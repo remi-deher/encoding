@@ -1,0 +1,137 @@
+.application-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.application-header {
+  min-height: 72px;
+  height: auto;
+  padding-inline: clamp(20px, 5vw, 72px);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'brand navigation status';
+  align-items: center;
+  column-gap: clamp(20px, 3vw, 44px);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.brand {
+  grid-area: brand;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.application-header app-primary-navigation {
+  min-width: 0;
+  grid-area: navigation;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accent);
+  color: white;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.06em;
+}
+
+.brand-name {
+  font-size: 13px;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+}
+
+.cluster-indicator {
+  grid-area: status;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.cluster-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.cluster-label {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.cluster-state {
+  padding: 5px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+}
+
+.main-content {
+  width: min(100% - 40px, 1320px);
+  margin-inline: auto;
+  padding-block: 36px 54px;
+  flex: 1;
+}
+
+.application-footer {
+  min-height: 52px;
+  padding: 12px clamp(20px, 5vw, 72px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.footer-separator {
+  padding-inline: 4px;
+  color: var(--accent);
+}
+
+.footer-version {
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .application-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand status'
+      'navigation navigation';
+    column-gap: 12px;
+    padding-top: 8px;
+    padding-inline: 16px;
+  }
+
+  .application-header app-primary-navigation {
+    width: calc(100% + 32px);
+    margin-inline: -16px;
+  }
+
+  .main-content {
+    width: min(100% - 32px, 1320px);
+    padding-block: 28px 40px;
+  }
+
+  .application-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+}

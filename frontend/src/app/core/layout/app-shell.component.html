@@ -1,0 +1,25 @@
+<div class="application-shell">
+  <mat-toolbar class="application-header">
+    <a class="brand" routerLink="/" aria-label="Accueil">
+      <span class="brand-mark" aria-hidden="true">E</span>
+      <span class="brand-name">{{ pageTitle() }}</span>
+    </a>
+
+    <app-primary-navigation />
+
+    <div class="cluster-indicator" aria-label="État du cluster : aperçu">
+      <span class="cluster-dot" aria-hidden="true"></span>
+      <span class="cluster-label">Cluster</span>
+      <span class="cluster-state">Aperçu</span>
+    </div>
+  </mat-toolbar>
+
+  <main id="main-content" class="main-content">
+    <router-outlet />
+  </main>
+
+  <footer class="application-footer">
+    <span>Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span>
+    <span class="footer-version">Interface en préparation</span>
+  </footer>
+</div>

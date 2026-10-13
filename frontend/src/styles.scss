@@ -1,0 +1,65 @@
+@use '@angular/material' as mat;
+
+@include mat.core();
+
+$app-theme: mat.define-theme(
+  (
+    color: (
+      theme-type: light,
+      primary: mat.$green-palette,
+      tertiary: mat.$azure-palette,
+    ),
+    density: (
+      scale: -1,
+    ),
+  )
+);
+
+html {
+  @include mat.all-component-themes($app-theme);
+  color-scheme: light;
+}
+
+:root {
+  --surface: #ffffff;
+  --surface-muted: #f4f6f5;
+  --page-background: #f7f8f7;
+  --border-subtle: #e5e9e7;
+  --text-primary: #202b28;
+  --text-secondary: #66736e;
+  --text-muted: #87928d;
+  --accent: #3b7867;
+  --accent-strong: #326b5b;
+  --accent-soft: #e9f2ef;
+  --success: #37805f;
+  --success-soft: #eaf5ee;
+  --warning: #a46d1c;
+  --warning-soft: #f8f1e4;
+  --danger: #b74e4e;
+  --danger-soft: #faeeee;
+  font-family: Inter, 'Segoe UI', sans-serif;
+  color: var(--text-primary);
+  background: var(--page-background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--page-background);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}

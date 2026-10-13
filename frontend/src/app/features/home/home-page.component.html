@@ -1,0 +1,120 @@
+<app-page-header
+  title="Vue d’ensemble"
+  description="L’état du cluster et des encodages, en un coup d’œil."
+>
+  <a page-actions mat-flat-button color="primary" routerLink="/flows">Créer un flow</a>
+</app-page-header>
+
+<div class="demo-notice" role="note">
+  <span class="demo-mark" aria-hidden="true">i</span>
+  <span
+    ><strong>Aperçu de l’interface.</strong> Les données affichées sont fictives, en attendant le
+    backend.</span
+  >
+</div>
+
+<section class="metrics-grid" aria-label="Indicateurs du cluster">
+  @for (metric of metrics; track metric.label) {
+    <app-metric-card [label]="metric.label" [value]="metric.value" [detail]="metric.detail" />
+  }
+</section>
+
+<div class="overview-grid">
+  <section class="surface-panel tasks-panel" aria-labelledby="active-tasks-heading">
+    <div class="panel-heading">
+      <div>
+        <h2 id="active-tasks-heading">Encodages en cours</h2>
+        <p>Progression des tâches prises en charge par les workers.</p>
+      </div>
+      <a class="subtle-link" routerLink="/tasks"
+        >Toutes les tâches <span aria-hidden="true">→</span></a
+      >
+    </div>
+
+    <div class="task-list">
+      @for (task of activeTasks; track task.title) {
+        <article class="task-row">
+          <div class="task-main">
+            <div class="task-title-line">
+              <h3>{{ task.title }}</h3>
+              <span class="task-percent">{{ task.progress }}%</span>
+            </div>
+            <mat-progress-bar
+              mode="determinate"
+              [value]="task.progress"
+              aria-label="Progression de l’encodage"
+            />
+            <div class="task-meta">
+              <span>{{ task.library }}</span>
+              <span>{{ task.node }}</span>
+              <span>{{ task.eta }}</span>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="surface-panel nodes-panel" aria-labelledby="nodes-heading">
+    <div class="panel-heading">
+      <div>
+        <h2 id="nodes-heading">Nœuds du cluster</h2>
+        <p>Disponibilité et activité des installations.</p>
+      </div>
+      <a class="subtle-link" routerLink="/nodes"
+        >Voir les nœuds <span aria-hidden="true">→</span></a
+      >
+    </div>
+
+    <div class="node-list">
+      @for (node of nodes; track node.name) {
+        <article class="node-row">
+          <div class="node-avatar" aria-hidden="true">
+            {{ node.name.substring(0, 1).toUpperCase() }}
+          </div>
+          <div class="node-info">
+            <h3>{{ node.name }}</h3>
+            <p>{{ node.role }}</p>
+          </div>
+          <div class="node-state">
+            <app-status-badge [label]="node.state" [tone]="node.tone" />
+            <span class="node-workload">{{ node.workload }}</span>
+          </div>
+        </article>
+      }
+    </div>
+  </section>
+</div>
+
+<section class="activity-panel surface-panel" aria-labelledby="activity-heading">
+  <div class="panel-heading">
+    <div>
+      <h2 id="activity-heading">Activité récente</h2>
+      <p>Les derniers événements de traitement.</p>
+    </div>
+    <a class="subtle-link" routerLink="/tasks"
+      >Ouvrir l’historique <span aria-hidden="true">→</span></a
+    >
+  </div>
+  <div class="activity-row">
+    <span class="activity-indicator completed" aria-hidden="true"></span>
+    <span class="activity-title">Encodage terminé</span>
+    <span class="activity-file">Arrival (2016)</span>
+    <span class="activity-node">worker-gpu-01</span>
+    <time datetime="2026-10-13T09:42:00">Il y a 4 min</time>
+  </div>
+  <div class="activity-row">
+    <span class="activity-indicator started" aria-hidden="true"></span>
+    <span class="activity-title">Encodage démarré</span>
+    <span class="activity-file">Dune: Part Two (2024)</span>
+    <span class="activity-node">worker-cpu-02</span>
+    <time datetime="2026-10-13T09:35:00">Il y a 11 min</time>
+  </div>
+  <div class="activity-row">
+    <span class="activity-indicator warning" aria-hidden="true"></span>
+    <span class="activity-title">Nœud déconnecté</span>
+    <span class="activity-file">worker-gpu-03</span>
+    <span class="activity-node">Aucune tâche active</span>
+    <time datetime="2026-10-13T09:18:00">Il y a 28 min</time>
+  </div>
+</section>
