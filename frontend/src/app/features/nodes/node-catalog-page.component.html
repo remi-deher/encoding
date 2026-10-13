@@ -1,6 +1,10 @@
 <app-management-catalog-template
   [title]="title()"
   [description]="description()"
+  [detailOpen]="selectedNode() !== null"
+  [detailTitle]="detailTitle()"
+  [detailDescription]="detailDescription()"
+  (detailClosed)="onDetailClosed()"
   filterLabel="Rôle du nœud"
   note="Les nœuds affichés sont des exemples. Leur état et leurs capacités seront fournis par le cluster."
 >
@@ -17,6 +21,19 @@
     catalogue-table
     [columns]="columns"
     [rows]="filteredNodes()"
+    [selectable]="true"
+    [rowOpenable]="true"
+    rowOpenLabel="Configurer"
+    (rowOpen)="onNodeOpen($event)"
     emptyMessage="Aucun nœud ne correspond à ce rôle."
   />
+
+  <ng-template #detailContent catalogue-detail>
+    <app-detail-field-list [fields]="detailFields()" />
+    @if (selectedNode()) {
+      <p role="note">
+        Les champs modifiables de configuration seront définis dans une prochaine étape.
+      </p>
+    }
+  </ng-template>
 </app-management-catalog-template>

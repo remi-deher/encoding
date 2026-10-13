@@ -8,6 +8,7 @@ import {
   DataTableRow,
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 
 type NodeRole = 'server' | 'worker';
 
@@ -18,6 +19,8 @@ interface NodeRecord extends DataTableRow {
   readonly roleLabel: string;
   readonly capabilities: string;
   readonly libraryAccess: string;
+  readonly workerLoad: string;
+  readonly queueStatus: string;
   readonly state: string;
   readonly lastSignal: string;
 }
@@ -30,6 +33,8 @@ const NODE_RECORDS: readonly NodeRecord[] = [
     roleLabel: 'Serveur · Worker',
     capabilities: 'FFmpeg · CPU',
     libraryAccess: 'Films · accès direct',
+    workerLoad: '1 tâche active · 4 simultanées max.',
+    queueStatus: '3 tâches compatibles en attente',
     state: 'En ligne',
     lastSignal: 'À l’instant',
   },
@@ -40,6 +45,8 @@ const NODE_RECORDS: readonly NodeRecord[] = [
     roleLabel: 'Serveur',
     capabilities: 'API · orchestration',
     libraryAccess: 'Aucun accès worker',
+    workerLoad: 'Non applicable · serveur uniquement',
+    queueStatus: 'Orchestration active',
     state: 'En ligne',
     lastSignal: 'À l’instant',
   },
@@ -50,6 +57,8 @@ const NODE_RECORDS: readonly NodeRecord[] = [
     roleLabel: 'Worker · NVIDIA',
     capabilities: 'FFmpeg · NVENC',
     libraryAccess: 'Films · accès direct',
+    workerLoad: '2 tâches actives · 3 simultanées max.',
+    queueStatus: '2 tâches compatibles en attente',
     state: 'En ligne',
     lastSignal: 'Il y a 8 s',
   },
@@ -60,6 +69,8 @@ const NODE_RECORDS: readonly NodeRecord[] = [
     roleLabel: 'Worker · CPU',
     capabilities: 'FFmpeg · CPU',
     libraryAccess: 'Séries · transfert WebDAV',
+    workerLoad: '1 tâche active · 2 simultanées max.',
+    queueStatus: '1 tâche compatible en attente',
     state: 'En ligne',
     lastSignal: 'Il y a 12 s',
   },
@@ -70,6 +81,8 @@ const NODE_RECORDS: readonly NodeRecord[] = [
     roleLabel: 'Worker · NVIDIA',
     capabilities: 'FFmpeg · NVENC',
     libraryAccess: 'Aucun accès configuré',
+    workerLoad: 'Indisponible',
+    queueStatus: 'Aucune tâche attribuée',
     state: 'Hors ligne',
     lastSignal: 'Il y a 28 min',
   },
@@ -82,8 +95,9 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
 
 @Component({
   selector: 'app-node-catalog-page',
-  imports: [DataTableComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent],
+  imports: [DataTableComponent, DetailFieldListComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent],
   templateUrl: './node-catalog-page.component.html',
+  styleUrl: './node-catalog-page.component.scss',
 })
 export class NodeCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
@@ -96,6 +110,25 @@ export class NodeCatalogPageComponent {
     () => (this.routeData()['description'] as string) ?? '',
   );
   protected readonly selectedRole = signal('all');
+  protected readonly selectedNode = signal<NodeRecord | null>(null);
+  protected readonly detailTitle = computed(
+    () => this.selectedNode()?.name ?? 'Configurer un nœud',
+  );
+  protected readonly detailDescription = computed(
+    () => this.selectedNode()?.roleLabel ?? 'Configuration du nœud',
+  );
+  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+    const node = this.selectedNode();
+    return node ? [
+      { section: 'Nœud', label: 'Rôle', value: node.roleLabel },
+      { section: 'Nœud', label: 'État', value: node.state },
+      { section: 'Nœud', label: 'Dernier signal', value: node.lastSignal },
+      { section: 'Capacités worker', label: 'Outils et accélération', value: node.capabilities },
+      { section: 'Capacités worker', label: 'Charge', value: node.workerLoad },
+      { section: 'Capacités worker', label: 'File compatible', value: node.queueStatus },
+      { section: 'Accès aux bibliothèques', label: 'Bibliothèques accessibles', value: node.libraryAccess },
+    ] : [];
+  });
 
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom du nœud', sortable: true },
@@ -121,5 +154,14 @@ export class NodeCatalogPageComponent {
 
   protected onRoleChange(role: string): void {
     this.selectedRole.set(role);
+  }
+
+  protected onNodeOpen(row: DataTableRow): void {
+    const selectedNode = NODE_RECORDS.find((node) => node.id === row['id']);
+    this.selectedNode.set(selectedNode ?? null);
+  }
+
+  protected onDetailClosed(): void {
+    this.selectedNode.set(null);
   }
 }

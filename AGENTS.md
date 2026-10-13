@@ -54,11 +54,17 @@ WebDAV est ici un canal de transfert de fichiers entre nœuds. Les outils d’en
 
 ## Flows, composants et plugins
 
-- Le moteur de flow est une capacité centrale du produit. Les flows sont des définitions versionnées composées d’étapes configurables avec des entrées et sorties typées.
+- Le moteur de flow est une capacité centrale du produit. Les flows sont des graphes versionnés composés de nœuds configurables et de connexions entre sorties typées et entrées.
 - Le catalogue des composants utilisables dans un flow est alimenté par les plugins.
+- Les composants déclarent leurs sorties possibles. L’aiguillage est défini sur le composant lui-même ; seules les sorties reliées sont représentées comme des chemins dans l’éditeur partagé.
+- L’éditeur visuel utilise `ngx-vflow` pour le canevas, les nœuds et les connexions, et `@dagrejs/dagre` pour leur disposition automatique de gauche à droite. Le modèle métier des flows reste indépendant de ces bibliothèques UI.
+- Le premier éditeur autorise les graphes orientés acycliques et une seule connexion entrante par nœud. Les boucles seront des nœuds conteneurs avec un sous-graphe d’itération, jamais des cycles libres.
+- Le plugin `base` fournit les composants génériques Action, Condition et Variable. Une boucle sera ajoutée avec son sous-graphe d’itération et une sortie de fin.
 - Le plugin `base` est installé et activé par défaut ; il fournit les composants de base nécessaires aux flows courants.
 - Les plugins additionnels servent principalement à intégrer des services externes, notamment Plex, Sonarr, Radarr et Jellyfin. Ils peuvent aussi fournir des déclencheurs, actions ou composants de flow selon leur rôle.
 - Chaque plugin déclare son identité, sa version, sa compatibilité et les composants qu’il fournit au moyen d’un contrat partagé et versionné.
+- La configuration d’un composant est décrite par un schéma de champs déclaratif et versionné. Le frontend rend les types de champs pris en charge avec le gabarit commun ; un plugin ne fournit ni code Angular, ni HTML, ni JavaScript d’interface.
+- Les valeurs de configuration sont stockées sur l’instance du nœud de flow. Le schéma est une aide à l’édition ; le backend devra également valider ces valeurs avant leur enregistrement et leur exécution.
 - Les plugins tiers s’exécutent dans un processus séparé de l’application hôte. Leur communication avec l’application passe par un contrat interprocessus versionné ; ils ne sont pas chargés directement dans le processus ASP.NET Core ou worker.
 - À ce stade, l’isolation des plugins repose sur ce processus séparé. Ne pas imposer de conteneur dédié par plugin.
 - Le moteur valide un flow selon les composants et versions disponibles avant son exécution. Une exécution référence une version précise de sa définition.

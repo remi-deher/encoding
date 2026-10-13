@@ -20,6 +20,94 @@
   font-size: 12px;
 }
 
+.selection-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 54px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-muted);
+}
+
+.mobile-select-all {
+  display: none;
+}
+
+.selection-count {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.selection-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.selection-action,
+.selection-clear {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.selection-action:hover,
+.selection-clear:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.selection-clear {
+  color: var(--text-secondary);
+}
+
+.selection-action:focus-visible,
+.selection-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:host ::ng-deep .data-table .mat-mdc-row[aria-selected='true'] .mat-mdc-cell {
+  background: var(--accent-soft);
+}
+
+.row-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-open:hover {
+  text-decoration: underline;
+}
+
+.row-open:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .data-table .mat-mdc-row:last-child .mat-mdc-cell {
   border-bottom: 0;
 }
@@ -109,6 +197,37 @@
     min-height: 36px;
     flex-direction: row;
     justify-content: flex-start;
+  }
+
+  .selection-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .mobile-select-all {
+    min-height: 42px;
+    margin: 0 12px 10px;
+    padding: 0 12px;
+    display: block;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--accent-strong);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .selection-actions {
+    justify-content: stretch;
+  }
+
+  .selection-action,
+  .selection-clear {
+    min-height: 42px;
+    flex: 1 1 auto;
   }
 
   .data-table .row-actions-cell {

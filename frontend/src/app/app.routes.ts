@@ -46,6 +46,28 @@ export const routes: Routes = [
     },
   },
   {
+    path: 'flows/new',
+    loadComponent: () =>
+      import('./features/flows/flow-editor-page.component').then(
+        (module) => module.FlowEditorPageComponent,
+    ),
+    data: {
+      title: 'Nouveau flow',
+      description: 'Assemblez les composants dans l’ordre de traitement souhaité.',
+    },
+  },
+  {
+    path: 'flows/:flowId/edit',
+    loadComponent: () =>
+      import('./features/flows/flow-editor-page.component').then(
+        (module) => module.FlowEditorPageComponent,
+      ),
+    data: {
+      title: 'Modifier un flow',
+      description: 'Modifiez les composants et leur ordre de traitement.',
+    },
+  },
+  {
     path: 'nodes',
     loadComponent: () =>
       import('./features/nodes/node-catalog-page.component').then(

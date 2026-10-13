@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import {
   DataTableColumn,
   DataTableComponent,
@@ -19,6 +20,8 @@ interface PluginRecord extends DataTableRow {
   readonly category: string;
   readonly version: string;
   readonly components: string;
+  readonly runtime: string;
+  readonly configuration: string;
   readonly state: string;
 }
 
@@ -31,6 +34,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     category: 'Composants de flow',
     version: 'Intégré',
     components: 'Composants généraux',
+    runtime: 'Fourni par le serveur',
+    configuration: 'Aucune connexion externe requise',
     state: 'Actif',
   },
   {
@@ -41,6 +46,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     category: 'Serveur multimédia',
     version: '—',
     components: 'Déclencheurs et actions',
+    runtime: 'Non installé',
+    configuration: 'Connexion non configurée',
     state: 'Prévu',
   },
   {
@@ -51,6 +58,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     category: 'Serveur multimédia',
     version: '—',
     components: 'Déclencheurs et actions',
+    runtime: 'Non installé',
+    configuration: 'Connexion non configurée',
     state: 'Prévu',
   },
   {
@@ -61,6 +70,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     category: 'Intégration *ARR',
     version: '—',
     components: 'Déclencheurs et actions',
+    runtime: 'Non installé',
+    configuration: 'Connexion non configurée',
     state: 'Prévu',
   },
   {
@@ -71,6 +82,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     category: 'Intégration *ARR',
     version: '—',
     components: 'Déclencheurs et actions',
+    runtime: 'Non installé',
+    configuration: 'Connexion non configurée',
     state: 'Prévu',
   },
 ];
@@ -83,7 +96,7 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
 
 @Component({
   selector: 'app-plugin-catalog-page',
-  imports: [DataTableComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent],
+  imports: [DataTableComponent, DetailFieldListComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent],
   templateUrl: './plugin-catalog-page.component.html',
 })
 export class PluginCatalogPageComponent {
@@ -97,6 +110,21 @@ export class PluginCatalogPageComponent {
     () => (this.routeData()['description'] as string) ?? '',
   );
   protected readonly selectedFamily = signal('all');
+  protected readonly selectedPlugin = signal<PluginRecord | null>(null);
+  protected readonly detailTitle = computed(() => this.selectedPlugin()?.name ?? 'Plugin');
+  protected readonly detailDescription = computed(() => this.selectedPlugin()?.familyLabel ?? 'Détails du plugin');
+  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+    const plugin = this.selectedPlugin();
+    return plugin ? [
+      { section: 'Plugin', label: 'Famille', value: plugin.familyLabel },
+      { section: 'Plugin', label: 'Type', value: plugin.category },
+      { section: 'Plugin', label: 'Version', value: plugin.version },
+      { section: 'Disponibilité', label: 'État', value: plugin.state },
+      { section: 'Disponibilité', label: 'Exécution', value: plugin.runtime },
+      { section: 'Intégration', label: 'Composants fournis', value: plugin.components },
+      { section: 'Intégration', label: 'Configuration', value: plugin.configuration },
+    ] : [];
+  });
 
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom', sortable: true },
@@ -122,5 +150,13 @@ export class PluginCatalogPageComponent {
 
   protected onFamilyChange(family: string): void {
     this.selectedFamily.set(family);
+  }
+
+  protected onPluginOpen(row: DataTableRow): void {
+    this.selectedPlugin.set(PLUGIN_RECORDS.find((plugin) => plugin.id === row['id']) ?? null);
+  }
+
+  protected onDetailClosed(): void {
+    this.selectedPlugin.set(null);
   }
 }

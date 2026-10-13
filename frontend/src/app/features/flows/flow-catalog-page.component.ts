@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
 import {
   DataTableColumn,
   DataTableComponent,
@@ -8,6 +9,7 @@ import {
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 
 interface FlowRecord extends DataTableRow {
@@ -16,6 +18,8 @@ interface FlowRecord extends DataTableRow {
   readonly category: MediaType;
   readonly mediaType: string;
   readonly version: string;
+  readonly summary: string;
+  readonly components: string;
   readonly state: string;
   readonly modifiedAt: string;
   readonly modifiedOrder: number;
@@ -28,6 +32,8 @@ const FLOW_RECORDS: readonly FlowRecord[] = [
     category: 'video',
     mediaType: 'Vidéo',
     version: 'v1',
+    summary: 'Analyse le média, encode la vidéo en H.265 et actualise la bibliothèque Plex.',
+    components: 'Analyse du média · Encodage vidéo · Actualisation Plex',
     state: 'Publié',
     modifiedAt: '13 oct. 2026',
     modifiedOrder: Date.UTC(2026, 9, 13),
@@ -38,6 +44,8 @@ const FLOW_RECORDS: readonly FlowRecord[] = [
     category: 'video',
     mediaType: 'Vidéo',
     version: 'v3',
+    summary: 'Encode les épisodes de séries selon le profil H.265 configuré.',
+    components: 'Analyse du média · Encodage vidéo',
     state: 'Publié',
     modifiedAt: '10 oct. 2026',
     modifiedOrder: Date.UTC(2026, 9, 10),
@@ -48,6 +56,8 @@ const FLOW_RECORDS: readonly FlowRecord[] = [
     category: 'video',
     mediaType: 'Vidéo',
     version: '—',
+    summary: 'Contrôle les informations de la source avant son traitement.',
+    components: 'Analyse du média · Vérification de la source',
     state: 'Brouillon',
     modifiedAt: '8 oct. 2026',
     modifiedOrder: Date.UTC(2026, 9, 8),
@@ -58,6 +68,8 @@ const FLOW_RECORDS: readonly FlowRecord[] = [
     category: 'image',
     mediaType: 'Image',
     version: 'v1',
+    summary: 'Convertit les images de la bibliothèque au format WebP.',
+    components: 'Conversion d’image',
     state: 'Publié',
     modifiedAt: '6 oct. 2026',
     modifiedOrder: Date.UTC(2026, 9, 6),
@@ -68,6 +80,8 @@ const FLOW_RECORDS: readonly FlowRecord[] = [
     category: 'music',
     mediaType: 'Musique',
     version: 'v2',
+    summary: 'Vérifie les fichiers audio FLAC de la bibliothèque.',
+    components: 'Analyse audio · Vérification FLAC',
     state: 'Publié',
     modifiedAt: '2 oct. 2026',
     modifiedOrder: Date.UTC(2026, 9, 2),
@@ -78,6 +92,8 @@ const FLOW_RECORDS: readonly FlowRecord[] = [
     category: 'subtitles',
     mediaType: 'Sous-titres',
     version: 'v1',
+    summary: 'Nettoie les fichiers de sous-titres sélectionnés.',
+    components: 'Nettoyage de sous-titres',
     state: 'Désactivé',
     modifiedAt: '28 sept. 2026',
     modifiedOrder: Date.UTC(2026, 8, 28),
@@ -86,7 +102,14 @@ const FLOW_RECORDS: readonly FlowRecord[] = [
 
 @Component({
   selector: 'app-flow-catalog-page',
-  imports: [DataTableComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent],
+  imports: [
+    DataTableComponent,
+    DetailFieldListComponent,
+    ManagementCatalogTemplateComponent,
+    CategoryTabsComponent,
+    MatButtonModule,
+    RouterLink,
+  ],
   templateUrl: './flow-catalog-page.component.html',
 })
 export class FlowCatalogPageComponent {
@@ -100,6 +123,23 @@ export class FlowCatalogPageComponent {
     () => (this.routeData()['description'] as string) ?? '',
   );
   protected readonly selectedCategory = signal('all');
+  protected readonly selectedFlow = signal<FlowRecord | null>(null);
+  protected readonly detailTitle = computed(() => this.selectedFlow()?.name ?? 'Flow');
+  protected readonly detailDescription = computed(() => {
+    const flow = this.selectedFlow();
+    return flow ? `${flow.mediaType} · ${flow.version} · ${flow.state}` : 'Détails du flow';
+  });
+  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+    const flow = this.selectedFlow();
+    return flow ? [
+      { section: 'Flow', label: 'Type de média', value: flow.mediaType },
+      { section: 'Flow', label: 'État', value: flow.state },
+      { section: 'Flow', label: 'Version', value: flow.version },
+      { section: 'Traitement', label: 'Résumé', value: flow.summary },
+      { section: 'Traitement', label: 'Composants', value: flow.components },
+      { section: 'Historique', label: 'Dernière modification', value: flow.modifiedAt },
+    ] : [];
+  });
 
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom du flow', sortable: true },
@@ -124,5 +164,13 @@ export class FlowCatalogPageComponent {
 
   protected onCategoryChange(category: string): void {
     this.selectedCategory.set(category);
+  }
+
+  protected onFlowOpen(row: DataTableRow): void {
+    this.selectedFlow.set(FLOW_RECORDS.find((flow) => flow.id === row['id']) ?? null);
+  }
+
+  protected onDetailClosed(): void {
+    this.selectedFlow.set(null);
   }
 }

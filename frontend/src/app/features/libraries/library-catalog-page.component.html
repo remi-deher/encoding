@@ -1,6 +1,10 @@
 <app-management-catalog-template
   [title]="title()"
   [description]="description()"
+  [detailOpen]="selectedLibrary() !== null"
+  [detailTitle]="detailTitle()"
+  [detailDescription]="detailDescription()"
+  (detailClosed)="onDetailClosed()"
   filterLabel="Type de média"
   note="Les bibliothèques affichées sont des exemples. Les chemins et modes d’accès réels seront définis par nœud."
 >
@@ -17,6 +21,14 @@
     catalogue-table
     [columns]="columns"
     [rows]="filteredLibraries()"
+    [selectable]="true"
+    [rowOpenable]="true"
+    rowOpenLabel="Consulter"
+    (rowOpen)="onLibraryOpen($event)"
     emptyMessage="Aucune bibliothèque ne correspond à ce type de média."
   />
+
+  <ng-template #detailContent catalogue-detail>
+    <app-detail-field-list [fields]="detailFields()" />
+  </ng-template>
 </app-management-catalog-template>

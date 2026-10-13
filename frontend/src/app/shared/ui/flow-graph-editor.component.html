@@ -1,0 +1,54 @@
+<section class="flow-canvas" aria-label="Composition graphique du flow">
+  <div class="graph-frame">
+    <button class="add-component-button" type="button" (click)="addComponentRequested.emit()">Ajouter un composant</button>
+    <vflow
+      class="graph-surface"
+      view="auto"
+      [nodes]="canvasNodes()"
+      [edges]="canvasEdges()"
+      [connection]="connectionSettings"
+      (connect)="onConnect($event)"
+      (nodeDragEnd)="onNodeDragEnd($event)"
+      (edgesChanges.remove)="onEdgesRemoved($event)"
+    >
+      <ng-template let-context nodeHtml>
+        <article class="flow-node" selectable [class.flow-node_selected]="context.selected()">
+          <handle type="target" position="left" id="input" />
+          <header class="node-heading">
+            <span class="node-kind">{{ kindLabel(context.data().component.kind) }}</span>
+            <span class="node-plugin">{{ context.data().component.pluginName }}</span>
+            @if (context.data().component.configurationSchema?.fields?.length) {
+              <button class="configure-node" type="button" [attr.aria-label]="'Configurer ' + context.data().component.name" (pointerdown)="$event.stopPropagation()" (click)="$event.stopPropagation(); configurationRequested.emit(context.node.id)">⚙</button>
+            }
+            <button class="remove-node" type="button" aria-label="Supprimer le bloc" (pointerdown)="$event.stopPropagation()" (click)="$event.stopPropagation(); nodeRemoved.emit(context.node.id)">×</button>
+          </header>
+          <strong class="node-name">{{ context.data().component.name }}</strong>
+          <p class="node-description">{{ context.data().component.description }}</p>
+
+          @for (activeOutput of context.data().activeOutputs; track activeOutput.id) {
+            <div class="node-output-row">
+              <span>{{ activeOutput.label }}</span>
+              <handle type="source" position="right" [id]="activeOutput.id" />
+            </div>
+          }
+
+          @if (availableOutputs(context.node.id, context.data().component).length) {
+            <button class="add-output-button" type="button" [matMenuTriggerFor]="outputMenu" (pointerdown)="$event.stopPropagation()" (click)="$event.stopPropagation()">＋ Ajouter une sortie</button>
+            <mat-menu #outputMenu="matMenu">
+              @for (possibleOutput of availableOutputs(context.node.id, context.data().component); track possibleOutput.id) {
+                <button mat-menu-item type="button" (click)="requestOutput(context.node.id, possibleOutput)">{{ possibleOutput.label }} — {{ possibleOutput.description }}</button>
+              }
+            </mat-menu>
+          }
+        </article>
+      </ng-template>
+    </vflow>
+
+    @if (!nodes().length) {
+      <div class="empty-graph">
+        <strong>Commencez par ajouter un composant</strong>
+        <span>Reliez ensuite ses sorties aux blocs suivants.</span>
+      </div>
+    }
+  </div>
+</section>

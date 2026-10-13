@@ -1,9 +1,21 @@
 <app-management-catalog-template
   [title]="title()"
   [description]="description()"
+  [detailOpen]="selectedFlow() !== null"
+  [detailTitle]="detailTitle()"
+  [detailDescription]="detailDescription()"
+  (detailClosed)="onDetailClosed()"
   filterLabel="Type de média"
   note="Les flows affichés sont des exemples. Le catalogue sera relié au backend lorsque son API sera en place."
 >
+  <a
+    page-actions
+    matButton="filled"
+    routerLink="/flows/new"
+    [info]="{ flowEditorDirection: 'forward' }"
+    >Nouveau flow</a
+  >
+
   <div catalogue-filters>
     <app-category-tabs
       label="Type de média"
@@ -17,6 +29,23 @@
     catalogue-table
     [columns]="columns"
     [rows]="filteredFlows()"
+    [selectable]="true"
+    [rowOpenable]="true"
+    rowOpenLabel="Consulter"
+    (rowOpen)="onFlowOpen($event)"
     emptyMessage="Aucun flow ne correspond à ce type de média."
   />
+
+  <ng-template #detailContent catalogue-detail>
+    <app-detail-field-list [fields]="detailFields()" />
+    @if (selectedFlow(); as flow) {
+      <a
+        matButton="filled"
+        [routerLink]="['/flows', flow.id, 'edit']"
+        [info]="{ flowEditorDirection: 'forward' }"
+      >
+        Ouvrir l’éditeur
+      </a>
+    }
+  </ng-template>
 </app-management-catalog-template>

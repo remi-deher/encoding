@@ -1,6 +1,10 @@
 <app-management-catalog-template
   [title]="title()"
   [description]="description()"
+  [detailOpen]="selectedPlugin() !== null"
+  [detailTitle]="detailTitle()"
+  [detailDescription]="detailDescription()"
+  (detailClosed)="onDetailClosed()"
   filterLabel="Famille de plugin"
   note="Liste illustrative : les plugins affichés ne sont pas encore installables dans cette version."
 >
@@ -17,6 +21,14 @@
     catalogue-table
     [columns]="columns"
     [rows]="filteredPlugins()"
+    [selectable]="true"
+    [rowOpenable]="true"
+    rowOpenLabel="Consulter"
+    (rowOpen)="onPluginOpen($event)"
     emptyMessage="Aucun plugin ne correspond à cette famille."
   />
+
+  <ng-template #detailContent catalogue-detail>
+    <app-detail-field-list [fields]="detailFields()" />
+  </ng-template>
 </app-management-catalog-template>

@@ -1,12 +1,16 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, TemplateRef, computed, input, output, signal, viewChild } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
+import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
 import {
   DataTableActionEvent,
   DataTableColumn,
   DataTableComponent,
   DataTableRow,
   DataTableRowAction,
+  DataTableSelectionAction,
+  DataTableSelectionActionEvent,
 } from '../ui/data-table.component';
+import { DetailField, DetailFieldListComponent } from '../ui/detail-field-list.component';
 import { PageHeaderComponent } from '../ui/page-header.component';
 
 export type ExecutionMonitorView = 'queue' | 'active' | 'errors' | 'cancelled' | 'history';
@@ -21,7 +25,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
 
 @Component({
   selector: 'app-execution-monitor-template',
-  imports: [DataTableComponent, MatTabsModule, PageHeaderComponent],
+  imports: [DataTableComponent, DetailDrawerComponent, DetailFieldListComponent, MatTabsModule, PageHeaderComponent],
   template: `
     <app-page-header [title]="title()" [description]="description()" />
 
@@ -51,6 +55,12 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
             <app-data-table
               [columns]="queueColumns()"
               [rows]="queueRows()"
+              [selectable]="true"
+              [selectionActions]="selectionActions()"
+              [rowOpenable]="true"
+              rowOpenLabel="Voir"
+              (rowOpen)="openExecution($event)"
+              (selectionAction)="selectionAction.emit($event)"
               emptyMessage="La file d’attente est vide."
             />
           </div>
@@ -64,6 +74,12 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
             <app-data-table
               [columns]="activeColumns()"
               [rows]="activeRows()"
+              [selectable]="true"
+              [selectionActions]="selectionActions()"
+              [rowOpenable]="true"
+              rowOpenLabel="Voir"
+              (rowOpen)="openExecution($event)"
+              (selectionAction)="selectionAction.emit($event)"
               emptyMessage="Aucun flow n’est actuellement traité par un worker."
             />
           </div>
@@ -78,7 +94,13 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
               [columns]="errorColumns()"
               [rows]="errorRows()"
               [rowActions]="errorActions()"
+              [selectable]="true"
+              [selectionActions]="selectionActions()"
+              [rowOpenable]="true"
+              rowOpenLabel="Voir"
               emptyMessage="Aucune exécution en erreur."
+              (rowOpen)="openExecution($event)"
+              (selectionAction)="selectionAction.emit($event)"
               (rowAction)="errorAction.emit($event)"
             />
           </div>
@@ -92,6 +114,12 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
             <app-data-table
               [columns]="cancelledColumns()"
               [rows]="cancelledRows()"
+              [selectable]="true"
+              [selectionActions]="selectionActions()"
+              [rowOpenable]="true"
+              rowOpenLabel="Voir"
+              (rowOpen)="openExecution($event)"
+              (selectionAction)="selectionAction.emit($event)"
               emptyMessage="Aucune exécution annulée."
             />
           </div>
@@ -105,6 +133,12 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
             <app-data-table
               [columns]="historyColumns()"
               [rows]="historyRows()"
+              [selectable]="true"
+              [selectionActions]="selectionActions()"
+              [rowOpenable]="true"
+              rowOpenLabel="Voir"
+              (rowOpen)="openExecution($event)"
+              (selectionAction)="selectionAction.emit($event)"
               emptyMessage="Aucune exécution réussie."
             />
           </div>
@@ -115,6 +149,18 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     @if (note()) {
       <p class="monitor-note" role="note">{{ note() }}</p>
     }
+
+    <app-detail-drawer
+      [opened]="selectedExecution() !== null"
+      [title]="detailTitle()"
+      [description]="detailDescription()"
+      [content]="executionDetailTemplate()"
+      (closed)="selectedExecution.set(null)"
+    >
+      <ng-template #executionDetail>
+        <app-detail-field-list [fields]="executionDetailFields()" />
+      </ng-template>
+    </app-detail-drawer>
   `,
   styles: `
     .monitor-panel {
@@ -219,6 +265,7 @@ export class ExecutionMonitorTemplateComponent {
   readonly errorColumns = input.required<readonly DataTableColumn[]>();
   readonly errorRows = input.required<readonly DataTableRow[]>();
   readonly errorActions = input<readonly DataTableRowAction[]>([]);
+  readonly selectionActions = input<readonly DataTableSelectionAction[]>([]);
   readonly cancelledColumns = input.required<readonly DataTableColumn[]>();
   readonly cancelledRows = input.required<readonly DataTableRow[]>();
   readonly historyColumns = input.required<readonly DataTableColumn[]>();
@@ -227,10 +274,39 @@ export class ExecutionMonitorTemplateComponent {
   readonly note = input('');
   readonly viewChange = output<ExecutionMonitorView>();
   readonly errorAction = output<DataTableActionEvent>();
+  readonly selectionAction = output<DataTableSelectionActionEvent>();
 
   protected readonly selectedIndex = computed(() =>
     EXECUTION_MONITOR_VIEWS.indexOf(this.selectedView()),
   );
+  protected readonly selectedExecution = signal<DataTableRow | null>(null);
+  protected readonly executionDetailTemplate = viewChild<TemplateRef<unknown>>('executionDetail');
+  protected readonly detailTitle = computed(() => String(this.selectedExecution()?.['media'] ?? 'Exécution'));
+  protected readonly detailDescription = computed(() => {
+    const execution = this.selectedExecution();
+    return [execution?.['state'], execution?.['flow']].filter(Boolean).join(' · ') || 'Détails de l’exécution';
+  });
+  protected readonly executionDetailFields = computed<readonly DetailField[]>(() => {
+    const execution = this.selectedExecution();
+    return execution ? [
+      { section: 'Exécution', label: 'Identifiant', value: execution['id'] ?? '—' },
+      { section: 'Exécution', label: 'État', value: execution['state'] ?? '—' },
+      { section: 'Exécution', label: 'Étape ou résultat', value: execution['detail'] ?? '—' },
+      { section: 'Source et traitement', label: 'Bibliothèque', value: execution['library'] ?? '—' },
+      { section: 'Source et traitement', label: 'Média', value: execution['media'] ?? '—' },
+      { section: 'Source et traitement', label: 'Flow', value: execution['flow'] ?? '—' },
+      { section: 'Source et traitement', label: 'Worker', value: execution['node'] ?? '—' },
+      { section: 'Chronologie', label: 'Ajoutée à la file', value: execution['queuedAt'] ?? '—' },
+      { section: 'Chronologie', label: 'Démarrée', value: execution['startedAt'] ?? '—' },
+      { section: 'Chronologie', label: 'Terminée', value: execution['finishedAt'] ?? '—' },
+      { section: 'Chronologie', label: 'Durée', value: execution['duration'] ?? '—' },
+      { section: 'Chronologie', label: 'Tentative', value: execution['attempt'] ?? '—' },
+    ] : [];
+  });
+
+  protected openExecution(execution: DataTableRow): void {
+    this.selectedExecution.set(execution);
+  }
 
   protected onSelectedIndexChange(index: number): void {
     const view = EXECUTION_MONITOR_VIEWS[index];

@@ -4,6 +4,8 @@ import {
   DataTableColumn,
   DataTableRow,
   DataTableRowAction,
+  DataTableSelectionAction,
+  DataTableSelectionActionEvent,
 } from '../../shared/ui/data-table.component';
 import {
   ExecutionMonitorTemplateComponent,
@@ -199,6 +201,28 @@ export class TaskMonitoringPageComponent {
       }),
     },
   ];
+  protected readonly selectionActions: readonly DataTableSelectionAction[] = [
+    {
+      id: 'cancel-selected',
+      label: 'Annuler les exécutions',
+      visibleWhen: (rows) => rows.every((row) => row['group'] === 'queue' || row['group'] === 'active'),
+      confirmation: (rows) => ({
+        title: 'Annuler les exécutions sélectionnées ?',
+        message: `Les ${rows.length} exécutions sélectionnées seront annulées.`,
+        confirmLabel: 'Annuler les exécutions',
+      }),
+    },
+    {
+      id: 'retry-selected',
+      label: 'Relancer les exécutions',
+      visibleWhen: (rows) => rows.every((row) => row['group'] === 'errors'),
+      confirmation: (rows) => ({
+        title: 'Relancer les exécutions sélectionnées ?',
+        message: `Une nouvelle tentative sera ajoutée à la file pour ${rows.length} exécution${rows.length > 1 ? 's' : ''}.`,
+        confirmLabel: 'Relancer',
+      }),
+    },
+  ];
 
   protected onViewChange(view: ExecutionMonitorView): void {
     this.selectedView.set(view);
@@ -214,7 +238,37 @@ export class TaskMonitoringPageComponent {
       return;
     }
 
-    const retry: ExecutionRecord = {
+    this.executions.update((executions) => [this.createRetry(failedExecution), ...executions]);
+    this.selectedView.set('queue');
+    this.feedback.set(
+      `Relance de « ${failedExecution.media} » ajoutée à la file de démonstration. Aucun worker n’a été sollicité.`,
+    );
+  }
+
+  protected onSelectionAction(event: DataTableSelectionActionEvent): void {
+    const selectedIds = new Set(event.rows.map((row) => String(row['id'])));
+    const selected = this.executions().filter((execution) => selectedIds.has(execution.id));
+    if (!selected.length || selected.length !== selectedIds.size) return;
+
+    if (event.actionId === 'cancel-selected' && selected.every((execution) => execution.group === 'queue' || execution.group === 'active')) {
+      this.executions.update((executions) => executions.map((execution) => selectedIds.has(execution.id)
+        ? { ...execution, state: 'Annulée', group: 'cancelled', detail: 'Annulée par un opérateur', finishedAt: 'À l’instant' }
+        : execution));
+      this.selectedView.set('cancelled');
+      this.feedback.set(`${selected.length} exécution${selected.length > 1 ? 's' : ''} annulée${selected.length > 1 ? 's' : ''} dans la file de démonstration.`);
+      return;
+    }
+
+    if (event.actionId === 'retry-selected' && selected.every((execution) => execution.group === 'errors')) {
+      const retries = selected.map((execution) => this.createRetry(execution));
+      this.executions.update((executions) => [...retries, ...executions]);
+      this.selectedView.set('queue');
+      this.feedback.set(`${retries.length} relance${retries.length > 1 ? 's' : ''} ajoutée${retries.length > 1 ? 's' : ''} à la file de démonstration. Aucun worker n’a été sollicité.`);
+    }
+  }
+
+  private createRetry(failedExecution: ExecutionRecord): ExecutionRecord {
+    return {
       ...failedExecution,
       id: `${failedExecution.id}-retry-${failedExecution.attempt + 1}`,
       state: 'En attente',
@@ -227,11 +281,5 @@ export class TaskMonitoringPageComponent {
       duration: '—',
       attempt: failedExecution.attempt + 1,
     };
-
-    this.executions.update((executions) => [retry, ...executions]);
-    this.selectedView.set('queue');
-    this.feedback.set(
-      `Relance de « ${failedExecution.media} » ajoutée à la file de démonstration. Aucun worker n’a été sollicité.`,
-    );
   }
 }

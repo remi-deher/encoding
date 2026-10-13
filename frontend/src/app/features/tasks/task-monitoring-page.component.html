@@ -16,6 +16,7 @@
   [errorColumns]="errorColumns"
   [errorRows]="errorExecutions()"
   [errorActions]="errorActions"
+  [selectionActions]="selectionActions"
   [cancelledColumns]="cancelledColumns"
   [cancelledRows]="cancelledExecutions()"
   [historyColumns]="historyColumns"
@@ -24,4 +25,5 @@
   note="Données illustratives : les états et relances ne sont pas encore reliés au moteur d’exécution."
   (viewChange)="onViewChange($event)"
   (errorAction)="onErrorAction($event)"
+  (selectionAction)="onSelectionAction($event)"
 />
