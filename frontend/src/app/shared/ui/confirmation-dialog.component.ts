@@ -11,26 +11,46 @@ export interface ConfirmationDialogData {
   readonly title: string;
   readonly message: string;
   readonly confirmLabel?: string;
+  readonly headerColor?: string;
+  readonly confirmColor?: string;
 }
 
 @Component({
   selector: 'app-confirmation-dialog',
   imports: [MatDialogActions, MatDialogContent, MatDialogTitle],
   template: `
-    <h2 mat-dialog-title>{{ data.title }}</h2>
+    <header class="confirmation-header" [class.confirmation-header_colored]="!!data.headerColor" [style.background-color]="data.headerColor ?? 'var(--surface-muted)'">
+      <h2 mat-dialog-title>{{ data.title }}</h2>
+    </header>
     <mat-dialog-content>{{ data.message }}</mat-dialog-content>
     <mat-dialog-actions align="end">
       <button class="cancel-button" type="button" (click)="dialogRef.close(false)">Annuler</button>
-      <button class="confirm-button" type="button" (click)="dialogRef.close(true)">
+      <button class="confirm-button" type="button" [style.background-color]="data.confirmColor ?? 'var(--accent-strong)'" [style.border-color]="data.confirmColor ?? 'var(--accent-strong)'" (click)="dialogRef.close(true)">
         {{ data.confirmLabel ?? 'Confirmer' }}
       </button>
     </mat-dialog-actions>
   `,
   styles: `
+    :host { display: block; }
+
+    .confirmation-header {
+      margin: -24px -24px 16px;
+      padding: 17px 24px;
+      background: var(--surface-muted);
+    }
+
     h2 {
       color: var(--text-primary);
       font-size: 17px;
       font-weight: 700;
+      line-height: 1.35;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+
+    .confirmation-header_colored h2 {
+      color: #fff;
     }
 
     mat-dialog-content {
@@ -57,8 +77,6 @@ export interface ConfirmationDialogData {
     }
 
     .confirm-button {
-      border-color: var(--accent-strong);
-      background: var(--accent-strong);
       color: #fff;
     }
 

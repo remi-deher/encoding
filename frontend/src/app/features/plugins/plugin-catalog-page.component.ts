@@ -106,9 +106,6 @@ export class PluginCatalogPageComponent {
   });
 
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Plugins');
-  protected readonly description = computed(
-    () => (this.routeData()['description'] as string) ?? '',
-  );
   protected readonly selectedFamily = signal('all');
   protected readonly selectedPlugin = signal<PluginRecord | null>(null);
   protected readonly detailTitle = computed(() => this.selectedPlugin()?.name ?? 'Plugin');

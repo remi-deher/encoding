@@ -32,3 +32,24 @@ public sealed record NodeResponse(
     IReadOnlyList<NodeToolCapability> Capabilities,
     NodePresenceStatus Status,
     DateTimeOffset LastSeenAt);
+
+public sealed record NodeEnrollmentRequest(
+    Guid Id,
+    string Name,
+    IReadOnlyList<NodeRole> Roles,
+    int MaxConcurrentTasks,
+    IReadOnlyList<NodeToolCapability> Capabilities,
+    string NodeToken);
+
+public sealed record CreateNodeEnrollmentRequest(NodeEnrollmentRequest Node, string PairingKey);
+
+public sealed record ApproveNodeEnrollmentRequest(string PairingKey);
+
+public sealed record PendingNodeEnrollmentResponse(
+    Guid Id,
+    string Name,
+    IReadOnlyList<NodeRole> Roles,
+    int MaxConcurrentTasks,
+    IReadOnlyList<NodeToolCapability> Capabilities,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ExpiresAt);

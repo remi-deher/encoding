@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import {
   DataTableColumn,
@@ -11,6 +11,9 @@ import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/catego
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
+import { FLOW_CREATION_FORM } from '../../shared/models/flow-creation';
+import { RecordFormComponent } from '../../shared/ui/record-form.component';
+import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
 
 interface FlowRecord extends DataTableRow {
   readonly id: string;
@@ -108,21 +111,22 @@ const FLOW_RECORDS: readonly FlowRecord[] = [
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     MatButtonModule,
-    RouterLink,
+    RecordFormComponent,
+    DrawerActionButtonComponent,
   ],
   templateUrl: './flow-catalog-page.component.html',
 })
 export class FlowCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
 
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Flows');
-  protected readonly description = computed(
-    () => (this.routeData()['description'] as string) ?? '',
-  );
   protected readonly selectedCategory = signal('all');
+  protected readonly actionOpen = signal(false);
+  protected readonly flowCreationForm = FLOW_CREATION_FORM;
   protected readonly selectedFlow = signal<FlowRecord | null>(null);
   protected readonly detailTitle = computed(() => this.selectedFlow()?.name ?? 'Flow');
   protected readonly detailDescription = computed(() => {
@@ -172,5 +176,21 @@ export class FlowCatalogPageComponent {
 
   protected onDetailClosed(): void {
     this.selectedFlow.set(null);
+  }
+
+  protected openFlowCreation(): void {
+    this.actionOpen.set(true);
+  }
+
+  protected closeFlowCreation(): void {
+    this.actionOpen.set(false);
+  }
+
+  protected startFlow(values: Record<string, string>): void {
+    void this.router.navigate(['/flows/new'], {
+      queryParams: { name: values['name'], mediaType: values['mediaType'], starter: values['starter'] },
+      info: { flowEditorDirection: 'forward' },
+    });
+    this.actionOpen.set(false);
   }
 }

@@ -1,10 +1,12 @@
-import { Component } from '@angular/core';
+import { Component, TemplateRef, inject, signal, viewChild } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { MetricCardComponent } from '../../shared/ui/metric-card.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
+import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { StatusBadgeComponent, StatusTone } from '../../shared/ui/status-badge.component';
 
 interface ActiveTask {
@@ -27,10 +29,12 @@ interface NodeSummary {
   selector: 'app-home-page',
   imports: [
     MatButtonModule,
-    MatCardModule,
     MatProgressBarModule,
+    DetailDrawerComponent,
     MetricCardComponent,
+    NgTemplateOutlet,
     PageHeaderComponent,
+    RecordFormComponent,
     RouterLink,
     StatusBadgeComponent,
   ],
@@ -38,6 +42,31 @@ interface NodeSummary {
   styleUrl: './home-page.component.scss',
 })
 export class HomePageComponent {
+  private readonly router = inject(Router);
+  protected readonly flowActionOpen = signal(false);
+  protected readonly flowCreationForm = signal<import('../../shared/ui/record-form.component').RecordFormData | null>(null);
+  protected readonly pageActionsTemplate = viewChild<TemplateRef<unknown>>('pageActions');
+  protected readonly flowFormTemplate = viewChild<TemplateRef<unknown>>('flowForm');
+  protected readonly homeContentTemplate = viewChild<TemplateRef<unknown>>('homeContent');
+
+  protected async openFlowCreation(): Promise<void> {
+    this.flowActionOpen.set(true);
+    const { FLOW_CREATION_FORM } = await import('../../shared/models/flow-creation');
+    this.flowCreationForm.set(FLOW_CREATION_FORM);
+  }
+
+  protected closeFlowCreation(): void {
+    this.flowActionOpen.set(false);
+  }
+
+  protected startFlow(values: Record<string, string>): void {
+    void this.router.navigate(['/flows/new'], {
+      queryParams: { name: values['name'], mediaType: values['mediaType'], starter: values['starter'] },
+      info: { flowEditorDirection: 'forward' },
+    });
+    this.flowActionOpen.set(false);
+  }
+
   protected readonly metrics = [
     { label: 'Nœuds disponibles', value: '3 / 4', detail: '1 nœud nécessite votre attention' },
     { label: 'Encodages actifs', value: '4', detail: 'Sur 6 workers configurés' },

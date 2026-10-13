@@ -1,0 +1,19 @@
+:host {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.drawer-action-button {
+  max-width: 260px;
+  min-height: 36px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+}
+
+@media (max-width: 700px) {
+  .drawer-action-button {
+    max-width: 220px;
+  }
+}

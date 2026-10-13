@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/dist
+**/.angular
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/.env
+**/coverage

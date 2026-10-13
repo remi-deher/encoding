@@ -49,7 +49,8 @@ export interface DetailField {
 
     .tab-fields {
       min-height: 120px;
-      padding: 22px 4px 4px;
+      padding: 18px 4px 4px;
+      gap: 9px;
     }
 
     .detail-field-list {
@@ -61,6 +62,13 @@ export interface DetailField {
     .detail-section {
       display: grid;
       gap: 14px;
+    }
+
+    .tab-fields > div {
+      padding: 12px 14px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 9px;
+      background: var(--surface-muted);
     }
 
     .detail-section h3 {
@@ -77,14 +85,17 @@ export interface DetailField {
 
     .detail-field-list dt {
       color: var(--text-muted);
-      font-size: 11px;
-      font-weight: 650;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .035em;
+      text-transform: uppercase;
     }
 
     .detail-field-list dd {
       margin: 0;
       color: var(--text-primary);
       font-size: 13px;
+      line-height: 1.5;
       overflow-wrap: anywhere;
       white-space: pre-line;
     }

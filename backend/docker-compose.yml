@@ -18,16 +18,18 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Cluster: Host=postgres;Port=5432;Database=encoding;Username=encoding;Password=encoding
-      Cluster__NodeApiToken: ${NODE_API_TOKEN:?Create backend/.env from .env.example and set NODE_API_TOKEN}
       NodePresence__OfflineAfterSeconds: 30
+      Cluster__DiscoveryPort: 8080
+      Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://api:8080/}
     ports:
       - "127.0.0.1:5080:8080"
+      - "127.0.0.1:4201:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,12 +41,18 @@ services:
       dockerfile: Dockerfile.Agent
     environment:
       Cluster__ApiBaseUrl: http://api:8080
-      Cluster__NodeApiToken: ${NODE_API_TOKEN:?Create backend/.env from .env.example and set NODE_API_TOKEN}
-      Node__Id: ${NODE_ID:?Create backend/.env from .env.example and set NODE_ID}
+      Node__DataDirectory: /var/lib/encoding-node
       Node__Name: ${NODE_NAME:-encoding-dev-node}
-      Node__Roles: ${NODE_ROLES:-server,worker}
-      Node__MaxConcurrentTasks: ${NODE_MAX_CONCURRENT_TASKS:-2}
+      Node__Roles: ${NODE_ROLES:-worker}
+      Node__MaxConcurrentTasks: ${NODE_MAX_CONCURRENT_TASKS:-1}
       Node__HeartbeatIntervalSeconds: 10
+      Worker__AutoAcceptEnrollment: ${WORKER_AUTO_ACCEPT_ENROLLMENT:-false}
+      WorkerUi__Port: 8081
+      WorkerUi__Origins: ${WORKER_UI_ORIGINS:-http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201,http://localhost:5080,http://127.0.0.1:5080}
+    ports:
+      - "127.0.0.1:5081:8081"
+    volumes:
+      - encoding-node-data:/var/lib/encoding-node
     depends_on:
       api:
         condition: service_started
@@ -52,3 +60,4 @@ services:
 
 volumes:
   encoding-postgres-data:
+  encoding-node-data:

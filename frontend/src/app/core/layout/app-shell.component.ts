@@ -16,20 +16,24 @@ export class AppShellComponent {
   private readonly navigationEnd = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
-      map(() => this.getCurrentPageTitle()),
+      map(() => this.getCurrentPageContext()),
     ),
-    { initialValue: this.getCurrentPageTitle() },
+    { initialValue: this.getCurrentPageContext() },
   );
 
-  protected readonly pageTitle = computed(() => this.navigationEnd());
+  protected readonly pageTitle = computed(() => this.navigationEnd().title);
+  protected readonly workerMode = computed(() => this.navigationEnd().workerMode);
 
-  private getCurrentPageTitle(): string {
+  private getCurrentPageContext(): { title: string; workerMode: boolean } {
     let route = this.router.routerState.snapshot.root;
 
     while (route.firstChild) {
       route = route.firstChild;
     }
 
-    return (route.data['title'] as string | undefined) ?? 'Vue d’ensemble';
+    return {
+      title: (route.data['title'] as string | undefined) ?? 'Vue d’ensemble',
+      workerMode: route.data['workerMode'] === true,
+    };
   }
 }

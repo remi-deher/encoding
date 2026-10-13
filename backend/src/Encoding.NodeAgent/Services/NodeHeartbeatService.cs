@@ -5,37 +5,44 @@ namespace Encoding.NodeAgent.Services;
 
 public sealed class NodeHeartbeatService(
     NodeAgentOptions options,
+    WorkerIdentityStore identityStore,
     IToolCapabilityProbe capabilityProbe,
     ILogger<NodeHeartbeatService> logger) : BackgroundService
 {
-    private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Agent du nœud {NodeName} démarré avec l’identifiant {NodeId}.", options.Name, options.Id);
+        var identity = await identityStore.GetAsync(stoppingToken);
+        logger.LogInformation("Agent worker {NodeName} démarré avec l’identifiant local {NodeId}.", options.Name, identity.Id);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                var capabilities = await capabilityProbe.DiscoverAsync(stoppingToken);
-                var heartbeat = new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities);
-                using var request = new HttpRequestMessage(
-                    HttpMethod.Put,
-                    new Uri(options.ApiBaseUri, $"api/v1/nodes/{options.Id:D}/heartbeat"))
+                identity = await identityStore.GetAsync(stoppingToken);
+                if (identity.HasCredentials)
                 {
-                    Content = JsonContent.Create(heartbeat)
-                };
-                request.Headers.Add("X-Node-Token", options.ApiToken);
-
-                using var response = await _httpClient.SendAsync(request, stoppingToken);
-                if (!response.IsSuccessStatusCode)
-                {
-                    logger.LogWarning("Le heartbeat du nœud a reçu HTTP {StatusCode}.", (int)response.StatusCode);
-                }
-                else
-                {
-                    logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", options.Id);
+                    var capabilities = await capabilityProbe.DiscoverAsync(stoppingToken);
+                    var heartbeat = new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities);
+                    using var request = new HttpRequestMessage(HttpMethod.Put,
+                        new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/nodes/{identity.Id:D}/heartbeat"))
+                    {
+                        Content = JsonContent.Create(heartbeat)
+                    };
+                    request.Headers.Add("X-Node-Token", identity.NodeToken);
+                    using var response = await httpClient.SendAsync(request, stoppingToken);
+                    if (!response.IsSuccessStatusCode && !(response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !identity.IsEnrolled))
+                        logger.LogWarning("Le heartbeat du nœud {NodeId} a reçu HTTP {StatusCode}.", identity.Id, (int)response.StatusCode);
+                    else if (response.IsSuccessStatusCode)
+                    {
+                        if (!identity.IsEnrolled)
+                        {
+                            await identityStore.MarkEnrolledAsync(stoppingToken);
+                            logger.LogInformation("L’enrôlement en attente du worker {NodeId} a été confirmé par le cluster.", identity.Id);
+                        }
+                        logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", identity.Id);
+                    }
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -44,7 +51,7 @@ public sealed class NodeHeartbeatService(
             }
             catch (HttpRequestException exception)
             {
-                logger.LogWarning(exception, "L’API du cluster est momentanément indisponible ; nouvel essai au prochain heartbeat.");
+                logger.LogWarning(exception, "Le cluster est momentanément indisponible ; nouvel essai au prochain heartbeat.");
             }
             catch (TaskCanceledException exception) when (!stoppingToken.IsCancellationRequested)
             {
@@ -57,7 +64,7 @@ public sealed class NodeHeartbeatService(
 
     public override void Dispose()
     {
-        _httpClient.Dispose();
+        httpClient.Dispose();
         base.Dispose();
     }
 }

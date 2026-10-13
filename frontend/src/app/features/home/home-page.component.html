@@ -1,9 +1,25 @@
-<app-page-header
-  title="Vue d’ensemble"
-  description="L’état du cluster et des encodages, en un coup d’œil."
->
-  <a page-actions mat-flat-button color="primary" routerLink="/flows">Créer un flow</a>
-</app-page-header>
+@if (flowActionOpen()) {
+  @defer (when flowActionOpen()) {
+    <app-detail-drawer
+      [opened]="true"
+      title="Créer un flow"
+      description="Choisissez un nom, un média et un point de départ avant d’ouvrir l’éditeur."
+      [content]="flowFormTemplate()"
+      (closed)="closeFlowCreation()"
+    >
+      <div drawer-main>
+        <ng-container [ngTemplateOutlet]="homeContentTemplate()" />
+      </div>
+    </app-detail-drawer>
+  } @placeholder {
+    <ng-container [ngTemplateOutlet]="homeContentTemplate()" />
+  }
+} @else {
+  <ng-container [ngTemplateOutlet]="homeContentTemplate()" />
+}
+
+<ng-template #homeContent>
+<app-page-header title="Vue d’ensemble" [actions]="pageActionsTemplate()" />
 
 <div class="demo-notice" role="note">
   <span class="demo-mark" aria-hidden="true">i</span>
@@ -118,3 +134,18 @@
     <time datetime="2026-10-13T09:18:00">Il y a 28 min</time>
   </div>
 </section>
+</ng-template>
+
+<ng-template #pageActions>
+  <button mat-flat-button color="primary" type="button" (click)="openFlowCreation()">Créer un flow</button>
+</ng-template>
+
+<ng-template #flowForm>
+  @defer (when flowCreationForm()) {
+    @if (flowCreationForm(); as form) {
+      <app-record-form [data]="form" (submitted)="startFlow($event)" (cancelled)="closeFlowCreation()" />
+    }
+  } @placeholder {
+    <p role="status">Préparation du formulaire…</p>
+  }
+</ng-template>

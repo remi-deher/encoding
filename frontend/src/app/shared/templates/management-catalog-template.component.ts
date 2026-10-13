@@ -7,16 +7,15 @@ import { PageHeaderComponent } from '../ui/page-header.component';
   imports: [DetailDrawerComponent, PageHeaderComponent],
   template: `
     <app-detail-drawer
-      [opened]="detailOpen()"
-      [title]="detailTitle()"
-      [description]="detailDescription()"
-      [content]="detailContent()"
-      (closed)="detailClosed.emit()"
+      [opened]="actionOpen() || detailOpen()"
+      [title]="actionOpen() ? actionTitle() : detailTitle()"
+      [description]="actionOpen() ? actionDescription() : detailDescription()"
+      [content]="actionOpen() ? actionContent() : detailContent()"
+      [headerActions]="actionOpen() ? undefined : detailHeaderActions()"
+      (closed)="onDrawerClosed()"
     >
       <div drawer-main>
-        <app-page-header [title]="title()" [description]="description()">
-          <ng-content select="[page-actions]" />
-        </app-page-header>
+        <app-page-header [title]="title()" [actions]="pageActions()" />
 
         <section class="catalog-panel" [attr.aria-label]="title()">
           <div class="catalog-toolbar">
@@ -48,7 +47,6 @@ import { PageHeaderComponent } from '../ui/page-header.component';
 })
 export class ManagementCatalogTemplateComponent {
   readonly title = input.required<string>();
-  readonly description = input('');
   readonly filterLabel = input('Filtres');
   readonly note = input('');
   readonly catalogState = input<'ready' | 'loading' | 'error'>('ready');
@@ -56,6 +54,18 @@ export class ManagementCatalogTemplateComponent {
   readonly detailOpen = input(false);
   readonly detailTitle = input('Détails');
   readonly detailDescription = input('');
+  readonly actionOpen = input(false);
+  readonly actionTitle = input('Ajouter');
+  readonly actionDescription = input('');
   readonly detailClosed = output<void>();
+  readonly actionClosed = output<void>();
+  protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
   protected readonly detailContent = contentChild('detailContent', { read: TemplateRef });
+  protected readonly detailHeaderActions = contentChild('detailHeaderActions', { read: TemplateRef });
+  protected readonly actionContent = contentChild('actionContent', { read: TemplateRef });
+
+  protected onDrawerClosed(): void {
+    if (this.actionOpen()) this.actionClosed.emit();
+    else this.detailClosed.emit();
+  }
 }

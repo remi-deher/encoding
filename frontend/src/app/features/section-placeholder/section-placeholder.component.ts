@@ -8,7 +8,7 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
   selector: 'app-section-placeholder',
   imports: [MatCardModule, PageHeaderComponent],
   template: `
-    <app-page-header [title]="title()" [description]="description()" />
+    <app-page-header [title]="title()" />
     <mat-card appearance="outlined" class="placeholder-card">
       <mat-card-content>
         <span class="placeholder-kicker">PROCHAINE ÉTAPE</span>
@@ -62,8 +62,5 @@ export class SectionPlaceholderComponent {
   });
   protected readonly title = computed(
     () => (this.routeData()['title'] as string | undefined) ?? 'Section',
-  );
-  protected readonly description = computed(
-    () => (this.routeData()['description'] as string | undefined) ?? '',
   );
 }

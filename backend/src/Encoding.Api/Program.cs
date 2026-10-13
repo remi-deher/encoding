@@ -6,8 +6,6 @@ using Encoding.Api.Libraries;
 using Encoding.Contracts.Nodes;
 using Encoding.Contracts.Libraries;
 using Npgsql;
-using System.Security.Cryptography;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Cluster")
@@ -17,17 +15,13 @@ if (offlineAfterSeconds <= 0)
 {
     throw new InvalidOperationException("NodePresence:OfflineAfterSeconds doit être supérieur à zéro.");
 }
-var nodeApiToken = builder.Configuration["Cluster:NodeApiToken"]
-    ?? throw new InvalidOperationException("Le jeton 'Cluster:NodeApiToken' est obligatoire.");
-if (string.IsNullOrWhiteSpace(nodeApiToken))
-{
-    throw new InvalidOperationException("Le jeton 'Cluster:NodeApiToken' ne peut pas être vide.");
-}
-
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
 builder.Services.AddSingleton<LibraryRepository>();
+builder.Services.AddSingleton<LibraryNodeAccessRepository>();
+builder.Services.AddSingleton<ClusterIdentityRepository>();
+builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -36,6 +30,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping);
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
     .WithTags("Health");
@@ -63,7 +60,6 @@ libraries.MapPost("", async (CreateLibraryRequest request, LibraryRepository rep
     var errors = new Dictionary<string, string[]>();
     if (string.IsNullOrWhiteSpace(request.Name)) errors["name"] = ["Le nom de la bibliothèque est obligatoire."];
     else if (request.Name.Trim().Length > 128) errors["name"] = ["Le nom ne peut pas dépasser 128 caractères."];
-    if (!Enum.IsDefined(request.MediaType)) errors["mediaType"] = ["Le type de média n’est pas pris en charge."];
     if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
     var created = await repository.CreateAsync(request, cancellationToken);
     return created is null
@@ -71,7 +67,133 @@ libraries.MapPost("", async (CreateLibraryRequest request, LibraryRepository rep
         : Results.Created($"/api/v1/libraries/{created.Id}", created);
 }).WithName("CreateLibrary");
 
+libraries.MapPut("/{libraryId:guid}", async (
+    Guid libraryId,
+    UpdateLibraryRequest request,
+    LibraryRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    var errors = new Dictionary<string, string[]>();
+    if (string.IsNullOrWhiteSpace(request.Name)) errors["name"] = ["Le nom de la bibliothèque est obligatoire."];
+    else if (request.Name.Trim().Length > 128) errors["name"] = ["Le nom ne peut pas dépasser 128 caractères."];
+    if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+    try
+    {
+        var updated = await repository.UpdateAsync(libraryId, request, cancellationToken);
+        return updated is null ? (IResult)Results.NotFound() : Results.Ok(updated);
+    }
+    catch (PostgresException exception) when (exception.SqlState == "23505")
+    {
+        return Results.Conflict(new { title = "Une bibliothèque porte déjà ce nom." });
+    }
+}).WithName("UpdateLibrary");
+
+libraries.MapPut("/{libraryId:guid}/activation", async (
+    Guid libraryId,
+    SetLibraryActivationRequest request,
+    LibraryRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    var updated = await repository.SetActiveAsync(libraryId, request.IsActive, cancellationToken);
+    return updated is null ? (IResult)Results.NotFound() : Results.Ok(updated);
+}).WithName("SetLibraryActivation");
+
+libraries.MapDelete("/{libraryId:guid}", async (
+    Guid libraryId,
+    LibraryRepository repository,
+    CancellationToken cancellationToken) =>
+    await repository.DeleteAsync(libraryId, cancellationToken) ? Results.NoContent() : Results.NotFound())
+    .WithName("DeleteLibrary");
+
+libraries.MapGet("/{libraryId:guid}/node-access", async (
+    Guid libraryId,
+    LibraryNodeAccessRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    var accesses = await repository.ListAsync(libraryId, cancellationToken);
+    return accesses is null ? (IResult)Results.NotFound() : Results.Ok(accesses);
+}).WithName("ListLibraryNodeAccesses");
+
+libraries.MapPut("/{libraryId:guid}/node-access", async (
+    Guid libraryId,
+    ConfigureLibraryNodeAccessRequest request,
+    LibraryNodeAccessRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var accesses = await repository.ConfigureAsync(libraryId, request, cancellationToken);
+        return accesses is null ? (IResult)Results.NotFound() : Results.Ok(accesses);
+    }
+    catch (LibraryNodeAccessValidationException exception)
+    {
+        return Results.ValidationProblem(exception.Errors.ToDictionary(pair => pair.Key, pair => pair.Value));
+    }
+}).WithName("ConfigureLibraryNodeAccesses");
+
 var nodes = app.MapGroup("/api/v1/nodes").WithTags("Nodes");
+app.MapGet("/api/v1/cluster", async (ClusterIdentityRepository repository, CancellationToken cancellationToken) =>
+{
+    var identity = await repository.GetAsync(cancellationToken);
+    return Results.Ok(new { identity.Id, identity.Name });
+}).WithTags("Cluster").WithName("GetClusterIdentity");
+
+nodes.MapPost("/enroll", async (
+    NodeEnrollmentRequest request,
+    NodeRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    var errors = NodeHeartbeatValidator.Validate(request);
+    if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+    var node = await repository.EnrollAsync(request, cancellationToken);
+    return node is null
+        ? Results.Conflict(new { title = "Cet identifiant appartient déjà à un autre nœud." })
+        : Results.Ok(node);
+}).WithName("EnrollNode");
+
+nodes.MapPost("/enrollment-requests", async (
+    CreateNodeEnrollmentRequest request,
+    NodeRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    var errors = NodeHeartbeatValidator.Validate(request);
+    if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+    var created = await repository.CreatePairingRequestAsync(request, cancellationToken);
+    return created
+        ? Results.Accepted()
+        : Results.Conflict(new { title = "Une demande de jumelage active existe déjà pour une autre identité." });
+}).WithName("CreateNodeEnrollmentRequest");
+
+nodes.MapGet("/enrollment-requests", async (
+    NodeRepository repository,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await repository.ListPendingPairingRequestsAsync(cancellationToken)))
+    .WithName("ListPendingNodeEnrollmentRequests");
+
+nodes.MapPost("/enrollment-requests/{nodeId:guid}/approve", async (
+    Guid nodeId,
+    NodeRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    var node = await repository.ApprovePairingRequestAsync(nodeId, cancellationToken);
+    return node is null
+        ? (IResult)Results.NotFound(new { title = "Cette demande est expirée ou n’existe plus." })
+        : Results.Ok(node);
+}).WithName("ApprovePendingNodeEnrollmentRequest");
+
+nodes.MapPost("/enrollment-requests/approve", async (
+    ApproveNodeEnrollmentRequest request,
+    NodeRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    var errors = NodeHeartbeatValidator.Validate(request);
+    if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+    var node = await repository.ApprovePairingRequestAsync(request.PairingKey, cancellationToken);
+    return node is null
+        ? Results.NotFound(new { title = "Cette clé de jumelage est invalide, expirée ou déjà utilisée." })
+        : Results.Ok(node);
+}).WithName("ApproveNodeEnrollmentRequest");
+
 nodes.MapPut("/{nodeId:guid}/heartbeat", async (
     Guid nodeId,
     NodeHeartbeatRequest request,
@@ -80,7 +202,7 @@ nodes.MapPut("/{nodeId:guid}/heartbeat", async (
     CancellationToken cancellationToken) =>
 {
     var providedToken = httpContext.Request.Headers["X-Node-Token"].ToString();
-    if (!NodeTokenAuthentication.Matches(providedToken, nodeApiToken))
+    if (string.IsNullOrWhiteSpace(providedToken))
     {
         return (IResult)Results.Unauthorized();
     }
@@ -91,8 +213,8 @@ nodes.MapPut("/{nodeId:guid}/heartbeat", async (
         return (IResult)Results.ValidationProblem(errors);
     }
 
-    var node = await repository.RecordHeartbeatAsync(nodeId, request, cancellationToken);
-    return (IResult)Results.Ok(node);
+    var node = await repository.RecordHeartbeatAsync(nodeId, providedToken, request, cancellationToken);
+    return node is null ? (IResult)Results.Unauthorized() : Results.Ok(node);
 }).WithName("RecordNodeHeartbeat");
 
 nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, CancellationToken cancellationToken) =>
@@ -105,17 +227,8 @@ nodes.MapGet("/{nodeId:guid}", async (Guid nodeId, NodeRepository repository, No
     return node is null ? (IResult)Results.NotFound() : Results.Ok(node);
 }).WithName("GetNode");
 
+app.MapFallbackToFile("index.html");
+
 app.Run();
 
 public partial class Program { }
-
-static class NodeTokenAuthentication
-{
-    public static bool Matches(string suppliedToken, string configuredToken)
-    {
-        var suppliedBytes = System.Text.Encoding.UTF8.GetBytes(suppliedToken);
-        var configuredBytes = System.Text.Encoding.UTF8.GetBytes(configuredToken);
-        return suppliedBytes.Length == configuredBytes.Length
-            && CryptographicOperations.FixedTimeEquals(suppliedBytes, configuredBytes);
-    }
-}

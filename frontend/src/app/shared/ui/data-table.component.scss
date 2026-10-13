@@ -143,6 +143,17 @@
   outline-offset: 2px;
 }
 
+.row-action_danger {
+  border-color: #b42318;
+  background: #b42318;
+  color: #fff;
+}
+
+.row-action_danger:hover {
+  border-color: #8f1d14;
+  background: #8f1d14;
+}
+
 .empty-row .mat-cell {
   height: 92px;
   color: var(--text-muted);

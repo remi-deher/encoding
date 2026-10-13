@@ -1,6 +1,7 @@
 import { Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import dagre from '@dagrejs/dagre';
+import { MEDIA_TYPE_OPTIONS } from '../../shared/models/media-type';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { ComponentConfigurationFormComponent } from '../../shared/ui/component-configuration-form.component';
 import {
@@ -14,6 +15,7 @@ import {
 } from '../../shared/models/flow-component';
 import { FlowGraphEditorComponent } from '../../shared/ui/flow-graph-editor.component';
 import { SearchableComponentCatalogComponent } from '../../shared/ui/searchable-component-catalog.component';
+import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 
 const output = (id: string, label: string, description: string): FlowComponentOutput => ({ id, label, description });
 const COMMON_OUTPUTS = [output('success', 'Suite', 'Le composant a terminé son traitement.'), output('error', 'Erreur', 'Le composant n’a pas pu terminer son traitement.')];
@@ -53,7 +55,7 @@ type ComponentDestination = { readonly kind: 'root' } | { readonly kind: 'branch
 
 @Component({
   selector: 'app-flow-editor-page',
-  imports: [ComponentConfigurationFormComponent, DetailDrawerComponent, FlowGraphEditorComponent, SearchableComponentCatalogComponent],
+  imports: [ComponentConfigurationFormComponent, DetailDrawerComponent, FlowGraphEditorComponent, SearchableComponentCatalogComponent, PageHeaderComponent],
   templateUrl: './flow-editor-page.component.html',
   styleUrl: './flow-editor-page.component.scss',
 })
@@ -71,7 +73,15 @@ export class FlowEditorPageComponent {
   protected readonly pluginOptions = PLUGIN_OPTIONS;
   protected readonly configuringNode = computed(() => this.nodes().find((node) => node.id === this.configuringNodeId()));
   private readonly flowId = this.route.snapshot.paramMap.get('flowId');
-  private readonly demoFlow = this.flowId ? FLOW_EDITOR_DEMOS[this.flowId] : undefined;
+  private readonly starterId = this.flowId ?? this.route.snapshot.queryParamMap.get('starter');
+  private readonly demoFlow = this.starterId && this.starterId !== 'blank' ? FLOW_EDITOR_DEMOS[this.starterId] : undefined;
+  protected readonly flowTitle = computed(() => {
+    const name = this.route.snapshot.queryParamMap.get('name');
+    const mediaType = this.route.snapshot.queryParamMap.get('mediaType');
+    const mediaLabel = MEDIA_TYPE_OPTIONS.find((option) => option.value === mediaType)?.label;
+    if (name) return mediaLabel ? `${name} · ${mediaLabel}` : name;
+    return this.demoFlow?.name ?? (this.flowId ? 'Modifier un flow' : 'Nouveau flow');
+  });
   private readonly componentDestination = signal<ComponentDestination>({ kind: 'root' });
   private nextNodeId = 1;
   private nextConnectionId = 1;

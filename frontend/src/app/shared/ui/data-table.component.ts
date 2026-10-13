@@ -4,7 +4,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import { ConfirmationDialogComponent } from './confirmation-dialog.component';
+import { ConfirmationDialogComponent, ConfirmationDialogData } from './confirmation-dialog.component';
 
 export type DataTableValue = string | number;
 export type DataTableRow = Readonly<Record<string, DataTableValue>>;
@@ -19,12 +19,9 @@ export interface DataTableColumn {
 export interface DataTableRowAction {
   readonly id: string;
   readonly label: string;
+  readonly tone?: 'default' | 'danger';
   readonly visibleWhen?: (row: DataTableRow) => boolean;
-  readonly confirmation?: (row: DataTableRow) => {
-    readonly title: string;
-    readonly message: string;
-    readonly confirmLabel?: string;
-  };
+  readonly confirmation?: (row: DataTableRow) => ConfirmationDialogData;
 }
 
 export interface DataTableActionEvent {
@@ -36,11 +33,7 @@ export interface DataTableSelectionAction {
   readonly id: string;
   readonly label: string;
   readonly visibleWhen?: (rows: readonly DataTableRow[]) => boolean;
-  readonly confirmation?: (rows: readonly DataTableRow[]) => {
-    readonly title: string;
-    readonly message: string;
-    readonly confirmLabel?: string;
-  };
+  readonly confirmation?: (rows: readonly DataTableRow[]) => ConfirmationDialogData;
 }
 
 export interface DataTableSelectionActionEvent {
@@ -131,7 +124,22 @@ export interface DataTableSelectionActionEvent {
           </ng-container>
         }
 
-        @if (rowActions().length > 0) {
+        @if (rowActions().length > 0 && separateRowActionColumns()) {
+          @for (action of rowActions(); track action.id) {
+            <ng-container [matColumnDef]="'row-action-' + action.id">
+              <th mat-header-cell *matHeaderCellDef>{{ action.label }}</th>
+              <td mat-cell *matCellDef="let row" class="row-actions-cell" [attr.data-label]="action.label">
+                @if (!action.visibleWhen || action.visibleWhen(row)) {
+                  <button class="row-action" [class.row-action_danger]="action.tone === 'danger'" type="button" [attr.aria-label]="action.label + ' ' + rowActionSubject(row)" (click)="requestRowAction(action, row)">
+                    {{ action.label }}
+                  </button>
+                }
+              </td>
+            </ng-container>
+          }
+        }
+
+        @if (rowActions().length > 0 && !separateRowActionColumns()) {
           <ng-container matColumnDef="row-actions">
             <th mat-header-cell *matHeaderCellDef>Actions</th>
             <td mat-cell *matCellDef="let row" class="row-actions-cell" data-label="Actions">
@@ -139,8 +147,9 @@ export interface DataTableSelectionActionEvent {
                 @if (!action.visibleWhen || action.visibleWhen(row)) {
                   <button
                     class="row-action"
+                    [class.row-action_danger]="action.tone === 'danger'"
                     type="button"
-                    [attr.aria-label]="action.label + ' : ' + row['media']"
+                    [attr.aria-label]="action.label + ' ' + rowActionSubject(row)"
                     (click)="requestRowAction(action, row)"
                   >
                     {{ action.label }}
@@ -172,6 +181,7 @@ export class DataTableComponent {
   readonly rowOpenable = input(false);
   readonly rowOpenLabel = input('Ouvrir');
   readonly rowActions = input<readonly DataTableRowAction[]>([]);
+  readonly separateRowActionColumns = input(false);
   readonly selectionActions = input<readonly DataTableSelectionAction[]>([]);
   readonly selectionChange = output<readonly DataTableRow[]>();
   readonly rowAction = output<DataTableActionEvent>();
@@ -184,7 +194,9 @@ export class DataTableComponent {
   protected readonly displayedColumnKeys = computed(() => [
     ...(this.selectable() ? ['select'] : []),
     ...this.columns().map((column) => column.key),
-    ...(this.rowActions().length > 0 ? ['row-actions'] : []),
+    ...(this.separateRowActionColumns()
+      ? this.rowActions().map((action) => `row-action-${action.id}`)
+      : this.rowActions().length > 0 ? ['row-actions'] : []),
   ]);
 
   @ViewChild(MatSort)
@@ -220,6 +232,10 @@ export class DataTableComponent {
           this.rowAction.emit({ actionId: action.id, row });
         }
       });
+  }
+
+  protected rowActionSubject(row: DataTableRow): string {
+    return String(row['name'] ?? row['nodeName'] ?? row['id'] ?? 'cet élément');
   }
 
   protected openRow(row: DataTableRow, event: MouseEvent): void {

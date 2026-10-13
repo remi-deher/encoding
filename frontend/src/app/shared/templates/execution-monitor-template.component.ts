@@ -1,4 +1,4 @@
-import { Component, TemplateRef, computed, input, output, signal, viewChild } from '@angular/core';
+import { Component, TemplateRef, computed, contentChild, input, output, signal, viewChild } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
 import {
@@ -27,7 +27,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
   selector: 'app-execution-monitor-template',
   imports: [DataTableComponent, DetailDrawerComponent, DetailFieldListComponent, MatTabsModule, PageHeaderComponent],
   template: `
-    <app-page-header [title]="title()" [description]="description()" />
+    <app-page-header [title]="title()" [actions]="pageActions()" />
 
     <section class="monitor-panel" aria-labelledby="execution-panel-heading">
       <div class="monitor-panel-heading">
@@ -249,7 +249,6 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
 })
 export class ExecutionMonitorTemplateComponent {
   readonly title = input.required<string>();
-  readonly description = input('');
   readonly sectionDescription = input('');
   readonly countText = input.required<string>();
   readonly queueCount = input.required<number>();
@@ -272,6 +271,7 @@ export class ExecutionMonitorTemplateComponent {
   readonly historyRows = input.required<readonly DataTableRow[]>();
   readonly feedback = input('');
   readonly note = input('');
+  protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
   readonly viewChange = output<ExecutionMonitorView>();
   readonly errorAction = output<DataTableActionEvent>();
   readonly selectionAction = output<DataTableSelectionActionEvent>();

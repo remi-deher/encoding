@@ -6,6 +6,7 @@
   (closed)="componentPickerOpen.set(false)"
 >
   <div drawer-main class="flow-editor-page">
+    <app-page-header [title]="flowTitle()" />
     <app-flow-graph-editor
       [nodes]="nodes()"
       [connections]="connections()"

@@ -1,20 +1,19 @@
 <app-management-catalog-template
   [title]="title()"
-  [description]="description()"
   [detailOpen]="selectedFlow() !== null"
+  [actionOpen]="actionOpen()"
+  [actionTitle]="flowCreationForm.title"
+  [actionDescription]="flowCreationForm.description"
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
+  (actionClosed)="closeFlowCreation()"
   filterLabel="Type de média"
   note="Les flows affichés sont des exemples. Le catalogue sera relié au backend lorsque son API sera en place."
 >
-  <a
-    page-actions
-    matButton="filled"
-    routerLink="/flows/new"
-    [info]="{ flowEditorDirection: 'forward' }"
-    >Créer un flow</a
-  >
+  <ng-template #pageActions>
+    <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
+  </ng-template>
 
   <div catalogue-filters>
     <app-category-tabs
@@ -38,14 +37,19 @@
 
   <ng-template #detailContent catalogue-detail>
     <app-detail-field-list [fields]="detailFields()" [tabbed]="true" tabsLabel="Sections du flow" />
+  </ng-template>
+
+  <ng-template #detailHeaderActions>
     @if (selectedFlow(); as flow) {
-      <a
-        matButton="filled"
+      <app-drawer-action-button
+        label="Ouvrir l’éditeur"
         [routerLink]="['/flows', flow.id, 'edit']"
-        [info]="{ flowEditorDirection: 'forward' }"
-      >
-        Ouvrir l’éditeur
-      </a>
+        [navigationInfo]="{ flowEditorDirection: 'forward' }"
+      />
     }
+  </ng-template>
+
+  <ng-template #actionContent>
+    <app-record-form [data]="flowCreationForm" (submitted)="startFlow($event)" (cancelled)="closeFlowCreation()" />
   </ng-template>
 </app-management-catalog-template>

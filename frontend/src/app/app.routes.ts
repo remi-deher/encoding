@@ -10,6 +10,18 @@ export const routes: Routes = [
     data: { title: 'Vue d’ensemble', primaryNavigation: true },
   },
   {
+    path: 'worker',
+    loadComponent: () =>
+      import('./features/worker/worker-console-page.component').then(
+        (module) => module.WorkerConsolePageComponent,
+      ),
+    data: {
+      title: 'Console worker',
+      workerMode: true,
+      description: 'Suivez les tâches et l’état de cette installation.',
+    },
+  },
+  {
     path: 'tasks',
     loadComponent: () =>
       import('./features/tasks/task-monitoring-page.component').then(

@@ -1,94 +1,54 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, TemplateRef, effect, inject, input, output } from '@angular/core';
-import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
-
-interface DetailDrawerData {
-  readonly title: string;
-  readonly description: string;
-  readonly content: TemplateRef<unknown>;
-}
+import { Component, TemplateRef, input, output } from '@angular/core';
+import { MatSidenavModule } from '@angular/material/sidenav';
 
 @Component({
   selector: 'app-detail-drawer',
-  template: '<ng-content select="[drawer-main]" />',
-})
-export class DetailDrawerComponent {
-  readonly opened = input(false);
-  readonly title = input('Détails');
-  readonly description = input('');
-  readonly content = input<TemplateRef<unknown> | undefined>(undefined);
-  readonly closed = output<void>();
-
-  private readonly dialog = inject(MatDialog);
-  private dialogRef: MatDialogRef<DetailDrawerPanelComponent> | undefined;
-
-  constructor() {
-    effect(() => {
-      const opened = this.opened();
-      const content = this.content();
-
-      if (!opened) {
-        this.dialogRef?.close();
-        return;
-      }
-
-      if (!content || this.dialogRef) {
-        return;
-      }
-
-      const dialogRef = this.dialog.open(DetailDrawerPanelComponent, {
-        data: {
-          title: this.title(),
-          description: this.description(),
-          content,
-        } satisfies DetailDrawerData,
-        width: '80vw',
-        maxWidth: '100vw',
-        height: '100dvh',
-        maxHeight: '100dvh',
-        position: { top: '0', right: '0' },
-        panelClass: 'detail-drawer-panel',
-        backdropClass: 'detail-drawer-backdrop',
-        autoFocus: 'first-tabbable',
-        restoreFocus: true,
-      });
-
-      this.dialogRef = dialogRef;
-      dialogRef.afterClosed().subscribe(() => {
-        if (this.dialogRef === dialogRef) {
-          this.dialogRef = undefined;
-        }
-        this.closed.emit();
-      });
-    });
-  }
-}
-
-@Component({
-  imports: [NgTemplateOutlet],
+  imports: [MatSidenavModule, NgTemplateOutlet],
   template: `
-    <section class="drawer-panel">
-      <header class="drawer-header">
-        <div class="drawer-heading">
-          <h2 id="detail-drawer-title">{{ data.title }}</h2>
-          @if (data.description) {
-            <p>{{ data.description }}</p>
-          }
-        </div>
-        <button class="drawer-close" type="button" aria-label="Fermer le panneau" (click)="close()">
-          <span aria-hidden="true">×</span>
-        </button>
-      </header>
-      <div class="drawer-body">
-        <ng-container [ngTemplateOutlet]="data.content" />
-      </div>
-    </section>
+    <mat-drawer-container class="detail-drawer-container" [hasBackdrop]="false">
+      <mat-drawer-content>
+        <ng-content select="[drawer-main]" />
+      </mat-drawer-content>
+      <mat-drawer
+        #drawer
+        class="detail-drawer-panel"
+        position="end"
+        mode="over"
+        [opened]="opened()"
+        [attr.aria-label]="title()"
+        (closed)="closed.emit()"
+      >
+        <section class="drawer-panel">
+          <header class="drawer-header">
+            <div class="drawer-heading">
+              <div class="drawer-title-row">
+                <h2>{{ title() }}</h2>
+                <ng-container [ngTemplateOutlet]="headerActions() ?? null" />
+              </div>
+              @if (description()) {
+                <p>{{ description() }}</p>
+              }
+            </div>
+            <button class="drawer-close" type="button" aria-label="Fermer le panneau" (click)="drawer.close()">
+              <span aria-hidden="true">×</span>
+            </button>
+          </header>
+          <div class="drawer-body">
+            <ng-container [ngTemplateOutlet]="content() ?? null" />
+          </div>
+        </section>
+      </mat-drawer>
+    </mat-drawer-container>
   `,
   styles: `
     :host {
       display: block;
       width: 100%;
-      height: 100%;
+    }
+
+    .detail-drawer-container {
+      width: 100%;
     }
 
     .drawer-panel {
@@ -110,6 +70,13 @@ export class DetailDrawerComponent {
 
     .drawer-heading {
       min-width: 0;
+    }
+
+    .drawer-title-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px 14px;
     }
 
     .drawer-heading h2 {
@@ -170,11 +137,12 @@ export class DetailDrawerComponent {
     }
   `,
 })
-class DetailDrawerPanelComponent {
-  protected readonly data = inject<DetailDrawerData>(MAT_DIALOG_DATA);
-  private readonly dialogRef = inject(MatDialogRef<DetailDrawerPanelComponent>);
+export class DetailDrawerComponent {
+  readonly opened = input(false);
+  readonly title = input('Détails');
+  readonly description = input('');
+  readonly content = input<TemplateRef<unknown> | undefined>(undefined);
+  readonly headerActions = input<TemplateRef<unknown> | undefined>(undefined);
+  readonly closed = output<void>();
 
-  protected close(): void {
-    this.dialogRef.close();
-  }
 }

@@ -1,19 +1,26 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { catchError, EMPTY, switchMap, timer } from 'rxjs';
+import { catchError, EMPTY, forkJoin, switchMap, timer } from 'rxjs';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import {
   DataTableColumn,
   DataTableComponent,
+  DataTableActionEvent,
   DataTableRow,
+  DataTableRowAction,
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
-import { GuideDialogComponent, GuideDialogData } from '../../shared/ui/guide-dialog.component';
+import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
+import { NotificationService } from '../../shared/services/notification.service';
+import { LibraryNodeAccessFormComponent, LibraryNodeAccessOption, LibraryNodeAccessValue } from '../../shared/ui/library-node-access-form.component';
+import { LibraryNodeAccessMode, LibraryNodeAccessResponse } from '../../shared/ui/library-node-access-types';
 
 type NodeRole = 'server' | 'worker';
 type NodeStatus = 'online' | 'offline';
@@ -33,6 +40,39 @@ interface NodeResponse {
   readonly capabilities: readonly NodeToolCapability[];
   readonly status: NodeStatus;
   readonly lastSeenAt: string;
+}
+
+interface LibraryResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly createdAt: string;
+  readonly isActive: boolean;
+}
+
+interface NodeLibraryRecord extends DataTableRow {
+  readonly id: string;
+  readonly name: string;
+  readonly mode: LibraryNodeAccessMode;
+  readonly modeLabel: string;
+  readonly pathLabel: string;
+}
+
+interface PendingNodeEnrollmentResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly roles: readonly NodeRole[];
+  readonly maxConcurrentTasks: number;
+  readonly capabilities: readonly NodeToolCapability[];
+  readonly createdAt: string;
+  readonly expiresAt: string;
+}
+
+interface PendingNodeEnrollmentRecord extends DataTableRow {
+  readonly id: string;
+  readonly name: string;
+  readonly rolesLabel: string;
+  readonly capabilitiesLabel: string;
+  readonly expiresAtLabel: string;
 }
 
 interface NodeRecord extends DataTableRow {
@@ -60,39 +100,130 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
 
 @Component({
   selector: 'app-node-catalog-page',
-  imports: [DataTableComponent, DetailFieldListComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent, MatButtonModule],
+  imports: [DataTableComponent, DetailFieldListComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent, MatButtonModule, MatTabsModule, MatFormFieldModule, MatSelectModule, RecordFormComponent, LibraryNodeAccessFormComponent],
   templateUrl: './node-catalog-page.component.html',
   styleUrl: './node-catalog-page.component.scss',
 })
 export class NodeCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly http = inject(HttpClient);
-  private readonly dialog = inject(MatDialog);
+  private readonly notifications = inject(NotificationService);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
   private readonly nodes = signal<readonly NodeResponse[]>([]);
+  private readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
+  private readonly allLibraries = signal<readonly LibraryResponse[]>([]);
+  private readonly nodeAccessByLibrary = signal<ReadonlyMap<string, readonly LibraryNodeAccessResponse[]>>(new Map());
 
   protected readonly loadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly selectedRole = signal('all');
+  protected readonly actionOpen = signal(false);
+  protected readonly actionType = signal<'enrollment' | 'library-access' | 'create-library'>('enrollment');
+  protected readonly nodeLibraryLoading = signal(false);
+  protected readonly accessFormBusy = signal(false);
+  protected readonly selectedNodeLibrary = signal<LibraryResponse | null>(null);
+  protected readonly selectedAvailableLibraryId = signal('');
+  protected readonly enrollmentView = signal<'requests' | 'key' | 'review'>('requests');
+  protected readonly selectedEnrollment = signal<PendingNodeEnrollmentResponse | null>(null);
   protected readonly selectedNode = signal<NodeRecord | null>(null);
+  protected readonly createFormData: RecordFormData = {
+    title: 'Ajouter un nœud worker',
+    description: 'Examinez les demandes des workers avant de les accepter. Si un worker n’apparaît pas, générez une clé depuis sa console locale et saisissez-la ici ; elle expire au bout de 10 minutes.',
+    submitLabel: 'Accepter le nœud',
+    reviewTitle: 'Vérifier le jumelage',
+    fields: [
+      { id: 'pairingKey', label: 'Clé générée sur le worker', type: 'text', required: true, maxLength: 16 },
+    ],
+  };
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Nœuds');
-  protected readonly description = computed(() => (this.routeData()['description'] as string) ?? '');
   protected readonly catalogMessage = computed(() => this.loadState() === 'error'
     ? 'Impossible de joindre l’API du cluster. Vérifiez que le backend et PostgreSQL sont démarrés.'
     : 'Chargement des nœuds du cluster…');
   protected readonly detailTitle = computed(() => this.selectedNode()?.name ?? 'Détails du nœud');
   protected readonly detailDescription = computed(() => this.selectedNode()?.roleLabel ?? 'État observé par le cluster');
-  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+  protected readonly overviewFields = computed<readonly DetailField[]>(() => {
     const node = this.selectedNode();
     return node ? [
       { section: 'Nœud', label: 'Rôle', value: node.roleLabel },
       { section: 'Nœud', label: 'État', value: node.state },
       { section: 'Nœud', label: 'Dernier signal', value: node.lastSignal },
+    ] : [];
+  });
+  protected readonly capabilityFields = computed<readonly DetailField[]>(() => {
+    const node = this.selectedNode();
+    return node ? [
       { section: 'Capacités worker', label: 'Outils et accélération', value: node.capabilities },
       { section: 'Capacités worker', label: 'Limite simultanée', value: node.workerLoad },
-      { section: 'Accès aux bibliothèques', label: 'État', value: node.libraryAccess },
     ] : [];
+  });
+  protected readonly actionTitle = computed(() => this.actionType() === 'library-access'
+    ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
+    : this.actionType() === 'create-library' ? 'Déclarer une bibliothèque' : this.createFormData.title);
+  protected readonly actionDescription = computed(() => this.actionType() === 'library-access'
+    ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
+    : this.actionType() === 'create-library'
+      ? 'Le serveur crée la définition partagée. Vous pourrez ensuite autoriser les nœuds et configurer leurs chemins.'
+      : this.createFormData.description);
+  protected readonly createLibraryFormData: RecordFormData = {
+    title: 'Déclarer une bibliothèque',
+    description: 'Créez une définition partagée côté serveur. Cette création ne donne pas encore accès aux médias à ce nœud.',
+    submitLabel: 'Déclarer la bibliothèque',
+    fields: [
+      { id: 'name', label: 'Nom', type: 'text', required: true, maxLength: 128 },
+    ],
+  };
+  protected readonly nodeLibraryColumns: readonly DataTableColumn[] = [
+    { key: 'name', label: 'Bibliothèque', sortable: true },
+    { key: 'modeLabel', label: 'Mode autorisé', sortable: true },
+    { key: 'pathLabel', label: 'Chemin sur ce nœud' },
+  ];
+  protected readonly nodeLibraryActions: readonly DataTableRowAction[] = [
+    { id: 'edit', label: 'Modifier' },
+    {
+      id: 'deactivate', label: 'Désactiver', visibleWhen: (row) => row['mode'] !== 'unsupported',
+      confirmation: (row) => ({
+        title: 'Désactiver cette bibliothèque sur ce nœud ?',
+        message: `« ${row['name']} » restera déclarée et ses accès sur les autres nœuds ne changeront pas.`,
+        confirmLabel: 'Désactiver sur ce nœud',
+      }),
+    },
+    {
+      id: 'delete', label: 'Supprimer', tone: 'danger',
+      confirmation: (row) => ({
+        title: 'Retirer cette bibliothèque du nœud ?',
+        message: `L’accès de ce nœud à « ${row['name']} » sera supprimé. La bibliothèque et ses accès sur les autres nœuds resteront inchangés.`,
+        confirmLabel: 'Retirer du nœud',
+        headerColor: '#b42318',
+        confirmColor: '#b42318',
+      }),
+    },
+  ];
+  protected readonly nodeLibraries = computed<readonly NodeLibraryRecord[]>(() => {
+    const node = this.selectedNode();
+    if (!node) return [];
+    return this.allLibraries().flatMap((library) => {
+      const access = this.nodeAccessByLibrary().get(library.id)?.find((item) => item.nodeId === node.id);
+      if (!access) return [];
+      const localMode = access.mode === 'direct' ? 'Accès direct' : access.mode === 'transfer' ? 'Transfert worker' : 'Désactivée sur ce nœud';
+      return [{
+        id: library.id,
+        name: library.name,
+        mode: access.mode,
+        modeLabel: library.isActive ? localMode : `${localMode} · Désactivée globalement`,
+        pathLabel: access.localPath ?? (access.mode === 'transfer' ? 'Espace temporaire du worker' : access.mode === 'unsupported' ? 'Aucun accès actif' : 'Chemin à configurer'),
+      }];
+    });
+  });
+  protected readonly availableLibraries = computed(() => {
+    const allowedIds = new Set(this.nodeLibraries().map((library) => library.id));
+    return this.allLibraries().filter((library) => library.isActive && !allowedIds.has(library.id));
+  });
+  protected readonly nodeLibraryRows = computed<readonly DataTableRow[]>(() => this.nodeLibraries());
+  protected readonly selectedNodeLibraryAccess = computed(() => {
+    const nodeId = this.selectedNode()?.id;
+    const libraryId = this.selectedNodeLibrary()?.id;
+    return nodeId && libraryId ? this.nodeAccessByLibrary().get(libraryId)?.find((item) => item.nodeId === nodeId) ?? null : null;
   });
 
   protected readonly columns: readonly DataTableColumn[] = [
@@ -122,17 +253,35 @@ export class NodeCatalogPageComponent {
       .map((node) => this.toRecord(node));
   });
 
+  protected readonly enrollmentColumns: readonly DataTableColumn[] = [
+    { key: 'name', label: 'Worker détecté', sortable: true },
+    { key: 'rolesLabel', label: 'Rôle annoncé', sortable: true },
+    { key: 'capabilitiesLabel', label: 'Capacités', sortable: true },
+    { key: 'expiresAtLabel', label: 'Expiration', sortable: true },
+  ];
+  protected readonly enrollmentRows = computed<readonly PendingNodeEnrollmentRecord[]>(() => this.pendingEnrollments().map((request) => ({
+    id: request.id,
+    name: request.name,
+    rolesLabel: request.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · '),
+    capabilitiesLabel: request.capabilities.length ? request.capabilities.map((item) => `${item.toolId} ${item.version}`).join(' · ') : 'Aucun outil déclaré',
+    expiresAtLabel: this.formatExpiry(request.expiresAt),
+  })));
+
   constructor() {
     timer(0, 10_000).pipe(
-      switchMap(() => this.http.get<readonly NodeResponse[]>('/api/v1/nodes').pipe(
+      switchMap(() => forkJoin({
+        nodes: this.http.get<readonly NodeResponse[]>('/api/v1/nodes'),
+        pending: this.http.get<readonly PendingNodeEnrollmentResponse[]>('/api/v1/nodes/enrollment-requests'),
+      }).pipe(
         catchError(() => {
           this.loadState.set(this.nodes().length ? 'ready' : 'error');
           return EMPTY;
         }),
       )),
       takeUntilDestroyed(),
-    ).subscribe((nodes) => {
+    ).subscribe(({ nodes, pending }) => {
       this.nodes.set(nodes);
+      this.pendingEnrollments.set(pending);
       this.loadState.set('ready');
     });
   }
@@ -142,26 +291,226 @@ export class NodeCatalogPageComponent {
   }
 
   protected addNode(): void {
-    const data: GuideDialogData = {
-      title: 'Enrôler un nœud',
-      description: 'Le serveur ajoute automatiquement une installation au cluster dès que son agent lui envoie un premier signal valide.',
-      steps: [
-        'Installez et démarrez l’agent Encoding sur la machine à ajouter (image Docker de développement disponible dans backend/).',
-        'Configurez un identifiant UUID stable et unique, un nom, ses rôles (server, worker ou les deux) et sa limite de tâches.',
-        'Indiquez l’URL de l’API du cluster, accessible depuis cette machine, ainsi que le jeton configuré côté serveur dans Cluster:NodeApiToken.',
-        'Démarrez l’agent. Il envoie un signal toutes les 10 secondes ; le nouveau nœud apparaît ensuite automatiquement dans ce catalogue.',
-      ],
-      note: 'Le jeton est partagé dans le socle actuel : transmettez-le par un canal secret et ne le collez pas dans un ticket ou un journal. La création de jetons d’enrôlement à usage unique sera une évolution distincte.',
-    };
-    this.dialog.open(GuideDialogComponent, { data, width: 'min(620px, 100vw)', maxWidth: '100vw', autoFocus: 'first-tabbable', restoreFocus: true });
+    this.actionType.set('enrollment');
+    this.enrollmentView.set('requests');
+    this.selectedEnrollment.set(null);
+    this.actionOpen.set(true);
+  }
+
+  protected closeCreateNode(): void {
+    this.actionOpen.set(false);
+    this.selectedEnrollment.set(null);
+    this.selectedNodeLibrary.set(null);
+  }
+
+  protected showPairingKey(): void {
+    this.selectedEnrollment.set(null);
+    this.enrollmentView.set('key');
+  }
+
+  protected showPendingRequests(): void {
+    this.enrollmentView.set('requests');
+  }
+
+  protected onEnrollmentOpen(row: DataTableRow): void {
+    const request = this.pendingEnrollments().find((item) => item.id === row['id']) ?? null;
+    this.selectedEnrollment.set(request);
+    if (request) this.enrollmentView.set('review');
+  }
+
+  protected approveEnrollment(): void {
+    const request = this.selectedEnrollment();
+    if (!request) return;
+    this.http.post<NodeResponse>(`/api/v1/nodes/enrollment-requests/${request.id}/approve`, {}).pipe(
+      catchError((error: { status?: number }) => {
+        this.notifications.show(error.status === 404
+          ? 'Cette demande a expiré ou a déjà été traitée. Actualisez la liste.'
+          : 'Le worker n’a pas pu être accepté. Vérifiez que le serveur est disponible.');
+        return EMPTY;
+      }),
+    ).subscribe((node) => {
+      this.nodes.update((current) => [...current.filter((existing) => existing.id !== node.id), node]);
+      this.pendingEnrollments.update((current) => current.filter((item) => item.id !== node.id));
+      this.selectedEnrollment.set(null);
+      this.enrollmentView.set('requests');
+      this.loadState.set('ready');
+      this.notifications.show(`Le nœud « ${node.name} » a rejoint le cluster.`);
+    });
+  }
+
+  protected acceptNode(value: Record<string, string>): void {
+    const pairingKey = value['pairingKey']?.trim().toUpperCase();
+    if (!pairingKey) return;
+    this.actionOpen.set(false);
+    this.http.post<NodeResponse>('/api/v1/nodes/enrollment-requests/approve', { pairingKey }).pipe(
+      catchError((error: { status?: number }) => {
+        this.notifications.show(error.status === 404
+          ? 'Cette clé est invalide, expirée ou déjà utilisée. Générez-en une nouvelle depuis le worker.'
+          : 'Le nœud n’a pas pu être accepté. Vérifiez que le serveur est disponible.');
+        return EMPTY;
+      }),
+    ).subscribe((node) => {
+      this.nodes.update((current) => [...current.filter((existing) => existing.id !== node.id), node]);
+      this.pendingEnrollments.update((current) => current.filter((item) => item.id !== node.id));
+      this.loadState.set('ready');
+      this.notifications.show(`Le nœud « ${node.name} » a rejoint le cluster.`);
+    });
+  }
+
+  protected formatExpiry(value: string): string {
+    const seconds = Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 1000));
+    if (seconds < 60) return `Dans ${seconds} s`;
+    return `Dans ${Math.ceil(seconds / 60)} min`;
+  }
+
+  protected formatExpiryTime(value: string): string {
+    return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  }
+
+  protected rolesLabel(roles: readonly NodeRole[]): string {
+    return roles.map((role) => NODE_ROLE_LABELS[role]).join(' · ');
+  }
+
+  protected capabilitiesLabel(capabilities: readonly NodeToolCapability[]): string {
+    return capabilities.length
+      ? capabilities.map((item) => `${item.toolId} ${item.version}`).join(' · ')
+      : 'Aucun outil détecté';
   }
 
   protected onNodeOpen(row: DataTableRow): void {
     this.selectedNode.set(this.filteredNodes().find((node) => node.id === row['id']) ?? null);
+    this.loadNodeLibraries();
   }
 
   protected onDetailClosed(): void {
     this.selectedNode.set(null);
+  }
+
+  protected nodeAccessOption(node: NodeRecord): LibraryNodeAccessOption {
+    const original = this.nodes().find((item) => item.id === node.id);
+    return { id: node.id, name: node.name, roles: original?.roles ?? [] };
+  }
+
+  protected openAddLibrary(): void {
+    this.actionType.set('create-library');
+    this.actionOpen.set(true);
+  }
+
+  protected addExistingLibrary(): void {
+    const library = this.allLibraries().find((item) => item.id === this.selectedAvailableLibraryId());
+    if (library) this.editNodeLibraryAccess(library);
+  }
+
+  protected editNodeLibraryAccess(library: NodeLibraryRecord | LibraryResponse): void {
+    this.selectedNodeLibrary.set(this.allLibraries().find((item) => item.id === library.id) ?? library as LibraryResponse);
+    this.actionType.set('library-access');
+    this.actionOpen.set(true);
+  }
+
+  protected onNodeLibraryAction(event: DataTableActionEvent): void {
+    const node = this.selectedNode();
+    const library = this.allLibraries().find((item) => item.id === event.row['id']);
+    if (!node || !library) return;
+    if (event.actionId === 'edit') {
+      this.editNodeLibraryAccess(library);
+      return;
+    }
+
+    const existing = this.nodeAccessByLibrary().get(library.id) ?? [];
+    const access = existing.find((item) => item.nodeId === node.id);
+    if (!access) return;
+    const configured = existing
+      .filter((item) => event.actionId !== 'delete' || item.nodeId !== node.id)
+      .map((item) => event.actionId === 'deactivate' && item.nodeId === node.id
+        ? { ...item, mode: 'unsupported' as const, localPath: null, canRead: false, canWrite: false, transferSourceNodeId: null }
+        : item)
+      .map((item): LibraryNodeAccessValue => ({
+        nodeId: item.nodeId,
+        mode: item.mode,
+        localPath: item.localPath,
+        canRead: item.canRead,
+        canWrite: item.canWrite,
+        transferSourceNodeId: item.transferSourceNodeId,
+      }));
+    this.saveNodeLibraryConfiguration(library, node, configured, event.actionId);
+  }
+
+  protected createLibraryFromNode(value: Record<string, string>): void {
+    this.http.post<LibraryResponse>('/api/v1/libraries', value).pipe(
+      catchError((error: { status?: number }) => {
+        this.notifications.show(error.status === 409 ? 'Une bibliothèque porte déjà ce nom.' : 'La bibliothèque n’a pas pu être déclarée sur le serveur.');
+        return EMPTY;
+      }),
+    ).subscribe((library) => {
+      this.allLibraries.update((current) => [...current, library]);
+      this.notifications.show(`La bibliothèque « ${library.name} » est déclarée sur le serveur. Autorisez ce nœud pour configurer son accès.`);
+      this.editNodeLibraryAccess(library);
+    });
+  }
+
+  protected saveNodeLibraryAccess(values: readonly LibraryNodeAccessValue[]): void {
+    const node = this.selectedNode();
+    const library = this.selectedNodeLibrary();
+    if (!node || !library || values.length !== 1) return;
+    const existing = this.nodeAccessByLibrary().get(library.id) ?? [];
+    const merged = [...existing.filter((item) => item.nodeId !== node.id).map((item) => ({
+      nodeId: item.nodeId,
+      mode: item.mode,
+      localPath: item.localPath,
+      canRead: item.canRead,
+      canWrite: item.canWrite,
+      transferSourceNodeId: item.transferSourceNodeId,
+    })), values[0]];
+    this.saveNodeLibraryConfiguration(library, node, merged, 'edit');
+  }
+
+  private saveNodeLibraryConfiguration(
+    library: LibraryResponse,
+    node: NodeRecord,
+    configured: readonly LibraryNodeAccessValue[],
+    action: string,
+  ): void {
+    this.accessFormBusy.set(true);
+    this.http.put<readonly LibraryNodeAccessResponse[]>(`/api/v1/libraries/${library.id}/node-access`, { nodes: configured }).pipe(
+      catchError((error: { error?: { errors?: Record<string, string[]> } }) => {
+        this.accessFormBusy.set(false);
+        const validation = error.error?.errors ? Object.values(error.error.errors).flat()[0] : undefined;
+        this.notifications.show(validation ?? 'La configuration de cette bibliothèque n’a pas pu être enregistrée.');
+        return EMPTY;
+      }),
+    ).subscribe((accesses) => {
+      this.accessFormBusy.set(false);
+      this.nodeAccessByLibrary.update((current) => new Map(current).set(library.id, accesses));
+      this.actionOpen.set(false);
+      this.notifications.show(action === 'delete'
+        ? `Bibliothèque « ${library.name} » retirée du nœud ${node.name}.`
+        : action === 'deactivate'
+          ? `Accès à « ${library.name} » désactivé pour ${node.name}.`
+          : `Accès à « ${library.name} » enregistré pour ${node.name}.`);
+    });
+  }
+
+  private loadNodeLibraries(): void {
+    const node = this.selectedNode();
+    if (!node) return;
+    this.nodeLibraryLoading.set(true);
+    this.http.get<readonly LibraryResponse[]>('/api/v1/libraries').pipe(
+      switchMap((libraries) => forkJoin({
+        libraries: Promise.resolve(libraries),
+        accessLists: libraries.length
+          ? forkJoin(libraries.map((library) => this.http.get<readonly LibraryNodeAccessResponse[]>(`/api/v1/libraries/${library.id}/node-access`)))
+          : Promise.resolve([] as readonly (readonly LibraryNodeAccessResponse[])[]),
+      })),
+      catchError(() => {
+        this.nodeLibraryLoading.set(false);
+        this.notifications.show('Les bibliothèques autorisées pour ce nœud n’ont pas pu être chargées.');
+        return EMPTY;
+      }),
+    ).subscribe(({ libraries, accessLists }) => {
+      this.allLibraries.set(libraries);
+      this.nodeAccessByLibrary.set(new Map(libraries.map((library, index) => [library.id, accessLists[index]])));
+      this.nodeLibraryLoading.set(false);
+    });
   }
 
   private toRecord(node: NodeResponse): NodeRecord {

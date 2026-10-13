@@ -1,23 +1,18 @@
 <app-management-catalog-template
   [title]="title()"
-  [description]="description()"
   [detailOpen]="selectedLibrary() !== null"
+  [actionOpen]="actionOpen()"
+  [actionTitle]="actionTitle()"
+  [actionDescription]="actionDescription()"
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
-  filterLabel="Type de média"
-  note="Une définition n’accorde aucun accès aux médias. Configurez ensuite les chemins et modes d’accès pour chaque nœud."
+  (actionClosed)="closeCreateLibrary()"
+  note="Le serveur déclare chaque bibliothèque et décide quels nœuds y sont autorisés. Les réglages d’accès sont conservés par bibliothèque et par nœud."
 >
-  <button page-actions matButton="filled" type="button" (click)="addLibrary()">Ajouter une bibliothèque</button>
-
-  <div catalogue-filters>
-    <app-category-tabs
-      label="Type de média"
-      [options]="categoryOptions()"
-      [selected]="selectedCategory()"
-      (selectedChange)="onCategoryChange($event)"
-    />
-  </div>
+  <ng-template #pageActions>
+    <button matButton="filled" type="button" (click)="addLibrary()">Ajouter une bibliothèque</button>
+  </ng-template>
 
   <app-data-table
     catalogue-table
@@ -26,11 +21,63 @@
     [selectable]="true"
     [rowOpenable]="true"
     rowOpenLabel="Consulter"
+    [rowActions]="libraryRowActions"
+    [separateRowActionColumns]="true"
     (rowOpen)="onLibraryOpen($event)"
-    emptyMessage="Aucune bibliothèque ne correspond à ce type de média."
+    (rowAction)="onLibraryAction($event)"
+    emptyMessage="Aucune bibliothèque n’est déclarée."
   />
 
   <ng-template #detailContent catalogue-detail>
     <app-detail-field-list [fields]="detailFields()" [tabbed]="true" tabsLabel="Sections de la bibliothèque" />
+    @if (selectedLibrary()) {
+      <section class="library-access-summary" aria-labelledby="library-access-heading">
+        <div>
+          <h3 id="library-access-heading">Nœuds autorisés par le serveur</h3>
+          <p>{{ accessStatus() }}</p>
+        </div>
+      </section>
+      @if (selectedAccesses().length) {
+        <app-data-table
+          [columns]="accessColumns"
+          [rows]="accessRows()"
+          [rowActions]="accessRowActions"
+          [separateRowActionColumns]="true"
+          (rowAction)="onAccessRowAction($event)"
+          emptyMessage="Aucun accès configuré."
+        />
+      } @else {
+        <p class="library-access-empty">Aucun nœud n’a encore accès à cette bibliothèque. Elle ne sera pas traitée tant qu’un accès n’est pas configuré.</p>
+      }
+    }
+  </ng-template>
+
+  <ng-template #detailHeaderActions>
+    @if (selectedLibrary(); as library) {
+      <app-drawer-action-button
+        [label]="library.configuredNodeCount ? 'Modifier les accès' : 'Configurer les accès'"
+        (activated)="configureAccesses()"
+      />
+    }
+  </ng-template>
+
+  <ng-template #actionContent>
+    @if (actionType() === 'create') {
+      <app-record-form [data]="createFormData" (submitted)="createLibrary($event)" (cancelled)="closeCreateLibrary()" />
+    } @else if (actionType() === 'edit') {
+      <app-record-form [data]="editFormData()" (submitted)="updateLibrary($event)" (cancelled)="closeCreateLibrary()" />
+    } @else if (accessFormLoading()) {
+      <p role="status">Chargement des nœuds et des accès…</p>
+    } @else {
+      <app-library-node-access-form
+        [libraryName]="selectedLibrary()?.name ?? ''"
+        [setupMode]="accessSetupMode()"
+        [nodes]="accessNodes()"
+        [initialAccesses]="initialAccesses()"
+        [busy]="accessFormBusy()"
+        (saved)="configureLibraryAccess($event)"
+        (cancelled)="closeCreateLibrary()"
+      />
+    }
   </ng-template>
 </app-management-catalog-template>

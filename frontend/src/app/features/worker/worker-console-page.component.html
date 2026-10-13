@@ -1,0 +1,107 @@
+<app-page-header
+  [title]="workerStatus()?.name ?? 'Console worker'"
+/>
+
+<section class="worker-panel" aria-label="Console worker">
+  <app-category-tabs
+    label="Sections de la console worker"
+    [options]="tabOptions"
+    [selected]="selectedTab()"
+    (selectedChange)="selectTab($event)"
+  />
+
+  @if (selectedTab() === 'tasks') {
+    <section class="worker-content" aria-labelledby="worker-tasks-heading">
+      <div class="section-heading">
+        <h2 id="worker-tasks-heading">Tâches attribuées</h2>
+        <span class="state-chip">En attente du moteur</span>
+      </div>
+      <div class="empty-state" role="status">
+        <span class="empty-mark" aria-hidden="true">↗</span>
+        <h3>La file de tâches n’est pas encore connectée</h3>
+        <p>Les tâches apparaîtront ici lorsque le répartiteur du cluster sera disponible.</p>
+      </div>
+    </section>
+  } @else {
+    <section class="worker-content" aria-labelledby="worker-node-heading">
+      <div class="section-heading">
+        <div>
+          <h2 id="worker-node-heading">Cette installation</h2>
+          <p>Identité et rattachement de l’agent worker.</p>
+        </div>
+        @if (workerStatus()?.isEnrolled) {
+          <span class="state-chip state-chip--connected">Connecté</span>
+        } @else {
+          <span class="state-chip">Non rattaché</span>
+        }
+      </div>
+
+      @if (loading()) {
+        <p class="feedback" role="status">Connexion à l’agent local…</p>
+      } @else if (refreshError()) {
+        <p class="feedback feedback--error" role="alert">L’agent local est inaccessible. Vérifiez qu’il est démarré sur ce poste.</p>
+      } @else if (workerStatus(); as worker) {
+        <dl class="node-details">
+          <div><dt>Identifiant local</dt><dd>{{ worker.nodeId }}</dd></div>
+          <div><dt>Rôles</dt><dd>{{ worker.roles.join(' · ') }}</dd></div>
+          <div><dt>Capacité simultanée</dt><dd>{{ worker.maxConcurrentTasks }} tâche(s)</dd></div>
+          <div><dt>Acceptation automatique</dt><dd>{{ worker.automaticEnrollmentEnabled ? 'Activée' : 'Désactivée' }}</dd></div>
+          <div><dt>Outils détectés</dt><dd>{{ toolsLabel(worker) }}</dd></div>
+          @if (worker.isEnrolled) {
+            <div><dt>Cluster</dt><dd>{{ worker.clusterName }}</dd></div>
+            <div><dt>Identifiant du cluster</dt><dd>{{ worker.clusterId }}</dd></div>
+          }
+        </dl>
+
+        @if (!worker.isEnrolled) {
+          @if (pairingKey()) {
+            <div class="pairing-code" role="status">
+              <div>
+                <strong>Clé de jumelage</strong>
+                <p>Dans le catalogue Nœuds du serveur, choisissez « Ajouter un nœud » et saisissez cette clé avant son expiration.</p>
+              </div>
+              <code>{{ pairingKey() }}</code>
+              @if (pairingExpiresAt(); as expiresAt) {
+                <span>Expire à {{ pairingExpiryLabel(expiresAt) }}</span>
+              }
+            </div>
+          }
+          <div class="cluster-list">
+            <h3>Clusters détectés sur le réseau</h3>
+            @if (clusters().length) {
+              @for (cluster of clusters(); track cluster.id) {
+                <article class="cluster-card">
+                  <div class="cluster-copy">
+                    <strong>{{ cluster.name }}</strong>
+                    <span>Détecté sur le réseau local</span>
+                  </div>
+                  <div class="cluster-actions">
+                    <button
+                      type="button"
+                      class="pairing-button"
+                      [disabled]="generatingPairingClusterId() !== null || enrollingClusterId() !== null"
+                      (click)="generatePairingKey(cluster)"
+                    >
+                      {{ generatingPairingClusterId() === cluster.id ? 'Génération…' : 'Générer une clé' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="join-button"
+                      [disabled]="enrollingClusterId() !== null || generatingPairingClusterId() !== null"
+                      (click)="joinCluster(cluster)"
+                    >
+                      {{ enrollingClusterId() === cluster.id ? 'Connexion…' : 'Rejoindre' }}
+                    </button>
+                  </div>
+                </article>
+              }
+            } @else {
+              <p class="feedback">Aucun cluster détecté. Vérifiez que le serveur est démarré et que les deux installations partagent le même réseau local.</p>
+            }
+          </div>
+          <p class="security-note">La confirmation crée une identité propre à cette installation. Son jeton reste stocké localement et n’est jamais affiché.</p>
+        }
+      }
+    </section>
+  }
+</section>

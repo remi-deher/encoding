@@ -1,35 +1,47 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { catchError, of } from 'rxjs';
+import { catchError, EMPTY, forkJoin, of } from 'rxjs';
 import {
   DataTableColumn,
   DataTableComponent,
+  DataTableActionEvent,
   DataTableRow,
+  DataTableRowAction,
 } from '../../shared/ui/data-table.component';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
-import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
-import { RecordFormDialogComponent, RecordFormDialogData } from '../../shared/ui/record-form-dialog.component';
+import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
+import { LibraryNodeAccessFormComponent, LibraryNodeAccessOption, LibraryNodeAccessValue } from '../../shared/ui/library-node-access-form.component';
+import { LibraryNodeAccessMode, LibraryNodeAccessResponse } from '../../shared/ui/library-node-access-types';
+import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
 import { NotificationService } from '../../shared/services/notification.service';
 
 interface LibraryResponse {
   readonly id: string;
   readonly name: string;
-  readonly mediaType: MediaType;
   readonly createdAt: string;
+  readonly configuredNodeCount: number;
+  readonly directAccessNodeCount: number;
+  readonly transferNodeCount: number;
+  readonly isActive: boolean;
+}
+
+interface NodeAccessNodeResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly roles: readonly string[];
 }
 
 interface LibraryRecord extends DataTableRow {
   readonly id: string;
   readonly name: string;
-  readonly category: MediaType;
-  readonly mediaType: string;
   readonly configuredNodes: string;
+  readonly configuredNodeCount: number;
+  readonly directAccessNodeCount: number;
+  readonly transferNodeCount: number;
   readonly accessModes: string;
   readonly nodePaths: string;
   readonly lastScan: string;
@@ -39,35 +51,126 @@ interface LibraryRecord extends DataTableRow {
   readonly modifiedOrder: number;
 }
 
-const mediaLabel = (mediaType: MediaType): string => MEDIA_TYPE_OPTIONS.find((option) => option.value === mediaType)?.label ?? mediaType;
+interface LibraryAccessRecord extends DataTableRow {
+  readonly nodeName: string;
+  readonly modeLabel: string;
+  readonly location: string;
+  readonly permissions: string;
+  readonly mode: LibraryNodeAccessMode;
+}
 
 @Component({
   selector: 'app-library-catalog-page',
-  imports: [DataTableComponent, DetailFieldListComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent, MatButtonModule],
+  imports: [DataTableComponent, DetailFieldListComponent, ManagementCatalogTemplateComponent, MatButtonModule, RecordFormComponent, LibraryNodeAccessFormComponent, DrawerActionButtonComponent],
   templateUrl: './library-catalog-page.component.html',
+  styleUrl: './library-catalog-page.component.scss',
 })
 export class LibraryCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly routeData = toSignal(this.route.data, { initialValue: this.route.snapshot.data });
   private readonly http = inject(HttpClient);
-  private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
   private readonly libraries = signal<readonly LibraryRecord[]>([]);
+  private readonly selectedAccesses = signal<readonly LibraryNodeAccessResponse[]>([]);
 
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Bibliothèques');
-  protected readonly description = computed(() => (this.routeData()['description'] as string) ?? '');
-  protected readonly selectedCategory = signal('all');
+  protected readonly actionOpen = signal(false);
+  protected readonly actionType = signal<'create' | 'edit' | 'access'>('create');
+  protected readonly accessSetupMode = signal(false);
+  protected readonly accessFormLoading = signal(false);
+  protected readonly accessFormBusy = signal(false);
+  protected readonly accessNodes = signal<readonly LibraryNodeAccessOption[]>([]);
+  protected readonly initialAccesses = signal<readonly LibraryNodeAccessResponse[]>([]);
   protected readonly selectedLibrary = signal<LibraryRecord | null>(null);
+  protected readonly actionTitle = computed(() => this.actionType() === 'create'
+    ? this.createFormData.title
+    : this.actionType() === 'edit' ? `Modifier ${this.selectedLibrary()?.name ?? 'la bibliothèque'}` : 'Configurer les accès par nœud');
+  protected readonly actionDescription = computed(() => this.actionType() === 'create'
+    ? this.createFormData.description
+    : this.actionType() === 'edit'
+      ? 'Modifiez le nom de cette définition partagée.'
+      : `Définissez quels nœuds peuvent accéder à « ${this.selectedLibrary()?.name ?? 'cette bibliothèque'} » et leur mode d’accès.`);
+  protected readonly createFormData: RecordFormData = {
+    title: 'Ajouter une bibliothèque',
+    description: 'Créez sa définition partagée. Les chemins et modes d’accès seront configurés séparément pour chaque nœud.',
+    submitLabel: 'Créer la bibliothèque',
+    fields: [
+      { id: 'name', label: 'Nom', type: 'text', required: true, maxLength: 128 },
+    ],
+  };
+  protected readonly editFormData = computed<RecordFormData>(() => ({
+    ...this.createFormData,
+    title: 'Modifier la bibliothèque',
+    description: 'Modifiez le nom de la définition partagée sans changer les accès configurés.',
+    submitLabel: 'Enregistrer la définition',
+    initialValues: {
+      name: this.selectedLibrary()?.name ?? '',
+    },
+  }));
+  protected readonly libraryRowActions: readonly DataTableRowAction[] = [
+    { id: 'edit', label: 'Modifier' },
+    {
+      id: 'deactivate', label: 'Désactiver', visibleWhen: (row) => row['state'] !== 'Désactivée',
+      confirmation: (row) => ({ title: 'Désactiver cette bibliothèque ?', message: `« ${row['name']} » ne sera plus disponible pour le cluster. Ses accès configurés seront conservés.`, confirmLabel: 'Désactiver' }),
+    },
+    {
+      id: 'activate', label: 'Réactiver', visibleWhen: (row) => row['state'] === 'Désactivée',
+      confirmation: (row) => ({ title: 'Réactiver cette bibliothèque ?', message: `« ${row['name']} » redeviendra disponible pour le cluster.`, confirmLabel: 'Réactiver' }),
+    },
+    {
+      id: 'delete', label: 'Supprimer', tone: 'danger',
+      confirmation: (row) => ({ title: 'Supprimer cette bibliothèque ?', message: `La définition « ${row['name']} » et ses accès par nœud seront supprimés. Les fichiers média ne seront pas touchés. Cette action est irréversible.`, confirmLabel: 'Supprimer', headerColor: '#b42318', confirmColor: '#b42318' }),
+    },
+  ];
+  protected readonly accessRowActions: readonly DataTableRowAction[] = [
+    { id: 'edit', label: 'Modifier' },
+    {
+      id: 'deactivate', label: 'Désactiver', visibleWhen: (row) => row['mode'] !== 'unsupported',
+      confirmation: (row) => ({ title: 'Désactiver cet accès ?', message: `Le nœud « ${row['nodeName']} » ne recevra plus de tâche pour cette bibliothèque.`, confirmLabel: 'Désactiver' }),
+    },
+    {
+      id: 'delete', label: 'Supprimer', tone: 'danger',
+      confirmation: (row) => ({ title: 'Supprimer cet accès ?', message: `L’accès de « ${row['nodeName']} » sera retiré de cette bibliothèque.`, confirmLabel: 'Supprimer l’accès', headerColor: '#b42318', confirmColor: '#b42318' }),
+    },
+  ];
   protected readonly detailTitle = computed(() => this.selectedLibrary()?.name ?? 'Bibliothèque');
-  protected readonly detailDescription = computed(() => this.selectedLibrary()?.mediaType ?? 'Détails de la bibliothèque');
+  protected readonly detailDescription = computed(() => this.selectedLibrary() ? 'Définition et accès aux nœuds' : 'Détails de la bibliothèque');
+  protected readonly accessStatus = computed(() => {
+    const library = this.selectedLibrary();
+    if (library?.state === 'Désactivée') return 'Bibliothèque désactivée par le serveur. Les chemins et autorisations restent enregistrés.';
+    if (!library?.configuredNodeCount) return 'Aucun accès actif. Les nœuds ne peuvent pas encore traiter ses médias.';
+    const modes = [
+      library.directAccessNodeCount ? `${library.directAccessNodeCount} accès direct${library.directAccessNodeCount > 1 ? 's' : ''}` : '',
+      library.transferNodeCount ? `${library.transferNodeCount} transfert${library.transferNodeCount > 1 ? 's' : ''}` : '',
+    ].filter(Boolean).join(' · ');
+    return `${library.configuredNodeCount} nœud${library.configuredNodeCount > 1 ? 's' : ''} utilisable${library.configuredNodeCount > 1 ? 's' : ''} · ${modes}`;
+  });
+  protected readonly accessColumns: readonly DataTableColumn[] = [
+    { key: 'nodeName', label: 'Nœud' },
+    { key: 'modeLabel', label: 'Accès' },
+    { key: 'location', label: 'Chemin ou source' },
+    { key: 'permissions', label: 'Droits' },
+  ];
+  protected readonly accessRows = computed<readonly LibraryAccessRecord[]>(() => this.selectedAccesses().map((access) => ({
+    id: access.nodeId,
+    nodeName: access.nodeName,
+    modeLabel: this.accessModeLabel(access.mode),
+    location: access.mode === 'direct'
+      ? access.localPath ?? 'Chemin absent'
+      : access.mode === 'transfer'
+        ? `Depuis ${access.transferSourceNodeName ?? 'source inconnue'}`
+        : 'Aucun accès',
+    permissions: access.mode === 'direct'
+      ? [access.canRead ? 'Lecture' : '', access.canWrite ? 'Écriture' : ''].filter(Boolean).join(' · ') || 'Aucun droit'
+      : access.mode === 'transfer' ? 'Copie temporaire · lecture et écriture' : 'Aucun',
+    mode: access.mode,
+  })));
   protected readonly detailFields = computed<readonly DetailField[]>(() => {
     const library = this.selectedLibrary();
     return library ? [
-      { section: 'Bibliothèque', label: 'Type de média', value: library.mediaType },
       { section: 'Bibliothèque', label: 'État', value: library.state },
-      { section: 'Accès par nœud', label: 'Nœuds concernés', value: library.configuredNodes },
-      { section: 'Accès par nœud', label: 'Mode de transfert', value: library.accessModes },
-      { section: 'Accès par nœud', label: 'Points d’entrée', value: library.nodePaths },
+      { section: 'Accès par nœud', label: 'Nœuds configurés', value: library.configuredNodes },
+      { section: 'Accès par nœud', label: 'Modes actifs', value: library.accessModes },
       { section: 'Activité', label: 'Dernière analyse', value: library.lastScan },
       { section: 'Activité', label: 'Flows associés', value: library.associatedFlows },
       { section: 'Activité', label: 'Créée le', value: library.modifiedAt },
@@ -76,61 +179,219 @@ export class LibraryCatalogPageComponent {
 
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom', sortable: true },
-    { key: 'mediaType', label: 'Type', sortable: true },
     { key: 'configuredNodes', label: 'Accès déclarés', sortable: true },
     { key: 'accessModes', label: 'Modes d’accès', sortable: true },
     { key: 'state', label: 'État', sortable: true },
     { key: 'modifiedAt', label: 'Créée le', sortable: true, sortValueKey: 'modifiedOrder' },
   ];
 
-  protected readonly categoryOptions = computed<readonly CategoryTabOption[]>(() => {
-    const libraries = this.libraries();
-    return [
-      { value: 'all', label: 'Tous', count: libraries.length },
-      ...MEDIA_TYPE_OPTIONS.map((category) => ({ ...category, count: libraries.filter((library) => library.category === category.value).length })),
-    ];
-  });
-
-  protected readonly filteredLibraries = computed(() => {
-    const category = this.selectedCategory();
-    return this.libraries().filter((library) => category === 'all' || library.category === category);
-  });
+  protected readonly filteredLibraries = computed(() => this.libraries());
 
   constructor() {
     this.refresh();
   }
 
-  protected onCategoryChange(category: string): void { this.selectedCategory.set(category); }
-  protected onLibraryOpen(row: DataTableRow): void { this.selectedLibrary.set(this.libraries().find((library) => library.id === row['id']) ?? null); }
+  protected onLibraryOpen(row: DataTableRow): void {
+    const library = this.libraries().find((item) => item.id === row['id']) ?? null;
+    this.selectedLibrary.set(library);
+    this.selectedAccesses.set([]);
+    if (library) this.loadSelectedAccesses(library.id);
+  }
   protected onDetailClosed(): void { this.selectedLibrary.set(null); }
 
   protected addLibrary(): void {
-    const data: RecordFormDialogData = {
-      title: 'Ajouter une bibliothèque',
-      description: 'Créez sa définition partagée. Les chemins et modes d’accès seront configurés séparément pour chaque nœud.',
-      submitLabel: 'Créer la bibliothèque',
-      fields: [
-        { id: 'name', label: 'Nom', type: 'text', required: true, maxLength: 128 },
-        { id: 'mediaType', label: 'Type de média', type: 'select', required: true, options: MEDIA_TYPE_OPTIONS },
-      ],
+    this.actionType.set('create');
+    this.actionOpen.set(true);
+  }
+
+  protected onLibraryAction(event: DataTableActionEvent): void {
+    const library = this.libraries().find((item) => item.id === event.row['id']);
+    if (!library) return;
+    if (event.actionId === 'edit') {
+      this.selectedLibrary.set(library);
+      this.actionType.set('edit');
+      this.actionOpen.set(true);
+    } else if (event.actionId === 'deactivate' || event.actionId === 'activate') {
+      this.setLibraryActive(library, event.actionId === 'activate');
+    } else if (event.actionId === 'delete') {
+      this.deleteLibrary(library);
+    }
+  }
+
+  protected updateLibrary(value: Record<string, string>): void {
+    const library = this.selectedLibrary();
+    if (!library) return;
+    this.http.put<LibraryResponse>(`/api/v1/libraries/${library.id}`, {
+      name: value['name'],
+    }).pipe(
+      catchError((error: { status?: number }) => {
+        this.notifications.show(error.status === 409 ? 'Une bibliothèque porte déjà ce nom.' : 'La définition n’a pas pu être modifiée.');
+        return EMPTY;
+      }),
+    ).subscribe((updated) => {
+      const record = this.toRecord(updated);
+      this.libraries.update((items) => items.map((item) => item.id === updated.id ? record : item));
+      this.selectedLibrary.set(record);
+      this.actionOpen.set(false);
+      this.notifications.show(`Définition « ${updated.name} » enregistrée.`);
+    });
+  }
+
+  protected onAccessRowAction(event: DataTableActionEvent): void {
+    const access = this.selectedAccesses().find((item) => item.nodeId === event.row['id']);
+    if (!access) return;
+    if (event.actionId === 'edit') {
+      this.configureAccesses();
+      return;
+    }
+    const updatedAccesses = this.selectedAccesses()
+      .filter((item) => event.actionId !== 'delete' || item.nodeId !== access.nodeId)
+      .map((item) => event.actionId === 'deactivate' && item.nodeId === access.nodeId
+        ? { ...item, mode: 'unsupported' as const, localPath: null, canRead: false, canWrite: false, transferSourceNodeId: null }
+        : item)
+      .map((item) => ({ nodeId: item.nodeId, mode: item.mode, localPath: item.localPath, canRead: item.canRead, canWrite: item.canWrite, transferSourceNodeId: item.transferSourceNodeId }));
+    this.saveAccessConfiguration(updatedAccesses);
+  }
+
+  protected configureAccesses(): void {
+    const library = this.selectedLibrary();
+    if (!library) return;
+    this.actionType.set('access');
+    this.accessSetupMode.set(false);
+    this.actionOpen.set(true);
+    this.loadAccessForm(library.id);
+  }
+
+  protected closeCreateLibrary(): void {
+    this.actionOpen.set(false);
+  }
+
+  protected createLibrary(value: Record<string, string>): void {
+    this.accessFormBusy.set(true);
+    this.http.post<LibraryResponse>('/api/v1/libraries', value).pipe(
+      catchError((error: { status?: number }) => {
+        const message = error.status === 409
+          ? 'Une bibliothèque porte déjà ce nom.'
+          : 'La bibliothèque n’a pas pu être créée. Vérifiez que le serveur est disponible.';
+        this.notifications.show(message);
+        return of(null);
+      }),
+    ).subscribe((created) => {
+      this.accessFormBusy.set(false);
+      if (!created) return;
+      const record = this.toRecord(created);
+      this.libraries.update((current) => [...current, record]);
+      this.selectedLibrary.set(record);
+      this.actionType.set('access');
+      this.accessSetupMode.set(true);
+      this.notifications.show(`Bibliothèque « ${created.name} » créée. Vous pouvez maintenant configurer les accès de ses nœuds.`);
+      this.loadAccessForm(created.id);
+    });
+  }
+
+  protected configureLibraryAccess(values: readonly LibraryNodeAccessValue[]): void {
+    this.saveAccessConfiguration(values);
+  }
+
+  private saveAccessConfiguration(values: readonly LibraryNodeAccessValue[]): void {
+    const library = this.selectedLibrary();
+    if (!library) return;
+    this.accessFormBusy.set(true);
+    this.http.put<readonly LibraryNodeAccessResponse[]>(`/api/v1/libraries/${library.id}/node-access`, { nodes: values }).pipe(
+      catchError((error: { status?: number; error?: { errors?: Record<string, string[]> } }) => {
+        this.accessFormBusy.set(false);
+        const validationMessage = error.error?.errors
+          ? Object.values(error.error.errors).flat()[0]
+          : undefined;
+        this.notifications.show(validationMessage ?? 'Les accès de la bibliothèque n’ont pas pu être enregistrés. Vérifiez le serveur et les nœuds sélectionnés.');
+        return EMPTY;
+      }),
+    ).subscribe((accesses) => {
+      this.accessFormBusy.set(false);
+      this.selectedAccesses.set(accesses);
+      const summary = this.toAccessSummary(accesses);
+      const state = library.state === 'Désactivée' ? 'Désactivée' : summary.state;
+      this.libraries.update((current) => current.map((item) => item.id === library.id ? { ...item, ...summary, state } : item));
+      this.selectedLibrary.update((item) => item?.id === library.id ? { ...item, ...summary, state } : item);
+      this.actionOpen.set(false);
+      this.notifications.show(`Accès de « ${library.name} » enregistrés pour ${accesses.filter((item) => item.mode !== 'unsupported').length} nœud(s).`);
+    });
+  }
+
+  private setLibraryActive(library: LibraryRecord, isActive: boolean): void {
+    this.http.put<LibraryResponse>(`/api/v1/libraries/${library.id}/activation`, { isActive }).pipe(
+      catchError(() => {
+        this.notifications.show('L’état de la bibliothèque n’a pas pu être modifié.');
+        return EMPTY;
+      }),
+    ).subscribe((updated) => {
+      const record = this.toRecord(updated);
+      this.libraries.update((items) => items.map((item) => item.id === updated.id ? record : item));
+      this.selectedLibrary.update((current) => current?.id === updated.id ? record : current);
+      this.notifications.show(`Bibliothèque « ${updated.name} » ${isActive ? 'réactivée' : 'désactivée'}.`);
+    });
+  }
+
+  private deleteLibrary(library: LibraryRecord): void {
+    this.http.delete<void>(`/api/v1/libraries/${library.id}`).pipe(
+      catchError(() => {
+        this.notifications.show('La bibliothèque n’a pas pu être supprimée.');
+        return EMPTY;
+      }),
+    ).subscribe(() => {
+      this.libraries.update((items) => items.filter((item) => item.id !== library.id));
+      if (this.selectedLibrary()?.id === library.id) this.selectedLibrary.set(null);
+      this.notifications.show(`Bibliothèque « ${library.name} » supprimée. Les fichiers média sont conservés.`);
+    });
+  }
+
+  protected accessModeLabel(mode: LibraryNodeAccessMode): string {
+    if (mode === 'direct') return 'Accès direct';
+    if (mode === 'transfer') return 'Transfert worker';
+    return 'Aucun accès';
+  }
+
+  private loadSelectedAccesses(libraryId: string): void {
+    this.http.get<readonly LibraryNodeAccessResponse[]>(`/api/v1/libraries/${libraryId}/node-access`).pipe(
+      catchError(() => {
+        this.notifications.show('Les accès de cette bibliothèque n’ont pas pu être chargés.');
+        return of([]);
+      }),
+    ).subscribe((accesses) => this.selectedAccesses.set(accesses));
+  }
+
+  private loadAccessForm(libraryId: string): void {
+    this.accessFormLoading.set(true);
+    forkJoin({
+      nodes: this.http.get<readonly NodeAccessNodeResponse[]>('/api/v1/nodes'),
+      accesses: this.http.get<readonly LibraryNodeAccessResponse[]>(`/api/v1/libraries/${libraryId}/node-access`),
+    }).pipe(
+      catchError(() => {
+        this.accessFormLoading.set(false);
+        this.notifications.show('Les nœuds ou les accès de cette bibliothèque n’ont pas pu être chargés.');
+        return EMPTY;
+      }),
+    ).subscribe(({ nodes, accesses }) => {
+      this.accessNodes.set(nodes);
+      this.initialAccesses.set(accesses);
+      this.accessFormLoading.set(false);
+    });
+  }
+
+  private toAccessSummary(accesses: readonly LibraryNodeAccessResponse[]): Pick<LibraryRecord, 'configuredNodes' | 'accessModes' | 'nodePaths' | 'state' | 'configuredNodeCount' | 'directAccessNodeCount' | 'transferNodeCount'> {
+    const directCount = accesses.filter((access) => access.mode === 'direct').length;
+    const transferCount = accesses.filter((access) => access.mode === 'transfer').length;
+    const configuredCount = directCount + transferCount;
+    const modes = [directCount ? `${directCount} direct(s)` : '', transferCount ? `${transferCount} transfert(s)` : ''].filter(Boolean).join(' · ');
+    return {
+      configuredNodeCount: configuredCount,
+      directAccessNodeCount: directCount,
+      transferNodeCount: transferCount,
+      configuredNodes: configuredCount ? `${configuredCount} nœud(s) utilisable(s)` : 'Aucun accès',
+      accessModes: modes || 'Non configuré',
+      nodePaths: accesses.filter((access) => access.mode === 'direct').map((access) => `${access.nodeName}: ${access.localPath}`).join(' · ') || 'Aucun chemin direct',
+      state: this.selectedLibrary()?.state === 'Désactivée' ? 'Désactivée' : configuredCount ? 'Active' : 'Accès à configurer',
     };
-    this.dialog.open(RecordFormDialogComponent, { data, width: 'min(520px, 100vw)', maxWidth: '100vw', autoFocus: 'first-tabbable', restoreFocus: true })
-      .afterClosed().subscribe((value: Record<string, string> | undefined) => {
-        if (!value) return;
-        this.http.post<LibraryResponse>('/api/v1/libraries', value).pipe(
-          catchError((error: { status?: number }) => {
-            const message = error.status === 409
-              ? 'Une bibliothèque porte déjà ce nom.'
-              : 'La bibliothèque n’a pas pu être créée. Vérifiez que le serveur est disponible.';
-            this.notifications.show(message);
-            return of(null);
-          }),
-        ).subscribe((created) => {
-          if (!created) return;
-          this.libraries.update((current) => [...current, this.toRecord(created)]);
-          this.notifications.show(`Bibliothèque « ${created.name} » créée.`);
-        });
-      });
   }
 
   private refresh(): void {
@@ -144,19 +405,31 @@ export class LibraryCatalogPageComponent {
 
   private toRecord(library: LibraryResponse): LibraryRecord {
     const date = new Date(library.createdAt);
+    const summary = this.toAccessSummaryFromCounts(library);
     return {
       id: library.id,
       name: library.name,
-      category: library.mediaType,
-      mediaType: mediaLabel(library.mediaType),
-      configuredNodes: 'Aucun accès',
-      accessModes: 'Non configuré',
-      nodePaths: 'Aucun point d’entrée configuré',
+      ...summary,
       lastScan: 'Jamais',
       associatedFlows: 'Aucun flow associé',
-      state: 'Accès à configurer',
       modifiedAt: new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date),
       modifiedOrder: date.getTime(),
+    };
+  }
+
+  private toAccessSummaryFromCounts(library: LibraryResponse): Pick<LibraryRecord, 'configuredNodes' | 'accessModes' | 'nodePaths' | 'state' | 'configuredNodeCount' | 'directAccessNodeCount' | 'transferNodeCount'> {
+    const directCount = library.directAccessNodeCount;
+    const transferCount = library.transferNodeCount;
+    const configuredCount = library.configuredNodeCount;
+    const modes = [directCount ? `${directCount} direct(s)` : '', transferCount ? `${transferCount} transfert(s)` : ''].filter(Boolean).join(' · ');
+    return {
+      configuredNodeCount: configuredCount,
+      directAccessNodeCount: directCount,
+      transferNodeCount: transferCount,
+      configuredNodes: configuredCount ? `${configuredCount} nœud(s) utilisable(s)` : 'Aucun accès',
+      accessModes: modes || 'Non configuré',
+      nodePaths: directCount ? 'Consulter les chemins configurés' : 'Aucun chemin direct',
+      state: !library.isActive ? 'Désactivée' : configuredCount ? 'Active' : 'Accès à configurer',
     };
   }
 }
