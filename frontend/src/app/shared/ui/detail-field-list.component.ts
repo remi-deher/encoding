@@ -4,7 +4,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 export interface DetailField {
   readonly section?: string;
   readonly label: string;
-  readonly value: string | number;
+  readonly value: string | number | boolean;
 }
 
 @Component({

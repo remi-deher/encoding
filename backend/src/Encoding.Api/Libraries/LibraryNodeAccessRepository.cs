@@ -11,6 +11,28 @@ public sealed class LibraryNodeAccessValidationException(IReadOnlyDictionary<str
 
 public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
 {
+    public async Task<LibraryNodeAccessResponse?> SetEnabledAsync(
+        Guid libraryId,
+        Guid nodeId,
+        bool isEnabled,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE library_node_accesses
+            SET is_enabled = @is_enabled, updated_at = clock_timestamp()
+            WHERE library_id = @library_id AND node_id = @node_id AND mode <> 'unsupported'
+            """;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("library_id", libraryId);
+        command.Parameters.AddWithValue("node_id", nodeId);
+        command.Parameters.AddWithValue("is_enabled", isEnabled);
+        if (await command.ExecuteNonQueryAsync(cancellationToken) == 0) return null;
+
+        var accesses = await ListAsync(libraryId, cancellationToken);
+        return accesses?.SingleOrDefault(item => item.NodeId == nodeId);
+    }
+
     public async Task<IReadOnlyList<LibraryNodeAccessResponse>?> ListAsync(Guid libraryId, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -21,7 +43,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
         }
 
         const string sql = """
-            SELECT a.library_id, a.node_id, n.name, a.mode, a.local_path, a.can_read, a.can_write,
+            SELECT a.library_id, a.node_id, n.name, a.mode, a.is_enabled, a.local_path, a.can_read, a.can_write,
                    a.transfer_source_node_id, source.name, a.updated_at
             FROM library_node_accesses a
             JOIN cluster_nodes n ON n.id = a.node_id
@@ -80,9 +102,9 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
 
         const string insertSql = """
             INSERT INTO library_node_accesses
-                (library_id, node_id, mode, local_path, can_read, can_write, transfer_source_node_id)
+                (library_id, node_id, mode, is_enabled, local_path, can_read, can_write, transfer_source_node_id)
             VALUES
-                (@library_id, @node_id, @mode, @local_path, @can_read, @can_write, @transfer_source_node_id)
+                (@library_id, @node_id, @mode, @is_enabled, @local_path, @can_read, @can_write, @transfer_source_node_id)
             """;
         foreach (var item in nodes)
         {
@@ -90,6 +112,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
             insert.Parameters.AddWithValue("library_id", libraryId);
             insert.Parameters.AddWithValue("node_id", item.NodeId);
             insert.Parameters.AddWithValue("mode", item.Mode.ToString().ToLowerInvariant());
+            insert.Parameters.AddWithValue("is_enabled", item.Mode != LibraryNodeAccessMode.Unsupported && item.IsEnabled);
             insert.Parameters.AddWithValue("local_path", (object?)Normalize(item.LocalPath) ?? DBNull.Value);
             insert.Parameters.AddWithValue("can_read", item.CanRead);
             insert.Parameters.AddWithValue("can_write", item.CanWrite);
@@ -140,7 +163,8 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
                         if (!registeredNodes.TryGetValue(item.NodeId, out var roles) || !roles.Contains("worker", StringComparer.OrdinalIgnoreCase))
                             errors[$"{key}.nodeId"] = ["Le transfert doit cibler un nœud ayant le rôle worker."];
                         if (!configured.TryGetValue(item.TransferSourceNodeId.Value, out var source)
-                            || source.Mode != LibraryNodeAccessMode.Direct || !source.CanRead || !source.CanWrite)
+                            || source.Mode != LibraryNodeAccessMode.Direct || !source.CanRead || !source.CanWrite
+                            || (item.IsEnabled && !source.IsEnabled))
                             errors[$"{key}.transferSourceNodeId"] = ["Le nœud source doit déclarer un accès direct en lecture et en écriture dans cette configuration."];
                     }
                     break;
@@ -157,7 +181,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
     private static LibraryNodeAccessResponse Read(NpgsqlDataReader reader) => new(
         reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2),
         Enum.Parse<LibraryNodeAccessMode>(reader.GetString(3), true),
-        reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetBoolean(5), reader.GetBoolean(6),
-        reader.IsDBNull(7) ? null : reader.GetGuid(7), reader.IsDBNull(8) ? null : reader.GetString(8),
-        new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(9), DateTimeKind.Utc)));
+        reader.GetBoolean(4), reader.IsDBNull(5) ? null : reader.GetString(5), reader.GetBoolean(6), reader.GetBoolean(7),
+        reader.IsDBNull(8) ? null : reader.GetGuid(8), reader.IsDBNull(9) ? null : reader.GetString(9),
+        new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(10), DateTimeKind.Utc)));
 }

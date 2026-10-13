@@ -1,15 +1,17 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { catchError, EMPTY, forkJoin, of } from 'rxjs';
+import { catchError, EMPTY, finalize, forkJoin, of } from 'rxjs';
 import {
   DataTableColumn,
   DataTableComponent,
   DataTableActionEvent,
   DataTableRow,
   DataTableRowAction,
+  DataTableToggleEvent,
 } from '../../shared/ui/data-table.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
@@ -18,6 +20,7 @@ import { LibraryNodeAccessFormComponent, LibraryNodeAccessOption, LibraryNodeAcc
 import { LibraryNodeAccessMode, LibraryNodeAccessResponse } from '../../shared/ui/library-node-access-types';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
 import { NotificationService } from '../../shared/services/notification.service';
+import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 
 interface LibraryResponse {
   readonly id: string;
@@ -42,6 +45,7 @@ interface LibraryRecord extends DataTableRow {
   readonly configuredNodeCount: number;
   readonly directAccessNodeCount: number;
   readonly transferNodeCount: number;
+  readonly isActive: boolean;
   readonly accessModes: string;
   readonly nodePaths: string;
   readonly lastScan: string;
@@ -53,6 +57,7 @@ interface LibraryRecord extends DataTableRow {
 
 interface LibraryAccessRecord extends DataTableRow {
   readonly nodeName: string;
+  readonly isEnabled: boolean;
   readonly modeLabel: string;
   readonly location: string;
   readonly permissions: string;
@@ -69,6 +74,7 @@ export class LibraryCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly routeData = toSignal(this.route.data, { initialValue: this.route.snapshot.data });
   private readonly http = inject(HttpClient);
+  private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
   private readonly libraries = signal<readonly LibraryRecord[]>([]);
   private readonly selectedAccesses = signal<readonly LibraryNodeAccessResponse[]>([]);
@@ -79,6 +85,9 @@ export class LibraryCatalogPageComponent {
   protected readonly accessSetupMode = signal(false);
   protected readonly accessFormLoading = signal(false);
   protected readonly accessFormBusy = signal(false);
+  protected readonly selectedAccessesLoading = signal(false);
+  private readonly activationBusy = signal<ReadonlySet<string>>(new Set());
+  private readonly accessActivationBusy = signal<ReadonlySet<string>>(new Set());
   protected readonly accessNodes = signal<readonly LibraryNodeAccessOption[]>([]);
   protected readonly initialAccesses = signal<readonly LibraryNodeAccessResponse[]>([]);
   protected readonly selectedLibrary = signal<LibraryRecord | null>(null);
@@ -110,24 +119,12 @@ export class LibraryCatalogPageComponent {
   protected readonly libraryRowActions: readonly DataTableRowAction[] = [
     { id: 'edit', label: 'Modifier' },
     {
-      id: 'deactivate', label: 'Désactiver', visibleWhen: (row) => row['state'] !== 'Désactivée',
-      confirmation: (row) => ({ title: 'Désactiver cette bibliothèque ?', message: `« ${row['name']} » ne sera plus disponible pour le cluster. Ses accès configurés seront conservés.`, confirmLabel: 'Désactiver' }),
-    },
-    {
-      id: 'activate', label: 'Réactiver', visibleWhen: (row) => row['state'] === 'Désactivée',
-      confirmation: (row) => ({ title: 'Réactiver cette bibliothèque ?', message: `« ${row['name']} » redeviendra disponible pour le cluster.`, confirmLabel: 'Réactiver' }),
-    },
-    {
       id: 'delete', label: 'Supprimer', tone: 'danger',
       confirmation: (row) => ({ title: 'Supprimer cette bibliothèque ?', message: `La définition « ${row['name']} » et ses accès par nœud seront supprimés. Les fichiers média ne seront pas touchés. Cette action est irréversible.`, confirmLabel: 'Supprimer', headerColor: '#b42318', confirmColor: '#b42318' }),
     },
   ];
   protected readonly accessRowActions: readonly DataTableRowAction[] = [
     { id: 'edit', label: 'Modifier' },
-    {
-      id: 'deactivate', label: 'Désactiver', visibleWhen: (row) => row['mode'] !== 'unsupported',
-      confirmation: (row) => ({ title: 'Désactiver cet accès ?', message: `Le nœud « ${row['nodeName']} » ne recevra plus de tâche pour cette bibliothèque.`, confirmLabel: 'Désactiver' }),
-    },
     {
       id: 'delete', label: 'Supprimer', tone: 'danger',
       confirmation: (row) => ({ title: 'Supprimer cet accès ?', message: `L’accès de « ${row['nodeName']} » sera retiré de cette bibliothèque.`, confirmLabel: 'Supprimer l’accès', headerColor: '#b42318', confirmColor: '#b42318' }),
@@ -147,6 +144,19 @@ export class LibraryCatalogPageComponent {
   });
   protected readonly accessColumns: readonly DataTableColumn[] = [
     { key: 'nodeName', label: 'Nœud' },
+    {
+      key: 'isEnabled',
+      label: 'Accès',
+      toggle: {
+        ariaLabel: (row, checked) => `${checked ? 'Désactiver' : row['mode'] === 'unsupported' ? 'Configurer' : 'Activer'} l’accès de ${row['nodeName']}`,
+        disabledWhen: (row) => this.accessActivationBusy().has(`${this.selectedLibrary()?.id}:${row['id']}`),
+        confirmation: (row, checked) => checked ? undefined : ({
+          title: 'Désactiver cet accès ?',
+          message: `Le nœud « ${row['nodeName']} » ne recevra plus de tâche pour cette bibliothèque.`,
+          confirmLabel: 'Désactiver',
+        }),
+      },
+    },
     { key: 'modeLabel', label: 'Accès' },
     { key: 'location', label: 'Chemin ou source' },
     { key: 'permissions', label: 'Droits' },
@@ -154,7 +164,8 @@ export class LibraryCatalogPageComponent {
   protected readonly accessRows = computed<readonly LibraryAccessRecord[]>(() => this.selectedAccesses().map((access) => ({
     id: access.nodeId,
     nodeName: access.nodeName,
-    modeLabel: this.accessModeLabel(access.mode),
+    isEnabled: access.isEnabled,
+    modeLabel: `${this.accessModeLabel(access.mode)}${access.mode !== 'unsupported' && !access.isEnabled ? ' · Désactivé' : ''}`,
     location: access.mode === 'direct'
       ? access.localPath ?? 'Chemin absent'
       : access.mode === 'transfer'
@@ -179,6 +190,19 @@ export class LibraryCatalogPageComponent {
 
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom', sortable: true },
+    {
+      key: 'isActive',
+      label: 'Activation',
+      toggle: {
+        ariaLabel: (row, checked) => `${checked ? 'Désactiver' : 'Activer'} la bibliothèque ${row['name']}`,
+        disabledWhen: (row) => this.activationBusy().has(String(row['id'])),
+        confirmation: (row, checked) => checked ? undefined : ({
+          title: 'Désactiver cette bibliothèque ?',
+          message: `« ${row['name']} » ne sera plus disponible pour le cluster. Ses accès configurés seront conservés.`,
+          confirmLabel: 'Désactiver',
+        }),
+      },
+    },
     { key: 'configuredNodes', label: 'Accès déclarés', sortable: true },
     { key: 'accessModes', label: 'Modes d’accès', sortable: true },
     { key: 'state', label: 'État', sortable: true },
@@ -197,6 +221,29 @@ export class LibraryCatalogPageComponent {
     this.selectedAccesses.set([]);
     if (library) this.loadSelectedAccesses(library.id);
   }
+
+  protected showLibraryNodes(): void {
+    const library = this.selectedLibrary();
+    if (!library) return;
+    const items = this.selectedAccesses()
+      .filter((access) => access.isEnabled && access.mode !== 'unsupported')
+      .map((access) => ({
+        label: access.nodeName,
+        detail: access.mode === 'direct'
+          ? `Accès direct${access.localPath ? ` · ${access.localPath}` : ''}`
+          : `Transfert depuis ${access.transferSourceNodeName ?? 'un nœud source'}`,
+      }));
+    this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        mode: 'information',
+        title: `Nœuds utilisant « ${library.name} »`,
+        message: 'Nœuds autorisés et mode d’accès configuré.',
+        items,
+        emptyMessage: 'Aucun nœud n’a accès à cette bibliothèque.',
+        headerColor: 'var(--accent-strong)',
+      },
+    });
+  }
   protected onDetailClosed(): void { this.selectedLibrary.set(null); }
 
   protected addLibrary(): void {
@@ -211,11 +258,14 @@ export class LibraryCatalogPageComponent {
       this.selectedLibrary.set(library);
       this.actionType.set('edit');
       this.actionOpen.set(true);
-    } else if (event.actionId === 'deactivate' || event.actionId === 'activate') {
-      this.setLibraryActive(library, event.actionId === 'activate');
     } else if (event.actionId === 'delete') {
       this.deleteLibrary(library);
     }
+  }
+
+  protected onLibraryToggle(event: DataTableToggleEvent): void {
+    const library = this.libraries().find((item) => item.id === event.row['id']);
+    if (library) this.setLibraryActive(library, event.checked);
   }
 
   protected updateLibrary(value: Record<string, string>): void {
@@ -246,11 +296,40 @@ export class LibraryCatalogPageComponent {
     }
     const updatedAccesses = this.selectedAccesses()
       .filter((item) => event.actionId !== 'delete' || item.nodeId !== access.nodeId)
-      .map((item) => event.actionId === 'deactivate' && item.nodeId === access.nodeId
-        ? { ...item, mode: 'unsupported' as const, localPath: null, canRead: false, canWrite: false, transferSourceNodeId: null }
-        : item)
-      .map((item) => ({ nodeId: item.nodeId, mode: item.mode, localPath: item.localPath, canRead: item.canRead, canWrite: item.canWrite, transferSourceNodeId: item.transferSourceNodeId }));
+      .map((item) => ({ nodeId: item.nodeId, mode: item.mode, isEnabled: item.isEnabled, localPath: item.localPath, canRead: item.canRead, canWrite: item.canWrite, transferSourceNodeId: item.transferSourceNodeId }));
     this.saveAccessConfiguration(updatedAccesses);
+  }
+
+  protected onAccessToggle(event: DataTableToggleEvent): void {
+    const access = this.selectedAccesses().find((item) => item.nodeId === event.row['id']);
+    if (!access) return;
+    if (event.checked && access.mode === 'unsupported') {
+      this.configureAccesses();
+      return;
+    }
+    const library = this.selectedLibrary();
+    if (!library) return;
+    const busyKey = `${library.id}:${access.nodeId}`;
+    this.accessActivationBusy.update((current) => new Set(current).add(busyKey));
+    this.http.put<LibraryNodeAccessResponse>(`/api/v1/libraries/${library.id}/node-access/${access.nodeId}/activation`, { isEnabled: event.checked }).pipe(
+      catchError(() => {
+        this.notifications.show('L’accès de ce nœud n’a pas pu être modifié.');
+        return EMPTY;
+      }),
+      finalize(() => this.accessActivationBusy.update((current) => {
+        const next = new Set(current);
+        next.delete(busyKey);
+        return next;
+      })),
+    ).subscribe((updated) => {
+      const accesses = this.selectedAccesses().map((item) => item.nodeId === updated.nodeId ? updated : item);
+      this.selectedAccesses.set(accesses);
+      const summary = this.toAccessSummary(accesses);
+      const state = library.state === 'Désactivée' ? 'Désactivée' : summary.state;
+      this.libraries.update((current) => current.map((item) => item.id === library.id ? { ...item, ...summary, state } : item));
+      this.selectedLibrary.update((current) => current?.id === library.id ? { ...current, ...summary, state } : current);
+      this.notifications.show(`Accès à « ${library.name} » ${event.checked ? 'réactivé' : 'désactivé'} pour ${access.nodeName}.`);
+    });
   }
 
   protected configureAccesses(): void {
@@ -319,17 +398,37 @@ export class LibraryCatalogPageComponent {
   }
 
   private setLibraryActive(library: LibraryRecord, isActive: boolean): void {
+    this.activationBusy.update((busy) => new Set(busy).add(library.id));
+    this.replaceLibraryRecord({
+      ...library,
+      isActive,
+      state: this.libraryState(isActive, library.configuredNodeCount),
+    });
     this.http.put<LibraryResponse>(`/api/v1/libraries/${library.id}/activation`, { isActive }).pipe(
       catchError(() => {
+        this.replaceLibraryRecord(library);
         this.notifications.show('L’état de la bibliothèque n’a pas pu être modifié.');
         return EMPTY;
       }),
+      finalize(() => this.activationBusy.update((busy) => {
+        const next = new Set(busy);
+        next.delete(library.id);
+        return next;
+      })),
     ).subscribe((updated) => {
       const record = this.toRecord(updated);
-      this.libraries.update((items) => items.map((item) => item.id === updated.id ? record : item));
-      this.selectedLibrary.update((current) => current?.id === updated.id ? record : current);
+      this.replaceLibraryRecord(record);
       this.notifications.show(`Bibliothèque « ${updated.name} » ${isActive ? 'réactivée' : 'désactivée'}.`);
     });
+  }
+
+  private replaceLibraryRecord(record: LibraryRecord): void {
+    this.libraries.update((items) => items.map((item) => item.id === record.id ? record : item));
+    this.selectedLibrary.update((current) => current?.id === record.id ? record : current);
+  }
+
+  private libraryState(isActive: boolean, configuredNodeCount: number): string {
+    return !isActive ? 'Désactivée' : configuredNodeCount ? 'Active' : 'Accès à configurer';
   }
 
   private deleteLibrary(library: LibraryRecord): void {
@@ -352,11 +451,13 @@ export class LibraryCatalogPageComponent {
   }
 
   private loadSelectedAccesses(libraryId: string): void {
+    this.selectedAccessesLoading.set(true);
     this.http.get<readonly LibraryNodeAccessResponse[]>(`/api/v1/libraries/${libraryId}/node-access`).pipe(
       catchError(() => {
         this.notifications.show('Les accès de cette bibliothèque n’ont pas pu être chargés.');
         return of([]);
       }),
+      finalize(() => this.selectedAccessesLoading.set(false)),
     ).subscribe((accesses) => this.selectedAccesses.set(accesses));
   }
 
@@ -379,8 +480,8 @@ export class LibraryCatalogPageComponent {
   }
 
   private toAccessSummary(accesses: readonly LibraryNodeAccessResponse[]): Pick<LibraryRecord, 'configuredNodes' | 'accessModes' | 'nodePaths' | 'state' | 'configuredNodeCount' | 'directAccessNodeCount' | 'transferNodeCount'> {
-    const directCount = accesses.filter((access) => access.mode === 'direct').length;
-    const transferCount = accesses.filter((access) => access.mode === 'transfer').length;
+    const directCount = accesses.filter((access) => access.isEnabled && access.mode === 'direct').length;
+    const transferCount = accesses.filter((access) => access.isEnabled && access.mode === 'transfer').length;
     const configuredCount = directCount + transferCount;
     const modes = [directCount ? `${directCount} direct(s)` : '', transferCount ? `${transferCount} transfert(s)` : ''].filter(Boolean).join(' · ');
     return {
@@ -389,7 +490,7 @@ export class LibraryCatalogPageComponent {
       transferNodeCount: transferCount,
       configuredNodes: configuredCount ? `${configuredCount} nœud(s) utilisable(s)` : 'Aucun accès',
       accessModes: modes || 'Non configuré',
-      nodePaths: accesses.filter((access) => access.mode === 'direct').map((access) => `${access.nodeName}: ${access.localPath}`).join(' · ') || 'Aucun chemin direct',
+      nodePaths: accesses.filter((access) => access.isEnabled && access.mode === 'direct').map((access) => `${access.nodeName}: ${access.localPath}`).join(' · ') || 'Aucun chemin direct',
       state: this.selectedLibrary()?.state === 'Désactivée' ? 'Désactivée' : configuredCount ? 'Active' : 'Accès à configurer',
     };
   }
@@ -409,6 +510,7 @@ export class LibraryCatalogPageComponent {
     return {
       id: library.id,
       name: library.name,
+      isActive: library.isActive,
       ...summary,
       lastScan: 'Jamais',
       associatedFlows: 'Aucun flow associé',
@@ -429,7 +531,7 @@ export class LibraryCatalogPageComponent {
       configuredNodes: configuredCount ? `${configuredCount} nœud(s) utilisable(s)` : 'Aucun accès',
       accessModes: modes || 'Non configuré',
       nodePaths: directCount ? 'Consulter les chemins configurés' : 'Aucun chemin direct',
-      state: !library.isActive ? 'Désactivée' : configuredCount ? 'Active' : 'Accès à configurer',
+      state: this.libraryState(library.isActive, configuredCount),
     };
   }
 }

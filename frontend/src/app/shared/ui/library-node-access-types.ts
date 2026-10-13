@@ -5,6 +5,7 @@ export interface LibraryNodeAccessResponse {
   readonly nodeId: string;
   readonly nodeName: string;
   readonly mode: LibraryNodeAccessMode;
+  readonly isEnabled: boolean;
   readonly localPath: string | null;
   readonly canRead: boolean;
   readonly canWrite: boolean;

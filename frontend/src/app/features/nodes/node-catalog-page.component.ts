@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { catchError, EMPTY, forkJoin, switchMap, timer } from 'rxjs';
+import { catchError, EMPTY, finalize, forkJoin, of, switchMap, timer } from 'rxjs';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import {
   DataTableColumn,
@@ -14,6 +14,7 @@ import {
   DataTableActionEvent,
   DataTableRow,
   DataTableRowAction,
+  DataTableToggleEvent,
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
@@ -52,6 +53,7 @@ interface LibraryResponse {
 interface NodeLibraryRecord extends DataTableRow {
   readonly id: string;
   readonly name: string;
+  readonly isEnabled: boolean;
   readonly mode: LibraryNodeAccessMode;
   readonly modeLabel: string;
   readonly pathLabel: string;
@@ -115,6 +117,8 @@ export class NodeCatalogPageComponent {
   private readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
   private readonly allLibraries = signal<readonly LibraryResponse[]>([]);
   private readonly nodeAccessByLibrary = signal<ReadonlyMap<string, readonly LibraryNodeAccessResponse[]>>(new Map());
+  private readonly nodeAccessActivationBusy = signal<ReadonlySet<string>>(new Set());
+  private readonly libraryAccessLoadState = signal<'loading' | 'ready' | 'error'>('loading');
 
   protected readonly loadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly selectedRole = signal('all');
@@ -175,19 +179,24 @@ export class NodeCatalogPageComponent {
   };
   protected readonly nodeLibraryColumns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Bibliothèque', sortable: true },
+    {
+      key: 'isEnabled',
+      label: 'Accès',
+      toggle: {
+        ariaLabel: (row, checked) => `${checked ? 'Désactiver' : row['mode'] === 'unsupported' ? 'Configurer' : 'Activer'} l’accès à ${row['name']} sur ce nœud`,
+        disabledWhen: (row) => this.nodeAccessActivationBusy().has(`${this.selectedNode()?.id}:${row['id']}`),
+        confirmation: (row, checked) => checked ? undefined : ({
+          title: 'Désactiver cette bibliothèque sur ce nœud ?',
+          message: `« ${row['name']} » restera déclarée et ses accès sur les autres nœuds ne changeront pas.`,
+          confirmLabel: 'Désactiver sur ce nœud',
+        }),
+      },
+    },
     { key: 'modeLabel', label: 'Mode autorisé', sortable: true },
     { key: 'pathLabel', label: 'Chemin sur ce nœud' },
   ];
   protected readonly nodeLibraryActions: readonly DataTableRowAction[] = [
     { id: 'edit', label: 'Modifier' },
-    {
-      id: 'deactivate', label: 'Désactiver', visibleWhen: (row) => row['mode'] !== 'unsupported',
-      confirmation: (row) => ({
-        title: 'Désactiver cette bibliothèque sur ce nœud ?',
-        message: `« ${row['name']} » restera déclarée et ses accès sur les autres nœuds ne changeront pas.`,
-        confirmLabel: 'Désactiver sur ce nœud',
-      }),
-    },
     {
       id: 'delete', label: 'Supprimer', tone: 'danger',
       confirmation: (row) => ({
@@ -205,12 +214,13 @@ export class NodeCatalogPageComponent {
     return this.allLibraries().flatMap((library) => {
       const access = this.nodeAccessByLibrary().get(library.id)?.find((item) => item.nodeId === node.id);
       if (!access) return [];
-      const localMode = access.mode === 'direct' ? 'Accès direct' : access.mode === 'transfer' ? 'Transfert worker' : 'Désactivée sur ce nœud';
+      const localMode = access.mode === 'direct' ? 'Accès direct' : access.mode === 'transfer' ? 'Transfert worker' : 'Aucun accès configuré';
       return [{
         id: library.id,
         name: library.name,
+        isEnabled: access.isEnabled,
         mode: access.mode,
-        modeLabel: library.isActive ? localMode : `${localMode} · Désactivée globalement`,
+        modeLabel: `${localMode}${access.mode !== 'unsupported' && !access.isEnabled ? ' · Désactivée sur ce nœud' : ''}${library.isActive ? '' : ' · Désactivée globalement'}`,
         pathLabel: access.localPath ?? (access.mode === 'transfer' ? 'Espace temporaire du worker' : access.mode === 'unsupported' ? 'Aucun accès actif' : 'Chemin à configurer'),
       }];
     });
@@ -268,6 +278,7 @@ export class NodeCatalogPageComponent {
   })));
 
   constructor() {
+    this.loadLibraryAccessSummary();
     timer(0, 10_000).pipe(
       switchMap(() => forkJoin({
         nodes: this.http.get<readonly NodeResponse[]>('/api/v1/nodes'),
@@ -407,6 +418,32 @@ export class NodeCatalogPageComponent {
     this.actionOpen.set(true);
   }
 
+  protected onNodeLibraryToggle(event: DataTableToggleEvent): void {
+    const node = this.selectedNode();
+    const library = this.allLibraries().find((item) => item.id === event.row['id']);
+    if (!node || !library) return;
+    if (event.checked && event.row['mode'] === 'unsupported') {
+      this.editNodeLibraryAccess(library);
+      return;
+    }
+    const busyKey = `${node.id}:${library.id}`;
+    this.nodeAccessActivationBusy.update((current) => new Set(current).add(busyKey));
+    this.http.put<LibraryNodeAccessResponse>(`/api/v1/libraries/${library.id}/node-access/${node.id}/activation`, { isEnabled: event.checked }).pipe(
+      catchError(() => {
+        this.notifications.show('L’accès de ce nœud n’a pas pu être modifié.');
+        return EMPTY;
+      }),
+      finalize(() => this.nodeAccessActivationBusy.update((current) => {
+        const next = new Set(current);
+        next.delete(busyKey);
+        return next;
+      })),
+    ).subscribe((updated) => {
+      this.nodeAccessByLibrary.update((current) => new Map(current).set(library.id, (current.get(library.id) ?? []).map((item) => item.nodeId === node.id ? updated : item)));
+      this.notifications.show(`Accès à « ${library.name} » ${event.checked ? 'réactivé' : 'désactivé'} pour ${node.name}.`);
+    });
+  }
+
   protected onNodeLibraryAction(event: DataTableActionEvent): void {
     const node = this.selectedNode();
     const library = this.allLibraries().find((item) => item.id === event.row['id']);
@@ -421,12 +458,10 @@ export class NodeCatalogPageComponent {
     if (!access) return;
     const configured = existing
       .filter((item) => event.actionId !== 'delete' || item.nodeId !== node.id)
-      .map((item) => event.actionId === 'deactivate' && item.nodeId === node.id
-        ? { ...item, mode: 'unsupported' as const, localPath: null, canRead: false, canWrite: false, transferSourceNodeId: null }
-        : item)
       .map((item): LibraryNodeAccessValue => ({
         nodeId: item.nodeId,
         mode: item.mode,
+        isEnabled: item.isEnabled,
         localPath: item.localPath,
         canRead: item.canRead,
         canWrite: item.canWrite,
@@ -456,6 +491,7 @@ export class NodeCatalogPageComponent {
     const merged = [...existing.filter((item) => item.nodeId !== node.id).map((item) => ({
       nodeId: item.nodeId,
       mode: item.mode,
+      isEnabled: item.isEnabled,
       localPath: item.localPath,
       canRead: item.canRead,
       canWrite: item.canWrite,
@@ -484,9 +520,7 @@ export class NodeCatalogPageComponent {
       this.actionOpen.set(false);
       this.notifications.show(action === 'delete'
         ? `Bibliothèque « ${library.name} » retirée du nœud ${node.name}.`
-        : action === 'deactivate'
-          ? `Accès à « ${library.name} » désactivé pour ${node.name}.`
-          : `Accès à « ${library.name} » enregistré pour ${node.name}.`);
+        : `Accès à « ${library.name} » enregistré pour ${node.name}.`);
     });
   }
 
@@ -509,7 +543,27 @@ export class NodeCatalogPageComponent {
     ).subscribe(({ libraries, accessLists }) => {
       this.allLibraries.set(libraries);
       this.nodeAccessByLibrary.set(new Map(libraries.map((library, index) => [library.id, accessLists[index]])));
+      this.libraryAccessLoadState.set('ready');
       this.nodeLibraryLoading.set(false);
+    });
+  }
+
+  private loadLibraryAccessSummary(): void {
+    this.http.get<readonly LibraryResponse[]>('/api/v1/libraries').pipe(
+      switchMap((libraries) => forkJoin({
+        libraries: of(libraries),
+        accessLists: libraries.length
+          ? forkJoin(libraries.map((library) => this.http.get<readonly LibraryNodeAccessResponse[]>(`/api/v1/libraries/${library.id}/node-access`)))
+          : of([] as readonly (readonly LibraryNodeAccessResponse[])[]),
+      })),
+      catchError(() => {
+        this.libraryAccessLoadState.set('error');
+        return EMPTY;
+      }),
+    ).subscribe(({ libraries, accessLists }) => {
+      this.allLibraries.set(libraries);
+      this.nodeAccessByLibrary.set(new Map(libraries.map((library, index) => [library.id, accessLists[index]])));
+      this.libraryAccessLoadState.set('ready');
     });
   }
 
@@ -528,12 +582,28 @@ export class NodeCatalogPageComponent {
       roleFilter: `|${node.roles.join('|')}|`,
       roleLabel,
       capabilities: capabilityLabels.length ? capabilityLabels.join(' · ') : 'Aucune capacité déclarée',
-      libraryAccess: 'À configurer',
+      libraryAccess: this.libraryAccessSummary(node.id),
       workerLoad: worker ? `${node.maxConcurrentTasks} tâche(s) max.` : 'Non applicable',
       queueStatus: 'Non disponible',
       state: node.status === 'online' ? 'En ligne' : 'Hors ligne',
       lastSignal: this.formatLastSeen(node.lastSeenAt),
     };
+  }
+
+  private libraryAccessSummary(nodeId: string): string {
+    const loadState = this.libraryAccessLoadState();
+    if (loadState === 'loading') return 'Chargement…';
+    if (loadState === 'error') return 'Indisponible';
+    const accesses = this.allLibraries().flatMap((library) => {
+      const access = this.nodeAccessByLibrary().get(library.id)?.find((item) => item.nodeId === nodeId);
+      return access && access.isEnabled && access.mode !== 'unsupported' ? [{ library, access }] : [];
+    });
+    if (!accesses.length) return 'À configurer';
+    const activeCount = accesses.filter(({ library }) => library.isActive).length;
+    const inactiveCount = accesses.length - activeCount;
+    return inactiveCount
+      ? `${activeCount} active(s) · ${inactiveCount} désactivée(s)`
+      : `${activeCount} bibliothèque(s) active(s)`;
   }
 
   private formatLastSeen(value: string): string {

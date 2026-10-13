@@ -28,15 +28,19 @@ public sealed record LibraryNodeAccessRequest(
     string? LocalPath,
     bool CanRead,
     bool CanWrite,
-    Guid? TransferSourceNodeId);
+    Guid? TransferSourceNodeId,
+    bool IsEnabled = true);
 
 public sealed record ConfigureLibraryNodeAccessRequest(IReadOnlyList<LibraryNodeAccessRequest> Nodes);
+
+public sealed record SetLibraryNodeAccessActivationRequest(bool IsEnabled);
 
 public sealed record LibraryNodeAccessResponse(
     Guid LibraryId,
     Guid NodeId,
     string NodeName,
     LibraryNodeAccessMode Mode,
+    bool IsEnabled,
     string? LocalPath,
     bool CanRead,
     bool CanWrite,

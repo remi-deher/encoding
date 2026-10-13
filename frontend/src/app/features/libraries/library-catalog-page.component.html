@@ -25,6 +25,7 @@
     [separateRowActionColumns]="true"
     (rowOpen)="onLibraryOpen($event)"
     (rowAction)="onLibraryAction($event)"
+    (toggleChange)="onLibraryToggle($event)"
     emptyMessage="Aucune bibliothèque n’est déclarée."
   />
 
@@ -36,6 +37,9 @@
           <h3 id="library-access-heading">Nœuds autorisés par le serveur</h3>
           <p>{{ accessStatus() }}</p>
         </div>
+        <button matButton="outlined" type="button" [disabled]="selectedAccessesLoading()" (click)="showLibraryNodes()">
+          {{ selectedAccessesLoading() ? 'Chargement des nœuds…' : 'Voir les nœuds' }}
+        </button>
       </section>
       @if (selectedAccesses().length) {
         <app-data-table
@@ -44,6 +48,7 @@
           [rowActions]="accessRowActions"
           [separateRowActionColumns]="true"
           (rowAction)="onAccessRowAction($event)"
+          (toggleChange)="onAccessToggle($event)"
           emptyMessage="Aucun accès configuré."
         />
       } @else {

@@ -16,6 +16,7 @@ export interface LibraryNodeAccessOption {
 export interface LibraryNodeAccessValue {
   readonly nodeId: string;
   readonly mode: LibraryNodeAccessMode;
+  readonly isEnabled: boolean;
   readonly localPath: string | null;
   readonly canRead: boolean;
   readonly canWrite: boolean;
@@ -24,6 +25,7 @@ export interface LibraryNodeAccessValue {
 
 interface NodeAccessControls {
   mode: FormControl<LibraryNodeAccessMode>;
+  isEnabled: FormControl<boolean>;
   localPath: FormControl<string>;
   canRead: FormControl<boolean>;
   canWrite: FormControl<boolean>;
@@ -61,12 +63,16 @@ interface NodeAccessControls {
 
                   <mat-form-field appearance="outline">
                     <mat-label>Comment ce nœud accède-t-il aux fichiers ?</mat-label>
-                    <mat-select formControlName="mode">
+                    <mat-select formControlName="mode" (selectionChange)="onModeChange(node.id, $event.value)">
                       <mat-option value="direct">Il lit les fichiers sur son stockage</mat-option>
                       <mat-option value="transfer" [disabled]="!node.roles.includes('worker')">Un autre nœud lui transfère une copie</mat-option>
                       <mat-option value="unsupported">Ne pas utiliser ce nœud</mat-option>
                     </mat-select>
                   </mat-form-field>
+
+                  @if (controls.controls.mode.value !== 'unsupported') {
+                    <mat-checkbox formControlName="isEnabled">Autoriser ce nœud à recevoir des tâches</mat-checkbox>
+                  }
 
                   @if (controls.controls.mode.value === 'direct') {
                     <mat-form-field appearance="outline">
@@ -173,8 +179,8 @@ export class LibraryNodeAccessFormComponent implements OnInit {
     return this.nodes().length > 0 && this.nodes().every((node) => {
     const controls = this.form.controls[node.id]?.controls;
     if (!controls) return false;
-    const mode = controls.mode.value;
-    if (mode === 'direct') return !!controls.localPath.value.trim() && controls.canRead.value;
+      const mode = controls.mode.value;
+      if (mode === 'direct') return !!controls.localPath.value.trim() && controls.canRead.value;
     if (mode === 'unsupported') return true;
     if (mode !== 'transfer' || !controls.transferSourceNodeId.value) return false;
     const source = this.form.controls[controls.transferSourceNodeId.value]?.controls;
@@ -188,6 +194,7 @@ export class LibraryNodeAccessFormComponent implements OnInit {
       const access = this.currentAccesses.get(node.id);
       this.form.addControl(node.id, new FormGroup<NodeAccessControls>({
         mode: new FormControl(access?.mode ?? 'unsupported', { nonNullable: true }),
+        isEnabled: new FormControl(access?.isEnabled ?? access?.mode !== 'unsupported', { nonNullable: true }),
         localPath: new FormControl(access?.localPath ?? '', { nonNullable: true }),
         canRead: new FormControl(access?.mode === 'direct' ? access.canRead : false, { nonNullable: true }),
         canWrite: new FormControl(access?.mode === 'direct' ? access.canWrite : false, { nonNullable: true }),
@@ -204,6 +211,10 @@ export class LibraryNodeAccessFormComponent implements OnInit {
     });
   }
 
+  protected onModeChange(nodeId: string, mode: LibraryNodeAccessMode): void {
+    this.form.controls[nodeId]?.controls.isEnabled.setValue(mode !== 'unsupported');
+  }
+
   protected review(): void {
     if (this.canSave()) this.reviewing.set(true);
   }
@@ -215,14 +226,16 @@ export class LibraryNodeAccessFormComponent implements OnInit {
   protected currentSummary(nodeId: string): string {
     const access = this.currentAccesses.get(nodeId);
     if (!access) return 'Non configuré';
-    return this.describe(access.mode, access.localPath, access.transferSourceNodeName, access.canRead, access.canWrite);
+    const summary = this.describe(access.mode, access.localPath, access.transferSourceNodeName, access.canRead, access.canWrite);
+    return access.mode !== 'unsupported' && !access.isEnabled ? `Désactivé · ${summary}` : summary;
   }
 
   protected proposedSummary(nodeId: string): string {
     const controls = this.form.controls[nodeId].controls;
     const mode = controls.mode.value;
     const source = this.nodes().find((node) => node.id === controls.transferSourceNodeId.value)?.name ?? null;
-    return this.describe(mode, controls.localPath.value.trim(), source, controls.canRead.value, controls.canWrite.value);
+    const summary = this.describe(mode, controls.localPath.value.trim(), source, controls.canRead.value, controls.canWrite.value);
+    return mode !== 'unsupported' && !controls.isEnabled.value ? `Désactivé · ${summary}` : summary;
   }
 
   private describe(mode: LibraryNodeAccessMode, path: string | null, source: string | null, canRead: boolean, canWrite: boolean): string {
@@ -242,6 +255,7 @@ export class LibraryNodeAccessFormComponent implements OnInit {
       return {
         nodeId: node.id,
         mode,
+        isEnabled: mode !== 'unsupported' && controls.isEnabled.value,
         localPath: mode === 'direct' ? controls.localPath.value.trim() : null,
         canRead: mode === 'direct' ? controls.canRead.value : mode === 'transfer',
         canWrite: mode === 'direct' ? controls.canWrite.value : mode === 'transfer',

@@ -9,9 +9,9 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
     {
         const string sql = """
             SELECT l.id, l.name, l.created_at,
-                   count(a.node_id) FILTER (WHERE a.mode <> 'unsupported')::integer,
-                   count(a.node_id) FILTER (WHERE a.mode = 'direct')::integer,
-                   count(a.node_id) FILTER (WHERE a.mode = 'transfer')::integer,
+                   count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode <> 'unsupported')::integer,
+                   count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'direct')::integer,
+                   count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'transfer')::integer,
                    l.is_active
             FROM libraries l
             LEFT JOIN library_node_accesses a ON a.library_id = l.id
@@ -81,9 +81,9 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
     {
         const string sql = """
             SELECT l.id, l.name, l.created_at,
-                   count(a.node_id) FILTER (WHERE a.mode <> 'unsupported')::integer,
-                   count(a.node_id) FILTER (WHERE a.mode = 'direct')::integer,
-                   count(a.node_id) FILTER (WHERE a.mode = 'transfer')::integer,
+                   count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode <> 'unsupported')::integer,
+                   count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'direct')::integer,
+                   count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'transfer')::integer,
                    l.is_active
             FROM libraries l LEFT JOIN library_node_accesses a ON a.library_id = l.id
             WHERE l.id = @id GROUP BY l.id

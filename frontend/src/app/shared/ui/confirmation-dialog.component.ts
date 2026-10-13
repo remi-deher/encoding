@@ -9,10 +9,14 @@ import {
 
 export interface ConfirmationDialogData {
   readonly title: string;
-  readonly message: string;
+  readonly message?: string;
   readonly confirmLabel?: string;
   readonly headerColor?: string;
   readonly confirmColor?: string;
+  readonly mode?: 'confirmation' | 'information';
+  readonly closeLabel?: string;
+  readonly items?: readonly { readonly label: string; readonly detail?: string }[];
+  readonly emptyMessage?: string;
 }
 
 @Component({
@@ -22,12 +26,32 @@ export interface ConfirmationDialogData {
     <header class="confirmation-header" [class.confirmation-header_colored]="!!data.headerColor" [style.background-color]="data.headerColor ?? 'var(--surface-muted)'">
       <h2 mat-dialog-title>{{ data.title }}</h2>
     </header>
-    <mat-dialog-content>{{ data.message }}</mat-dialog-content>
+    <mat-dialog-content>
+      @if (data.message) { <p class="dialog-message">{{ data.message }}</p> }
+      @if (data.items?.length) {
+        <ul class="information-list">
+          @for (item of data.items; track item.label) {
+            <li>
+              <strong>{{ item.label }}</strong>
+              @if (item.detail) { <span>{{ item.detail }}</span> }
+            </li>
+          }
+        </ul>
+      } @else if (data.emptyMessage) {
+        <p class="empty-message">{{ data.emptyMessage }}</p>
+      }
+    </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button class="cancel-button" type="button" (click)="dialogRef.close(false)">Annuler</button>
-      <button class="confirm-button" type="button" [style.background-color]="data.confirmColor ?? 'var(--accent-strong)'" [style.border-color]="data.confirmColor ?? 'var(--accent-strong)'" (click)="dialogRef.close(true)">
-        {{ data.confirmLabel ?? 'Confirmer' }}
-      </button>
+      @if (data.mode === 'information') {
+        <button class="confirm-button" type="button" [style.background-color]="data.confirmColor ?? 'var(--accent-strong)'" [style.border-color]="data.confirmColor ?? 'var(--accent-strong)'" (click)="dialogRef.close(true)">
+          {{ data.closeLabel ?? 'Fermer' }}
+        </button>
+      } @else {
+        <button class="cancel-button" type="button" (click)="dialogRef.close(false)">Annuler</button>
+        <button class="confirm-button" type="button" [style.background-color]="data.confirmColor ?? 'var(--accent-strong)'" [style.border-color]="data.confirmColor ?? 'var(--accent-strong)'" (click)="dialogRef.close(true)">
+          {{ data.confirmLabel ?? 'Confirmer' }}
+        </button>
+      }
     </mat-dialog-actions>
   `,
   styles: `
@@ -58,6 +82,29 @@ export interface ConfirmationDialogData {
       font-size: 13px;
       line-height: 1.6;
     }
+
+    .dialog-message { margin: 0; }
+
+    .information-list {
+      margin: 12px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+      list-style: none;
+    }
+
+    .information-list li {
+      padding: 10px 12px;
+      display: grid;
+      gap: 3px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      background: var(--surface-muted);
+    }
+
+    .information-list strong { color: var(--text-primary); }
+    .information-list span, .empty-message { color: var(--text-secondary); }
+    .empty-message { margin: 0; }
 
     mat-dialog-actions {
       gap: 8px;

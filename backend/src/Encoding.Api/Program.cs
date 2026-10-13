@@ -131,6 +131,17 @@ libraries.MapPut("/{libraryId:guid}/node-access", async (
     }
 }).WithName("ConfigureLibraryNodeAccesses");
 
+libraries.MapPut("/{libraryId:guid}/node-access/{nodeId:guid}/activation", async (
+    Guid libraryId,
+    Guid nodeId,
+    SetLibraryNodeAccessActivationRequest request,
+    LibraryNodeAccessRepository repository,
+    CancellationToken cancellationToken) =>
+{
+    var access = await repository.SetEnabledAsync(libraryId, nodeId, request.IsEnabled, cancellationToken);
+    return access is null ? (IResult)Results.NotFound() : Results.Ok(access);
+}).WithName("SetLibraryNodeAccessActivation");
+
 var nodes = app.MapGroup("/api/v1/nodes").WithTags("Nodes");
 app.MapGet("/api/v1/cluster", async (ClusterIdentityRepository repository, CancellationToken cancellationToken) =>
 {

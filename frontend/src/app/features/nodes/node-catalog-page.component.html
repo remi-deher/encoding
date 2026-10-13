@@ -77,6 +77,7 @@
                 [rowActions]="nodeLibraryActions"
                 [separateRowActionColumns]="true"
                 (rowAction)="onNodeLibraryAction($event)"
+                (toggleChange)="onNodeLibraryToggle($event)"
                 emptyMessage="Aucune bibliothèque autorisée sur ce nœud."
               />
             } @else {

@@ -6,14 +6,21 @@ import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from './confirmation-dialog.component';
 
-export type DataTableValue = string | number;
+export type DataTableValue = string | number | boolean;
 export type DataTableRow = Readonly<Record<string, DataTableValue>>;
+
+export interface DataTableToggle {
+  readonly ariaLabel: (row: DataTableRow, checked: boolean) => string;
+  readonly disabledWhen?: (row: DataTableRow) => boolean;
+  readonly confirmation?: (row: DataTableRow, checked: boolean) => ConfirmationDialogData | undefined;
+}
 
 export interface DataTableColumn {
   readonly key: string;
   readonly label: string;
   readonly sortable?: boolean;
   readonly sortValueKey?: string;
+  readonly toggle?: DataTableToggle;
 }
 
 export interface DataTableRowAction {
@@ -27,6 +34,12 @@ export interface DataTableRowAction {
 export interface DataTableActionEvent {
   readonly actionId: string;
   readonly row: DataTableRow;
+}
+
+export interface DataTableToggleEvent {
+  readonly key: string;
+  readonly row: DataTableRow;
+  readonly checked: boolean;
 }
 
 export interface DataTableSelectionAction {
@@ -108,7 +121,21 @@ export interface DataTableSelectionActionEvent {
               {{ column.label }}
             </th>
             <td mat-cell *matCellDef="let row" [attr.data-label]="column.label">
-              @if (rowOpenable() && isFirst) {
+              @if (column.toggle) {
+                <div>
+                  <button
+                    class="row-toggle"
+                    [class.row-toggle_checked]="!!row[column.key]"
+                    type="button"
+                    role="switch"
+                    [attr.aria-checked]="!!row[column.key]"
+                    [attr.aria-label]="column.toggle.ariaLabel(row, !!row[column.key])"
+                    [disabled]="column.toggle.disabledWhen?.(row) ?? false"
+                    (click)="requestToggle(column, row)"
+                  ><span></span></button>
+                  <span class="row-toggle-status">{{ row[column.key] ? 'Activée' : 'Désactivée' }}</span>
+                </div>
+              } @else if (rowOpenable() && isFirst) {
                 <button
                   class="row-open"
                   type="button"
@@ -185,6 +212,7 @@ export class DataTableComponent {
   readonly selectionActions = input<readonly DataTableSelectionAction[]>([]);
   readonly selectionChange = output<readonly DataTableRow[]>();
   readonly rowAction = output<DataTableActionEvent>();
+  readonly toggleChange = output<DataTableToggleEvent>();
   readonly rowOpen = output<DataTableRow>();
   readonly selectionAction = output<DataTableSelectionActionEvent>();
 
@@ -213,7 +241,8 @@ export class DataTableComponent {
 
     this.dataSource.sortingDataAccessor = (row, property) => {
       const sortValueKey = this.columns().find((column) => column.key === property)?.sortValueKey;
-      return row[sortValueKey ?? property] ?? '';
+      const value = row[sortValueKey ?? property];
+      return typeof value === 'boolean' ? Number(value) : value ?? '';
     };
   }
 
@@ -231,6 +260,23 @@ export class DataTableComponent {
         if (confirmed) {
           this.rowAction.emit({ actionId: action.id, row });
         }
+      });
+  }
+
+  protected requestToggle(column: DataTableColumn, row: DataTableRow): void {
+    if (!column.toggle || column.toggle.disabledWhen?.(row)) return;
+    const checked = !Boolean(row[column.key]);
+    const confirmation = column.toggle.confirmation?.(row, checked);
+    if (!confirmation) {
+      this.toggleChange.emit({ key: column.key, row, checked });
+      return;
+    }
+
+    this.dialog
+      .open(ConfirmationDialogComponent, { data: confirmation })
+      .afterClosed()
+      .subscribe((confirmed: boolean | undefined) => {
+        if (confirmed) this.toggleChange.emit({ key: column.key, row, checked });
       });
   }
 
