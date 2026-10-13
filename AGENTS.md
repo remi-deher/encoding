@@ -104,3 +104,7 @@ Les règles de [BACKEND_RULES.md](BACKEND_RULES.md) sont obligatoires pour toute
 ## Règles absolues de tests et de CI
 
 Les règles de [TEST_RULES.md](TEST_RULES.md) sont obligatoires. Le lint doit être exécutable en local et dans GitHub Actions ; les tests doivent protéger les fonctionnalités, les contrats et les garanties du cluster. Les E2E légers doivent pouvoir s’exécuter en local, tandis que les scénarios longs et lourds sont exécutés dans GitHub Actions.
+
+## Préparation du moteur de flow
+
+Les premiers contrats de définition, de catalogue plugin et d’invocation sont préparés dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins. Ils restent sans runtime ni endpoints activés. Consulter [0012 — Préparation du moteur](docs/architecture/0012-flow-engine-foundation.md) avant leur implémentation ; réutiliser le registre d’exécutions existant et préserver les garanties de bail, d’accès et de validation des artefacts.

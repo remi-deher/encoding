@@ -50,3 +50,7 @@ Une définition de bibliothèque ne configure aucun accès média. Les chemins l
 ## Suivi des exécutions
 
 La migration 0008 ajoute le registre et son journal. L’API /api/v1/executions expose les compteurs et tentatives persistants, les demandes d’annulation et les relances. Les rapports de progression restent internes au futur moteur, qui devra contrôler ses baux et valider les sorties avant une réussite. Aucun traitement média n’est lancé par cette évolution. Voir docs/architecture/0009-execution-tracking.md pour les contrats et les limites.
+
+## Préparation du moteur de flow
+
+Les contrats de préparation se trouvent dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins : définition versionnée, manifeste déclaratif, invocation et résultat d’étape. Ils ne sont pas encore exposés par l’API ni exécutés par l’agent. L’ordre d’implémentation et les garanties attendues sont décrits dans [l’architecture 0012](../docs/architecture/0012-flow-engine-foundation.md).
