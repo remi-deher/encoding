@@ -1,0 +1,22 @@
+<app-management-catalog-template
+  [title]="title()"
+  [description]="description()"
+  filterLabel="Type de média"
+  note="Les bibliothèques affichées sont des exemples. Les chemins et modes d’accès réels seront définis par nœud."
+>
+  <div catalogue-filters>
+    <app-category-tabs
+      label="Type de média"
+      [options]="categoryOptions()"
+      [selected]="selectedCategory()"
+      (selectedChange)="onCategoryChange($event)"
+    />
+  </div>
+
+  <app-data-table
+    catalogue-table
+    [columns]="columns"
+    [rows]="filteredLibraries()"
+    emptyMessage="Aucune bibliothèque ne correspond à ce type de média."
+  />
+</app-management-catalog-template>

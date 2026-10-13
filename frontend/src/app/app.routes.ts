@@ -11,16 +11,22 @@ export const routes: Routes = [
   },
   {
     path: 'tasks',
-    component: SectionPlaceholderComponent,
+    loadComponent: () =>
+      import('./features/tasks/task-monitoring-page.component').then(
+        (module) => module.TaskMonitoringPageComponent,
+      ),
     data: {
       title: 'Tâches',
       primaryNavigation: true,
-      description: 'Suivez les opérations en cours et consultez leur historique.',
+      description: 'Suivez les exécutions en attente, en cours, annulées, en erreur ou réussies.',
     },
   },
   {
     path: 'libraries',
-    component: SectionPlaceholderComponent,
+    loadComponent: () =>
+      import('./features/libraries/library-catalog-page.component').then(
+        (module) => module.LibraryCatalogPageComponent,
+      ),
     data: {
       title: 'Bibliothèques',
       primaryNavigation: true,
@@ -29,29 +35,38 @@ export const routes: Routes = [
   },
   {
     path: 'flows',
-    component: SectionPlaceholderComponent,
+    loadComponent: () =>
+      import('./features/flows/flow-catalog-page.component').then(
+        (module) => module.FlowCatalogPageComponent,
+      ),
     data: {
       title: 'Flows',
       primaryNavigation: true,
-      description: 'Composez les étapes qui définissent le traitement de vos médias.',
+      description: 'Composez et gérez les traitements définis pour vos médias.',
     },
   },
   {
     path: 'nodes',
-    component: SectionPlaceholderComponent,
+    loadComponent: () =>
+      import('./features/nodes/node-catalog-page.component').then(
+        (module) => module.NodeCatalogPageComponent,
+      ),
     data: {
       title: 'Nœuds',
       primaryNavigation: true,
-      description: 'Configurez les rôles, capacités et accès de chaque installation.',
+      description: 'Consultez les rôles, capacités et états des installations du cluster.',
     },
   },
   {
     path: 'plugins',
-    component: SectionPlaceholderComponent,
+    loadComponent: () =>
+      import('./features/plugins/plugin-catalog-page.component').then(
+        (module) => module.PluginCatalogPageComponent,
+      ),
     data: {
       title: 'Plugins',
       primaryNavigation: true,
-      description: 'Ajoutez les intégrations et composants disponibles pour vos flows.',
+      description: 'Consultez les intégrations et composants disponibles pour vos flows.',
     },
   },
   {

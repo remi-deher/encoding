@@ -1,0 +1,123 @@
+.table-scroll-region {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  background: transparent;
+}
+
+.data-table th {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+.data-table td {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.data-table .mat-mdc-row:last-child .mat-mdc-cell {
+  border-bottom: 0;
+}
+
+.selection-cell {
+  width: 48px;
+}
+
+.row-actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.row-action {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.row-action:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.row-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.empty-row .mat-cell {
+  height: 92px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .table-scroll-region {
+    overflow: visible;
+  }
+
+  .data-table {
+    display: block;
+  }
+
+  .data-table .mat-mdc-header-row {
+    display: none;
+  }
+
+  .data-table .mat-mdc-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto !important;
+    min-height: 0;
+    margin: 0 12px 12px;
+    padding: 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+  }
+
+  .data-table .mat-mdc-cell {
+    min-height: 48px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .data-table .mat-mdc-cell:not(.selection-cell)::before {
+    margin-bottom: 5px;
+    color: var(--text-muted);
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 650;
+  }
+
+  .data-table .selection-cell {
+    grid-column: 1 / -1;
+    min-height: 36px;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  .data-table .row-actions-cell {
+    grid-column: 1 / -1;
+    align-items: flex-end;
+  }
+
+  .empty-row {
+    display: block;
+    border: 0;
+  }
+}

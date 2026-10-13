@@ -1,0 +1,22 @@
+<app-management-catalog-template
+  [title]="title()"
+  [description]="description()"
+  filterLabel="Rôle du nœud"
+  note="Les nœuds affichés sont des exemples. Leur état et leurs capacités seront fournis par le cluster."
+>
+  <div catalogue-filters>
+    <app-category-tabs
+      label="Rôle du nœud"
+      [options]="roleOptions()"
+      [selected]="selectedRole()"
+      (selectedChange)="onRoleChange($event)"
+    />
+  </div>
+
+  <app-data-table
+    catalogue-table
+    [columns]="columns"
+    [rows]="filteredNodes()"
+    emptyMessage="Aucun nœud ne correspond à ce rôle."
+  />
+</app-management-catalog-template>

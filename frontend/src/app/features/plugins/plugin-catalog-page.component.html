@@ -1,0 +1,22 @@
+<app-management-catalog-template
+  [title]="title()"
+  [description]="description()"
+  filterLabel="Famille de plugin"
+  note="Liste illustrative : les plugins affichés ne sont pas encore installables dans cette version."
+>
+  <div catalogue-filters>
+    <app-category-tabs
+      label="Famille de plugin"
+      [options]="familyOptions()"
+      [selected]="selectedFamily()"
+      (selectedChange)="onFamilyChange($event)"
+    />
+  </div>
+
+  <app-data-table
+    catalogue-table
+    [columns]="columns"
+    [rows]="filteredPlugins()"
+    emptyMessage="Aucun plugin ne correspond à cette famille."
+  />
+</app-management-catalog-template>

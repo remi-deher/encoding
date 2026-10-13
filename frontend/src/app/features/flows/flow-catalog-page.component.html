@@ -1,0 +1,22 @@
+<app-management-catalog-template
+  [title]="title()"
+  [description]="description()"
+  filterLabel="Type de média"
+  note="Les flows affichés sont des exemples. Le catalogue sera relié au backend lorsque son API sera en place."
+>
+  <div catalogue-filters>
+    <app-category-tabs
+      label="Type de média"
+      [options]="categoryOptions()"
+      [selected]="selectedCategory()"
+      (selectedChange)="onCategoryChange($event)"
+    />
+  </div>
+
+  <app-data-table
+    catalogue-table
+    [columns]="columns"
+    [rows]="filteredFlows()"
+    emptyMessage="Aucun flow ne correspond à ce type de média."
+  />
+</app-management-catalog-template>
