@@ -4,10 +4,14 @@
   [detailOpen]="selectedNode() !== null"
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
+  [catalogState]="loadState()"
+  [catalogMessage]="catalogMessage()"
   (detailClosed)="onDetailClosed()"
   filterLabel="Rôle du nœud"
-  note="Les nœuds affichés sont des exemples. Leur état et leurs capacités seront fournis par le cluster."
+  note="L’état et les capacités proviennent du dernier signal reçu. Le statut en ligne est calculé par le cluster."
 >
+  <button page-actions matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
+
   <div catalogue-filters>
     <app-category-tabs
       label="Rôle du nœud"
@@ -29,11 +33,9 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list [fields]="detailFields()" />
+    <app-detail-field-list [fields]="detailFields()" [tabbed]="true" tabsLabel="Sections du nœud" />
     @if (selectedNode()) {
-      <p role="note">
-        Les champs modifiables de configuration seront définis dans une prochaine étape.
-      </p>
+      <p role="note">Les accès bibliothèque et les tâches seront affichés lorsque ces contrats backend seront disponibles.</p>
     }
   </ng-template>
 </app-management-catalog-template>

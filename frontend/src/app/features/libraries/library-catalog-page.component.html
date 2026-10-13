@@ -6,8 +6,10 @@
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
   filterLabel="Type de média"
-  note="Les bibliothèques affichées sont des exemples. Les chemins et modes d’accès réels seront définis par nœud."
+  note="Une définition n’accorde aucun accès aux médias. Configurez ensuite les chemins et modes d’accès pour chaque nœud."
 >
+  <button page-actions matButton="filled" type="button" (click)="addLibrary()">Ajouter une bibliothèque</button>
+
   <div catalogue-filters>
     <app-category-tabs
       label="Type de média"
@@ -29,6 +31,6 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list [fields]="detailFields()" />
+    <app-detail-field-list [fields]="detailFields()" [tabbed]="true" tabsLabel="Sections de la bibliothèque" />
   </ng-template>
 </app-management-catalog-template>

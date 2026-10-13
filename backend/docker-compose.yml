@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: encoding
+      POSTGRES_USER: encoding
+      POSTGRES_PASSWORD: encoding
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - encoding-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U encoding -d encoding"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Cluster: Host=postgres;Port=5432;Database=encoding;Username=encoding;Password=encoding
+      Cluster__NodeApiToken: ${NODE_API_TOKEN:?Create backend/.env from .env.example and set NODE_API_TOKEN}
+      NodePresence__OfflineAfterSeconds: 30
+    ports:
+      - "127.0.0.1:5080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  node-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.Agent
+    environment:
+      Cluster__ApiBaseUrl: http://api:8080
+      Cluster__NodeApiToken: ${NODE_API_TOKEN:?Create backend/.env from .env.example and set NODE_API_TOKEN}
+      Node__Id: ${NODE_ID:?Create backend/.env from .env.example and set NODE_ID}
+      Node__Name: ${NODE_NAME:-encoding-dev-node}
+      Node__Roles: ${NODE_ROLES:-server,worker}
+      Node__MaxConcurrentTasks: ${NODE_MAX_CONCURRENT_TASKS:-2}
+      Node__HeartbeatIntervalSeconds: 10
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  encoding-postgres-data:

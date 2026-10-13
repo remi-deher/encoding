@@ -19,11 +19,19 @@ import { PageHeaderComponent } from '../ui/page-header.component';
         </app-page-header>
 
         <section class="catalog-panel" [attr.aria-label]="title()">
-          <div class="catalog-filters">
-            <span class="catalog-filter-label">{{ filterLabel() }}</span>
-            <ng-content select="[catalogue-filters]" />
+          <div class="catalog-toolbar">
+            <div class="catalog-filters">
+              <span class="catalog-filter-label">{{ filterLabel() }}</span>
+              <ng-content select="[catalogue-filters]" />
+            </div>
           </div>
-          <ng-content select="[catalogue-table]" />
+          @if (catalogState() === 'loading') {
+            <p class="catalog-state" role="status">{{ catalogMessage() || 'Chargement…' }}</p>
+          } @else if (catalogState() === 'error') {
+            <p class="catalog-state" role="alert">{{ catalogMessage() || 'Les données ne sont pas disponibles.' }}</p>
+          } @else {
+            <ng-content select="[catalogue-table]" />
+          }
         </section>
 
         @if (note()) {
@@ -43,6 +51,8 @@ export class ManagementCatalogTemplateComponent {
   readonly description = input('');
   readonly filterLabel = input('Filtres');
   readonly note = input('');
+  readonly catalogState = input<'ready' | 'loading' | 'error'>('ready');
+  readonly catalogMessage = input('');
   readonly detailOpen = input(false);
   readonly detailTitle = input('Détails');
   readonly detailDescription = input('');

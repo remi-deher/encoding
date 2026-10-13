@@ -1,4 +1,5 @@
 import { Component, computed, input } from '@angular/core';
+import { MatTabsModule } from '@angular/material/tabs';
 
 export interface DetailField {
   readonly section?: string;
@@ -8,24 +9,49 @@ export interface DetailField {
 
 @Component({
   selector: 'app-detail-field-list',
+  imports: [MatTabsModule],
   template: `
-    <dl class="detail-field-list">
-      @for (section of sections(); track section.title) {
-        <section class="detail-section">
-          @if (section.title) {
-            <h3>{{ section.title }}</h3>
-          }
-          @for (field of section.fields; track field.label) {
-            <div>
-              <dt>{{ field.label }}</dt>
-              <dd>{{ field.value }}</dd>
-            </div>
-          }
-        </section>
-      }
-    </dl>
+    @if (tabbed() && sections().length > 1) {
+      <mat-tab-group class="detail-tabs" [attr.aria-label]="tabsLabel()">
+        @for (section of sections(); track section.title) {
+          <mat-tab [label]="section.title || 'Général'">
+            <dl class="detail-field-list tab-fields">
+              @for (field of section.fields; track field.label) {
+                <div>
+                  <dt>{{ field.label }}</dt>
+                  <dd>{{ field.value }}</dd>
+                </div>
+              }
+            </dl>
+          </mat-tab>
+        }
+      </mat-tab-group>
+    } @else {
+      <dl class="detail-field-list">
+        @for (section of sections(); track section.title) {
+          <section class="detail-section">
+            @if (section.title) { <h3>{{ section.title }}</h3> }
+            @for (field of section.fields; track field.label) {
+              <div>
+                <dt>{{ field.label }}</dt>
+                <dd>{{ field.value }}</dd>
+              </div>
+            }
+          </section>
+        }
+      </dl>
+    }
   `,
   styles: `
+    :host { display: block; }
+
+    .detail-tabs { display: block; }
+
+    .tab-fields {
+      min-height: 120px;
+      padding: 22px 4px 4px;
+    }
+
     .detail-field-list {
       margin: 0;
       display: grid;
@@ -66,6 +92,8 @@ export interface DetailField {
 })
 export class DetailFieldListComponent {
   readonly fields = input.required<readonly DetailField[]>();
+  readonly tabbed = input(false);
+  readonly tabsLabel = input('Sections du détail');
 
   protected readonly sections = computed(() => {
     const sections = new Map<string, DetailField[]>();

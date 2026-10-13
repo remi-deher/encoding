@@ -13,7 +13,7 @@
     matButton="filled"
     routerLink="/flows/new"
     [info]="{ flowEditorDirection: 'forward' }"
-    >Nouveau flow</a
+    >Créer un flow</a
   >
 
   <div catalogue-filters>
@@ -37,7 +37,7 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list [fields]="detailFields()" />
+    <app-detail-field-list [fields]="detailFields()" [tabbed]="true" tabsLabel="Sections du flow" />
     @if (selectedFlow(); as flow) {
       <a
         matButton="filled"

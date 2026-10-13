@@ -1,6 +1,10 @@
+import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
+import { catchError, of } from 'rxjs';
 import {
   DataTableColumn,
   DataTableComponent,
@@ -10,6 +14,15 @@ import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/catego
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
+import { RecordFormDialogComponent, RecordFormDialogData } from '../../shared/ui/record-form-dialog.component';
+import { NotificationService } from '../../shared/services/notification.service';
+
+interface LibraryResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly mediaType: MediaType;
+  readonly createdAt: string;
+}
 
 interface LibraryRecord extends DataTableRow {
   readonly id: string;
@@ -26,96 +39,23 @@ interface LibraryRecord extends DataTableRow {
   readonly modifiedOrder: number;
 }
 
-const LIBRARY_RECORDS: readonly LibraryRecord[] = [
-  {
-    id: 'library-films',
-    name: 'Films',
-    category: 'video',
-    mediaType: 'Vidéo',
-    configuredNodes: '3 / 4 nœuds',
-    accessModes: '2 directs · 1 transfert WebDAV',
-    nodePaths: 'media-core-01 · /mnt/media/films\nworker-gpu-01 · /mnt/media/films\nworker-cpu-02 · transfert WebDAV',
-    lastScan: 'Aujourd’hui, 09:30',
-    associatedFlows: 'Films — H.265 · Films — Vérification de la source',
-    state: 'Accès configuré',
-    modifiedAt: '13 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 13),
-  },
-  {
-    id: 'library-series',
-    name: 'Séries',
-    category: 'video',
-    mediaType: 'Vidéo',
-    configuredNodes: '2 / 4 nœuds',
-    accessModes: '2 directs',
-    nodePaths: 'media-core-01 · /mnt/media/series\nworker-cpu-02 · /mnt/media/series',
-    lastScan: 'Hier, 22:10',
-    associatedFlows: 'Séries — H.265',
-    state: 'Accès configuré',
-    modifiedAt: '10 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 10),
-  },
-  {
-    id: 'library-photos',
-    name: 'Photos',
-    category: 'image',
-    mediaType: 'Image',
-    configuredNodes: '1 / 4 nœuds',
-    accessModes: '1 direct',
-    nodePaths: 'media-core-01 · /mnt/media/photos',
-    lastScan: '8 oct. 2026',
-    associatedFlows: 'Images — Conversion WebP',
-    state: 'Accès configuré',
-    modifiedAt: '8 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 8),
-  },
-  {
-    id: 'library-music',
-    name: 'Musique',
-    category: 'music',
-    mediaType: 'Musique',
-    configuredNodes: '2 / 4 nœuds',
-    accessModes: '1 direct · 1 transfert WebDAV',
-    nodePaths: 'media-core-01 · /mnt/media/music\nworker-cpu-02 · transfert WebDAV',
-    lastScan: '2 oct. 2026',
-    associatedFlows: 'Musique — Vérification FLAC',
-    state: 'Accès configuré',
-    modifiedAt: '2 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 2),
-  },
-  {
-    id: 'library-subtitles',
-    name: 'Sous-titres',
-    category: 'subtitles',
-    mediaType: 'Sous-titres',
-    configuredNodes: '0 / 4 nœuds',
-    accessModes: 'Aucun accès déclaré',
-    nodePaths: 'Aucun point d’entrée configuré',
-    lastScan: 'Jamais',
-    associatedFlows: 'Aucun flow associé',
-    state: 'À configurer',
-    modifiedAt: '28 sept. 2026',
-    modifiedOrder: Date.UTC(2026, 8, 28),
-  },
-];
+const mediaLabel = (mediaType: MediaType): string => MEDIA_TYPE_OPTIONS.find((option) => option.value === mediaType)?.label ?? mediaType;
 
 @Component({
   selector: 'app-library-catalog-page',
-  imports: [DataTableComponent, DetailFieldListComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent],
+  imports: [DataTableComponent, DetailFieldListComponent, ManagementCatalogTemplateComponent, CategoryTabsComponent, MatButtonModule],
   templateUrl: './library-catalog-page.component.html',
 })
 export class LibraryCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
-  private readonly routeData = toSignal(this.route.data, {
-    initialValue: this.route.snapshot.data,
-  });
+  private readonly routeData = toSignal(this.route.data, { initialValue: this.route.snapshot.data });
+  private readonly http = inject(HttpClient);
+  private readonly dialog = inject(MatDialog);
+  private readonly notifications = inject(NotificationService);
+  private readonly libraries = signal<readonly LibraryRecord[]>([]);
 
-  protected readonly title = computed(
-    () => (this.routeData()['title'] as string) ?? 'Bibliothèques',
-  );
-  protected readonly description = computed(
-    () => (this.routeData()['description'] as string) ?? '',
-  );
+  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Bibliothèques');
+  protected readonly description = computed(() => (this.routeData()['description'] as string) ?? '');
   protected readonly selectedCategory = signal('all');
   protected readonly selectedLibrary = signal<LibraryRecord | null>(null);
   protected readonly detailTitle = computed(() => this.selectedLibrary()?.name ?? 'Bibliothèque');
@@ -130,7 +70,7 @@ export class LibraryCatalogPageComponent {
       { section: 'Accès par nœud', label: 'Points d’entrée', value: library.nodePaths },
       { section: 'Activité', label: 'Dernière analyse', value: library.lastScan },
       { section: 'Activité', label: 'Flows associés', value: library.associatedFlows },
-      { section: 'Activité', label: 'Dernière modification', value: library.modifiedAt },
+      { section: 'Activité', label: 'Créée le', value: library.modifiedAt },
     ] : [];
   });
 
@@ -140,31 +80,83 @@ export class LibraryCatalogPageComponent {
     { key: 'configuredNodes', label: 'Accès déclarés', sortable: true },
     { key: 'accessModes', label: 'Modes d’accès', sortable: true },
     { key: 'state', label: 'État', sortable: true },
-    { key: 'modifiedAt', label: 'Modifiée le', sortable: true, sortValueKey: 'modifiedOrder' },
+    { key: 'modifiedAt', label: 'Créée le', sortable: true, sortValueKey: 'modifiedOrder' },
   ];
 
-  protected readonly categoryOptions = computed<readonly CategoryTabOption[]>(() => [
-    { value: 'all', label: 'Tous', count: LIBRARY_RECORDS.length },
-    ...MEDIA_TYPE_OPTIONS.map((category) => ({
-      ...category,
-      count: LIBRARY_RECORDS.filter((library) => library.category === category.value).length,
-    })),
-  ]);
+  protected readonly categoryOptions = computed<readonly CategoryTabOption[]>(() => {
+    const libraries = this.libraries();
+    return [
+      { value: 'all', label: 'Tous', count: libraries.length },
+      ...MEDIA_TYPE_OPTIONS.map((category) => ({ ...category, count: libraries.filter((library) => library.category === category.value).length })),
+    ];
+  });
 
   protected readonly filteredLibraries = computed(() => {
     const category = this.selectedCategory();
-    return LIBRARY_RECORDS.filter((library) => category === 'all' || library.category === category);
+    return this.libraries().filter((library) => category === 'all' || library.category === category);
   });
 
-  protected onCategoryChange(category: string): void {
-    this.selectedCategory.set(category);
+  constructor() {
+    this.refresh();
   }
 
-  protected onLibraryOpen(row: DataTableRow): void {
-    this.selectedLibrary.set(LIBRARY_RECORDS.find((library) => library.id === row['id']) ?? null);
+  protected onCategoryChange(category: string): void { this.selectedCategory.set(category); }
+  protected onLibraryOpen(row: DataTableRow): void { this.selectedLibrary.set(this.libraries().find((library) => library.id === row['id']) ?? null); }
+  protected onDetailClosed(): void { this.selectedLibrary.set(null); }
+
+  protected addLibrary(): void {
+    const data: RecordFormDialogData = {
+      title: 'Ajouter une bibliothèque',
+      description: 'Créez sa définition partagée. Les chemins et modes d’accès seront configurés séparément pour chaque nœud.',
+      submitLabel: 'Créer la bibliothèque',
+      fields: [
+        { id: 'name', label: 'Nom', type: 'text', required: true, maxLength: 128 },
+        { id: 'mediaType', label: 'Type de média', type: 'select', required: true, options: MEDIA_TYPE_OPTIONS },
+      ],
+    };
+    this.dialog.open(RecordFormDialogComponent, { data, width: 'min(520px, 100vw)', maxWidth: '100vw', autoFocus: 'first-tabbable', restoreFocus: true })
+      .afterClosed().subscribe((value: Record<string, string> | undefined) => {
+        if (!value) return;
+        this.http.post<LibraryResponse>('/api/v1/libraries', value).pipe(
+          catchError((error: { status?: number }) => {
+            const message = error.status === 409
+              ? 'Une bibliothèque porte déjà ce nom.'
+              : 'La bibliothèque n’a pas pu être créée. Vérifiez que le serveur est disponible.';
+            this.notifications.show(message);
+            return of(null);
+          }),
+        ).subscribe((created) => {
+          if (!created) return;
+          this.libraries.update((current) => [...current, this.toRecord(created)]);
+          this.notifications.show(`Bibliothèque « ${created.name} » créée.`);
+        });
+      });
   }
 
-  protected onDetailClosed(): void {
-    this.selectedLibrary.set(null);
+  private refresh(): void {
+    this.http.get<readonly LibraryResponse[]>('/api/v1/libraries').pipe(
+      catchError(() => {
+        this.notifications.show('Impossible de charger les bibliothèques depuis le serveur.');
+        return of([]);
+      }),
+    ).subscribe((libraries) => this.libraries.set(libraries.map((library) => this.toRecord(library))));
+  }
+
+  private toRecord(library: LibraryResponse): LibraryRecord {
+    const date = new Date(library.createdAt);
+    return {
+      id: library.id,
+      name: library.name,
+      category: library.mediaType,
+      mediaType: mediaLabel(library.mediaType),
+      configuredNodes: 'Aucun accès',
+      accessModes: 'Non configuré',
+      nodePaths: 'Aucun point d’entrée configuré',
+      lastScan: 'Jamais',
+      associatedFlows: 'Aucun flow associé',
+      state: 'Accès à configurer',
+      modifiedAt: new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date),
+      modifiedOrder: date.getTime(),
+    };
   }
 }

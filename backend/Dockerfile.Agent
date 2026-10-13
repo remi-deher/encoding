@@ -1,0 +1,15 @@
+ARG DOTNET_VERSION=10.0
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+WORKDIR /source
+
+COPY src/Encoding.NodeAgent/Encoding.NodeAgent.csproj ./src/Encoding.NodeAgent/
+COPY src/Encoding.Contracts/Encoding.Contracts.csproj ./src/Encoding.Contracts/
+RUN dotnet restore ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj
+COPY src/Encoding.NodeAgent ./src/Encoding.NodeAgent
+COPY src/Encoding.Contracts ./src/Encoding.Contracts
+RUN dotnet publish ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj --configuration Release --output /app/publish --no-restore
+
+FROM mcr.microsoft.com/dotnet/runtime:${DOTNET_VERSION} AS runtime
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "Encoding.NodeAgent.dll"]

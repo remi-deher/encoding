@@ -158,7 +158,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       (closed)="selectedExecution.set(null)"
     >
       <ng-template #executionDetail>
-        <app-detail-field-list [fields]="executionDetailFields()" />
+        <app-detail-field-list [fields]="executionDetailFields()" [tabbed]="true" tabsLabel="Sections de l’exécution" />
       </ng-template>
     </app-detail-drawer>
   `,
