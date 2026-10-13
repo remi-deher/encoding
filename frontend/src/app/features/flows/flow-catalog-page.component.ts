@@ -1,3 +1,5 @@
+import { FlowValidation } from '../../shared/services/flow-validation';
+import { map, catchError, of, timer, switchMap } from 'rxjs';
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -24,84 +26,10 @@ interface FlowRecord extends DataTableRow {
   readonly summary: string;
   readonly components: string;
   readonly state: string;
+  readonly backup: string;
   readonly modifiedAt: string;
   readonly modifiedOrder: number;
 }
-
-const FLOW_RECORDS: readonly FlowRecord[] = [
-  {
-    id: 'flow-video-library',
-    name: 'Films — H.265',
-    category: 'video',
-    mediaType: 'Vidéo',
-    version: 'v1',
-    summary: 'Analyse le média, encode la vidéo en H.265 et actualise la bibliothèque Plex.',
-    components: 'Analyse du média · Encodage vidéo · Actualisation Plex',
-    state: 'Publié',
-    modifiedAt: '13 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 13),
-  },
-  {
-    id: 'flow-video-series',
-    name: 'Séries — H.265',
-    category: 'video',
-    mediaType: 'Vidéo',
-    version: 'v3',
-    summary: 'Encode les épisodes de séries selon le profil H.265 configuré.',
-    components: 'Analyse du média · Encodage vidéo',
-    state: 'Publié',
-    modifiedAt: '10 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 10),
-  },
-  {
-    id: 'flow-video-source-check',
-    name: 'Films — Vérification de la source',
-    category: 'video',
-    mediaType: 'Vidéo',
-    version: '—',
-    summary: 'Contrôle les informations de la source avant son traitement.',
-    components: 'Analyse du média · Vérification de la source',
-    state: 'Brouillon',
-    modifiedAt: '8 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 8),
-  },
-  {
-    id: 'flow-image-webp',
-    name: 'Images — Conversion WebP',
-    category: 'image',
-    mediaType: 'Image',
-    version: 'v1',
-    summary: 'Convertit les images de la bibliothèque au format WebP.',
-    components: 'Conversion d’image',
-    state: 'Publié',
-    modifiedAt: '6 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 6),
-  },
-  {
-    id: 'flow-music-flac',
-    name: 'Musique — Vérification FLAC',
-    category: 'music',
-    mediaType: 'Musique',
-    version: 'v2',
-    summary: 'Vérifie les fichiers audio FLAC de la bibliothèque.',
-    components: 'Analyse audio · Vérification FLAC',
-    state: 'Publié',
-    modifiedAt: '2 oct. 2026',
-    modifiedOrder: Date.UTC(2026, 9, 2),
-  },
-  {
-    id: 'flow-subtitles-cleanup',
-    name: 'Sous-titres — Nettoyage',
-    category: 'subtitles',
-    mediaType: 'Sous-titres',
-    version: 'v1',
-    summary: 'Nettoie les fichiers de sous-titres sélectionnés.',
-    components: 'Nettoyage de sous-titres',
-    state: 'Désactivé',
-    modifiedAt: '28 sept. 2026',
-    modifiedOrder: Date.UTC(2026, 8, 28),
-  },
-];
 
 @Component({
   selector: 'app-flow-catalog-page',
@@ -123,6 +51,40 @@ export class FlowCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
 
+  private readonly api = inject(FlowValidation);
+  private readonly catalog = toSignal(
+    timer(0, 5000).pipe(
+      switchMap(() => this.api.list()),
+      map((flows): { state: 'ready' | 'error' | 'loading'; records: readonly FlowRecord[] } => ({
+        state: 'ready' as const,
+        records: flows.map((flow) => ({
+          id: flow.id,
+          name: flow.name,
+          category: flow.mediaType,
+          mediaType:
+            MEDIA_TYPE_OPTIONS.find((type) => type.value === flow.mediaType)?.label ??
+            flow.mediaType,
+          version: 'v' + flow.version,
+          summary: flow.nodeCount + ' étapes',
+          components: flow.nodeCount + ' composants',
+          state: 'Enregistré',
+          backup:
+            flow.backupStatus === 'ready'
+              ? 'Disponible'
+              : flow.backupStatus === 'failed'
+                ? 'En échec'
+                : 'En attente',
+          modifiedAt: new Date(flow.updatedAt).toLocaleString('fr-FR'),
+          modifiedOrder: Date.parse(flow.updatedAt),
+        })),
+      })),
+      catchError(() => of({ state: 'error' as const, records: [] as readonly FlowRecord[] })),
+    ),
+    { initialValue: { state: 'loading' as const, records: [] as readonly FlowRecord[] } },
+  );
+  protected readonly catalogState = computed(() => this.catalog().state);
+  private readonly records = computed(() => this.catalog().records);
+
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Flows');
   protected readonly selectedCategory = signal('all');
   protected readonly actionOpen = signal(false);
@@ -135,14 +97,17 @@ export class FlowCatalogPageComponent {
   });
   protected readonly detailFields = computed<readonly DetailField[]>(() => {
     const flow = this.selectedFlow();
-    return flow ? [
-      { section: 'Flow', label: 'Type de média', value: flow.mediaType },
-      { section: 'Flow', label: 'État', value: flow.state },
-      { section: 'Flow', label: 'Version', value: flow.version },
-      { section: 'Traitement', label: 'Résumé', value: flow.summary },
-      { section: 'Traitement', label: 'Composants', value: flow.components },
-      { section: 'Historique', label: 'Dernière modification', value: flow.modifiedAt },
-    ] : [];
+    return flow
+      ? [
+          { section: 'Flow', label: 'Type de média', value: flow.mediaType },
+          { section: 'Flow', label: 'État', value: flow.state },
+          { section: 'Flow', label: 'Version', value: flow.version },
+          { section: 'Flow', label: 'Sauvegarde JSON', value: flow.backup },
+          { section: 'Traitement', label: 'Résumé', value: flow.summary },
+          { section: 'Traitement', label: 'Composants', value: flow.components },
+          { section: 'Historique', label: 'Dernière modification', value: flow.modifiedAt },
+        ]
+      : [];
   });
 
   protected readonly columns: readonly DataTableColumn[] = [
@@ -150,20 +115,21 @@ export class FlowCatalogPageComponent {
     { key: 'mediaType', label: 'Type', sortable: true },
     { key: 'version', label: 'Version', sortable: true },
     { key: 'state', label: 'État', sortable: true },
+    { key: 'backup', label: 'Sauvegarde JSON', sortable: true },
     { key: 'modifiedAt', label: 'Modifié le', sortable: true, sortValueKey: 'modifiedOrder' },
   ];
 
   protected readonly categoryOptions = computed<readonly CategoryTabOption[]>(() => [
-    { value: 'all', label: 'Tous', count: FLOW_RECORDS.length },
+    { value: 'all', label: 'Tous', count: this.records().length },
     ...MEDIA_TYPE_OPTIONS.map((category) => ({
       ...category,
-      count: FLOW_RECORDS.filter((flow) => flow.category === category.value).length,
+      count: this.records().filter((flow) => flow.category === category.value).length,
     })),
   ]);
 
   protected readonly filteredFlows = computed(() => {
     const category = this.selectedCategory();
-    return FLOW_RECORDS.filter((flow) => category === 'all' || flow.category === category);
+    return this.records().filter((flow) => category === 'all' || flow.category === category);
   });
 
   protected onCategoryChange(category: string): void {
@@ -171,7 +137,7 @@ export class FlowCatalogPageComponent {
   }
 
   protected onFlowOpen(row: DataTableRow): void {
-    this.selectedFlow.set(FLOW_RECORDS.find((flow) => flow.id === row['id']) ?? null);
+    this.selectedFlow.set(this.records().find((flow) => flow.id === row['id']) ?? null);
   }
 
   protected onDetailClosed(): void {
@@ -188,7 +154,11 @@ export class FlowCatalogPageComponent {
 
   protected startFlow(values: Record<string, string>): void {
     void this.router.navigate(['/flows/new'], {
-      queryParams: { name: values['name'], mediaType: values['mediaType'], starter: values['starter'] },
+      queryParams: {
+        name: values['name'],
+        mediaType: values['mediaType'],
+        starter: values['starter'],
+      },
       info: { flowEditorDirection: 'forward' },
     });
     this.actionOpen.set(false);

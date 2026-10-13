@@ -1,4 +1,5 @@
 using Encoding.Api.Executions;
+using Encoding.Api.Flows;
 using Encoding.Contracts.Executions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -21,6 +22,10 @@ builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
 builder.Services.AddSingleton<ExecutionRepository>();
+builder.Services.AddSingleton<FlowComponentRegistry>();
+builder.Services.AddSingleton<FlowDefinitionValidator>();
+builder.Services.AddSingleton<FlowRepository>();
+builder.Services.AddHostedService<FlowBackupService>();
 builder.Services.AddSingleton<LibraryRepository>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
 builder.Services.AddSingleton<ClusterIdentityRepository>();
@@ -32,10 +37,13 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 var app = builder.Build();
+// Fail startup if the bundled installed catalog is invalid or missing.
+app.Services.GetRequiredService<FlowComponentRegistry>();
 await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.MapFlowEndpoints();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
     .WithTags("Health");
@@ -252,7 +260,7 @@ executions.MapGet("/{id:guid}", async (Guid id, ExecutionRepository repository, 
 }).WithName("GetExecution");
 executions.MapGet("/{id:guid}/events", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
     await repository.GetAsync(id, ct) is null ? (IResult)Results.NotFound() : Results.Ok(await repository.EventsAsync(id, ct))).WithName("GetExecutionEvents");
-executions.MapPost("", async (CreateExecutionRequest request, ExecutionRepository repository, CancellationToken ct) =>
+executions.MapPost("", async (CreateExecutionRequest request, ExecutionRepository repository, FlowDefinitionValidator validator, FlowRepository flowRepository, CancellationToken ct) =>
 {
     var errors = new Dictionary<string, string[]>();
     if (request.Id == Guid.Empty) errors["id"] = ["Un identifiant unique est obligatoire."];
@@ -263,6 +271,16 @@ executions.MapPost("", async (CreateExecutionRequest request, ExecutionRepositor
     if (request.FlowDefinition.ValueKind != JsonValueKind.Object) errors["flowDefinition"] = ["La définition doit être un objet JSON."];
     else if (request.FlowDefinition.GetRawText().Length > 1048576) errors["flowDefinition"] = ["La définition dépasse 1 Mo."];
     if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+    var (definition, validation) = validator.ValidateDocument(request.FlowDefinition);
+    if (!validation.IsValid) return Results.UnprocessableEntity(validation);
+    if (definition!.Version != request.FlowVersion)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["flowVersion"] = ["La version doit correspondre à celle de la définition."] });
+    var storedFlow = await flowRepository.GetAsync(definition.Id,definition.Version,ct);
+    if (storedFlow is null) return Results.Conflict(new { title="La version du flow doit être enregistrée avant de créer une exécution." });
+    var canonical = JsonSerializer.SerializeToElement(storedFlow.Definition,FlowRepository.JsonOptions);
+    if (!JsonElement.DeepEquals(canonical,JsonSerializer.SerializeToElement(definition,FlowRepository.JsonOptions)))
+        return Results.Conflict(new { title="La définition ne correspond pas à la version enregistrée." });
+    request = request with { Flow=storedFlow.Definition.Name, FlowDefinition=canonical };
     return await repository.CreateAsync(request, ct)
         ? Results.Created($"/api/v1/executions/{request.Id}", new { request.Id })
         : Results.Conflict(new { title = "Cet identifiant d’exécution est déjà enregistré." });

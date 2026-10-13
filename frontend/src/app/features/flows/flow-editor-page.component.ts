@@ -1,6 +1,10 @@
+import { toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { timer, switchMap, catchError, of } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { FlowValidation } from '../../shared/services/flow-validation';
 import { FlowContinuationSource } from '../../shared/models/flow-sequence';
 import { Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import {
   GENERIC_FILE_INPUT,
@@ -8,11 +12,7 @@ import {
   createFlowInputConfigurationSchema,
   getFlowInputComponents,
 } from '../../shared/models/flow-control-components';
-import {
-  canConnectFlowGraph,
-  validateFlowGraph,
-  flowConfigurationFieldError,
-} from '../../shared/models/flow-graph';
+import { canConnectFlowGraph, flowConfigurationFieldError } from '../../shared/models/flow-graph';
 import { NotificationService } from '../../shared/services/notification.service';
 import { FLOW_COMPONENT_CATALOG } from '../../shared/models/flow-component-catalog';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
@@ -114,7 +114,9 @@ type ComponentDestination =
 
 @Component({
   selector: 'app-flow-editor-page',
+  host: { '(window:beforeunload)': 'warnBeforeUnload($event)' },
   imports: [
+    RouterLink,
     MatButtonModule,
     ComponentConfigurationFormComponent,
     DetailDrawerComponent,
@@ -173,7 +175,9 @@ export class FlowEditorPageComponent {
   private readonly starterId = this.flowId ?? this.route.snapshot.queryParamMap.get('starter');
   private readonly demoFlow =
     this.starterId && this.starterId !== 'blank' ? FLOW_EDITOR_DEMOS[this.starterId] : undefined;
+  private readonly savedName = signal<string | null>(null);
   protected readonly flowTitle = computed(() => {
+    if (this.savedName()) return this.savedName()!;
     const name = this.route.snapshot.queryParamMap.get('name');
     if (name) return name;
     return this.demoFlow?.name ?? (this.flowId ? 'Modifier un flow' : 'Nouveau flow');
@@ -234,6 +238,28 @@ export class FlowEditorPageComponent {
     if (initialNodes.length)
       initialConnections.unshift(this.createConnection(entry.id, 'success', initialNodes[0].id));
     this.setGraph([entry, ...initialNodes], initialConnections);
+    if (this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)) {
+      this.loadState.set('loading');
+      void this.loadSavedFlow(this.flowId);
+    }
+    toObservable(this.storedVersion)
+      .pipe(
+        switchMap((version) =>
+          version > 0
+            ? timer(0, 5000).pipe(
+                switchMap(() =>
+                  this.serverValidation
+                    .versionStatus(this.validationFlowId, version)
+                    .pipe(catchError(() => of(null))),
+                ),
+              )
+            : of(null),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((response) => {
+        if (response) this.backupStatus.set(response.backupStatus);
+      });
   }
 
   protected onTerminationRequested(event: {
@@ -378,13 +404,173 @@ export class FlowEditorPageComponent {
     );
   }
 
-  protected validateGraph(): void {
-    const issues = validateFlowGraph(this.nodes(), this.connections());
-    this.notifications.show(
-      issues.length
-        ? issues.join(' ')
-        : 'Le graphe et les champs obligatoires sont valides. L’exécution sera vérifiée par le moteur.',
+  private readonly serverValidation = inject(FlowValidation);
+  private readonly editorRouter = inject(Router);
+  private readonly validationFlowId =
+    this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)
+      ? this.flowId
+      : crypto.randomUUID();
+  private readonly savedGraph = signal<string | null>(null);
+  hasUnsavedChanges(): boolean {
+    return (
+      this.loadState() === 'ready' &&
+      this.savedGraph() !== JSON.stringify([this.nodes(), this.connections()])
     );
+  }
+  protected warnBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.hasUnsavedChanges()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+  protected readonly storedVersion = signal(0);
+  protected readonly saving = signal(false);
+  protected readonly loadState = signal<'ready' | 'loading' | 'error'>('ready');
+  protected readonly backupStatus = signal<string | null>(null);
+  private async loadSavedFlow(id: string): Promise<void> {
+    try {
+      const [saved, plugins] = await Promise.all([
+        this.serverValidation.get(id),
+        this.serverValidation.catalog(),
+      ]);
+      const definition = saved.definition;
+      this.savedName.set(definition.name);
+      this.flowMediaType.set(definition.mediaType);
+      const nodes: FlowGraphNode[] = definition.nodes.map((node) => {
+        const plugin = plugins.find(
+          (plugin) =>
+            plugin.id === node.component.pluginId &&
+            plugin.version === node.component.pluginVersion,
+        );
+        const descriptor = plugin?.components.find(
+          (component) =>
+            component.id === node.component.componentId &&
+            component.version === node.component.componentVersion,
+        );
+        const component: FlowComponentDefinition = descriptor
+          ? { ...descriptor, pluginId: plugin!.id, pluginName: plugin!.name }
+          : {
+              id: node.component.componentId,
+              name: node.name ?? node.component.componentId,
+              description:
+                'Cette version du composant est indisponible. Sa configuration est conservée.',
+              kind: 'action',
+              mediaType: 'general',
+              pluginId: node.component.pluginId,
+              pluginName: node.component.pluginId,
+              outputs: definition.connections
+                .filter((edge) => edge.sourceNodeId === node.id)
+                .map((edge) => ({
+                  id: edge.sourceOutputId,
+                  label: edge.sourceOutputId,
+                  description: '',
+                })),
+            };
+        return {
+          id: node.id,
+          name: node.name ?? undefined,
+          component,
+          reference: node.component,
+          configuration: node.configuration,
+          position: { x: 0, y: 0 },
+        };
+      });
+      this.nextNodeId =
+        Math.max(0, ...nodes.map((node) => Number(node.id.match(/^flow-node-(\d+)$/)?.[1]) || 0)) +
+        1;
+      this.nextConnectionId =
+        Math.max(
+          0,
+          ...definition.connections.map(
+            (edge) => Number(edge.id.match(/^connection-(\d+)$/)?.[1]) || 0,
+          ),
+        ) + 1;
+      this.setGraph(nodes, definition.connections);
+      this.savedGraph.set(JSON.stringify([nodes, definition.connections]));
+      this.storedVersion.set(definition.version);
+      this.backupStatus.set(saved.backupStatus);
+      this.loadState.set('ready');
+    } catch {
+      this.loadState.set('error');
+      this.notifications.show('Impossible de charger le flow enregistré.');
+    }
+  }
+
+  protected async saveFlow(): Promise<void> {
+    if (this.saving() || this.loadState() !== 'ready') return;
+    this.saving.set(true);
+    const nodes = this.nodes(),
+      connections = this.connections(),
+      expected = this.storedVersion();
+    try {
+      const document = await this.serverValidation.document(
+        this.validationFlowId,
+        expected + 1,
+        this.flowTitle(),
+        this.flowMediaType(),
+        nodes,
+        connections,
+      );
+      const saved = await this.serverValidation.save(document, expected);
+      this.savedGraph.set(JSON.stringify([nodes, connections]));
+      this.storedVersion.set(saved.definition.version);
+      this.backupStatus.set(saved.backupStatus);
+      const changed = this.nodes() !== nodes || this.connections() !== connections;
+      if (!changed && this.flowId !== saved.definition.id)
+        void this.editorRouter.navigate(['/flows', saved.definition.id, 'edit'], {
+          replaceUrl: true,
+        });
+      this.notifications.show(
+        'Version ' +
+          saved.definition.version +
+          ' enregistrée en base. Sauvegarde JSON : ' +
+          (saved.backupStatus === 'ready' ? 'disponible.' : 'en attente.') +
+          (changed ? ' Des modifications plus récentes restent à enregistrer.' : ''),
+      );
+    } catch (error) {
+      const message =
+        error instanceof HttpErrorResponse && error.status === 409
+          ? 'Conflit de version : rechargez le flow avant de réessayer.'
+          : error instanceof HttpErrorResponse && error.status === 422
+            ? error.error.issues.map((issue: { message: string }) => issue.message).join(' ')
+            : 'Enregistrement non confirmé. Votre flow reste dans l’éditeur.';
+      this.notifications.show(message);
+    } finally {
+      this.saving.set(false);
+    }
+  }
+  protected readonly validating = signal(false);
+  protected async validateGraph(): Promise<void> {
+    if (this.validating()) return;
+    this.validating.set(true);
+    const checkedNodes = this.nodes();
+    const checkedConnections = this.connections();
+    try {
+      const result = await this.serverValidation.validate(
+        this.validationFlowId,
+        this.flowTitle(),
+        this.flowMediaType(),
+        checkedNodes,
+        checkedConnections,
+      );
+      if (this.nodes() !== checkedNodes || this.connections() !== checkedConnections) {
+        this.notifications.show(
+          'Le flow a été modifié pendant la vérification. Vérifiez sa nouvelle version.',
+        );
+        return;
+      }
+      this.notifications.show(
+        result.isValid
+          ? 'Le backend confirme la validité du flow. Le moteur ne lance pas encore de traitement.'
+          : result.issues.map((issue) => issue.path + ' : ' + issue.message).join(' '),
+      );
+    } catch {
+      this.notifications.show(
+        'Validation backend indisponible. La validité du flow n’a pas été confirmée.',
+      );
+    } finally {
+      this.validating.set(false);
+    }
   }
 
   protected saveNodeConfiguration(configuration: FlowComponentConfiguration): void {
@@ -400,7 +586,9 @@ export class FlowEditorPageComponent {
       }
       this.nodes.update((nodes) =>
         nodes.map((node) =>
-          node.id === nodeId ? { ...node, component: inputComponent, configuration: {} } : node,
+          node.id === nodeId
+            ? { ...node, reference: undefined, component: inputComponent, configuration: {} }
+            : node,
         ),
       );
       this.configurationOpen.set(false);

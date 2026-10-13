@@ -107,4 +107,8 @@ Les règles de [TEST_RULES.md](TEST_RULES.md) sont obligatoires. Le lint doit ê
 
 ## Préparation du moteur de flow
 
-Les premiers contrats de définition, de catalogue plugin et d’invocation sont préparés dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins. Ils restent sans runtime ni endpoints activés. Consulter [0012 — Préparation du moteur](docs/architecture/0012-flow-engine-foundation.md) avant leur implémentation ; réutiliser le registre d’exécutions existant et préserver les garanties de bail, d’accès et de validation des artefacts.
+Les premiers contrats de définition, de catalogue plugin et d’invocation sont préparés dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins. Le runtime n’est pas encore activé ; les endpoints de catalogue, validation et stockage sont décrits dans 0013 et 0014. Consulter [0012 — Préparation du moteur](docs/architecture/0012-flow-engine-foundation.md) avant leur implémentation ; réutiliser le registre d’exécutions existant et préserver les garanties de bail, d’accès et de validation des artefacts.
+
+Le registre déclaratif Base et la validation backend sont implémentés : consulter [0013 — Catalogue et validation](docs/architecture/0013-flow-catalog-and-validation.md). La création d’une exécution utilise cette validation. Le runtime worker et les plugins tiers restent à implémenter ; disponibilité d’un descripteur et capacité d’exécution sont distinctes.
+
+Les versions validées des flows sont enregistrées dans PostgreSQL avec contrôle de concurrence. Une file transactionnelle écrit et vérifie leurs sauvegardes JSON dans un dossier persistant séparé. Le catalogue et l’éditeur utilisent ce stockage ; voir [0014 — Stockage et sauvegardes](docs/architecture/0014-flow-version-storage-and-backups.md). Les brouillons incomplets et la restauration guidée restent à implémenter.

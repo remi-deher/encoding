@@ -156,6 +156,13 @@ export interface FlowGraphPosition {
 }
 
 export interface FlowGraphNode {
+  readonly reference?: {
+    readonly pluginId: string;
+    readonly pluginVersion: string;
+    readonly componentId: string;
+    readonly componentVersion: string;
+    readonly configurationSchemaVersion: number;
+  };
   readonly id: string;
   readonly name?: string;
   readonly component: FlowComponentDefinition;

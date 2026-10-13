@@ -2,7 +2,7 @@
 
 ## Statut et périmètre
 
-Les contrats C# de cette première préparation sont compilables, mais ne sont pas encore exposés par l’API ni consommés par un worker. Leur format reste à stabiliser avant publication. Aucun traitement média, chargement de plugin, bail ou remplacement de fichier n’est activé par leur ajout.
+Les contrats C# sont compilables. Le registre et la validation des définitions sont maintenant exposés par l’API (voir 0013), mais aucun worker ne consomme encore les invocations. Leur format reste à stabiliser avant publication. Aucun traitement média, chargement de plugin, bail ou remplacement de fichier n’est activé par leur ajout.
 
 ## Capacités existantes à réutiliser
 

@@ -1,0 +1,2734 @@
+{
+  "contractVersion": 1,
+  "id": "base",
+  "version": "1.0.0",
+  "name": "Base",
+  "supportedHostContractVersions": [
+    1
+  ],
+  "components": [
+    {
+      "id": "base-input-file",
+      "version": "1.0.0",
+      "name": "Fichier",
+      "description": "Reçoit un fichier. Les scripts préparatoires peuvent précéder la lecture des métadonnées média.",
+      "kind": "input",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Continuer sur ce chemin."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-input-video",
+      "version": "1.0.0",
+      "name": "Fichier vidéo",
+      "description": "Reçoit le fichier et analyse ses métadonnées avant les actions du flow.",
+      "kind": "input",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Continuer sur ce chemin."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
+      },
+      "requiredTools": [],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-input-image",
+      "version": "1.0.0",
+      "name": "Fichier image",
+      "description": "Reçoit le fichier et analyse ses métadonnées avant les actions du flow.",
+      "kind": "input",
+      "mediaType": "image",
+      "supportedFlowMediaTypes": [
+        "image"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Continuer sur ce chemin."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
+      },
+      "requiredTools": [],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-input-music",
+      "version": "1.0.0",
+      "name": "Fichier audio",
+      "description": "Reçoit le fichier et analyse ses métadonnées avant les actions du flow.",
+      "kind": "input",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Continuer sur ce chemin."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
+      },
+      "requiredTools": [],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-input-subtitles",
+      "version": "1.0.0",
+      "name": "Fichier de sous-titres",
+      "description": "Reçoit le fichier et analyse ses métadonnées avant les actions du flow.",
+      "kind": "input",
+      "mediaType": "subtitles",
+      "supportedFlowMediaTypes": [
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Continuer sur ce chemin."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
+      },
+      "requiredTools": [],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-script",
+      "version": "1.0.0",
+      "name": "Exécuter un script",
+      "description": "Prépare les variables et les règles du flow ; les métadonnées sont disponibles après analyse.",
+      "kind": "script",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Continuer sur ce chemin."
+        },
+        {
+          "id": "skipped",
+          "label": "Ignoré",
+          "description": "Aucun traitement nécessaire."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Traiter l’échec de cette étape."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "language",
+            "label": "Langage",
+            "type": "select",
+            "defaultValue": "javascript",
+            "options": [
+              {
+                "value": "javascript",
+                "label": "JavaScript"
+              },
+              {
+                "value": "python",
+                "label": "Python"
+              }
+            ]
+          },
+          {
+            "id": "code",
+            "label": "Code du script",
+            "type": "text",
+            "multiline": true,
+            "required": true,
+            "description": "Le script disposera du contexte média et des services du moteur. Son exécution attend le contrat des scripts."
+          },
+          {
+            "id": "timeoutSeconds",
+            "label": "Durée maximale (secondes)",
+            "type": "number",
+            "defaultValue": 60,
+            "min": 1,
+            "max": 3600
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-prepare-processing",
+      "version": "1.0.0",
+      "name": "Préparer le traitement",
+      "description": "Initialise un plan média sans modifier le fichier courant.",
+      "kind": "preparation",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Continuer sur ce chemin."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Traiter l’échec de cette étape."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "tool",
+            "label": "Outil",
+            "type": "select",
+            "defaultValue": "ffmpeg",
+            "options": [
+              {
+                "value": "ffmpeg",
+                "label": "FFmpeg"
+              },
+              {
+                "value": "mkvtoolnix",
+                "label": "MKVToolNix",
+                "supportedFlowMediaTypes": [
+                  "video"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "preserveUnchangedTracks",
+            "label": "Conserver les pistes non modifiées",
+            "type": "boolean",
+            "defaultValue": true
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-execute-processing",
+      "version": "1.0.0",
+      "name": "Exécuter le traitement",
+      "description": "Exécute le plan sur une sortie temporaire, puis analyse et valide le résultat.",
+      "kind": "execution",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Continuer sur ce chemin."
+        },
+        {
+          "id": "skipped",
+          "label": "Ignoré",
+          "description": "Aucun traitement nécessaire."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Traiter l’échec de cette étape."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "forceProcessing",
+            "label": "Traiter même si le média est conforme",
+            "type": "boolean",
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-defer-processing",
+      "version": "1.0.0",
+      "name": "Reporter le traitement",
+      "description": "Reporte la tâche et libère le worker jusqu’à la prochaine tentative.",
+      "kind": "terminal",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "delayMinutes",
+            "label": "Délai (minutes)",
+            "type": "number",
+            "defaultValue": 2,
+            "min": 1,
+            "max": 1440
+          },
+          {
+            "id": "reason",
+            "label": "Motif du report",
+            "type": "text",
+            "required": true
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-complete-flow",
+      "version": "1.0.0",
+      "name": "Terminer le flow",
+      "description": "Termine ce chemin avec un résultat explicite. La publication reste contrôlée par le moteur.",
+      "kind": "terminal",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "result",
+            "label": "Résultat",
+            "type": "select",
+            "defaultValue": "unchanged",
+            "options": [
+              {
+                "value": "unchanged",
+                "label": "Déjà conforme"
+              },
+              {
+                "value": "success",
+                "label": "Traitement terminé"
+              },
+              {
+                "value": "failed",
+                "label": "Échec"
+              }
+            ]
+          },
+          {
+            "id": "message",
+            "label": "Message pour l’historique",
+            "type": "text"
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-transcode-video",
+      "version": "1.0.0",
+      "name": "Encoder la vidéo",
+      "description": "Encode la vidéo selon le codec et la qualité choisis.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "videoCodec",
+            "label": "Codec vidéo",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "hevc",
+            "options": [
+              {
+                "value": "hevc",
+                "label": "H.265 / HEVC"
+              },
+              {
+                "value": "av1",
+                "label": "AV1"
+              },
+              {
+                "value": "h264",
+                "label": "H.264"
+              }
+            ]
+          },
+          {
+            "id": "quality",
+            "label": "Qualité cible (CRF)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 23,
+            "min": 0,
+            "max": 51,
+            "step": 1,
+            "suggestions": [
+              18,
+              20,
+              23,
+              26,
+              28
+            ]
+          },
+          {
+            "id": "preset",
+            "label": "Preset",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "medium",
+            "options": [
+              {
+                "value": "slow",
+                "label": "Lent"
+              },
+              {
+                "value": "medium",
+                "label": "Moyen"
+              },
+              {
+                "value": "fast",
+                "label": "Rapide"
+              }
+            ]
+          },
+          {
+            "id": "hardwareAcceleration",
+            "label": "Accélération matérielle",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "cpu",
+            "options": [
+              {
+                "value": "cpu",
+                "label": "CPU"
+              },
+              {
+                "value": "nvenc",
+                "label": "NVIDIA NVENC"
+              },
+              {
+                "value": "qsv",
+                "label": "Intel Quick Sync"
+              },
+              {
+                "value": "vaapi",
+                "label": "VAAPI"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-transcode-audio",
+      "version": "1.0.0",
+      "name": "Encoder l’audio",
+      "description": "Convertit une piste audio et règle son débit et ses canaux.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "audioCodec",
+            "label": "Codec audio",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "aac",
+            "options": [
+              {
+                "value": "aac",
+                "label": "AAC"
+              },
+              {
+                "value": "opus",
+                "label": "Opus"
+              },
+              {
+                "value": "flac",
+                "label": "FLAC"
+              },
+              {
+                "value": "ac3",
+                "label": "AC-3"
+              }
+            ]
+          },
+          {
+            "id": "bitrateKbps",
+            "label": "Débit cible avec perte (kbit/s)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 192,
+            "min": 32,
+            "max": 1536,
+            "step": 32
+          },
+          {
+            "id": "channels",
+            "label": "Canaux",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "source",
+            "options": [
+              {
+                "value": "source",
+                "label": "Conserver"
+              },
+              {
+                "value": "2",
+                "label": "Stéréo"
+              },
+              {
+                "value": "6",
+                "label": "5.1"
+              },
+              {
+                "value": "8",
+                "label": "7.1"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-normalize-audio",
+      "version": "1.0.0",
+      "name": "Normaliser le volume",
+      "description": "Ajuste le niveau sonore de la piste sélectionnée.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "targetLoudness",
+            "label": "Niveau cible (LUFS)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": -16,
+            "min": -30,
+            "max": -5,
+            "step": 1
+          },
+          {
+            "id": "truePeak",
+            "label": "True peak maximal (dBTP)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": -1.5,
+            "min": -9,
+            "max": 0,
+            "step": 0.1
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-resize-video",
+      "version": "1.0.0",
+      "name": "Redimensionner la vidéo",
+      "description": "Réencode la vidéo aux dimensions souhaitées en conservant ses proportions.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "width",
+            "label": "Largeur maximale (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 1920,
+            "min": 1,
+            "step": 1
+          },
+          {
+            "id": "height",
+            "label": "Hauteur maximale (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 1080,
+            "min": 1,
+            "step": 1
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-remux-media",
+      "version": "1.0.0",
+      "name": "Changer de conteneur",
+      "description": "Copie les pistes compatibles dans un conteneur MKV ou MP4.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "container",
+            "label": "Conteneur",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "mkv",
+            "options": [
+              {
+                "value": "mkv",
+                "label": "Matroska (MKV)"
+              },
+              {
+                "value": "mp4",
+                "label": "MP4"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-extract-audio",
+      "version": "1.0.0",
+      "name": "Extraire une piste audio",
+      "description": "Copie ou convertit une piste audio dans un fichier séparé.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "audioCodec",
+            "label": "Mode de sortie",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "copy",
+            "options": [
+              {
+                "value": "copy",
+                "label": "Copie du codec source"
+              },
+              {
+                "value": "aac",
+                "label": "AAC"
+              },
+              {
+                "value": "flac",
+                "label": "FLAC"
+              },
+              {
+                "value": "opus",
+                "label": "Opus"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-video-thumbnail",
+      "version": "1.0.0",
+      "name": "Créer une miniature",
+      "description": "Extrait une image à la position choisie dans la vidéo.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "positionSeconds",
+            "label": "Position (secondes)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "width",
+            "label": "Largeur (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 640,
+            "min": 1,
+            "step": 1
+          },
+          {
+            "id": "height",
+            "label": "Hauteur (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 360,
+            "min": 1,
+            "step": 1
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-verify-decoding",
+      "version": "1.0.0",
+      "name": "Vérifier le décodage",
+      "description": "Décode les pistes sélectionnées et signale les erreurs rencontrées.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackType",
+            "label": "Type de piste",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "all",
+            "options": [
+              {
+                "value": "all",
+                "label": "Tous"
+              },
+              {
+                "value": "video",
+                "label": "Vidéo"
+              },
+              {
+                "value": "audio",
+                "label": "Audio"
+              },
+              {
+                "value": "subtitles",
+                "label": "Sous-titres"
+              }
+            ]
+          },
+          {
+            "id": "trackIds",
+            "label": "Identifiants des pistes",
+            "type": "text",
+            "required": false,
+            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi."
+          },
+          {
+            "id": "language",
+            "label": "Filtrer par langue",
+            "type": "text",
+            "required": false,
+            "description": "Facultatif, par exemple fra ou eng."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-remux-matroska",
+      "version": "1.0.0",
+      "name": "Créer ou remuxer un MKV",
+      "description": "Regroupe les pistes choisies dans un conteneur Matroska sans les réencoder.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "trackType",
+            "label": "Type de piste",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "all",
+            "options": [
+              {
+                "value": "all",
+                "label": "Tous"
+              },
+              {
+                "value": "video",
+                "label": "Vidéo"
+              },
+              {
+                "value": "audio",
+                "label": "Audio"
+              },
+              {
+                "value": "subtitles",
+                "label": "Sous-titres"
+              }
+            ]
+          },
+          {
+            "id": "trackIds",
+            "label": "Identifiants des pistes",
+            "type": "text",
+            "required": false,
+            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi."
+          },
+          {
+            "id": "language",
+            "label": "Filtrer par langue",
+            "type": "text",
+            "required": false,
+            "description": "Facultatif, par exemple fra ou eng."
+          },
+          {
+            "id": "title",
+            "label": "Titre du conteneur",
+            "type": "text",
+            "required": false
+          },
+          {
+            "id": "keepAttachments",
+            "label": "Conserver les pièces jointes",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": true
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-add-audio-track",
+      "version": "1.0.0",
+      "name": "Ajouter une piste audio",
+      "description": "Ajoute un fichier audio au conteneur MKV.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "sourceFile",
+            "label": "Fichier à ajouter",
+            "type": "text",
+            "required": true,
+            "description": "Référence à un fichier local ou à un résultat produit par le flow."
+          },
+          {
+            "id": "language",
+            "label": "Langue",
+            "type": "text",
+            "required": true,
+            "description": "Code de langue, par exemple fra ou eng."
+          },
+          {
+            "id": "trackName",
+            "label": "Nom de la piste",
+            "type": "text",
+            "required": false
+          },
+          {
+            "id": "defaultTrack",
+            "label": "Piste par défaut",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-add-subtitle-track",
+      "version": "1.0.0",
+      "name": "Ajouter des sous-titres",
+      "description": "Ajoute un fichier de sous-titres au conteneur MKV.",
+      "kind": "action",
+      "mediaType": "subtitles",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "sourceFile",
+            "label": "Fichier à ajouter",
+            "type": "text",
+            "required": true,
+            "description": "Référence à un fichier local ou à un résultat produit par le flow."
+          },
+          {
+            "id": "language",
+            "label": "Langue",
+            "type": "text",
+            "required": true,
+            "description": "Code de langue, par exemple fra ou eng."
+          },
+          {
+            "id": "trackName",
+            "label": "Nom de la piste",
+            "type": "text",
+            "required": false
+          },
+          {
+            "id": "forcedTrack",
+            "label": "Sous-titres forcés",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-remove-tracks",
+      "version": "1.0.0",
+      "name": "Retirer des pistes",
+      "description": "Produit un MKV sans les pistes sélectionnées.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "trackType",
+            "label": "Type de piste",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "all",
+            "options": [
+              {
+                "value": "all",
+                "label": "Tous"
+              },
+              {
+                "value": "video",
+                "label": "Vidéo"
+              },
+              {
+                "value": "audio",
+                "label": "Audio"
+              },
+              {
+                "value": "subtitles",
+                "label": "Sous-titres"
+              }
+            ]
+          },
+          {
+            "id": "trackIds",
+            "label": "Identifiants des pistes",
+            "type": "text",
+            "required": false,
+            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi."
+          },
+          {
+            "id": "language",
+            "label": "Filtrer par langue",
+            "type": "text",
+            "required": false,
+            "description": "Facultatif, par exemple fra ou eng."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-extract-track",
+      "version": "1.0.0",
+      "name": "Extraire une piste",
+      "description": "Extrait une piste Matroska dans son format natif, sans conversion de codec.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-reorder-tracks",
+      "version": "1.0.0",
+      "name": "Réordonner les pistes",
+      "description": "Définit l’ordre des pistes dans le conteneur MKV.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "trackOrder",
+            "label": "Ordre des identifiants",
+            "type": "text",
+            "required": true,
+            "description": "Identifiants séparés par des virgules, par exemple 0,2,1,3."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-edit-track-properties",
+      "version": "1.0.0",
+      "name": "Modifier les propriétés d’une piste",
+      "description": "Règle la langue, le nom et les indicateurs d’une piste MKV.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "language",
+            "label": "Langue",
+            "type": "text",
+            "required": true,
+            "description": "Code de langue, par exemple fra ou eng."
+          },
+          {
+            "id": "trackName",
+            "label": "Nom de la piste",
+            "type": "text",
+            "required": false
+          },
+          {
+            "id": "defaultTrack",
+            "label": "Piste par défaut",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          },
+          {
+            "id": "forcedTrack",
+            "label": "Piste forcée",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-edit-matroska-metadata",
+      "version": "1.0.0",
+      "name": "Modifier le titre du conteneur",
+      "description": "Change le titre d’une copie de travail du fichier MKV.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "title",
+            "label": "Titre du conteneur",
+            "type": "text",
+            "required": true
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-extract-attachments",
+      "version": "1.0.0",
+      "name": "Extraire les pièces jointes",
+      "description": "Extrait les polices, images et autres pièces jointes du MKV.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "attachmentIds",
+            "label": "Identifiants des pièces jointes",
+            "type": "text",
+            "required": false,
+            "description": "Séparés par des virgules ; vide pour toutes les pièces jointes."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-remove-attachments",
+      "version": "1.0.0",
+      "name": "Retirer les pièces jointes",
+      "description": "Produit une copie de travail du MKV sans les pièces jointes sélectionnées.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "attachmentIds",
+            "label": "Identifiants des pièces jointes",
+            "type": "text",
+            "required": false,
+            "description": "Séparés par des virgules ; vide pour toutes les pièces jointes."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-extract-chapters",
+      "version": "1.0.0",
+      "name": "Extraire les chapitres",
+      "description": "Exporte les chapitres du MKV dans un fichier séparé.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "format",
+            "label": "Format",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "xml",
+            "options": [
+              {
+                "value": "xml",
+                "label": "XML Matroska"
+              },
+              {
+                "value": "simple",
+                "label": "Texte simple"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-replace-chapters",
+      "version": "1.0.0",
+      "name": "Remplacer les chapitres",
+      "description": "Applique un fichier de chapitres à une copie de travail du MKV.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "sourceFile",
+            "label": "Fichier à ajouter",
+            "type": "text",
+            "required": true,
+            "description": "Référence à un fichier local ou à un résultat produit par le flow."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-extract-subtitles",
+      "version": "1.0.0",
+      "name": "Extraire les sous-titres",
+      "description": "Extrait les pistes de sous-titres sélectionnées dans leur format natif.",
+      "kind": "action",
+      "mediaType": "subtitles",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackIds",
+            "label": "Identifiants des pistes",
+            "type": "text",
+            "required": false,
+            "description": "Séparés par des virgules ; vide pour toutes les pistes de sous-titres."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-probe-media",
+      "version": "1.0.0",
+      "name": "Analyser le média",
+      "description": "Lit les métadonnées du scan courant : conteneur, durée, taille et débit.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-probe-tracks",
+      "version": "1.0.0",
+      "name": "Lister les pistes",
+      "description": "Lit les identifiants, types, codecs et langues des pistes.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-probe-video",
+      "version": "1.0.0",
+      "name": "Lire les caractéristiques vidéo",
+      "description": "Lit la résolution, la fréquence d’images et le format de pixels.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-probe-audio",
+      "version": "1.0.0",
+      "name": "Lire les caractéristiques audio",
+      "description": "Lit les canaux, la fréquence d’échantillonnage et le débit.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-inspect-media",
+      "version": "1.0.0",
+      "name": "Lire le rapport technique complet",
+      "description": "Lit les caractéristiques techniques disponibles avec MediaInfo.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mediainfo",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-inspect-hdr",
+      "version": "1.0.0",
+      "name": "Lire les caractéristiques HDR",
+      "description": "Lit le format HDR, la profondeur de couleur et les informations disponibles.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mediainfo",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-inspect-track",
+      "version": "1.0.0",
+      "name": "Lire les caractéristiques d’une piste",
+      "description": "Lit les détails techniques de la piste sélectionnée.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mediainfo",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-export-media-report",
+      "version": "1.0.0",
+      "name": "Exporter le rapport JSON",
+      "description": "Produit un rapport MediaInfo JSON comme résultat du flow.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
+      },
+      "requiredTools": [
+        {
+          "toolId": "mediainfo",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-convert-image",
+      "version": "1.0.0",
+      "name": "Convertir une image",
+      "description": "Convertit l’image dans le format choisi.",
+      "kind": "action",
+      "mediaType": "image",
+      "supportedFlowMediaTypes": [
+        "image"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "format",
+            "label": "Format",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "webp",
+            "options": [
+              {
+                "value": "webp",
+                "label": "WebP"
+              },
+              {
+                "value": "avif",
+                "label": "AVIF"
+              },
+              {
+                "value": "jpeg",
+                "label": "JPEG"
+              },
+              {
+                "value": "png",
+                "label": "PNG"
+              }
+            ]
+          },
+          {
+            "id": "quality",
+            "label": "Qualité",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 85,
+            "min": 1,
+            "max": 100,
+            "step": 1
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "imagemagick",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-resize-image",
+      "version": "1.0.0",
+      "name": "Redimensionner une image",
+      "description": "Redimensionne l’image avec ou sans conservation des proportions.",
+      "kind": "action",
+      "mediaType": "image",
+      "supportedFlowMediaTypes": [
+        "image"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "width",
+            "label": "Largeur maximale (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 1920,
+            "min": 1,
+            "step": 1
+          },
+          {
+            "id": "height",
+            "label": "Hauteur maximale (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 1080,
+            "min": 1,
+            "step": 1
+          },
+          {
+            "id": "preserveAspectRatio",
+            "label": "Conserver les proportions",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": true
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "imagemagick",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-crop-image",
+      "version": "1.0.0",
+      "name": "Recadrer une image",
+      "description": "Recadre une zone en pixels ou selon des proportions centrées.",
+      "kind": "action",
+      "mediaType": "image",
+      "supportedFlowMediaTypes": [
+        "image"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "aspectRatio",
+            "label": "Proportions cibles",
+            "type": "text",
+            "required": false,
+            "description": "Facultatif, par exemple 16:9. Si renseigné, applique un recadrage centré plutôt que la zone en pixels."
+          },
+          {
+            "id": "x",
+            "label": "Position horizontale (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "y",
+            "label": "Position verticale (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "width",
+            "label": "Largeur (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 1920,
+            "min": 1,
+            "step": 1
+          },
+          {
+            "id": "height",
+            "label": "Hauteur (pixels)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 1080,
+            "min": 1,
+            "step": 1
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "imagemagick",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true
+    },
+    {
+      "id": "base-condition",
+      "version": "1.0.0",
+      "name": "Tester une condition",
+      "description": "Évalue une règle et dirige le flow selon le résultat.",
+      "kind": "condition",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "La condition est satisfaite."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "La condition n’est pas satisfaite."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "La condition n’a pas pu être évaluée."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "expression",
+            "type": "text",
+            "label": "Expression",
+            "description": "Règle à évaluer pour choisir la sortie.",
+            "placeholder": "Ex. codec vidéo = HEVC",
+            "required": true,
+            "multiline": true
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-variable",
+      "version": "1.0.0",
+      "name": "Définir une variable",
+      "description": "Crée ou met à jour une valeur réutilisable dans le flow.",
+      "kind": "variable",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Le composant a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Le composant n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "name",
+            "label": "Nom de la variable",
+            "type": "text",
+            "required": true
+          },
+          {
+            "id": "value",
+            "label": "Valeur",
+            "type": "text",
+            "required": true
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    }
+  ]
+}

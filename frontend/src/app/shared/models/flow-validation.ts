@@ -1,0 +1,70 @@
+import type {
+  FlowComponentDefinition,
+  FlowGraphNode,
+  FlowGraphConnection,
+  FlowComponentConfiguration,
+} from './flow-component';
+import type { MediaType } from './media-type';
+
+export interface FlowPluginCatalog {
+  readonly id: string;
+  readonly version: string;
+  readonly name: string;
+  readonly components: readonly (Omit<FlowComponentDefinition, 'pluginId' | 'pluginName'> & {
+    readonly id: string;
+    readonly version: string;
+  })[];
+}
+
+export interface FlowDocument {
+  readonly formatVersion: number;
+  readonly id: string;
+  readonly version: number;
+  readonly name: string;
+  readonly mediaType: MediaType;
+  readonly nodes: readonly {
+    readonly id: string;
+    readonly name: string | null;
+    readonly component: NonNullable<FlowGraphNode['reference']>;
+    readonly configuration: FlowComponentConfiguration;
+  }[];
+  readonly connections: readonly FlowGraphConnection[];
+}
+export interface FlowVersionResponse {
+  readonly definition: FlowDocument;
+  readonly backupStatus: string;
+  readonly createdAt: string;
+}
+export interface FlowSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly mediaType: MediaType;
+  readonly version: number;
+  readonly nodeCount: number;
+  readonly backupStatus: string;
+  readonly updatedAt: string;
+}
+
+export interface FlowValidationResult {
+  readonly isValid: boolean;
+  readonly issues: readonly {
+    readonly code: string;
+    readonly path: string;
+    readonly message: string;
+  }[];
+}
+
+export function flowComponentReference(
+  component: FlowComponentDefinition,
+  plugins: readonly FlowPluginCatalog[],
+) {
+  const plugin = plugins.find((plugin) => plugin.id === component.pluginId);
+  const descriptor = plugin?.components.find((candidate) => candidate.id === component.id);
+  return {
+    pluginId: component.pluginId,
+    pluginVersion: plugin?.version ?? '',
+    componentId: component.id,
+    componentVersion: descriptor?.version ?? '',
+    configurationSchemaVersion: descriptor?.configurationSchema?.version ?? 0,
+  };
+}

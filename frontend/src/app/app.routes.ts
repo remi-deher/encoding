@@ -1,3 +1,4 @@
+import { unsavedChangesGuard } from './shared/guards/unsaved-changes-guard';
 import { Routes } from '@angular/router';
 import { SectionPlaceholderComponent } from './features/section-placeholder/section-placeholder.component';
 
@@ -59,6 +60,7 @@ export const routes: Routes = [
   },
   {
     path: 'flows/new',
+    canDeactivate: [unsavedChangesGuard],
     loadComponent: () =>
       import('./features/flows/flow-editor-page.component').then(
         (module) => module.FlowEditorPageComponent,
@@ -71,6 +73,7 @@ export const routes: Routes = [
   },
   {
     path: 'flows/:flowId/edit',
+    canDeactivate: [unsavedChangesGuard],
     loadComponent: () =>
       import('./features/flows/flow-editor-page.component').then(
         (module) => module.FlowEditorPageComponent,

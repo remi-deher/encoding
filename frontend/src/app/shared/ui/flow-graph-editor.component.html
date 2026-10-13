@@ -19,11 +19,7 @@
       (insertionRequested)="insertOnConnection($event)"
     />
   }
-  <p class="editor-help">
-    Les étapes se lisent de haut en bas. Double-cliquez sur un bloc pour le configurer, ou
-    sélectionnez-le avec Tab puis appuyez sur Entrée. Plusieurs sorties peuvent rejoindre le même
-    point d’entrée.
-  </p>
+
   @if (structured().references) {
     <p class="graph-notice" role="status">
       Certains raccordements sont partagés entre des branches. Ils restent représentés par des
@@ -304,12 +300,9 @@
                 </button>
               </div>
             }
-            @if (step.joinId) {
-              <p class="continuation-label">↓ Suite commune aux branches reliées</p>
-            }
           } @else if (primaryOutput(step.node); as output) {
             <div class="insertion">
-              @if (step.continuationOutput) {
+              @if (step.continuationOutput && step.continuationOutput.label !== 'Suite') {
                 <span class="continuation-label">↓ {{ step.continuationOutput.label }}</span>
               }
               @if (!isConnected(step.node, output) || !showConnections()) {

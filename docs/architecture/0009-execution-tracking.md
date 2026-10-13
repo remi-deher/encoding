@@ -12,7 +12,7 @@ Une transition et son événement sont écrits dans une transaction. Le rapport 
 
 GET /api/v1/executions fournit les compteurs globaux, jusqu’à 200 exécutions (en attente/en cours prioritaires) et les 20 derniers événements, dans un instantané transactionnel cohérent. GET /api/v1/executions/{id}/events fournit la chronologie de la tentative. La page Tâches et l’accueil utilisent le même service Angular avec actualisation toutes les cinq secondes, conservation des dernières valeurs en cas d’erreur et signalement des données obsolètes.
 
-POST /api/v1/executions enregistre une attente avec un identifiant fourni par l’appelant, une version positive et un objet JSON. Un doublon d’identifiant est rejeté explicitement. Cet endpoint ne valide pas encore la sémantique du graphe et ne lance aucun traitement. Les endpoints cancel et retry écrivent les demandes opérateur dans le registre.
+POST /api/v1/executions enregistre une attente avec un identifiant fourni par l’appelant, une version positive et un objet JSON. Un doublon d’identifiant est rejeté explicitement. Cet endpoint valide désormais le graphe et exige une version enregistrée identique à la définition fournie (0013/0014). Il ne lance aucun traitement. Les endpoints cancel et retry écrivent les demandes opérateur dans le registre.
 
 ## Frontière avec le moteur
 

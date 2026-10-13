@@ -2,7 +2,7 @@
 
 ## Statut
 
-Proposé à partir du choix exprimé pour un format JSON stocké en base et sauvegardé dans un dossier distinct.
+Implémenté pour les versions validées ; voir 0014-flow-version-storage-and-backups.md pour le stockage, la file de sauvegardes et les limites.
 
 ## Décision
 

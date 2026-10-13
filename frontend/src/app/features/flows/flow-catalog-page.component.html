@@ -9,7 +9,10 @@
   (detailClosed)="onDetailClosed()"
   (actionClosed)="closeFlowCreation()"
   filterLabel="Type de média"
-  note="Les flows affichés sont des exemples. Le catalogue sera relié au backend lorsque son API sera en place."
+  [catalogState]="catalogState()"
+  [catalogMessage]="
+    catalogState() === 'loading' ? 'Chargement des flows…' : 'Impossible de charger les flows.'
+  "
 >
   <ng-template #pageActions>
     <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
@@ -50,6 +53,10 @@
   </ng-template>
 
   <ng-template #actionContent>
-    <app-record-form [data]="flowCreationForm" (submitted)="startFlow($event)" (cancelled)="closeFlowCreation()" />
+    <app-record-form
+      [data]="flowCreationForm"
+      (submitted)="startFlow($event)"
+      (cancelled)="closeFlowCreation()"
+    />
   </ng-template>
 </app-management-catalog-template>

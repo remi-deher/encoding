@@ -8,9 +8,11 @@ import { Component, TemplateRef, input, inject, effect, DestroyRef } from '@angu
   imports: [NgTemplateOutlet],
   template: `
     <div class="page-header">
-      <div class="page-heading">
-        <h1>{{ title() }}</h1>
-      </div>
+      @if (showHeading()) {
+        <div class="page-heading">
+          <h1>{{ title() }}</h1>
+        </div>
+      }
       <div class="page-actions">
         <ng-content select="[page-actions]" />
         <ng-container [ngTemplateOutlet]="actions()" />
@@ -21,6 +23,7 @@ import { Component, TemplateRef, input, inject, effect, DestroyRef } from '@angu
 })
 export class PageHeaderComponent {
   readonly title = input.required<string>();
+  readonly showHeading = input(true);
   readonly shellTitle = input<string>();
   private readonly pageTitle = inject(PageTitle);
   private readonly router = inject(Router);

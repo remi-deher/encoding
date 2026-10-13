@@ -13,6 +13,7 @@
     <ProjectReference Include="..\Encoding.Contracts\Encoding.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Update="Flows\Catalog\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\migrations\*.sql" Link="migrations\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
