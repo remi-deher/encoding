@@ -1,6 +1,10 @@
-<div class="application-shell">
+<div class="application-shell" [class.workspace-shell]="workspaceMode()">
   <mat-toolbar class="application-header">
-    <a class="brand" [routerLink]="workerMode() ? '/worker' : '/'" [attr.aria-label]="workerMode() ? 'Console worker' : 'Accueil'">
+    <a
+      class="brand"
+      [routerLink]="workerMode() ? '/worker' : '/'"
+      [attr.aria-label]="workerMode() ? 'Console worker' : 'Accueil'"
+    >
       <span class="brand-mark" aria-hidden="true">E</span>
       <span class="brand-name">{{ pageTitle() }}</span>
     </a>
@@ -10,10 +14,9 @@
     }
 
     @if (!workerMode()) {
-      <div class="cluster-indicator" aria-label="État du cluster : aperçu">
-        <span class="cluster-dot" aria-hidden="true"></span>
+      <div class="cluster-indicator" [attr.aria-label]="'Présence des nœuds : ' + clusterLabel()">
         <span class="cluster-label">Cluster</span>
-        <span class="cluster-state">Aperçu</span>
+        <span class="cluster-state">{{ clusterLabel() }}</span>
       </div>
     }
   </mat-toolbar>
@@ -23,9 +26,11 @@
       <router-outlet />
     </main>
 
-    @if (!workerMode()) {
+    @if (!workerMode() && !workspaceMode()) {
       <footer class="application-footer">
-        <span>Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span>
+        <span
+          >Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span
+        >
         <span class="footer-version">Interface en préparation</span>
       </footer>
     }

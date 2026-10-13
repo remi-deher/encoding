@@ -2,37 +2,6 @@
   display: block;
 }
 
-.demo-notice {
-  margin: -5px 0 20px;
-  padding: 10px 13px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid #d9e5e1;
-  border-radius: 9px;
-  background: #f1f6f4;
-  color: #547069;
-  font-size: 11px;
-}
-
-.demo-notice strong {
-  color: #34564d;
-  font-weight: 700;
-}
-
-.demo-mark {
-  width: 17px;
-  height: 17px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border: 1px solid #a8c4b9;
-  border-radius: 50%;
-  color: #456b5f;
-  font-size: 10px;
-  font-weight: 750;
-}
-
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -91,39 +60,11 @@
   text-underline-offset: 3px;
 }
 
-.task-list {
-  display: grid;
-}
-
-.task-row {
-  padding-block: 14px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.task-main {
-  width: 100%;
-}
-
-.task-title-line {
-  margin-bottom: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.task-title-line h3,
 .node-info h3 {
   margin: 0;
   color: var(--text-primary);
   font-size: 11px;
   font-weight: 660;
-}
-
-.task-percent {
-  color: var(--accent-strong);
-  font-size: 10px;
-  font-weight: 730;
 }
 
 mat-progress-bar {
@@ -134,15 +75,6 @@ mat-progress-bar {
   --mdc-linear-progress-track-height: 5px;
   --mdc-linear-progress-active-indicator-height: 5px;
   --mdc-linear-progress-track-shape: 99px;
-}
-
-.task-meta {
-  margin-top: 9px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  color: var(--text-muted);
-  font-size: 9px;
 }
 
 .node-list {
@@ -208,54 +140,6 @@ mat-progress-bar {
   margin-bottom: 4px;
 }
 
-.activity-row {
-  min-height: 42px;
-  display: grid;
-  grid-template-columns: 8px minmax(130px, 1fr) minmax(150px, 1.3fr) minmax(125px, 1fr) 80px;
-  align-items: center;
-  gap: 12px;
-  border-top: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  font-size: 10px;
-}
-
-.activity-indicator {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-muted);
-}
-
-.activity-indicator.completed {
-  background: var(--success);
-}
-
-.activity-indicator.started {
-  background: var(--accent);
-}
-
-.activity-indicator.warning {
-  background: var(--warning);
-}
-
-.activity-title {
-  color: var(--text-primary);
-  font-weight: 620;
-}
-
-.activity-file,
-.activity-node {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.activity-row time {
-  color: var(--text-muted);
-  text-align: right;
-  white-space: nowrap;
-}
-
 @media (max-width: 1000px) {
   .metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -266,19 +150,6 @@ mat-progress-bar {
   }
 }
 
-@media (max-width: 720px) {
-  .activity-row {
-    grid-template-columns: 8px minmax(0, 1fr) auto;
-    gap: 9px;
-    padding-block: 10px;
-  }
-
-  .activity-file,
-  .activity-node {
-    display: none;
-  }
-}
-
 @media (max-width: 480px) {
   .metrics-grid {
     gap: 10px;
@@ -286,9 +157,5 @@ mat-progress-bar {
 
   .surface-panel {
     padding: 16px;
-  }
-
-  .task-meta span:nth-child(2) {
-    display: none;
   }
 }

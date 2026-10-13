@@ -1,0 +1,15 @@
+name: Backend
+on:
+  push:
+    paths: ['backend/**', '.github/workflows/backend.yml']
+  pull_request:
+    paths: ['backend/**', '.github/workflows/backend.yml']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/dotnet/sdk:10.0
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: dotnet restore backend/Encoding.sln
+      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore

@@ -1,4 +1,13 @@
-import { Component, TemplateRef, computed, contentChild, input, output, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  TemplateRef,
+  computed,
+  contentChild,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
 import {
@@ -25,7 +34,13 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
 
 @Component({
   selector: 'app-execution-monitor-template',
-  imports: [DataTableComponent, DetailDrawerComponent, DetailFieldListComponent, MatTabsModule, PageHeaderComponent],
+  imports: [
+    DataTableComponent,
+    DetailDrawerComponent,
+    DetailFieldListComponent,
+    MatTabsModule,
+    PageHeaderComponent,
+  ],
   template: `
     <app-page-header [title]="title()" [actions]="pageActions()" />
 
@@ -155,10 +170,23 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       [title]="detailTitle()"
       [description]="detailDescription()"
       [content]="executionDetailTemplate()"
-      (closed)="selectedExecution.set(null)"
+      (closed)="selectedId.set(null); executionOpened.emit(null)"
     >
       <ng-template #executionDetail>
-        <app-detail-field-list [fields]="executionDetailFields()" [tabbed]="true" tabsLabel="Sections de l’exécution" />
+        <app-detail-field-list
+          [fields]="executionDetailFields()"
+          [tabbed]="true"
+          tabsLabel="Sections de l’exécution"
+        />
+        <h3>Chronologie</h3>
+        @if (eventFeedback()) {
+          <p role="status">{{ eventFeedback() }}</p>
+        }
+        <app-data-table
+          [columns]="eventColumns"
+          [rows]="eventRows()"
+          emptyMessage="Aucun événement enregistré."
+        />
       </ng-template>
     </app-detail-drawer>
   `,
@@ -279,33 +307,69 @@ export class ExecutionMonitorTemplateComponent {
   protected readonly selectedIndex = computed(() =>
     EXECUTION_MONITOR_VIEWS.indexOf(this.selectedView()),
   );
-  protected readonly selectedExecution = signal<DataTableRow | null>(null);
+  private readonly selectedId = signal<string | null>(null);
+  protected readonly selectedExecution = computed(
+    () =>
+      [
+        ...this.queueRows(),
+        ...this.activeRows(),
+        ...this.errorRows(),
+        ...this.cancelledRows(),
+        ...this.historyRows(),
+      ].find((row) => row['id'] === this.selectedId()) ?? null,
+  );
+  readonly executionOpened = output<string | null>();
+  readonly eventRows = input<readonly DataTableRow[]>([]);
+  readonly eventFeedback = input('');
+  protected readonly eventColumns: readonly DataTableColumn[] = [
+    { key: 'revision', label: 'Ordre' },
+    { key: 'createdAt', label: 'Date' },
+    { key: 'state', label: 'État' },
+    { key: 'detail', label: 'Détail' },
+  ];
   protected readonly executionDetailTemplate = viewChild<TemplateRef<unknown>>('executionDetail');
-  protected readonly detailTitle = computed(() => String(this.selectedExecution()?.['media'] ?? 'Exécution'));
+  protected readonly detailTitle = computed(() =>
+    String(this.selectedExecution()?.['media'] ?? 'Exécution'),
+  );
   protected readonly detailDescription = computed(() => {
     const execution = this.selectedExecution();
-    return [execution?.['state'], execution?.['flow']].filter(Boolean).join(' · ') || 'Détails de l’exécution';
+    return (
+      [execution?.['state'], execution?.['flow']].filter(Boolean).join(' · ') ||
+      'Détails de l’exécution'
+    );
   });
   protected readonly executionDetailFields = computed<readonly DetailField[]>(() => {
     const execution = this.selectedExecution();
-    return execution ? [
-      { section: 'Exécution', label: 'Identifiant', value: execution['id'] ?? '—' },
-      { section: 'Exécution', label: 'État', value: execution['state'] ?? '—' },
-      { section: 'Exécution', label: 'Étape ou résultat', value: execution['detail'] ?? '—' },
-      { section: 'Source et traitement', label: 'Bibliothèque', value: execution['library'] ?? '—' },
-      { section: 'Source et traitement', label: 'Média', value: execution['media'] ?? '—' },
-      { section: 'Source et traitement', label: 'Flow', value: execution['flow'] ?? '—' },
-      { section: 'Source et traitement', label: 'Worker', value: execution['node'] ?? '—' },
-      { section: 'Chronologie', label: 'Ajoutée à la file', value: execution['queuedAt'] ?? '—' },
-      { section: 'Chronologie', label: 'Démarrée', value: execution['startedAt'] ?? '—' },
-      { section: 'Chronologie', label: 'Terminée', value: execution['finishedAt'] ?? '—' },
-      { section: 'Chronologie', label: 'Durée', value: execution['duration'] ?? '—' },
-      { section: 'Chronologie', label: 'Tentative', value: execution['attempt'] ?? '—' },
-    ] : [];
+    return execution
+      ? [
+          { section: 'Exécution', label: 'Identifiant', value: execution['id'] ?? '—' },
+          { section: 'Exécution', label: 'État', value: execution['state'] ?? '—' },
+          { section: 'Exécution', label: 'Progression', value: execution['progress'] ?? '—' },
+          { section: 'Exécution', label: 'Étape ou résultat', value: execution['detail'] ?? '—' },
+          {
+            section: 'Source et traitement',
+            label: 'Bibliothèque',
+            value: execution['library'] ?? '—',
+          },
+          { section: 'Source et traitement', label: 'Média', value: execution['media'] ?? '—' },
+          { section: 'Source et traitement', label: 'Flow', value: execution['flow'] ?? '—' },
+          { section: 'Source et traitement', label: 'Worker', value: execution['node'] ?? '—' },
+          {
+            section: 'Chronologie',
+            label: 'Ajoutée à la file',
+            value: execution['queuedAt'] ?? '—',
+          },
+          { section: 'Chronologie', label: 'Démarrée', value: execution['startedAt'] ?? '—' },
+          { section: 'Chronologie', label: 'Terminée', value: execution['finishedAt'] ?? '—' },
+          { section: 'Chronologie', label: 'Durée', value: execution['duration'] ?? '—' },
+          { section: 'Chronologie', label: 'Tentative', value: execution['attempt'] ?? '—' },
+        ]
+      : [];
   });
 
   protected openExecution(execution: DataTableRow): void {
-    this.selectedExecution.set(execution);
+    this.selectedId.set(String(execution['id']));
+    this.executionOpened.emit(String(execution['id']));
   }
 
   protected onSelectedIndexChange(index: number): void {

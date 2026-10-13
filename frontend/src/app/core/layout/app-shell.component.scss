@@ -73,14 +73,6 @@
   font-size: 12px;
 }
 
-.cluster-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
 .cluster-label {
   font-weight: 650;
   color: var(--text-primary);
@@ -148,4 +140,24 @@
     flex-direction: column;
     gap: 5px;
   }
+}
+
+.workspace-shell {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-shell .application-header {
+  flex: 0 0 auto;
+}
+.workspace-shell .page-transition-region {
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-shell .main-content {
+  width: 100%;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }

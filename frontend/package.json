@@ -6,7 +6,9 @@
     "start": "ng serve --proxy-config proxy.conf.json",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "node --test tests/*.test.mjs",
+    "lint": "tsc --noEmit --noUnusedLocals --noUnusedParameters --project tsconfig.app.json",
+    "format:flows": "prettier --check src/app/shared/models/flow-component.ts src/app/shared/models/flow-graph.ts src/app/shared/models/flow-sequence.ts src/app/shared/models/flow-presentation.ts src/app/shared/models/flow-configuration.ts src/app/shared/models/flow-control-components.ts src/app/shared/models/flow-component-catalog.ts src/app/shared/models/media-tool-actions.ts src/app/shared/ui/flow-graph-editor.component.ts src/app/shared/ui/flow-graph-editor.component.html src/app/shared/ui/component-configuration-form.component.ts src/app/shared/ui/flow-inline-parameters.ts src/app/shared/ui/flow-inline-parameters.html src/app/shared/ui/flow-inline-parameters.scss src/app/shared/ui/flow-configuration-controls.ts src/app/shared/ui/flow-link-routing.ts src/app/shared/ui/flow-links.ts src/app/shared/ui/flow-links.html src/app/shared/ui/flow-links.scss src/app/shared/ui/searchable-component-catalog.component.ts src/app/features/flows/flow-editor-page.component.ts src/app/features/flows/flow-editor-page.component.html tests/*.test.mjs"
   },
   "private": true,
   "packageManager": "npm@11.13.0",
@@ -19,8 +21,6 @@
     "@angular/material": "^22.2.2",
     "@angular/platform-browser": "^22.2.0",
     "@angular/router": "^22.2.0",
-    "@dagrejs/dagre": "^2.0.4",
-    "ngx-vflow": "^2.7.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

@@ -228,7 +228,7 @@ export class DataTableComponent {
   ]);
 
   @ViewChild(MatSort)
-  private set sort(sort: MatSort | undefined) {
+  protected set sort(sort: MatSort | undefined) {
     if (sort) {
       this.dataSource.sort = sort;
     }

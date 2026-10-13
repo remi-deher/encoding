@@ -1,12 +1,12 @@
 import { Routes } from '@angular/router';
-import { HomePageComponent } from './features/home/home-page.component';
 import { SectionPlaceholderComponent } from './features/section-placeholder/section-placeholder.component';
 
 export const routes: Routes = [
   {
     path: '',
     pathMatch: 'full',
-    component: HomePageComponent,
+    loadComponent: () =>
+      import('./features/home/home-page.component').then((module) => module.HomePageComponent),
     data: { title: 'Vue d’ensemble', primaryNavigation: true },
   },
   {
@@ -62,9 +62,10 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/flows/flow-editor-page.component').then(
         (module) => module.FlowEditorPageComponent,
-    ),
+      ),
     data: {
       title: 'Nouveau flow',
+      layout: 'workspace',
       description: 'Assemblez les composants dans l’ordre de traitement souhaité.',
     },
   },
@@ -76,6 +77,7 @@ export const routes: Routes = [
       ),
     data: {
       title: 'Modifier un flow',
+      layout: 'workspace',
       description: 'Modifiez les composants et leur ordre de traitement.',
     },
   },

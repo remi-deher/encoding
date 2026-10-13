@@ -1,4 +1,13 @@
-import { Component, computed, signal } from '@angular/core';
+import { toSignal, toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { MatButtonModule } from '@angular/material/button';
+import { catchError, exhaustMap, forkJoin, map, of, switchMap, startWith, timer } from 'rxjs';
+import {
+  ExecutionTracking,
+  INITIAL_EXECUTION_TRACKING,
+} from '../../shared/services/execution-tracking';
+import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
+import { NotificationService } from '../../shared/services/notification.service';
+import { Component, computed, inject, signal, DestroyRef } from '@angular/core';
 import {
   DataTableActionEvent,
   DataTableColumn,
@@ -28,108 +37,93 @@ interface ExecutionRecord extends DataTableRow {
   readonly attempt: number;
 }
 
-const INITIAL_EXECUTIONS: readonly ExecutionRecord[] = [
-  {
-    id: 'exec-1006',
-    media: 'Dune — Deuxième partie (2024).mkv',
-    library: 'Films',
-    flow: 'Films — H.265 · v1',
-    node: 'worker-gpu-01',
-    state: 'En cours',
-    group: 'active',
-    detail: 'Encodage vidéo · étape 3 sur 5',
-    queuedAt: 'Aujourd’hui, 10:40',
-    startedAt: 'Aujourd’hui, 10:42',
-    finishedAt: '—',
-    duration: '12 min',
-    attempt: 1,
-  },
-  {
-    id: 'exec-1005',
-    media: 'The Bear — Saison 3 — Épisode 4.mkv',
-    library: 'Séries',
-    flow: 'Séries — H.265 · v3',
-    node: '—',
-    state: 'En attente',
-    group: 'queue',
-    detail: 'En attente d’un worker compatible',
-    queuedAt: 'Aujourd’hui, 10:38',
-    startedAt: '—',
-    finishedAt: '—',
-    duration: '—',
-    attempt: 1,
-  },
-  {
-    id: 'exec-1004',
-    media: 'Blade Runner 2049 (2017).mkv',
-    library: 'Films',
-    flow: 'Films — H.265 · v1',
-    node: '—',
-    state: 'Bloquée',
-    group: 'queue',
-    detail: 'Accès à la bibliothèque indisponible sur les nœuds éligibles',
-    queuedAt: 'Aujourd’hui, 09:51',
-    startedAt: '—',
-    finishedAt: '—',
-    duration: '—',
-    attempt: 1,
-  },
-  {
-    id: 'exec-1003',
-    media: 'Arrival (2016).mkv',
-    library: 'Films',
-    flow: 'Films — H.265 · v1',
-    node: 'worker-gpu-01',
-    state: 'Réussie',
-    group: 'history',
-    detail: 'Exécution terminée avec succès',
-    queuedAt: 'Aujourd’hui, 08:14',
-    startedAt: 'Aujourd’hui, 08:16',
-    finishedAt: 'Aujourd’hui, 08:34',
-    duration: '18 min',
-    attempt: 1,
-  },
-  {
-    id: 'exec-1002',
-    media: 'Oppenheimer (2023).mkv',
-    library: 'Films',
-    flow: 'Films — H.265 · v1',
-    node: 'worker-gpu-02',
-    state: 'Échec',
-    group: 'errors',
-    detail: 'Échec à l’étape de validation de la sortie',
-    queuedAt: 'Aujourd’hui, 07:38',
-    startedAt: 'Aujourd’hui, 07:40',
-    finishedAt: 'Aujourd’hui, 07:53',
-    duration: '13 min',
-    attempt: 1,
-  },
-  {
-    id: 'exec-1001',
-    media: 'Interstellar (2014).mkv',
-    library: 'Films',
-    flow: 'Films — H.265 · v1',
-    node: 'worker-cpu-02',
-    state: 'Annulée',
-    group: 'cancelled',
-    detail: 'Annulée par un opérateur',
-    queuedAt: 'Hier, 22:10',
-    startedAt: 'Hier, 22:12',
-    finishedAt: 'Hier, 22:15',
-    duration: '3 min',
-    attempt: 1,
-  },
-];
-
 @Component({
   selector: 'app-task-monitoring-page',
-  imports: [ExecutionMonitorTemplateComponent],
+  imports: [ExecutionMonitorTemplateComponent, MatButtonModule],
   templateUrl: './task-monitoring-page.component.html',
 })
 export class TaskMonitoringPageComponent {
-  protected readonly executions = signal<readonly ExecutionRecord[]>(INITIAL_EXECUTIONS);
+  private readonly tracking = inject(ExecutionTracking);
+  private readonly notifications = inject(NotificationService);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly trackingState = toSignal(this.tracking.state$, {
+    initialValue: INITIAL_EXECUTION_TRACKING,
+  });
+  protected readonly busy = signal(false);
+  protected readonly selectedExecutionId = signal<string | null>(null);
+  protected readonly eventState = toSignal(
+    toObservable(this.selectedExecutionId).pipe(
+      switchMap((id) =>
+        id
+          ? timer(0, 5000).pipe(
+              exhaustMap(() =>
+                this.tracking.events(id).pipe(
+                  map((events) => ({
+                    message: '',
+                    rows: events.map((e) => ({
+                      id: e.id,
+                      revision: e.revision,
+                      state: EXECUTION_STATE_LABELS[e.state],
+                      detail: e.detail,
+                      createdAt: this.date(e.createdAt),
+                    })),
+                  })),
+                  catchError(() =>
+                    of({ message: 'Impossible de charger la chronologie.', rows: [] }),
+                  ),
+                ),
+              ),
+              startWith({ message: 'Chargement de la chronologie…', rows: [] }),
+            )
+          : of({ message: '', rows: [] }),
+      ),
+    ),
+    { initialValue: { message: 'Chargement de la chronologie…', rows: [] } },
+  );
+  protected readonly executions = computed<readonly ExecutionRecord[]>(() =>
+    (this.trackingState().data?.executions ?? []).map((e) => ({
+      id: e.id,
+      media: e.media,
+      library: e.library,
+      flow: e.flow + ' · v' + e.flowVersion,
+      node: e.node ?? '—',
+      state: EXECUTION_STATE_LABELS[e.state],
+      group:
+        e.state === 'queued'
+          ? 'queue'
+          : e.state === 'running' || e.state === 'cancelling'
+            ? 'active'
+            : e.state === 'failed'
+              ? 'errors'
+              : e.state === 'cancelled'
+                ? 'cancelled'
+                : 'history',
+      detail: e.detail || '—',
+      queuedAt: this.date(e.queuedAt),
+      startedAt: this.date(e.startedAt),
+      finishedAt: this.date(e.finishedAt),
+      duration: e.startedAt
+        ? Math.max(
+            0,
+            Math.floor(
+              (Date.parse(e.finishedAt ?? this.trackingState().data!.observedAt) -
+                Date.parse(e.startedAt)) /
+                1000,
+            ),
+          ) + ' s'
+        : '—',
+      attempt: e.attempt,
+      progress: e.progress === null ? '—' : e.progress + ' %',
+    })),
+  );
   protected readonly selectedView = signal<ExecutionMonitorView>('queue');
-  protected readonly feedback = signal('');
+  protected readonly feedback = computed(() =>
+    this.trackingState().status === 'loading'
+      ? 'Chargement des exécutions…'
+      : this.trackingState().status === 'error'
+        ? 'Actualisation impossible. Les dernières données reçues peuvent être obsolètes.'
+        : '',
+  );
 
   protected readonly queueExecutions = computed(() =>
     this.executions().filter((execution) => execution.group === 'queue'),
@@ -146,10 +140,17 @@ export class TaskMonitoringPageComponent {
   protected readonly historyExecutions = computed(() =>
     this.executions().filter((execution) => execution.group === 'history'),
   );
-  protected readonly countText = computed(
-    () =>
-      `${this.queueExecutions().length} à traiter · ${this.activeExecutions().length} en cours · ${this.errorExecutions().length} erreurs`,
-  );
+  protected readonly countText = computed(() => {
+    const data = this.trackingState().data;
+    return data
+      ? data.queuedCount +
+          ' à traiter · ' +
+          data.activeCount +
+          ' en cours · ' +
+          data.failedCount +
+          ' erreurs'
+      : 'Données indisponibles';
+  });
 
   protected readonly queueColumns: readonly DataTableColumn[] = [
     { key: 'media', label: 'Média', sortable: true },
@@ -165,6 +166,7 @@ export class TaskMonitoringPageComponent {
     { key: 'flow', label: 'Flow', sortable: true },
     { key: 'node', label: 'Worker', sortable: true },
     { key: 'detail', label: 'Étape actuelle', sortable: true },
+    { key: 'progress', label: 'Progression', sortable: true },
     { key: 'startedAt', label: 'Démarrée', sortable: true },
   ];
   protected readonly errorColumns: readonly DataTableColumn[] = [
@@ -194,6 +196,7 @@ export class TaskMonitoringPageComponent {
     {
       id: 'retry',
       label: 'Relancer',
+      visibleWhen: () => !this.busy(),
       confirmation: (row) => ({
         title: 'Relancer cette exécution ?',
         message: `Une nouvelle exécution de « ${row['media']} » sera ajoutée à la file.`,
@@ -205,17 +208,23 @@ export class TaskMonitoringPageComponent {
     {
       id: 'cancel-selected',
       label: 'Annuler les exécutions',
-      visibleWhen: (rows) => rows.every((row) => row['group'] === 'queue' || row['group'] === 'active'),
+      visibleWhen: (rows) =>
+        !this.busy() &&
+        rows.every(
+          (row) =>
+            (row['group'] === 'queue' || row['group'] === 'active') &&
+            row['state'] !== EXECUTION_STATE_LABELS.cancelling,
+        ),
       confirmation: (rows) => ({
         title: 'Annuler les exécutions sélectionnées ?',
-        message: `Les ${rows.length} exécutions sélectionnées seront annulées.`,
+        message: `Les ${rows.length} exécutions recevront une demande d’annulation. Les traitements en cours attendront la confirmation du worker.`,
         confirmLabel: 'Annuler les exécutions',
       }),
     },
     {
       id: 'retry-selected',
       label: 'Relancer les exécutions',
-      visibleWhen: (rows) => rows.every((row) => row['group'] === 'errors'),
+      visibleWhen: (rows) => !this.busy() && rows.every((row) => row['group'] === 'errors'),
       confirmation: (rows) => ({
         title: 'Relancer les exécutions sélectionnées ?',
         message: `Une nouvelle tentative sera ajoutée à la file pour ${rows.length} exécution${rows.length > 1 ? 's' : ''}.`,
@@ -228,58 +237,53 @@ export class TaskMonitoringPageComponent {
     this.selectedView.set(view);
   }
 
+  protected refresh(): void {
+    this.tracking.refresh();
+  }
   protected onErrorAction(event: DataTableActionEvent): void {
-    if (event.actionId !== 'retry') {
-      return;
-    }
-
-    const failedExecution = this.executions().find((execution) => execution.id === event.row['id']);
-    if (!failedExecution || failedExecution.group !== 'errors') {
-      return;
-    }
-
-    this.executions.update((executions) => [this.createRetry(failedExecution), ...executions]);
-    this.selectedView.set('queue');
-    this.feedback.set(
-      `Relance de « ${failedExecution.media} » ajoutée à la file de démonstration. Aucun worker n’a été sollicité.`,
-    );
+    if (event.actionId === 'retry') this.perform('retry', [String(event.row['id'])]);
   }
-
   protected onSelectionAction(event: DataTableSelectionActionEvent): void {
-    const selectedIds = new Set(event.rows.map((row) => String(row['id'])));
-    const selected = this.executions().filter((execution) => selectedIds.has(execution.id));
-    if (!selected.length || selected.length !== selectedIds.size) return;
-
-    if (event.actionId === 'cancel-selected' && selected.every((execution) => execution.group === 'queue' || execution.group === 'active')) {
-      this.executions.update((executions) => executions.map((execution) => selectedIds.has(execution.id)
-        ? { ...execution, state: 'Annulée', group: 'cancelled', detail: 'Annulée par un opérateur', finishedAt: 'À l’instant' }
-        : execution));
-      this.selectedView.set('cancelled');
-      this.feedback.set(`${selected.length} exécution${selected.length > 1 ? 's' : ''} annulée${selected.length > 1 ? 's' : ''} dans la file de démonstration.`);
-      return;
-    }
-
-    if (event.actionId === 'retry-selected' && selected.every((execution) => execution.group === 'errors')) {
-      const retries = selected.map((execution) => this.createRetry(execution));
-      this.executions.update((executions) => [...retries, ...executions]);
-      this.selectedView.set('queue');
-      this.feedback.set(`${retries.length} relance${retries.length > 1 ? 's' : ''} ajoutée${retries.length > 1 ? 's' : ''} à la file de démonstration. Aucun worker n’a été sollicité.`);
-    }
+    if (event.actionId === 'cancel-selected')
+      this.perform(
+        'cancel',
+        event.rows.map((r) => String(r['id'])),
+      );
+    if (event.actionId === 'retry-selected')
+      this.perform(
+        'retry',
+        event.rows.map((r) => String(r['id'])),
+      );
   }
-
-  private createRetry(failedExecution: ExecutionRecord): ExecutionRecord {
-    return {
-      ...failedExecution,
-      id: `${failedExecution.id}-retry-${failedExecution.attempt + 1}`,
-      state: 'En attente',
-      group: 'queue',
-      node: '—',
-      detail: 'En attente d’un worker compatible',
-      queuedAt: 'À l’instant',
-      startedAt: '—',
-      finishedAt: '—',
-      duration: '—',
-      attempt: failedExecution.attempt + 1,
-    };
+  private perform(action: 'cancel' | 'retry', ids: readonly string[]): void {
+    if (this.busy() || !ids.length) return;
+    this.busy.set(true);
+    forkJoin(
+      ids.map((id) =>
+        (action === 'cancel'
+          ? this.tracking.cancel(id).pipe(map(() => true))
+          : this.tracking.retry(id).pipe(map(() => true))
+        ).pipe(catchError(() => of(false))),
+      ),
+    )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((results) => {
+        this.busy.set(false);
+        this.tracking.refresh();
+        const success = results.filter(Boolean).length;
+        this.notifications.show(
+          success === ids.length
+            ? action === 'cancel'
+              ? 'Demandes d’annulation enregistrées.'
+              : 'Relances ajoutées à la file.'
+            : success +
+                ' sur ' +
+                ids.length +
+                ' demandes enregistrées. Les autres ont échoué ou leur état a changé.',
+        );
+      });
+  }
+  private date(value: string | null): string {
+    return value ? new Date(value).toLocaleString('fr-FR') : '—';
   }
 }

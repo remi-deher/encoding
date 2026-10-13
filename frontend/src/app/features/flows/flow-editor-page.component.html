@@ -1,4 +1,5 @@
 <app-detail-drawer
+  mainScroll="parent"
   [opened]="componentPickerOpen()"
   [title]="'Composants du flow'"
   [description]="'Recherchez et ajoutez des blocs fournis par les plugins.'"
@@ -6,15 +7,22 @@
   (closed)="componentPickerOpen.set(false)"
 >
   <div drawer-main class="flow-editor-page">
-    <app-page-header [title]="flowTitle()" />
+    <app-page-header [title]="flowTitle()" [shellTitle]="flowTitle()">
+      <button page-actions matButton="text" type="button" (click)="validateGraph()">
+        Vérifier le flow
+      </button>
+    </app-page-header>
     <app-flow-graph-editor
       [nodes]="nodes()"
+      [mediaType]="flowMediaType()"
+      (configurationChanged)="onInlineConfigurationChanged($event)"
       [connections]="connections()"
-      (addComponentRequested)="onAddComponentRequested()"
       (configurationRequested)="onConfigurationRequested($event)"
       (branchComponentRequested)="onBranchComponentRequested($event)"
+      (terminationRequested)="onTerminationRequested($event)"
       (connectionRequested)="onConnectionRequested($event)"
-      (nodePositionChanged)="onNodePositionChanged($event)"
+      (continuationRequested)="onContinuationRequested($event)"
+      (connectionsChanged)="onConnectionsChanged($event)"
       (nodeRemoved)="removeNode($event)"
       (connectionRemoved)="removeConnection($event)"
     />
@@ -22,15 +30,16 @@
 
   <ng-template #componentPicker>
     <app-searchable-component-catalog
-      [components]="components"
-      [typeOptions]="typeOptions"
-      [pluginOptions]="pluginOptions"
+      [components]="components()"
+      [typeOptions]="typeOptions()"
+      [pluginOptions]="pluginOptions()"
       (selected)="addComponent($event)"
     />
   </ng-template>
 </app-detail-drawer>
 
 <app-detail-drawer
+  mainScroll="parent"
   [opened]="configurationOpen()"
   [title]="configuringNode()?.component?.name ?? 'Configuration du composant'"
   [description]="configuringNode()?.component?.description ?? ''"
@@ -39,8 +48,11 @@
 >
   <ng-template #componentConfiguration>
     <app-component-configuration-form
-      [schema]="configuringNode()?.component?.configurationSchema"
-      [values]="configuringNode()?.configuration ?? {}"
+      [schema]="configuringSchema()"
+      [values]="configuringValues()"
+      [instanceName]="configuringNode()?.name ?? ''"
+      submitLabel="Appliquer au flow"
+      (instanceNameChange)="renameNode($event)"
       (saved)="saveNodeConfiguration($event)"
       (cancelled)="configurationOpen.set(false)"
     />

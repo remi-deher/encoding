@@ -1,3 +1,5 @@
+import { ClusterApi } from '../../shared/services/cluster-api';
+import { NodeRole, NodeResponse, LibraryResponse, NodeToolCapability, NODE_ROLE_LABELS } from '../../shared/models/cluster';
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -22,33 +24,6 @@ import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form
 import { NotificationService } from '../../shared/services/notification.service';
 import { LibraryNodeAccessFormComponent, LibraryNodeAccessOption, LibraryNodeAccessValue } from '../../shared/ui/library-node-access-form.component';
 import { LibraryNodeAccessMode, LibraryNodeAccessResponse } from '../../shared/ui/library-node-access-types';
-
-type NodeRole = 'server' | 'worker';
-type NodeStatus = 'online' | 'offline';
-
-interface NodeToolCapability {
-  readonly toolId: string;
-  readonly version: string;
-  readonly mediaTypes: readonly string[];
-  readonly accelerationTypes: readonly string[];
-}
-
-interface NodeResponse {
-  readonly id: string;
-  readonly name: string;
-  readonly roles: readonly NodeRole[];
-  readonly maxConcurrentTasks: number;
-  readonly capabilities: readonly NodeToolCapability[];
-  readonly status: NodeStatus;
-  readonly lastSeenAt: string;
-}
-
-interface LibraryResponse {
-  readonly id: string;
-  readonly name: string;
-  readonly createdAt: string;
-  readonly isActive: boolean;
-}
 
 interface NodeLibraryRecord extends DataTableRow {
   readonly id: string;
@@ -90,11 +65,6 @@ interface NodeRecord extends DataTableRow {
   readonly lastSignal: string;
 }
 
-const NODE_ROLE_LABELS: Readonly<Record<NodeRole, string>> = {
-  server: 'Serveur',
-  worker: 'Worker',
-};
-
 const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: string }[] = [
   { value: 'server', label: 'Serveur' },
   { value: 'worker', label: 'Worker' },
@@ -109,6 +79,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
 export class NodeCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly http = inject(HttpClient);
+  private readonly clusterApi = inject(ClusterApi);
   private readonly notifications = inject(NotificationService);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
@@ -281,7 +252,7 @@ export class NodeCatalogPageComponent {
     this.loadLibraryAccessSummary();
     timer(0, 10_000).pipe(
       switchMap(() => forkJoin({
-        nodes: this.http.get<readonly NodeResponse[]>('/api/v1/nodes'),
+        nodes: this.clusterApi.listNodes(),
         pending: this.http.get<readonly PendingNodeEnrollmentResponse[]>('/api/v1/nodes/enrollment-requests'),
       }).pipe(
         catchError(() => {
@@ -528,7 +499,7 @@ export class NodeCatalogPageComponent {
     const node = this.selectedNode();
     if (!node) return;
     this.nodeLibraryLoading.set(true);
-    this.http.get<readonly LibraryResponse[]>('/api/v1/libraries').pipe(
+    this.clusterApi.listLibraries().pipe(
       switchMap((libraries) => forkJoin({
         libraries: Promise.resolve(libraries),
         accessLists: libraries.length
@@ -549,7 +520,7 @@ export class NodeCatalogPageComponent {
   }
 
   private loadLibraryAccessSummary(): void {
-    this.http.get<readonly LibraryResponse[]>('/api/v1/libraries').pipe(
+    this.clusterApi.listLibraries().pipe(
       switchMap((libraries) => forkJoin({
         libraries: of(libraries),
         accessLists: libraries.length

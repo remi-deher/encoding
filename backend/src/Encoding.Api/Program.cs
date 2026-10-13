@@ -1,3 +1,5 @@
+using Encoding.Api.Executions;
+using Encoding.Contracts.Executions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Encoding.Api.Infrastructure;
@@ -18,6 +20,7 @@ if (offlineAfterSeconds <= 0)
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
+builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<LibraryRepository>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
 builder.Services.AddSingleton<ClusterIdentityRepository>();
@@ -237,6 +240,42 @@ nodes.MapGet("/{nodeId:guid}", async (Guid nodeId, NodeRepository repository, No
     var node = await repository.GetAsync(nodeId, options.OfflineAfter, cancellationToken);
     return node is null ? (IResult)Results.NotFound() : Results.Ok(node);
 }).WithName("GetNode");
+
+
+var executions = app.MapGroup("/api/v1/executions").WithTags("Executions");
+executions.MapGet("", async (ExecutionRepository repository, CancellationToken ct) =>
+    Results.Ok(await repository.OverviewAsync(ct))).WithName("GetExecutionOverview");
+executions.MapGet("/{id:guid}", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
+{
+    var execution = await repository.GetAsync(id, ct);
+    return execution is null ? (IResult)Results.NotFound() : Results.Ok(execution);
+}).WithName("GetExecution");
+executions.MapGet("/{id:guid}/events", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
+    await repository.GetAsync(id, ct) is null ? (IResult)Results.NotFound() : Results.Ok(await repository.EventsAsync(id, ct))).WithName("GetExecutionEvents");
+executions.MapPost("", async (CreateExecutionRequest request, ExecutionRepository repository, CancellationToken ct) =>
+{
+    var errors = new Dictionary<string, string[]>();
+    if (request.Id == Guid.Empty) errors["id"] = ["Un identifiant unique est obligatoire."];
+    if (string.IsNullOrWhiteSpace(request.Media) || request.Media.Length > 2048) errors["media"] = ["Le média doit contenir entre 1 et 2048 caractères."];
+    if (string.IsNullOrWhiteSpace(request.Library) || request.Library.Length > 128) errors["library"] = ["La bibliothèque doit contenir entre 1 et 128 caractères."];
+    if (string.IsNullOrWhiteSpace(request.Flow) || request.Flow.Length > 128) errors["flow"] = ["Le flow doit contenir entre 1 et 128 caractères."];
+    if (request.FlowVersion <= 0) errors["flowVersion"] = ["La version doit être positive."];
+    if (request.FlowDefinition.ValueKind != JsonValueKind.Object) errors["flowDefinition"] = ["La définition doit être un objet JSON."];
+    else if (request.FlowDefinition.GetRawText().Length > 1048576) errors["flowDefinition"] = ["La définition dépasse 1 Mo."];
+    if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+    return await repository.CreateAsync(request, ct)
+        ? Results.Created($"/api/v1/executions/{request.Id}", new { request.Id })
+        : Results.Conflict(new { title = "Cet identifiant d’exécution est déjà enregistré." });
+}).WithName("RegisterExecution");
+executions.MapPost("/{id:guid}/cancel", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
+    await repository.CancelAsync(id, ct) ? Results.NoContent() : Results.Conflict(new { title = "Cette exécution ne peut pas être annulée dans son état actuel." }))
+    .WithName("CancelExecution");
+executions.MapPost("/{id:guid}/retry", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
+{
+    var retryId = await repository.RetryAsync(id, ct);
+    return retryId is null ? (IResult)Results.Conflict(new { title = "Relance impossible ou déjà enregistrée pour cette tentative." })
+        : Results.Created($"/api/v1/executions/{retryId}", new { id = retryId });
+}).WithName("RetryExecution");
 
 app.MapFallbackToFile("index.html");
 

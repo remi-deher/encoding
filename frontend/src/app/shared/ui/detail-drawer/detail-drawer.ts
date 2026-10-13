@@ -7,7 +7,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
   imports: [MatSidenavModule, NgTemplateOutlet],
   template: `
     <mat-drawer-container class="detail-drawer-container" [hasBackdrop]="false">
-      <mat-drawer-content>
+      <mat-drawer-content [style.overflow]="mainScroll() === 'parent' ? 'visible' : null">
         <ng-content select="[drawer-main]" />
       </mat-drawer-content>
       <mat-drawer
@@ -22,17 +22,22 @@ import { MatSidenavModule } from '@angular/material/sidenav';
         <section class="drawer-panel">
           <header class="drawer-header">
             <div class="drawer-heading">
-              <div class="drawer-title-row">
-                <h2>{{ title() }}</h2>
-                <ng-container [ngTemplateOutlet]="headerActions() ?? null" />
-              </div>
+              <h2>{{ title() }}</h2>
               @if (description()) {
                 <p>{{ description() }}</p>
               }
             </div>
-            <button class="drawer-close" type="button" aria-label="Fermer le panneau" (click)="drawer.close()">
-              <span aria-hidden="true">×</span>
-            </button>
+            <div class="drawer-header-controls">
+              <ng-container [ngTemplateOutlet]="headerActions() ?? null" />
+              <button
+                class="drawer-close"
+                type="button"
+                aria-label="Fermer le panneau"
+                (click)="drawer.close()"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
           </header>
           <div class="drawer-body">
             <ng-container [ngTemplateOutlet]="content() ?? null" />
@@ -69,14 +74,17 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     }
 
     .drawer-heading {
+      flex: 1;
       min-width: 0;
+      overflow-wrap: anywhere;
     }
 
-    .drawer-title-row {
+    .drawer-header-controls {
       display: flex;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 10px 14px;
+      gap: 8px;
+      flex: 0 0 auto;
+      margin-left: auto;
     }
 
     .drawer-heading h2 {
@@ -129,6 +137,11 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       .drawer-header {
         min-height: 64px;
         padding-inline: 16px;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .drawer-heading {
+        flex-basis: 100%;
       }
 
       .drawer-body {
@@ -138,11 +151,11 @@ import { MatSidenavModule } from '@angular/material/sidenav';
   `,
 })
 export class DetailDrawerComponent {
+  readonly mainScroll = input<'auto' | 'parent'>('auto');
   readonly opened = input(false);
   readonly title = input('Détails');
   readonly description = input('');
   readonly content = input<TemplateRef<unknown> | undefined>(undefined);
   readonly headerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly closed = output<void>();
-
 }

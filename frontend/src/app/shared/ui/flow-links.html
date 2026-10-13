@@ -1,0 +1,19 @@
+<svg aria-hidden="true" [attr.width]="size().width" [attr.height]="size().height">
+  @for (link of links(); track link.id) {
+    <path [attr.d]="link.path" [class.error-connection]="link.error" />
+  }
+</svg>
+@for (link of links(); track link.id) {
+  <button
+    mat-icon-button
+    class="link-insertion"
+    type="button"
+    [style.left.px]="link.insertion.x"
+    [style.top.px]="link.insertion.y"
+    aria-label="Insérer une étape sur cette liaison"
+    title="Insérer une étape"
+    (click)="insertionRequested.emit(link.id)"
+  >
+    +
+  </button>
+}

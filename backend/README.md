@@ -46,3 +46,7 @@ La page **Tâches** est prête pour la console worker, mais la file et le répar
 - `POST /api/v1/libraries` crée une définition avec un nom unique et un type `video`, `image`, `music` ou `subtitles`.
 
 Une définition de bibliothèque ne configure aucun accès média. Les chemins locaux, capacités de lecture/écriture et modes d’accès sont enregistrés séparément par nœud.
+
+## Suivi des exécutions
+
+La migration 0008 ajoute le registre et son journal. L’API /api/v1/executions expose les compteurs et tentatives persistants, les demandes d’annulation et les relances. Les rapports de progression restent internes au futur moteur, qui devra contrôler ses baux et valider les sorties avant une réussite. Aucun traitement média n’est lancé par cette évolution. Voir docs/architecture/0009-execution-tracking.md pour les contrats et les limites.

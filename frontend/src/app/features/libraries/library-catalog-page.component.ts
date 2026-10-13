@@ -1,3 +1,5 @@
+import { ClusterApi } from '../../shared/services/cluster-api';
+import { LibraryResponse } from '../../shared/models/cluster';
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -21,22 +23,6 @@ import { LibraryNodeAccessMode, LibraryNodeAccessResponse } from '../../shared/u
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
 import { NotificationService } from '../../shared/services/notification.service';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
-
-interface LibraryResponse {
-  readonly id: string;
-  readonly name: string;
-  readonly createdAt: string;
-  readonly configuredNodeCount: number;
-  readonly directAccessNodeCount: number;
-  readonly transferNodeCount: number;
-  readonly isActive: boolean;
-}
-
-interface NodeAccessNodeResponse {
-  readonly id: string;
-  readonly name: string;
-  readonly roles: readonly string[];
-}
 
 interface LibraryRecord extends DataTableRow {
   readonly id: string;
@@ -74,6 +60,7 @@ export class LibraryCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly routeData = toSignal(this.route.data, { initialValue: this.route.snapshot.data });
   private readonly http = inject(HttpClient);
+  private readonly clusterApi = inject(ClusterApi);
   private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
   private readonly libraries = signal<readonly LibraryRecord[]>([]);
@@ -464,7 +451,7 @@ export class LibraryCatalogPageComponent {
   private loadAccessForm(libraryId: string): void {
     this.accessFormLoading.set(true);
     forkJoin({
-      nodes: this.http.get<readonly NodeAccessNodeResponse[]>('/api/v1/nodes'),
+      nodes: this.clusterApi.listNodes(),
       accesses: this.http.get<readonly LibraryNodeAccessResponse[]>(`/api/v1/libraries/${libraryId}/node-access`),
     }).pipe(
       catchError(() => {
@@ -496,7 +483,7 @@ export class LibraryCatalogPageComponent {
   }
 
   private refresh(): void {
-    this.http.get<readonly LibraryResponse[]>('/api/v1/libraries').pipe(
+    this.clusterApi.listLibraries().pipe(
       catchError(() => {
         this.notifications.show('Impossible de charger les bibliothèques depuis le serveur.');
         return of([]);

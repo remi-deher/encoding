@@ -4,6 +4,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import {
+  FLOW_COMPONENT_KIND_LABELS,
   FlowComponentDefinition,
   FlowComponentFilterOption,
 } from '../models/flow-component';
@@ -37,9 +38,22 @@ import {
 
         <mat-form-field appearance="outline">
           <mat-label>Plugin</mat-label>
-          <mat-select [value]="selectedPlugin()" (selectionChange)="selectedPlugin.set($event.value)">
+          <mat-select
+            [value]="selectedPlugin()"
+            (selectionChange)="selectedPlugin.set($event.value)"
+          >
             <mat-option value="all">Tous les plugins</mat-option>
             @for (option of pluginOptions(); track option.value) {
+              <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Outil média</mat-label>
+          <mat-select [value]="selectedTool()" (selectionChange)="selectedTool.set($event.value)">
+            <mat-option value="all">Tous les outils</mat-option>
+            @for (option of toolOptions(); track option.value) {
               <mat-option [value]="option.value">{{ option.label }}</mat-option>
             }
           </mat-select>
@@ -51,7 +65,12 @@ import {
           <button class="component-option" type="button" (click)="selected.emit(component)">
             <span class="component-option-heading">
               <span class="component-name">{{ component.name }}</span>
-              <span class="component-meta">{{ kindLabel(component.kind) }} · {{ component.pluginName }}</span>
+              <span class="component-meta"
+                >{{ kindLabel(component.kind) }} · {{ component.pluginName }}
+                @if (component.executionToolName) {
+                  · {{ component.executionToolName }}
+                }
+              </span>
             </span>
             <span class="component-description">{{ component.description }}</span>
             <span class="component-meta">{{ mediaTypeLabel(component.mediaType) }}</span>
@@ -63,26 +82,77 @@ import {
     </section>
   `,
   styles: `
-    :host { display: block; }
-    .component-catalog { display: grid; gap: 12px; }
-    .search-field { width: 100%; }
-    .catalog-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .catalog-filters mat-form-field { min-width: 0; }
-    .component-list { display: grid; gap: 8px; }
+    :host {
+      display: block;
+    }
+    .component-catalog {
+      display: grid;
+      gap: 12px;
+    }
+    .search-field {
+      width: 100%;
+    }
+    .catalog-filters {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .catalog-filters mat-form-field {
+      min-width: 0;
+    }
+    .component-list {
+      display: grid;
+      gap: 8px;
+    }
     .component-option {
-      width: 100%; padding: 14px 16px; display: grid; gap: 7px; text-align: left;
-      border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface);
-      color: var(--text-primary); font: inherit; cursor: pointer;
+      width: 100%;
+      padding: 14px 16px;
+      display: grid;
+      gap: 7px;
+      text-align: left;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text-primary);
+      font: inherit;
+      cursor: pointer;
     }
-    .component-option:hover, .component-option:focus-visible {
-      border-color: var(--accent); background: var(--accent-soft); outline: none;
+    .component-option:hover,
+    .component-option:focus-visible {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      outline: none;
     }
-    .component-option-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .component-name { font-weight: 700; }
-    .component-plugin, .component-meta { color: var(--text-muted); font-size: 11px; }
-    .component-description { color: var(--text-secondary); line-height: 1.45; }
-    .empty-state { margin: 0; padding: 24px 12px; color: var(--text-muted); text-align: center; }
-    @media (max-width: 620px) { .catalog-filters { grid-template-columns: 1fr; gap: 0; } }
+    .component-option-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .component-name {
+      font-weight: 700;
+    }
+    .component-plugin,
+    .component-meta {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .component-description {
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+    .empty-state {
+      margin: 0;
+      padding: 24px 12px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    @media (max-width: 620px) {
+      .catalog-filters {
+        grid-template-columns: 1fr;
+        gap: 0;
+      }
+    }
   `,
 })
 export class SearchableComponentCatalogComponent {
@@ -94,21 +164,32 @@ export class SearchableComponentCatalogComponent {
   protected readonly query = signal('');
   protected readonly selectedType = signal('all');
   protected readonly selectedPlugin = signal('all');
+  protected readonly selectedTool = signal('all');
+  protected readonly toolOptions = computed(() => {
+    const tools = new Map<string, string>();
+    for (const component of this.components()) {
+      if (component.executionToolId && component.executionToolName)
+        tools.set(component.executionToolId, component.executionToolName);
+    }
+    return [...tools].map(([value, label]) => ({ value, label }));
+  });
   protected readonly filteredComponents = computed(() => {
     const query = this.query().trim().toLocaleLowerCase();
     const type = this.selectedType();
     const plugin = this.selectedPlugin();
+    const tool = this.selectedTool();
 
     return this.components().filter((component) => {
       const matchesQuery =
         query.length === 0 ||
-        `${component.name} ${component.description} ${component.pluginName}`
+        `${component.name} ${component.description} ${component.pluginName} ${component.executionToolName ?? ''}`
           .toLocaleLowerCase()
           .includes(query);
       return (
         matchesQuery &&
         (type === 'all' || component.mediaType === type) &&
-        (plugin === 'all' || component.pluginId === plugin)
+        (plugin === 'all' || component.pluginId === plugin) &&
+        (tool === 'all' || component.executionToolId === tool)
       );
     });
   });
@@ -118,6 +199,6 @@ export class SearchableComponentCatalogComponent {
   }
 
   protected kindLabel(kind: FlowComponentDefinition['kind']): string {
-    return { action: 'Action', condition: 'Condition', variable: 'Variable' }[kind];
+    return FLOW_COMPONENT_KIND_LABELS[kind];
   }
 }

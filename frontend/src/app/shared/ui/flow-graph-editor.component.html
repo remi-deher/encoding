@@ -1,54 +1,334 @@
-<section class="flow-canvas" aria-label="Composition graphique du flow">
-  <div class="graph-frame">
-    <button class="add-component-button" type="button" (click)="addComponentRequested.emit()">Ajouter un composant</button>
-    <vflow
-      class="graph-surface"
-      view="auto"
-      [nodes]="canvasNodes()"
-      [edges]="canvasEdges()"
-      [connection]="connectionSettings"
-      (connect)="onConnect($event)"
-      (nodeDragEnd)="onNodeDragEnd($event)"
-      (edgesChanges.remove)="onEdgesRemoved($event)"
-    >
-      <ng-template let-context nodeHtml>
-        <article class="flow-node" selectable [class.flow-node_selected]="context.selected()">
-          <handle type="target" position="left" id="input" />
-          <header class="node-heading">
-            <span class="node-kind">{{ kindLabel(context.data().component.kind) }}</span>
-            <span class="node-plugin">{{ context.data().component.pluginName }}</span>
-            @if (context.data().component.configurationSchema?.fields?.length) {
-              <button class="configure-node" type="button" [attr.aria-label]="'Configurer ' + context.data().component.name" (pointerdown)="$event.stopPropagation()" (click)="$event.stopPropagation(); configurationRequested.emit(context.node.id)">⚙</button>
-            }
-            <button class="remove-node" type="button" aria-label="Supprimer le bloc" (pointerdown)="$event.stopPropagation()" (click)="$event.stopPropagation(); nodeRemoved.emit(context.node.id)">×</button>
-          </header>
-          <strong class="node-name">{{ context.data().component.name }}</strong>
-          <p class="node-description">{{ context.data().component.description }}</p>
-
-          @for (activeOutput of context.data().activeOutputs; track activeOutput.id) {
-            <div class="node-output-row">
-              <span>{{ activeOutput.label }}</span>
-              <handle type="source" position="right" [id]="activeOutput.id" />
-            </div>
-          }
-
-          @if (availableOutputs(context.node.id, context.data().component).length) {
-            <button class="add-output-button" type="button" [matMenuTriggerFor]="outputMenu" (pointerdown)="$event.stopPropagation()" (click)="$event.stopPropagation()">＋ Ajouter une sortie</button>
-            <mat-menu #outputMenu="matMenu">
-              @for (possibleOutput of availableOutputs(context.node.id, context.data().component); track possibleOutput.id) {
-                <button mat-menu-item type="button" (click)="requestOutput(context.node.id, possibleOutput)">{{ possibleOutput.label }} — {{ possibleOutput.description }}</button>
-              }
-            </mat-menu>
-          }
-        </article>
-      </ng-template>
-    </vflow>
-
-    @if (!nodes().length) {
-      <div class="empty-graph">
-        <strong>Commencez par ajouter un composant</strong>
-        <span>Reliez ensuite ses sorties aux blocs suivants.</span>
-      </div>
+<section #surface class="structured-editor" aria-label="Composition du flow par étapes">
+  <div class="connection-tools">
+    <button mat-button type="button" (click)="showConnections.set(!showConnections())">
+      {{ showConnections() ? 'Masquer les liaisons' : 'Afficher les liaisons' }}
+    </button>
+    @if (pendingConnection(); as pending) {
+      <span role="status"
+        >Sortie {{ pending.output.label }} : choisissez le point d’entrée d’une étape.</span
+      >
+      <button mat-button type="button" (click)="pendingConnection.set(null)">
+        Annuler la liaison
+      </button>
     }
   </div>
+  @if (showConnections()) {
+    <app-flow-links
+      [size]="drawingSize()"
+      [links]="drawnConnections()"
+      (insertionRequested)="insertOnConnection($event)"
+    />
+  }
+  <p class="editor-help">
+    Les étapes se lisent de haut en bas. Double-cliquez sur un bloc pour le configurer, ou
+    sélectionnez-le avec Tab puis appuyez sur Entrée. Plusieurs sorties peuvent rejoindre le même
+    point d’entrée.
+  </p>
+  @if (structured().references) {
+    <p class="graph-notice" role="status">
+      Certains raccordements sont partagés entre des branches. Ils restent représentés par des
+      renvois explicites ; leur logique n’a pas été convertie.
+    </p>
+  }
+  <ng-container
+    [ngTemplateOutlet]="sequenceTemplate"
+    [ngTemplateOutletContext]="{ sequence: structured().main }"
+  />
+  @if (structured().detached.length) {
+    <section class="detached" aria-label="Blocs non reliés à l’entrée">
+      <h2>Blocs non reliés à l’entrée</h2>
+      <p>Ces blocs sont conservés. Reliez-les depuis le menu de sortie d’une étape.</p>
+      @for (sequence of structured().detached; track sequence.id) {
+        <ng-container
+          [ngTemplateOutlet]="sequenceTemplate"
+          [ngTemplateOutletContext]="{ sequence: sequence }"
+        />
+      }
+    </section>
+  }
 </section>
+
+<ng-template #sequenceTemplate let-sequence="sequence">
+  <div
+    class="sequence"
+    cdkDropList
+    [cdkDropListData]="sequence"
+    (cdkDropListDropped)="drop(sequence, $event)"
+  >
+    @for (step of sequence.steps; track step.node.id; let index = $index) {
+      <div
+        class="step-unit"
+        cdkDrag
+        cdkDragLockAxis="y"
+        (cdkDragEnded)="measureConnections()"
+        [cdkDragDisabled]="
+          step.reference ||
+          (!canMove(sequence, index, index - 1) && !canMove(sequence, index, index + 1))
+        "
+      >
+        @if (step.reference) {
+          <div
+            class="shared-reference"
+            tabindex="0"
+            (dblclick)="openConfiguration(step.node, $event)"
+            (keydown.enter)="openConfiguration(step.node, $event)"
+          >
+            <span
+              >Rejoindre l’étape partagée : {{ step.node.name || step.node.component.name }}</span
+            >
+            <button mat-button type="button" (click)="focusNode(step.node.id)">Voir l’étape</button>
+          </div>
+        } @else {
+          <article
+            class="step-card"
+            #stepCard
+            [style.--step-color]="colors(step.node.component).color"
+            [style.--step-background]="colors(step.node.component).background"
+            [style.--plugin-color]="colors(step.node.component).plugin"
+            [style.--output-count]="step.node.component.outputs.length"
+            [attr.data-node-id]="step.node.id"
+            tabindex="0"
+            role="group"
+            [attr.aria-label]="
+              (step.node.name || step.node.component.name) + ' — Entrée pour configurer'
+            "
+            aria-keyshortcuts="Enter"
+            (dblclick)="openConfiguration(step.node, $event)"
+            (keydown.enter)="openConfiguration(step.node, $event)"
+          >
+            @if (step.node.component.kind !== 'input') {
+              <button
+                #inputPort
+                class="connection-port input-port"
+                type="button"
+                [attr.data-node-id]="step.node.id"
+                [disabled]="!canLinkTo(step.node)"
+                [class.valid-target]="canLinkTo(step.node)"
+                [class.port-connected]="incomingCount(step.node) > 0"
+                [attr.title]="
+                  incomingCount(step.node) +
+                  ' liaison(s) entrante(s). Plusieurs sorties peuvent rejoindre cette entrée.'
+                "
+                [attr.aria-label]="'Relier à ' + (step.node.name || step.node.component.name)"
+                (click)="linkTo(step.node)"
+              >
+                <span aria-hidden="true">●</span>
+              </button>
+            }
+            <div class="step-band">
+              <span class="step-kind">{{ kindLabel(step.node.component.kind) }}</span>
+              @if (canMove(sequence, index, index - 1) || canMove(sequence, index, index + 1)) {
+                <button
+                  class="drag-handle"
+                  cdkDragHandle
+                  type="button"
+                  [attr.aria-label]="'Déplacer ' + (step.node.name || step.node.component.name)"
+                  title="Glisser pour réordonner"
+                >
+                  <span aria-hidden="true">⠿</span>
+                </button>
+              } @else {
+                <span class="fixed-handle" aria-hidden="true">⠿</span>
+              }
+              <span class="step-provider">{{ blockLabel(step.node.component) }}</span>
+            </div>
+            <div class="step-heading">
+              <strong class="step-name">{{ step.node.name || step.node.component.name }}</strong>
+              @if (step.node.component.kind !== 'input') {
+                <button
+                  mat-icon-button
+                  class="step-menu"
+                  type="button"
+                  [attr.aria-label]="'Supprimer ' + (step.node.name || step.node.component.name)"
+                  title="Supprimer le bloc"
+                  (click)="nodeRemoved.emit(step.node.id)"
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                  >
+                    <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
+                  </svg>
+                </button>
+              }
+            </div>
+            @if (incomingCount(step.node) > 1) {
+              <p class="continuation-label">{{ incomingCount(step.node) }} liaisons entrantes</p>
+            }
+            <p class="step-summary">{{ step.node.component.description }}</p>
+            <app-flow-inline-parameters
+              [schema]="inlineSchema(step.node)"
+              [values]="step.node.configuration"
+              (changed)="
+                configurationChanged.emit({
+                  nodeId: step.node.id,
+                  fieldId: $event.fieldId,
+                  value: $event.value,
+                })
+              "
+            />
+            <div class="step-controls">
+              @if (canMove(sequence, index, index - 1)) {
+                <button
+                  mat-button
+                  type="button"
+                  [attr.aria-label]="'Monter ' + (step.node.name || step.node.component.name)"
+                  (click)="move(sequence, index, index - 1)"
+                >
+                  ↑ Monter
+                </button>
+              }
+              @if (canMove(sequence, index, index + 1)) {
+                <button
+                  mat-button
+                  type="button"
+                  [attr.aria-label]="'Descendre ' + (step.node.name || step.node.component.name)"
+                  (click)="move(sequence, index, index + 1)"
+                >
+                  ↓ Descendre
+                </button>
+              }
+            </div>
+
+            <div class="output-actions" aria-label="Sorties de l’étape">
+              @for (output of step.node.component.outputs; track output.id) {
+                <div
+                  class="output-action"
+                  [class.output-connected]="isConnected(step.node, output)"
+                >
+                  <button
+                    #outputPort
+                    class="connection-port output-port"
+                    type="button"
+                    [attr.data-source-id]="step.node.id"
+                    [attr.data-output-id]="output.id"
+                    [class.port-connected]="isConnected(step.node, output)"
+                    [attr.aria-label]="'Créer une liaison depuis ' + output.label"
+                    (click)="selectOutput(step.node, output)"
+                  >
+                    <span aria-hidden="true">●</span>
+                  </button>
+                  <button
+                    mat-button
+                    class="output-label"
+                    type="button"
+                    [attr.aria-label]="'Actions de la sortie ' + output.label"
+                    [matMenuTriggerFor]="outputMenu"
+                  >
+                    {{ output.label }}
+                  </button>
+                  <mat-menu #outputMenu="matMenu">
+                    <button mat-menu-item type="button" (click)="add(step.node, output)">
+                      Ajouter une étape
+                    </button>
+                    @if (isConnected(step.node, output)) {
+                      <button mat-menu-item type="button" (click)="disconnect(step.node, output)">
+                        Déconnecter {{ output.label }}
+                      </button>
+                    } @else {
+                      <button
+                        mat-menu-item
+                        type="button"
+                        (click)="terminationRequested.emit({ sourceNodeId: step.node.id, output })"
+                      >
+                        Terminer ce chemin
+                      </button>
+                      @for (target of targets(step.node, output); track target.id) {
+                        <button
+                          mat-menu-item
+                          type="button"
+                          (click)="
+                            connectionRequested.emit({
+                              sourceNodeId: step.node.id,
+                              sourceOutputId: output.id,
+                              targetNodeId: target.id,
+                            })
+                          "
+                        >
+                          Rejoindre {{ target.name || target.component.name }}
+                        </button>
+                      } @empty {
+                        <button mat-menu-item type="button" disabled>
+                          Aucune étape disponible
+                        </button>
+                      }
+                    }
+                  </mat-menu>
+                </div>
+              }
+            </div>
+          </article>
+
+          @if (step.branches.length) {
+            <div class="branches" [style.--branch-count]="step.branches.length">
+              @for (branch of step.branches; track branch.output.id) {
+                <mat-expansion-panel [expanded]="true">
+                  <mat-expansion-panel-header>
+                    <mat-panel-title>{{ branch.output.label }}</mat-panel-title>
+                    <mat-panel-description
+                      >{{ branch.sequence.steps.length }} étape(s)</mat-panel-description
+                    >
+                  </mat-expansion-panel-header>
+
+                  @if (!branch.sequence.steps.length) {
+                    <p class="branch-empty">
+                      {{
+                        isConnected(step.node, branch.output)
+                          ? 'Rejoint directement la suite commune.'
+                          : 'Fin de cette branche.'
+                      }}
+                    </p>
+                  }
+                  <ng-container
+                    [ngTemplateOutlet]="sequenceTemplate"
+                    [ngTemplateOutletContext]="{ sequence: branch.sequence }"
+                  />
+                </mat-expansion-panel>
+              }
+            </div>
+            @if (
+              !step.joinId && !structured().references && continuationSources(step.node).length
+            ) {
+              <div class="insertion">
+                <button
+                  mat-button
+                  type="button"
+                  (click)="continuationRequested.emit(continuationSources(step.node))"
+                >
+                  ＋ Ajouter une suite aux chemins non terminés
+                </button>
+              </div>
+            }
+            @if (step.joinId) {
+              <p class="continuation-label">↓ Suite commune aux branches reliées</p>
+            }
+          } @else if (primaryOutput(step.node); as output) {
+            <div class="insertion">
+              @if (step.continuationOutput) {
+                <span class="continuation-label">↓ {{ step.continuationOutput.label }}</span>
+              }
+              @if (!isConnected(step.node, output) || !showConnections()) {
+                <button mat-button type="button" (click)="add(step.node, output)">
+                  ＋ Ajouter une étape
+                </button>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+    @if (sequence.returnsTo) {
+      <p class="branch-return">
+        Rejoindre {{ nodeLabel(sequence.returnsTo) }}
+        <button mat-button type="button" (click)="focusNode(sequence.returnsTo)">
+          Voir l’étape
+        </button>
+      </p>
+    }
+  </div>
+</ng-template>

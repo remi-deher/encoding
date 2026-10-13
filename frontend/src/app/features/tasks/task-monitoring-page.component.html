@@ -2,11 +2,11 @@
   title="Tâches"
   sectionDescription="Une vue distincte pour chaque étape de vie d’une exécution."
   [countText]="countText()"
-  [queueCount]="queueExecutions().length"
-  [activeCount]="activeExecutions().length"
-  [errorCount]="errorExecutions().length"
-  [cancelledCount]="cancelledExecutions().length"
-  [historyCount]="historyExecutions().length"
+  [queueCount]="trackingState().data?.queuedCount ?? 0"
+  [activeCount]="trackingState().data?.activeCount ?? 0"
+  [errorCount]="trackingState().data?.failedCount ?? 0"
+  [cancelledCount]="trackingState().data?.cancelledCount ?? 0"
+  [historyCount]="trackingState().data?.succeededCount ?? 0"
   [selectedView]="selectedView()"
   [queueColumns]="queueColumns"
   [queueRows]="queueExecutions()"
@@ -21,8 +21,15 @@
   [historyColumns]="historyColumns"
   [historyRows]="historyExecutions()"
   [feedback]="feedback()"
-  note="Données illustratives : les états et relances ne sont pas encore reliés au moteur d’exécution."
+  note="Suivi persistant · actualisation toutes les 5 secondes · jusqu’à 200 exécutions récentes affichées. Les relances attendent le moteur d’exécution."
+  [eventRows]="eventState().rows"
+  [eventFeedback]="eventState().message"
+  (executionOpened)="selectedExecutionId.set($event)"
   (viewChange)="onViewChange($event)"
   (errorAction)="onErrorAction($event)"
   (selectionAction)="onSelectionAction($event)"
-/>
+>
+  <ng-template #pageActions
+    ><button mat-button type="button" (click)="refresh()">Actualiser</button></ng-template
+  >
+</app-execution-monitor-template>
