@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Encoding.Contracts.Nodes;
+using System.Runtime.InteropServices;
 
 namespace Encoding.NodeAgent.Services;
 
@@ -24,7 +25,9 @@ public sealed class NodeHeartbeatService(
                 if (identity.HasCredentials)
                 {
                     var capabilities = await capabilityProbe.DiscoverAsync(stoppingToken);
-                    var heartbeat = new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities);
+                    var memoryMb = Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
+                    var inventory = new NodeInventory(RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(), Environment.ProcessorCount, memoryMb);
+                    var heartbeat = new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory);
                     using var request = new HttpRequestMessage(HttpMethod.Put,
                         new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/nodes/{identity.Id:D}/heartbeat"))
                     {

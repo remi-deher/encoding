@@ -85,6 +85,15 @@ internal static class FlowSimulationScenarios
         var constraintResult = new Dictionary<string, FlowSimulationAssumption> { ["constraint"] = new("success") };
         ExpectArgument(() => Run(constrained, assumptions: constraintResult));
         Check(Run(constrained, file with { WorkerNodeId = target }, constraintResult).Status == "completed", "A node constraint cannot contradict the simulated worker.");
+        var selectedConstraint = basic with { Nodes = [input, Node("selector", "nodes-run-on-node", new Dictionary<string, JsonElement> { ["targetGroupId"] = J(Guid.NewGuid().ToString()), ["requiredLabels"] = J("gpu=nvidia") }), finish],
+            Connections = [new("a", "entry", "success", "selector"), new("b", "selector", "success", "finish")] };
+        var selectorResult = Run(selectedConstraint, file with { WorkerNodeId = target }, new Dictionary<string, FlowSimulationAssumption> { ["selector"] = new("success") });
+        Check(selectorResult.Status == "completed" && selectorResult.Steps[1].Detail.Contains("ne sont pas vérifiées"), "Group and label eligibility remains an explicit assumption in simulation.");
+        var selectorRelay = simulator.Simulate(new(J(flow), file, assumptions), new Dictionary<string, JsonElement>
+        {
+            ["mode"] = J("selector"), ["targetGroupId"] = J(Guid.NewGuid().ToString()), ["requiredLabels"] = J("gpu=nvidia"),
+        });
+        Check(selectorRelay.Status == "completed" && selectorRelay.Steps[4].Detail.Contains("Le scénario suppose"), "A simulated relay records assumed group and label eligibility.");
         var deferred = basic with { Nodes = [input, Node("defer", "base-defer-processing", new Dictionary<string, JsonElement> { ["delayMinutes"] = J(7), ["reason"] = J("Simulation") })], Connections = [new("a", "entry", "success", "defer")] };
         var deferredResult = Run(deferred);
         Check(deferredResult.TerminalResult == "deferred" && deferredResult.Steps[^1].Context.Variables["runtime.deferMinutes"].GetInt32() == 7, "Deferred execution retains the configured delay.");

@@ -20,6 +20,43 @@ export interface NodeResponse {
   readonly capabilities: readonly NodeToolCapability[];
   readonly status: 'online' | 'offline';
   readonly lastSeenAt: string;
+  readonly inventory?: NodeInventory | null;
+  readonly displayName?: string | null;
+  readonly labels?: Readonly<Record<string, string | null>>;
+}
+export interface NodeInventory {
+  readonly operatingSystem: string;
+  readonly architecture: string;
+  readonly processorCount: number;
+  readonly memoryMb: number;
+}
+export type NodeGroupMode = 'manual' | 'automatic';
+export interface NodeGroupCriteria {
+  readonly roles?: readonly NodeRole[] | null;
+  readonly operatingSystem?: string | null;
+  readonly architecture?: string | null;
+  readonly minimumMemoryMb?: number | null;
+  readonly requiredToolIds?: readonly string[] | null;
+  readonly minimumConcurrentTasks?: number | null;
+  readonly minimumProcessorCount?: number | null;
+}
+export interface NodeGroupResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly mode: NodeGroupMode;
+  readonly criteria: NodeGroupCriteria;
+  readonly labels: Readonly<Record<string, string | null>>;
+  readonly nodeIds: readonly string[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+export interface NodeIdentityResponse {
+  readonly nodeId: string;
+  readonly displayName: string | null;
+  readonly labels: Readonly<Record<string, string | null>>;
+  readonly effectiveLabels: Readonly<Record<string, string | null>>;
+  readonly groupIds: readonly string[];
 }
 export interface LibraryResponse {
   readonly flowName?: string | null;

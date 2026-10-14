@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Encoding.Contracts.Nodes;
+using System.Runtime.InteropServices;
 
 namespace Encoding.NodeAgent.Services;
 
@@ -27,7 +28,8 @@ public sealed class WorkerEnrollmentService(
             options.Roles,
             options.MaxConcurrentTasks,
             capabilities,
-            pending.NodeToken!);
+            pending.NodeToken!,
+            CreateInventory());
 
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         using var response = await client.PostAsJsonAsync(
@@ -66,7 +68,8 @@ public sealed class WorkerEnrollmentService(
                 options.Roles,
                 options.MaxConcurrentTasks,
                 capabilities,
-                pending.NodeToken!),
+                pending.NodeToken!,
+                CreateInventory()),
             pending.PairingKey!);
 
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -86,6 +89,12 @@ public sealed class WorkerEnrollmentService(
         logger.LogInformation("Une clé de jumelage a été créée pour le worker {NodeId} vers le cluster {ClusterId}.", pending.Id, cluster.Id);
         return new WorkerPairingResponse(pending.PairingKey!, pending.PairingExpiresAt!.Value);
     }
+
+    private static NodeInventory CreateInventory() => new(
+        RuntimeInformation.OSDescription,
+        RuntimeInformation.ProcessArchitecture.ToString(),
+        Environment.ProcessorCount,
+        Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024)));
 }
 
 public sealed record WorkerPairingResponse(string PairingKey, DateTimeOffset ExpiresAt);

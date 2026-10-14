@@ -202,7 +202,7 @@ internal static partial class Harness
             await ResetNodesAsync();
             await using var secondDb=NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(connection) { SearchPath=schema }.ConnectionString);
             var secondConfigurations=new PluginConfigurationRepository(secondDb,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
-            var second=new RuntimeRepository(secondDb,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),secondConfigurations);
+            var second=new RuntimeRepository(secondDb,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),secondConfigurations,new NodeGroupRepository(secondDb));
             var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
             var ids=new List<Guid>(); for(var index=0;index<8;index++) ids.Add(await QueueAsync(flow));
 

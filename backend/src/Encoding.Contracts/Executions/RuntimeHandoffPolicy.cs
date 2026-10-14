@@ -1,12 +1,17 @@
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 
+using Encoding.Contracts.Nodes;
+
 namespace Encoding.Contracts.Executions;
 
-public sealed record RuntimeHandoffSelector(string Mode, Guid? TargetNodeId = null)
+public sealed record RuntimeHandoffSelector(string Mode, Guid? TargetNodeId = null, Guid? TargetGroupId = null, string? RequiredLabels = null)
 {
-    public bool Accepts(Guid candidate, Guid previousWorker) => candidate != previousWorker
-        && (Mode == "eligible" || Mode == "node" && TargetNodeId == candidate);
+    public bool Accepts(Guid candidate, Guid previousWorker, NodeIdentityResponse? identity = null) => candidate != previousWorker
+        && (Mode == "eligible" || Mode == "node" && TargetNodeId == candidate
+            || Mode == "selector" && identity is not null
+                && (TargetGroupId is null || identity.GroupIds.Contains(TargetGroupId.Value))
+                && NodeLabelSelector.Matches(RequiredLabels, identity.EffectiveLabels));
 }
 
 /// <summary>Shared interpretation of defaults, flow overrides and the explicit relay block.</summary>
@@ -27,9 +32,30 @@ public static class RuntimeHandoffPolicy
         }
         var mode = Read("mode") ?? "eligible";
         if (mode == "eligible") return new(mode);
-        if (mode != "node" || !Guid.TryParse(Read("targetNodeId"), out var target) || target == Guid.Empty)
-            throw new ArgumentException("Le relais vers un nœud précis nécessite un identifiant de worker valide.");
-        return new(mode, target);
+        if (mode == "node")
+        {
+            if (!Guid.TryParse(Read("targetNodeId"), out var target) || target == Guid.Empty)
+                throw new ArgumentException("Le relais vers un nœud précis nécessite un identifiant de worker valide.");
+            return new(mode, target);
+        }
+        if (mode == "selector")
+        {
+            var groupValue = Read("targetGroupId");
+            Guid? group = null;
+            if (!string.IsNullOrWhiteSpace(groupValue))
+            {
+                if (!Guid.TryParse(groupValue, out var groupId) || groupId == Guid.Empty)
+                    throw new ArgumentException("L’identifiant du groupe destinataire est invalide.");
+                group = groupId;
+            }
+            var labels = Read("requiredLabels");
+            if (!string.IsNullOrWhiteSpace(labels) && !NodeLabelSelector.IsValid(labels))
+                throw new ArgumentException("Le filtre d’étiquettes du relais est invalide.");
+            if (group is null && string.IsNullOrWhiteSpace(labels))
+                throw new ArgumentException("Le filtre de relais doit définir un groupe ou des étiquettes.");
+            return new(mode, TargetGroupId: group, RequiredLabels: labels);
+        }
+        throw new ArgumentException("La destination du relais n’est pas prise en charge.");
     }
 
     /// <summary>All possible sequential paths in this segment; stop at the next relay boundary.</summary>

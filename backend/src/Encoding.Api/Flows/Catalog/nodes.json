@@ -10,8 +10,8 @@
     {
       "id": "nodes-run-on-node",
       "version": "1.0.0",
-      "name": "Exécuter sur un nœud précis",
-      "description": "Contraint le worker du segment courant, jusqu’au prochain relais. Sans candidat disponible, le traitement attend.",
+      "name": "Exécuter sur un nœud ou un groupe",
+      "description": "Contraint le worker du segment courant selon un nœud, un groupe et des étiquettes. Les critères se cumulent. Sans candidat disponible, le traitement attend.",
       "kind": "action",
       "mediaType": "general",
       "supportedFlowMediaTypes": [
@@ -33,10 +33,23 @@
           {
             "id": "targetNodeId",
             "type": "text",
-            "label": "Identifiant du nœud",
+            "label": "Identifiant du nœud (facultatif)",
             "description": "Copiez l’identifiant depuis la fiche du nœud.",
-            "required": true,
-            "placeholder": "UUID du nœud worker"
+            "placeholder": "UUID du worker"
+          },
+          {
+            "id": "targetGroupId",
+            "type": "text",
+            "label": "Identifiant du groupe (facultatif)",
+            "description": "Le worker doit appartenir à ce groupe manuel ou automatique.",
+            "placeholder": "UUID du groupe"
+          },
+          {
+            "id": "requiredLabels",
+            "type": "text",
+            "label": "Étiquettes requises (facultatif)",
+            "description": "Toutes les conditions doivent correspondre. Syntaxe : gpu ou gpu=nvidia,region=eu.",
+            "placeholder": "gpu=nvidia,region=eu"
           }
         ]
       },
@@ -142,6 +155,10 @@
               {
                 "value": "node",
                 "label": "Un nœud précis"
+              },
+              {
+                "value": "selector",
+                "label": "Un groupe et/ou des étiquettes"
               }
             ]
           },
@@ -151,6 +168,20 @@
             "label": "Identifiant du nœud",
             "description": "Facultatif : remplace le nœud défini dans la configuration du plugin ou du flow. Le worker courant ne peut pas être sa propre cible.",
             "placeholder": "UUID du worker"
+          },
+          {
+            "id": "targetGroupId",
+            "type": "text",
+            "label": "Identifiant du groupe",
+            "description": "Le destinataire doit appartenir à ce groupe.",
+            "placeholder": "UUID du groupe"
+          },
+          {
+            "id": "requiredLabels",
+            "type": "text",
+            "label": "Étiquettes requises",
+            "description": "Toutes les conditions doivent correspondre : gpu=nvidia,region=eu.",
+            "placeholder": "gpu=nvidia,region=eu"
           }
         ]
       },
@@ -173,9 +204,13 @@
             "value": "eligible",
             "label": "Un autre worker éligible"
           },
-          {
-            "value": "node",
-            "label": "Un nœud précis"
+        {
+          "value": "node",
+          "label": "Un nœud précis"
+        },
+        {
+          "value": "selector",
+          "label": "Un groupe et/ou des étiquettes"
           }
         ]
       },
@@ -185,6 +220,20 @@
         "label": "Identifiant du nœud par défaut",
         "description": "Utilisé lorsque la destination est un nœud précis. Copiez son identifiant depuis sa fiche.",
         "placeholder": "UUID du worker"
+      },
+      {
+        "id": "targetGroupId",
+        "type": "text",
+        "label": "Identifiant du groupe par défaut",
+        "description": "Utilisé lorsque la destination est filtrée par groupe.",
+        "placeholder": "UUID du groupe"
+      },
+      {
+        "id": "requiredLabels",
+        "type": "text",
+        "label": "Étiquettes requises par défaut",
+        "description": "Toutes les étiquettes doivent correspondre.",
+        "placeholder": "gpu=nvidia,region=eu"
       }
     ]
   }
