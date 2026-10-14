@@ -16,7 +16,7 @@ public sealed class ToolCapabilityProbe(ProcessToolRunner processes,PluginProces
             Directory.CreateDirectory(options.DataDirectory);
             var list=new List<NodeToolCapability> {
                 new("plugin/base","1.0.0",["general"],["cpu"]),
-                new("plugin/nodes","1.0.0",["general"],[])
+                new("plugin/nodes","1.1.0",["general"],[])
             };
             foreach(var (id,names,args) in new (string,string[],string[])[] {
                 ("ffmpeg",["ffmpeg"],["-version"]),("ffprobe",["ffprobe"],["-version"]),

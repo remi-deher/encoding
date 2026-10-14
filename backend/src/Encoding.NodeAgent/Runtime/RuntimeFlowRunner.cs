@@ -10,15 +10,21 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
     public async Task RunAsync(RuntimeLease lease,RuntimeClient client,CancellationToken stoppingToken)
     {
         using var job=CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        using var leaseGate=new SemaphoreSlim(1,1);
         var revision=lease.Revision; var cancelled=false; var lost=false;
-        var directory=Path.Combine(options.DataDirectory,"executions",lease.ExecutionId.ToString("D")); Directory.CreateDirectory(directory);
+        var directory=Path.Combine(options.DataDirectory,"executions",lease.ExecutionId.ToString("D"),lease.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)); Directory.CreateDirectory(directory);
         async Task<RuntimeLeaseStatus> RenewAsync(CancellationToken ct)
         {
+            await leaseGate.WaitAsync(ct);
+            try
+            {
             using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
             var status=(await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch),timeout.Token))!;
             Volatile.Write(ref revision,status.Revision);
             if(status.CancelRequested) { cancelled=true; job.Cancel(); }
             return status;
+            }
+            finally { leaseGate.Release(); }
         }
         var renewal=Task.Run(async()=>
         {
@@ -36,17 +42,32 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             var extension=Path.GetExtension(lease.MediaPath); if(string.IsNullOrWhiteSpace(extension)) extension=".mkv";
             var original=Path.Combine(directory,"source"+extension);
-            await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha,original,job.Token);
             RuntimeContext context=lease.Checkpoint?.Context??new(sourceSha,extension,new Dictionary<string,JsonElement>(),null,null,[]);
             var variables=new Dictionary<string,JsonElement>(context.Variables);
             var next=lease.Checkpoint?.NextNodeId;
             if(lease.Checkpoint is null) next=lease.EntryNodeId;
             var terminal=lease.Checkpoint?.TerminalResult; var lastOutput=lease.Checkpoint?.OutputId;
             var current=Path.Combine(directory,"current"+context.Extension);
-            await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
+            var materialized=false;
+
+            async Task EnsureFilesAsync()
+            {
+                if(materialized) return;
+                await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha,original,job.Token);
+                await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
+                foreach(var variable in variables.Where(pair=>pair.Key.StartsWith("artifact.",StringComparison.Ordinal)))
+                {
+                    var sha=variable.Value.GetProperty("sha256").GetString()!;
+                    var name=variable.Value.GetProperty("name").GetString()!;
+                    var artifactDirectory=Path.Combine(directory,"artifacts",sha); Directory.CreateDirectory(artifactDirectory);
+                    await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sha,SafeMediaPaths.Resolve(artifactDirectory,Path.GetFileName(name)),job.Token);
+                }
+                materialized=true;
+            }
 
             async Task EnsureScanAsync()
             {
+                await EnsureFilesAsync();
                 if(context.BeforeMetadata is null)
                 {
                     if(await SafeMediaPaths.DigestAsync(original,job.Token)!=sourceSha) throw new IOException("La copie de référence a été altérée.");
@@ -90,9 +111,10 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 if(started.Completed is { } completed)
                 {
                     context=completed.Context; variables=new(context.Variables); next=completed.NextNodeId; terminal=completed.TerminalResult; lastOutput=completed.OutputId;
-                    current=Path.Combine(directory,"current"+context.Extension); await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token); continue;
+                    current=Path.Combine(directory,"current"+context.Extension); materialized=false; continue;
                 }
                 string? output="success"; terminal=null;
+                RuntimeHandoffSelector? handoff=null;
                 try
                 {
                     var id=node.Component.PluginId=="base"?node.Component.ComponentId:""; var c=node.Configuration;
@@ -113,11 +135,18 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     else if(id=="base-defer-processing") { await EnsureScanAsync(); output=null; terminal="deferred"; variables["runtime.deferMinutes"]=JsonSerializer.SerializeToElement(int.Parse(MediaActions.Number(c,"delayMinutes",2))); }
                     else if(id is "base-script" or "base-condition")
                     {
+                        await EnsureFilesAsync();
                         if(id=="base-condition") await EnsureScanAsync();
                         var result=await ScriptAsync(id,c,new { variables,metadata=context.CurrentMetadata,sourceMetadata=context.BeforeMetadata,currentFile=Path.GetFileName(current) },directory,job.Token);
                         output=result.TryGetProperty("outputId",out var selected)?selected.GetString():"success";
                         if(result.TryGetProperty("variables",out var changes)) foreach(var change in changes.EnumerateObject()) variables[change.Name]=change.Value.Clone();
                         if(result.TryGetProperty("candidate",out var candidate)) { await EnsureScanAsync(); await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate.GetString()!),[]),node.Id); }
+                    }
+                    else if(RuntimeHandoffPolicy.IsHandoff(node))
+                    {
+                        handoff=RuntimeHandoffPolicy.Resolve(node,lease.PluginConfigurations?.GetValueOrDefault("nodes"));
+                        if(handoff.Mode=="node" && handoff.TargetNodeId==client.NodeId)
+                            throw new IOException("Le relais doit sélectionner un autre worker.");
                     }
                     else if(node.Component.PluginId=="nodes"
                         && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability"))
@@ -175,7 +204,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             if(MediaActions.Flag(c,"refreshMetadata")) context=context with { CurrentMetadata=await scanner.ScanAsync(current,job.Token) };
                         }
                     }
-                    if(await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256) {
+                    if(materialized && await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256) {
                         await EnsureScanAsync(); await ApplyOutcomeAsync(new(current,[]),node.Id);
                     }
                 }
@@ -188,9 +217,30 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 }
                 context=context with { Variables=new Dictionary<string,JsonElement>(variables) };
                 next=lease.Flow.Connections.SingleOrDefault(e=>e.SourceNodeId==node.Id && e.SourceOutputId==output)?.TargetNodeId;
-                var checkpoint=new RuntimeCheckpoint(node.Id,started.InvocationId,output,next,context,terminal);
+                var checkpoint=new RuntimeCheckpoint(node.Id,started.InvocationId,output,next,context,terminal,handoff);
                 var eventId=Guid.NewGuid();
-                await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/steps/complete",new CompleteRuntimeStep(lease.Epoch,eventId,Volatile.Read(ref revision),checkpoint),job.Token);
+                await leaseGate.WaitAsync(job.Token);
+                try
+                {
+                    var request=new CompleteRuntimeStep(lease.Epoch,eventId,Volatile.Read(ref revision),checkpoint);
+                    for(var retry=0;;retry++)
+                    {
+                        try
+                        {
+                            await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/steps/complete",request,job.Token);
+                            break;
+                        }
+                        catch(HttpRequestException exception) when(handoff is not null && retry<2
+                            && (exception.StatusCode is null || (int)exception.StatusCode>=500))
+                        { await Task.Delay(TimeSpan.FromSeconds(1),job.Token); }
+                    }
+                    if(handoff is not null)
+                    {
+                        logger.LogInformation("Exécution {ExecutionId} cédée après le bloc {Node}.",lease.ExecutionId,node.Id);
+                        job.Cancel(); return;
+                    }
+                }
+                finally { leaseGate.Release(); }
                 await RenewAsync(job.Token); lastOutput=output;
             }
             await EnsureScanAsync(); context=context with { Variables=variables };
@@ -212,6 +262,12 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         catch(OperationCanceledException) when(job.IsCancellationRequested)
         {
             if(cancelled && !lost) await FailureAsync("cancelled","Annulation confirmée après arrêt des processus.");
+        }
+        catch(HttpRequestException exception) when(exception.StatusCode is null || exception.StatusCode==System.Net.HttpStatusCode.Conflict
+            || (int)exception.StatusCode>=500)
+        {
+            lost=true;
+            logger.LogWarning("Exécution {ExecutionId} interrompue pendant un échange ; reprise après expiration du bail.",lease.ExecutionId);
         }
         catch(Exception exception)
         {
