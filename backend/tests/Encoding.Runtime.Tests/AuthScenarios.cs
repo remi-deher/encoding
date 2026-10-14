@@ -294,7 +294,7 @@ internal static class AuthScenarios
             "GET /api/v1/auth/status",
             "GET /api/v1/cluster",
             "GET /health/live",
-            "GET /health/ready",
+            "* /health/ready",
             "POST /api/v1/auth/login",
             "POST /api/v1/auth/setup",
             "POST /api/v1/nodes/enroll",
