@@ -219,27 +219,136 @@ export class NodeCatalogPageComponent {
     ),
     { initialValue: null },
   );
-  protected readonly summaryFields = computed<readonly DetailField[]>(() => {
+  protected readonly generalCards = computed<readonly DetailCard[]>(() => {
     const node = this.rawNode();
-    const activity = this.nodeActivity();
     if (!node) return [];
+
+    const activity = this.nodeActivity();
+    const inventory = node.inventory;
+    const libraries = this.nodeLibraries().filter(
+      (library) => library.isEnabled && library.mode !== 'unsupported',
+    );
+    const directLibraries = libraries.filter((library) => library.mode === 'direct').length;
+    const transferLibraries = libraries.filter((library) => library.mode === 'transfer').length;
+    const isWorker = node.roles.includes('worker');
+    const roleTags = node.roles.map((role) => ({
+      label: NODE_ROLE_LABELS[role],
+      tone: 'accent' as const,
+    }));
+    const labelTags = Object.entries(node.labels ?? {})
+      .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      .map(([key, value]) => ({ label: `${key}: ${value}` }));
+
     return [
-      { label: 'Identifiant du nœud', value: node.id },
-      { label: 'Présence', value: node.status === 'online' ? 'En ligne' : 'Hors ligne' },
-      { label: 'Rôles', value: node.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · ') },
       {
-        label: 'Traitements actifs / limite',
-        value: node.roles.includes('worker')
-          ? (activity ? activity.active : '—') +
-            ' / ' +
-            (this.nodeProcessingState()?.effectiveMaxConcurrentTasks ?? node.maxConcurrentTasks)
-          : 'Fonctions serveur',
+        id: 'node-general-identity',
+        title: 'Identité et rôles',
+        subtitle: 'Membre du cluster',
+        icon: 'server',
+        status: {
+          label: node.status === 'online' ? 'En ligne' : 'Hors ligne',
+          tone: node.status === 'online' ? 'success' : 'warning',
+        },
+        tags: [...roleTags, ...labelTags],
+        sections: [
+          {
+            title: 'Identité',
+            items: [
+              { label: 'Nom affiché', description: node.displayName?.trim() || node.name },
+              { label: 'Identifiant', description: node.id },
+            ],
+          },
+        ],
       },
       {
-        label: 'Bibliothèques accessibles',
-        value: this.nodeLibraries().filter(
-          (library) => library.isEnabled && library.mode !== 'unsupported',
-        ).length,
+        id: 'node-general-activity',
+        title: 'Disponibilité et activité',
+        subtitle: `Dernier signal · ${new Date(node.lastSeenAt).toLocaleString('fr-FR')}`,
+        icon: 'activity',
+        status: {
+          label: node.status === 'online' ? 'Connecté' : 'Signal absent',
+          tone: node.status === 'online' ? 'success' : 'warning',
+        },
+        tags: [],
+        sections: [
+          {
+            title: 'Traitement',
+            items: [
+              {
+                label: 'Tâches actives / limite',
+                description: isWorker
+                  ? `${activity?.active ?? '—'} / ${this.nodeProcessingState()?.effectiveMaxConcurrentTasks ?? node.maxConcurrentTasks}`
+                  : 'Fonctions serveur',
+              },
+              { label: 'Réussies', description: activity?.succeeded.toString() ?? 'Indisponible' },
+              { label: 'Échecs', description: activity?.failed.toString() ?? 'Indisponible' },
+              {
+                label: 'Annulations',
+                description: activity?.cancelled.toString() ?? 'Indisponible',
+              },
+              {
+                label: 'Tâches alimentées par ce nœud',
+                description: activity?.sourceTasks.toString() ?? 'Indisponible',
+              },
+              {
+                label: 'Dernière activité',
+                description: activity
+                  ? activity.lastActivity
+                    ? new Date(activity.lastActivity).toLocaleString('fr-FR')
+                    : 'Aucune activité enregistrée'
+                  : 'Indisponible',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'node-general-system',
+        title: 'Système et ressources',
+        subtitle: 'Inventaire déclaré par le worker',
+        icon: 'system',
+        status: {
+          label: inventory ? 'Inventaire disponible' : 'Non déclaré',
+          tone: inventory ? 'neutral' : 'warning',
+        },
+        tags: [],
+        sections: [
+          {
+            title: 'Configuration détectée',
+            items: [
+              { label: 'Système', description: inventory?.operatingSystem ?? 'Non déclaré' },
+              { label: 'Architecture', description: inventory?.architecture ?? 'Non déclarée' },
+              {
+                label: 'Processeurs disponibles',
+                description: inventory?.processorCount.toString() ?? 'Non déclarés',
+              },
+              {
+                label: 'Mémoire totale disponible',
+                description: inventory ? `${inventory.memoryMb} Mo` : 'Non déclarée',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'node-general-libraries',
+        title: 'Accès aux bibliothèques',
+        subtitle: 'Droits configurés pour ce nœud',
+        icon: 'library',
+        status: {
+          label: `${libraries.length} autorisée(s)`,
+          tone: libraries.length ? 'success' : 'warning',
+        },
+        tags: [],
+        sections: [
+          {
+            title: 'Modes d’accès',
+            items: [
+              { label: 'Accès direct', description: `${directLibraries} bibliothèque(s)` },
+              { label: 'Transfert WebDAV', description: `${transferLibraries} bibliothèque(s)` },
+            ],
+          },
+        ],
       },
     ];
   });
@@ -458,68 +567,6 @@ export class NodeCatalogPageComponent {
       this.notifications.show('Les étiquettes ou le nom du nœud sont invalides.');
     }
   }
-  protected readonly overviewFields = computed<readonly DetailField[]>(() => {
-    const node = this.rawNode();
-    const activity = this.nodeActivity();
-    if (!node) return [];
-    return [
-      { section: 'Identité et connexion', label: 'Identifiant', value: node.id },
-      ...(node.inventory
-        ? [
-            {
-              section: 'Inventaire déclaré',
-              label: 'Système',
-              value: node.inventory.operatingSystem,
-            },
-            {
-              section: 'Inventaire déclaré',
-              label: 'Architecture',
-              value: node.inventory.architecture,
-            },
-            {
-              section: 'Inventaire déclaré',
-              label: 'Processeurs disponibles',
-              value: node.inventory.processorCount,
-            },
-            {
-              section: 'Inventaire déclaré',
-              label: 'Mémoire totale disponible',
-              value: `${node.inventory.memoryMb} Mo`,
-            },
-          ]
-        : []),
-      {
-        section: 'Identité et connexion',
-        label: 'Dernier signal reçu',
-        value: new Date(node.lastSeenAt).toLocaleString('fr-FR'),
-      },
-      {
-        section: 'Activité du nœud',
-        label: 'Traitements réussis',
-        value: activity?.succeeded ?? 'Indisponible',
-      },
-      { section: 'Activité du nœud', label: 'Échecs', value: activity?.failed ?? 'Indisponible' },
-      {
-        section: 'Activité du nœud',
-        label: 'Annulations',
-        value: activity?.cancelled ?? 'Indisponible',
-      },
-      {
-        section: 'Activité du nœud',
-        label: 'Tâches alimentées par ce nœud',
-        value: activity?.sourceTasks ?? 'Indisponible',
-      },
-      {
-        section: 'Activité du nœud',
-        label: 'Dernière activité',
-        value: activity?.lastActivity
-          ? new Date(activity.lastActivity).toLocaleString('fr-FR')
-          : activity
-            ? 'Aucune activité enregistrée'
-            : 'Indisponible',
-      },
-    ];
-  });
   protected readonly capabilityFields = computed<readonly DetailField[]>(() => {
     const capabilities = this.rawNode()?.capabilities ?? [];
     const tools = capabilities.filter((capability) => !capability.toolId.startsWith('plugin/'));

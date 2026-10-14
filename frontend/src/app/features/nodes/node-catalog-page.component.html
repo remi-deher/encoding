@@ -43,8 +43,11 @@
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group class="node-detail-tabs" aria-label="Sections du nœud">
       <mat-tab label="Général">
-        <app-detail-field-list [fields]="summaryFields()" layout="cards" />
-        <app-detail-field-list [fields]="overviewFields()" />
+        <app-detail-card-grid
+          [cards]="generalCards()"
+          ariaLabel="Informations générales du nœud"
+          emptyMessage="Aucune information générale disponible pour ce nœud."
+        />
       </mat-tab>
       @if (rawNode()?.roles?.includes('worker')) {
         <mat-tab label="Traitement">

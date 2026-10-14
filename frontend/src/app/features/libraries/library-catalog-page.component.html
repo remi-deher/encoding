@@ -59,7 +59,7 @@
         emptyMessage="Aucun fichier détecté. Attribuez un flow puis lancez la découverte."
       />
 
-      <h3>Exécutions récentes</h3>
+      <h3>Historique des exécutions</h3>
       @if (executionTrackingState().status === 'error') {
         <p role="status">Actualisation des exécutions impossible.</p>
       }
@@ -67,16 +67,18 @@
         [columns]="libraryExecutionColumns"
         [rows]="libraryExecutionRows()"
         [rowActions]="libraryExecutionActions"
+        [expandedRowId]="selectedProcessingExecutionId()"
         (rowAction)="onProcessingExecutionAction($event)"
         emptyMessage="Aucune exécution récente pour cette bibliothèque."
-      />
-      @if (selectedProcessingExecutionId(); as executionId) {
-        <app-execution-pipeline-logs
-          [executionId]="executionId"
-          [steps]="processingPipelineState().steps"
-          [feedback]="processingPipelineState().message"
-        />
-      }
+      >
+        <ng-template dataTableRowDetail let-execution>
+          <app-execution-pipeline-logs
+            [executionId]="execution['id'].toString()"
+            [steps]="processingPipelineState().steps"
+            [feedback]="processingPipelineState().message"
+          />
+        </ng-template>
+      </app-data-table>
 
       <section class="library-access-summary" aria-labelledby="library-access-heading">
         <div>
