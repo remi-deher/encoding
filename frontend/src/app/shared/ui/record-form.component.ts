@@ -124,7 +124,9 @@ export interface RecordFormData {
     }
     form {
       display: grid;
-      gap: 8px;
+      gap: 16px;
+      /* Réserve la place du libellé flottant du premier champ outline, que les conteneurs à défilement (modale) rogneraient. */
+      padding-top: 8px;
     }
     mat-form-field {
       width: 100%;
