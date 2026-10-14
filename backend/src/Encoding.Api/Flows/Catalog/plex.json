@@ -21,6 +21,14 @@
         "type": "secret",
         "label": "Jeton Plex",
         "required": true
+      },
+      {
+        "id": "pathMappings",
+        "type": "text",
+        "label": "Correspondance des chemins",
+        "description": "Une ligne par bibliothèque Encoding : identifiant-bibliothèque=/chemin/vu/par/Plex. Permet aux composants de retrouver le fichier traité ; sans elle, ils agissent sur l’ensemble du service.",
+        "multiline": true,
+        "placeholder": "00000000-0000-0000-0000-000000000000=/media"
       }
     ]
   },
@@ -29,7 +37,7 @@
       "id": "plex-refresh-library",
       "version": "1.0.0",
       "name": "Actualiser la bibliothèque Plex",
-      "description": "Demande à Plex d’actualiser les éléments traités.",
+      "description": "Demande à Plex d’actualiser le dossier du fichier traité (ou les bibliothèques).",
       "kind": "action",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -55,7 +63,7 @@
             "type": "number",
             "label": "ID de bibliothèque",
             "required": false,
-            "description": "Laisser vide pour actualiser toutes les bibliothèques.",
+            "description": "Laisser vide pour déduire la bibliothèque du fichier traité (ou actualiser toutes les bibliothèques sans correspondance de chemins).",
             "min": 1,
             "step": 1
           }
@@ -69,7 +77,7 @@
       "id": "plex-wait-library-scan",
       "version": "1.0.0",
       "name": "Attendre la fin du scan Plex",
-      "description": "Attend la fin du scan d’une bibliothèque avant de poursuivre.",
+      "description": "Attend la fin du scan de la bibliothèque qui contient le fichier traité (ou de celle indiquée).",
       "kind": "action",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -94,9 +102,10 @@
             "id": "sectionId",
             "type": "number",
             "label": "ID de bibliothèque",
-            "required": true,
+            "required": false,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "description": "Laisser vide pour déduire la bibliothèque du fichier traité (ou attendre toutes les bibliothèques sans correspondance de chemins)."
           }
         ]
       },
@@ -108,7 +117,7 @@
       "id": "plex-check-media-indexed",
       "version": "1.0.0",
       "name": "Vérifier le média dans Plex",
-      "description": "Vérifie si Plex a indexé l’élément ciblé.",
+      "description": "Vérifie si Plex a indexé l’élément ou le fichier traité.",
       "kind": "condition",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -138,8 +147,9 @@
             "id": "ratingKey",
             "type": "text",
             "label": "Identifiant Plex (ratingKey)",
-            "required": true,
-            "placeholder": "Ex. 12345"
+            "required": false,
+            "placeholder": "Ex. 12345",
+            "description": "Laisser vide pour vérifier le fichier traité."
           }
         ]
       },

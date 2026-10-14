@@ -52,7 +52,13 @@ internal static class ProcessTests
             {
                 ["Runtime:Plugins:0:Id"] = "sonarr", ["Runtime:Plugins:0:Version"] = "1.0.0", ["Runtime:Plugins:0:Executable"] = python,
                 ["Runtime:Plugins:0:Arguments:0"] = "-B", ["Runtime:Plugins:0:Arguments:1"] = Path.Combine(plugins, "arr", "plugin.py"), ["Runtime:Plugins:0:Arguments:2"] = "sonarr",
-                ["Runtime:Plugins:0:ReadOnlyPaths:0"] = plugins, ["Runtime:Plugins:0:ReadOnlyPaths:1"] = Path.Combine(RepositoryRoot(), "backend", "src", "Encoding.Api", "Flows", "Catalog")
+                ["Runtime:Plugins:0:ReadOnlyPaths:0"] = plugins, ["Runtime:Plugins:0:ReadOnlyPaths:1"] = Path.Combine(RepositoryRoot(), "backend", "src", "Encoding.Api", "Flows", "Catalog"),
+                ["Runtime:Plugins:1:Id"] = "plex", ["Runtime:Plugins:1:Version"] = "1.0.0", ["Runtime:Plugins:1:Executable"] = python,
+                ["Runtime:Plugins:1:Arguments:0"] = "-B", ["Runtime:Plugins:1:Arguments:1"] = Path.Combine(plugins, "plex", "plugin.py"),
+                ["Runtime:Plugins:1:ReadOnlyPaths:0"] = plugins, ["Runtime:Plugins:1:ReadOnlyPaths:1"] = Path.Combine(RepositoryRoot(), "backend", "src", "Encoding.Api", "Flows", "Catalog"),
+                ["Runtime:Plugins:2:Id"] = "jellyfin", ["Runtime:Plugins:2:Version"] = "1.0.0", ["Runtime:Plugins:2:Executable"] = python,
+                ["Runtime:Plugins:2:Arguments:0"] = "-B", ["Runtime:Plugins:2:Arguments:1"] = Path.Combine(plugins, "jellyfin", "plugin.py"),
+                ["Runtime:Plugins:2:ReadOnlyPaths:0"] = plugins, ["Runtime:Plugins:2:ReadOnlyPaths:1"] = Path.Combine(RepositoryRoot(), "backend", "src", "Encoding.Api", "Flows", "Catalog")
             }).Build();
             var options = new NodeAgentOptions("plugin-test", [NodeRole.Worker], 1, Path.Combine(data, "node"), null, false, TimeSpan.FromSeconds(10), 8081, []);
             var host = new PluginProcessHost(new ProcessToolRunner(), configuration, options);
@@ -65,8 +71,14 @@ internal static class ProcessTests
                 new Dictionary<string, JsonElement> { ["baseUrl"] = J(sonarr.Urls.Single()), ["apiKey"] = J("host-key"), ["pathMappings"] = J($"{library}=/tv") });
             try
             {
-                var described = await host.DescribeAsync(host.Installed.Single(), CancellationToken.None);
+                var described = await host.DescribeAsync(host.Installed.Single(item => item.Id == "sonarr"), CancellationToken.None);
                 Check(described.Id == "sonarr" && described.Version == manifest.Version && described.Components.Count == manifest.Components.Count, "The worker handshake accepts the plugin and its manifest matches the server catalog.");
+                foreach (var id in new[] { "plex", "jellyfin" })
+                {
+                    var expected = registry.Plugins.Single(item => item.Id == id);
+                    var actual = await host.DescribeAsync(host.Installed.Single(item => item.Id == id), CancellationToken.None);
+                    Check(actual.Id == id && actual.Version == expected.Version && actual.Components.Select(c => c.Id).SequenceEqual(expected.Components.Select(c => c.Id)), $"The worker handshake accepts the {id} plugin and matches the server catalog.");
+                }
                 var response = await host.ExecuteAsync(invocation, workspace, CancellationToken.None);
                 Check(response.OutputId == "success" && response.InvocationId == invocation.InvocationId && response.LeaseEpoch == 4, "The worker host validates the plugin answer.");
                 Check(commands.Count == 1 && commands[0].Key == "host-key" && commands[0].Body.Contains("RescanSeries") && commands[0].Body.Contains("7"), "The sandboxed plugin rescanned the series that contains the file.");

@@ -17,6 +17,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg mkvtooln
 # Le manifeste copié est le JSON que le serveur charge : une seule définition des composants.
 COPY plugins/sdk/encoding_plugin_sdk.py plugins/arr/plugin.py /opt/encoding/plugins/arr/
 COPY src/Encoding.Api/Flows/Catalog/sonarr.json src/Encoding.Api/Flows/Catalog/radarr.json /opt/encoding/plugins/arr/manifests/
+COPY plugins/sdk/encoding_plugin_sdk.py plugins/plex/plugin.py /opt/encoding/plugins/plex/
+COPY src/Encoding.Api/Flows/Catalog/plex.json /opt/encoding/plugins/plex/manifests/
+COPY plugins/sdk/encoding_plugin_sdk.py plugins/jellyfin/plugin.py /opt/encoding/plugins/jellyfin/
+COPY src/Encoding.Api/Flows/Catalog/jellyfin.json /opt/encoding/plugins/jellyfin/manifests/
 WORKDIR /app
 COPY --from=build /app/publish .
 EXPOSE 8081

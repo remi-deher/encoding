@@ -3,6 +3,7 @@
 Exécution : python3 -m unittest discover -s plugins/tests -v   (depuis la racine du dépôt)
 Chaque plugin est lancé comme processus réel, exactement comme le fait le worker.
 """
+import datetime
 import io
 import json
 import os
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import threading
 import unittest
+import urllib.parse
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -19,9 +21,11 @@ sys.path.insert(0, os.path.join(PLUGINS, "sdk"))
 sys.path.insert(0, os.path.join(PLUGINS, "arr"))
 
 import encoding_plugin_sdk as sdk  # noqa: E402
-import plugin as arr  # noqa: E402
+import plugin as arr  # noqa: E402,F401
 
 ARR = os.path.join(PLUGINS, "arr", "plugin.py")
+PLEX = os.path.join(PLUGINS, "plex", "plugin.py")
+JELLYFIN = os.path.join(PLUGINS, "jellyfin", "plugin.py")
 EXAMPLE = os.path.join(PLUGINS, "example", "plugin.py")
 LIBRARY = str(uuid.uuid4())
 
@@ -60,7 +64,7 @@ class FakeArr:
             def _answer(self, method):
                 length = int(self.headers.get("Content-Length") or 0)
                 body = self.rfile.read(length).decode() if length else ""
-                fake.requests.append({"method": method, "path": self.path, "body": body, "key": self.headers.get("X-Api-Key")})
+                fake.requests.append({"method": method, "path": self.path, "body": body, "key": self.headers.get("X-Api-Key") or self.headers.get("X-Plex-Token") or self.headers.get("X-Emby-Token")})
                 status, payload = fake.routes.get((method, self.path), (404, None))
                 data = b"" if payload is None else json.dumps(payload).encode()
                 self.send_response(status)
@@ -184,16 +188,16 @@ class PathMappingTests(unittest.TestCase):
         return text
 
     def test_parse_and_map_to_remote(self):
-        mappings = arr.parse_mappings(self.fill(self.vectors["mappings"]))
+        mappings = sdk.parse_mappings(self.fill(self.vectors["mappings"]))
         self.assertEqual(mappings, {self.libraries[name]: root for name, root in self.vectors["roots"].items()})
         for case in self.vectors["toRemote"]:
-            self.assertEqual(arr.to_remote(mappings, self.libraries[case["library"]], case["relative"]), case["remote"])
-        self.assertIsNone(arr.to_remote(mappings, str(uuid.uuid4()), "a.mkv"))
+            self.assertEqual(sdk.to_remote(mappings, self.libraries[case["library"]], case["relative"]), case["remote"])
+        self.assertIsNone(sdk.to_remote(mappings, str(uuid.uuid4()), "a.mkv"))
 
     def test_invalid_mappings_are_refused(self):
         for text in self.vectors["invalid"]:
             with self.assertRaises(ValueError, msg=text):
-                arr.parse_mappings(self.fill(text))
+                sdk.parse_mappings(self.fill(text))
 
 
 class SonarrTests(unittest.TestCase):
@@ -302,6 +306,188 @@ class RadarrTests(unittest.TestCase):
     def test_check_matches_the_exact_known_file(self):
         self.assertEqual(self.run_component("radarr-check-movie-indexed", "Film (2020)/Film.mkv")["outputId"], "found")
         self.assertEqual(self.run_component("radarr-check-movie-indexed", "Autre/Autre.mkv")["outputId"], "notFound")
+
+
+PLEX_SECTIONS = {"MediaContainer": {"Directory": [
+    {"key": "1", "type": "movie", "Location": [{"path": "/movies"}]},
+    {"key": "2", "type": "show", "Location": [{"path": "/tv"}, {"path": "/tv/Anime"}]},
+]}}
+
+
+class PlexTests(unittest.TestCase):
+    def setUp(self):
+        self.routes = {("GET", "/library/sections"): (200, PLEX_SECTIONS)}
+        self.fake = FakeArr(self.routes)
+        self.addCleanup(self.fake.close)
+        self.manifest = sdk.load_manifest(PLEX, "plex")
+
+    def run_component(self, component, config=None, media="Show/Season 1/e1.mkv", mappings=True, deadline=None):
+        plugin_config = {"baseUrl": self.fake.url, "apiKey": "plex-secret-token"}
+        if mappings:
+            plugin_config["pathMappings"] = "%s=/tv" % LIBRARY
+        inv = invocation(self.manifest, component, config, plugin_config, LIBRARY, media)
+        if deadline:
+            inv["deadline"] = deadline
+        code, out, err = execute(PLEX, [], inv)
+        self.assertEqual(code, 0, err)
+        return json.loads(out)
+
+    def paths(self):
+        return [r["path"] for r in self.fake.requests]
+
+    def test_describe_is_the_served_manifest(self):
+        code, out, _ = run_process(PLEX, [], '{"type":"describe","contractVersion":1}\n')
+        self.assertEqual((code, json.loads(out)), (0, self.manifest))
+
+    def test_refresh_limits_the_scan_to_the_folder_of_the_file(self):
+        self.routes[("GET", "/library/sections/2/refresh?path=%2Ftv%2FShow%2FSeason+1")] = (200, None)
+        result = self.run_component("plex-refresh-library")
+        self.assertEqual(result["outputId"], "success")
+        self.assertIn("/library/sections/2/refresh?path=%2Ftv%2FShow%2FSeason+1", self.paths())
+        self.assertTrue(all(r["key"] == "plex-secret-token" for r in self.fake.requests))
+        self.assertTrue(all("plex-secret-token" not in p for p in self.paths()), "jeton jamais dans l'URL")
+
+    def test_refresh_without_mapping_refreshes_every_section_or_the_given_one(self):
+        self.run_component("plex-refresh-library", mappings=False)
+        self.assertEqual([p for p in self.paths() if "refresh" in p], ["/library/sections/1/refresh", "/library/sections/2/refresh"])
+        self.fake.requests.clear()
+        self.run_component("plex-refresh-library", {"sectionId": 1}, mappings=False)
+        self.assertEqual(self.paths(), ["/library/sections/1/refresh"])
+
+    def test_file_outside_every_section_is_a_business_error(self):
+        # racine /movies2 : préfixe voisin de /movies, refusé (frontière de dossier)
+        inv = invocation(self.manifest, "plex-refresh-library", None,
+                         {"baseUrl": self.fake.url, "apiKey": "k", "pathMappings": "%s=/movies2" % LIBRARY}, LIBRARY, "a.mkv")
+        code, out, _ = execute(PLEX, [], inv)
+        self.assertEqual((code, json.loads(out)["outputId"]), (0, "error"))
+        self.assertEqual([p for p in self.paths() if "refresh" in p], [])
+
+    def test_wait_polls_until_the_section_is_idle(self):
+        busy = {"MediaContainer": {"Directory": [{"key": "2", "type": "show", "refreshing": True, "Location": [{"path": "/tv"}]}]}}
+        calls = {"n": 0}
+        original = self.fake.routes
+
+        class Sequence(dict):
+            def get(inner, key, default=None):  # noqa: N805
+                if key == ("GET", "/library/sections"):
+                    calls["n"] += 1
+                    return (200, busy) if calls["n"] < 3 else (200, PLEX_SECTIONS)
+                return original.get(key, default)
+
+        self.fake.routes = Sequence()
+        result = self.run_component("plex-wait-library-scan")
+        self.assertEqual(result["outputId"], "success")
+        self.assertGreaterEqual(calls["n"], 3)
+
+    def test_wait_gives_up_before_the_invocation_deadline(self):
+        busy = {"MediaContainer": {"Directory": [{"key": "2", "type": "show", "refreshing": True, "Location": [{"path": "/tv"}]}]}}
+        self.routes[("GET", "/library/sections")] = (200, busy)
+        soon = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=6)).isoformat()
+        result = self.run_component("plex-wait-library-scan", deadline=soon)
+        self.assertEqual(result["outputId"], "error")
+
+    def test_check_by_rating_key_and_by_file(self):
+        self.routes[("GET", "/library/metadata/10")] = (200, {})
+        self.assertEqual(self.run_component("plex-check-media-indexed", {"ratingKey": "10"})["outputId"], "found")
+        self.assertEqual(self.run_component("plex-check-media-indexed", {"ratingKey": "11"})["outputId"], "notFound")
+        listing = {"MediaContainer": {"Metadata": [{"Media": [{"Part": [{"file": "/tv/Show/Season 1/e1.mkv"}]}]}]}}
+        for path in self.paths_for_check():
+            self.routes[("GET", path)] = (200, listing)
+        self.assertEqual(self.run_component("plex-check-media-indexed")["outputId"], "found")
+        self.assertEqual(self.run_component("plex-check-media-indexed", media="Show/Season 1/e2.mkv")["outputId"], "notFound",
+                         "un filtre ignoré par Plex ne doit pas valoir « trouvé »")
+
+    @staticmethod
+    def paths_for_check():
+        for name in ("Show/Season 1/e1.mkv", "Show/Season 1/e2.mkv"):
+            query = urllib.parse.urlencode({"file": "/tv/" + name, "X-Plex-Container-Start": 0, "X-Plex-Container-Size": 50, "type": 4})
+            yield "/library/sections/2/all?" + query
+
+    def test_infrastructure_failures_exit_without_output_or_key(self):
+        for status in (401, 500, 302):
+            fake = FakeArr({("GET", "/library/sections"): (status, None)})
+            self.addCleanup(fake.close)
+            inv = invocation(self.manifest, "plex-refresh-library", None,
+                             {"baseUrl": fake.url, "apiKey": "plex-secret-token", "pathMappings": "%s=/tv" % LIBRARY}, LIBRARY, "a.mkv")
+            code, out, err = execute(PLEX, [], inv)
+            self.assertEqual((code, out), (1, ""), status)
+            self.assertNotIn("plex-secret-token", err)
+
+
+class JellyfinTests(unittest.TestCase):
+    ITEM = "0a1b2c3d4e5f60718293a4b5c6d7e8f9"
+
+    def setUp(self):
+        self.fake = FakeArr({})
+        self.addCleanup(self.fake.close)
+        self.manifest = sdk.load_manifest(JELLYFIN, "jellyfin")
+
+    def route(self, method, path, status=204, payload=None):
+        self.fake.routes[(method, path)] = (status, payload)
+
+    def run_component(self, component, config=None, media="Show/Season 1/e1.mkv", mappings=True):
+        plugin_config = {"baseUrl": self.fake.url, "apiKey": "jf-secret-key"}
+        if mappings:
+            plugin_config["pathMappings"] = "%s=/media/tv" % LIBRARY
+        code, out, err = execute(JELLYFIN, [], invocation(self.manifest, component, config, plugin_config, LIBRARY, media))
+        self.assertEqual(code, 0, err)
+        return json.loads(out)
+
+    def items_path(self):
+        query = urllib.parse.urlencode({"Recursive": "true", "Path": "/media/tv/Show/Season 1/e1.mkv", "Fields": "Path",
+                                        "IncludeItemTypes": "Movie,Episode,Video,Audio"})
+        return "/Items?" + query
+
+    def test_describe_is_the_served_manifest(self):
+        code, out, _ = run_process(JELLYFIN, [], '{"type":"describe","contractVersion":1}\n')
+        self.assertEqual((code, json.loads(out)), (0, self.manifest))
+
+    def test_refresh_item_by_file_resolves_the_exact_path(self):
+        listing = {"Items": [{"Id": self.ITEM, "Path": "/media/tv/Show/Season 1/e1.mkv"}, {"Id": "other", "Path": "/media/tv/Show/Season 1/e1.mkv.bak"}]}
+        self.route("GET", self.items_path(), 200, listing)
+        refresh = "/Items/%s/Refresh?Recursive=false&MetadataRefreshMode=FullRefresh&ImageRefreshMode=FullRefresh&ReplaceAllMetadata=false" % self.ITEM
+        self.route("POST", refresh)
+        self.assertEqual(self.run_component("jellyfin-refresh-item")["outputId"], "success")
+        self.assertIn(("POST", refresh), [(r["method"], r["path"]) for r in self.fake.requests])
+        self.assertTrue(all(r["key"] == "jf-secret-key" for r in self.fake.requests))
+        self.assertTrue(all("jf-secret-key" not in r["path"] for r in self.fake.requests))
+
+    def test_refresh_item_unknown_file_is_a_business_error(self):
+        self.route("GET", self.items_path(), 200, {"Items": []})
+        self.assertEqual(self.run_component("jellyfin-refresh-item")["outputId"], "error")
+        self.assertEqual([r for r in self.fake.requests if r["method"] == "POST"], [])
+
+    def test_refresh_item_with_explicit_id_needs_no_mapping(self):
+        refresh = "/Items/abc/Refresh?Recursive=false&MetadataRefreshMode=FullRefresh&ImageRefreshMode=FullRefresh&ReplaceAllMetadata=false"
+        self.route("POST", refresh)
+        self.assertEqual(self.run_component("jellyfin-refresh-item", {"itemId": "abc"}, mappings=False)["outputId"], "success")
+
+    def test_refresh_library_notifies_the_file_or_rescans_everything(self):
+        self.route("POST", "/Library/Media/Updated")
+        self.assertEqual(self.run_component("jellyfin-refresh-library")["outputId"], "success")
+        self.assertEqual(self.fake.commands(), [{"Updates": [{"Path": "/media/tv/Show/Season 1/e1.mkv", "UpdateType": "Modified"}]}])
+        self.route("POST", "/Library/Refresh")
+        self.run_component("jellyfin-refresh-library", mappings=False)
+        self.assertEqual(self.fake.requests[-1]["path"], "/Library/Refresh")
+
+    def test_check_by_id_and_by_file(self):
+        self.route("GET", "/Items?ids=" + self.ITEM, 200, {"Items": [{"Id": self.ITEM}]})
+        self.route("GET", "/Items?ids=missing", 200, {"Items": []})
+        self.assertEqual(self.run_component("jellyfin-check-item-indexed", {"itemId": self.ITEM})["outputId"], "found")
+        self.assertEqual(self.run_component("jellyfin-check-item-indexed", {"itemId": "missing"})["outputId"], "notFound")
+        self.route("GET", self.items_path(), 200, {"Items": [{"Id": self.ITEM, "Path": "/media/tv/Show/Season 1/e1.mkv"}]})
+        self.assertEqual(self.run_component("jellyfin-check-item-indexed")["outputId"], "found")
+        self.route("GET", self.items_path(), 200, {"Items": [{"Id": "x", "Path": "/media/tv/autre.mkv"}]})
+        self.assertEqual(self.run_component("jellyfin-check-item-indexed")["outputId"], "notFound",
+                         "un filtre ignoré par Jellyfin ne doit pas valoir « trouvé »")
+
+    def test_infrastructure_failures_exit_without_output_or_key(self):
+        for status in (401, 500, 302):
+            self.fake.routes = {("POST", "/Library/Refresh"): (status, None)}
+            code, out, err = execute(JELLYFIN, [], invocation(self.manifest, "jellyfin-refresh-library", None,
+                                     {"baseUrl": self.fake.url, "apiKey": "jf-secret-key"}, LIBRARY, "a.mkv"))
+            self.assertEqual((code, out), (1, ""), status)
+            self.assertNotIn("jf-secret-key", err)
 
 
 if __name__ == "__main__":

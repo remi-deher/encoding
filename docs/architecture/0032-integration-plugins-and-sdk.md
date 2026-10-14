@@ -1,4 +1,4 @@
-# 0032 — Plugins d’intégration Sonarr/Radarr, déclencheur d’import et SDK
+# 0032 — Plugins d’intégration (Sonarr, Radarr, Plex, Jellyfin), déclencheur d’import et SDK
 
 ## Décision
 
@@ -32,14 +32,23 @@ Python 3 de la bibliothèque standard fonctionne dans le bac à sable (lecture d
 - Résultat métier attendu (bibliothèque sans correspondance, aucun élément pour ce fichier) : sortie `error` ou `notFound` déclarée, aucune commande envoyée. Échec d’infrastructure (service injoignable, clé refusée, statut HTTP inattendu, redirection) : le processus se termine en erreur, jamais en sortie métier (0012, règle 5) ; l’effet est considéré incertain et la relance est explicite (0015).
 - Sonarr : API `v5` puis `v3` en repli, comme le test de connexion. Radarr : `v3`. Les clés ne passent que par l’en-tête `X-Api-Key` et n’apparaissent dans aucun message.
 
+## Plex et Jellyfin
+
+Plex et Jellyfin utilisent le même SDK (correspondance de chemins et client HTTP JSON bornés, sans redirection) et n'ont pas de déclencheur : ils ne sont appelés que par des composants de flow.
+
+- **Plex** (`X-Plex-Token` en en-tête) : la section est celle dont un dossier est le plus long préfixe du fichier ; l'actualisation est limitée au dossier du fichier (`/library/sections/{id}/refresh?path=`). L'attente interroge `refreshing` des sections jusqu'à la fin, bornée par l'échéance de l'invocation (marge de 5 s, 10 min au plus) ; si le scan n'est pas fini, sortie `error`, jamais un succès supposé. La vérification utilise `ratingKey` ou, à défaut, le filtre `file` de Plex, dont le résultat est revérifié sur le chemin exact de chaque partie (un filtre ignoré par un serveur ancien donne `notFound`, pas `found`).
+- **Jellyfin** (`X-Emby-Token`) : le fichier traité est signalé par `POST /Library/Media/Updated` ; l'actualisation d'un élément passe par son identifiant ou par `GET /Items?Path=` (chemin exact revérifié) puis `POST /Items/{id}/Refresh` ; la vérification interroge `GET /Items?ids=` ou le chemin.
+- Sans `pathMappings`, les composants gardent leur comportement global d'origine (toutes les sections Plex, `POST /Library/Refresh`) ; avec `pathMappings`, une bibliothèque sans correspondance ou un fichier hors des racines est une sortie `error` déclarée, sans appel d'actualisation.
+- Limites : les API Plex et Jellyfin n'ont été vérifiées que contre des faux services ; le comportement sur de vrais serveurs (versions anciennes sans filtre `file`/`Path`) n'est pas couvert.
+
 ## Configuration
 
-`pathMappings` et `webhookSecret` s’ajoutent au schéma de configuration de Sonarr et de Radarr (0019) ; le secret est chiffré comme les autres. Limite connue : la configuration effective du plugin est transmise au worker avec les autres valeurs, donc le secret du webhook y est inclus bien que seul le serveur en ait besoin.
+`pathMappings` et `webhookSecret` s’ajoutent au schéma de configuration de Sonarr et de Radarr, et `pathMappings` à celui de Plex et de Jellyfin (0019) ; le secret est chiffré comme les autres. Limite connue : la configuration effective du plugin est transmise au worker avec les autres valeurs, donc le secret du webhook y est inclus bien que seul le serveur en ait besoin.
 
 ## Déploiement
 
-L’image worker embarque le SDK, le plugin et les manifestes (copies exactes du catalogue du serveur) dans `/opt/encoding/plugins/arr`. Chaque worker déclare les deux plugins dans `Runtime:Plugins` (voir `docker-compose.yml`) ; la capacité `plugin/sonarr` ou `plugin/radarr` n’est annoncée que si la poignée de main réussit, et l’attribution des tâches l’exige comme pour toute capacité.
+L’image worker embarque le SDK, le plugin et les manifestes (copies exactes du catalogue du serveur) dans `/opt/encoding/plugins/{arr,plex,jellyfin}`. Chaque worker déclare les quatre plugins dans `Runtime:Plugins` (voir `docker-compose.yml`) ; la capacité `plugin/<id>` (sonarr, radarr, plex, jellyfin) n’est annoncée que si la poignée de main réussit, et l’attribution des tâches l’exige comme pour toute capacité.
 
 ## Vérifications
 
-Tests Python (`python3 -m unittest discover -s backend/plugins/tests`) : protocole du SDK, plugin d’exemple, plugins Sonarr/Radarr comme processus réels contre un faux service (résolution par chemin, voisin au même préfixe, identifiants explicites, sorties métier, échecs d’infrastructure sans fuite de clé). Tests C# (`backend/tests/Encoding.Plugins.Tests`) : correspondance des chemins, analyse des événements, acceptation des manifestes par le catalogue, poignée de main et exécution par `PluginProcessHost` dans le bac à sable, webhook sur PostgreSQL (authentification, idempotence, découverte préalable, reçus, réclamations concurrentes, expiration). Non couverts : Sonarr/Radarr réels, plusieurs serveurs dans des processus distincts, plugin tiers installé dans un cluster multi-hôte.
+Tests Python (`python3 -m unittest discover -s backend/plugins/tests`) : protocole du SDK, plugin d’exemple, plugins Sonarr/Radarr/Plex/Jellyfin comme processus réels contre un faux service (résolution par chemin, voisin au même préfixe, identifiants explicites, sorties métier, échecs d’infrastructure sans fuite de clé). Tests C# (`backend/tests/Encoding.Plugins.Tests`) : correspondance des chemins, analyse des événements, acceptation des manifestes par le catalogue, poignée de main et exécution par `PluginProcessHost` dans le bac à sable, webhook sur PostgreSQL (authentification, idempotence, découverte préalable, reçus, réclamations concurrentes, expiration). Non couverts : Sonarr/Radarr réels, plusieurs serveurs dans des processus distincts, plugin tiers installé dans un cluster multi-hôte.

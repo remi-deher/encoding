@@ -1,10 +1,12 @@
 # Plugins d’intégration
 
-Un plugin ajoute des composants de flow (actions, conditions) fournis par un processus séparé. Le contrat est décrit dans [0012](../../docs/architecture/0012-flow-engine-foundation.md) et [0015](../../docs/architecture/0015-flow-runtime-and-portable-archives.md) ; les plugins Sonarr/Radarr et ce SDK dans [0032](../../docs/architecture/0032-integration-plugins-and-sdk.md).
+Un plugin ajoute des composants de flow (actions, conditions) fournis par un processus séparé. Le contrat est décrit dans [0012](../../docs/architecture/0012-flow-engine-foundation.md) et [0015](../../docs/architecture/0015-flow-runtime-and-portable-archives.md) ; les plugins Sonarr/Radarr/Plex/Jellyfin et ce SDK dans [0032](../../docs/architecture/0032-integration-plugins-and-sdk.md).
 
 ```
 sdk/encoding_plugin_sdk.py   SDK Python (un seul fichier, bibliothèque standard)
 arr/plugin.py                Sonarr et Radarr (python3 plugin.py sonarr|radarr)
+plex/plugin.py               Plex
+jellyfin/plugin.py           Jellyfin
 example/                     plugin tiers minimal : plugin.py + manifest.json
 tests/                       tests Python (python3 -m unittest discover -s backend/plugins/tests)
 ```

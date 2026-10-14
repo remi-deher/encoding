@@ -21,6 +21,14 @@
         "type": "secret",
         "label": "Clé API Jellyfin",
         "required": true
+      },
+      {
+        "id": "pathMappings",
+        "type": "text",
+        "label": "Correspondance des chemins",
+        "description": "Une ligne par bibliothèque Encoding : identifiant-bibliothèque=/chemin/vu/par/Jellyfin. Permet aux composants de retrouver le fichier traité ; sans elle, ils agissent sur l’ensemble du service.",
+        "multiline": true,
+        "placeholder": "00000000-0000-0000-0000-000000000000=/media"
       }
     ]
   },
@@ -29,7 +37,7 @@
       "id": "jellyfin-refresh-item",
       "version": "1.0.0",
       "name": "Actualiser les métadonnées Jellyfin",
-      "description": "Demande à Jellyfin d’actualiser les métadonnées de l’élément ciblé.",
+      "description": "Demande à Jellyfin d’actualiser les métadonnées de l’élément ciblé ou du fichier traité.",
       "kind": "action",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -54,8 +62,8 @@
             "id": "itemId",
             "type": "text",
             "label": "ID de l’élément Jellyfin",
-            "required": true,
-            "placeholder": "Identifiant de l’élément"
+            "required": false,
+            "description": "Laisser vide pour viser le fichier traité."
           }
         ]
       },
@@ -67,7 +75,7 @@
       "id": "jellyfin-refresh-library",
       "version": "1.0.0",
       "name": "Actualiser la bibliothèque Jellyfin",
-      "description": "Demande à Jellyfin de rescanner ses bibliothèques.",
+      "description": "Informe Jellyfin que le fichier traité a changé (ou rescanne ses bibliothèques sans correspondance de chemins).",
       "kind": "action",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -97,7 +105,7 @@
       "id": "jellyfin-check-item-indexed",
       "version": "1.0.0",
       "name": "Vérifier l’élément dans Jellyfin",
-      "description": "Vérifie si Jellyfin connaît l’élément ciblé.",
+      "description": "Vérifie si Jellyfin connaît l’élément ciblé ou le fichier traité.",
       "kind": "condition",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -127,8 +135,8 @@
             "id": "itemId",
             "type": "text",
             "label": "ID de l’élément Jellyfin",
-            "required": true,
-            "placeholder": "Identifiant de l’élément"
+            "required": false,
+            "description": "Laisser vide pour viser le fichier traité."
           }
         ]
       },

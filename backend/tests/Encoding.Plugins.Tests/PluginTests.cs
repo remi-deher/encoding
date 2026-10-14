@@ -82,6 +82,8 @@ internal static class PluginTests
                 Check(plugin.ConfigurationSchema!.Fields.Any(field => field.Id == "webhookSecret" && field.Type == "secret")
                     && plugin.ConfigurationSchema.Fields.Any(field => field.Id == "pathMappings"), id + " exposes the trigger settings.");
             }
+            foreach (var id in new[] { "plex", "jellyfin" })
+                Check(registry.Plugins.Single(item => item.Id == id).ConfigurationSchema!.Fields.Any(field => field.Id == "pathMappings"), id + " exposes the path mapping.");
         }
         finally { Directory.Delete(directory, true); }
         Console.WriteLine("PASS: server catalog accepts the shipped and the example plugin manifests.");

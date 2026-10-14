@@ -23,7 +23,12 @@ déclarée dans le descripteur du composant. N'écrivez ni secret ni donnée sen
 """
 import json
 import os
+import socket
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 
 CONTRACT_VERSION = 1
 MAX_REQUEST_CHARACTERS = 1024 * 1024
@@ -200,3 +205,106 @@ class Plugin:
             "candidateArtifactId": None,
             "detail": outcome.detail,
         }
+
+
+# --- correspondance de chemins (même format et mêmes règles que Encoding.Contracts LibraryPathMapping) -------------
+
+def _normalize_remote(path):
+    normalized = path.strip().replace("\\", "/")
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+    return normalized.rstrip("/") if len(normalized) > 1 else normalized
+
+
+def parse_mappings(text):
+    """Parse « identifiant-bibliothèque=/chemin/vu/par/le/service », une ligne par bibliothèque.
+
+    Retourne {identifiant: racine}. Lève ValueError si le format est invalide.
+    """
+    result = {}
+    for raw in (text or "").split("\n"):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        separator = line.find("=")
+        if separator <= 0:
+            raise ValueError("Format de correspondance invalide.")
+        library = str(uuid.UUID(line[:separator].strip()))
+        root = _normalize_remote(line[separator + 1:])
+        if not root or library in result or root in result.values():
+            raise ValueError("Racine vide ou déclarée deux fois.")
+        result[library] = root
+    return result
+
+
+def to_remote(mappings, library_id, relative_path):
+    """Chemin d'un fichier de la bibliothèque tel que le service le voit, ou None si elle n'est pas associée."""
+    root = mappings.get(str(uuid.UUID(str(library_id))))
+    return None if root is None else root.rstrip("/") + "/" + relative_path.replace("\\", "/")
+
+
+def remote_path(ctx):
+    """(chemin du fichier traité vu par le service, message d'erreur métier) d'après la configuration du plugin."""
+    if not ctx.library_id or not ctx.media_path:
+        return None, "Le fichier traité n'est pas rattaché à une bibliothèque."
+    try:
+        mappings = parse_mappings(ctx.plugin_text("pathMappings"))
+    except ValueError:
+        return None, "La correspondance des chemins du plugin est invalide."
+    path = to_remote(mappings, ctx.library_id, ctx.media_path)
+    if path is None:
+        return None, "Cette bibliothèque n'a pas de correspondance de chemin dans la configuration du plugin."
+    return path, None
+
+
+# --- client HTTP JSON ---------------------------------------------------------------------------------------------
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+class JsonApi:
+    """Client HTTP JSON pour un service externe.
+
+    Pas de redirection, délai et taille de réponse bornés. 404 est rendu à l'appelant ((404, None)) car c'est
+    un résultat métier fréquent ; toute autre erreur est une InfrastructureError dont le message ne contient ni
+    l'adresse complète ni les en-têtes (donc pas la clé).
+    """
+
+    MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+    TIMEOUT_SECONDS = 30
+
+    def __init__(self, name, base_url, headers, opener=None):
+        parts = urllib.parse.urlsplit(base_url or "")
+        if parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.password:
+            raise InfrastructureError("L'adresse de %s doit être une URL HTTP ou HTTPS sans identifiant intégré." % name)
+        self.name = name
+        self.base = base_url if base_url.endswith("/") else base_url + "/"
+        self.headers = dict(headers)
+        self.opener = opener or urllib.request.build_opener(_NoRedirect)
+
+    def request(self, method, path, body=None):
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        request = urllib.request.Request(self.base + path, data=data, method=method)
+        request.add_header("Accept", "application/json")
+        for key, value in self.headers.items():
+            request.add_header(key, value)
+        if data is not None:
+            request.add_header("Content-Type", "application/json")
+        try:
+            with self.opener.open(request, timeout=self.TIMEOUT_SECONDS) as response:
+                payload = response.read(self.MAX_RESPONSE_BYTES + 1)
+                if len(payload) > self.MAX_RESPONSE_BYTES:
+                    raise InfrastructureError("La réponse de %s dépasse la limite." % self.name)
+                return response.status, (json.loads(payload) if payload.strip() else None)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return 404, None
+            if error.code in (401, 403):
+                raise InfrastructureError("%s a refusé la clé API." % self.name)
+            raise InfrastructureError("%s a répondu avec le statut HTTP %d." % (self.name, error.code))
+        except (urllib.error.URLError, socket.timeout, ConnectionError):
+            raise InfrastructureError("Impossible de joindre %s depuis ce worker." % self.name)
+        except ValueError:
+            raise InfrastructureError("%s a répondu avec un contenu illisible." % self.name)
