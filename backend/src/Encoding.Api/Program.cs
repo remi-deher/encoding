@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Contracts.Executions;
@@ -31,6 +32,8 @@ if (offlineAfterSeconds <= 0)
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
+builder.Services.AddSingleton<EnrollmentWindowRepository>();
+builder.Services.AddClusterAuthentication(builder.Configuration);
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
 builder.Services.AddSingleton<FlowDefinitionValidator>();
@@ -75,6 +78,9 @@ app.UseRequestObservability();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseClusterAuthentication();
+app.MapAuthEndpoints();
+app.MapEnrollmentWindowEndpoints();
 app.MapFlowEndpoints();
 app.MapFlowScriptEndpoints();
 app.MapFlowTemplateEndpoints();
@@ -93,7 +99,7 @@ app.MapClusterEndpoints();
 app.MapNodeEndpoints();
 app.MapExecutionEndpoints();
 
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html").AllowAnonymous();
 
 app.Run();
 

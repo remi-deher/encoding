@@ -1,0 +1,87 @@
+using System.Security.Cryptography;
+using System.Text.RegularExpressions;
+using Encoding.Contracts.Auth;
+
+namespace Encoding.Api.Auth;
+
+public enum SetupOutcome { Created, AlreadyConfigured, InvalidSetupToken }
+
+public sealed record LoginResult(CurrentUserResponse User, string SessionToken);
+
+/// <summary>Règles métier de l’authentification : politique des identifiants, ouverture et fermeture de session.</summary>
+public sealed partial class AuthService(UserRepository users, AuthOptions options)
+{
+    public const int MinimumPasswordLength = 12;
+    public const int MaximumPasswordLength = 256;
+
+    private static readonly string DummyHash = PasswordHasher.Hash("mot de passe factice pour égaliser les temps de réponse");
+
+    [GeneratedRegex("^[A-Za-z0-9._@-]{1,64}$")]
+    private static partial Regex UsernamePattern();
+
+    public static Dictionary<string, string[]> ValidateNewUser(string? username, string? password)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (!UsernamePattern().IsMatch(username?.Trim() ?? string.Empty))
+            errors["username"] = ["Le nom d’utilisateur compte de 1 à 64 caractères : lettres, chiffres, point, tiret, tiret bas ou @."];
+        foreach (var (key, value) in ValidatePassword("password", password)) errors[key] = value;
+        return errors;
+    }
+
+    public static Dictionary<string, string[]> ValidatePassword(string field, string? password)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (string.IsNullOrEmpty(password) || password.Length < MinimumPasswordLength)
+            errors[field] = [$"Le mot de passe doit contenir au moins {MinimumPasswordLength} caractères."];
+        else if (password.Length > MaximumPasswordLength)
+            errors[field] = [$"Le mot de passe ne peut pas dépasser {MaximumPasswordLength} caractères."];
+        return errors;
+    }
+
+    public async Task<bool> SetupRequiredAsync(CancellationToken ct) => !await users.AnyAsync(ct);
+
+    public async Task<(SetupOutcome Outcome, UserResponse? User)> SetupAsync(SetupRequest request, CancellationToken ct)
+    {
+        if (options.SetupToken is not null && !SecretsEqual(request.SetupToken, options.SetupToken))
+            return (SetupOutcome.InvalidSetupToken, null);
+        var user = await users.CreateFirstAdministratorAsync(request.Username.Trim(), PasswordHasher.Hash(request.Password), ct);
+        return user is null ? (SetupOutcome.AlreadyConfigured, null) : (SetupOutcome.Created, user);
+    }
+
+    /// <summary>Ouvre une session ; l’échec est identique pour un compte inconnu, un mauvais mot de passe, un compte inactif ou verrouillé.</summary>
+    public async Task<LoginResult?> LoginAsync(string username, string password, CancellationToken ct)
+    {
+        var credentials = await users.FindCredentialsAsync(username.Trim(), ct);
+        var verified = PasswordHasher.Verify(password, credentials?.PasswordHash ?? DummyHash, out var needsRehash);
+        if (credentials is null) return null;
+        if (credentials.LockedUntil is { } lockedUntil && lockedUntil > DateTimeOffset.UtcNow) return null;
+        if (!verified || !credentials.IsActive)
+        {
+            if (credentials.IsActive) await users.RecordFailureAsync(credentials.Id, options.MaxFailedAttempts, ct);
+            return null;
+        }
+
+        await users.RecordSuccessAsync(credentials.Id, needsRehash ? PasswordHasher.Hash(password) : null, ct);
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).Replace('+', '-').Replace('/', '_').TrimEnd('=');
+        await users.CreateSessionAsync(credentials.Id, TokenHash(token), options, ct);
+        return new LoginResult(new CurrentUserResponse(credentials.Id, credentials.Username, credentials.Role), token);
+    }
+
+    public Task LogoutAsync(string token, CancellationToken ct) => users.DeleteSessionAsync(TokenHash(token), ct);
+
+    /// <summary>Change le mot de passe de l’utilisateur courant après vérification de l’actuel ; ses autres sessions sont révoquées.</summary>
+    public async Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, string sessionToken, CancellationToken ct)
+    {
+        var credentials = await users.FindCredentialsAsync(userId, ct);
+        if (credentials is null || !PasswordHasher.Verify(currentPassword, credentials.PasswordHash, out _)) return false;
+        return await users.SetPasswordAsync(userId, PasswordHasher.Hash(newPassword), TokenHash(sessionToken), ct);
+    }
+
+    public Task<bool> ResetPasswordAsync(Guid userId, string newPassword, CancellationToken ct) =>
+        users.SetPasswordAsync(userId, PasswordHasher.Hash(newPassword), null, ct);
+
+    public static byte[] TokenHash(string token) => SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
+
+    private static bool SecretsEqual(string? provided, string expected) =>
+        CryptographicOperations.FixedTimeEquals(TokenHash(provided ?? string.Empty), TokenHash(expected));
+}

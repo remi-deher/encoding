@@ -1,5 +1,6 @@
 import { firstValueFrom } from 'rxjs';
 import { ClusterApi } from '../../shared/services/cluster-api';
+import { EnrollmentWindow } from '../../shared/models/auth';
 import {
   NodeRole,
   NodeResponse,
@@ -11,7 +12,9 @@ import {
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
+import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { AuthService } from '../../core/auth/auth.service';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -112,6 +115,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     RecordFormComponent,
     LibraryNodeAccessFormComponent,
     DrawerActionButtonComponent,
+    DatePipe,
   ],
   templateUrl: './node-catalog-page.component.html',
   styleUrl: './node-catalog-page.component.scss',
@@ -134,6 +138,8 @@ export class NodeCatalogPageComponent {
   private readonly nodeAccessActivationBusy = signal<ReadonlySet<string>>(new Set());
   private readonly libraryAccessLoadState = signal<'loading' | 'ready' | 'error'>('loading');
 
+  protected readonly isAdmin = inject(AuthService).isAdmin;
+  protected readonly enrollmentWindow = signal<EnrollmentWindow>({ isOpen: false, openUntil: null });
   protected readonly loadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
@@ -644,6 +650,44 @@ export class NodeCatalogPageComponent {
     this.enrollmentView.set('requests');
     this.selectedEnrollment.set(null);
     this.actionOpen.set(true);
+    this.refreshEnrollmentWindow();
+  }
+
+  private refreshEnrollmentWindow(): void {
+    this.clusterApi
+      .enrollmentWindow()
+      .pipe(catchError(() => EMPTY))
+      .subscribe((window) => this.enrollmentWindow.set(window));
+  }
+
+  protected openEnrollmentWindow(): void {
+    this.clusterApi
+      .openEnrollmentWindow(10)
+      .pipe(
+        catchError(() => {
+          this.notifications.show('La fenêtre d’enrôlement n’a pas pu être ouverte.');
+          return EMPTY;
+        }),
+      )
+      .subscribe((window) => {
+        this.enrollmentWindow.set(window);
+        this.notifications.show('L’enrôlement direct est ouvert pendant 10 minutes.');
+      });
+  }
+
+  protected closeEnrollmentWindow(): void {
+    this.clusterApi
+      .closeEnrollmentWindow()
+      .pipe(
+        catchError(() => {
+          this.notifications.show('La fenêtre d’enrôlement n’a pas pu être fermée.');
+          return EMPTY;
+        }),
+      )
+      .subscribe(() => {
+        this.enrollmentWindow.set({ isOpen: false, openUntil: null });
+        this.notifications.show('L’enrôlement direct est fermé.');
+      });
   }
 
   protected closeCreateNode(): void {

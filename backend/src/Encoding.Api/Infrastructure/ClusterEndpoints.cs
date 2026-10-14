@@ -10,6 +10,6 @@ public static class ClusterEndpoints
         {
             var identity = await repository.GetAsync(cancellationToken);
             return Results.Ok(new { identity.Id, identity.Name });
-        }).WithTags("Cluster").WithName("GetClusterIdentity");
+        }).AllowAnonymous().WithTags("Cluster").WithName("GetClusterIdentity");
     }
 }

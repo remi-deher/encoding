@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 
 
 namespace Encoding.Api.Executions;
@@ -13,7 +14,7 @@ public static class ExecutionEndpoints
         {
             var execution = await repository.GetAsync(id, ct);
             return execution is null ? (IResult)Results.NotFound() : Results.Ok(execution);
-        }).WithName("GetExecution");
+        }).AllowNodeCredentials().WithName("GetExecution");
         executions.MapGet("/{id:guid}/events", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
             await repository.GetAsync(id, ct) is null ? (IResult)Results.NotFound() : Results.Ok(await repository.EventsAsync(id, ct))).WithName("GetExecutionEvents");
         executions.MapGet("/{id:guid}/pipeline", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>

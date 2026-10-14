@@ -6,6 +6,17 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
+  // Routes are matched last-registered first: the session is an administrator so the guarded pages render.
+  await page.route('**/api/v1/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        setupRequired: false,
+        user: { id: '00000000-0000-0000-0000-000000000001', username: 'admin', role: 'admin' },
+      }),
+    }),
+  );
 });
 
 test('the overview loads on desktop and mobile without console errors', async ({ page }) => {

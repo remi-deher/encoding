@@ -64,8 +64,14 @@
   letter-spacing: 0.12em;
 }
 
-.cluster-indicator {
+.header-status {
   grid-area: status;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cluster-indicator {
   display: inline-flex;
   align-items: center;
   gap: 9px;

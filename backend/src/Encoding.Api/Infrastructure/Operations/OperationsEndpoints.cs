@@ -38,23 +38,27 @@ public static class OperationsEndpoints
     {
         var options = app.Services.GetRequiredService<OperationsOptions>();
         // Vivacité : le processus répond. Aucune dépendance externe, pour qu’un orchestrateur ne redémarre pas un serveur à cause de PostgreSQL.
-        app.MapGet("/health/live", () => Results.Ok(new { status = "ok" })).WithTags("Health");
+        app.MapGet("/health/live", () => Results.Ok(new { status = "ok" })).AllowAnonymous().WithTags("Health");
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains(ReadyTag),
             ResponseWriter = (context, report) => WriteReportAsync(context, report, detailed: false),
-        }).WithTags("Health");
+        }).AllowAnonymous().WithTags("Health");
         app.MapHealthChecks("/health/details", new HealthCheckOptions
         {
             ResponseWriter = (context, report) => WriteReportAsync(context, report, detailed: true),
         }).WithTags("Health");
 
         if (options.Metrics.Enabled)
-            app.MapGet("/metrics", async (HttpContext context, ClusterMetricsCollector collector, CancellationToken cancellationToken) =>
+        {
+            // Sans jeton Bearer configuré, les métriques exigent une session ; avec jeton, un collecteur Prometheus s’authentifie par ce seul jeton.
+            var metrics = app.MapGet("/metrics", async (HttpContext context, ClusterMetricsCollector collector, CancellationToken cancellationToken) =>
             {
                 if (!Authorized(context, options.Metrics.Token)) return Results.Unauthorized();
                 return Results.Text(await collector.CollectAsync(cancellationToken), "text/plain; version=0.0.4; charset=utf-8");
             }).WithTags("Operations");
+            if (!string.IsNullOrEmpty(options.Metrics.Token)) metrics.AllowAnonymous();
+        }
     }
 
     /// <summary>Attribue un identifiant de corrélation, l’ajoute aux journaux et alimente les métriques HTTP.</summary>

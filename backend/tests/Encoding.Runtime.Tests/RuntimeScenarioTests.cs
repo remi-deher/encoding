@@ -60,4 +60,7 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
 
     [MediaToolsFact]
     public Task H265SourceReplacedThenRestored() => Scenarios.MediaRelayAsync(false, true);
+
+    [PostgresFact]
+    public Task AuthenticationRolesPairingAndAnonymousRouteCatalogue() => AuthScenarios.RunAsync(PostgresFixture.ConnectionString!);
 }

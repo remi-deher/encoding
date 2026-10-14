@@ -1,6 +1,6 @@
 <nav class="primary-navigation" aria-label="Navigation principale">
   <div class="navigation-items">
-    @for (item of items; track item.path) {
+    @for (item of items(); track item.path) {
       <a
         class="navigation-link"
         [routerLink]="item.path"

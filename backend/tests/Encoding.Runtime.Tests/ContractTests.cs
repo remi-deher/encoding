@@ -26,4 +26,7 @@ public sealed class ContractTests
 
     [Fact]
     public Task SourceReplacementFilesPolicyGraceAndRestore() => SourceReplacementScenarios.RunAsync();
+
+    [Fact]
+    public void PasswordHashingRehashDetectionAndCredentialPolicy() => AuthScenarios.RunUnit();
 }
