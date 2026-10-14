@@ -3,7 +3,7 @@ import { FlowValidation } from '../../shared/services/flow-validation';
 
 import { ClusterApi } from '../../shared/services/cluster-api';
 
-import { LibraryResponse } from '../../shared/models/cluster';
+import { LibraryResponse, NodeGroupResponse } from '../../shared/models/cluster';
 
 import { HttpClient } from '@angular/common/http';
 
@@ -357,6 +357,10 @@ export class LibraryCatalogPageComponent {
   private readonly accessActivationBusy = signal<ReadonlySet<string>>(new Set());
 
   protected readonly accessNodes = signal<readonly LibraryNodeAccessOption[]>([]);
+
+  protected readonly accessNodeGroups = signal<readonly NodeGroupResponse[]>([]);
+
+  protected readonly automaticallySelectedAccessNodeIds = signal<readonly string[]>([]);
 
   protected readonly initialAccesses = signal<readonly LibraryNodeAccessResponse[]>([]);
 
@@ -1534,12 +1538,26 @@ export class LibraryCatalogPageComponent {
   private loadAccessForm(libraryId: string): void {
     this.accessFormLoading.set(true);
 
+    const otherLibraryIds = this.libraries()
+      .map((library) => library.id)
+      .filter((id) => id !== libraryId);
+
     forkJoin({
       nodes: this.clusterApi.listNodes(),
+      groups: this.http.get<readonly NodeGroupResponse[]>('/api/v1/node-groups'),
 
       accesses: this.http.get<readonly LibraryNodeAccessResponse[]>(
         `/api/v1/libraries/${libraryId}/node-access`,
       ),
+      otherLibraryAccesses: otherLibraryIds.length
+        ? forkJoin(
+            otherLibraryIds.map((id) =>
+              this.http.get<readonly LibraryNodeAccessResponse[]>(
+                `/api/v1/libraries/${id}/node-access`,
+              ),
+            ),
+          )
+        : of([] as readonly (readonly LibraryNodeAccessResponse[])[]),
     })
       .pipe(
         catchError(() => {
@@ -1553,10 +1571,21 @@ export class LibraryCatalogPageComponent {
         }),
       )
 
-      .subscribe(({ nodes, accesses }) => {
+      .subscribe(({ nodes, groups, accesses, otherLibraryAccesses }) => {
         this.accessNodes.set(nodes);
 
+        this.accessNodeGroups.set(groups);
+
         this.initialAccesses.set(accesses);
+
+        this.automaticallySelectedAccessNodeIds.set([
+          ...new Set(
+            otherLibraryAccesses
+              .flat()
+              .filter((access) => access.isEnabled && access.mode === 'direct')
+              .map((access) => access.nodeId),
+          ),
+        ]);
 
         this.accessFormLoading.set(false);
       });

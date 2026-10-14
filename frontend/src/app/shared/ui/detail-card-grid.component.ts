@@ -29,7 +29,6 @@ export interface DetailCard {
   readonly status?: DetailCardTag;
   readonly tags: readonly DetailCardTag[];
   readonly sections: readonly DetailCardSection[];
-  readonly initiallyExpanded?: boolean;
 }
 
 @Component({
@@ -50,7 +49,6 @@ export interface DetailCard {
             [class.detail-card_expanded]="item.expanded"
             cdkAccordionItem
             #item="cdkAccordionItem"
-            [expanded]="card.initiallyExpanded ?? false"
           >
             <h3 class="detail-card-heading">
               <button
