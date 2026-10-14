@@ -46,3 +46,7 @@ Le glissement CDK d’une étape utilise désormais un bouton dédié visible, a
 Le flow est centré avec une largeur maximale de lecture de 1200 px dans la surface workspace, dont le défilement reste unique. La configuration s’ouvre par double-clic sur un bloc, ou avec Tab puis Entrée. Les boutons internes conservent leurs propres actions et ne déclenchent pas cette ouverture. Le bouton Configurer et son entrée de menu sont retirés.
 
 flow-presentation.ts centralise les couleurs par type et plugin. La bordure et l’étiquette indiquent le type ; le libellé souligné indique le plugin. Les plugins inconnus reçoivent une couleur déterministe. Les libellés textuels restent présents, sans dépendre uniquement des couleurs.
+
+## En-tête de l’espace d’édition
+
+L’en-tête est placé avant le drawer/canvas et utilise la disposition `workspace` du composant partagé `PageHeader`. Il expose le titre, l’état de sauvegarde et les outils Tester, Vérifier et Publier. Les actions Annuler puis Enregistrer sont alignées à droite ; Enregistrer sauvegarde le brouillon, Publier crée une version publiée. Sur mobile, les outils se replient sur plusieurs lignes et les actions restent groupées à droite. Les autres pages utilisent la disposition par défaut du même composant.

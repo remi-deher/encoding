@@ -41,11 +41,15 @@ export interface FlowDocument {
   readonly connections: readonly FlowGraphConnection[];
 }
 export interface FlowVersionResponse {
-  readonly draftRevision?: number;
-  readonly publishedVersion?: number;
+  readonly draftRevision?: number | null;
+  readonly publishedVersion?: number | null;
   readonly definition: FlowDocument;
   readonly backupStatus: string;
   readonly createdAt: string;
+}
+/** A draft's next version is not an already published version. */
+export function flowPublishedVersion(saved: FlowVersionResponse): number {
+  return saved.draftRevision != null ? (saved.publishedVersion ?? 0) : saved.definition.version;
 }
 export interface FlowSummary {
   readonly isDraft: boolean;

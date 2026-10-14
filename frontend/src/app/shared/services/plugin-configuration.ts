@@ -37,27 +37,4 @@ export class PluginConfigurationApi {
       ),
     );
   }
-
-  getFlow(flowId: string, pluginId: string) {
-    return firstValueFrom(
-      this.http.get<PluginConfigurationResponse>(
-        `/api/v1/flows/${flowId}/plugins/${pluginId}/configuration`,
-      ),
-    );
-  }
-
-  saveFlow(
-    flowId: string,
-    pluginId: string,
-    revision: number,
-    values: FlowComponentConfiguration,
-    clearSecrets: readonly string[] = [],
-  ) {
-    return firstValueFrom(
-      this.http.put<PluginConfigurationResponse>(
-        `/api/v1/flows/${flowId}/plugins/${pluginId}/configuration`,
-        { expectedRevision: revision, values, clearSecrets },
-      ),
-    );
-  }
 }
