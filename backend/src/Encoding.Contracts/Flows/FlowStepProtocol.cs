@@ -21,13 +21,19 @@ public sealed record FlowStepInvocation(
     DateTimeOffset Deadline,
     IReadOnlyDictionary<string, JsonElement>? PluginConfiguration = null);
 
-/// <summary>Artifacts are opaque identifiers resolved to local files by the worker.</summary>
+/// <summary>
+/// Artifacts are opaque identifiers resolved to local files by the worker. MediaPath and LibraryId
+/// identify the library file being processed so integrations can address it in an external service;
+/// they are read-only context and never a location a plugin may write to.
+/// </summary>
 public sealed record FlowStepContext(
     string? SourceArtifactId,
     string? CurrentArtifactId,
     JsonElement? BeforeMetadata,
     JsonElement? CurrentMetadata,
-    IReadOnlyDictionary<string, JsonElement> Variables);
+    IReadOnlyDictionary<string, JsonElement> Variables,
+    string? MediaPath = null,
+    Guid? LibraryId = null);
 
 /// <summary>
 /// Exactly one of OutputId or TerminalResult is required. The host validates this

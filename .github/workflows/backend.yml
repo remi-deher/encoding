@@ -23,7 +23,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
-      - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg mediainfo
+      - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg mediainfo python3
+      - run: python3 -m unittest discover -s backend/plugins/tests -v
       - run: >-
           dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
           --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --results-directory test-results
@@ -31,6 +32,9 @@ jobs:
           ENCODING_TEST_DATABASE: Host=postgres;Database=encoding_test;Username=encoding;Password=encoding_test
           ENCODING_TEST_REQUIRE_DATABASE: '1'
           ENCODING_TEST_REQUIRE_MEDIA_TOOLS: '1'
+      - run: dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
+        env:
+          ENCODING_TEST_DATABASE: Host=postgres;Database=encoding_test;Username=encoding;Password=encoding_test
       - uses: actions/upload-artifact@v4
         if: always()
         with:
