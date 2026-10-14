@@ -70,13 +70,15 @@
       }
       <mat-tab label="Capacités">
         <app-detail-field-list [fields]="capabilityFields()" layout="cards" />
-        <app-data-table
-          [columns]="capabilityColumns"
-          [rows]="capabilityRows()"
-          [rowActions]="capabilityActions"
-          (rowAction)="showEncoders($event)"
+        <app-detail-card-grid
+          [cards]="capabilityCards()"
+          ariaLabel="Outils et capacités de traitement"
           emptyMessage="Aucune capacité déclarée par ce nœud."
         />
+        <p class="node-tab-note capability-note">
+          Les encodeurs « utilisables » ont réussi un test synthétique ; les bibliothèques, limites
+          et règles d’attribution déterminent aussi l’éligibilité à une tâche.
+        </p>
       </mat-tab>
       <mat-tab label="Bibliothèques">
         @if (selectedNode(); as node) {
