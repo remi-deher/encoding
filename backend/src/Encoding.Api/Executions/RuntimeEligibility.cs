@@ -1,17 +1,20 @@
 using Encoding.Api.Flows;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Nodes;
+using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Executions;
 
 public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefinitionValidator validator)
 {
-    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId)
+    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false)
     {
         if(!validator.Validate(flow).IsValid) return false;
-        foreach(var node in flow.Nodes)
+        var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
+        foreach(var node in entry is null?Array.Empty<FlowNodeDefinition>():RuntimeHandoffPolicy.Segment(flow,entry))
         {
-            if(!capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId && c.Version==node.Component.PluginVersion)) return false;
+            if(!capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId && (c.Version==node.Component.PluginVersion
+                || node.Component.PluginId=="nodes" && node.Component.PluginVersion=="1.0.0" && c.Version=="1.1.0"))) return false;
             if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node"
                 && (!node.Configuration.TryGetValue("targetNodeId",out var target) || target.ValueKind!=System.Text.Json.JsonValueKind.String
                     || !Guid.TryParse(target.GetString(),out var targetId) || targetId!=workerId)) return false;

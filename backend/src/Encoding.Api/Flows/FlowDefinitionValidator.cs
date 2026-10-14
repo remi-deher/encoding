@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Plugins;
+using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Flows;
 
@@ -90,13 +91,6 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                 && !System.Version.TryParse(minimumVersion.GetString(), out _))
                 Issue("field.invalid", path + "/configuration/minimumVersion", "Utilisez une version numérique, par exemple 7.1.0.");
         }
-        var workerTargets = flow.Nodes
-            .Where(node => node is not null && node.Component?.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node" && node.Configuration is not null)
-            .Select(node => node.Configuration.TryGetValue("targetNodeId", out var value)
-                && value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var id) ? id : (Guid?)null)
-            .Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
-        if (workerTargets.Length > 1)
-            Issue("node.constraint.conflict", "/nodes", "Les blocs Nœuds d’un même flow doivent cibler le même worker.");
         var entries = nodes.Where(n => n.Value.Kind == "input").Select(n => n.Key).ToArray();
         if (entries.Length != 1) Issue("graph.entry.count", "/nodes", "Le flow doit posséder exactement une entrée.");
         var outgoing = ids.ToDictionary(id => id, _ => new List<string>(), StringComparer.Ordinal);
@@ -132,6 +126,26 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             var pending = new Stack<string>(); pending.Push(entries[0]);
             while (pending.TryPop(out var id)) if (seen.Add(id)) foreach (var target in outgoing[id]) pending.Push(target);
             foreach (var id in ids) if (!seen.Contains(id)) Issue("node.unreachable", "/nodes", $"Bloc non relié à l’entrée : {id}.");
+        }
+        if(issues.Count==0)
+        {
+            var segmentEntries=entries.Concat(flow.Nodes.Where(RuntimeHandoffPolicy.IsHandoff)
+                .SelectMany(node=>flow.Connections.Where(edge=>edge.SourceNodeId==node.Id).Select(edge=>edge.TargetNodeId)));
+            foreach(var entry in segmentEntries.Distinct())
+            {
+                var targets=RuntimeHandoffPolicy.Segment(flow,entry)
+                    .Where(node=>node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node")
+                    .Select(node=>node.Configuration["targetNodeId"].GetString()).Distinct().ToArray();
+                if(targets.Length>1) Issue("node.constraint.conflict","/nodes","Les contraintes d'un segment entre deux relais doivent cibler le même worker.");
+            }
+        }
+        foreach(var node in flow.Nodes.Where(node=>node?.Component is not null && RuntimeHandoffPolicy.IsHandoff(node)))
+        {
+            if(!flow.Connections.Any(edge=>edge.SourceNodeId==node.Id && edge.SourceOutputId=="success"))
+                Issue("handoff.next.required","/nodes","Le relais doit être relié à la suite du flow.");
+            if(node.Configuration?.TryGetValue("targetNodeId",out var target)==true && target.ValueKind==JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(target.GetString()) && (!Guid.TryParse(target.GetString(),out var targetId) || targetId==Guid.Empty))
+                Issue("field.invalid","/nodes/"+node.Id+"/configuration/targetNodeId","Utilisez un identifiant de worker valide.");
         }
         return new(issues);
     }
