@@ -1,0 +1,53 @@
+# 0033 — Attentes durables et gestion du temps dans Base
+
+Statut : proposition (conception avant implémentation).
+
+## Besoin
+
+Un flow doit pouvoir s'arrêter sans bloquer un worker ni un emplacement de traitement, puis reprendre à l'étape suivante quand une condition est remplie : un délai écoulé, une heure atteinte, la fin d'une lecture Plex/Jellyfin, l'état d'un autre bloc, d'un worker ou le nombre de tâches. Aujourd'hui seul `base-defer-processing` existe : il termine l'exécution (`deferred`) et la relance depuis le début après 1 min à 24 h.
+
+## Décision
+
+Le plugin `base` fournit un composant **Attendre** (`base-wait`, action, sorties `resumed` et `timeout`). Il sépare le *mécanisme d'attente* (commun, durable) de la *condition de réveil* (déclarée dans le bloc, extensible). Le flow reprend à l'étape qui suit le bloc, avec le même contexte (variables, artefacts, scans, plan d'encodage) ; aucun bloc « attente » spécifique à un plugin n'est nécessaire.
+
+### Condition de réveil (champ `wake`)
+
+| Type | Évaluée par | Exemple |
+|---|---|---|
+| `timer` | serveur | durée (`PT30M`) ou heure du jour/date |
+| `nodeState` | serveur | un worker donné (ou tout worker) est en ligne / hors ligne / libre |
+| `workload` | serveur | nombre de tâches en cours ou en file (global, bibliothèque, nœud) comparé à un seuil |
+| `block` | un worker éligible | une condition d'un plugin (ex. `plex-check-playback`) renvoie l'une des sorties « remplies » choisies |
+
+Les conditions `block` réutilisent n'importe quel composant de kind `condition` : le bloc stocke la référence du composant, sa configuration et la liste des sorties qui valent « remplie ». Le plugin n'a rien de nouveau à implémenter, et la validation (composant, version, sorties) est celle du moteur. Les types `timer`, `nodeState` et `workload` ne nécessitent aucun worker.
+
+Paramètres communs : `pollSeconds` (intervalle de réévaluation des conditions `block`, 15 s à 1 h), `maxWaitMinutes` (optionnel : vide = illimité) et la sortie `timeout` (facultative ; si elle n'est pas reliée, un délai dépassé termine l'exécution en échec explicite plutôt que de continuer).
+
+### Mécanisme durable (modèle du relais 0021)
+
+1. Au premier passage du bloc, le worker enregistre le checkpoint de l'étape (comme tout bloc) et demande l'attente dans la même transaction : création de la ligne `execution_waits`, bail révoqué, `lease_epoch + 1`, `available_at = 'infinity'`, réservation du média conservée (`lease_until = 'infinity'`). L'état public reste `running`, détail « en attente : <condition> » (même principe que `handoff_pending`, pas de nouvel état public). Le worker est libéré et son emplacement de traitement aussi : l'attente ne compte dans aucun plafond de bail.
+2. `ExecutionWaitService` (sur chaque serveur) réclame les attentes dues avec `FOR UPDATE SKIP LOCKED` et une réclamation courte récupérable, évalue les conditions serveur, et décide : **remplie** → `available_at = now()`, l'exécution est réattribuée par le chemin de réclamation ordinaire (éligibilité, plafonds, calendrier du nœud, accès bibliothèque) ; **délai dépassé** → même chose avec la sortie `timeout` ; **ni l'un ni l'autre** → prochaine échéance (`next_check_at`).
+3. Plusieurs serveurs n'aboutissent jamais à deux décisions : la décision est une mise à jour conditionnelle de la ligne d'attente (état `waiting` → `met|timeout|cancelled`), identique en cas de répétition.
+4. Conditions `block` : le service marque l'attente « sonde due ». Un worker éligible la réclame par un bail court (même chemin, même époque, mêmes plafonds), exécute **uniquement** le composant de condition avec le contexte figé du checkpoint, puis rapporte la sortie avec son époque ; une sonde périmée est refusée. Aucun checkpoint d'étape n'est créé par une sonde. Si aucun worker éligible n'est disponible, l'attente continue sans erreur (la sonde reste due).
+5. À la reprise, le checkpoint enregistré à l'étape 1 porte déjà la suite normale (`resumed`). Pour `timeout`, le serveur ne forge pas de contexte : il réécrit uniquement `OutputId`/`NextNodeId` du dernier checkpoint vers la connexion `timeout` validée contre le flow publié, dans la même transaction que la décision.
+6. Annulation, retrait du nœud, expiration d'un bail de sonde : mêmes garanties que pour le relais (la réservation n'est récupérable que par la même exécution ; l'annulation libère la réservation via le mécanisme existant).
+
+### Haute disponibilité et état des nœuds
+
+Les états `nodeState` et `workload` sont lus dans PostgreSQL (présence par battement de cœur, baux de `execution_work`), qui est déjà l'état partagé du cluster. Interroger directement les autres nœuds créerait des vues divergentes ; tous les serveurs évaluent donc la même base et un seul décide par attente. Perdre un serveur ou un worker ne bloque aucune attente : un autre serveur reprend la réclamation expirée, un autre worker éligible prend la sonde. L'état d'un bloc se surveille par la sonde ci-dessus, pas par un abonnement à un worker précis.
+
+### Plugins « événement » (extension)
+
+Un plugin peut fournir de nouvelles conditions simplement en déclarant un composant `condition` ; l'attente s'y branche sans changement du moteur. Les services externes qui savent notifier (webhook Sonarr/Radarr…) pourront plus tard réveiller une attente par un événement entrant, sans sondage ; ce n'est pas inclus ici.
+
+### Média pendant l'attente (à trancher)
+
+Première version : le média reste **réservé** par l'exécution en attente (aucune autre tâche ne le modifie, la source est intacte), comme pendant un relais. Rémi souhaite ensuite pouvoir, selon le flow : reprendre le média en cours, créer un autre média à côté, ou écraser le média en cours. Cela touche la politique de remplacement (0030) et la notion de nœud d'accès ; le champ `mediaPolicy` est réservé dans la spécification d'attente (`keep` seul accepté pour l'instant) pour ne pas changer le contrat plus tard.
+
+## Garanties à vérifier
+
+Attente sans worker occupé, reprise à l'étape suivante avec contexte identique, minuterie après perte d'un serveur, deux serveurs simultanés (une seule décision), sonde avec époque périmée, aucun worker éligible, délai dépassé avec et sans sortie `timeout`, annulation pendant l'attente, réservation du média conservée, plafonds non consommés pendant l'attente, simulateur de flow (hypothèse explicite sur `resumed`/`timeout`).
+
+## Impact
+
+Contrats : `FlowStepContext` inchangé ; nouvelle demande d'attente et rapport de sonde dans les endpoints runtime. Migration additive (`execution_waits`, colonnes de sonde). Catalogue Base : nouveau composant (version du plugin à incrémenter avec `compatiblePluginVersions` comme pour 0021 ; un agent ancien ne peut pas réclamer un flow qui contient `base-wait`). Éditeur : champ `wake` rendu par le gabarit déclaratif (les types de champs existants suffisent, avec un champ de référence de composant à ajouter s'il n'existe pas). Simulateur 0023 et `base-defer-processing` : ce dernier reste inchangé.
