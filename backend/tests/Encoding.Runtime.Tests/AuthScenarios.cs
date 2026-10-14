@@ -18,7 +18,7 @@ using ApiAssembly = Encoding.Api.Auth.AuthOptions;
 namespace Encoding.Runtime.Tests;
 
 /// <summary>Authentification, rôles et durcissement du jumelage, vérifiés sur le vrai pipeline HTTP de l’API.</summary>
-internal static class AuthTests
+internal static class AuthScenarios
 {
     private const string SetupToken = "jeton-d-initialisation-de-test";
     private const string AdminPassword = "correct horse battery staple";

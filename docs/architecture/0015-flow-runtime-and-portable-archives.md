@@ -44,7 +44,7 @@ Le nœud d’accès transfère une copie vérifiée par les endpoints WebDAV du 
 
 Runtime:ArtifactDirectory configure le volume durable des artefacts. Tous les serveurs d’un cluster multi-hôte doivent partager ce stockage ; un volume Compose local n’établit pas une haute disponibilité entre machines. Aucun nettoyage automatique n’est activé.
 
-Le nœud d’accès contrôle de nouveau la source, le résultat et le bail avant publication. Le résultat est publié atomiquement sans écrasement sous .encoding-results/<executionId>/result.<extension>. Une sortie déjà présente doit avoir la même empreinte. Le fichier original est conservé. Son remplacement automatique reste une politique future explicite.
+Le nœud d’accès contrôle de nouveau la source, le résultat et le bail avant publication. Le résultat est publié atomiquement sans écrasement sous .encoding-results/<executionId>/result.<extension>. Une sortie déjà présente doit avoir la même empreinte. Le fichier original est conservé. Son remplacement est une politique de bibliothèque explicite, désactivée par défaut : voir [0030](0030-source-replacement-policy.md).
 
 ## Plugins en processus séparés
 

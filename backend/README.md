@@ -13,7 +13,7 @@ docker compose up --build
 
 L’interface Angular et l’API sont servies par le même conteneur : ouvrir `http://localhost:4201` pour l’application ou `http://localhost:5080` pour l’API. La console locale de l’agent reste disponible sur `http://localhost:5081` et PostgreSQL sur `localhost:5432`. Depuis le poste worker, ouvrir l’interface Angular à `/worker`. Le navigateur appelle `localhost:5081` sur le poste où il s’exécute ; les origines autorisées se règlent avec `WORKER_UI_ORIGINS`. Les données d’identité du worker sont persistées dans le volume `encoding-node-data`.
 
-Les migrations SQL versionnées s’appliquent au démarrage, sous verrou PostgreSQL. Pour ne lancer que la base : `docker compose up -d postgres`. Les identifiants PostgreSQL Compose sont réservés au développement local.
+Les migrations SQL versionnées (`NNNN_nom.sql`, numéro unique, empreinte enregistrée) s’appliquent au démarrage, sous verrou PostgreSQL ; ne jamais modifier une migration publiée, en ajouter une. Pour ne lancer que la base : `docker compose up -d postgres`. Les identifiants PostgreSQL Compose sont réservés au développement local.
 
 Le worker découvre les clusters annoncés en DNS-SD/mDNS (`_encoding._tcp`). Le service prend aussi en charge une adresse bootstrap `Cluster:ApiBaseUrl`, utilisée ici pour la découverte dans le réseau Compose où le multicast peut être indisponible. Pour un worker sur un autre hôte, définissez `CLUSTER_ADVERTISED_API_BASE_URL` avec une URL HTTPS joignable depuis ces machines, puis publiez le port API sur l’interface réseau prévue et configurez les origines navigateur. Le réglage de développement lie volontairement l’API à la boucle locale.
 
@@ -98,3 +98,7 @@ Depuis l’éditeur, **Tester le flow** explore le document en cours avec un pro
 Aucune exécution, conversion, invocation de plugin ou transfert réel n’est créé. Les résultats du test restent dans la session de l’éditeur. L’import MediaInfo est limité à 512 Mio, deux minutes et deux lectures simultanées par serveur ; la copie temporaire est supprimée après lecture. Voir [0023](../docs/architecture/0023-flow-simulation.md) pour les contrats et limites.
 
 L’action Enregistrer de l’éditeur valide automatiquement le document : publication s’il est valide, brouillon sinon. Une publication inchangée retourne la version existante et ne crée ni version ni tâche de sauvegarde supplémentaire. Ce contrôle transactionnel conserve les conflits de concurrence et les versions des archives importées.
+
+## Exploitation
+
+`/health/live`, `/health/ready` et `/health/details` décrivent l’état du serveur, `/metrics` publie les métriques Prometheus, et les images journalisent en JSON avec un identifiant `X-Correlation-Id`. La rétention des artefacts est désactivée par défaut. Voir [supervision](../docs/operations/monitoring.md), [sauvegarde et restauration](../docs/operations/backup-restore.md) et l’architecture 0029.
