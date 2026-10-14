@@ -505,7 +505,11 @@ export class FlowEditorPageComponent {
     return plugin.configurationSchema
       ? {
           ...plugin.configurationSchema,
-          fields: plugin.configurationSchema.fields.map((field) => ({ ...field, required: false })),
+          fields: plugin.configurationSchema.fields.map((field) => ({
+            ...field,
+            required: false,
+            defaultValue: undefined,
+          })),
         }
       : undefined;
   }

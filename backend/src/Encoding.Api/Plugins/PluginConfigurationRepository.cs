@@ -39,6 +39,7 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
         var values = Merge(plugin.ConfigurationSchema, current, request.Values, request.ClearSecrets, flowOverride: false);
         var validation = Validate(plugin.ConfigurationSchema, values, requireRequired: true);
         if (validation is not null) throw new PluginConfigurationValidationException(validation);
+        ValidateNodeDefaults(plugin, values, requireTarget: true);
 
         await using var command = dataSource.CreateCommand("""
             INSERT INTO plugin_configurations(plugin_id,revision,encrypted_values)
@@ -74,6 +75,7 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
         var values = Merge(plugin.ConfigurationSchema, current, request.Values, request.ClearSecrets, flowOverride: true);
         var validation = Validate(plugin.ConfigurationSchema, values, requireRequired: false);
         if (validation is not null) throw new PluginConfigurationValidationException(validation);
+        ValidateNodeDefaults(plugin, values, requireTarget: false);
 
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
@@ -212,6 +214,17 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
             }
         }
         return null;
+    }
+
+    private static void ValidateNodeDefaults(PluginManifest plugin,IReadOnlyDictionary<string,JsonElement> values,bool requireTarget)
+    {
+        if(plugin.Id!="nodes") return;
+        values.TryGetValue("targetNodeId",out var target);
+        var provided=target.ValueKind==JsonValueKind.String && !string.IsNullOrWhiteSpace(target.GetString());
+        if(provided && (!Guid.TryParse(target.GetString(),out var id) || id==Guid.Empty))
+            throw new PluginConfigurationValidationException("L'identifiant du worker est invalide.");
+        if(requireTarget && values.TryGetValue("mode",out var mode) && mode.GetString()=="node" && !provided)
+            throw new PluginConfigurationValidationException("Choisissez le nœud par défaut pour cette destination.");
     }
 
     private PluginConfigurationResponse ToResponse(PluginManifest plugin, int revision, IReadOnlyDictionary<string, JsonElement> values)

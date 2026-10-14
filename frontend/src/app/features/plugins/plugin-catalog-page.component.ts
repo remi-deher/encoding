@@ -56,10 +56,10 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     family: 'cluster',
     familyLabel: 'Cluster',
     category: 'Orchestration des workers',
-    version: '1.0.0',
-    components: 'Choisir un nœud ou exiger une capacité',
+    version: '1.1.0',
+    components: 'Transférer la suite, choisir un nœud ou exiger une capacité',
     runtime: 'Intégré au répartiteur et au worker',
-    configuration: 'Aucune configuration globale requise',
+    configuration: 'Cible par défaut, avec dérogations par flow et par bloc',
     state: 'Actif par défaut',
   },
   {

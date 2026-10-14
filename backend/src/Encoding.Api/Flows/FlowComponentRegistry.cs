@@ -64,6 +64,8 @@ public sealed class FlowComponentRegistry
                     component.Version,
                     component.ConfigurationSchema.Version);
                 if (!components.TryAdd(reference, component)) throw new InvalidOperationException($"Composant dupliqué : {component.Id}.");
+                if(installed.Id=="nodes" && installed.Version=="1.1.0" && component.Id!="nodes-handoff")
+                    components.Add(reference with { PluginVersion="1.0.0" },component);
             }
         }
         Plugins = manifests;

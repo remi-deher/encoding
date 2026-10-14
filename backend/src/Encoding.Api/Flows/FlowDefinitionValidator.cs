@@ -81,7 +81,7 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                 var message = ValidateField(field, value, flow.MediaType);
                 if (message is not null) Issue("field.invalid", path + "/configuration/" + Pointer(field.Id), message);
             }
-            if (node.Component.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node"
+            if (node.Component!.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node"
                 && (!node.Configuration.TryGetValue("targetNodeId", out var targetNode)
                     || targetNode.ValueKind != JsonValueKind.String || !Guid.TryParse(targetNode.GetString(), out _)))
                 Issue("field.invalid", path + "/configuration/targetNodeId", "Un identifiant de nœud valide est obligatoire.");

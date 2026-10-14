@@ -14,7 +14,7 @@ public sealed class PluginConnectionTester(IHttpClientFactory clients)
         var baseUrl = ReadText(values, "baseUrl");
         var apiKey = ReadText(values, "apiKey");
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri)
-            || baseUri.Scheme is not (Uri.UriSchemeHttp or Uri.UriSchemeHttps)
+            || baseUri.Scheme is not ("http" or "https")
             || !string.IsNullOrEmpty(baseUri.UserInfo))
             throw new PluginConfigurationValidationException("L’adresse doit être une URL HTTP ou HTTPS valide, sans identifiant intégré.");
 

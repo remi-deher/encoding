@@ -42,7 +42,7 @@
         [schema]="schema"
         [values]="configurationValues()"
         [configuredSecrets]="configuredSecrets()"
-        [showConnectionTest]="true"
+        [showConnectionTest]="selectedPlugin()?.id !== 'nodes'"
         [connectionTestBusy]="connectionTestBusy()"
         [connectionTestMessage]="connectionTestMessage()"
         [connectionTestSuccess]="connectionTestSuccess()"
