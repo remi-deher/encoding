@@ -5,6 +5,7 @@ import { FlowValidation } from '../../shared/services/flow-validation';
 import {
   FlowPluginCatalog,
   PluginConfigurationResponse,
+  resolveFlowComponent,
 } from '../../shared/models/flow-validation';
 import { PluginConfigurationApi } from '../../shared/services/plugin-configuration';
 import { FlowContinuationSource } from '../../shared/models/flow-sequence';
@@ -589,16 +590,9 @@ export class FlowEditorPageComponent {
       this.savedName.set(definition.name);
       this.flowMediaType.set(definition.mediaType);
       const nodes: FlowGraphNode[] = definition.nodes.map((node) => {
-        const plugin = plugins.find(
-          (plugin) =>
-            plugin.id === node.component.pluginId &&
-            plugin.version === node.component.pluginVersion,
-        );
-        const descriptor = plugin?.components.find(
-          (component) =>
-            component.id === node.component.componentId &&
-            component.version === node.component.componentVersion,
-        );
+        const resolved = resolveFlowComponent(plugins, node.component);
+        const plugin = resolved?.plugin;
+        const descriptor = resolved?.component;
         const component: FlowComponentDefinition = descriptor
           ? { ...descriptor, pluginId: plugin!.id, pluginName: plugin!.name }
           : {

@@ -17,7 +17,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
         foreach(var node in segment.Concat(planned))
         {
             if(!capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId && (c.Version==node.Component.PluginVersion
-                || node.Component.PluginId=="nodes" && node.Component.PluginVersion=="1.0.0" && c.Version=="1.1.0"))) return false;
+                || c.Version==registry.RuntimePluginVersion(node.Component)))) return false;
             if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node"
                 && (!node.Configuration.TryGetValue("targetNodeId",out var target) || target.ValueKind!=System.Text.Json.JsonValueKind.String
                     || !Guid.TryParse(target.GetString(),out var targetId) || targetId!=workerId)) return false;

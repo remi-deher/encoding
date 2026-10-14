@@ -203,7 +203,11 @@ export class PluginCatalogPageComponent {
           { section: 'Plugin', label: 'Version', value: plugin.version },
           { section: 'Plugin', label: 'État', value: plugin.state },
           { section: 'Plugin', label: 'Exécution', value: plugin.runtime },
-          { section: 'Intégration', label: 'Blocs', value: `${this.pluginComponents(plugin.id).length}` },
+          {
+            section: 'Intégration',
+            label: 'Blocs',
+            value: `${this.pluginComponents(plugin.id).length}`,
+          },
           ...(this.configurationSchema()
             ? [{ section: 'Configuration', label: 'Portée', value: plugin.configuration }]
             : []),
@@ -273,7 +277,8 @@ export class PluginCatalogPageComponent {
     this.configurationBusy.set(true);
     try {
       const result = await this.configurationApi.getGlobal(pluginId);
-      if (operation !== this.configurationOperation || this.selectedPlugin()?.id !== pluginId) return;
+      if (operation !== this.configurationOperation || this.selectedPlugin()?.id !== pluginId)
+        return;
       this.configurationValues.set(result.values);
       this.configuredSecrets.set(result.configuredSecrets);
       this.configurationRevision.set(result.revision);
@@ -300,7 +305,8 @@ export class PluginCatalogPageComponent {
         values,
         clearSecrets,
       );
-      if (operation !== this.configurationOperation || this.selectedPlugin()?.id !== plugin.id) return;
+      if (operation !== this.configurationOperation || this.selectedPlugin()?.id !== plugin.id)
+        return;
       this.configurationValues.set(saved.values);
       this.configuredSecrets.set(saved.configuredSecrets);
       this.configurationRevision.set(saved.revision);
@@ -326,7 +332,8 @@ export class PluginCatalogPageComponent {
     this.connectionTestMessage.set('');
     try {
       const result = await this.configurationApi.testConnection(plugin.id, values);
-      if (operation !== this.connectionTestOperation || this.selectedPlugin()?.id !== plugin.id) return;
+      if (operation !== this.connectionTestOperation || this.selectedPlugin()?.id !== plugin.id)
+        return;
       this.connectionTestSuccess.set(result.success);
       this.connectionTestMessage.set(result.message);
     } catch (error) {

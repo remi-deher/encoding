@@ -23,6 +23,40 @@ const {
 const { MEDIA_TOOL_ACTIONS } = await loadModel('media-tool-actions');
 const action = (id) => MEDIA_TOOL_ACTIONS.find((component) => component.id === id);
 
+test('les anciennes contraintes Nœuds restent éditables sans rendre le nouveau relais compatible avec un ancien plugin', async () => {
+  const { resolveFlowComponent } = await loadModel('flow-validation');
+  const plugin = JSON.parse(
+    await readFile(
+      new URL('../../backend/src/Encoding.Api/Flows/Catalog/nodes.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  const reference = {
+    pluginId: 'nodes',
+    pluginVersion: '1.0.0',
+    componentId: 'nodes-run-on-node',
+    componentVersion: '1.0.0',
+    configurationSchemaVersion: 1,
+  };
+  assert.equal(resolveFlowComponent([plugin], reference)?.component.id, 'nodes-run-on-node');
+  assert.equal(
+    resolveFlowComponent([plugin], { ...reference, componentId: 'nodes-handoff' }),
+    undefined,
+  );
+  assert.equal(
+    resolveFlowComponent([plugin], { ...reference, configurationSchemaVersion: 2 }),
+    undefined,
+  );
+  assert.equal(
+    resolveFlowComponent([plugin], {
+      ...reference,
+      pluginVersion: '1.1.0',
+      componentId: 'nodes-handoff',
+    })?.component.id,
+    'nodes-handoff',
+  );
+});
+
 test('une entrée générique est disponible pour chaque type avec une seule entrée spécialisée compatible', () => {
   for (const mediaType of ['video', 'music', 'image', 'subtitles']) {
     const inputs = getFlowInputComponents(mediaType);

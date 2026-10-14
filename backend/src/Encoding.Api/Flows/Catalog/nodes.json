@@ -42,7 +42,10 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
     },
     {
       "id": "nodes-require-capability",
@@ -93,7 +96,10 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
     },
     {
       "id": "nodes-handoff",

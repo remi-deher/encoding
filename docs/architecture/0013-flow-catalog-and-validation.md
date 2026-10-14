@@ -14,6 +14,8 @@ Format 1, version positive, identifiant UUID, nom et type média valides ; ident
 
 Plusieurs connexions vers une même entrée et plusieurs blocs terminaux sont permis. La validation ne convertit pas ces chemins en parallélisme.
 
+Un descripteur peut déclarer `compatiblePluginVersions` pour des références historiques conservant la même version de composant et de schéma. Le registre et l'éditeur résolvent uniquement ces compatibilités explicites. Pour le plugin Nœuds, les contraintes sont vérifiées par segment entre deux relais ; un relais exige une connexion vers la suite. Voir 0021.
+
 Les valeurs doivent respecter les types text/number/boolean/select, les champs obligatoires, les options compatibles avec le média et les bornes/pas numériques. Les champs inconnus sont rejetés. Les valeurs manquantes ne sont pas complétées silencieusement : le frontend prépare explicitement les valeurs par défaut.
 
 ## Interface et transition du catalogue

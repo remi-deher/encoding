@@ -1,0 +1,412 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using Encoding.Api.Executions;
+using Encoding.Api.Flows;
+using Encoding.Api.Infrastructure;
+using Encoding.Api.Libraries;
+using Encoding.Api.Nodes;
+using Encoding.Api.Plugins;
+using Encoding.Contracts.Executions;
+using Encoding.Contracts.Flows;
+using Encoding.Contracts.Nodes;
+using Encoding.Contracts.Plugins;
+using Encoding.NodeAgent;
+using Encoding.NodeAgent.Runtime;
+using Encoding.NodeAgent.Runtime.Media;
+using Encoding.NodeAgent.Services;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
+using NpgsqlTypes;
+
+namespace Encoding.Runtime.Tests;
+
+internal static class Program
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static JsonElement J<T>(T value) => JsonSerializer.SerializeToElement(value, Json);
+    private static void Check(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    public static async Task Main()
+    {
+        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var validator = new FlowDefinitionValidator(registry);
+        var eligibility = new RuntimeEligibility(registry, validator);
+        var destination = Guid.NewGuid();
+        var relay = Node(registry, "relay", "nodes-handoff", new() { ["mode"] = J("node"), ["targetNodeId"] = J(destination) });
+        var flow = Chain(Node(registry, "entry", "base-input-file"), relay,
+            Node(registry, "encode", "base-transcode-video"), Node(registry, "end", "base-complete-flow"));
+        Check(validator.Validate(flow).IsValid, "A valid relay flow must publish.");
+        Check(RuntimeHandoffPolicy.Segment(flow, "entry").Select(node => node.Id).SequenceEqual(["entry", "relay"]), "A relay bounds the current segment.");
+        Check(eligibility.CanRun(flow, Capabilities(false), Guid.NewGuid()), "The first segment must not require the next worker's encoder.");
+        Check(!eligibility.CanRun(flow, Capabilities(false), destination, "encode", true), "The next segment requires its encoder.");
+        Check(eligibility.CanRun(flow, Capabilities(true), destination, "encode", true), "A compatible receiver can resume.");
+        Check(!eligibility.CanRun(flow, Capabilities(false).Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.0.0" } : cap).ToArray(), Guid.NewGuid()), "An old agent cannot execute the new relay.");
+        var legacy = Node(registry, "constraint", "nodes-run-on-node", new() { ["targetNodeId"] = J(destination) });
+        Check(registry.Resolve(legacy.Component with { PluginVersion = "1.0.0" }) is not null, "Legacy node constraints remain resolvable.");
+        Check(!new RuntimeHandoffSelector("eligible").Accepts(destination, destination), "A relay excludes the previous worker.");
+        var inherited = relay with { Configuration = new Dictionary<string, JsonElement> { ["mode"] = J("inherit") } };
+        Check(RuntimeHandoffPolicy.Resolve(inherited, new Dictionary<string, JsonElement> { ["mode"] = J("node"), ["targetNodeId"] = J(destination) }).TargetNodeId == destination, "Plugin defaults are inherited.");
+        Check(RuntimeHandoffPolicy.Resolve(relay with { Configuration = new Dictionary<string, JsonElement> { ["mode"] = J("eligible") } }, new Dictionary<string, JsonElement> { ["mode"] = J("node"), ["targetNodeId"] = J(destination) }).Mode == "eligible", "The block overrides defaults.");
+        Check(!validator.Validate(Chain(Node(registry, "entry", "base-input-file"), relay)).IsValid, "A relay requires a connected continuation.");
+        var branch = flow with { Nodes = [.. flow.Nodes, Node(registry, "other", "base-variable", new() { ["name"] = J("x"), ["value"] = J("1") })], Connections = [.. flow.Connections, new("branch", "entry", "error", "other")] };
+        Check(RuntimeHandoffPolicy.Segment(branch, "entry").Any(node => node.Id == "other"), "All possible branches within the segment are considered.");
+        Console.WriteLine("PASS: relay contracts, segment eligibility, inheritance and old-agent compatibility.");
+
+        var connection = Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");
+        if (string.IsNullOrWhiteSpace(connection))
+        {
+            Console.WriteLine("PostgreSQL tests require ENCODING_TEST_DATABASE; see README.md.");
+            return;
+        }
+        await using var fixture = await Fixture.CreateAsync(connection, registry, validator, eligibility);
+        await fixture.BackendRelayAsync(false);
+        await fixture.BackendRelayAsync(true);
+        await fixture.FrozenConfigurationAsync();
+        await fixture.IntegrityAndAvailabilityAsync();
+        await fixture.ConcurrentRelayAsync();
+        await fixture.EarlyRunnerAsync();
+        await fixture.CancellationAsync();
+        if(ProcessToolRunner.Find("ffmpeg") is not null)
+        {
+            await fixture.MediaRelayAsync(false);
+            await fixture.MediaRelayAsync(true);
+        }
+        else Console.WriteLine("Media relay test requires ffmpeg and ffprobe (included in the test Dockerfile).");
+        Console.WriteLine("PASS: all PostgreSQL relay scenarios.");
+    }
+
+    private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
+        new("plugin/base", "1.0.0", ["general"], []), new("plugin/nodes", "1.1.0", ["general"], []),
+        new("ffprobe", "7.0", ["video"], []), .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
+
+    private static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)
+    {
+        var plugin = registry.Plugins.Single(plugin => plugin.Components.Any(component => component.Id == componentId));
+        var component = plugin.Components.Single(component => component.Id == componentId);
+        var configuration = component.ConfigurationSchema.Fields.Where(field => field.DefaultValue is not null).ToDictionary(field => field.Id, field => field.DefaultValue!.Value);
+        foreach (var pair in values ?? []) configuration[pair.Key] = pair.Value;
+        return new(id, null, new(plugin.Id, plugin.Version, component.Id, component.Version, component.ConfigurationSchema.Version), configuration);
+    }
+    private static FlowDefinition Chain(params FlowNodeDefinition[] nodes) => new(1, Guid.NewGuid(), 1, "Relay fixture", "video", nodes,
+        nodes.Zip(nodes.Skip(1), (source, target) => new FlowConnectionDefinition(source.Id + "-" + target.Id, source.Id, "success", target.Id)).ToArray());
+
+    private sealed class Probe : IToolCapabilityProbe
+    {
+        public Task<IReadOnlyList<NodeToolCapability>> DiscoverAsync(CancellationToken ct) => Task.FromResult(Capabilities(true));
+    }
+
+    private sealed class Fixture : IAsyncDisposable
+    {
+        private readonly string schema = "handoff_" + Guid.NewGuid().ToString("N");
+        private readonly string directory = Path.Combine(Path.GetTempPath(), "encoding-handoff-" + Guid.NewGuid().ToString("N"));
+        private readonly string connection;
+        private readonly FlowComponentRegistry registry;
+        private readonly FlowDefinitionValidator validator;
+        private readonly RuntimeEligibility eligibility;
+        private NpgsqlDataSource db = null!;
+        private WebApplication app = null!;
+        private RuntimeRepository runtime = null!;
+        private RuntimeArtifactStore artifacts = null!;
+        private PluginConfigurationRepository configurations = null!;
+        private ExecutionRepository executions = null!;
+        private readonly Guid a = Guid.NewGuid(), b = Guid.NewGuid(), c = Guid.NewGuid();
+        private const string Token = "fixture-node-token-is-long-enough-for-authentication";
+        private Fixture(string connection, FlowComponentRegistry registry, FlowDefinitionValidator validator, RuntimeEligibility eligibility)
+        { this.connection=connection; this.registry=registry; this.validator=validator; this.eligibility=eligibility; }
+
+        public static async Task<Fixture> CreateAsync(string connection, FlowComponentRegistry registry, FlowDefinitionValidator validator, RuntimeEligibility eligibility)
+        {
+            var fixture=new Fixture(connection,registry,validator,eligibility);
+            try { await fixture.InitializeAsync(); return fixture; }
+            catch { await fixture.DisposeAsync(); throw; }
+        }
+        private async Task InitializeAsync()
+        {
+            Directory.CreateDirectory(directory);
+            await using(var admin=NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"CREATE SCHEMA {schema}").ExecuteNonQueryAsync();
+            db=NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(connection) { SearchPath=schema }.ConnectionString);
+            await DatabaseMigrator.ApplyAsync(db,Path.GetFullPath("backend"),CancellationToken.None);
+            var config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Runtime:ArtifactDirectory"]=Path.Combine(directory,"durable") }).Build();
+            configurations=new(db,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
+            runtime=new(db,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),configurations);
+            artifacts=new(db,config); executions=new(db);
+            foreach(var id in new[]{a,b,c})
+            {
+                await using var command=db.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at,node_token_hash) VALUES(@id,@name,ARRAY['worker'],10,@caps,clock_timestamp(),@token)");
+                command.Parameters.AddWithValue("id",id); command.Parameters.AddWithValue("name",id.ToString());
+                command.Parameters.AddWithValue("caps",NpgsqlDbType.Jsonb,JsonSerializer.Serialize(Capabilities(true),Json));
+                command.Parameters.AddWithValue("token",SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Token))); await command.ExecuteNonQueryAsync();
+            }
+            var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0"); builder.Logging.ClearProviders();
+            builder.Services.AddSingleton(db); builder.Services.AddSingleton(runtime); builder.Services.AddSingleton(artifacts);
+            builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(config);
+            builder.Services.AddSingleton<LibraryProcessingRepository>(); builder.Services.AddSingleton<LibraryWorkflowRepository>();
+            builder.Services.AddSingleton(validator); builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromHours(1)));
+            app=builder.Build(); app.MapRuntimeEndpoints();
+            app.MapGet("/api/v1/executions/{id:guid}",async(Guid id)=>await executions.GetAsync(id,CancellationToken.None));
+            await app.StartAsync();
+        }
+        private RuntimeClient Client(Guid node) => new(new WorkerIdentityState(node,"fixture","fixture",app.Urls.Single()+"/",Token,true));
+        private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
+        {
+            var library=Guid.NewGuid(); var id=Guid.NewGuid();
+            await using var command=db.CreateCommand("""
+                INSERT INTO libraries(id,name) VALUES(@library,@name);
+                INSERT INTO library_node_accesses(library_id,node_id,mode,local_path,can_read,can_write)
+                  VALUES(@library,@a,'direct',@root,true,true);
+                INSERT INTO library_node_accesses(library_id,node_id,mode,can_read,can_write,transfer_source_node_id)
+                  VALUES(@library,@b,'transfer',true,true,@a),(@library,@c,'transfer',true,true,@a);
+                """);
+            command.Parameters.AddWithValue("library",library); command.Parameters.AddWithValue("name",library.ToString());
+            command.Parameters.AddWithValue("root",directory); command.Parameters.AddWithValue("a",a); command.Parameters.AddWithValue("b",b); command.Parameters.AddWithValue("c",c);
+            await command.ExecuteNonQueryAsync();
+            Check(validator.Validate(flow).IsValid,JsonSerializer.Serialize(validator.Validate(flow),Json));
+            Check(await runtime.EnqueueAsync(new(id,library,"source.mkv",flow.Id,flow.Version),flow,CancellationToken.None),"Enqueue fixture.");
+            var lease=await runtime.ClaimAsync(a,CancellationToken.None)??throw new InvalidOperationException("The initial worker must claim.");
+            Check(lease.ExecutionId==id,"The expected execution was claimed.");
+            content??=System.Text.Encoding.UTF8.GetBytes("fixture-original-media");
+            var digest=Convert.ToHexStringLower(SHA256.HashData(content));
+            Check(await artifacts.PutAsync(id,a,lease.Epoch,digest,new MemoryStream(content),true,CancellationToken.None),"Register original source.");
+            return(id,lease,new(digest,".mkv",new Dictionary<string,JsonElement>(),null,null,[]));
+        }
+        private async Task<RuntimeCheckpoint> CompleteAsync(Guid id,Guid actor,RuntimeLease lease,string nodeId,RuntimeContext context)
+        {
+            var started=await runtime.StartStepAsync(id,actor,new(lease.Epoch,nodeId),CancellationToken.None)??throw new InvalidOperationException("Start expected step.");
+            var node=lease.Flow.Nodes.Single(node=>node.Id==nodeId);
+            var terminal=node.Component.ComponentId=="base-complete-flow";
+            var output=terminal?null:"success";
+            var next=lease.Flow.Connections.SingleOrDefault(edge=>edge.SourceNodeId==nodeId && edge.SourceOutputId==output)?.TargetNodeId;
+            var selector=RuntimeHandoffPolicy.IsHandoff(node)?RuntimeHandoffPolicy.Resolve(node,lease.PluginConfigurations?.GetValueOrDefault("nodes")):null;
+            var checkpoint=new RuntimeCheckpoint(nodeId,started.InvocationId,output,next,context,terminal?"unchanged":null,selector);
+            var status=await runtime.RenewAsync(id,actor,lease.Epoch,CancellationToken.None)??throw new InvalidOperationException("Renew before checkpoint.");
+            Check(await runtime.CompleteStepAsync(id,actor,new(lease.Epoch,Guid.NewGuid(),status.Revision,checkpoint),CancellationToken.None),"Checkpoint must commit.");
+            return checkpoint;
+        }
+        private FlowDefinition RelayFlow(string mode="node",bool converted=false) => Chain([
+            Node(registry,"entry","base-input-file"),
+            Node(registry,"variable","base-variable",new(){["name"]=J("selected"),["value"]=J("42")}),
+            .. converted?new[]{Node(registry,"convert","base-remux-media")}:Array.Empty<FlowNodeDefinition>(),
+            Node(registry,"relay","nodes-handoff",new(){["mode"]=J(mode),["targetNodeId"]=J(b)}),
+            Node(registry,"end","base-complete-flow")]);
+
+        public async Task BackendRelayAsync(bool converted)
+        {
+            var fixture=await EnqueueAsync(RelayFlow(converted:converted)); var(id,lease,context)=fixture;
+            await CompleteAsync(id,a,lease,"entry",context);
+            context=context with { Variables=new Dictionary<string,JsonElement>{["selected"]=J(42)},BeforeMetadata=J(new{source="before"}),CurrentMetadata=J(new{source="before"}) };
+            await CompleteAsync(id,a,lease,"variable",context);
+            if(converted)
+            {
+                var candidate=System.Text.Encoding.UTF8.GetBytes("converted-media-fixture"); var sha=Convert.ToHexStringLower(SHA256.HashData(candidate));
+                Check(await artifacts.PutAsync(id,a,lease.Epoch,sha,new MemoryStream(candidate),false,CancellationToken.None),"Register transformed artifact.");
+                context=context with { CurrentSha256=sha,CurrentMetadata=J(new{source="after"}) };
+                var report=System.Text.Encoding.UTF8.GetBytes("annex-report-fixture");var reportSha=Convert.ToHexStringLower(SHA256.HashData(report));
+                Check(await artifacts.PutAsync(id,a,lease.Epoch,reportSha,new MemoryStream(report),false,CancellationToken.None),"Register an additional artifact.");
+                context=context with { Variables=new Dictionary<string,JsonElement>(context.Variables){["artifact.export.report"]=J(new{sha256=reportSha,name="report.json"})} };
+                await CompleteAsync(id,a,lease,"convert",context);
+            }
+            var cp=await CompleteAsync(id,a,lease,"relay",context);
+            Check(await runtime.RenewAsync(id,a,lease.Epoch,CancellationToken.None) is null,"The previous lease is revoked.");
+            Check(!await artifacts.AuthorizeAsync(id,a,lease.Epoch,CancellationToken.None),"An obsolete epoch cannot access artifacts.");
+            Check(await runtime.StartStepAsync(id,a,new(lease.Epoch,"end"),CancellationToken.None) is null,"The previous worker cannot continue.");
+            Check(await runtime.CompleteStepAsync(id,a,new(lease.Epoch,Guid.NewGuid(),lease.Revision,cp),CancellationToken.None),"An identical lost-response retry is acknowledged.");
+            Check(!await runtime.CompleteStepAsync(id,a,new(lease.Epoch,Guid.NewGuid(),lease.Revision,cp with { NextNodeId="entry" }),CancellationToken.None),"A modified duplicate is rejected.");
+            Check(await runtime.ClaimAsync(a,CancellationToken.None) is null,"The previous worker cannot reclaim its relay.");
+            Check(await runtime.ClaimAsync(c,CancellationToken.None) is null,"A different worker cannot take a precise target's relay.");
+            if(converted)
+            {
+                await using var direct=db.CreateCommand("UPDATE library_node_accesses SET mode='direct',local_path='/another/mount',transfer_source_node_id=NULL WHERE node_id=@node AND library_id=(SELECT library_id FROM execution_work WHERE execution_id=@id)");
+                direct.Parameters.AddWithValue("id",id);direct.Parameters.AddWithValue("node",b);await direct.ExecuteNonQueryAsync();
+            }
+            await using(var pending=db.CreateCommand("SELECT lease_until='infinity'::timestamptz FROM media_reservations WHERE execution_id=@id"))
+            { pending.Parameters.AddWithValue("id",id);Check((bool)(await pending.ExecuteScalarAsync())!,"The media reservation survives waiting."); }
+            var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The receiver must claim.");
+            Check(received.ExecutionId==id && received.Attempt==lease.Attempt && received.Epoch>lease.Epoch,"The same execution resumes with a new epoch.");
+            Check(received.SourceNodeId==a,"The source node is preserved.");
+            Check(received.Checkpoint?.NextNodeId=="end" && received.Checkpoint.Context.Variables["selected"].GetInt32()==42,"The context and resume point survive.");
+            Check(received.Checkpoint!.Context.CurrentSha256==context.CurrentSha256,"The correct source or transformed file is referenced.");
+            if(converted) Check(received.Checkpoint.Context.Variables.ContainsKey("artifact.export.report"),"Additional artifact references survive changing workers.");
+            using(var client=Client(b)) await client.DownloadAsync(id,received.Epoch,context.CurrentSha256,Path.Combine(directory,id+".download"),CancellationToken.None);
+            await CompleteAsync(id,b,received,"end",context);
+            var status=await runtime.RenewAsync(id,b,received.Epoch,CancellationToken.None);
+            Check(await new RuntimeTransferRepository(db).FinishAsync(id,b,new(received.Epoch,Guid.NewGuid(),status!.Revision,"succeeded","Finished relay fixture",null,null,context.BeforeMetadata,context.CurrentMetadata),CancellationToken.None),"The receiver finishes the same execution.");
+            Console.WriteLine("PASS: durable relay "+(converted?"after transformation":"before transformation")+", exact duplicate receipt, fencing and artifact download.");
+        }
+        public async Task ConcurrentRelayAsync()
+        {
+            var(id,lease,context)=await EnqueueAsync(RelayFlow("eligible"));
+            await CompleteAsync(id,a,lease,"entry",context); await CompleteAsync(id,a,lease,"variable",context); await CompleteAsync(id,a,lease,"relay",context);
+            var claims=await Task.WhenAll(runtime.ClaimAsync(b,CancellationToken.None),runtime.ClaimAsync(c,CancellationToken.None));
+            Check(claims.Count(claim=>claim?.ExecutionId==id)==1,"Only one receiver can claim the relay concurrently.");
+            Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel concurrent fixture.");
+            await ExpireAsync(id);
+            await RecoverCancellationAsync(id);
+            Console.WriteLine("PASS: concurrent receiver claims preserve one owner.");
+        }
+        public async Task IntegrityAndAvailabilityAsync()
+        {
+            var(id,lease,context)=await EnqueueAsync(RelayFlow());
+            await CompleteAsync(id,a,lease,"entry",context);await CompleteAsync(id,a,lease,"variable",context);
+            var started=await runtime.StartStepAsync(id,a,new(lease.Epoch,"relay"),CancellationToken.None);
+            var status=await runtime.RenewAsync(id,a,lease.Epoch,CancellationToken.None);
+            var missing=new string('a',64);
+            var cp=new RuntimeCheckpoint("relay",started!.InvocationId,"success","end",context with { CurrentSha256=missing },null,new("node",b));
+            Check(!await runtime.CompleteStepAsync(id,a,new(lease.Epoch,Guid.NewGuid(),status!.Revision,cp),CancellationToken.None),"A relay cannot commit an artifact that is not durable.");
+            var corruptRejected=false;
+            try { await artifacts.PutAsync(id,a,lease.Epoch,missing,new MemoryStream([1,2,3]),false,CancellationToken.None); }
+            catch(InvalidDataException) { corruptRejected=true; }
+            Check(corruptRejected,"A corrupt transfer must be rejected before registration.");
+            await CompleteAsync(id,a,lease,"relay",context);
+            await using(var offline=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@id"))
+            { offline.Parameters.AddWithValue("id",b);await offline.ExecuteNonQueryAsync(); }
+            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"An offline target cannot claim.");
+            await using(var busy=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp(),max_concurrent_tasks=0 WHERE id=@id"))
+            { busy.Parameters.AddWithValue("id",b);await busy.ExecuteNonQueryAsync(); }
+            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"Capacity limits still apply to a relay.");
+            await using(var unsupported=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=10 WHERE id=@node; UPDATE library_node_accesses SET is_enabled=false WHERE node_id=@node AND library_id=(SELECT library_id FROM execution_work WHERE execution_id=@execution)"))
+            { unsupported.Parameters.AddWithValue("node",b);unsupported.Parameters.AddWithValue("execution",id);await unsupported.ExecuteNonQueryAsync(); }
+            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"The receiver needs an enabled library access.");
+            Check(await new NodeRepository(db).DeleteAsync(a,CancellationToken.None)=="busy","The original source cannot be removed during a waiting relay.");
+            Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel integrity fixture.");await RecoverCancellationAsync(id);
+            Console.WriteLine("PASS: missing/corrupt artifacts, offline targets, capacity and access limits, source removal protection.");
+        }
+        public async Task FrozenConfigurationAsync()
+        {
+            var plugin=registry.Plugins.Single(plugin=>plugin.Id=="nodes");
+            var saved=await configurations.SaveGlobalAsync(plugin,new(0,new Dictionary<string,JsonElement>{["mode"]=J("node"),["targetNodeId"]=J(b)}),CancellationToken.None);
+            Check(saved is not null,"Save defaults before the initial assignment.");
+            var flow=RelayFlow();
+            flow=flow with { Nodes=flow.Nodes.Select(node=>RuntimeHandoffPolicy.IsHandoff(node)?node with { Configuration=new Dictionary<string,JsonElement>{["mode"]=J("inherit")} }:node).ToArray() };
+            var(id,lease,context)=await EnqueueAsync(flow);
+            Check(await configurations.SaveGlobalAsync(plugin,new(saved!.Revision,new Dictionary<string,JsonElement>{["targetNodeId"]=J(c)}),CancellationToken.None) is not null,"Update global defaults while the flow is running.");
+            await CompleteAsync(id,a,lease,"entry",context);await CompleteAsync(id,a,lease,"variable",context);
+            var started=await runtime.StartStepAsync(id,a,new(lease.Epoch,"relay"),CancellationToken.None);
+            var status=await runtime.RenewAsync(id,a,lease.Epoch,CancellationToken.None);
+            var forged=new RuntimeCheckpoint("relay",started!.InvocationId,"success","end",context,null,new("node",c));
+            Check(!await runtime.CompleteStepAsync(id,a,new(lease.Epoch,Guid.NewGuid(),status!.Revision,forged),CancellationToken.None),"The worker cannot replace the frozen target.");
+            await CompleteAsync(id,a,lease,"relay",context);
+            Check(await runtime.ClaimAsync(c,CancellationToken.None) is null,"A global edit must not change a running execution's target.");
+            var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The original frozen target must receive the relay.");
+            Check(received.PluginConfigurations!["nodes"]["targetNodeId"].GetGuid()==b,"The receiver retains the original configuration snapshot.");
+            Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel frozen fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
+            var overrideFlow=Guid.NewGuid();
+            var overrideSaved=await configurations.SaveFlowAsync(overrideFlow,plugin,new(0,new Dictionary<string,JsonElement>{["mode"]=J("eligible")}),CancellationToken.None);
+            Check(overrideSaved is not null,"Create a flow-specific plugin override.");
+            var overrideUpdated=await configurations.SaveFlowAsync(overrideFlow,plugin,new(overrideSaved!.Revision,new Dictionary<string,JsonElement>{["mode"]=J("node"),["targetNodeId"]=J(b)}),CancellationToken.None);
+            Check(overrideUpdated?.Revision==overrideSaved.Revision+1,"An existing flow override can be updated.");
+            Check(await configurations.SaveFlowAsync(overrideFlow,plugin,new(overrideSaved.Revision,new Dictionary<string,JsonElement>{["targetNodeId"]=J(c)}),CancellationToken.None) is null,"A stale override revision cannot overwrite newer settings.");
+            await using var connection=await db.OpenConnectionAsync();await using var transaction=await connection.BeginTransactionAsync();
+            var effective=await configurations.ResolveEffectiveAsync(overrideFlow,["nodes"],connection,transaction,CancellationToken.None);
+            Check(effective["nodes"]["targetNodeId"].GetGuid()==b,"A flow override takes precedence over global settings.");
+            Console.WriteLine("PASS: configuration snapshots remain fixed and forged relay targets are rejected.");
+        }
+        private async Task ExpireAsync(Guid id)
+        {
+            await using var command=db.CreateCommand("UPDATE execution_work SET lease_until=clock_timestamp()-interval '1 second' WHERE execution_id=@id; UPDATE media_reservations SET lease_until=clock_timestamp()-interval '1 second' WHERE execution_id=@id");
+            command.Parameters.AddWithValue("id",id);await command.ExecuteNonQueryAsync();
+        }
+        private async Task RecoverCancellationAsync(Guid id)
+        {
+            using var service=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await service.StartAsync(CancellationToken.None);
+            for(var retry=0;retry<50 && (await executions.GetAsync(id,CancellationToken.None))!.State!="cancelled";retry++) await Task.Delay(100);
+            await service.StopAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="cancelled","Cancellation recovery must finish.");
+            await using var command=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id");command.Parameters.AddWithValue("id",id);
+            Check((long)(await command.ExecuteScalarAsync())! ==0,"Cancellation releases the reservation.");
+        }
+        private RuntimeFlowRunner Runner(string name,out NodeAgentOptions options)
+        {
+            options=NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Node:DataDirectory"]=Path.Combine(directory,name) }).Build());
+            var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
+            return new(options,scanner,new MediaActions(tools,scanner,new Probe()),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),NullLogger<RuntimeFlowRunner>.Instance);
+        }
+        public async Task EarlyRunnerAsync()
+        {
+            var(id,lease,context)=await EnqueueAsync(RelayFlow());
+            var runner=Runner("early-a",out var options);
+            using var client=Client(a);using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await runner.RunAsync(lease,client,deadline.Token);
+            Check(!Directory.EnumerateFiles(options.DataDirectory,"*",SearchOption.AllDirectories).Any(),"An early relay must not materialize media on the first worker.");
+            var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The early runner must yield.");
+            Check(received.Checkpoint?.Context.Variables["selected"].GetInt32()==42,"The runner persists variables before the relay.");
+            await ExpireAsync(id);var resumed=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("Receiver crash must resume.");
+            Check(resumed.Checkpoint?.NextNodeId=="end" && resumed.Epoch>received.Epoch,"Lease expiration resumes after the relay without repeating it.");
+            Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel early fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
+            Console.WriteLine("PASS: real early worker relay avoids downloads and survives receiver loss.");
+        }
+        public async Task CancellationAsync()
+        {
+            var(id,lease,context)=await EnqueueAsync(RelayFlow());
+            await CompleteAsync(id,a,lease,"entry",context);await CompleteAsync(id,a,lease,"variable",context);await CompleteAsync(id,a,lease,"relay",context);
+            Check(await executions.CancelAsync(id,CancellationToken.None),"A waiting relay can be cancelled.");await RecoverCancellationAsync(id);
+            Console.WriteLine("PASS: cancellation while waiting releases the durable reservation.");
+        }
+        public async Task MediaRelayAsync(bool planned)
+        {
+            var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
+            var source=Path.Combine(directory,"source.mkv");
+            await tools.CheckedAsync("ffmpeg",["-y","-nostdin","-v","error","-f","lavfi","-i","testsrc2=size=64x64:rate=5","-t","1","-c:v","libx264",source],directory,CancellationToken.None);
+            var flow=Chain([Node(registry,"entry","base-input-file"),
+                .. planned?new[]{Node(registry,"prepare","base-prepare-processing")}:Array.Empty<FlowNodeDefinition>(),
+                Node(registry,"encode","base-transcode-video",new(){["processingMode"]=J(planned?"plan":"direct"),["videoCodec"]=J("hevc"),["preset"]=J("fast")}),
+                Node(registry,"convert","base-remux-media",new(){["container"]=J("mp4"),["processingMode"]=J(planned?"plan":"direct")}),
+                Node(registry,"relay","nodes-handoff",new(){["mode"]=J("node"),["targetNodeId"]=J(b)}),
+                .. planned?new[]{Node(registry,"execute","base-execute-processing")}:Array.Empty<FlowNodeDefinition>(),
+                Node(registry,"end","base-complete-flow",new(){["result"]=J("success")})]);
+            var(id,lease,context)=await EnqueueAsync(flow,await File.ReadAllBytesAsync(source));
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(40));
+            using(var client=Client(a)) await Runner("media-a",out _).RunAsync(lease,client,deadline.Token);
+            var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("Converted media must yield.");
+            Check(planned?received.Checkpoint!.Context.CurrentSha256==context.CurrentSha256:received.Checkpoint!.Context.CurrentSha256!=context.CurrentSha256,
+                "The relay references the original for an unexecuted plan, and the converted file after execution.");
+            Check(!planned || received.Checkpoint!.Context.Plan.Count==2,"Unexecuted plan steps survive the relay.");
+            Check(received.Checkpoint.Context.BeforeMetadata is not null && received.Checkpoint.Context.CurrentMetadata is not null,"Both scans survive conversion and relay.");
+            var candidate=Path.Combine(directory,planned?"received-original.mkv":"received.mp4");
+            using(var client=Client(b)) await client.DownloadAsync(id,received.Epoch,received.Checkpoint.Context.CurrentSha256,candidate,deadline.Token);
+            await scanner.ValidateAsync(candidate,"video",received.Checkpoint.Context.BeforeMetadata,deadline.Token);
+            using var receiver=Client(b);var run=Runner("media-b",out _).RunAsync(received,receiver,deadline.Token);
+            RuntimeTransfer? publication=null;
+            var transfers=new RuntimeTransferRepository(db);
+            for(var retry=0;retry<100;retry++)
+            {
+                publication=(await transfers.ListAsync(a,deadline.Token)).SingleOrDefault(item=>item.ExecutionId==id && item.Publish);
+                if(publication is not null) break;
+                if(run.IsCompleted) break;
+                await Task.Delay(100,deadline.Token);
+            }
+            Check(publication is not null,"The final worker requests publication from the original source node.");
+            Runner("source-agent",out var sourceOptions);
+            Directory.CreateDirectory(sourceOptions.DataDirectory);
+            await File.WriteAllTextAsync(Path.Combine(sourceOptions.DataDirectory,"node-identity.json"),
+                JsonSerializer.Serialize(new WorkerIdentityState(a,"fixture","fixture",app.Urls.Single()+"/",Token,true),Json),deadline.Token);
+            using var sourceService=new RuntimeTransferService(sourceOptions,new WorkerIdentityStore(sourceOptions),scanner,NullLogger<RuntimeTransferService>.Instance);
+            await sourceService.StartAsync(deadline.Token);
+            await run;
+            await sourceService.StopAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,deadline.Token))!.State=="succeeded","The complete two-worker media execution succeeds.");
+            var published=Path.Combine(directory,".encoding-results",id.ToString("D"),"result.mp4");
+            Check(await SafeMediaPaths.DigestAsync(published,deadline.Token)==publication!.ResultSha256,"The source service publishes the exact validated artifact.");
+            var finalMetadata=await scanner.ScanAsync(published,deadline.Token);
+            Check(finalMetadata.GetProperty("streams").EnumerateArray().Any(stream=>stream.GetProperty("codec_name").GetString()=="hevc"),"The published video was actually encoded to H.265.");
+            Check(Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(source)))==context.CurrentSha256,"The source media remains intact.");
+            Console.WriteLine("PASS: H.265 "+(planned?"plan handed off before execution":"conversion handed off after execution")+", receiver scan and actual source publication.");
+        }
+        public async ValueTask DisposeAsync()
+        {
+            if(app is not null) await app.DisposeAsync();
+            if(db is not null) await db.DisposeAsync();
+            await using(var admin=NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE").ExecuteNonQueryAsync();
+            if(Directory.Exists(directory)) Directory.Delete(directory,true);
+        }
+    }
+}

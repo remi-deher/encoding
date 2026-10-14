@@ -8,8 +8,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container: mcr.microsoft.com/dotnet/sdk:10.0
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: encoding_test
+          POSTGRES_USER: encoding
+          POSTGRES_PASSWORD: encoding_test
+        options: >-
+          --health-cmd "pg_isready -U encoding -d encoding_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - run: dotnet restore backend/Encoding.sln
-      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore
+      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
+      - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg
+      - run: dotnet run --project backend/tests/Encoding.Runtime.Tests --configuration Release
+        env:
+          ENCODING_TEST_DATABASE: Host=postgres;Database=encoding_test;Username=encoding;Password=encoding_test

@@ -24,8 +24,14 @@ La matérialisation locale est différée jusqu'à une étape qui nécessite un 
 
 La première version utilise le stockage durable partagé et les endpoints de transfert existants. Le transfert direct entre workers pourra être ajouté avec négociation authentifiée, reprise, contrôle d'intégrité et repli vers ce stockage. Aucun serveur permanent ni connexion directe entre workers n'est nécessaire.
 
-Le plugin Nœuds passe en version 1.1.0, tout en gardant les références 1.0.0 des deux contraintes historiques résolubles. Le nouveau bloc n'est attribué qu'aux agents annonçant 1.1.0. Un agent ancien ne peut pas réclamer un segment qui contient un relais.
+Le plugin Nœuds passe en version 1.1.0, tout en gardant les références 1.0.0 des deux contraintes historiques résolubles. Le champ facultatif `compatiblePluginVersions` d'un descripteur déclare ces références compatibles ; le registre, l'éligibilité et l'éditeur utilisent la même déclaration. La référence originale du bloc est conservée. Le nouveau bloc n'est attribué qu'aux agents annonçant 1.1.0. Un agent ancien ne peut pas réclamer un segment qui contient un relais.
 
 ## Garanties à vérifier
 
 Relais avant et après transformation, contexte inchangé, reprises à chaque panne, doublons, refus des anciennes époques, conservation de la source et de la réservation, attente sans cible, annulation et sélection indépendante des capacités de chaque segment.
+
+## Implémentation et vérification
+
+La migration additive `0017_worker_handoff` ajoute l'état interne de relais, le sélecteur, le worker précédent, les configurations chiffrées et l'identité de fin de checkpoint. Une fin de checkpoint identique est acquittée même après la révocation du bail ; une variante du contenu ou de l'identité est refusée.
+
+La suite `backend/tests/Encoding.Runtime.Tests` vérifie les dépôts sur PostgreSQL isolé, les endpoints et le runner réel. Elle couvre les fichiers originaux et transformés, les artefacts annexes, les doublons, les anciennes époques, les réclamations concurrentes, les configurations figées et les surcharges, les limites, les cibles hors ligne, l'accès bibliothèque, le retrait de la source et l'annulation. Deux parcours FFmpeg sur une vidéo synthétique vérifient la conversion en H.265 avant relais et la transmission d'un plan avant exécution, jusqu'à la publication réelle par le service source. La CI exécute ces mêmes scénarios.

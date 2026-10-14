@@ -8,6 +8,7 @@ export interface FlowComponentReference {
   readonly configurationSchemaVersion: number;
 }
 export interface FlowComponentDefinition {
+  readonly compatiblePluginVersions?: readonly string[];
   readonly reference?: FlowComponentReference;
   readonly id: string;
   readonly name: string;

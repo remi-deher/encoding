@@ -140,6 +140,25 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
             }
             var pluginSettings=item.Settings is {} savedSettings?pluginConfigurations.ReadSnapshot(savedSettings)
                 :await pluginConfigurations.ResolveEffectiveAsync(item.Flow.Id,item.Flow.Nodes.Select(node=>node.Component.PluginId).Where(id=>id!="base"),c,tx,ct);
+            var segmentEntry=item.Checkpoint?.NextNodeId??(item.Checkpoint is null?item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id:null);
+            if(segmentEntry is not null)
+            {
+                var returnsToSelf=false;
+                foreach(var relay in RuntimeHandoffPolicy.Segment(item.Flow,segmentEntry).Where(RuntimeHandoffPolicy.IsHandoff))
+                {
+                    RuntimeHandoffSelector destination;
+                    try { destination=RuntimeHandoffPolicy.Resolve(relay,pluginSettings.GetValueOrDefault("nodes")); }
+                    catch(ArgumentException)
+                    {
+                        await using var actor=new NpgsqlCommand("UPDATE executions SET node_id=@worker WHERE id=@id",c,tx);
+                        actor.Parameters.AddWithValue("id",item.Id); actor.Parameters.AddWithValue("worker",worker); await actor.ExecuteNonQueryAsync(ct);
+                        await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,"La configuration du relais ne désigne pas un worker valide."),c,tx,ct);
+                        await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return null;
+                    }
+                    if(destination.Mode=="node" && destination.TargetNodeId==worker) returnsToSelf=true;
+                }
+                if(returnsToSelf) continue;
+            }
             var epoch=item.Epoch+1;
             await using(var reserve=new NpgsqlCommand("""
               INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until)
@@ -242,7 +261,8 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
     public async Task<bool> CompleteStepAsync(Guid id,Guid worker,CompleteRuntimeStep request,CancellationToken ct)
     {
         var cp=request.Checkpoint;
-        if(cp is null || cp.Context is null || cp.Context.Variables is null || cp.Context.Plan is null
+        if(cp is null || string.IsNullOrWhiteSpace(cp.NodeId) || cp.InvocationId==Guid.Empty
+            || cp.Context is null || cp.Context.Variables is null || cp.Context.Plan is null
             || !RuntimeArtifactStore.ValidDigest(cp.Context.CurrentSha256)
             || cp.Context.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(cp.Context.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
         var serialized=JsonSerializer.Serialize(cp,Json); if(serialized.Length>1048576) return false;
@@ -275,7 +295,10 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         foreach(var variable in cp.Context.Variables.Where(pair=>pair.Key.StartsWith("artifact.",StringComparison.Ordinal)))
         {
             if(variable.Value.ValueKind!=JsonValueKind.Object || !variable.Value.TryGetProperty("sha256",out var digest)
-                || digest.ValueKind!=JsonValueKind.String || !RuntimeArtifactStore.ValidDigest(digest.GetString()!)) return false;
+                || digest.ValueKind!=JsonValueKind.String || !RuntimeArtifactStore.ValidDigest(digest.GetString()!)
+                || !variable.Value.TryGetProperty("name",out var name) || name.ValueKind!=JsonValueKind.String
+                || string.IsNullOrWhiteSpace(name.GetString()) || name.GetString()!.Length>255
+                || name.GetString()!.Contains('/') || name.GetString()!.Contains('\\')) return false;
             await using var artifact=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx);
             artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",digest.GetString()!);
             if(!(bool)(await artifact.ExecuteScalarAsync(ct))!) return false;

@@ -4,6 +4,7 @@ import type {
   FlowGraphConnection,
   FlowComponentConfiguration,
   FlowComponentConfigurationSchema,
+  FlowComponentReference,
 } from './flow-component';
 import type { MediaType } from './media-type';
 
@@ -64,6 +65,26 @@ export interface FlowValidationResult {
     readonly path: string;
     readonly message: string;
   }[];
+}
+
+/** Resolve only exact component/schema versions and explicitly declared plugin compatibility. */
+export function resolveFlowComponent(
+  plugins: readonly FlowPluginCatalog[],
+  reference: FlowComponentReference,
+) {
+  for (const plugin of plugins) {
+    if (plugin.id !== reference.pluginId) continue;
+    const component = plugin.components.find(
+      (component) =>
+        component.id === reference.componentId &&
+        component.version === reference.componentVersion &&
+        component.configurationSchema?.version === reference.configurationSchemaVersion &&
+        (plugin.version === reference.pluginVersion ||
+          component.compatiblePluginVersions?.includes(reference.pluginVersion)),
+    );
+    if (component) return { plugin, component };
+  }
+  return undefined;
 }
 
 export function flowComponentReference(

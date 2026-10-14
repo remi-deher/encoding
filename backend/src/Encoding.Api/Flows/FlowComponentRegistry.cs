@@ -8,6 +8,7 @@ namespace Encoding.Api.Flows;
 public sealed class FlowComponentRegistry
 {
     private readonly Dictionary<FlowComponentReference, FlowComponentDescriptor> components = [];
+    private readonly Dictionary<FlowComponentReference,string> runtimeVersions=[];
     public IReadOnlyList<PluginManifest> Plugins { get; }
 
     public FlowComponentRegistry(IConfiguration configuration)
@@ -64,12 +65,19 @@ public sealed class FlowComponentRegistry
                     component.Version,
                     component.ConfigurationSchema.Version);
                 if (!components.TryAdd(reference, component)) throw new InvalidOperationException($"Composant dupliqué : {component.Id}.");
-                if(installed.Id=="nodes" && installed.Version=="1.1.0" && component.Id!="nodes-handoff")
-                    components.Add(reference with { PluginVersion="1.0.0" },component);
+                runtimeVersions.Add(reference,installed.Version);
+                foreach(var version in component.CompatiblePluginVersions??[])
+                {
+                    var compatible=reference with { PluginVersion=version };
+                    if(string.IsNullOrWhiteSpace(version) || !components.TryAdd(compatible,component))
+                        throw new InvalidOperationException($"Référence compatible dupliquée ou invalide : {component.Id}.");
+                    runtimeVersions.Add(compatible,installed.Version);
+                }
             }
         }
         Plugins = manifests;
     }
 
     public FlowComponentDescriptor? Resolve(FlowComponentReference reference) => components.GetValueOrDefault(reference);
+    public string? RuntimePluginVersion(FlowComponentReference reference)=>runtimeVersions.GetValueOrDefault(reference);
 }

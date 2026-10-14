@@ -44,6 +44,7 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
         await using var command = dataSource.CreateCommand("""
             INSERT INTO plugin_configurations(plugin_id,revision,encrypted_values)
             SELECT @id,1,@values WHERE @expected=0
+              OR EXISTS(SELECT 1 FROM plugin_configurations WHERE plugin_id=@id AND revision=@expected)
             ON CONFLICT(plugin_id) DO UPDATE SET revision=plugin_configurations.revision+1,
               encrypted_values=EXCLUDED.encrypted_values,updated_at=clock_timestamp()
             WHERE plugin_configurations.revision=@expected
@@ -87,6 +88,7 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
         await using var command = new NpgsqlCommand("""
             INSERT INTO flow_plugin_configurations(flow_id,plugin_id,revision,encrypted_values)
             SELECT @flow,@plugin,1,@values WHERE @expected=0
+              OR EXISTS(SELECT 1 FROM flow_plugin_configurations WHERE flow_id=@flow AND plugin_id=@plugin AND revision=@expected)
             ON CONFLICT(flow_id,plugin_id) DO UPDATE SET revision=flow_plugin_configurations.revision+1,
               encrypted_values=EXCLUDED.encrypted_values,updated_at=clock_timestamp()
             WHERE flow_plugin_configurations.revision=@expected

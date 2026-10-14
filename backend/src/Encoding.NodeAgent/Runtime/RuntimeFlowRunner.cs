@@ -18,11 +18,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             await leaseGate.WaitAsync(ct);
             try
             {
-            using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            var status=(await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch),timeout.Token))!;
-            Volatile.Write(ref revision,status.Revision);
-            if(status.CancelRequested) { cancelled=true; job.Cancel(); }
-            return status;
+                using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                var status=(await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch),timeout.Token))!;
+                Volatile.Write(ref revision,status.Revision);
+                if(status.CancelRequested) { cancelled=true; job.Cancel(); }
+                return status;
             }
             finally { leaseGate.Release(); }
         }

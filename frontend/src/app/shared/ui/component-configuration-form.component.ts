@@ -163,7 +163,11 @@ type ConfigurationFormGroup = FormGroup<
         </button>
       </div>
       @if (connectionTestMessage()) {
-        <p class="connection-test-result" [class.connection-test-failed]="!connectionTestSuccess()" aria-live="polite">
+        <p
+          class="connection-test-result"
+          [class.connection-test-failed]="!connectionTestSuccess()"
+          aria-live="polite"
+        >
           {{ connectionTestMessage() }}
         </p>
       }

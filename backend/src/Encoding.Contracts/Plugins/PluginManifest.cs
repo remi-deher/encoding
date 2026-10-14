@@ -24,7 +24,8 @@ public sealed record FlowComponentDescriptor(
     FlowConfigurationSchema ConfigurationSchema,
     IReadOnlyList<FlowToolRequirement> RequiredTools,
     bool RequiresMedia,
-    bool RequiresWriteAccess);
+    bool RequiresWriteAccess,
+    IReadOnlyList<string>? CompatiblePluginVersions = null);
 
 public sealed record FlowOutputDescriptor(string Id, string Label, string Description);
 

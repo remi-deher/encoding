@@ -107,7 +107,9 @@
           [values]="flowPluginValues(plugin.id)"
           [configuredSecrets]="configuredFlowSecrets(plugin.id)"
           submitLabel="Appliquer à ce flow"
-          (savedWithSecrets)="saveFlowPluginConfiguration(plugin, $event.values, $event.clearSecrets)"
+          (savedWithSecrets)="
+            saveFlowPluginConfiguration(plugin, $event.values, $event.clearSecrets)
+          "
           (cancelled)="pluginConfigurationOpen.set(false)"
         />
         @if (hasFlowPluginOverride(plugin.id)) {
