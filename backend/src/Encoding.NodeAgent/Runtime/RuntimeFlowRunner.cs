@@ -285,7 +285,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             || (int)exception.StatusCode>=500)
         {
             lost=true;
-            logger.LogWarning("Exécution {ExecutionId} interrompue pendant un échange ; reprise après expiration du bail.",lease.ExecutionId);
+            logger.LogWarning(exception,"Exécution {ExecutionId} interrompue pendant un échange HTTP ({StatusCode}) ; reprise après expiration du bail.",lease.ExecutionId,exception.StatusCode);
         }
         catch(Exception exception)
         {

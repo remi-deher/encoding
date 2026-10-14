@@ -293,7 +293,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         FlowDefinition flow;
         await using(var cmd=new NpgsqlCommand("SELECT flow_definition::text FROM executions WHERE id=@id AND state='running'",c,tx))
         { cmd.Parameters.AddWithValue("id",id); if(await cmd.ExecuteScalarAsync(ct) is not string json) return false; flow=JsonSerializer.Deserialize<FlowDefinition>(json,Json)!; }
-        if(!ValidVideoEncodings(flow,worker,cp.Context.VideoEncodings)) return false;
+        if(!await ValidVideoEncodingsAsync(flow,id,worker,cp.NodeId,cp.Context.VideoEncodings,c,tx,ct)) return false;
         await using(var artifact=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx))
         {
             artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",cp.Context.CurrentSha256);
@@ -383,11 +383,27 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         return new(source,map);
     }
 
-    private static bool ValidVideoEncodings(FlowDefinition flow,Guid worker,IReadOnlyList<ResolvedVideoEncoding>? resolutions)
+    private static async Task<bool> ValidVideoEncodingsAsync(FlowDefinition flow,Guid executionId,Guid worker,string currentNodeId,
+        IReadOnlyList<ResolvedVideoEncoding>? resolutions,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
     {
         foreach(var resolution in resolutions??[])
         {
-            if(resolution.WorkerId!=worker || string.IsNullOrWhiteSpace(resolution.FfmpegVersion)
+            Guid? executionWorker;
+            var currentNode=flow.Nodes.SingleOrDefault(item=>item.Id==currentNodeId);
+            if(resolution.FlowNodeId==currentNodeId || currentNode?.Component.PluginId=="base" && currentNode.Component.ComponentId=="base-execute-processing") executionWorker=worker;
+            else
+            {
+                await using var owner=new NpgsqlCommand("SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND node_id=@node AND completed_at IS NOT NULL",c,tx);
+                owner.Parameters.AddWithValue("id",executionId); owner.Parameters.AddWithValue("node",resolution.FlowNodeId);
+                executionWorker=await owner.ExecuteScalarAsync(ct) is Guid nodeId?nodeId:null;
+                if(executionWorker!=resolution.WorkerId)
+                {
+                    await using var plannedOwner=new NpgsqlCommand("SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL AND checkpoint->'context'->'videoEncodings' @> @resolution ORDER BY completed_revision DESC LIMIT 1",c,tx);
+                    plannedOwner.Parameters.AddWithValue("id",executionId); plannedOwner.Parameters.AddWithValue("resolution",NpgsqlTypes.NpgsqlDbType.Jsonb,JsonSerializer.Serialize(new[]{resolution},Json));
+                    executionWorker=await plannedOwner.ExecuteScalarAsync(ct) is Guid plannedNodeId?plannedNodeId:null;
+                }
+            }
+            if(executionWorker!=resolution.WorkerId || string.IsNullOrWhiteSpace(resolution.FfmpegVersion)
                 || resolution.FfmpegVersion.Length>128 || resolution.ResolvedAt==default) return false;
             var node=flow.Nodes.SingleOrDefault(item=>item.Id==resolution.FlowNodeId);
             if(node is null || node.Component.PluginId!="base" || node.Component.ComponentId!="base-transcode-video"
