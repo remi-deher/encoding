@@ -122,9 +122,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     if(id.StartsWith("base-input-",StringComparison.Ordinal)) { if(id!="base-input-file") await EnsureScanAsync(); }
                     else if(id=="base-variable")
                     {
-                        var value=MediaActions.Text(c,"value"); JsonElement element;
-                        try { element=JsonSerializer.Deserialize<JsonElement>(value); } catch(JsonException) { element=JsonSerializer.SerializeToElement(value); }
-                        variables[MediaActions.Text(c,"name")]=element;
+                        variables[MediaActions.Text(c,"name")]=FlowVariableValue.Parse(MediaActions.Text(c,"value"));
                     }
                     else if(id=="base-prepare-processing")
                     {
@@ -229,7 +227,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
                 }
                 context=context with { Variables=new Dictionary<string,JsonElement>(variables) };
-                next=lease.Flow.Connections.SingleOrDefault(e=>e.SourceNodeId==node.Id && e.SourceOutputId==output)?.TargetNodeId;
+                next=FlowPath.NextNodeId(lease.Flow,node.Id,output);
                 var checkpoint=new RuntimeCheckpoint(node.Id,started.InvocationId,output,next,context,terminal,handoff);
                 var eventId=Guid.NewGuid();
                 await leaseGate.WaitAsync(job.Token);
@@ -301,7 +299,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         }
     }
 
-    private static bool IsFfmpegPlan(string id)=>id is "base-transcode-video" or "base-transcode-audio" or "base-normalize-audio" or "base-resize-video" or "base-remux-media";
+    private static bool IsFfmpegPlan(string id)=>FlowMediaValues.IsFfmpegPlan(id);
     private async Task<JsonElement> ScriptAsync(string id,IReadOnlyDictionary<string,JsonElement> config,object context,string directory,CancellationToken ct)
     {
         var python=id=="base-script" && MediaActions.Text(config,"language")=="python";

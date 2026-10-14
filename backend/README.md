@@ -78,3 +78,9 @@ Voir [0015 — Runtime et archives portables](../docs/architecture/0015-flow-run
 - Le nœud source transfère le média par WebDAV ; les outils travaillent sur une copie locale. Le résultat validé est publié sous .encoding-results/<executionId>/ sans remplacer la source.
 - Les métadonnées avant/après, événements et fichiers produits sont consultables dans le suivi.
 - Runtime__ArtifactDirectory désigne le stockage durable des blobs. Compose ajoute un volume séparé ; les serveurs multi-hôtes doivent utiliser un stockage partagé. Prévoir sa capacité : aucun nettoyage automatique n’est activé.
+
+## Testeur de flow
+
+Depuis l’éditeur, **Tester le flow** explore le document en cours avec un profil fictif ou un fichier importé via MediaInfo. Le nom, les métadonnées, les pistes et les variables restent modifiables. Les conditions natives affichent leurs comparaisons et sorties ; les actions externes s’arrêtent pour demander le résultat à supposer avant de poursuivre.
+
+Aucune exécution, conversion, invocation de plugin ou transfert réel n’est créé. Les résultats du test restent dans la session de l’éditeur. L’import MediaInfo est limité à 512 Mio, deux minutes et deux lectures simultanées par serveur ; la copie temporaire est supprimée après lecture. Voir [0023](../docs/architecture/0023-flow-simulation.md) pour les contrats et limites.

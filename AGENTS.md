@@ -120,6 +120,8 @@ Les versions validées des flows sont enregistrées dans PostgreSQL avec contrô
 
 ## Runtime des flows
 
+Le testeur de flow est séparé du runtime : il explore une définition validée avec un profil fictif/importé et des résultats explicitement supposés pour les étapes externes. Il réutilise l’évaluateur de conditions commun et ne crée ni exécution ni transfert. L’import lit uniquement MediaInfo dans un espace temporaire borné du serveur. Voir [0023](docs/architecture/0023-flow-simulation.md).
+
 Consulter [0015 — Runtime et archives](docs/architecture/0015-flow-runtime-and-portable-archives.md). Les workers utilisent des baux de 60 secondes avec époque, réservations uniques par média et checkpoints transactionnels. Une invocation externe interrompue avant checkpoint exige une relance explicite. Les scripts et plugins nécessitent Linux Landlock et travaillent dans l’espace temporaire de l’exécution ; aucun repli sans restriction des fichiers n’est autorisé.
 
 La publication conserve la source et crée un résultat distinct dans .encoding-results/<executionId>/. Ne pas activer un remplacement automatique sans politique explicite et validation. Les volumes d’artefacts et sauvegardes doivent être partagés durablement par les serveurs d’un cluster multi-hôte. Le nettoyage automatique des artefacts n’est pas activé.

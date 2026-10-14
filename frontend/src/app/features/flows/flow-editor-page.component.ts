@@ -39,6 +39,8 @@ import {
 import { FlowGraphEditorComponent } from '../../shared/ui/flow-graph-editor.component';
 import { SearchableComponentCatalogComponent } from '../../shared/ui/searchable-component-catalog.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
+import { FlowSimulation } from '../../shared/services/flow-simulation';
+import { FlowSimulationPanelComponent } from '../../shared/ui/flow-simulation-panel.component';
 
 const TYPE_OPTIONS = [
   { value: 'video', label: 'Vidéo' },
@@ -113,6 +115,7 @@ type ComponentDestination =
 
 @Component({
   selector: 'app-flow-editor-page',
+  providers: [FlowSimulation],
   host: { '(window:beforeunload)': 'warnBeforeUnload($event)' },
   imports: [
     RouterLink,
@@ -122,11 +125,31 @@ type ComponentDestination =
     FlowGraphEditorComponent,
     SearchableComponentCatalogComponent,
     PageHeaderComponent,
+    FlowSimulationPanelComponent,
   ],
   templateUrl: './flow-editor-page.component.html',
   styleUrl: './flow-editor-page.component.scss',
 })
 export class FlowEditorPageComponent {
+  protected readonly simulator = inject(FlowSimulation);
+  protected readonly simulationOpen = signal(false);
+  protected readonly simulationTemplate = viewChild<TemplateRef<unknown>>('simulation');
+  protected async openSimulator(): Promise<void> {
+    try {
+      const definition = await this.serverValidation.document(
+        this.validationFlowId,
+        this.storedVersion() + 1,
+        this.flowTitle(),
+        this.flowMediaType(),
+        this.nodes(),
+        this.connections(),
+      );
+      this.simulator.prepare(definition);
+      this.simulationOpen.set(true);
+    } catch {
+      this.notifications.show('Impossible de préparer le test du flow.');
+    }
+  }
   private readonly route = inject(ActivatedRoute);
   private readonly notifications = inject(NotificationService);
   protected readonly componentTemplate = viewChild<TemplateRef<unknown>>('componentPicker');

@@ -108,6 +108,14 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>> ResolveEffectiveAsync(
+        Guid flowId, IEnumerable<string> pluginIds, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
+        return await ResolveEffectiveAsync(flowId, pluginIds, connection, transaction, ct);
+    }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>> ResolveEffectiveAsync(
         Guid flowId, IEnumerable<string> pluginIds, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken ct)
     {
         var result = new Dictionary<string, IReadOnlyDictionary<string, JsonElement>>(StringComparer.Ordinal);

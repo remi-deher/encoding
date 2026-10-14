@@ -32,6 +32,8 @@ builder.Services.AddSingleton<NodeRepository>();
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
 builder.Services.AddSingleton<FlowDefinitionValidator>();
+builder.Services.AddSingleton<FlowSimulator>();
+builder.Services.AddSingleton<FlowMetadataImporter>();
 builder.Services.AddSingleton<FlowRepository>();
 builder.Services.AddSingleton<FlowArchiveService>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
@@ -65,6 +67,7 @@ await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSour
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFlowEndpoints();
+app.MapFlowSimulationEndpoints();
 app.MapPluginConfigurationEndpoints();
 app.MapRuntimeEndpoints();
 

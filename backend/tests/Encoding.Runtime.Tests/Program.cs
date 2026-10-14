@@ -42,6 +42,7 @@ internal static class Program
         var validator = new FlowDefinitionValidator(registry);
         var eligibility = new RuntimeEligibility(registry, validator);
         ConditionTests.Run(registry,validator,eligibility);
+        await FlowSimulationTests.RunAsync(registry,validator);
         var destination = Guid.NewGuid();
         var relay = Node(registry, "relay", "nodes-handoff", new() { ["mode"] = J("node"), ["targetNodeId"] = J(destination) });
         var flow = Chain(Node(registry, "entry", "base-input-file"), relay,

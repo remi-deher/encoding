@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
-using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
+using Encoding.Contracts.Executions;
 using Encoding.NodeAgent.Services;
 
 namespace Encoding.NodeAgent.Runtime.Media;
@@ -20,13 +20,8 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
     {
         if(id.StartsWith("base-probe-",StringComparison.Ordinal))
         {
-            var metadata=await scanner.ScanAsync(current,ct); JsonElement value=metadata;
-            if(id!="base-probe-media")
-            {
-                var selected=metadata.GetProperty("streams").EnumerateArray().Where(s=>id=="base-probe-tracks"||s.GetProperty("codec_type").GetString()==(id=="base-probe-audio"?"audio":"video")).ToArray();
-                if(id is "base-probe-video" or "base-probe-audio") selected=selected.Skip(int.Parse(Number(config,"trackId"))).Take(1).ToArray();
-                value=JsonSerializer.SerializeToElement(selected);
-            }
+            var metadata=await scanner.ScanAsync(current,ct);
+            var value=FlowMediaValues.Probe(id,metadata,int.Parse(Number(config,"trackId")));
             return new(null,[],value);
         }
         if(id.StartsWith("base-inspect-",StringComparison.Ordinal)||id=="base-export-media-report")

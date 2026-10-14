@@ -9,7 +9,7 @@ $env:ENCODING_TEST_DATABASE = 'Host=localhost;Database=encoding_test;Username=en
 dotnet run --project backend/tests/Encoding.Runtime.Tests --configuration Release
 ```
 
-Sans cette variable, seuls les contrats, les règles de sélection et la compatibilité sont vérifiés. FFmpeg et ffprobe sont nécessaires au scénario de conversion réel. `backend/tests/Dockerfile` fournit le SDK et ces outils pour reproduire ce scénario localement. La CI fournit PostgreSQL et exécute la suite complète.
+Sans cette variable, les contrats, les règles de sélection, la compatibilité et le testeur de flow (dont l’import synthétique MediaInfo) sont vérifiés. FFmpeg, ffprobe et MediaInfo sont nécessaires. `backend/tests/Dockerfile` fournit le SDK et ces outils. La CI fournit PostgreSQL et exécute la suite complète.
 
 Depuis la racine du dépôt, avec Docker et une base de test éphémère :
 
@@ -25,3 +25,5 @@ docker stop encoding-runtime-test-db
 Les scénarios média encodent une vidéo synthétique de 1 seconde en H.265 : une fois avant le relais, et une fois en transférant le plan avant son exécution. Le service source publie réellement le résultat distinct et les tests vérifient que la source reste intacte.
 
 La suite couvre aussi les conditions structurées : groupes ET / OU, types et données absentes, limites de taille/profondeur, instantanés d'origine/courant, disponibilité du plugin et trois branches du runner avant téléchargement. Le parcours média vérifie une condition H.265 courant ET H.264 d'origine après conversion.
+
+Le testeur de flow est couvert sans lancer de traitement : branches et reconvergence, probes/variables, résultats fictifs de transformation, conservation de l’origine, relais avec paramètres hérités, plan non exécuté, contrats HTTP et erreurs de profil. Un fichier synthétique vérifie MediaInfo et l’intégrité de la source ; saturation et annulation vérifient la libération des ressources.

@@ -20,6 +20,7 @@ public sealed record ConditionPreset(string Id, string Label, ConditionExpressio
 public sealed record ConditionEvaluationContext(RuntimeContext Runtime, Guid SourceNodeId, Guid WorkerNodeId,
     Guid? LibraryId, string MediaPath, string SourceSha256);
 public sealed class ConditionEvaluationException(string message) : Exception(message);
+public sealed record ConditionObservation(ConditionRule Rule, JsonElement? Actual, bool? Result, string? Error = null);
 
 /// <summary>Shared, bounded and typed condition contract. Neither validation nor evaluation executes code.</summary>
 public static class ConditionTree
@@ -140,12 +141,22 @@ public static class ConditionTree
         _ => false
     };
 
-    public static bool Evaluate(ConditionExpression tree, ConditionEvaluationContext context)
+    public static bool Evaluate(ConditionExpression tree, ConditionEvaluationContext context, Action<ConditionObservation>? observe = null)
     {
         if (tree is ConditionGroup group)
-            return group.Match == "all" ? group.Children.All(child => Evaluate(child, context)) : group.Children.Any(child => Evaluate(child, context));
+            return group.Match == "all" ? group.Children.All(child => Evaluate(child, context, observe)) : group.Children.Any(child => Evaluate(child, context, observe));
         var rule = (ConditionRule)tree;
         var actual = Read(rule, context);
+        try
+        {
+            var result = EvaluateRule(rule, actual);
+            observe?.Invoke(new(rule, actual, result));
+            return result;
+        }
+        catch (ConditionEvaluationException e) { observe?.Invoke(new(rule, actual, null, e.Message)); throw; }
+    }
+    private static bool EvaluateRule(ConditionRule rule, JsonElement? actual)
+    {
         var present = actual is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
         if (rule.Operator == "exists") return present;
         if (rule.Operator == "missing") return !present;

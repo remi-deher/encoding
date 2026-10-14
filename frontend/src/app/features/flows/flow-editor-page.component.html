@@ -10,6 +10,15 @@
     <app-page-header [title]="flowTitle()" [shellTitle]="flowTitle()" [showHeading]="false">
       <button
         page-actions
+        matButton="outlined"
+        type="button"
+        [disabled]="loadState() !== 'ready' || simulator.busy()"
+        (click)="openSimulator()"
+      >
+        Tester le flow
+      </button>
+      <button
+        page-actions
         matButton="text"
         type="button"
         [disabled]="loadState() !== 'ready' || !pluginSettingsLoaded() || !flowPlugins().length"
@@ -86,6 +95,29 @@
       [typeOptions]="typeOptions()"
       [pluginOptions]="pluginOptions()"
       (selected)="addComponent($event)"
+    />
+  </ng-template>
+</app-detail-drawer>
+
+<app-detail-drawer
+  mainScroll="parent"
+  [opened]="simulationOpen()"
+  title="Testeur de flow"
+  description="Explorez les branches avec un profil fictif ou les métadonnées d’un fichier."
+  [content]="simulationTemplate()"
+  (closed)="simulationOpen.set(false)"
+>
+  <ng-template #simulation>
+    <app-flow-simulation-panel
+      [nodes]="nodes()"
+      [profile]="simulator.profile()"
+      [result]="simulator.result()"
+      [busy]="simulator.busy()"
+      [error]="simulator.error()"
+      (runRequested)="simulator.run($event)"
+      (continueRequested)="simulator.continue($event)"
+      (fileSelected)="simulator.import($event)"
+      (closed)="simulationOpen.set(false)"
     />
   </ng-template>
 </app-detail-drawer>

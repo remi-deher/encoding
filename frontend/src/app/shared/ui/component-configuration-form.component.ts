@@ -1,6 +1,6 @@
 import { flowFieldValidator } from './flow-configuration-controls';
 import { flowConfigurationValue } from '../models/flow-configuration';
-import { Component, OnChanges, input, output } from '@angular/core';
+import { Component, OnChanges, SimpleChanges, input, output } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -45,7 +45,11 @@ type ConfigurationFormGroup = FormGroup<
           @for (field of fields; track field.id) {
             @switch (field.type) {
               @case ('condition-tree') {
-                <section class="condition-field" [attr.aria-label]="field.label">
+                <section
+                  class="condition-field"
+                  [attr.aria-label]="field.label"
+                  [attr.inert]="busy() ? '' : null"
+                >
                   <h3>{{ field.label }}</h3>
                   @if (field.description) {
                     <p>{{ field.description }}</p>
@@ -169,13 +173,17 @@ type ConfigurationFormGroup = FormGroup<
           <button
             matButton="outlined"
             type="button"
-            [disabled]="form.invalid || connectionTestBusy()"
+            [disabled]="busy() || form.invalid || connectionTestBusy()"
             (click)="testConnection()"
           >
             {{ connectionTestBusy() ? 'Test en cours…' : 'Tester la connexion' }}
           </button>
         }
-        <button matButton="filled" type="submit" [disabled]="form.invalid || nameControl.invalid">
+        <button
+          matButton="filled"
+          type="submit"
+          [disabled]="busy() || form.invalid || nameControl.invalid"
+        >
           {{ submitLabel() }}
         </button>
       </div>
@@ -248,6 +256,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   readonly instanceName = input<string | undefined>();
   readonly instanceNameChange = output<string>();
   readonly submitLabel = input('Enregistrer');
+  readonly busy = input(false);
   readonly showConnectionTest = input(false);
   readonly connectionTestBusy = input(false);
   readonly connectionTestMessage = input('');
@@ -268,21 +277,35 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     validators: [Validators.maxLength(128)],
   });
 
-  ngOnChanges(): void {
-    this.secretsToClear = new Set();
-    this.nameControl.setValue(this.instanceName() ?? '');
-    this.fields = this.schema()?.fields ?? [];
-    const controls: Record<string, FormControl<FlowComponentConfigurationValue>> = {};
-    for (const field of this.fields) {
-      controls[field.id] = new FormControl(flowConfigurationValue(field, this.values()), {
-        validators: flowFieldValidator(field),
-      });
+  ngOnChanges(changes: SimpleChanges): void {
+    if (
+      changes['schema'] ||
+      changes['values'] ||
+      changes['instanceName'] ||
+      changes['configuredSecrets']
+    ) {
+      this.secretsToClear = new Set();
+      this.nameControl.setValue(this.instanceName() ?? '');
+      this.fields = this.schema()?.fields ?? [];
+      const controls: Record<string, FormControl<FlowComponentConfigurationValue>> = {};
+      for (const field of this.fields) {
+        controls[field.id] = new FormControl(flowConfigurationValue(field, this.values()), {
+          validators: flowFieldValidator(field),
+        });
+      }
+      this.form = new FormGroup(controls);
     }
-    this.form = new FormGroup(controls);
+    if (this.busy()) {
+      this.form.disable({ emitEvent: false });
+      this.nameControl.disable({ emitEvent: false });
+    } else {
+      this.form.enable({ emitEvent: false });
+      this.nameControl.enable({ emitEvent: false });
+    }
   }
 
   protected save(): void {
-    if (this.form.invalid || this.nameControl.invalid) return;
+    if (this.busy() || this.form.invalid || this.nameControl.invalid) return;
     if (this.instanceName() !== undefined)
       this.instanceNameChange.emit(this.nameControl.value.trim());
     const values = this.form.getRawValue();
@@ -291,7 +314,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   }
 
   protected testConnection(): void {
-    if (this.form.invalid || this.connectionTestBusy()) return;
+    if (this.busy() || this.form.invalid || this.connectionTestBusy()) return;
     this.connectionTestRequested.emit(this.form.getRawValue());
   }
 
@@ -300,6 +323,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     return value && typeof value === 'object' ? value : undefined;
   }
   protected setConditionValue(fieldId: string, value: ConditionGroup): void {
+    if (this.busy()) return;
     const control = this.form.controls[fieldId];
     control.setValue(value);
     control.markAsDirty();
@@ -307,6 +331,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   }
 
   protected setSecretCleared(fieldId: string, cleared: boolean): void {
+    if (this.busy()) return;
     const updated = new Set(this.secretsToClear);
     if (cleared) updated.add(fieldId);
     else updated.delete(fieldId);
