@@ -48,6 +48,7 @@ builder.Services.AddSingleton<RuntimeEligibility>();
 builder.Services.AddSingleton<RuntimeRepository>();
 builder.Services.AddSingleton<RuntimeArtifactStore>();
 builder.Services.AddSingleton<RuntimeTransferRepository>();
+builder.Services.AddSingleton<SourceReplacementRepository>();
 builder.Services.AddHostedService<RuntimeRecoveryService>();
 builder.Services.AddHostedService<FlowBackupService>();
 builder.Services.AddSingleton<LibraryRepository>();
@@ -78,6 +79,7 @@ app.MapEncodingProfileEndpoints();
 app.MapFlowSimulationEndpoints();
 app.MapPluginConfigurationEndpoints();
 app.MapRuntimeEndpoints();
+app.MapSourceReplacementEndpoints();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
     .WithTags("Health");

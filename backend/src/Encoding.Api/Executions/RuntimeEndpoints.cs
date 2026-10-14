@@ -54,6 +54,9 @@ public static class RuntimeEndpoints
             await artifacts.AuthorizeAsync(id,nodeId,epoch,ct) ? (IResult)Results.Ok(await runtime.SourceAsync(id,ct)) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/publication",async(Guid nodeId,Guid id,ConfirmRuntimePublication request,RuntimeTransferRepository transfers,CancellationToken ct)=>
             await transfers.ConfirmAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
+        group.MapGet("/replacements",async(Guid nodeId,SourceReplacementRepository replacements,CancellationToken ct)=>Results.Ok(await replacements.TasksAsync(nodeId,ct)));
+        group.MapPost("/replacements/{id:guid}/report",async(Guid nodeId,Guid id,ReportReplacementTask request,SourceReplacementRepository replacements,CancellationToken ct)=>
+            await replacements.ReportAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapPost("/executions/{id:guid}/source-failure",async(Guid nodeId,Guid id,FinishRuntimeExecution request,RuntimeTransferRepository transfers,CancellationToken ct)=>
             await transfers.FinishAsync(id,nodeId,request,ct,true) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapPut("/executions/{id:guid}/dav/{digest}",async(Guid nodeId,Guid id,string digest,long epoch,bool? original,string? inputPath,HttpRequest request,RuntimeArtifactStore artifacts,IConfiguration configuration,CancellationToken ct)=>

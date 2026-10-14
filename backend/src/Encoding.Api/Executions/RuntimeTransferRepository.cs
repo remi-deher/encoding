@@ -8,7 +8,7 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
     public async Task<IReadOnlyList<RuntimeTransfer>> ListAsync(Guid node,CancellationToken ct)
     {
         await using var cmd=dataSource.CreateCommand("""
-          SELECT w.execution_id,w.lease_epoch,a.local_path,w.media_path,w.source_sha,w.result_sha,w.result_extension,w.publication_requested,e.flow_definition::text,a.can_write
+          SELECT w.execution_id,w.lease_epoch,a.local_path,w.media_path,w.source_sha,w.result_sha,w.result_extension,w.publication_requested,e.flow_definition::text,a.can_write,w.replacement_grace_hours
           FROM execution_work w JOIN executions e ON e.id=w.execution_id
           JOIN library_node_accesses a ON a.library_id=w.library_id AND a.node_id=w.source_node_id
           WHERE w.source_node_id=@node AND w.lease_until>clock_timestamp() AND e.state='running'
@@ -19,7 +19,7 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
         cmd.Parameters.AddWithValue("node",node); await using var r=await cmd.ExecuteReaderAsync(ct); var result=new List<RuntimeTransfer>();
         while(await r.ReadAsync(ct)) result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetString(2),r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5),r.IsDBNull(6)?null:r.GetString(6),r.GetBoolean(7),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.Nodes
             .Where(n=>n.Configuration.TryGetValue("sourceFile",out var f)&&f.ValueKind==System.Text.Json.JsonValueKind.String&&!string.IsNullOrWhiteSpace(f.GetString()))
-            .Select(n=>RuntimeRepository.NormalizePath(n.Configuration["sourceFile"].GetString())).Distinct().ToArray(),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.MediaType,r.GetBoolean(9)));
+            .Select(n=>RuntimeRepository.NormalizePath(n.Configuration["sourceFile"].GetString())).Distinct().ToArray(),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.MediaType,r.GetBoolean(9),r.IsDBNull(10)?null:r.GetInt32(10)));
         return result;
     }
     public async Task<bool> ConfirmAsync(Guid id,Guid source,ConfirmRuntimePublication request,CancellationToken ct)
@@ -27,10 +27,19 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
         if(request.PublishedPath is null || request.PublishedPath.Length>2048 || !RuntimeArtifactStore.ValidDigest(request.Sha256)) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await RuntimeRepository.FenceAsync(id,source,request.Epoch,c,tx,ct,true)) return false;
-        Guid worker;
-        await using(var read=new NpgsqlCommand("SELECT worker_node_id FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
-        { read.Parameters.AddWithValue("id",id); read.Parameters.AddWithValue("sha",request.Sha256); read.Parameters.AddWithValue("path",request.PublishedPath); if(await read.ExecuteScalarAsync(ct) is not Guid node) return false; worker=node; }
-        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"succeeded",worker,100,"Résultat validé et publié ; fichier source conservé."),c,tx,ct)) return false;
+        Guid worker; Guid library; string original; string sourceSha; string resultSha; int? graceHours;
+        await using(var read=new NpgsqlCommand("SELECT worker_node_id,library_id,media_path,source_sha,result_sha,replacement_grace_hours FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
+        {
+            read.Parameters.AddWithValue("id",id); read.Parameters.AddWithValue("sha",request.Sha256); read.Parameters.AddWithValue("path",request.PublishedPath);
+            await using var row=await read.ExecuteReaderAsync(ct); if(!await row.ReadAsync(ct)) return false;
+            worker=row.GetGuid(0); library=row.GetGuid(1); original=row.GetString(2); sourceSha=row.GetString(3); resultSha=row.GetString(4); graceHours=row.IsDBNull(5)?null:row.GetInt32(5);
+        }
+        var replacement=graceHours is null?null:request.Replacement;
+        if(replacement is not null && !SourceReplacementRepository.ValidReport(id,original,replacement)) return false;
+        var detail=replacement?.Status=="replaced"?"Résultat validé et publié ; source remplacée, sauvegarde conservée pendant la période de grâce."
+            :graceHours is not null?"Résultat validé et publié ; remplacement non effectué, fichier source conservé"+(replacement?.Detail is {} reason?" : "+reason:"."):"Résultat validé et publié ; fichier source conservé.";
+        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"succeeded",worker,100,detail),c,tx,ct)) return false;
+        if(replacement is not null) await SourceReplacementRepository.RecordInTransactionAsync(id,library,source,original,sourceSha,resultSha,graceHours!.Value,replacement,c,tx,ct);
         await using var update=new NpgsqlCommand("UPDATE execution_work SET published_path=@path WHERE execution_id=@id",c,tx);
         update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("path",request.PublishedPath); await update.ExecuteNonQueryAsync(ct);
         await RuntimeRepository.ReleaseAsync(id,c,tx,ct); await tx.CommitAsync(ct); return true;
@@ -88,7 +97,8 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
         {
             if(!RuntimeArtifactStore.ValidDigest(sha) || request.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(request.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
             await using var set=new NpgsqlCommand("""
-              UPDATE execution_work w SET result_sha=@sha,result_extension=@extension,publication_requested=true
+              UPDATE execution_work w SET result_sha=@sha,result_extension=@extension,publication_requested=true,
+              replacement_grace_hours=(SELECT p.grace_period_hours FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled)
               WHERE execution_id=@id AND EXISTS(SELECT 1 FROM execution_artifacts a WHERE a.execution_id=w.execution_id AND a.sha256=@sha)
               AND EXISTS(SELECT 1 FROM library_node_accesses a WHERE a.library_id=w.library_id AND a.node_id=w.source_node_id AND a.is_enabled AND a.can_write)
               """,c,tx);

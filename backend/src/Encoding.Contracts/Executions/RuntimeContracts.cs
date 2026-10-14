@@ -11,7 +11,7 @@ public sealed record RuntimeFence(long Epoch);
 public sealed record RuntimeLeaseStatus(bool CancelRequested, int Revision, DateTimeOffset ExpiresAt);
 public sealed record RuntimeSourceState(string? SourceSha256, IReadOnlyDictionary<string,string>? Inputs = null);
 public sealed record RuntimeTransfer(Guid ExecutionId, long Epoch, string Root, string MediaPath, string? SourceSha256,
-    string? ResultSha256, string? ResultExtension, bool Publish, IReadOnlyList<string>? InputPaths = null, string MediaType = "video", bool CanWrite = true);
+    string? ResultSha256, string? ResultExtension, bool Publish, IReadOnlyList<string>? InputPaths = null, string MediaType = "video", bool CanWrite = true, int? ReplacementGraceHours = null);
 public sealed record RuntimeContext(string CurrentSha256, string Extension, IReadOnlyDictionary<string,JsonElement> Variables,
     JsonElement? BeforeMetadata, JsonElement? CurrentMetadata, IReadOnlyList<RuntimePlanStep> Plan,
     IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings = null);
@@ -36,4 +36,4 @@ public sealed record FinishRuntimeExecution(long Epoch, Guid EventId, int Expect
     JsonElement? BeforeMetadata = null, JsonElement? AfterMetadata = null, int? DeferMinutes = null,
     IReadOnlyList<RuntimeStepCommand>? Commands = null);
 public sealed record ReportRuntimeCommand(long Epoch, string NodeId, Guid InvocationId, RuntimeCommandLog Command);
-public sealed record ConfirmRuntimePublication(long Epoch, Guid EventId, int ExpectedRevision, string PublishedPath, string Sha256);
+public sealed record ConfirmRuntimePublication(long Epoch, Guid EventId, int ExpectedRevision, string PublishedPath, string Sha256, SourceReplacementReport? Replacement = null);

@@ -28,7 +28,7 @@ using NpgsqlTypes;
 
 namespace Encoding.Runtime.Tests;
 
-internal static class Program
+internal static partial class Program
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static JsonElement J<T>(T value) => JsonSerializer.SerializeToElement(value, Json);
@@ -65,6 +65,7 @@ internal static class Program
         Check(RuntimeHandoffPolicy.Segment(branch, "entry").Any(node => node.Id == "other"), "All possible branches within the segment are considered.");
         Console.WriteLine("PASS: relay contracts, segment eligibility, inheritance and old-agent compatibility.");
 
+        await SourceReplacementTests.RunAsync();
         var connection = Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");
         if (string.IsNullOrWhiteSpace(connection))
         {
@@ -80,6 +81,9 @@ internal static class Program
         await fixture.ConcurrentRelayAsync();
         await fixture.EarlyRunnerAsync();
         await fixture.CancellationAsync();
+        await fixture.ReplacementLifecycleAsync();
+        await fixture.WorkerLossFailoverAsync();
+        await fixture.ServerLossFailoverAsync();
         await fixture.ConditionalRelayAsync("yes");
         await fixture.ConditionalRelayAsync("no");
         await fixture.ConditionalRelayAsync("error");
@@ -87,6 +91,7 @@ internal static class Program
         {
             await fixture.MediaRelayAsync(false);
             await fixture.MediaRelayAsync(true);
+            await fixture.MediaRelayAsync(false,true);
         }
         else Console.WriteLine("Media relay test requires ffmpeg and ffprobe (included in the test Dockerfile).");
         Console.WriteLine("PASS: all PostgreSQL relay scenarios.");
@@ -112,7 +117,7 @@ internal static class Program
         public Task<IReadOnlyList<NodeToolCapability>> DiscoverAsync(CancellationToken ct) => Task.FromResult(Capabilities(true));
     }
 
-    private sealed class Fixture : IAsyncDisposable
+    private sealed partial class Fixture : IAsyncDisposable
     {
         private readonly string schema = "handoff_" + Guid.NewGuid().ToString("N");
         private readonly string directory = Path.Combine(Path.GetTempPath(), "encoding-handoff-" + Guid.NewGuid().ToString("N"));
@@ -156,7 +161,7 @@ internal static class Program
             }
             var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0"); builder.Logging.ClearProviders();
             builder.Services.AddSingleton(db); builder.Services.AddSingleton(runtime); builder.Services.AddSingleton(artifacts);
-            builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(config);
+            builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
             builder.Services.AddSingleton<LibraryProcessingRepository>(); builder.Services.AddSingleton<LibraryWorkflowRepository>();
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromHours(1)));
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton<FlowRepository>(); builder.Services.AddSingleton<FlowArchiveService>();
@@ -405,7 +410,7 @@ internal static class Program
             Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel condition fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
             Console.WriteLine("PASS: native condition "+outcome+" branch before any media scan, checkpoint persistence and worker handoff.");
         }
-        public async Task MediaRelayAsync(bool planned)
+        public async Task MediaRelayAsync(bool planned,bool replace=false)
         {
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
             var source=Path.Combine(directory,"source.mkv");
@@ -421,6 +426,7 @@ internal static class Program
                 Node(registry,"end","base-complete-flow",new(){["result"]=J("success")})]);
             if(!planned) flow=flow with { Connections=flow.Connections.Select(edge=>edge.SourceNodeId=="condition"?edge with { SourceOutputId="yes" }:edge).ToArray() };
             var(id,lease,context)=await EnqueueAsync(flow,await File.ReadAllBytesAsync(source));
+            if(replace) Check(await new SourceReplacementRepository(db).SavePolicyAsync(lease.LibraryId!.Value,new(true,1,0),CancellationToken.None),"Enable source replacement for the media library.");
             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(40));
             using(var client=Client(a)) await Runner("media-a",out _).RunAsync(lease,client,deadline.Token);
             var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("Converted media must yield.");
@@ -455,6 +461,20 @@ internal static class Program
             Check(await SafeMediaPaths.DigestAsync(published,deadline.Token)==publication!.ResultSha256,"The source service publishes the exact validated artifact.");
             var finalMetadata=await scanner.ScanAsync(published,deadline.Token);
             Check(finalMetadata.GetProperty("streams").EnumerateArray().Any(stream=>stream.GetProperty("codec_name").GetString()=="hevc"),"The published video was actually encoded to H.265.");
+            if(replace)
+            {
+                var replacement=await new SourceReplacementRepository(db).GetAsync(id,deadline.Token);
+                Check(replacement is { State: "replaced", FinalPath: "source.mp4" } && !File.Exists(source),"The agent replaced the source with the validated .mp4 and recorded the replacement.");
+                Check(await SafeMediaPaths.DigestAsync(Path.Combine(directory,"source.mp4"),deadline.Token)==publication.ResultSha256,"The library now holds exactly the validated result.");
+                Check(await SafeMediaPaths.DigestAsync(Path.Combine(directory,replacement!.BackupPath!),deadline.Token)==context.CurrentSha256,"The original is kept in the backup during the grace period.");
+                var task=(await new SourceReplacementRepository(db).TasksAsync(a,deadline.Token)).SingleOrDefault(item=>item.ExecutionId==id);
+                Check(task is null && await new SourceReplacementRepository(db).RequestRollbackAsync(id,deadline.Token)=="ok","A rollback is requested during the grace period.");
+                var restoreTask=(await new SourceReplacementRepository(db).TasksAsync(a,deadline.Token)).Single(item=>item.ExecutionId==id);
+                var restored=await SourceReplacer.RollbackAsync(restoreTask.Root,restoreTask,deadline.Token);
+                Check(restored.Status=="restored" && Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(source)))==context.CurrentSha256 && !File.Exists(Path.Combine(directory,"source.mp4")),"The restored library file is byte-identical to the original.");
+                Console.WriteLine("PASS: real agent replaces the source after H.265 validation, then restores it byte for byte.");
+                return;
+            }
             Check(Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(source)))==context.CurrentSha256,"The source media remains intact.");
             Console.WriteLine("PASS: H.265 "+(planned?"plan handed off before execution":"conversion handed off after execution")+", receiver scan and actual source publication.");
         }

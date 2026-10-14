@@ -29,3 +29,5 @@ La suite couvre aussi les conditions structurées : groupes ET / OU, types et do
 Le testeur de flow est couvert sans lancer de traitement : branches et reconvergence, probes/variables, résultats fictifs de transformation, conservation de l’origine, relais avec paramètres hérités, plan non exécuté, contrats HTTP et erreurs de profil. Un fichier synthétique vérifie MediaInfo et l’intégrité de la source ; saturation et annulation vérifient la libération des ressources.
 
 La suite vérifie également les publications inchangées et concurrentes, l’absence de nouvelles sauvegardes, la concurrence des brouillons, les modifications réelles, la version exacte retournée par l’API et la conservation des versions identiques lors d’un import d’archives.
+
+Les tests de remplacement de source (fichiers, politique, période de grâce, restauration) et de bascule multi-nœud (perte d’un worker, d’un nœud d’accès, d’un serveur) sont décrits dans l’architecture 0029. Le remplacement réel d’une source H.265 puis sa restauration sont aussi vérifiés avec FFmpeg.
