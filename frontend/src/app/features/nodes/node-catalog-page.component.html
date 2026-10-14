@@ -52,7 +52,7 @@
       @if (rawNode()?.roles?.includes('worker')) {
         <mat-tab label="Traitement">
           <div class="node-processing-tab">
-            <app-detail-field-list [fields]="processingFields()" layout="cards" />
+            <app-detail-field-list [fields]="processingFields()" layout="horizontal-cards" />
             <p class="node-tab-note">
               Les plafonds de bibliothèque et de couple nœud et bibliothèque s’appliquent aussi.
               Hors des plages du calendrier, aucun nouveau traitement ne démarre ; ceux en cours ne
