@@ -14,9 +14,9 @@ using Npgsql;
 
 namespace Encoding.Runtime.Tests;
 
-internal static partial class Program
+internal static partial class Harness
 {
-    private sealed partial class Fixture
+    internal sealed partial class Fixture
     {
         private async Task<T?> ScalarAsync<T>(string sql,params (string Name,object Value)[] parameters)
         {

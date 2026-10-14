@@ -8,7 +8,7 @@ using Encoding.Contracts.Nodes;
 
 namespace Encoding.Runtime.Tests;
 
-internal static class ConditionTests
+internal static class ConditionScenarios
 {
     private static JsonElement J<T>(T value) => JsonSerializer.SerializeToElement(value);
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
@@ -64,7 +64,6 @@ internal static class ConditionTests
         Check(!eligibility.CanRun(flow,caps.Where(cap=>cap.ToolId!="plugin/conditions").ToArray(),worker),"An old agent cannot execute the new plugin.");
         var draft=flow with { Nodes=[flow.Nodes[0],flow.Nodes[1] with { Configuration=new Dictionary<string,JsonElement>{["rules"]=ConditionTree.Serialize(new ConditionGroup("all",[]))} }] };
         Check(validator.ValidateDraft(draft).IsValid && !validator.Validate(draft).IsValid,"An incomplete draft cannot become an execution.");
-        Console.WriteLine("PASS: native condition types, nested groups, metadata snapshots, missing values, bounds, catalog and compatibility.");
     }
     private static void ExpectError(Action action,string message)
     {

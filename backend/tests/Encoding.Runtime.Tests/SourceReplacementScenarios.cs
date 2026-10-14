@@ -5,7 +5,7 @@ using Encoding.NodeAgent.Runtime;
 namespace Encoding.Runtime.Tests;
 
 /// <summary>Garanties de fichiers du remplacement de source : sauvegarde vérifiée avant tout changement, restauration, reprise après perte du nœud d'accès.</summary>
-internal static class SourceReplacementTests
+internal static class SourceReplacementScenarios
 {
     private static void Check(bool condition,string message){ if(!condition) throw new InvalidOperationException(message); }
     private static string Sha(byte[] bytes)=>Convert.ToHexStringLower(SHA256.HashData(bytes));

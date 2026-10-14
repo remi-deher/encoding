@@ -24,6 +24,16 @@ jobs:
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
       - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg mediainfo
-      - run: dotnet run --project backend/tests/Encoding.Runtime.Tests --configuration Release
+      - run: >-
+          dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
+          --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --results-directory test-results
         env:
           ENCODING_TEST_DATABASE: Host=postgres;Database=encoding_test;Username=encoding;Password=encoding_test
+          ENCODING_TEST_REQUIRE_DATABASE: '1'
+          ENCODING_TEST_REQUIRE_MEDIA_TOOLS: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: test-results
+          retention-days: 14
