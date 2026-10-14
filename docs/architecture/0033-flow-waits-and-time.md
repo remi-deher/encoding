@@ -42,7 +42,13 @@ Un plugin peut fournir de nouvelles conditions simplement en déclarant un compo
 
 ### Média pendant l'attente (à trancher)
 
-Première version : le média reste **réservé** par l'exécution en attente (aucune autre tâche ne le modifie, la source est intacte), comme pendant un relais. Rémi souhaite ensuite pouvoir, selon le flow : reprendre le média en cours, créer un autre média à côté, ou écraser le média en cours. Cela touche la politique de remplacement (0030) et la notion de nœud d'accès ; le champ `mediaPolicy` est réservé dans la spécification d'attente (`keep` seul accepté pour l'instant) pour ne pas changer le contrat plus tard.
+Le média reste **réservé** pendant toute l'attente : aucune autre tâche ne le modifie et la source est intacte. Le champ `mediaPolicy` du bloc choisit ce qui arrive à la publication du résultat, et le dernier bloc Attendre traversé fait foi (`execution_work.media_policy`) :
+
+- `keep` (défaut) : la politique de remplacement de la bibliothèque (0030) décide, comme avant.
+- `beside` : copie à côté. La source n'est jamais remplacée, même si la bibliothèque l'autorise ; le résultat reste un fichier distinct sous `.encoding-results/<exécution>/`.
+- `overwrite` : écrasement demandé par le flow. Il passe par le protocole 0030 (sauvegarde vérifiée, bascule atomique, période de grâce, restauration) et n'a lieu que si la bibliothèque a une politique de remplacement active ; sinon le résultat reste distinct et l'historique l'indique. Un flow ne peut donc jamais contourner la garde de la bibliothèque.
+
+Seul le nœud d'accès direct à la bibliothèque écrit dans le média, comme pour toute publication. Limite : « à côté » n'écrit pas encore de fichier voisin visible par Plex ; le résultat reste dans `.encoding-results`.
 
 ## Implémentation
 

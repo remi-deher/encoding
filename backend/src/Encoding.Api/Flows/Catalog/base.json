@@ -3081,10 +3081,18 @@
             "options": [
               {
                 "value": "keep",
-                "label": "Le garder réservé"
+                "label": "Suivre la politique de la bibliothèque"
+              },
+              {
+                "value": "beside",
+                "label": "Créer une copie à côté (source jamais remplacée)"
+              },
+              {
+                "value": "overwrite",
+                "label": "Écraser le média en cours (si la bibliothèque l’autorise)"
               }
             ],
-            "description": "Les autres comportements (reprendre, copier à côté, écraser) seront ajoutés avec la politique de remplacement."
+            "description": "Le média reste réservé pendant l’attente. Le choix s’applique à la publication du résultat : l’écrasement passe par la politique de remplacement de la bibliothèque (sauvegarde, période de grâce)."
           }
         ]
       },

@@ -53,6 +53,9 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
     public Task SourceReplacementLifecycle() => Scenarios.ReplacementLifecycleAsync();
 
     [PostgresFact]
+    public Task WaitMediaPolicy() => Scenarios.WaitMediaPolicyAsync();
+
+    [PostgresFact]
     public Task WorkerLossFailover() => Scenarios.WorkerLossFailoverAsync();
 
     [PostgresFact]

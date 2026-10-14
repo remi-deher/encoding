@@ -18,3 +18,6 @@ CREATE INDEX ix_execution_waits_due ON execution_waits(next_check_at) WHERE stat
 
 -- Une sonde due rend l'exécution réclamable par un worker éligible, uniquement pour évaluer la condition.
 ALTER TABLE execution_work ADD COLUMN wait_probe_due boolean NOT NULL DEFAULT false;
+
+-- Politique média choisie par le dernier bloc Attendre traversé (architecture 0033 et 0030).
+ALTER TABLE execution_work ADD COLUMN media_policy text NOT NULL DEFAULT 'keep' CHECK (media_policy IN ('keep','beside','overwrite'));

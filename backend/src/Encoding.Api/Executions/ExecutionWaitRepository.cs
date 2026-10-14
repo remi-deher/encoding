@@ -35,9 +35,10 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
             deadline=EXCLUDED.deadline,due_at=EXCLUDED.due_at,next_check_at=EXCLUDED.next_check_at,resolved_at=NULL,probe_count=0,last_probe_at=NULL,last_probe_output=NULL;
           UPDATE execution_waits SET next_check_at=LEAST(next_check_at,COALESCE(deadline,'infinity'::timestamptz)) WHERE execution_id=@id;
           UPDATE execution_work SET worker_node_id=NULL,lease_until=NULL,lease_epoch=lease_epoch+1,available_at='infinity'::timestamptz,wait_probe_due=false,
-            handoff_pending=false,handoff_selector=NULL,previous_worker_node_id=NULL WHERE execution_id=@id;
+            handoff_pending=false,handoff_selector=NULL,previous_worker_node_id=NULL,media_policy=@media WHERE execution_id=@id;
           UPDATE media_reservations SET lease_epoch=@epoch+1,lease_until='infinity'::timestamptz WHERE execution_id=@id;
           """,c,tx);
+        cmd.Parameters.AddWithValue("media",wait.MediaPolicy);
         cmd.Parameters.AddWithValue("id",id); cmd.Parameters.AddWithValue("node",nodeId); cmd.Parameters.AddWithValue("epoch",epoch);
         cmd.Parameters.AddWithValue("spec",NpgsqlDbType.Jsonb,JsonSerializer.Serialize(wait,Json));
         cmd.Parameters.AddWithValue("max",NpgsqlDbType.Integer,(object?)wait.MaxWaitMinutes??DBNull.Value);

@@ -159,6 +159,26 @@ internal static partial class Harness
             Check(await ScalarAsync<string>("SELECT state FROM execution_waits WHERE execution_id=@id",("id",id))=="cancelled","The wait of a cancelled execution is closed.");
         }
 
+        public async Task WaitMediaPolicyAsync()
+        {
+            var transfers=new RuntimeTransferRepository(db);
+            // Écraser sans politique de bibliothèque : rien n'est remplacé et le détail le dit.
+            var none=await PublicationRequestedAsync(false,1,"overwrite");
+            Check(await ScalarAsync<int?>("SELECT replacement_grace_hours FROM execution_work WHERE execution_id=@id",("id",none.Id)) is null,"Overwrite never replaces without an enabled library policy.");
+            var status=await executions.GetAsync(none.Id,CancellationToken.None);
+            Check(await transfers.ConfirmAsync(none.Id,a,new(none.Lease.Epoch,Guid.NewGuid(),status!.Revision,$".encoding-results/{none.Id:D}/result.mkv",none.ResultSha,null),CancellationToken.None),"Publication confirmed.");
+            Check((await executions.GetAsync(none.Id,CancellationToken.None))!.Detail.Contains("pas de politique de remplacement"),"The history explains why the source was kept.");
+            // Écraser avec politique active : le remplacement est demandé.
+            var over=await PublicationRequestedAsync(true,3,"overwrite");
+            Check(await ScalarAsync<int?>("SELECT replacement_grace_hours FROM execution_work WHERE execution_id=@id",("id",over.Id))==3,"Overwrite requests the replacement allowed by the library.");
+            // Copie à côté : jamais de remplacement, même si la bibliothèque l'autorise.
+            var beside=await PublicationRequestedAsync(true,3,"beside");
+            Check(await ScalarAsync<int?>("SELECT replacement_grace_hours FROM execution_work WHERE execution_id=@id",("id",beside.Id)) is null,"The beside policy never replaces the source.");
+            status=await executions.GetAsync(beside.Id,CancellationToken.None);
+            Check(await transfers.ConfirmAsync(beside.Id,a,new(beside.Lease.Epoch,Guid.NewGuid(),status!.Revision,$".encoding-results/{beside.Id:D}/result.mkv",beside.ResultSha,Replaced(beside.Id)),CancellationToken.None),"Publication confirmed.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM source_replacements WHERE execution_id=@id",("id",beside.Id))==0,"A forged replacement report is ignored for the beside policy.");
+        }
+
         public void WaitContracts()
         {
             Check(!validator.Validate(WaitFlow(new(){["mode"]=J("block"),["blockNodeId"]=J("entry"),["blockOutputs"]=J("success")})).IsValid,"Only plugin conditions can be watched.");
@@ -169,6 +189,8 @@ internal static partial class Harness
             Check(!validator.Validate(noNext).IsValid,"A wait needs a continuation.");
             Check(validator.Validate(WaitFlow(new(){["mode"]=J("timer")})).IsValid,"A timer wait validates with defaults.");
             Check(!eligibility.CanRun(WaitFlow(new(){["mode"]=J("timer")}),Capabilities(false).Select(cap=>cap.ToolId=="plugin/base"?cap with { Version="1.0.0" }:cap).ToArray(),Guid.NewGuid()),"An old agent cannot run the wait block.");
+            Check(!validator.Validate(WaitFlow(new(){["mode"]=J("timer"),["mediaPolicy"]=J("delete")})).IsValid,"Unknown media policies are refused.");
+            Check(validator.Validate(WaitFlow(new(){["mode"]=J("timer"),["mediaPolicy"]=J("overwrite")})).IsValid,"Overwrite is a valid media policy.");
             var legacy=Node(registry,"v","base-variable",new(){["name"]=J("x"),["value"]=J("1")});
             Check(registry.Resolve(legacy.Component with { PluginVersion="1.0.0" }) is not null,"Existing base references stay resolvable.");
         }

@@ -27,17 +27,18 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
         if(request.PublishedPath is null || request.PublishedPath.Length>2048 || !RuntimeArtifactStore.ValidDigest(request.Sha256)) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await RuntimeRepository.FenceAsync(id,source,request.Epoch,c,tx,ct,true)) return false;
-        Guid worker; Guid library; string original; string sourceSha; string resultSha; int? graceHours;
-        await using(var read=new NpgsqlCommand("SELECT worker_node_id,library_id,media_path,source_sha,result_sha,replacement_grace_hours FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
+        Guid worker; Guid library; string original; string sourceSha; string resultSha; int? graceHours; string mediaPolicy;
+        await using(var read=new NpgsqlCommand("SELECT worker_node_id,library_id,media_path,source_sha,result_sha,replacement_grace_hours,media_policy FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
         {
             read.Parameters.AddWithValue("id",id); read.Parameters.AddWithValue("sha",request.Sha256); read.Parameters.AddWithValue("path",request.PublishedPath);
             await using var row=await read.ExecuteReaderAsync(ct); if(!await row.ReadAsync(ct)) return false;
-            worker=row.GetGuid(0); library=row.GetGuid(1); original=row.GetString(2); sourceSha=row.GetString(3); resultSha=row.GetString(4); graceHours=row.IsDBNull(5)?null:row.GetInt32(5);
+            worker=row.GetGuid(0); library=row.GetGuid(1); original=row.GetString(2); sourceSha=row.GetString(3); resultSha=row.GetString(4); graceHours=row.IsDBNull(5)?null:row.GetInt32(5); mediaPolicy=row.GetString(6);
         }
         var replacement=graceHours is null?null:request.Replacement;
         if(replacement is not null && !SourceReplacementRepository.ValidReport(id,original,replacement)) return false;
         var detail=replacement?.Status=="replaced"?"Résultat validé et publié ; source remplacée, sauvegarde conservée pendant la période de grâce."
-            :graceHours is not null?"Résultat validé et publié ; remplacement non effectué, fichier source conservé"+(replacement?.Detail is {} reason?" : "+reason:"."):"Résultat validé et publié ; fichier source conservé.";
+            :graceHours is not null?"Résultat validé et publié ; remplacement non effectué, fichier source conservé"+(replacement?.Detail is {} reason?" : "+reason:"."):mediaPolicy=="beside"?"Résultat validé et publié à côté de la source (politique du flow) ; fichier source conservé."
+            :mediaPolicy=="overwrite"?"Résultat validé et publié ; écrasement demandé par le flow mais la bibliothèque n’a pas de politique de remplacement active : fichier source conservé.":"Résultat validé et publié ; fichier source conservé.";
         if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"succeeded",worker,100,detail),c,tx,ct)) return false;
         if(replacement is not null) await SourceReplacementRepository.RecordInTransactionAsync(id,library,source,original,sourceSha,resultSha,graceHours!.Value,replacement,c,tx,ct);
         await using var update=new NpgsqlCommand("UPDATE execution_work SET published_path=@path WHERE execution_id=@id",c,tx);
@@ -98,7 +99,7 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
             if(!RuntimeArtifactStore.ValidDigest(sha) || request.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(request.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
             await using var set=new NpgsqlCommand("""
               UPDATE execution_work w SET result_sha=@sha,result_extension=@extension,publication_requested=true,
-              replacement_grace_hours=(SELECT p.grace_period_hours FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled)
+              replacement_grace_hours=CASE WHEN w.media_policy='beside' THEN NULL ELSE (SELECT p.grace_period_hours FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled) END
               WHERE execution_id=@id AND EXISTS(SELECT 1 FROM execution_artifacts a WHERE a.execution_id=w.execution_id AND a.sha256=@sha)
               AND EXISTS(SELECT 1 FROM library_node_accesses a WHERE a.library_id=w.library_id AND a.node_id=w.source_node_id AND a.is_enabled AND a.can_write)
               """,c,tx);
