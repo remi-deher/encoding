@@ -297,6 +297,7 @@ internal static class AuthScenarios
             "* /health/ready",
             "POST /api/v1/auth/login",
             "POST /api/v1/auth/setup",
+            "POST /api/v1/integrations/{pluginId}/webhook",
             "POST /api/v1/nodes/enroll",
             "POST /api/v1/nodes/enrollment-requests",
             "PUT /api/v1/nodes/{nodeId:guid}/heartbeat",

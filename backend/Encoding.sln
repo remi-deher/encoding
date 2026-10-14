@@ -16,6 +16,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{BCA04260
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Encoding.Runtime.Tests", "tests\Encoding.Runtime.Tests\Encoding.Runtime.Tests.csproj", "{4A087B0A-21A3-49E1-8A66-3FD1C9329F88}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Encoding.Plugins.Tests", "tests\Encoding.Plugins.Tests\Encoding.Plugins.Tests.csproj", "{7C1D2B84-3A55-4E0B-9C6F-5D1E8A2B4F10}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,10 +44,15 @@ Global
 		{4A087B0A-21A3-49E1-8A66-3FD1C9329F88}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4A087B0A-21A3-49E1-8A66-3FD1C9329F88}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4A087B0A-21A3-49E1-8A66-3FD1C9329F88}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C1D2B84-3A55-4E0B-9C6F-5D1E8A2B4F10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C1D2B84-3A55-4E0B-9C6F-5D1E8A2B4F10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C1D2B84-3A55-4E0B-9C6F-5D1E8A2B4F10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C1D2B84-3A55-4E0B-9C6F-5D1E8A2B4F10}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{D69D8A8C-DAD4-4998-898A-E1DB2A8C1ACA} = {BD3EF0D8-1316-43E6-8C88-7F023B94A8A3}
 		{3C25E660-477B-4BB4-A287-0306162681C3} = {BD3EF0D8-1316-43E6-8C88-7F023B94A8A3}
 		{4A087B0A-21A3-49E1-8A66-3FD1C9329F88} = {BCA04260-7BBD-41CB-B5A2-00C196BB94C3}
+		{7C1D2B84-3A55-4E0B-9C6F-5D1E8A2B4F10} = {BCA04260-7BBD-41CB-B5A2-00C196BB94C3}
 	EndGlobalSection
 EndGlobal

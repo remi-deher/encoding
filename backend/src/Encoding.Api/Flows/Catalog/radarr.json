@@ -21,6 +21,20 @@
         "type": "secret",
         "label": "Clé API Radarr",
         "required": true
+      },
+      {
+        "id": "pathMappings",
+        "type": "text",
+        "label": "Correspondance des chemins",
+        "description": "Une ligne par bibliothèque Encoding : identifiant-bibliothèque=/chemin/vu/par/Radarr. Active le déclencheur d’import (POST /api/v1/integrations/radarr/webhook) et permet aux composants de retrouver le fichier traité.",
+        "multiline": true,
+        "placeholder": "00000000-0000-0000-0000-000000000000=/movies"
+      },
+      {
+        "id": "webhookSecret",
+        "type": "secret",
+        "label": "Secret du webhook",
+        "description": "Mot de passe (authentification de base, utilisateur quelconque) ou en-tête X-Encoding-Webhook-Secret à configurer dans la connexion Webhook de Radarr."
       }
     ]
   },
@@ -29,7 +43,7 @@
       "id": "radarr-refresh-movie",
       "version": "1.0.0",
       "name": "Actualiser un film Radarr",
-      "description": "Synchronise le statut du film après traitement.",
+      "description": "Demande à Radarr de relire les fichiers du film qui contient le fichier traité.",
       "kind": "action",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -39,12 +53,12 @@
         {
           "id": "success",
           "label": "Suite",
-          "description": "Le composant a terminé son traitement."
+          "description": "Radarr a accepté la demande."
         },
         {
           "id": "error",
           "label": "Erreur",
-          "description": "Le composant n’a pas pu terminer son traitement."
+          "description": "Le film est introuvable ou la configuration est incomplète."
         }
       ],
       "configurationSchema": {
@@ -89,9 +103,10 @@
             "id": "movieId",
             "type": "number",
             "label": "ID du film Radarr",
-            "required": true,
+            "required": false,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "description": "Laisser vide pour utiliser le film qui contient le fichier traité."
           }
         ]
       },
@@ -128,9 +143,10 @@
             "id": "movieId",
             "type": "number",
             "label": "ID du film Radarr",
-            "required": true,
+            "required": false,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "description": "Laisser vide pour utiliser le film qui contient le fichier traité."
           }
         ]
       },
