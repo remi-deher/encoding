@@ -61,6 +61,6 @@ public sealed record PendingNodeEnrollmentResponse(
 
 public sealed record NodeActivityResponse(int Active,int Succeeded,int Failed,int Cancelled,DateTimeOffset? LastActivity,int SourceTasks);
 
-public sealed record NodeProcessingSettings(int? MaxConcurrentTasks,int EffectiveMaxConcurrentTasks,int Revision);
-public sealed record SaveNodeProcessingSettings(int? MaxConcurrentTasks,int ExpectedRevision);
+public sealed record NodeProcessingSettings(int? MaxConcurrentTasks,int EffectiveMaxConcurrentTasks,int Revision,NodeSchedule Schedule);
+public sealed record SaveNodeProcessingSettings(int? MaxConcurrentTasks,int ExpectedRevision,NodeSchedule? Schedule=null);
 public sealed record RuntimeCapacity(int MaxConcurrentTasks);

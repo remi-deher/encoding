@@ -15,6 +15,18 @@
 
     @if (!workerMode() && !authMode()) {
       <div class="header-status">
+        @if (activeExecutionCount() > 0) {
+          <a
+            class="processing-indicator"
+            routerLink="/tasks"
+            [queryParams]="{ view: 'active' }"
+            [attr.aria-label]="
+              activeExecutionCount() + ' en traitement, ouvrir les tâches en cours'
+            "
+          >
+            {{ activeExecutionCount() }} en traitement
+          </a>
+        }
         <div class="cluster-indicator" [attr.aria-label]="'Présence des nœuds : ' + clusterLabel()">
           <span class="cluster-label">Nœuds</span>
           <span class="cluster-state">{{ clusterLabel() }}</span>

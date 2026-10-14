@@ -1,3 +1,7 @@
+import {
+  ExecutionTracking,
+  INITIAL_EXECUTION_TRACKING,
+} from '../../shared/services/execution-tracking';
 import { PageTitle } from '../../shared/services/page-title';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
 import { Component, computed, inject } from '@angular/core';
@@ -60,6 +64,17 @@ export class AppShellComponent {
     const nodes = state.snapshot?.nodes ?? [];
     return nodes.filter((n) => n.status === 'online').length + ' / ' + nodes.length + ' en ligne';
   });
+
+  private readonly tracking = inject(ExecutionTracking);
+  private readonly executionState = toSignal(
+    toObservable(this.workerMode).pipe(
+      switchMap((worker) => (worker ? of(INITIAL_EXECUTION_TRACKING) : this.tracking.state$)),
+    ),
+    { initialValue: INITIAL_EXECUTION_TRACKING },
+  );
+  protected readonly activeExecutionCount = computed(
+    () => this.executionState().data?.activeCount ?? 0,
+  );
 
   private getCurrentPageContext(): {
     title: string;

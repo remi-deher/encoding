@@ -29,4 +29,7 @@ public sealed class ContractTests
 
     [Fact]
     public void PasswordHashingRehashDetectionAndCredentialPolicy() => AuthScenarios.RunUnit();
+
+    [Fact]
+    public void NodeScheduleValidationAndEvaluation() => NodeScheduleScenarios.Run();
 }

@@ -63,4 +63,7 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
 
     [PostgresFact]
     public Task AuthenticationRolesPairingAndAnonymousRouteCatalogue() => AuthScenarios.RunAsync(PostgresFixture.ConnectionString!);
+
+    [PostgresFact]
+    public Task NodeScheduleBlocksNewClaimsOnly() => Scenarios.NodeScheduleAsync();
 }

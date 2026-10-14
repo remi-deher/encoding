@@ -1,3 +1,4 @@
+import { NodeSchedule } from './node-schedule';
 export type NodeRole = 'server' | 'worker';
 export interface NodeToolCapability {
   readonly encoders?: readonly string[] | null;
@@ -49,4 +50,5 @@ export interface NodeProcessingSettings {
   readonly maxConcurrentTasks: number | null;
   readonly effectiveMaxConcurrentTasks: number;
   readonly revision: number;
+  readonly schedule: NodeSchedule;
 }

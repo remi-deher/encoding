@@ -71,6 +71,21 @@
   gap: 16px;
 }
 
+.processing-indicator {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.processing-indicator:hover,
+.processing-indicator:focus-visible {
+  text-decoration: underline;
+}
+
 .cluster-indicator {
   display: inline-flex;
   align-items: center;
