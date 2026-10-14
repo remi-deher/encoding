@@ -40,16 +40,12 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list
-      [fields]="detailFields()"
-      [tabbed]="true"
-      tabsLabel="Sections de la bibliothèque"
+    <app-detail-card-grid
+      [cards]="libraryCards()"
+      ariaLabel="Accès, traitement et activité de la bibliothèque"
+      emptyMessage="Aucune information disponible pour cette bibliothèque."
     />
     @if (selectedLibrary()) {
-      <h3>Traitement de la bibliothèque</h3>
-      <p>{{ workflowLabel() }}</p>
-      <p>{{ processingSummary() }}</p>
-      <p role="status">{{ discoveryStatus() }}</p>
       <app-data-table
         [columns]="mediaColumns"
         [rows]="mediaRows()"
