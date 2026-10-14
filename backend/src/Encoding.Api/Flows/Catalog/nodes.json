@@ -1,0 +1,53 @@
+{
+  "contractVersion": 1,
+  "id": "nodes",
+  "version": "1.0.0",
+  "name": "Nœuds",
+  "supportedHostContractVersions": [1],
+  "components": [
+    {
+      "id": "nodes-run-on-node",
+      "version": "1.0.0",
+      "name": "Exécuter sur un nœud précis",
+      "description": "Contraint l’attribution de tout le traitement à ce worker. S’il est hors ligne, occupé ou sans accès à la bibliothèque, la tâche attend.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": ["video", "image", "music", "subtitles"],
+      "outputs": [
+        { "id": "success", "label": "Suite", "description": "Le traitement a été attribué au nœud demandé." }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          { "id": "targetNodeId", "type": "text", "label": "Identifiant du nœud", "description": "Copiez l’identifiant depuis la fiche du nœud.", "required": true, "placeholder": "UUID du nœud worker" }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "nodes-require-capability",
+      "version": "1.0.0",
+      "name": "Exiger une capacité du worker",
+      "description": "Réserve le flow à un worker qui annonce l’outil et la capacité demandés. Le répartiteur choisit ce worker avant de démarrer le fichier ; sans candidat, la tâche attend.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": ["video", "image", "music", "subtitles"],
+      "outputs": [
+        { "id": "success", "label": "Suite", "description": "Le worker attribué satisfait les capacités demandées." }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          { "id": "toolId", "type": "text", "label": "Identifiant de l’outil", "description": "Ex. ffmpeg, imagemagick, python ou javascript.", "required": true, "placeholder": "ffmpeg" },
+          { "id": "minimumVersion", "type": "text", "label": "Version minimale", "description": "Facultatif. Comparaison de version numérique, par exemple 7.1.0.", "placeholder": "7.1.0" },
+          { "id": "requiredCapability", "type": "text", "label": "Accélération requise", "description": "Facultatif. Valeur déclarée par l’outil sur le worker, par exemple nvenc ou vaapi.", "placeholder": "nvenc" }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    }
+  ]
+}

@@ -9,8 +9,11 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
     public FlowValidationResult ValidateDraft(FlowDefinition flow)
     {
         var result=Validate(flow);
-        var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown"};
-        var issues=result.Issues.Where(issue=>!allowed.Contains(issue.Code) && !(issue.Code=="field.invalid" && issue.Message=="Ce paramètre est obligatoire.")).ToList();
+        var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown","node.constraint.conflict"};
+        var issues=result.Issues.Where(issue=>!allowed.Contains(issue.Code)
+            && !(issue.Code=="field.invalid" && (issue.Message=="Ce paramètre est obligatoire."
+                || issue.Path.EndsWith("/targetNodeId",StringComparison.Ordinal)
+                || issue.Path.EndsWith("/minimumVersion",StringComparison.Ordinal)))).ToList();
         if(flow.Nodes?.Any(node=>node is null || node.Component is null || node.Configuration is null)==true)
             issues.Add(new("draft.shape.invalid","/nodes","Chaque bloc doit conserver sa référence et sa configuration."));
         return new(issues);
@@ -77,7 +80,23 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                 var message = ValidateField(field, value, flow.MediaType);
                 if (message is not null) Issue("field.invalid", path + "/configuration/" + Pointer(field.Id), message);
             }
+            if (node.Component.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node"
+                && (!node.Configuration.TryGetValue("targetNodeId", out var targetNode)
+                    || targetNode.ValueKind != JsonValueKind.String || !Guid.TryParse(targetNode.GetString(), out _)))
+                Issue("field.invalid", path + "/configuration/targetNodeId", "Un identifiant de nœud valide est obligatoire.");
+            if (node.Component.PluginId == "nodes" && node.Component.ComponentId == "nodes-require-capability"
+                && node.Configuration.TryGetValue("minimumVersion", out var minimumVersion)
+                && minimumVersion.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(minimumVersion.GetString())
+                && !System.Version.TryParse(minimumVersion.GetString(), out _))
+                Issue("field.invalid", path + "/configuration/minimumVersion", "Utilisez une version numérique, par exemple 7.1.0.");
         }
+        var workerTargets = flow.Nodes
+            .Where(node => node is not null && node.Component?.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node" && node.Configuration is not null)
+            .Select(node => node.Configuration.TryGetValue("targetNodeId", out var value)
+                && value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var id) ? id : (Guid?)null)
+            .Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToArray();
+        if (workerTargets.Length > 1)
+            Issue("node.constraint.conflict", "/nodes", "Les blocs Nœuds d’un même flow doivent cibler le même worker.");
         var entries = nodes.Where(n => n.Value.Kind == "input").Select(n => n.Key).ToArray();
         if (entries.Length != 1) Issue("graph.entry.count", "/nodes", "Le flow doit posséder exactement une entrée.");
         var outgoing = ids.ToDictionary(id => id, _ => new List<string>(), StringComparer.Ordinal);

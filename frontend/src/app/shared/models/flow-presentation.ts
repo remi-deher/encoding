@@ -1,17 +1,15 @@
 import type { FlowComponentDefinition } from './flow-component';
 
-const TYPES: Record<FlowComponentDefinition['kind'], { color: string; background: string }> = {
-  input: { color: '#16634d', background: '#e8f5ee' },
-  action: { color: '#245b9b', background: '#edf3fc' },
-  condition: { color: '#875600', background: '#fff5db' },
-  variable: { color: '#67419b', background: '#f3edfa' },
-  script: { color: '#8c3e76', background: '#f9edf5' },
-  preparation: { color: '#146c75', background: '#e9f6f7' },
-  execution: { color: '#925016', background: '#fff2e5' },
-  terminal: { color: '#555e6b', background: '#f0f2f5' },
+const MEDIA: Record<FlowComponentDefinition['mediaType'], { color: string; background: string }> = {
+  video: { color: '#245b9b', background: '#edf3fc' },
+  image: { color: '#67419b', background: '#f3edfa' },
+  audio: { color: '#146c75', background: '#e9f6f7' },
+  subtitles: { color: '#875600', background: '#fff5db' },
+  general: { color: '#555e6b', background: '#f0f2f5' },
 };
 const PLUGINS: Record<string, string> = {
   base: '#365969',
+  nodes: '#315c4d',
   plex: '#805700',
   sonarr: '#14667c',
   radarr: '#755300',
@@ -24,7 +22,7 @@ export function flowComponentColors(component: FlowComponentDefinition) {
     0,
   );
   return {
-    ...TYPES[component.kind],
+    ...MEDIA[component.mediaType],
     plugin: PLUGINS[component.pluginId] ?? EXTRA_COLORS[hash % EXTRA_COLORS.length],
   };
 }

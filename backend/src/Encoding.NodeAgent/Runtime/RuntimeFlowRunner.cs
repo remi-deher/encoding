@@ -119,11 +119,17 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(result.TryGetProperty("variables",out var changes)) foreach(var change in changes.EnumerateObject()) variables[change.Name]=change.Value.Clone();
                         if(result.TryGetProperty("candidate",out var candidate)) { await EnsureScanAsync(); await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate.GetString()!),[]),node.Id); }
                     }
+                    else if(node.Component.PluginId=="nodes"
+                        && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability"))
+                    {
+                        // Scheduling enforces these constraints before assigning the file to this worker.
+                    }
                     else if(node.Component.PluginId!="base")
                     {
                         await EnsureScanAsync();
                         var invocation=new FlowStepInvocation(1,started.InvocationId,lease.ExecutionId,lease.Attempt,client.NodeId,lease.Epoch,node.Id,node.Component,c,
-                            new(sourceSha,Path.GetFileName(current),context.BeforeMetadata,context.CurrentMetadata,variables),DateTimeOffset.UtcNow.AddHours(6));
+                            new(sourceSha,Path.GetFileName(current),context.BeforeMetadata,context.CurrentMetadata,variables),DateTimeOffset.UtcNow.AddHours(6),
+                            lease.PluginConfigurations?.GetValueOrDefault(node.Component.PluginId));
                         var response=await plugins.ExecuteAsync(invocation,directory,job.Token);
                         output=response.OutputId; terminal=response.TerminalResult?.ToString().ToLowerInvariant();
                         foreach(var change in response.VariableChanges) variables[change.Key]=change.Value;

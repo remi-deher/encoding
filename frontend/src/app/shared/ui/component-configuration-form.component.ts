@@ -110,6 +110,35 @@ type ConfigurationFormGroup = FormGroup<
                   }
                 </mat-form-field>
               }
+              @case ('secret') {
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>{{ field.label }}</mat-label>
+                  <input
+                    matInput
+                    type="password"
+                    autocomplete="new-password"
+                    [formControlName]="field.id"
+                    [placeholder]="field.placeholder ?? ''"
+                  />
+                  @if (configuredSecrets().includes(field.id)) {
+                    <mat-hint>Laissez vide pour conserver le secret enregistré.</mat-hint>
+                  } @else if (field.description) {
+                    <mat-hint>{{ field.description }}</mat-hint>
+                  }
+                  @if (form.controls[field.id].invalid && form.controls[field.id].touched) {
+                    <mat-error>{{ form.controls[field.id].errors?.['configuration'] }}</mat-error>
+                  }
+                </mat-form-field>
+                @if (configuredSecrets().includes(field.id)) {
+                  <mat-checkbox
+                    [checked]="secretsToClear.has(field.id)"
+                    [disabled]="field.required && !form.controls[field.id].value"
+                    (change)="setSecretCleared(field.id, $event.checked)"
+                  >
+                    Supprimer le secret enregistré
+                  </mat-checkbox>
+                }
+              }
             }
           }
         </div>
@@ -119,10 +148,25 @@ type ConfigurationFormGroup = FormGroup<
 
       <div class="form-actions">
         <button matButton="text" type="button" (click)="cancelled.emit()">Annuler</button>
+        @if (showConnectionTest()) {
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="form.invalid || connectionTestBusy()"
+            (click)="testConnection()"
+          >
+            {{ connectionTestBusy() ? 'Test en cours…' : 'Tester la connexion' }}
+          </button>
+        }
         <button matButton="filled" type="submit" [disabled]="form.invalid || nameControl.invalid">
           {{ submitLabel() }}
         </button>
       </div>
+      @if (connectionTestMessage()) {
+        <p class="connection-test-result" [class.connection-test-failed]="!connectionTestSuccess()" aria-live="polite">
+          {{ connectionTestMessage() }}
+        </p>
+      }
     </form>
   `,
   styles: `
@@ -154,6 +198,13 @@ type ConfigurationFormGroup = FormGroup<
       gap: 8px;
       padding-top: 16px;
     }
+    .connection-test-result {
+      margin: 8px 0 0;
+      color: var(--color-success, #237a45);
+    }
+    .connection-test-failed {
+      color: var(--color-error, #b3261e);
+    }
     @media (max-width: 600px) {
       .form-actions {
         position: sticky;
@@ -172,13 +223,24 @@ type ConfigurationFormGroup = FormGroup<
 export class ComponentConfigurationFormComponent implements OnChanges {
   readonly schema = input.required<FlowComponentConfigurationSchema | undefined>();
   readonly values = input<FlowComponentConfiguration>({});
+  readonly configuredSecrets = input<readonly string[]>([]);
   readonly instanceName = input<string | undefined>();
   readonly instanceNameChange = output<string>();
   readonly submitLabel = input('Enregistrer');
+  readonly showConnectionTest = input(false);
+  readonly connectionTestBusy = input(false);
+  readonly connectionTestMessage = input('');
+  readonly connectionTestSuccess = input(false);
   readonly saved = output<FlowComponentConfiguration>();
   readonly cancelled = output<void>();
+  readonly savedWithSecrets = output<{
+    readonly values: FlowComponentConfiguration;
+    readonly clearSecrets: readonly string[];
+  }>();
+  readonly connectionTestRequested = output<FlowComponentConfiguration>();
 
   protected fields: readonly FlowComponentConfigurationField[] = [];
+  protected secretsToClear = new Set<string>();
   protected form: ConfigurationFormGroup = new FormGroup({});
   protected nameControl = new FormControl('', {
     nonNullable: true,
@@ -186,6 +248,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   });
 
   ngOnChanges(): void {
+    this.secretsToClear = new Set();
     this.nameControl.setValue(this.instanceName() ?? '');
     this.fields = this.schema()?.fields ?? [];
     const controls: Record<string, FormControl<FlowComponentConfigurationValue>> = {};
@@ -201,6 +264,20 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     if (this.form.invalid || this.nameControl.invalid) return;
     if (this.instanceName() !== undefined)
       this.instanceNameChange.emit(this.nameControl.value.trim());
-    this.saved.emit(this.form.getRawValue());
+    const values = this.form.getRawValue();
+    this.saved.emit(values);
+    this.savedWithSecrets.emit({ values, clearSecrets: [...this.secretsToClear] });
+  }
+
+  protected testConnection(): void {
+    if (this.form.invalid || this.connectionTestBusy()) return;
+    this.connectionTestRequested.emit(this.form.getRawValue());
+  }
+
+  protected setSecretCleared(fieldId: string, cleared: boolean): void {
+    const updated = new Set(this.secretsToClear);
+    if (cleared) updated.add(fieldId);
+    else updated.delete(fieldId);
+    this.secretsToClear = updated;
   }
 }

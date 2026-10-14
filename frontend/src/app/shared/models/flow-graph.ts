@@ -102,6 +102,7 @@ export function flowConfigurationFieldError(
   if (empty) return field.required ? 'Ce paramètre est obligatoire.' : undefined;
   switch (field.type) {
     case 'text':
+    case 'secret':
       return typeof value === 'string' ? undefined : 'Une valeur textuelle est attendue.';
     case 'boolean':
       return typeof value === 'boolean' ? undefined : 'Une valeur Oui ou Non est attendue.';

@@ -27,6 +27,7 @@ services:
       NodePresence__OfflineAfterSeconds: 30
       FlowBackups__Directory: /var/lib/encoding/flow-backups
       Runtime__ArtifactDirectory: /var/lib/encoding/runtime-artifacts
+      PluginSettings__KeyDirectory: /var/lib/encoding/plugin-keys
       Cluster__DiscoveryPort: 8080
       Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://api:8080/}
     ports:
@@ -38,6 +39,7 @@ services:
     volumes:
       - encoding-flow-backups:/var/lib/encoding/flow-backups
       - encoding-runtime-artifacts:/var/lib/encoding/runtime-artifacts
+      - encoding-plugin-keys:/var/lib/encoding/plugin-keys
     restart: unless-stopped
 
   node-agent:
@@ -67,5 +69,6 @@ services:
 volumes:
   encoding-flow-backups:
   encoding-runtime-artifacts:
+  encoding-plugin-keys:
   encoding-postgres-data:
   encoding-node-data:

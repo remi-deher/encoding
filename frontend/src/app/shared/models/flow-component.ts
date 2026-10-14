@@ -92,6 +92,11 @@ export type FlowComponentConfigurationField =
       readonly multiline?: boolean;
     })
   | (FlowComponentConfigurationFieldBase & {
+      readonly type: 'secret';
+      readonly defaultValue?: string;
+      readonly placeholder?: string;
+    })
+  | (FlowComponentConfigurationFieldBase & {
       readonly type: 'number';
       readonly defaultValue?: number;
       readonly min?: number;

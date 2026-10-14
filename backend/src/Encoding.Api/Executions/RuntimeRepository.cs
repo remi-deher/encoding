@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Api.Flows;
 using Encoding.Api.Nodes;
+using Encoding.Api.Plugins;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Nodes;
@@ -10,7 +11,7 @@ using NpgsqlTypes;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence)
+public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     public async Task<bool> AuthenticateAsync(Guid node,string token,CancellationToken ct)
@@ -79,7 +80,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         }
         foreach(var item in candidates)
         {
-            if(!eligibility.CanRun(item.Flow,capabilities)) continue;
+            if(!eligibility.CanRun(item.Flow,capabilities,worker)) continue;
             // Library row serializes claims from all workers before counting active leases.
             await using(var limits=new NpgsqlCommand("""
               SELECT p.max_concurrent_tasks,(SELECT max_concurrent_tasks FROM library_node_processing_limits WHERE library_id=l.id AND node_id=@worker)
@@ -151,7 +152,9 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
                 sourceSha=r.IsDBNull(0)?null:r.GetString(0); expires=r.GetFieldValue<DateTimeOffset>(1);
                 if(!r.IsDBNull(2)) checkpoint=JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(2),Json);
             }
-            await tx.CommitAsync(ct); return new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id);
+            var pluginSettings = await pluginConfigurations.ResolveEffectiveAsync(item.Flow.Id,
+                item.Flow.Nodes.Select(node => node.Component.PluginId).Where(id => id != "base"), c, tx, ct);
+            await tx.CommitAsync(ct); return new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings);
         }
         return null;
     }

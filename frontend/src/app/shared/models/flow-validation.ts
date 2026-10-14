@@ -3,6 +3,7 @@ import type {
   FlowGraphNode,
   FlowGraphConnection,
   FlowComponentConfiguration,
+  FlowComponentConfigurationSchema,
 } from './flow-component';
 import type { MediaType } from './media-type';
 
@@ -10,10 +11,18 @@ export interface FlowPluginCatalog {
   readonly id: string;
   readonly version: string;
   readonly name: string;
+  readonly configurationSchema?: FlowComponentConfigurationSchema;
   readonly components: readonly (Omit<FlowComponentDefinition, 'pluginId' | 'pluginName'> & {
     readonly id: string;
     readonly version: string;
   })[];
+}
+
+export interface PluginConfigurationResponse {
+  readonly pluginId: string;
+  readonly revision: number;
+  readonly values: FlowComponentConfiguration;
+  readonly configuredSecrets: readonly string[];
 }
 
 export interface FlowDocument {

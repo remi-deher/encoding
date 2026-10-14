@@ -12,6 +12,15 @@
         page-actions
         matButton="text"
         type="button"
+        [disabled]="loadState() !== 'ready' || !pluginSettingsLoaded() || !flowPlugins().length"
+        (click)="pluginConfigurationOpen.set(true)"
+      >
+        Paramètres des plugins
+      </button>
+      <button
+        page-actions
+        matButton="text"
+        type="button"
         [disabled]="validating() || loadState() !== 'ready'"
         (click)="validateGraph()"
       >
@@ -78,6 +87,38 @@
       [pluginOptions]="pluginOptions()"
       (selected)="addComponent($event)"
     />
+  </ng-template>
+</app-detail-drawer>
+
+<app-detail-drawer
+  mainScroll="parent"
+  [opened]="pluginConfigurationOpen()"
+  title="Paramètres des plugins du flow"
+  description="Les champs renseignés remplacent les valeurs globales uniquement pour ce flow. Laissez un champ vide pour hériter de la configuration du plugin."
+  [content]="flowPluginConfigurationTemplate()"
+  (closed)="pluginConfigurationOpen.set(false)"
+>
+  <ng-template #flowPluginConfiguration>
+    @for (plugin of flowPlugins(); track plugin.id) {
+      <section class="flow-plugin-configuration">
+        <h3>{{ plugin.name }}</h3>
+        <app-component-configuration-form
+          [schema]="flowPluginSchema(plugin)"
+          [values]="flowPluginValues(plugin.id)"
+          [configuredSecrets]="configuredFlowSecrets(plugin.id)"
+          submitLabel="Appliquer à ce flow"
+          (savedWithSecrets)="saveFlowPluginConfiguration(plugin, $event.values, $event.clearSecrets)"
+          (cancelled)="pluginConfigurationOpen.set(false)"
+        />
+        @if (hasFlowPluginOverride(plugin.id)) {
+          <button matButton="text" type="button" (click)="resetFlowPluginConfiguration(plugin)">
+            Revenir aux valeurs globales
+          </button>
+        }
+      </section>
+    } @empty {
+      <p>Aucun plugin configuré n’est utilisé dans ce flow.</p>
+    }
   </ng-template>
 </app-detail-drawer>
 

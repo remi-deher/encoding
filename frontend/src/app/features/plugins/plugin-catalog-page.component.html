@@ -5,7 +5,7 @@
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
   filterLabel="Famille de plugin"
-  note="Liste illustrative : les plugins affichés ne sont pas encore installables dans cette version."
+  note="Les manifestes Plex, Sonarr, Radarr et Jellyfin sont intégrés au catalogue. Leur exécution nécessite encore un processus plugin configuré sur le worker."
 >
   <div catalogue-filters>
     <app-category-tabs
@@ -27,7 +27,39 @@
     emptyMessage="Aucun plugin ne correspond à cette famille."
   />
 
+  <ng-template #integrationSection>
+    <app-flow-component-list [components]="selectedComponents()" />
+  </ng-template>
+  <ng-template #configurationSection>
+    @if (configurationSchema(); as schema) {
+      <div class="plugin-configuration-section">
+        <h3>Configuration globale par défaut</h3>
+        <p>
+          Ces valeurs sont partagées par le cluster. Un flow peut définir ses propres dérogations.
+        </p>
+      </div>
+      <app-component-configuration-form
+        [schema]="schema"
+        [values]="configurationValues()"
+        [configuredSecrets]="configuredSecrets()"
+        [showConnectionTest]="true"
+        [connectionTestBusy]="connectionTestBusy()"
+        [connectionTestMessage]="connectionTestMessage()"
+        [connectionTestSuccess]="connectionTestSuccess()"
+        [submitLabel]="configurationBusy() ? 'Enregistrement…' : 'Enregistrer'"
+        (savedWithSecrets)="saveConfiguration($event.values, $event.clearSecrets)"
+        (connectionTestRequested)="testConnection($event)"
+        (cancelled)="onConfigurationCancelled()"
+      />
+    }
+  </ng-template>
+
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list [fields]="detailFields()" [tabbed]="true" tabsLabel="Sections du plugin" />
+    <app-detail-field-list
+      [fields]="detailFields()"
+      [tabbed]="true"
+      tabsLabel="Sections du plugin"
+      [sectionTemplates]="sectionTemplates()"
+    />
   </ng-template>
 </app-management-catalog-template>

@@ -1,0 +1,142 @@
+{
+  "contractVersion": 1,
+  "id": "radarr",
+  "version": "1.0.0",
+  "name": "Radarr",
+  "supportedHostContractVersions": [
+    1
+  ],
+  "configurationSchema": {
+    "version": 1,
+    "fields": [
+      {
+        "id": "baseUrl",
+        "type": "text",
+        "label": "Adresse du serveur",
+        "required": true,
+        "placeholder": "http://radarr:7878"
+      },
+      {
+        "id": "apiKey",
+        "type": "secret",
+        "label": "Clé API Radarr",
+        "required": true
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "radarr-refresh-movie",
+      "version": "1.0.0",
+      "name": "Actualiser un film Radarr",
+      "description": "Synchronise le statut du film après traitement.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Le composant a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Le composant n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "radarr-check-movie-indexed",
+      "version": "1.0.0",
+      "name": "Vérifier le fichier dans Radarr",
+      "description": "Vérifie si Radarr a reconnu le fichier du film ciblé.",
+      "kind": "condition",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "found",
+          "label": "Trouvé",
+          "description": "L’élément est présent dans la bibliothèque."
+        },
+        {
+          "id": "notFound",
+          "label": "Absent",
+          "description": "L’élément n’est pas présent dans la bibliothèque."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "La vérification n’a pas pu aboutir."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "movieId",
+            "type": "number",
+            "label": "ID du film Radarr",
+            "required": true,
+            "min": 1,
+            "step": 1
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "radarr-search-movie",
+      "version": "1.0.0",
+      "name": "Rechercher ou améliorer un film",
+      "description": "Demande à Radarr une recherche pour le film surveillé, y compris une amélioration si nécessaire.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Le composant a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Le composant n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "movieId",
+            "type": "number",
+            "label": "ID du film Radarr",
+            "required": true,
+            "min": 1,
+            "step": 1
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    }
+  ]
+}

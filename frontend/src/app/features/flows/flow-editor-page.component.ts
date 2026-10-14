@@ -2,6 +2,11 @@ import { toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { timer, switchMap, catchError, of, from } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FlowValidation } from '../../shared/services/flow-validation';
+import {
+  FlowPluginCatalog,
+  PluginConfigurationResponse,
+} from '../../shared/models/flow-validation';
+import { PluginConfigurationApi } from '../../shared/services/plugin-configuration';
 import { FlowContinuationSource } from '../../shared/models/flow-sequence';
 import { Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -23,6 +28,7 @@ import {
   isFlowComponentCompatible,
   getFlowConfigurationSchema,
   FlowComponentConfiguration,
+  FlowComponentConfigurationSchema,
   FlowComponentConfigurationValue,
   FlowComponentDefinition,
   FlowComponentOutput,
@@ -123,15 +129,29 @@ export class FlowEditorPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly notifications = inject(NotificationService);
   protected readonly componentTemplate = viewChild<TemplateRef<unknown>>('componentPicker');
+  protected readonly flowPluginConfigurationTemplate =
+    viewChild<TemplateRef<unknown>>('flowPluginConfiguration');
   protected readonly configurationTemplate =
     viewChild<TemplateRef<unknown>>('componentConfiguration');
   protected readonly componentPickerOpen = signal(false);
   protected readonly configurationOpen = signal(false);
+  protected readonly pluginConfigurationOpen = signal(false);
+  protected readonly pluginSettingsLoaded = signal(false);
   protected readonly configuringNodeId = signal<string | undefined>(undefined);
   protected readonly nodes = signal<readonly FlowGraphNode[]>([]);
   protected readonly connections = signal<readonly FlowGraphConnection[]>([]);
   protected readonly flowMediaType = signal<MediaType>('video');
   private readonly installedComponents = signal<readonly FlowComponentDefinition[]>([]);
+  private readonly installedPlugins = signal<readonly FlowPluginCatalog[]>([]);
+  private readonly flowPluginConfigurations = signal<
+    Readonly<Record<string, PluginConfigurationResponse>>
+  >({});
+  protected readonly flowPlugins = computed(() => {
+    const used = new Set(this.nodes().map((node) => node.component.pluginId));
+    return this.installedPlugins().filter(
+      (plugin) => used.has(plugin.id) && plugin.configurationSchema,
+    );
+  });
   protected readonly components = computed(() =>
     this.installedComponents().filter(
       (component) =>
@@ -238,15 +258,67 @@ export class FlowEditorPageComponent {
     void this.serverValidation
       .catalog()
       .then((plugins) => {
-        this.installedComponents.set(
-          plugins.flatMap((plugin) =>
-            plugin.components.map((component) => ({
-              ...component,
-              pluginId: plugin.id,
-              pluginName: plugin.name,
-            })),
-          ),
+        this.installedPlugins.set(plugins);
+        const installed = plugins.flatMap((plugin) =>
+          plugin.components.map((component) => ({
+            ...component,
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+          })),
         );
+        this.installedComponents.set(installed);
+        void Promise.all(
+          plugins
+            .filter((plugin) => plugin.configurationSchema)
+            .map(async (plugin) => {
+              try {
+                const settings = await this.pluginConfigurationApi.getFlow(
+                  this.validationFlowId,
+                  plugin.id,
+                );
+                this.flowPluginConfigurations.update((current) => ({
+                  ...current,
+                  [plugin.id]: settings,
+                }));
+              } catch {
+                this.notifications.show(
+                  `Impossible de charger la dérogation ${plugin.name} du flow.`,
+                );
+              }
+            }),
+        ).finally(() => this.pluginSettingsLoaded.set(true));
+        if (this.demoFlow && !this.flowId) {
+          const available = new Map(
+            [...FLOW_COMPONENT_CATALOG, ...installed].map((component) => [component.id, component]),
+          );
+          const nodes = this.demoFlow.nodes.flatMap((seed) => {
+            const component = available.get(seed.componentId);
+            return component && isFlowComponentCompatible(component, mediaType)
+              ? [
+                  {
+                    id: seed.id,
+                    component,
+                    position: { x: 0, y: 0 },
+                    configuration: createDefaultFlowComponentConfiguration(
+                      getFlowConfigurationSchema(component.configurationSchema, mediaType),
+                    ),
+                  },
+                ]
+              : [];
+          });
+          const connections =
+            this.demoFlow.connections
+              ?.filter(
+                (seed) =>
+                  nodes.some((node) => node.id === seed.sourceNodeId) &&
+                  nodes.some((node) => node.id === seed.targetNodeId),
+              )
+              .map((seed) => ({ id: `connection-${this.nextConnectionId++}`, ...seed })) ?? [];
+          if (nodes.length)
+            connections.unshift(this.createConnection(entry.id, 'success', nodes[0].id));
+          this.nextNodeId = Math.max(this.nextNodeId, nodes.length + 1);
+          this.setGraph([entry, ...nodes], connections);
+        }
       })
       .catch(() =>
         this.notifications.show(
@@ -420,11 +492,71 @@ export class FlowEditorPageComponent {
   }
 
   private readonly serverValidation = inject(FlowValidation);
+  private readonly pluginConfigurationApi = inject(PluginConfigurationApi);
   private readonly editorRouter = inject(Router);
   private readonly validationFlowId =
     this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)
       ? this.flowId
       : crypto.randomUUID();
+
+  protected flowPluginSchema(
+    plugin: FlowPluginCatalog,
+  ): FlowComponentConfigurationSchema | undefined {
+    return plugin.configurationSchema
+      ? {
+          ...plugin.configurationSchema,
+          fields: plugin.configurationSchema.fields.map((field) => ({ ...field, required: false })),
+        }
+      : undefined;
+  }
+
+  protected flowPluginValues(pluginId: string): FlowComponentConfiguration {
+    return this.flowPluginConfigurations()[pluginId]?.values ?? {};
+  }
+
+  protected configuredFlowSecrets(pluginId: string): readonly string[] {
+    return this.flowPluginConfigurations()[pluginId]?.configuredSecrets ?? [];
+  }
+
+  protected hasFlowPluginOverride(pluginId: string): boolean {
+    const settings = this.flowPluginConfigurations()[pluginId];
+    return (
+      !!settings &&
+      (Object.keys(settings.values).length > 0 || settings.configuredSecrets.length > 0)
+    );
+  }
+
+  protected async saveFlowPluginConfiguration(
+    plugin: FlowPluginCatalog,
+    values: FlowComponentConfiguration,
+    clearSecrets: readonly string[] = [],
+  ): Promise<void> {
+    const current = this.flowPluginConfigurations()[plugin.id];
+    try {
+      const saved = await this.pluginConfigurationApi.saveFlow(
+        this.validationFlowId,
+        plugin.id,
+        current?.revision ?? 0,
+        values,
+        clearSecrets,
+      );
+      this.flowPluginConfigurations.update((all) => ({ ...all, [plugin.id]: saved }));
+      this.notifications.show(`Dérogation ${plugin.name} enregistrée pour ce flow.`);
+    } catch (error) {
+      this.notifications.show(
+        error instanceof HttpErrorResponse && error.status === 409
+          ? 'La dérogation du flow a changé ailleurs. Rechargez le flow avant de réessayer.'
+          : 'Dérogation non enregistrée.',
+      );
+    }
+  }
+
+  protected resetFlowPluginConfiguration(plugin: FlowPluginCatalog): void {
+    const values = Object.fromEntries(
+      (plugin.configurationSchema?.fields ?? []).map((field) => [field.id, null]),
+    );
+    void this.saveFlowPluginConfiguration(plugin, values, this.configuredFlowSecrets(plugin.id));
+  }
   private readonly savedGraph = signal<string | null>(null);
   hasUnsavedChanges(): boolean {
     return (

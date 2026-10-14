@@ -18,7 +18,8 @@ public sealed record FlowStepInvocation(
     FlowComponentReference Component,
     IReadOnlyDictionary<string, JsonElement> Configuration,
     FlowStepContext Context,
-    DateTimeOffset Deadline);
+    DateTimeOffset Deadline,
+    IReadOnlyDictionary<string, JsonElement>? PluginConfiguration = null);
 
 /// <summary>Artifacts are opaque identifiers resolved to local files by the worker.</summary>
 public sealed record FlowStepContext(

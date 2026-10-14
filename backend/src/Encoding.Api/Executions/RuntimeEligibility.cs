@@ -6,12 +6,24 @@ namespace Encoding.Api.Executions;
 
 public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefinitionValidator validator)
 {
-    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities)
+    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId)
     {
         if(!validator.Validate(flow).IsValid) return false;
         foreach(var node in flow.Nodes)
         {
             if(!capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId && c.Version==node.Component.PluginVersion)) return false;
+            if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node"
+                && (!node.Configuration.TryGetValue("targetNodeId",out var target) || target.ValueKind!=System.Text.Json.JsonValueKind.String
+                    || !Guid.TryParse(target.GetString(),out var targetId) || targetId!=workerId)) return false;
+            if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-require-capability")
+            {
+                var toolId=node.Configuration.TryGetValue("toolId",out var requestedTool)?requestedTool.GetString():null;
+                var minimum=node.Configuration.TryGetValue("minimumVersion",out var requestedVersion)?requestedVersion.GetString():null;
+                var required=node.Configuration.TryGetValue("requiredCapability",out var requestedCapability)?requestedCapability.GetString():null;
+                if(toolId is null || !capabilities.Any(capability=>capability.ToolId==toolId
+                    && (string.IsNullOrWhiteSpace(minimum) || Version.TryParse(capability.Version,out var actual) && Version.TryParse(minimum,out var min) && actual>=min)
+                    && (string.IsNullOrWhiteSpace(required) || capability.AccelerationTypes.Contains(required,StringComparer.Ordinal)))) return false;
+            }
             var component=registry.Resolve(node.Component)!;
             if(node.Component.PluginId=="base" && node.Component.ComponentId=="base-prepare-processing"
                 && !capabilities.Any(c=>c.ToolId==(node.Configuration.TryGetValue("tool",out var chosen)?chosen.GetString():"ffmpeg"))) return false;

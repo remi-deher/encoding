@@ -9,7 +9,8 @@ public sealed record PluginManifest(
     string Version,
     string Name,
     IReadOnlyList<int> SupportedHostContractVersions,
-    IReadOnlyList<FlowComponentDescriptor> Components);
+    IReadOnlyList<FlowComponentDescriptor> Components,
+    FlowConfigurationSchema? ConfigurationSchema = null);
 
 public sealed record FlowComponentDescriptor(
     string Id,

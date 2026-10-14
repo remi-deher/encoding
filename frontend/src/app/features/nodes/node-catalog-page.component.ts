@@ -200,6 +200,7 @@ export class NodeCatalogPageComponent {
     const activity = this.nodeActivity();
     if (!node) return [];
     return [
+      { label: 'Identifiant du nœud', value: node.id },
       { label: 'Présence', value: node.status === 'online' ? 'En ligne' : 'Hors ligne' },
       { label: 'Rôles', value: node.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · ') },
       {

@@ -22,7 +22,7 @@ Le bouton Vérifier le flow utilise le catalogue backend pour obtenir les réfé
 
 L’adaptateur retire uniquement inputComponentId de la configuration de l’entrée : ce sélecteur d’édition change déjà la référence du composant et n’est pas un paramètre runtime.
 
-Le catalogue visuel reste temporairement statique, pour conserver les flows de démonstration. Les composants externes Plex/*ARR/Jellyfin sans manifeste installé échouent explicitement à la validation. Prochaine évolution UI : charger les définitions directement depuis ce registre et signaler les références historiques indisponibles, puis retirer les définitions statiques devenues inutiles. Jusqu’à cette migration, le manifeste backend fait autorité pour l’acceptation du flow.
+L’éditeur charge ses composants depuis ce registre et conserve un catalogue local pour les composants Base nécessaires à l’amorçage et à l’entrée. Les manifestes Plex, Sonarr et Radarr sont intégrés au catalogue serveur ; leurs anciens blocs statiques ont été retirés de l’éditeur. Le manifeste rend une référence disponible pour la validation, sans prouver qu’un worker dispose du processus plugin correspondant. Les composants externes sans manifeste installé échouent explicitement à la validation.
 
 ## Limites
 

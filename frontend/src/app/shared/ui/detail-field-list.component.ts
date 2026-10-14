@@ -1,4 +1,5 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, input, TemplateRef } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { MatTabsModule } from '@angular/material/tabs';
 
 export interface DetailField {
@@ -9,20 +10,24 @@ export interface DetailField {
 
 @Component({
   selector: 'app-detail-field-list',
-  imports: [MatTabsModule],
+  imports: [MatTabsModule, NgTemplateOutlet],
   template: `
     @if (tabbed() && sections().length > 1) {
       <mat-tab-group class="detail-tabs" [attr.aria-label]="tabsLabel()">
         @for (section of sections(); track section.title) {
           <mat-tab [label]="section.title || 'Général'">
-            <dl class="detail-field-list tab-fields">
-              @for (field of section.fields; track field.label) {
-                <div>
-                  <dt>{{ field.label }}</dt>
-                  <dd>{{ field.value }}</dd>
-                </div>
-              }
-            </dl>
+            @if (sectionTemplates()[section.title]; as template) {
+              <ng-container [ngTemplateOutlet]="template" />
+            } @else {
+              <dl class="detail-field-list tab-fields">
+                @for (field of section.fields; track field.label) {
+                  <div>
+                    <dt>{{ field.label }}</dt>
+                    <dd>{{ field.value }}</dd>
+                  </div>
+                }
+              </dl>
+            }
           </mat-tab>
         }
       </mat-tab-group>
@@ -138,6 +143,7 @@ export class DetailFieldListComponent {
   readonly layout = input<'list' | 'cards'>('list');
   readonly tabbed = input(false);
   readonly tabsLabel = input('Sections du détail');
+  readonly sectionTemplates = input<Readonly<Record<string, TemplateRef<unknown>>>>({});
 
   protected readonly sections = computed(() => {
     const sections = new Map<string, DetailField[]>();

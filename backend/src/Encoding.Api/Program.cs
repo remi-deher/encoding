@@ -6,11 +6,19 @@ using System.Text.Json.Serialization;
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Nodes;
 using Encoding.Api.Libraries;
+using Encoding.Api.Plugins;
 using Encoding.Contracts.Nodes;
 using Encoding.Contracts.Libraries;
 using Npgsql;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
+var pluginKeyDirectory = builder.Configuration["PluginSettings:KeyDirectory"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "data", "plugin-keys");
+Directory.CreateDirectory(pluginKeyDirectory);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(pluginKeyDirectory))
+    .SetApplicationName("Encoding.PluginSettings");
 var connectionString = builder.Configuration.GetConnectionString("Cluster")
     ?? throw new InvalidOperationException("La chaîne de connexion 'Cluster' est obligatoire.");
 var offlineAfterSeconds = builder.Configuration.GetValue("NodePresence:OfflineAfterSeconds", 30);
@@ -26,6 +34,10 @@ builder.Services.AddSingleton<FlowComponentRegistry>();
 builder.Services.AddSingleton<FlowDefinitionValidator>();
 builder.Services.AddSingleton<FlowRepository>();
 builder.Services.AddSingleton<FlowArchiveService>();
+builder.Services.AddSingleton<PluginConfigurationRepository>();
+builder.Services.AddSingleton<PluginConnectionTester>();
+builder.Services.AddHttpClient("PluginConnectionTest", client => client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<RuntimeEligibility>();
 builder.Services.AddSingleton<RuntimeRepository>();
 builder.Services.AddSingleton<RuntimeArtifactStore>();
@@ -53,6 +65,7 @@ await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSour
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFlowEndpoints();
+app.MapPluginConfigurationEndpoints();
 app.MapRuntimeEndpoints();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
