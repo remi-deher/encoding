@@ -7,6 +7,7 @@ import {
   INITIAL_EXECUTION_TRACKING,
 } from '../../shared/services/execution-tracking';
 import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
+import { formatFileSize } from '../../shared/models/file-size';
 import { NotificationService } from '../../shared/services/notification.service';
 import { Component, computed, inject, signal, DestroyRef } from '@angular/core';
 import {
@@ -94,7 +95,7 @@ export class TaskMonitoringPageComponent {
                     rows: items.map((item) => ({
                       id: item.sha256,
                       name: item.name,
-                      size: item.bytes.toLocaleString('fr-FR') + ' octets',
+                      size: formatFileSize(item.bytes),
                     })),
                   })),
                   catchError(() =>
@@ -107,6 +108,26 @@ export class TaskMonitoringPageComponent {
       ),
     ),
     { initialValue: { message: '', rows: [] } },
+  );
+  protected readonly pipelineState = toSignal(
+    toObservable(this.selectedExecutionId).pipe(
+      switchMap((id) =>
+        id
+          ? timer(0, 3000).pipe(
+              exhaustMap(() =>
+                this.tracking.pipeline(id).pipe(
+                  map((steps) => ({ message: '', steps })),
+                  catchError(() =>
+                    of({ message: 'Impossible de charger les commandes de cette exécution.', steps: [] }),
+                  ),
+                ),
+              ),
+              startWith({ message: 'Chargement du pipeline…', steps: [] }),
+            )
+          : of({ message: '', steps: [] }),
+      ),
+    ),
+    { initialValue: { message: '', steps: [] } },
   );
   protected downloadArtifact(row: DataTableRow): void {
     const id = this.selectedExecutionId();
@@ -150,13 +171,29 @@ export class TaskMonitoringPageComponent {
             ),
           ) + ' s'
         : '—',
-      beforeSize: e.beforeMetadata?.format?.size
-        ? Number(e.beforeMetadata.format.size).toLocaleString('fr-FR') + ' octets'
+      beforeSize: e.beforeMetadata?.format?.size != null
+        ? formatFileSize(Number(e.beforeMetadata.format.size))
         : '—',
-      afterSize: e.afterMetadata?.format?.size
-        ? Number(e.afterMetadata.format.size).toLocaleString('fr-FR') + ' octets'
+      afterSize: e.afterMetadata?.format?.size != null
+        ? formatFileSize(Number(e.afterMetadata.format.size))
         : '—',
       publishedPath: e.publishedPath ?? '—',
+      videoEncodingsJson: JSON.stringify((e.videoEncodings ?? []).map((encoding, index) => ({
+        id: `${encoding.flowNodeId}-${encoding.encoderId}-${index}`,
+        flowNode: encoding.flowNodeId,
+        worker: encoding.workerId,
+        codec: encoding.codec.toUpperCase(),
+        encoder: encoding.encoderId,
+        ffmpeg: encoding.ffmpegVersion,
+        acceleration: encoding.acceleration,
+        quality: `${encoding.qualityMode} (${encoding.qualityOption}) : ${encoding.quality}`,
+        preset: encoding.presetOption && encoding.presetValue
+          ? `${encoding.presetOption} : ${encoding.presetValue}`
+          : 'Sans preset',
+        profile: `${encoding.profileName} · v${encoding.profileVersion}`,
+        priority: encoding.priority + 1,
+        resolvedAt: this.date(encoding.resolvedAt),
+      }))),
       attempt: e.attempt,
       progress: e.progress === null ? '—' : e.progress + ' %',
     })),

@@ -2,7 +2,7 @@
 
 ## Statut
 
-Catalogue déclaratif implémenté dans l’éditeur. Le contrat et les adaptateurs d’exécution restent à implémenter ; les actions ne lancent pas encore les outils.
+Le catalogue des composants et l’exécution initiale des outils média sont implémentés. Les profils versionnés et le registre des encodeurs vidéo sont décrits dans [0027](0027-video-encoder-quality-profiles.md). Les autres paramètres média poursuivent leur évolution selon les mêmes contrats.
 
 ## Catalogue initial
 
@@ -22,13 +22,13 @@ Les définitions sont centralisées dans `frontend/src/app/shared/models/media-t
 
 Les actions de lecture exposent une variable de résultat et une option d’actualisation. Par défaut, elles réutiliseront les métadonnées du scan automatique prévu par [la décision 0006](0006-mandatory-media-scanning.md). Un rafraîchissement ne remplace jamais l’instantané initial de l’historique.
 
-Les presets, qualités, codecs et identifiants de pistes sont des intentions de configuration. Le futur contrat devra vérifier leur compatibilité avec l’encodeur effectif, les capacités du worker et le média ; il ne peut pas traduire aveuglément ces champs en arguments. Les identifiants de FFprobe, MediaInfo et MKVToolNix peuvent différer : la sélection de piste doit passer par un mapping commun. Les pistes extraites par MKVToolNix conservent leur codec, aucun champ de conversion n’est proposé pour cette action.
+Les presets, qualités, codecs et identifiants de pistes sont des intentions de configuration. Pour la vidéo, les cibles par encodeur sont versionnées dans un profil et traduites par l’adaptateur d’exécution ; l’éligibilité compare le profil aux encodeurs vérifiés utilisables par le worker quand il annonce ces vérifications. Les anciennes capacités restent compatibles. Les identifiants de FFprobe, MediaInfo et MKVToolNix peuvent différer : la sélection de piste doit passer par un mapping commun. Les pistes extraites par MKVToolNix conservent leur codec, aucun champ de conversion n’est proposé pour cette action.
 
 ## Suite prévue
 
-- Définir un contrat commun versionné pour décrire les outils, versions, capacités, paramètres et résultats.
-- Faire détecter et annoncer les outils installés par chaque worker, puis utiliser ces capacités dans l’éligibilité et la répartition.
-- Exécuter les outils sur des fichiers locaux au worker avec des arguments structurés, sans construire de commande depuis une chaîne libre fournie par l’éditeur.
-- Valider les sorties avant leur publication selon les garanties de fichiers de `AGENTS.md`.
+- Étendre le catalogue versionné aux autres paramètres média, capacités et résultats.
+- Renforcer la détection active des périphériques matériels et estimer les limites de capacité par accélérateur.
+- Étendre les adaptateurs aux autres codecs et paramètres de contrôle de débit sans construire de commande depuis une chaîne libre fournie par l’éditeur.
+- Étendre la validation de sortie aux autres opérations avant publication selon les garanties de fichiers de `AGENTS.md`.
 
-Le catalogue actuel est une aide de conception UI. Il ne réalise aucune détection, orchestration ni exécution des binaires.
+La disponibilité d’un encodeur vidéo reste distincte de sa déclaration dans le catalogue : l’agent l’annonce à partir de FFmpeg puis teste les encodeurs catalogués avec une mire synthétique, sans lire de média utilisateur. La capacité par périphérique et la mesure de débit restent à implémenter.

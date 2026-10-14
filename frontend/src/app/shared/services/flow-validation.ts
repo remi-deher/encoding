@@ -14,6 +14,7 @@ import {
   FlowSummary,
   FlowValidationResult,
   flowComponentReference,
+  FlowComponentPackInstance,
 } from '../models/flow-validation';
 @Injectable({ providedIn: 'root' })
 export class FlowValidation {
@@ -92,6 +93,7 @@ export class FlowValidation {
     mediaType: MediaType,
     nodes: readonly FlowGraphNode[],
     connections: readonly FlowGraphConnection[],
+    componentPacks: readonly FlowComponentPackInstance[] = [],
   ): Promise<FlowDocument> {
     const plugins = await this.catalog();
     return {
@@ -111,6 +113,7 @@ export class FlowValidation {
         ),
       })),
       connections,
+      ...(componentPacks.length ? { componentPacks } : {}),
     };
   }
 
@@ -169,8 +172,17 @@ export class FlowValidation {
     mediaType: MediaType,
     nodes: readonly FlowGraphNode[],
     connections: readonly FlowGraphConnection[],
+    componentPacks: readonly FlowComponentPackInstance[] = [],
   ): Promise<FlowValidationResult> {
-    const document = await this.document(id, 1, name, mediaType, nodes, connections);
+    const document = await this.document(
+      id,
+      1,
+      name,
+      mediaType,
+      nodes,
+      connections,
+      componentPacks,
+    );
     return this.validateDocument(document);
   }
 

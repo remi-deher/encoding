@@ -335,15 +335,16 @@ export class NodeCatalogPageComponent {
         value: capabilities.filter((capability) => capability.toolId.startsWith('plugin/')).length,
       },
       {
-        label: 'Accélérations annoncées',
+        label: 'Accélérations vérifiées',
         value:
           [...new Set(tools.flatMap((tool) => tool.accelerationTypes))].join(' · ') ||
           'Aucune déclarée',
       },
       {
-        label: 'Encodeurs détectés',
+        label: 'Encodeurs vérifiés utilisables',
         value: [
-          ...new Set(tools.flatMap((tool) => tool.encoders ?? []).filter((name) => name !== '=')),
+          ...new Set(tools.flatMap((tool) => tool.encoderChecks ?? [])
+            .filter((check) => check.status === 'usable').map((check) => check.encoderId)),
         ].length,
       },
     ];
@@ -359,14 +360,18 @@ export class NodeCatalogPageComponent {
       encoders: tool.encoders
         ? [...new Set(tool.encoders)].filter((name) => name !== '=').length
         : 'Non déclarés',
+      verifiedEncoders: tool.encoderChecks
+        ? `${tool.encoderChecks.filter((check) => check.status === 'usable').length} utilisable(s) · ${tool.encoderChecks.filter((check) => check.status === 'detected').length} détecté(s)`
+        : 'Vérification non déclarée',
     })),
   );
   protected readonly capabilityColumns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Outil / Plugin' },
     { key: 'version', label: 'Version' },
     { key: 'media', label: 'Médias' },
-    { key: 'acceleration', label: 'Accélération' },
+    { key: 'acceleration', label: 'Accélération vérifiée' },
     { key: 'encoders', label: 'Encodeurs' },
+    { key: 'verifiedEncoders', label: 'Encodeurs vérifiés' },
   ];
   protected readonly capabilityActions: readonly DataTableRowAction[] = [
     {
@@ -380,14 +385,23 @@ export class NodeCatalogPageComponent {
     if (!tool) return;
     this.dialog.open(ConfirmationDialogComponent, {
       data: {
-        title: tool.toolId + ' · Encodeurs détectés',
+        title: tool.toolId + ' · État des encodeurs',
         mode: 'information',
         items: [...new Set(tool.encoders ?? [])]
           .filter((name) => name !== '=')
           .sort()
-          .map((name) => ({ label: name })),
-        message:
-          'Ces encodeurs sont déclarés par le binaire installé. L’exécution dépend aussi des codecs et des périphériques accessibles.',
+          .map((name) => {
+            const check = tool.encoderChecks?.find((item) => item.encoderId === name);
+            return {
+              label: name,
+              detail: check?.status === 'usable'
+                ? 'Vérifié utilisable par un encodage synthétique'
+                : check?.status === 'detected'
+                  ? 'Détecté, mais le test d’encodage n’a pas réussi'
+                  : 'Déclaré par FFmpeg · capacité non vérifiée',
+            };
+          }),
+        message: 'Les vérifications utilisent une image synthétique et ne lisent aucun média de la bibliothèque.',
       },
     });
   }

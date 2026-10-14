@@ -107,6 +107,18 @@ export function flowConfigurationFieldError(
     case 'text':
     case 'secret':
       return typeof value === 'string' ? undefined : 'Une valeur textuelle est attendue.';
+    case 'script-reference':
+      return typeof value === 'string' && /^[0-9a-f-]{36}@[1-9]\d*$/i.test(value)
+        ? undefined
+        : 'Choisissez une version publiée de la bibliothèque de scripts.';
+    case 'encoding-profile':
+      return typeof value === 'object' && value !== null && 'targets' in value
+        ? undefined
+        : 'Choisissez un profil de qualité publié.';
+    case 'video-encoder':
+      return typeof value === 'string' && value.length > 0
+        ? undefined
+        : 'Choisissez un encodeur compatible avec le profil.';
     case 'boolean':
       return typeof value === 'boolean' ? undefined : 'Une valeur Oui ou Non est attendue.';
     case 'select':

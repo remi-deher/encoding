@@ -15,13 +15,14 @@ import { MatDialog } from '@angular/material/dialog';
 
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import {
   catchError,
   EMPTY,
   finalize,
   forkJoin,
+  map,
   of,
   timer,
   switchMap,
@@ -63,6 +64,10 @@ import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-butto
 import { NotificationService } from '../../shared/services/notification.service';
 
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
+import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { formatFileSize } from '../../shared/models/file-size';
+import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../../shared/services/execution-tracking';
+import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeline-logs.component';
 
 interface LibraryRecord extends DataTableRow {
   readonly id: string;
@@ -125,6 +130,8 @@ interface LibraryAccessRecord extends DataTableRow {
     LibraryNodeAccessFormComponent,
 
     DrawerActionButtonComponent,
+    CategoryTabsComponent,
+    ExecutionPipelineLogsComponent,
   ],
 
   templateUrl: './library-catalog-page.component.html',
@@ -135,6 +142,7 @@ export class LibraryCatalogPageComponent {
   private readonly flowApi = inject(FlowValidation);
 
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
@@ -143,6 +151,12 @@ export class LibraryCatalogPageComponent {
   private readonly http = inject(HttpClient);
 
   private readonly clusterApi = inject(ClusterApi);
+
+  private readonly executionTracking = inject(ExecutionTracking);
+
+  protected readonly executionTrackingState = toSignal(this.executionTracking.state$, {
+    initialValue: INITIAL_EXECUTION_TRACKING,
+  });
 
   private readonly dialog = inject(MatDialog);
 
@@ -302,9 +316,22 @@ export class LibraryCatalogPageComponent {
     }
   }
 
-  protected readonly title = computed(
-    () => (this.routeData()['title'] as string) ?? 'Bibliothèques',
-  );
+  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Librairies');
+
+  protected readonly librarySections: readonly CategoryTabOption[] = [
+    { value: 'media', label: 'Médias' },
+    { value: 'scripts', label: 'Scripts' },
+    { value: 'templates', label: 'Modèles' },
+    { value: 'packs', label: 'Packs de composants' },
+    { value: 'encoding', label: 'Profils d’encodage' },
+  ];
+  protected readonly selectedSection = signal('media');
+  protected onSectionChanged(section: string): void {
+    if (section === 'scripts') void this.router.navigateByUrl('/libraries/scripts');
+    if (section === 'templates') void this.router.navigateByUrl('/libraries/templates');
+    if (section === 'packs') void this.router.navigateByUrl('/libraries/packs');
+    if (section === 'encoding') void this.router.navigateByUrl('/libraries/encoding-profiles');
+  }
 
   protected readonly actionOpen = signal(false);
 
@@ -329,6 +356,56 @@ export class LibraryCatalogPageComponent {
   protected readonly initialAccesses = signal<readonly LibraryNodeAccessResponse[]>([]);
 
   protected readonly selectedLibrary = signal<LibraryRecord | null>(null);
+
+  protected readonly selectedProcessingExecutionId = signal<string | null>(null);
+
+  protected readonly processingPipelineState = toSignal(
+    toObservable(this.selectedProcessingExecutionId).pipe(
+      switchMap((id) =>
+        id
+          ? timer(0, 3000).pipe(
+              exhaustMap(() =>
+                this.executionTracking.pipeline(id).pipe(
+                  map((steps) => ({ message: '', steps })),
+                  catchError(() =>
+                    of({ message: 'Impossible de charger les commandes de cette exécution.', steps: [] }),
+                  ),
+                ),
+              ),
+              startWith({ message: 'Chargement du pipeline…', steps: [] }),
+            )
+          : of({ message: '', steps: [] }),
+      ),
+    ),
+    { initialValue: { message: '', steps: [] } },
+  );
+
+  protected readonly libraryExecutionRows = computed<readonly DataTableRow[]>(() => {
+    const libraryId = this.selectedLibrary()?.id;
+    return (this.executionTrackingState().data?.executions ?? [])
+      .filter((execution) => execution.libraryId === libraryId)
+      .slice(0, 25)
+      .map((execution) => ({
+        id: execution.id,
+        media: execution.media,
+        flow: execution.flow + ' · v' + execution.flowVersion,
+        state: execution.state,
+        worker: execution.node ?? '—',
+        updatedAt: new Date(execution.updatedAt).toLocaleString('fr-FR'),
+      }));
+  });
+
+  protected readonly libraryExecutionColumns: readonly DataTableColumn[] = [
+    { key: 'media', label: 'Média', sortable: true },
+    { key: 'flow', label: 'Flow', sortable: true },
+    { key: 'state', label: 'État', sortable: true },
+    { key: 'worker', label: 'Worker', sortable: true },
+    { key: 'updatedAt', label: 'Actualisé le', sortable: true },
+  ];
+
+  protected readonly libraryExecutionActions: readonly DataTableRowAction[] = [
+    { id: 'pipeline', label: 'Voir le pipeline' },
+  ];
 
   protected readonly actionTitle = computed(() => {
     switch (this.actionType()) {
@@ -498,7 +575,7 @@ export class LibraryCatalogPageComponent {
 
       name: file.relativePath,
 
-      size: file.bytes.toLocaleString('fr-FR') + ' octets',
+      size: formatFileSize(file.bytes),
 
       modifiedAt: new Date(file.modifiedAt).toLocaleString('fr-FR'),
     })),
@@ -869,8 +946,14 @@ export class LibraryCatalogPageComponent {
     this.selectedLibrary.set(library);
 
     this.selectedAccesses.set([]);
+    this.selectedProcessingExecutionId.set(null);
 
     if (library) this.loadSelectedAccesses(library.id);
+  }
+
+  protected onProcessingExecutionAction(event: DataTableActionEvent): void {
+    if (event.actionId === 'pipeline')
+      this.selectedProcessingExecutionId.set(String(event.row['id']));
   }
 
   protected showLibraryNodes(): void {

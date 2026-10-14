@@ -169,6 +169,12 @@
         "version": 1,
         "fields": [
           {
+            "id": "scriptReference",
+            "label": "Script de la bibliothèque",
+            "type": "script-reference",
+            "description": "Choisissez une version publiée. Son code est copié dans le flow et reste figé avec sa version."
+          },
+          {
             "id": "language",
             "label": "Langage",
             "type": "select",
@@ -434,6 +440,29 @@
             ]
           },
           {
+            "id": "encodingProfile",
+            "label": "Profil de qualité",
+            "type": "encoding-profile",
+            "description": "Les valeurs du profil sont intégrées au flow et restent stables après publication."
+          },
+          {
+            "id": "encoderMode",
+            "label": "Sélection de l’encodeur",
+            "type": "select",
+            "defaultValue": "automatic",
+            "options": [
+              { "value": "automatic", "label": "Automatique selon le worker" },
+              { "value": "specific", "label": "Encodeur précis" }
+            ]
+          },
+          {
+            "id": "encoderId",
+            "label": "Encodeur précis",
+            "type": "video-encoder",
+            "visibleWhenFieldId": "encoderMode",
+            "visibleWhenValue": "specific"
+          },
+          {
             "id": "videoCodec",
             "label": "Codec vidéo",
             "type": "select",
@@ -456,9 +485,10 @@
           },
           {
             "id": "quality",
-            "label": "Qualité cible (CRF)",
+            "label": "Qualité héritée (sans profil)",
             "type": "number",
-            "inline": true,
+            "visibleWhenFieldId": "encodingProfile",
+            "visibleWhenEmpty": true,
             "defaultValue": 23,
             "min": 0,
             "max": 51,
@@ -473,9 +503,10 @@
           },
           {
             "id": "preset",
-            "label": "Preset",
+            "label": "Preset hérité (sans profil)",
             "type": "select",
-            "inline": true,
+            "visibleWhenFieldId": "encodingProfile",
+            "visibleWhenEmpty": true,
             "defaultValue": "medium",
             "options": [
               {
@@ -494,9 +525,10 @@
           },
           {
             "id": "hardwareAcceleration",
-            "label": "Accélération matérielle",
+            "label": "Accélération héritée (sans profil)",
             "type": "select",
-            "inline": true,
+            "visibleWhenFieldId": "encodingProfile",
+            "visibleWhenEmpty": true,
             "defaultValue": "cpu",
             "options": [
               {

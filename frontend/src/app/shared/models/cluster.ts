@@ -1,10 +1,15 @@
 export type NodeRole = 'server' | 'worker';
 export interface NodeToolCapability {
   readonly encoders?: readonly string[] | null;
+  readonly encoderChecks?: readonly NodeEncoderCapability[] | null;
   readonly toolId: string;
   readonly version: string;
   readonly mediaTypes: readonly string[];
   readonly accelerationTypes: readonly string[];
+}
+export interface NodeEncoderCapability {
+  readonly encoderId: string;
+  readonly status: 'usable' | 'detected';
 }
 export interface NodeResponse {
   readonly id: string;

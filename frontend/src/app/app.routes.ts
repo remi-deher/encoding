@@ -35,15 +35,63 @@ export const routes: Routes = [
     },
   },
   {
+    path: 'libraries/encoding-profiles',
+    loadComponent: () =>
+      import('./features/libraries/encoding-profile-library-page.component').then(
+        (module) => module.EncodingProfileLibraryPageComponent,
+      ),
+    data: {
+      title: 'Librairies',
+      primaryNavigation: false,
+      description: 'Gérez les profils de qualité et leurs réglages par encodeur.',
+    },
+  },
+  {
+    path: 'libraries/scripts',
+    loadComponent: () =>
+      import('./features/libraries/script-library-page.component').then(
+        (module) => module.ScriptLibraryPageComponent,
+      ),
+    data: {
+      title: 'Librairies',
+      primaryNavigation: false,
+      description: 'Gérez les scripts réutilisables dans vos flows.',
+    },
+  },
+  {
+    path: 'libraries/packs',
+    loadComponent: () =>
+      import('./features/libraries/component-pack-library-page.component').then(
+        (module) => module.ComponentPackLibraryPageComponent,
+      ),
+    data: {
+      title: 'Librairies',
+      primaryNavigation: false,
+      description: 'Parcourez les packs de composants réutilisables dans vos flows.',
+    },
+  },
+  {
+    path: 'libraries/templates',
+    loadComponent: () =>
+      import('./features/libraries/flow-template-library-page.component').then(
+        (module) => module.FlowTemplateLibraryPageComponent,
+      ),
+    data: {
+      title: 'Librairies',
+      primaryNavigation: false,
+      description: 'Parcourez les modèles de flow réutilisables.',
+    },
+  },
+  {
     path: 'libraries',
     loadComponent: () =>
       import('./features/libraries/library-catalog-page.component').then(
         (module) => module.LibraryCatalogPageComponent,
       ),
     data: {
-      title: 'Bibliothèques',
+      title: 'Librairies',
       primaryNavigation: true,
-      description: 'Gérez les bibliothèques partagées et leurs accès par nœud.',
+      description: 'Gérez les ressources partagées du cluster.',
     },
   },
   {

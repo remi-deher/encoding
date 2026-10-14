@@ -36,6 +36,8 @@ import {
   FlowGraphNode,
 } from '../models/flow-component';
 import { canConnectFlowGraph } from '../models/flow-graph';
+import { FlowComponentPackInstance } from '../models/flow-validation';
+import { projectFlowPacks } from '../models/flow-pack-projection';
 import {
   FlowSequence,
   FlowContinuationSource,
@@ -69,6 +71,7 @@ export class FlowGraphEditorComponent {
   }>();
   readonly nodes = input.required<readonly FlowGraphNode[]>();
   readonly connections = input.required<readonly FlowGraphConnection[]>();
+  readonly componentPacks = input<readonly FlowComponentPackInstance[]>([]);
   readonly configurationRequested = output<string>();
   readonly branchComponentRequested = output<{
     readonly sourceNodeId: string;
@@ -85,12 +88,30 @@ export class FlowGraphEditorComponent {
   readonly connectionRemoved = output<string>();
   private readonly cards = viewChildren<ElementRef<HTMLElement>>('stepCard');
   private readonly notifications = inject(NotificationService);
-  protected readonly structured = computed(() => structureFlow(this.nodes(), this.connections()));
+  protected readonly projection = computed(() =>
+    projectFlowPacks(this.nodes(), this.connections(), this.componentPacks()),
+  );
+  protected readonly visualNodes = computed(() => this.projection().nodes);
+  protected readonly visualConnections = computed(() => this.projection().connections);
+  protected readonly drawnGraphConnections = computed(() => {
+    const expanded = this.componentPacks().filter((pack) => this.expandedPacks().has(pack.id));
+    const internal = this.connections().filter((edge) =>
+      expanded.some(
+        (pack) =>
+          pack.nodeIds.includes(edge.sourceNodeId) && pack.nodeIds.includes(edge.targetNodeId),
+      ),
+    );
+    return [...this.visualConnections(), ...internal];
+  });
+  protected readonly structured = computed(() =>
+    structureFlow(this.visualNodes(), this.visualConnections()),
+  );
   private readonly surface = viewChild<ElementRef<HTMLElement>>('surface');
   private readonly ports = viewChildren<ElementRef<HTMLElement>>('outputPort');
   private readonly inputs = viewChildren<ElementRef<HTMLElement>>('inputPort');
   private observer?: ResizeObserver;
   protected readonly showConnections = signal(true);
+  protected readonly expandedPacks = signal<ReadonlySet<string>>(new Set());
   protected readonly pendingConnection = signal<FlowContinuationSource | null>(null);
   protected readonly drawnConnections = signal<readonly FlowLinkDrawing[]>([]);
   protected readonly drawingSize = signal({ width: 0, height: 0 });
@@ -100,6 +121,8 @@ export class FlowGraphEditorComponent {
     afterRenderEffect(() => {
       this.nodes();
       this.connections();
+      this.componentPacks();
+      this.expandedPacks();
       this.cards();
       this.ports();
       this.inputs();
@@ -129,7 +152,7 @@ export class FlowGraphEditorComponent {
           bottom: bounds.bottom - origin.top,
         };
       });
-    const paths = this.connections().flatMap((edge) => {
+    const paths = this.drawnGraphConnections().flatMap((edge) => {
       const source = this.ports().find(
         (port) =>
           port.nativeElement.dataset['sourceId'] === edge.sourceNodeId &&
@@ -168,7 +191,9 @@ export class FlowGraphEditorComponent {
     this.drawnConnections.set(paths);
   }
   protected incomingCount(node: FlowGraphNode): number {
-    return this.connections().filter((edge) => edge.targetNodeId === node.id).length;
+    if (this.projection().instanceByChildId.has(node.id))
+      return this.connections().filter((edge) => edge.targetNodeId === node.id).length;
+    return this.visualConnections().filter((edge) => edge.targetNodeId === node.id).length;
   }
   protected insertOnConnection(id: string): void {
     const edge = this.connections().find((connection) => connection.id === id);
@@ -183,16 +208,26 @@ export class FlowGraphEditorComponent {
       );
       return;
     }
-    this.pendingConnection.set({ sourceNodeId: node.id, output });
+    const pack = this.packForVisualNode(node);
+    const binding = pack?.outputs.find((candidate) => candidate.id === output.id);
+    const sourceNodeId = binding?.sourceNodeId ?? node.id;
+    const sourceOutput = binding
+      ? this.nodes()
+          .find((candidate) => candidate.id === sourceNodeId)
+          ?.component.outputs.find((candidate) => candidate.id === binding.sourceOutputId)
+      : output;
+    if (!sourceOutput) return;
+    this.pendingConnection.set({ sourceNodeId, output: sourceOutput });
   }
   protected canLinkTo(node: FlowGraphNode): boolean {
     const pending = this.pendingConnection();
+    const targetNodeId = this.packForVisualNode(node)?.inputNodeId ?? node.id;
     return (
       !!pending &&
       canConnectFlowGraph(this.nodes(), this.connections(), {
         sourceNodeId: pending.sourceNodeId,
         sourceOutputId: pending.output.id,
-        targetNodeId: node.id,
+        targetNodeId,
       })
     );
   }
@@ -202,13 +237,17 @@ export class FlowGraphEditorComponent {
     this.connectionRequested.emit({
       sourceNodeId: pending.sourceNodeId,
       sourceOutputId: pending.output.id,
-      targetNodeId: node.id,
+      targetNodeId: this.packForVisualNode(node)?.inputNodeId ?? node.id,
     });
     this.pendingConnection.set(null);
     this.showConnections.set(true);
   }
   protected readonly colors = flowComponentColors;
   protected openConfiguration(node: FlowGraphNode, event: Event): void {
+    if (node.component.kind === 'pack') {
+      event.preventDefault();
+      return;
+    }
     const target = event.target;
     if (
       target instanceof Element &&
@@ -236,36 +275,61 @@ export class FlowGraphEditorComponent {
     return FLOW_COMPONENT_KIND_LABELS[kind];
   }
   protected primaryOutput(node: FlowGraphNode): FlowComponentOutput | undefined {
-    const edge = this.connections().find((e) => e.sourceNodeId === node.id);
+    const edge = this.visualConnections().find((e) => e.sourceNodeId === node.id);
     return (
       node.component.outputs.find((o) => o.id === (edge?.sourceOutputId ?? 'success')) ??
       node.component.outputs[0]
     );
   }
   protected targets(node: FlowGraphNode, output: FlowComponentOutput) {
+    const binding = this.packForVisualNode(node)?.outputs.find(
+      (candidate) => candidate.id === output.id,
+    );
+    const sourceNodeId = binding?.sourceNodeId ?? node.id;
+    const sourceOutputId = binding?.sourceOutputId ?? output.id;
     return this.nodes().filter((n) =>
       canConnectFlowGraph(this.nodes(), this.connections(), {
-        sourceNodeId: node.id,
-        sourceOutputId: output.id,
+        sourceNodeId,
+        sourceOutputId,
         targetNodeId: n.id,
       }),
     );
   }
   protected add(node: FlowGraphNode, output: FlowComponentOutput): void {
-    this.branchComponentRequested.emit({ sourceNodeId: node.id, output });
+    const binding = this.packForVisualNode(node)?.outputs.find(
+      (candidate) => candidate.id === output.id,
+    );
+    const sourceNodeId = binding?.sourceNodeId ?? node.id;
+    const actualOutput = binding
+      ? this.nodes()
+          .find((candidate) => candidate.id === sourceNodeId)
+          ?.component.outputs.find((candidate) => candidate.id === binding.sourceOutputId)
+      : output;
+    if (actualOutput) this.branchComponentRequested.emit({ sourceNodeId, output: actualOutput });
   }
   protected disconnect(node: FlowGraphNode, output: FlowComponentOutput): void {
-    const edge = this.connections().find(
-      (e) => e.sourceNodeId === node.id && e.sourceOutputId === output.id,
+    const binding = this.packForVisualNode(node)?.outputs.find(
+      (candidate) => candidate.id === output.id,
+    );
+    const edge = this.connections().find((candidate) =>
+      binding
+        ? candidate.sourceNodeId === binding.sourceNodeId &&
+          candidate.sourceOutputId === binding.sourceOutputId
+        : candidate.sourceNodeId === node.id && candidate.sourceOutputId === output.id,
     );
     if (edge) this.connectionRemoved.emit(edge.id);
   }
   protected isConnected(node: FlowGraphNode, output: FlowComponentOutput): boolean {
-    return this.connections().some(
+    if (this.projection().instanceByChildId.has(node.id))
+      return this.connections().some(
+        (edge) => edge.sourceNodeId === node.id && edge.sourceOutputId === output.id,
+      );
+    return this.visualConnections().some(
       (e) => e.sourceNodeId === node.id && e.sourceOutputId === output.id,
     );
   }
   protected move(sequence: FlowSequence, from: number, to: number): void {
+    if (sequence.steps.some((step) => step.node.component.kind === 'pack')) return;
     const changed = reorderFlowSequence(
       this.nodes(),
       this.connections(),
@@ -283,6 +347,7 @@ export class FlowGraphEditorComponent {
   }
   protected canMove(sequence: FlowSequence, from: number, to: number): boolean {
     return (
+      !sequence.steps.some((step) => step.node.component.kind === 'pack') &&
       reorderFlowSequence(
         this.nodes(),
         this.connections(),
@@ -301,6 +366,24 @@ export class FlowGraphEditorComponent {
       ?.nativeElement.focus();
   }
   protected continuationSources(node: FlowGraphNode): readonly FlowContinuationSource[] {
+    const pack = this.packForVisualNode(node);
+    if (pack)
+      return pack.outputs
+        .filter(
+          (binding) =>
+            !this.connections().some(
+              (edge) =>
+                edge.sourceNodeId === binding.sourceNodeId &&
+                edge.sourceOutputId === binding.sourceOutputId,
+            ),
+        )
+        .flatMap((binding) => {
+          const source = this.nodes().find((candidate) => candidate.id === binding.sourceNodeId);
+          const output = source?.component.outputs.find(
+            (candidate) => candidate.id === binding.sourceOutputId,
+          );
+          return source && output ? [{ sourceNodeId: source.id, output }] : [];
+        });
     return flowContinuationSources(this.nodes(), this.connections(), node.id);
   }
   protected nodeLabel(id: string): string {
@@ -312,5 +395,65 @@ export class FlowGraphEditorComponent {
       component.pluginName +
       (component.executionToolName ? ' · ' + component.executionToolName : '')
     );
+  }
+
+  protected packForVisualNode(node: FlowGraphNode): FlowComponentPackInstance | undefined {
+    return this.projection().instancesByVisualId.get(node.id);
+  }
+
+  protected packContents(instance: FlowComponentPackInstance) {
+    const nodes = this.nodes().filter((node) => instance.nodeIds.includes(node.id));
+    const edges = this.connections().filter(
+      (edge) =>
+        instance.nodeIds.includes(edge.sourceNodeId) &&
+        instance.nodeIds.includes(edge.targetNodeId),
+    );
+    return structureFlow(nodes, edges, instance.inputNodeId);
+  }
+
+  protected packExpanded(instance: FlowComponentPackInstance): boolean {
+    return this.expandedPacks().has(instance.id);
+  }
+
+  protected togglePack(instance: FlowComponentPackInstance): void {
+    this.expandedPacks.update((current) => {
+      const next = new Set(current);
+      if (next.has(instance.id)) next.delete(instance.id);
+      else next.add(instance.id);
+      return next;
+    });
+  }
+
+  protected packRootLabel(instance: FlowComponentPackInstance): string {
+    const root = this.nodes().find((node) => node.id === instance.inputNodeId);
+    return root?.name || root?.component.name || instance.inputNodeId;
+  }
+
+  protected connectPackOutput(
+    node: FlowGraphNode,
+    output: FlowComponentOutput,
+    target: FlowGraphNode,
+  ): void {
+    const binding = this.packForVisualNode(node)?.outputs.find(
+      (candidate) => candidate.id === output.id,
+    );
+    this.connectionRequested.emit({
+      sourceNodeId: binding?.sourceNodeId ?? node.id,
+      sourceOutputId: binding?.sourceOutputId ?? output.id,
+      targetNodeId: target.id,
+    });
+  }
+
+  protected terminatePackOutput(node: FlowGraphNode, output: FlowComponentOutput): void {
+    const binding = this.packForVisualNode(node)?.outputs.find(
+      (candidate) => candidate.id === output.id,
+    );
+    const sourceNodeId = binding?.sourceNodeId ?? node.id;
+    const sourceOutput = binding
+      ? this.nodes()
+          .find((candidate) => candidate.id === sourceNodeId)
+          ?.component.outputs.find((candidate) => candidate.id === binding.sourceOutputId)
+      : output;
+    if (sourceOutput) this.terminationRequested.emit({ sourceNodeId, output: sourceOutput });
   }
 }

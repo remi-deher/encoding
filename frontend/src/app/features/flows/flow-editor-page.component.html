@@ -32,6 +32,15 @@
   </button>
   <button
     page-tools
+    matButton="outlined"
+    type="button"
+    [disabled]="loadState() !== 'ready' || storedVersion() < 1 || saving()"
+    (click)="packCreationOpen.set(true)"
+  >
+    Créer un pack depuis cette version
+  </button>
+  <button
+    page-tools
     matButton="text"
     type="button"
     [disabled]="validating() || loadState() !== 'ready'"
@@ -67,6 +76,7 @@
     } @else {
       <app-flow-graph-editor
         [nodes]="nodes()"
+        [componentPacks]="componentPacks()"
         [mediaType]="flowMediaType()"
         (configurationChanged)="onInlineConfigurationChanged($event)"
         [connections]="connections()"
@@ -83,12 +93,29 @@
   </div>
 
   <ng-template #componentPicker>
-    <app-searchable-component-catalog
-      [components]="components()"
-      [typeOptions]="typeOptions()"
-      [pluginOptions]="pluginOptions()"
-      (selected)="addComponent($event)"
+    <app-category-tabs
+      label="Types de blocs à insérer"
+      [options]="pickerSections()"
+      [selected]="packPickerSection()"
+      (selectedChange)="packPickerSection.set($event)"
     />
+    @if (packPickerSection() === 'components') {
+      <app-searchable-component-catalog
+        [components]="components()"
+        [typeOptions]="typeOptions()"
+        [pluginOptions]="pluginOptions()"
+        (selected)="addComponent($event)"
+      />
+    } @else {
+      <app-data-table
+        [columns]="packColumns"
+        [rows]="packRows()"
+        [rowActions]="packRowActions"
+        [separateRowActionColumns]="true"
+        (rowAction)="onPackRowAction($event)"
+        emptyMessage="Aucun pack disponible. Créez-en depuis la page Flows."
+      />
+    }
   </ng-template>
 </app-detail-drawer>
 
@@ -132,6 +159,23 @@
       (instanceNameChange)="renameNode($event)"
       (saved)="saveNodeConfiguration($event)"
       (cancelled)="configurationOpen.set(false)"
+    />
+  </ng-template>
+</app-detail-drawer>
+
+<app-detail-drawer
+  mainScroll="parent"
+  [opened]="packCreationOpen()"
+  title="Créer un pack de composants"
+  description="Copiez une version publiée de ce flow dans les Librairies."
+  [content]="packCreationTemplate()"
+  (closed)="packCreationOpen.set(false)"
+>
+  <ng-template #packCreation>
+    <app-record-form
+      [data]="packCreationForm()"
+      (submitted)="createPackFromPublishedFlow($event)"
+      (cancelled)="packCreationOpen.set(false)"
     />
   </ng-template>
 </app-detail-drawer>

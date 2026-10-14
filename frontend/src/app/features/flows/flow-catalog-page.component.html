@@ -64,5 +64,12 @@
       (submitted)="submitAction($event)"
       (cancelled)="closeFlowCreation()"
     />
+    @if (sourcePreviewStatus() === 'loading') {
+      <p role="status">Chargement de la version source…</p>
+    } @else if (sourcePreviewStatus() === 'error') {
+      <p role="alert">Le flow source n’est pas disponible pour l’aperçu.</p>
+    } @else if (sourcePreview(); as flow) {
+      <app-flow-preview [flow]="flow" [components]="sourcePreviewComponents()" mode="flow" />
+    }
   </ng-template>
 </app-management-catalog-template>

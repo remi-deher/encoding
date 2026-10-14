@@ -56,7 +56,10 @@ public sealed record FlowConfigurationField(
     IReadOnlyList<decimal>? Suggestions = null,
     IReadOnlyList<FlowSelectOption>? Options = null,
     IReadOnlyList<ConditionFieldDefinition>? ConditionFields = null,
-    IReadOnlyList<ConditionPreset>? ConditionPresets = null);
+    IReadOnlyList<ConditionPreset>? ConditionPresets = null,
+    string? VisibleWhenFieldId = null,
+    string? VisibleWhenValue = null,
+    bool VisibleWhenEmpty = false);
 
 public sealed record FlowSelectOption(
     string Value,

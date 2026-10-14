@@ -39,6 +39,21 @@ export interface FlowDocument {
     readonly configuration: FlowComponentConfiguration;
   }[];
   readonly connections: readonly FlowGraphConnection[];
+  readonly componentPacks?: readonly FlowComponentPackInstance[];
+}
+export interface FlowComponentPackInstance {
+  readonly id: string;
+  readonly packId: string;
+  readonly packVersion: number;
+  readonly name: string;
+  readonly inputNodeId: string;
+  readonly nodeIds: readonly string[];
+  readonly outputs: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly sourceNodeId: string;
+    readonly sourceOutputId: string;
+  }[];
 }
 export interface FlowVersionResponse {
   readonly draftRevision?: number | null;

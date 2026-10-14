@@ -23,6 +23,7 @@ export interface ConfirmationDialogData {
   selector: 'app-confirmation-dialog',
   imports: [MatDialogActions, MatDialogContent, MatDialogTitle],
   template: `
+    <div class="confirmation-dialog">
     <header class="confirmation-header" [class.confirmation-header_colored]="!!data.headerColor" [style.background-color]="data.headerColor ?? 'var(--surface-muted)'">
       <h2 mat-dialog-title>{{ data.title }}</h2>
     </header>
@@ -53,13 +54,17 @@ export interface ConfirmationDialogData {
         </button>
       }
     </mat-dialog-actions>
+    </div>
   `,
   styles: `
-    :host { display: block; }
+    :host { display: block; max-width: 100%; }
+
+    .confirmation-dialog { width: max-content; max-width: 100%; }
 
     .confirmation-header {
-      margin: -24px -24px 16px;
-      padding: 17px 24px;
+      margin: 0 0 16px;
+      padding: 16px 20px;
+      border-radius: 12px;
       background: var(--surface-muted);
     }
 
@@ -70,7 +75,8 @@ export interface ConfirmationDialogData {
       line-height: 1.35;
       margin: 0;
       padding: 0;
-      text-align: center;
+      text-align: start;
+      overflow-wrap: anywhere;
     }
 
     .confirmation-header_colored h2 {
@@ -78,6 +84,10 @@ export interface ConfirmationDialogData {
     }
 
     mat-dialog-content {
+      max-height: none;
+      margin: 0;
+      padding: 0 8px;
+      overflow: visible;
       color: var(--text-secondary);
       font-size: 13px;
       line-height: 1.6;
@@ -104,11 +114,12 @@ export interface ConfirmationDialogData {
 
     .information-list strong { color: var(--text-primary); }
     .information-list span, .empty-message { color: var(--text-secondary); }
+    .information-list span { overflow-wrap: anywhere; }
     .empty-message { margin: 0; }
 
     mat-dialog-actions {
       gap: 8px;
-      padding: 12px 24px 20px;
+      padding: 12px 8px 4px;
     }
 
     button {
@@ -136,4 +147,9 @@ export interface ConfirmationDialogData {
 export class ConfirmationDialogComponent {
   protected readonly data = inject<ConfirmationDialogData>(MAT_DIALOG_DATA);
   protected readonly dialogRef = inject(MatDialogRef<ConfirmationDialogComponent, boolean>);
+
+  constructor() {
+    this.dialogRef.addPanelClass('confirmation-dialog-panel');
+    this.dialogRef.updateSize('max-content');
+  }
 }

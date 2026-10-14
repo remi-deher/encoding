@@ -84,6 +84,25 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                 var message = ValidateField(field, value, flow.MediaType,allowIncompleteConditions);
                 if (message is not null) Issue("field.invalid", path + "/configuration/" + Pointer(field.Id), message);
             }
+            if (node.Component?.PluginId == "base" && node.Component.ComponentId == "base-transcode-video")
+            {
+                var profile = TryGetEncodingProfile(node.Configuration);
+                var codec = node.Configuration.TryGetValue("videoCodec", out var codecValue)
+                    ? codecValue.GetString() : "hevc";
+                var targets = profile?.Targets ?? [];
+                if (profile is not null && !targets.Any(target => VideoEncoderCatalog.Find(target.EncoderId)?.Codec == codec))
+                    Issue("field.invalid", path + "/configuration/encodingProfile", "Le profil ne contient aucun réglage pour le codec choisi.");
+                var mode = node.Configuration.TryGetValue("encoderMode", out var modeValue)
+                    ? modeValue.GetString() : "automatic";
+                if (profile is not null && mode == "specific")
+                {
+                    var encoderId = node.Configuration.TryGetValue("encoderId", out var encoderValue)
+                        ? encoderValue.GetString() : null;
+                    if (encoderId is null || !targets.Any(target => target.EncoderId == encoderId)
+                        || VideoEncoderCatalog.Find(encoderId)?.Codec != codec)
+                        Issue("field.invalid", path + "/configuration/encoderId", "L’encodeur précis doit posséder un réglage dans le profil et produire le codec choisi.");
+                }
+            }
             if (node.Component!.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node"
                 && (!node.Configuration.TryGetValue("targetNodeId", out var targetNode)
                     || targetNode.ValueKind != JsonValueKind.String || !Guid.TryParse(targetNode.GetString(), out _)))
@@ -130,6 +149,53 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             while (pending.TryPop(out var id)) if (seen.Add(id)) foreach (var target in outgoing[id]) pending.Push(target);
             foreach (var id in ids) if (!seen.Contains(id)) Issue("node.unreachable", "/nodes", $"Bloc non relié à l’entrée : {id}.");
         }
+        var packInstanceIds = new HashSet<string>(StringComparer.Ordinal);
+        var packMembers = new Dictionary<string, FlowComponentPackInstance>(StringComparer.Ordinal);
+        for (var packIndex = 0; packIndex < (flow.ComponentPacks?.Count ?? 0); packIndex++)
+        {
+            var pack = flow.ComponentPacks![packIndex];
+            var path = $"/componentPacks/{packIndex}";
+            if (pack is null)
+            {
+                Issue("pack.required", path, "La définition du pack est obligatoire.");
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(pack.Id) || !packInstanceIds.Add(pack.Id))
+                Issue("pack.id.invalid", path + "/id", "L’identifiant du pack doit être unique.");
+            if (pack.PackId == Guid.Empty || pack.PackVersion < 1 || string.IsNullOrWhiteSpace(pack.Name) || pack.Name.Length > 128)
+                Issue("pack.reference.invalid", path, "La référence et la version du pack sont invalides.");
+            var nodeList = pack.NodeIds ?? [];
+            var memberIds = nodeList.Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet(StringComparer.Ordinal);
+            if (memberIds.Count == 0 || memberIds.Count != nodeList.Count || !memberIds.Contains(pack.InputNodeId))
+                Issue("pack.members.invalid", path + "/nodeIds", "Le pack doit contenir des blocs distincts et son entrée.");
+            foreach (var memberId in memberIds)
+            {
+                if (!ids.Contains(memberId))
+                    Issue("pack.member.unknown", path + "/nodeIds", "Le pack référence un bloc absent du flow.");
+                if (!packMembers.TryAdd(memberId, pack))
+                    Issue("pack.member.duplicate", path + "/nodeIds", "Un bloc ne peut appartenir qu’à un pack.");
+            }
+            var packOutputs = pack.Outputs ?? [];
+            if (pack.Outputs is null || packOutputs.Select(output => output?.Id).Distinct(StringComparer.Ordinal).Count() != packOutputs.Count)
+                Issue("pack.outputs.invalid", path + "/outputs", "Les sorties exposées du pack doivent avoir des identifiants uniques.");
+            foreach (var port in packOutputs)
+            {
+                if (port is null || !memberIds.Contains(port.SourceNodeId)
+                    || !nodes.TryGetValue(port.SourceNodeId, out var source)
+                    || !source.Outputs.Any(output => output.Id == port.SourceOutputId))
+                    Issue("pack.output.invalid", path + "/outputs", "Une sortie du pack doit correspondre à une sortie de composant interne.");
+            }
+            foreach (var edge in flow.Connections)
+            {
+                var sourceInside = memberIds.Contains(edge.SourceNodeId);
+                var targetInside = memberIds.Contains(edge.TargetNodeId);
+                if (!sourceInside && targetInside && edge.TargetNodeId != pack.InputNodeId)
+                    Issue("pack.input.boundary.invalid", path + "/inputNodeId", "Les liaisons entrantes doivent passer par l’entrée du pack.");
+                if (sourceInside && !targetInside && !packOutputs.Any(port =>
+                    port is not null && port.SourceNodeId == edge.SourceNodeId && port.SourceOutputId == edge.SourceOutputId))
+                    Issue("pack.output.boundary.invalid", path + "/outputs", "Toute liaison sortant du pack doit utiliser une sortie exposée.");
+            }
+        }
         if(issues.Count==0)
         {
             var segmentEntries=entries.Concat(flow.Nodes.Where(RuntimeHandoffPolicy.IsHandoff)
@@ -169,6 +235,25 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                     catch(ArgumentException e) { return e.Message; }
                 }
                 return value.ValueKind == JsonValueKind.String ? null : "Une valeur textuelle est attendue.";
+            case "script-reference":
+                if (value.ValueKind != JsonValueKind.String) return "Une référence de script est attendue.";
+                var reference = value.GetString();
+                var separator = reference?.LastIndexOf('@') ?? -1;
+                return separator > 0 && Guid.TryParse(reference![..separator], out var scriptId) && scriptId != Guid.Empty
+                    && int.TryParse(reference[(separator + 1)..], out var version) && version > 0
+                    ? null
+                    : "Choisissez une version publiée de la bibliothèque de scripts.";
+            case "encoding-profile":
+                if (value.ValueKind != JsonValueKind.Object) return "Choisissez un profil de qualité publié.";
+                try
+                {
+                    var profile = value.Deserialize<EncodingProfileSnapshot>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                    return VideoEncoderCatalog.ValidateSnapshot(profile);
+                }
+                catch (JsonException) { return "Le profil de qualité intégré au flow est invalide."; }
+            case "video-encoder":
+                return value.ValueKind == JsonValueKind.String && VideoEncoderCatalog.Find(value.GetString()) is not null
+                    ? null : "Choisissez un encodeur pris en charge.";
             case "boolean": return value.ValueKind is JsonValueKind.True or JsonValueKind.False ? null : "Une valeur Oui ou Non est attendue.";
             case "select": return value.ValueKind == JsonValueKind.String && (field.Options ?? []).Any(o => o.Value == value.GetString() && (o.SupportedFlowMediaTypes is null || o.SupportedFlowMediaTypes.Contains(mediaType))) ? null : "Choisissez une valeur proposée pour ce média.";
             case "number":
@@ -187,5 +272,12 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                 return null;
             default: return "Type de champ non pris en charge.";
         }
+    }
+
+    private static EncodingProfileSnapshot? TryGetEncodingProfile(IReadOnlyDictionary<string, JsonElement> configuration)
+    {
+        if (!configuration.TryGetValue("encodingProfile", out var value) || value.ValueKind != JsonValueKind.Object) return null;
+        try { return value.Deserialize<EncodingProfileSnapshot>(new JsonSerializerOptions(JsonSerializerDefaults.Web)); }
+        catch (JsonException) { return null; }
     }
 }

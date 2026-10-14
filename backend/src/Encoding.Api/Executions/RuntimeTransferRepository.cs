@@ -40,6 +40,23 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
         if(request.State is not("succeeded" or "failed" or "cancelled" or "deferred") || request.Detail is null || request.Detail.Length>4000) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await RuntimeRepository.FenceAsync(id,worker,request.Epoch,c,tx,ct,sourceFailure)) return false;
+        if(request.Commands is { Count: > 0 } commands)
+        {
+            if(commands.Count>64 || commands.Any(item=>string.IsNullOrWhiteSpace(item.NodeId) || item.NodeId.Length>128
+                || item.InvocationId==Guid.Empty || !RuntimeRepository.ValidCommandLog(item.Command))
+                || commands.Select(item=>item.Command.Id).Distinct().Count()!=commands.Count) return false;
+            var json=new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+            if(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(commands,json).Length>524288) return false;
+            foreach(var group in commands.GroupBy(item=>(item.NodeId,item.InvocationId)))
+            {
+                var logs=System.Text.Json.JsonSerializer.Serialize(group.Select(item=>item.Command),json);
+                await using var append=new NpgsqlCommand("UPDATE execution_steps SET command_logs=command_logs || @logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation",c,tx);
+                append.Parameters.AddWithValue("id",id); append.Parameters.AddWithValue("node",group.Key.NodeId);
+                append.Parameters.AddWithValue("invocation",group.Key.InvocationId);
+                append.Parameters.AddWithValue("logs",NpgsqlTypes.NpgsqlDbType.Jsonb,logs);
+                if(await append.ExecuteNonQueryAsync(ct)!=1) return false;
+            }
+        }
         if(request.State=="cancelled")
         {
             await using var cancellation=new NpgsqlCommand("SELECT state='cancelling' FROM executions WHERE id=@id",c,tx); cancellation.Parameters.AddWithValue("id",id);

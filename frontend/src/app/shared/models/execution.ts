@@ -25,7 +25,53 @@ export interface ExecutionResponse {
     readonly streams?: readonly unknown[];
   } | null;
   readonly publishedPath?: string | null;
+  readonly videoEncodings?: readonly ResolvedVideoEncoding[] | null;
+  readonly libraryId?: string | null;
   readonly updatedAt: string;
+}
+
+export interface RuntimeCommandLog {
+  readonly id: string;
+  readonly command: string;
+  readonly standardOutput: string;
+  readonly standardError: string;
+  readonly exitCode: number | null;
+  readonly startedAt: string;
+  readonly finishedAt: string | null;
+  readonly truncated: boolean;
+}
+
+export interface ExecutionPipelineStep {
+  readonly nodeId: string;
+  readonly nodeName: string;
+  readonly invocationId: string;
+  readonly componentKind: string;
+  readonly status: 'completed' | 'failed' | 'cancelled' | 'cancelling' | 'running';
+  readonly startedAt: string;
+  readonly completedAt: string | null;
+  readonly outputId: string | null;
+  readonly outputLabel: string | null;
+  readonly nextNodeId: string | null;
+  readonly commands: readonly RuntimeCommandLog[];
+}
+export interface ResolvedVideoEncoding {
+  readonly flowNodeId: string;
+  readonly workerId: string;
+  readonly codec: string;
+  readonly encoderId: string;
+  readonly ffmpegVersion: string;
+  readonly acceleration: string;
+  readonly qualityMode: string;
+  readonly qualityOption: string;
+  readonly quality: number;
+  readonly presetId: string;
+  readonly presetOption: string | null;
+  readonly presetValue: string | null;
+  readonly profileId: string;
+  readonly profileVersion: number;
+  readonly profileName: string;
+  readonly priority: number;
+  readonly resolvedAt: string;
 }
 export interface ExecutionEventResponse {
   readonly id: string;

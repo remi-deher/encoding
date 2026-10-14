@@ -16,6 +16,14 @@
     </button>
   </ng-template>
 
+  <app-category-tabs
+    catalogue-navigation
+    label="Type de librairie"
+    [options]="librarySections"
+    [selected]="selectedSection()"
+    (selectedChange)="onSectionChanged($event)"
+  />
+
   <app-data-table
     catalogue-table
     [columns]="columns"
@@ -54,6 +62,25 @@
         (selectionAction)="onMediaSelection($event)"
         emptyMessage="Aucun fichier détecté. Attribuez un flow puis lancez la découverte."
       />
+
+      <h3>Exécutions récentes</h3>
+      @if (executionTrackingState().status === 'error') {
+        <p role="status">Actualisation des exécutions impossible.</p>
+      }
+      <app-data-table
+        [columns]="libraryExecutionColumns"
+        [rows]="libraryExecutionRows()"
+        [rowActions]="libraryExecutionActions"
+        (rowAction)="onProcessingExecutionAction($event)"
+        emptyMessage="Aucune exécution récente pour cette bibliothèque."
+      />
+      @if (selectedProcessingExecutionId(); as executionId) {
+        <app-execution-pipeline-logs
+          [executionId]="executionId"
+          [steps]="processingPipelineState().steps"
+          [feedback]="processingPipelineState().message"
+        />
+      }
 
       <section class="library-access-summary" aria-labelledby="library-access-heading">
         <div>

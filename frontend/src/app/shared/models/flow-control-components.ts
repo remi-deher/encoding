@@ -94,6 +94,13 @@ export const FLOW_CONTROL_COMPONENTS: readonly FlowComponentDefinition[] = [
       version: 1,
       fields: [
         {
+          id: 'scriptReference',
+          label: 'Script de la bibliothèque',
+          type: 'script-reference',
+          description:
+            'Choisissez une version publiée. Son code est copié dans le flow et reste figé avec sa version.',
+        },
+        {
           id: 'language',
           label: 'Langage',
           type: 'select',

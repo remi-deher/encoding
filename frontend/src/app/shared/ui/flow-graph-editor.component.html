@@ -113,7 +113,10 @@
             }
             <div class="step-band">
               <span class="step-kind">{{ kindLabel(step.node.component.kind) }}</span>
-              @if (canMove(sequence, index, index - 1) || canMove(sequence, index, index + 1)) {
+              @if (
+                step.node.component.kind !== 'pack' &&
+                (canMove(sequence, index, index - 1) || canMove(sequence, index, index + 1))
+              ) {
                 <button
                   class="drag-handle"
                   cdkDragHandle
@@ -157,17 +160,40 @@
               <p class="continuation-label">{{ incomingCount(step.node) }} liaisons entrantes</p>
             }
             <p class="step-summary">{{ step.node.component.description }}</p>
-            <app-flow-inline-parameters
-              [schema]="inlineSchema(step.node)"
-              [values]="step.node.configuration"
-              (changed)="
-                configurationChanged.emit({
-                  nodeId: step.node.id,
-                  fieldId: $event.fieldId,
-                  value: $event.value,
-                })
-              "
-            />
+            @if (packForVisualNode(step.node); as pack) {
+              <button mat-button type="button" (click)="togglePack(pack)">
+                {{ packExpanded(pack) ? 'Replier le pack' : 'Déplier les composants' }}
+              </button>
+              @if (packExpanded(pack)) {
+                <section class="pack-expanded" [attr.aria-label]="'Contenu du pack ' + pack.name">
+                  <p class="pack-boundary">Entrée du pack → {{ packRootLabel(pack) }}</p>
+                  <ng-container
+                    [ngTemplateOutlet]="sequenceTemplate"
+                    [ngTemplateOutletContext]="{ sequence: packContents(pack).main }"
+                  />
+                  @if (packContents(pack).detached.length) {
+                    <p role="alert">Des composants du pack ne sont plus reliés à son entrée.</p>
+                  }
+                  <div class="pack-boundary pack-outputs">
+                    @for (port of pack.outputs; track port.id) {
+                      <span>{{ port.label }} ← {{ nodeLabel(port.sourceNodeId) }}</span>
+                    }
+                  </div>
+                </section>
+              }
+            } @else {
+              <app-flow-inline-parameters
+                [schema]="inlineSchema(step.node)"
+                [values]="step.node.configuration"
+                (changed)="
+                  configurationChanged.emit({
+                    nodeId: step.node.id,
+                    fieldId: $event.fieldId,
+                    value: $event.value,
+                  })
+                "
+              />
+            }
             <div class="step-controls">
               @if (canMove(sequence, index, index - 1)) {
                 <button
@@ -230,7 +256,7 @@
                       <button
                         mat-menu-item
                         type="button"
-                        (click)="terminationRequested.emit({ sourceNodeId: step.node.id, output })"
+                        (click)="terminatePackOutput(step.node, output)"
                       >
                         Terminer ce chemin
                       </button>
@@ -238,13 +264,7 @@
                         <button
                           mat-menu-item
                           type="button"
-                          (click)="
-                            connectionRequested.emit({
-                              sourceNodeId: step.node.id,
-                              sourceOutputId: output.id,
-                              targetNodeId: target.id,
-                            })
-                          "
+                          (click)="connectPackOutput(step.node, output, target)"
                         >
                           Rejoindre {{ target.name || target.component.name }}
                         </button>

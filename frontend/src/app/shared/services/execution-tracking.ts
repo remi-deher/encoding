@@ -12,7 +12,7 @@ import {
   timeout,
   timer,
 } from 'rxjs';
-import { ExecutionOverviewResponse, ExecutionEventResponse } from '../models/execution';
+import { ExecutionOverviewResponse, ExecutionEventResponse, ExecutionPipelineStep } from '../models/execution';
 
 export interface ExecutionTrackingState {
   readonly status: 'loading' | 'ready' | 'error';
@@ -41,6 +41,11 @@ export class ExecutionTracking {
   events(id: string) {
     return this.http.get<readonly ExecutionEventResponse[]>(
       '/api/v1/executions/' + encodeURIComponent(id) + '/events',
+    );
+  }
+  pipeline(id: string) {
+    return this.http.get<readonly ExecutionPipelineStep[]>(
+      '/api/v1/executions/' + encodeURIComponent(id) + '/pipeline',
     );
   }
   artifacts(id: string) {

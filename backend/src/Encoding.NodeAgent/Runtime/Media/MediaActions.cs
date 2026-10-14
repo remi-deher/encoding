@@ -6,7 +6,8 @@ using Encoding.NodeAgent.Services;
 
 namespace Encoding.NodeAgent.Runtime.Media;
 
-public sealed record MediaActionOutcome(string? Primary,IReadOnlyList<string> Additional,JsonElement? Value=null);
+public sealed record MediaActionOutcome(string? Primary,IReadOnlyList<string> Additional,JsonElement? Value=null,
+    IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings=null);
 
 public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IToolCapabilityProbe capabilities)
 {
@@ -16,7 +17,7 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
     private static int[] Ids(string value)=>string.IsNullOrWhiteSpace(value)?[]:value.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Select(value=>int.TryParse(value,out var id)&&id>=0?id:throw new IOException("Identifiant de piste invalide.")).Distinct().ToArray();
     private static string Output(string directory,string node,string extension)=>Path.Combine(directory,"out-"+Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(node)))[..16]+extension);
 
-    public async Task<MediaActionOutcome> ExecuteAsync(string id,IReadOnlyDictionary<string,JsonElement> config,string current,string directory,string node,Func<string,Task<string>> extra,CancellationToken ct)
+    public async Task<MediaActionOutcome> ExecuteAsync(string id,IReadOnlyDictionary<string,JsonElement> config,string current,string directory,string node,Func<string,Task<string>> extra,Guid workerId,CancellationToken ct)
     {
         if(id.StartsWith("base-probe-",StringComparison.Ordinal))
         {
@@ -34,7 +35,7 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
             return new(null,[],value);
         }
         if(id is "base-transcode-video" or "base-transcode-audio" or "base-normalize-audio" or "base-resize-video" or "base-remux-media")
-            return new(await FfmpegPlanAsync([new(id,config)],current,directory,node,ct),[]);
+            return await FfmpegPlanAsync([new(id,config,node)],current,directory,node,workerId,ct);
         if(id=="base-verify-decoding")
         {
             var args=new List<string> { "-nostdin","-v","error","-xerror","-i",current };
@@ -97,10 +98,11 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
         return await MatroskaAsync(id,config,current,directory,node,extra,ct);
     }
 
-    public async Task<string> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,CancellationToken ct,bool preserve=true)
+    public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true)
     {
         var output=Output(directory,node,Path.GetExtension(current) is ".mp4" or ".mkv" or ".mka" or ".flac"?Path.GetExtension(current):".mkv");
         var input=new List<string> { "-nostdin","-y","-v","error" }; var args=new List<string> { "-c","copy" }; var videoFilters=new List<string>(); var hardwareMode="cpu";
+        var resolutions=new List<ResolvedVideoEncoding>();
         if(preserve || !plan.Any(p=>p.ComponentId is "base-transcode-video" or "base-transcode-audio" or "base-normalize-audio" or "base-resize-video")) args.AddRange(["-map","0"]);
         else {
             if(plan.Any(p=>p.ComponentId is "base-transcode-video" or "base-resize-video")) args.AddRange(["-map","0:v?"]);
@@ -112,15 +114,48 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
             switch(step.ComponentId)
             {
                 case "base-transcode-video":
-                    var hardware=Text(c,"hardwareAcceleration","cpu"); hardwareMode=hardware; var codec=Text(c,"videoCodec","hevc");
-                    var available=(await capabilities.DiscoverAsync(ct)).First(c=>c.ToolId=="ffmpeg").Encoders??[];
-                    var encoder=MediaCodecPolicy.VideoEncoder(codec,hardware,available)??throw new MediaToolException("encodeur vidéo",1);
-                    if(hardware=="vaapi") input.AddRange(["-vaapi_device","/dev/dri/renderD128"]);
-                    args.AddRange(["-c:v",encoder,hardware=="cpu"?"-crf":hardware=="nvenc"?"-cq":hardware=="qsv"?"-global_quality":"-qp",Number(c,"quality",23)]);
-                    var preset=Text(c,"preset","medium");
-                    if(encoder=="libsvtav1") preset=preset=="slow"?"4":preset=="fast"?"10":"8";
-                    if(hardware=="nvenc") preset=preset=="slow"?"p7":preset=="fast"?"p1":"p4";
-                    if(hardware!="vaapi") args.AddRange(["-preset",preset]); break;
+                {
+                    var codec=Text(c,"videoCodec","hevc");
+                    var ffmpeg=(await capabilities.DiscoverAsync(ct)).FirstOrDefault(capability=>capability.ToolId=="ffmpeg")
+                        ??throw new MediaToolException("FFmpeg",1);
+                    if(c.TryGetValue("encodingProfile",out var profileValue) && profileValue.ValueKind==JsonValueKind.Object)
+                    {
+                        var profile=profileValue.Deserialize<EncodingProfileSnapshot>(new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                            ??throw new MediaToolException("profil d’encodage",1);
+                        var mode=Text(c,"encoderMode","automatic");
+                        var selected=Text(c,"encoderId");
+                        var resolved=MediaCodecPolicy.ResolveVideoEncoder(codec,mode,selected,profile,ffmpeg.Encoders??[],ffmpeg.AccelerationTypes,ffmpeg.EncoderChecks)
+                            ??throw new MediaToolException("encodeur vidéo compatible avec le profil",1);
+                        var encoder=resolved.Encoder;
+                        var target=resolved.Target;
+                        hardwareMode=encoder.Acceleration;
+                        if(hardwareMode=="vaapi") input.AddRange(["-vaapi_device","/dev/dri/renderD128"]);
+                        args.AddRange(["-c:v",encoder.Id,encoder.QualityOption,target.Quality.ToString(CultureInfo.InvariantCulture)]);
+                        var preset=encoder.Presets.FirstOrDefault(candidate=>candidate.Id==target.Preset)?.Value;
+                        if(!string.IsNullOrEmpty(encoder.PresetOption) && !string.IsNullOrEmpty(preset))
+                            args.AddRange([encoder.PresetOption,preset]);
+                        // Older durable plans predate FlowNodeId. Keep them executable, but do not
+                        // record a misleading resolution under the enclosing processing node.
+                        if(step.FlowNodeId is { } flowNodeId)
+                            resolutions.Add(new(flowNodeId,workerId,codec,encoder.Id,ffmpeg.Version,encoder.Acceleration,
+                                encoder.QualityMode,encoder.QualityOption,target.Quality,target.Preset,
+                                string.IsNullOrEmpty(encoder.PresetOption)?null:encoder.PresetOption,preset,
+                                profile.Id,profile.Version,profile.Name,target.Priority,DateTimeOffset.UtcNow));
+                    }
+                    else
+                    {
+                        var hardware=Text(c,"hardwareAcceleration","cpu"); hardwareMode=hardware;
+                        var available=ffmpeg.Encoders??[];
+                        var encoder=MediaCodecPolicy.VideoEncoder(codec,hardware,available)??throw new MediaToolException("encodeur vidéo",1);
+                        if(hardware=="vaapi") input.AddRange(["-vaapi_device","/dev/dri/renderD128"]);
+                        args.AddRange(["-c:v",encoder,hardware=="cpu"?"-crf":hardware=="nvenc"?"-cq":hardware=="qsv"?"-global_quality":"-qp",Number(c,"quality",23)]);
+                        var preset=Text(c,"preset","medium");
+                        if(encoder=="libsvtav1") preset=preset=="slow"?"4":preset=="fast"?"10":"8";
+                        if(hardware=="nvenc") preset=preset=="slow"?"p7":preset=="fast"?"p1":"p4";
+                        if(hardware!="vaapi") args.AddRange(["-preset",preset]);
+                    }
+                    break;
+                }
                 case "base-transcode-audio":
                     var index=Number(c,"trackId"); var audio=Text(c,"audioCodec","aac"); args.AddRange(["-c:a:"+index,audio=="opus"?"libopus":audio]);
                     if(audio!="flac") args.AddRange(["-b:a:"+index,Number(c,"bitrateKbps",192)+"k"]);
@@ -134,7 +169,7 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
         }
         if(hardwareMode=="vaapi") videoFilters.AddRange(["format=nv12","hwupload"]);
         if(videoFilters.Count>0) args.AddRange(["-vf",string.Join(',',videoFilters)]);
-        input.AddRange(["-i",current]); input.AddRange(args); input.Add(output); await tools.CheckedAsync("ffmpeg",input,directory,ct); return output;
+        input.AddRange(["-i",current]); input.AddRange(args); input.Add(output); await tools.CheckedAsync("ffmpeg",input,directory,ct); return new(output,[],null,resolutions);
     }
 
     private async Task<MediaActionOutcome> MatroskaAsync(string id,IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,Func<string,Task<string>> extra,CancellationToken ct)

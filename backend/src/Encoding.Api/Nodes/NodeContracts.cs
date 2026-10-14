@@ -1,4 +1,5 @@
 using Encoding.Contracts.Nodes;
+using Encoding.Contracts.Flows;
 using System.Text.RegularExpressions;
 
 namespace Encoding.Api.Nodes;
@@ -38,6 +39,12 @@ public static class NodeHeartbeatValidator
                     errors[$"{prefix}.mediaTypes"] = ["Un ou plusieurs types de média ne sont pas pris en charge."];
                 if (capability.AccelerationTypes is null || capability.AccelerationTypes.Any(string.IsNullOrWhiteSpace))
                     errors[$"{prefix}.accelerationTypes"] = ["Les types d'accélération doivent être renseignés."];
+                if (capability.EncoderChecks is { } checks
+                    && (checks.Count > 64
+                        || checks.Select(check => check.EncoderId).Distinct(StringComparer.Ordinal).Count() != checks.Count
+                        || checks.Any(check => VideoEncoderCatalog.Find(check.EncoderId) is null
+                            || check.Status is not ("usable" or "detected"))))
+                    errors[$"{prefix}.encoderChecks"] = ["Les vérifications d’encodeur contiennent une entrée inconnue ou invalide."];
             }
         }
         return errors;

@@ -10,6 +10,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
 {
     public async Task RunAsync(RuntimeLease lease,RuntimeClient client,CancellationToken stoppingToken)
     {
+        using var commandCapture=RuntimeCommandCapture.Begin();
         using var job=CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         using var leaseGate=new SemaphoreSlim(1,1);
         var revision=lease.Revision; var cancelled=false; var lost=false;
@@ -91,6 +92,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             async Task ApplyOutcomeAsync(MediaActionOutcome outcome,string node)
             {
+                if(outcome.VideoEncodings is { Count: > 0 })
+                    context=context with { VideoEncodings=[..(context.VideoEncodings??[]),..outcome.VideoEncodings] };
                 foreach(var additional in outcome.Additional)
                 {
                     var sha=await SafeMediaPaths.DigestAsync(additional,job.Token);
@@ -114,6 +117,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     context=completed.Context; variables=new(context.Variables); next=completed.NextNodeId; terminal=completed.TerminalResult; lastOutput=completed.OutputId;
                     current=Path.Combine(directory,"current"+context.Extension); materialized=false; continue;
                 }
+                using var commandStep=commandCapture.BeginStep(node.Id,started.InvocationId);
                 string? output="success"; terminal=null;
                 RuntimeHandoffSelector? handoff=null;
                 try
@@ -185,10 +189,10 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                                 if(IsFfmpegPlan(plan[index].ComponentId))
                                 {
                                     var batch=new List<RuntimePlanStep>(); while(index<plan.Count && IsFfmpegPlan(plan[index].ComponentId)) batch.Add(plan[index++]);
-                                    var candidate=await actions.FfmpegPlanAsync(batch,current,directory,node.Id+index,job.Token,!variables.TryGetValue("plan.preserveUnchangedTracks",out var preserve)||preserve.GetBoolean());
-                                    await ApplyOutcomeAsync(new(candidate,[]),node.Id);
+                                    var outcome=await actions.FfmpegPlanAsync(batch,current,directory,node.Id+index,client.NodeId,job.Token,!variables.TryGetValue("plan.preserveUnchangedTracks",out var preserve)||preserve.GetBoolean());
+                                    await ApplyOutcomeAsync(outcome,node.Id);
                                 }
-                                else { var step=plan[index++]; await ApplyOutcomeAsync(await actions.ExecuteAsync(step.ComponentId,step.Configuration,current,directory,node.Id+index,ExtraAsync,job.Token),node.Id); }
+                                else { var step=plan[index++]; await ApplyOutcomeAsync(await actions.ExecuteAsync(step.ComponentId,step.Configuration,current,directory,node.Id+index,ExtraAsync,client.NodeId,job.Token),node.Id); }
                             }
                             context=context with { Plan=[] };
                         }
@@ -200,11 +204,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         {
                             if(variables.TryGetValue("plan.tool",out var selected) && (IsFfmpegPlan(id)!=(selected.GetString()=="ffmpeg")))
                                 throw new MediaToolException("outil du plan incompatible avec cette action",1);
-                            context=context with { Plan=[..context.Plan,new RuntimePlanStep(id,c)] };
+                            context=context with { Plan=[..context.Plan,new RuntimePlanStep(id,c,node.Id)] };
                         }
                         else
                         {
-                            var outcome=await actions.ExecuteAsync(id,c,current,directory,node.Id,ExtraAsync,job.Token);
+                            var outcome=await actions.ExecuteAsync(id,c,current,directory,node.Id,ExtraAsync,client.NodeId,job.Token);
                             if(outcome.Value is { } value) variables[MediaActions.Text(c,"resultVariable","result")]=value;
                             await ApplyOutcomeAsync(outcome,node.Id);
                             if(MediaActions.Flag(c,"refreshMetadata")) context=context with { CurrentMetadata=await scanner.ScanAsync(current,job.Token) };
@@ -233,12 +237,14 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 await leaseGate.WaitAsync(job.Token);
                 try
                 {
-                    var request=new CompleteRuntimeStep(lease.Epoch,eventId,Volatile.Read(ref revision),checkpoint);
+                    var request=new CompleteRuntimeStep(lease.Epoch,eventId,Volatile.Read(ref revision),checkpoint,
+                        commandCapture.ForStep(node.Id,started.InvocationId));
                     for(var retry=0;;retry++)
                     {
                         try
                         {
                             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/steps/complete",request,job.Token);
+                            commandCapture.MarkPersisted(node.Id,started.InvocationId);
                             break;
                         }
                         catch(HttpRequestException exception) when(handoff is not null && retry<2
@@ -260,7 +266,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
 
             var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=sourceSha;
             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),failed?"failed":terminal=="deferred"?"deferred":"succeeded",
-                failed?"Le flow a atteint une fin en échec.":"Flow terminé ; scans média réalisés.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null),job.Token);
+                failed?"Le flow a atteint une fin en échec.":"Flow terminé ; scans média réalisés.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null,
+                commandCapture.Pending()),job.Token);
             if(changed)
             {
                 while(true)
@@ -293,7 +300,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             {
                 using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 var status=await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch),timeout.Token);
-                await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),status!.Revision,state,detail,null,null),timeout.Token);
+                await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),status!.Revision,state,detail,null,null,
+                    Commands:commandCapture.Pending()),timeout.Token);
             }
             catch(Exception) { logger.LogWarning("Le résultat de l’exécution {ExecutionId} n’a pas pu être confirmé par le cluster.",lease.ExecutionId); }
         }

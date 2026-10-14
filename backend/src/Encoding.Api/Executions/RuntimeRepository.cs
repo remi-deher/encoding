@@ -261,16 +261,22 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
     public async Task<bool> CompleteStepAsync(Guid id,Guid worker,CompleteRuntimeStep request,CancellationToken ct)
     {
         var cp=request.Checkpoint;
+        var commands=request.Commands??[];
         if(cp is null || string.IsNullOrWhiteSpace(cp.NodeId) || cp.InvocationId==Guid.Empty
             || cp.Context is null || cp.Context.Variables is null || cp.Context.Plan is null
+            || cp.Context.VideoEncodings is { Count: > 64 }
             || !RuntimeArtifactStore.ValidDigest(cp.Context.CurrentSha256)
-            || cp.Context.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(cp.Context.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
+            || cp.Context.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(cp.Context.Extension,"^\\.[a-zA-Z0-9]{1,10}$")
+            || commands.Count>64 || commands.Any(command=>!ValidCommandLog(command))
+            || commands.Select(command=>command.Id).Distinct().Count()!=commands.Count) return false;
+        var serializedCommands=JsonSerializer.Serialize(commands,Json);
+        if(System.Text.Encoding.UTF8.GetByteCount(serializedCommands)>524288) return false;
         var serialized=JsonSerializer.Serialize(cp,Json); if(serialized.Length>1048576) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         // A lost handoff response can be retried after its lease has already been revoked.
         // Only the exact checkpoint, actor and completed epoch can acknowledge this duplicate.
         await using(var duplicate=new NpgsqlCommand("""
-          SELECT s.checkpoint=@checkpoint FROM execution_steps s JOIN execution_work w ON w.execution_id=s.execution_id
+          SELECT s.checkpoint=@checkpoint AND s.command_logs=@commands FROM execution_steps s JOIN execution_work w ON w.execution_id=s.execution_id
           JOIN executions e ON e.id=w.execution_id
           WHERE s.execution_id=@id AND s.node_id=@node AND s.invocation_id=@invocation
             AND s.completed_at IS NOT NULL AND s.completed_epoch=@epoch AND s.completed_worker_node_id=@worker
@@ -280,12 +286,14 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
             duplicate.Parameters.AddWithValue("id",id); duplicate.Parameters.AddWithValue("node",cp.NodeId);
             duplicate.Parameters.AddWithValue("invocation",cp.InvocationId); duplicate.Parameters.AddWithValue("epoch",request.Epoch);
             duplicate.Parameters.AddWithValue("worker",worker); duplicate.Parameters.AddWithValue("checkpoint",NpgsqlDbType.Jsonb,serialized);
+            duplicate.Parameters.AddWithValue("commands",NpgsqlDbType.Jsonb,serializedCommands);
             if(await duplicate.ExecuteScalarAsync(ct) is bool same) return same;
         }
         if(!await FenceAsync(id,worker,request.Epoch,c,tx,ct)) return false;
         FlowDefinition flow;
         await using(var cmd=new NpgsqlCommand("SELECT flow_definition::text FROM executions WHERE id=@id AND state='running'",c,tx))
         { cmd.Parameters.AddWithValue("id",id); if(await cmd.ExecuteScalarAsync(ct) is not string json) return false; flow=JsonSerializer.Deserialize<FlowDefinition>(json,Json)!; }
+        if(!ValidVideoEncodings(flow,worker,cp.Context.VideoEncodings)) return false;
         await using(var artifact=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx))
         {
             artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",cp.Context.CurrentSha256);
@@ -319,18 +327,20 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         if(component.Kind=="terminal" ? cp.OutputId is not null || cp.TerminalResult is not("success" or "unchanged" or "failed" or "deferred")
             : cp.TerminalResult is not null || !component.Outputs.Any(o=>o.Id==cp.OutputId)) return false;
         if(cp.NextNodeId!=flow.Connections.SingleOrDefault(e=>e.SourceNodeId==node.Id && e.SourceOutputId==cp.OutputId)?.TargetNodeId) return false;
-        await using(var existing=new NpgsqlCommand("SELECT checkpoint=@checkpoint FROM execution_steps WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NOT NULL",c,tx))
+        await using(var existing=new NpgsqlCommand("SELECT checkpoint=@checkpoint AND command_logs=@commands FROM execution_steps WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NOT NULL",c,tx))
         {
             existing.Parameters.AddWithValue("id",id); existing.Parameters.AddWithValue("node",cp.NodeId); existing.Parameters.AddWithValue("invocation",cp.InvocationId); existing.Parameters.AddWithValue("checkpoint",NpgsqlDbType.Jsonb,serialized);
+            existing.Parameters.AddWithValue("commands",NpgsqlDbType.Jsonb,serializedCommands);
             if(await existing.ExecuteScalarAsync(ct) is bool same) return same;
         }
         await using var update=new NpgsqlCommand("""
-          UPDATE execution_steps SET completed_at=clock_timestamp(),completed_revision=@completed_revision,checkpoint=@checkpoint,
+          UPDATE execution_steps SET completed_at=clock_timestamp(),completed_revision=@completed_revision,checkpoint=@checkpoint,command_logs=@commands,
             completed_epoch=@epoch,completed_worker_node_id=@worker
           WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NULL RETURNING node_id
           """,c,tx);
         update.Parameters.AddWithValue("completed_revision",request.ExpectedRevision+1); update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("node",cp.NodeId); update.Parameters.AddWithValue("invocation",cp.InvocationId); update.Parameters.AddWithValue("checkpoint",NpgsqlDbType.Jsonb,serialized);
         update.Parameters.AddWithValue("epoch",request.Epoch); update.Parameters.AddWithValue("worker",worker);
+        update.Parameters.AddWithValue("commands",NpgsqlDbType.Jsonb,serializedCommands);
         update.Parameters.AddWithValue("before",NpgsqlDbType.Jsonb,(object?)cp.Context.BeforeMetadata?.GetRawText()??DBNull.Value);
         update.Parameters.AddWithValue("after",NpgsqlDbType.Jsonb,(object?)cp.Context.CurrentMetadata?.GetRawText()??DBNull.Value);
         if(await update.ExecuteScalarAsync(ct) is null) return false;
@@ -357,6 +367,12 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         }
         await tx.CommitAsync(ct); return true;
     }
+
+    internal static bool ValidCommandLog(RuntimeCommandLog command) =>
+        command.Id!=Guid.Empty && command.Command is not null && command.Command.Length<=16384
+        && command.StandardOutput is not null && command.StandardOutput.Length<=32768
+        && command.StandardError is not null && command.StandardError.Length<=32768
+        && (command.FinishedAt is null || command.FinishedAt>=command.StartedAt);
     public async Task<RuntimeSourceState> SourceAsync(Guid id,CancellationToken ct)
     {
         await using var cmd=dataSource.CreateCommand("SELECT source_sha FROM execution_work WHERE execution_id=@id");cmd.Parameters.AddWithValue("id",id);
@@ -365,5 +381,31 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         inputs.Parameters.AddWithValue("id",id); await using var r=await inputs.ExecuteReaderAsync(ct);
         var map=new Dictionary<string,string>(); while(await r.ReadAsync(ct)) map.Add(r.GetString(0),r.GetString(1));
         return new(source,map);
+    }
+
+    private static bool ValidVideoEncodings(FlowDefinition flow,Guid worker,IReadOnlyList<ResolvedVideoEncoding>? resolutions)
+    {
+        foreach(var resolution in resolutions??[])
+        {
+            if(resolution.WorkerId!=worker || string.IsNullOrWhiteSpace(resolution.FfmpegVersion)
+                || resolution.FfmpegVersion.Length>128 || resolution.ResolvedAt==default) return false;
+            var node=flow.Nodes.SingleOrDefault(item=>item.Id==resolution.FlowNodeId);
+            if(node is null || node.Component.PluginId!="base" || node.Component.ComponentId!="base-transcode-video"
+                || !node.Configuration.TryGetValue("encodingProfile",out var profileValue)
+                || profileValue.ValueKind!=JsonValueKind.Object) return false;
+            var profile=profileValue.Deserialize<EncodingProfileSnapshot>(Json);
+            var codec=node.Configuration.TryGetValue("videoCodec",out var codecValue)?codecValue.GetString():"hevc";
+            var encoder=VideoEncoderCatalog.Find(resolution.EncoderId);
+            var target=profile?.Targets.SingleOrDefault(item=>item.EncoderId==resolution.EncoderId);
+            var preset=encoder?.Presets.FirstOrDefault(item=>item.Id==target?.Preset)?.Value;
+            if(profile is null || encoder is null || target is null || resolution.Codec!=codec || encoder.Codec!=codec
+                || resolution.ProfileId!=profile.Id || resolution.ProfileVersion!=profile.Version || resolution.ProfileName!=profile.Name
+                || resolution.Acceleration!=encoder.Acceleration || resolution.QualityMode!=encoder.QualityMode
+                || resolution.QualityOption!=encoder.QualityOption || resolution.Quality!=target.Quality
+                || resolution.PresetId!=target.Preset || resolution.Priority!=target.Priority
+                || resolution.PresetOption!=(string.IsNullOrEmpty(encoder.PresetOption)?null:encoder.PresetOption)
+                || resolution.PresetValue!=preset) return false;
+        }
+        return true;
     }
 }

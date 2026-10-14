@@ -25,6 +25,7 @@ export interface StructuredFlow {
 export function structureFlow(
   nodes: readonly FlowGraphNode[],
   edges: readonly FlowGraphConnection[],
+  startNodeId?: string,
 ): StructuredFlow {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const seen = new Set<string>();
@@ -99,7 +100,9 @@ export function structureFlow(
     }
     return { id: key, steps, returnsTo: id === stop ? stop : undefined };
   };
-  const entry = nodes.find((n) => n.component.kind === 'input');
+  const entry = startNodeId
+    ? nodes.find((node) => node.id === startNodeId)
+    : nodes.find((n) => n.component.kind === 'input');
   const main = build(entry?.id, undefined, 'main');
   const detached: FlowSequence[] = [];
   for (const node of nodes)

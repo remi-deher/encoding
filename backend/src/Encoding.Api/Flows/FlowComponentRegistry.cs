@@ -55,6 +55,9 @@ public sealed class FlowComponentRegistry
                         ConditionFields=ConditionTree.Fields,
                         ConditionPresets=ConditionTree.Presets,
                         DefaultValue=field.DefaultValue??ConditionTree.Serialize(new ConditionGroup("all",[]))
+                    }:field.Type=="encoding-profile"?field with
+                    {
+                        DefaultValue=field.DefaultValue??JsonSerializer.SerializeToElement(BuiltInEncodingProfiles.Balanced,new JsonSerializerOptions(JsonSerializerDefaults.Web))
                     }:field).ToArray()
                 }
             }).ToArray()
@@ -72,7 +75,7 @@ public sealed class FlowComponentRegistry
                     || component.ConfigurationSchema.Version != 1
                     || component.Outputs.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != component.Outputs.Count
                     || component.ConfigurationSchema.Fields.Select(f => f.Id).Distinct(StringComparer.Ordinal).Count() != component.ConfigurationSchema.Fields.Count
-                    || component.ConfigurationSchema.Fields.Any(f => f.Type is not ("text" or "number" or "boolean" or "select" or "condition-tree")))
+                    || component.ConfigurationSchema.Fields.Any(f => f.Type is not ("text" or "number" or "boolean" or "select" or "condition-tree" or "script-reference" or "encoding-profile" or "video-encoder")))
                     throw new InvalidOperationException($"Descripteur invalide : {component.Id}.");
                 var reference = new FlowComponentReference(
                     installed.Id,

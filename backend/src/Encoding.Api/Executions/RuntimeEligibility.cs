@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Encoding.Api.Flows;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Nodes;
@@ -45,8 +46,21 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 && !capabilities.Any(c=>c.ToolId==(language.GetString()=="python"?"python":"javascript"))) return false;
             if(node.Component.ComponentId=="base-condition" && !capabilities.Any(c=>c.ToolId=="javascript")) return false;
             var encoders=capabilities.FirstOrDefault(c=>c.ToolId=="ffmpeg")?.Encoders??[];
-            if(node.Component.ComponentId=="base-transcode-video" && node.Configuration.TryGetValue("videoCodec",out var codec)
-                && MediaCodecPolicy.VideoEncoder(codec.GetString()!,node.Configuration.TryGetValue("hardwareAcceleration",out var hw)?hw.GetString()!:"cpu",encoders) is null) return false;
+            if(node.Component.ComponentId=="base-transcode-video")
+            {
+                var codec=node.Configuration.TryGetValue("videoCodec",out var codecValue)?codecValue.GetString()!:"hevc";
+                if(node.Configuration.TryGetValue("encodingProfile",out var profileValue)
+                    && profileValue.ValueKind==System.Text.Json.JsonValueKind.Object)
+                {
+                    var profile=profileValue.Deserialize<EncodingProfileSnapshot>(new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+                    var mode=node.Configuration.TryGetValue("encoderMode",out var modeValue)?modeValue.GetString()!:"automatic";
+                    var selected=node.Configuration.TryGetValue("encoderId",out var encoderValue)?encoderValue.GetString():null;
+                    var ffmpeg=capabilities.FirstOrDefault(capability=>capability.ToolId=="ffmpeg");
+                    if(profile is null || ffmpeg is null
+                        || MediaCodecPolicy.ResolveVideoEncoder(codec,mode,selected,profile,ffmpeg.Encoders??[],ffmpeg.AccelerationTypes,ffmpeg.EncoderChecks) is null) return false;
+                }
+                else if(MediaCodecPolicy.VideoEncoder(codec,node.Configuration.TryGetValue("hardwareAcceleration",out var hw)?hw.GetString()!:"cpu",encoders) is null) return false;
+            }
             if(node.Component.ComponentId=="base-transcode-audio" && node.Configuration.TryGetValue("audioCodec",out var audio)
                 && MediaCodecPolicy.AudioEncoder(audio.GetString()!,encoders) is null) return false;
         }

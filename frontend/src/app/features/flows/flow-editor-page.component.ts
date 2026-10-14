@@ -1,11 +1,13 @@
 import { toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { timer, switchMap, catchError, of, from } from 'rxjs';
+import { timer, switchMap, catchError, of, from, firstValueFrom } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import {
   flowDocumentKey,
   flowPublishedVersion,
   resolveFlowComponent,
+  FlowDocument,
+  FlowPluginCatalog,
 } from '../../shared/models/flow-validation';
 import { FlowContinuationSource } from '../../shared/models/flow-sequence';
 import { Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
@@ -23,6 +25,7 @@ import { FLOW_COMPONENT_CATALOG } from '../../shared/models/flow-component-catal
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { ComponentConfigurationFormComponent } from '../../shared/ui/component-configuration-form.component';
+import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import {
   createDefaultFlowComponentConfiguration,
   isFlowComponentCompatible,
@@ -39,6 +42,20 @@ import { SearchableComponentCatalogComponent } from '../../shared/ui/searchable-
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { FlowSimulation } from '../../shared/services/flow-simulation';
 import { FlowSimulationPanelComponent } from '../../shared/ui/flow-simulation-panel.component';
+import { FlowTemplates } from '../../shared/services/flow-templates';
+import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
+import {
+  FlowComponentPackDetails,
+  FlowComponentPackSummary,
+} from '../../shared/models/flow-component-packs';
+import { FlowComponentPackInstance } from '../../shared/models/flow-validation';
+import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import {
+  DataTableActionEvent,
+  DataTableColumn,
+  DataTableComponent,
+  DataTableRow,
+} from '../../shared/ui/data-table.component';
 
 const TYPE_OPTIONS = [
   { value: 'video', label: 'Vidéo' },
@@ -124,6 +141,9 @@ type ComponentDestination =
     SearchableComponentCatalogComponent,
     PageHeaderComponent,
     FlowSimulationPanelComponent,
+    CategoryTabsComponent,
+    DataTableComponent,
+    RecordFormComponent,
   ],
   templateUrl: './flow-editor-page.component.html',
   styleUrl: './flow-editor-page.component.scss',
@@ -141,6 +161,7 @@ export class FlowEditorPageComponent {
         this.flowMediaType(),
         this.nodes(),
         this.connections(),
+        this.componentPacks(),
       );
       this.simulator.prepare(definition);
       this.simulationOpen.set(true);
@@ -158,6 +179,39 @@ export class FlowEditorPageComponent {
   protected readonly configuringNodeId = signal<string | undefined>(undefined);
   protected readonly nodes = signal<readonly FlowGraphNode[]>([]);
   protected readonly connections = signal<readonly FlowGraphConnection[]>([]);
+  protected readonly componentPacks = signal<readonly FlowComponentPackInstance[]>([]);
+  protected readonly packPickerSection = signal('components');
+  protected readonly packCatalog = signal<readonly FlowComponentPackSummary[]>([]);
+  protected readonly packCreationOpen = signal(false);
+  protected readonly packCreationTemplate = viewChild<TemplateRef<unknown>>('packCreation');
+  protected readonly packCreationForm = computed<RecordFormData>(() => ({
+    title: 'Créer un pack depuis la version publiée',
+    description: `La version publiée v${this.storedVersion()} sera copiée avec ses composants internes et ses ports.`,
+    submitLabel: 'Créer le pack',
+    initialValues: { name: `${this.flowTitle()} — Pack`, description: '' },
+    fields: [
+      { id: 'name', label: 'Nom du pack', type: 'text', required: true, maxLength: 128 },
+      { id: 'description', label: 'Description', type: 'text', maxLength: 1000 },
+    ],
+  }));
+  protected readonly pickerSections = computed<readonly CategoryTabOption[]>(() => [
+    { value: 'components', label: 'Composants' },
+    { value: 'packs', label: 'Packs', count: this.packCatalog().length },
+  ]);
+  protected readonly packColumns: readonly DataTableColumn[] = [
+    { key: 'name', label: 'Pack', sortable: true },
+    { key: 'mediaType', label: 'Type de média', sortable: true },
+    { key: 'componentCount', label: 'Composants', sortable: true },
+  ];
+  protected readonly packRows = computed<readonly DataTableRow[]>(() =>
+    this.packCatalog().map((pack) => ({
+      id: pack.id,
+      name: pack.name,
+      mediaType: pack.mediaType,
+      componentCount: pack.componentCount,
+    })),
+  );
+  protected readonly packRowActions = [{ id: 'insert-pack', label: 'Insérer le pack' }];
   protected readonly flowMediaType = signal<MediaType>('video');
   private readonly installedComponents = signal<readonly FlowComponentDefinition[]>([]);
   protected readonly components = computed(() =>
@@ -208,14 +262,21 @@ export class FlowEditorPageComponent {
     return this.demoFlow?.name ?? (this.flowId ? 'Modifier un flow' : 'Nouveau flow');
   });
   private readonly componentDestination = signal<ComponentDestination | null>(null);
+  private readonly packApi = inject(FlowComponentPacks);
   private nextNodeId = 1;
   private nextConnectionId = 1;
 
   constructor() {
+    void this.packApi.list().subscribe({
+      next: (packs) => this.packCatalog.set(packs),
+      error: () => this.packCatalog.set([]),
+    });
     const componentsById = new Map(
       FLOW_COMPONENT_CATALOG.map((component) => [component.id, component]),
     );
     const requestedMediaType = this.route.snapshot.queryParamMap.get('mediaType');
+    const templateId = this.route.snapshot.queryParamMap.get('templateId');
+    if (templateId) this.loadState.set('loading');
     const inferredMediaType = this.starterId?.startsWith('flow-image')
       ? 'image'
       : this.starterId?.startsWith('flow-music')
@@ -265,7 +326,7 @@ export class FlowEditorPageComponent {
     this.setGraph([entry, ...initialNodes], initialConnections);
     void this.serverValidation
       .catalog()
-      .then((plugins) => {
+      .then(async (plugins) => {
         const installed = plugins.flatMap((plugin) =>
           plugin.components.map((component) => ({
             ...component,
@@ -274,6 +335,10 @@ export class FlowEditorPageComponent {
           })),
         );
         this.installedComponents.set(installed);
+        if (templateId && !this.flowId) {
+          await this.loadTemplate(templateId, plugins);
+          return;
+        }
         if (this.demoFlow && !this.flowId) {
           const available = new Map(
             [...FLOW_COMPONENT_CATALOG, ...installed].map((component) => [component.id, component]),
@@ -352,13 +417,157 @@ export class FlowEditorPageComponent {
     readonly output: FlowComponentOutput;
   }): void {
     this.componentDestination.set({ kind: 'branch', ...event });
+    this.packPickerSection.set('components');
     this.componentPickerOpen.set(true);
   }
 
   protected onContinuationRequested(sources: readonly FlowContinuationSource[]): void {
     if (!sources.length) return;
     this.componentDestination.set({ kind: 'continuation', sources });
+    this.packPickerSection.set('components');
     this.componentPickerOpen.set(true);
+  }
+
+  protected async onPackRowAction(event: DataTableActionEvent): Promise<void> {
+    if (event.actionId !== 'insert-pack' || !this.componentDestination()) return;
+    const summary = this.packCatalog().find((candidate) => candidate.id === event.row['id']);
+    if (!summary) return;
+    try {
+      const pack = await this.packApi.get(summary.id);
+      await this.insertPack(pack);
+    } catch (error) {
+      this.notifications.show(
+        error instanceof HttpErrorResponse
+          ? (error.error?.title ?? 'Chargement du pack impossible.')
+          : 'Chargement du pack impossible.',
+      );
+    }
+  }
+
+  protected async createPackFromPublishedFlow(values: Record<string, string>): Promise<void> {
+    if (this.storedVersion() < 1 || this.saving()) return;
+    try {
+      await this.packApi.createFromFlow({
+        sourceFlowId: this.validationFlowId,
+        sourceVersion: this.storedVersion(),
+        name: values['name'],
+        description: values['description'] ?? '',
+      });
+      this.packCatalog.set(await firstValueFrom(this.packApi.list()));
+      this.packCreationOpen.set(false);
+      this.notifications.show('Pack créé depuis la version publiée du flow.');
+    } catch (error) {
+      this.notifications.show(
+        error instanceof HttpErrorResponse
+          ? (error.error?.title ?? 'Création du pack impossible.')
+          : 'Création du pack impossible.',
+      );
+    }
+  }
+
+  private async insertPack(pack: FlowComponentPackDetails): Promise<void> {
+    const destination = this.componentDestination();
+    if (!destination) return;
+    if (pack.pack.mediaType !== this.flowMediaType()) {
+      this.notifications.show('Ce pack n’est pas compatible avec le type de média du flow.');
+      return;
+    }
+    const plugins = await this.serverValidation.catalog();
+    const sourceNodes = this.mapDefinitionNodes(pack.definition, plugins).filter(
+      (node) => node.id !== findEntryId(pack.definition),
+    );
+    const clonedIds = new Map(
+      sourceNodes.map((node) => [node.id, `flow-node-${this.nextNodeId++}`]),
+    );
+    const clonedNodes = sourceNodes.map((node) => ({ ...node, id: clonedIds.get(node.id)! }));
+    const inputNodeId = clonedIds.get(pack.inputNodeId);
+    if (!inputNodeId) {
+      this.notifications.show('L’entrée du pack ne correspond plus à un composant disponible.');
+      return;
+    }
+    const internalConnections = pack.definition.connections
+      .filter((edge) => clonedIds.has(edge.sourceNodeId) && clonedIds.has(edge.targetNodeId))
+      .map((edge) =>
+        this.createConnection(
+          clonedIds.get(edge.sourceNodeId)!,
+          edge.sourceOutputId,
+          clonedIds.get(edge.targetNodeId)!,
+        ),
+      );
+    const outputs = pack.outputs.flatMap((port) => {
+      const sourceNodeId = clonedIds.get(port.sourceNodeId);
+      return sourceNodeId ? [{ ...port, sourceNodeId }] : [];
+    });
+    const instance: FlowComponentPackInstance = {
+      id: crypto.randomUUID(),
+      packId: pack.pack.id,
+      packVersion: 1,
+      name: pack.pack.name,
+      inputNodeId,
+      nodeIds: clonedNodes.map((node) => node.id),
+      outputs,
+    };
+    const existing =
+      destination.kind === 'branch'
+        ? this.connections().find(
+            (edge) =>
+              edge.sourceNodeId === destination.sourceNodeId &&
+              edge.sourceOutputId === destination.output.id,
+          )
+        : undefined;
+    const remaining = this.connections().filter((edge) => edge.id !== existing?.id);
+    const nodes = [...this.nodes(), ...clonedNodes];
+    const next = [...remaining, ...internalConnections];
+    if (destination.kind === 'branch') {
+      if (
+        !canConnectFlowGraph(nodes, next, {
+          sourceNodeId: destination.sourceNodeId,
+          sourceOutputId: destination.output.id,
+          targetNodeId: inputNodeId,
+        })
+      ) {
+        this.notifications.show('Cette sortie n’est plus disponible pour insérer le pack.');
+        return;
+      }
+      next.push(
+        this.createConnection(destination.sourceNodeId, destination.output.id, inputNodeId),
+      );
+      if (existing) {
+        const continuations = outputs.filter((port) => port.sourceOutputId === 'success');
+        if (!continuations.length) {
+          this.notifications.show(
+            'Ce pack n’expose pas de sortie « Suite » pour conserver la suite existante.',
+          );
+          return;
+        }
+        for (const continuation of continuations)
+          next.push(
+            this.createConnection(
+              continuation.sourceNodeId,
+              continuation.sourceOutputId,
+              existing.targetNodeId,
+            ),
+          );
+      }
+    } else {
+      for (const source of destination.sources) {
+        if (
+          !canConnectFlowGraph(nodes, next, {
+            sourceNodeId: source.sourceNodeId,
+            sourceOutputId: source.output.id,
+            targetNodeId: inputNodeId,
+          })
+        ) {
+          this.notifications.show('Une branche a changé. Choisissez à nouveau où ajouter le pack.');
+          return;
+        }
+        next.push(this.createConnection(source.sourceNodeId, source.output.id, inputNodeId));
+      }
+    }
+    this.componentPacks.update((instances) => [...instances, instance]);
+    this.setGraph(nodes, next);
+    this.componentPickerOpen.set(false);
+    this.componentDestination.set(null);
   }
 
   protected addComponent(component: FlowComponentDefinition): void {
@@ -377,6 +586,10 @@ export class FlowEditorPageComponent {
         getFlowConfigurationSchema(component.configurationSchema, this.flowMediaType()),
       ),
     };
+    const packOwner =
+      destination.kind === 'branch'
+        ? this.componentPacks().find((pack) => pack.nodeIds.includes(destination.sourceNodeId))
+        : undefined;
     const nodes = [...this.nodes(), node];
     if (destination.kind === 'continuation') {
       let next = [...this.connections()];
@@ -396,6 +609,38 @@ export class FlowEditorPageComponent {
         next.push(this.createConnection(source.sourceNodeId, source.output.id, node.id));
       }
       this.setGraph(nodes, next);
+      const continuationPack = destination.sources.length
+        ? this.componentPacks().find((pack) =>
+            destination.sources.every((source) => pack.nodeIds.includes(source.sourceNodeId)),
+          )
+        : undefined;
+      if (continuationPack)
+        this.componentPacks.update((packs) =>
+          packs.map((pack) =>
+            pack.id === continuationPack.id
+              ? {
+                  ...pack,
+                  nodeIds: [...pack.nodeIds, node.id],
+                  outputs: [
+                    ...pack.outputs.filter(
+                      (port) =>
+                        !destination.sources.some(
+                          (source) =>
+                            port.sourceNodeId === source.sourceNodeId &&
+                            port.sourceOutputId === source.output.id,
+                        ),
+                    ),
+                    ...node.component.outputs.map((output) => ({
+                      id: `${node.id}:${output.id}`,
+                      label: output.label,
+                      sourceNodeId: node.id,
+                      sourceOutputId: output.id,
+                    })),
+                  ],
+                }
+              : pack,
+          ),
+        );
       this.componentPickerOpen.set(false);
       return;
     }
@@ -438,6 +683,49 @@ export class FlowEditorPageComponent {
           ]
         : remaining;
     this.setGraph(nodes, connections);
+    if (packOwner)
+      this.componentPacks.update((packs) =>
+        packs.map((pack) =>
+          pack.id === packOwner.id
+            ? {
+                ...pack,
+                nodeIds: [...pack.nodeIds, node.id],
+                outputs: (() => {
+                  const crossesBoundary =
+                    !existing || !pack.nodeIds.includes(existing.targetNodeId);
+                  const replaced = pack.outputs.some(
+                    (port) =>
+                      port.sourceNodeId === destination.sourceNodeId &&
+                      port.sourceOutputId === destination.output.id,
+                  );
+                  return crossesBoundary
+                    ? [
+                        ...pack.outputs.filter(
+                          (port) =>
+                            !(
+                              port.sourceNodeId === destination.sourceNodeId &&
+                              port.sourceOutputId === destination.output.id
+                            ),
+                        ),
+                        ...(replaced || !existing
+                          ? continuation
+                            ? [
+                                {
+                                  id: `${node.id}:${continuation.id}`,
+                                  label: continuation.label,
+                                  sourceNodeId: node.id,
+                                  sourceOutputId: continuation.id,
+                                },
+                              ]
+                            : []
+                          : []),
+                      ]
+                    : pack.outputs;
+                })(),
+              }
+            : pack,
+        ),
+      );
     this.componentPickerOpen.set(false);
   }
 
@@ -479,6 +767,7 @@ export class FlowEditorPageComponent {
   }
 
   private readonly serverValidation = inject(FlowValidation);
+  private readonly templates = inject(FlowTemplates);
   private readonly editorRouter = inject(Router);
   private readonly validationFlowId =
     this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)
@@ -500,10 +789,10 @@ export class FlowEditorPageComponent {
             : 'Enregistré',
   );
   hasUnsavedChanges(): boolean {
-    return (
-      this.loadState() === 'ready' &&
-      this.savedGraph() !== JSON.stringify([this.nodes(), this.connections()])
-    );
+    return this.loadState() === 'ready' && this.savedGraph() !== this.graphSnapshot();
+  }
+  private graphSnapshot(): string {
+    return JSON.stringify([this.nodes(), this.connections(), this.componentPacks()]);
   }
   protected warnBeforeUnload(event: BeforeUnloadEvent): void {
     if (this.hasUnsavedChanges()) {
@@ -525,50 +814,11 @@ export class FlowEditorPageComponent {
       const definition = saved.definition;
       this.savedName.set(definition.name);
       this.flowMediaType.set(definition.mediaType);
-      const nodes: FlowGraphNode[] = definition.nodes.map((node) => {
-        const resolved = resolveFlowComponent(plugins, node.component);
-        const plugin = resolved?.plugin;
-        const descriptor = resolved?.component;
-        const component: FlowComponentDefinition = descriptor
-          ? { ...descriptor, pluginId: plugin!.id, pluginName: plugin!.name }
-          : {
-              id: node.component.componentId,
-              name: node.name ?? node.component.componentId,
-              description:
-                'Cette version du composant est indisponible. Sa configuration est conservée.',
-              kind: 'action',
-              mediaType: 'general',
-              pluginId: node.component.pluginId,
-              pluginName: node.component.pluginId,
-              outputs: definition.connections
-                .filter((edge) => edge.sourceNodeId === node.id)
-                .map((edge) => ({
-                  id: edge.sourceOutputId,
-                  label: edge.sourceOutputId,
-                  description: '',
-                })),
-            };
-        return {
-          id: node.id,
-          name: node.name ?? undefined,
-          component,
-          reference: node.component,
-          configuration: node.configuration,
-          position: { x: 0, y: 0 },
-        };
-      });
-      this.nextNodeId =
-        Math.max(0, ...nodes.map((node) => Number(node.id.match(/^flow-node-(\d+)$/)?.[1]) || 0)) +
-        1;
-      this.nextConnectionId =
-        Math.max(
-          0,
-          ...definition.connections.map(
-            (edge) => Number(edge.id.match(/^connection-(\d+)$/)?.[1]) || 0,
-          ),
-        ) + 1;
+      const nodes = this.mapDefinitionNodes(definition, plugins);
+      this.updateGraphCounters(definition, nodes);
       this.setGraph(nodes, definition.connections);
-      this.savedGraph.set(JSON.stringify([nodes, definition.connections]));
+      this.componentPacks.set(definition.componentPacks ?? []);
+      this.savedGraph.set(this.graphSnapshot());
       this.savedDocumentKey.set(flowDocumentKey(definition));
       this.storedVersion.set(flowPublishedVersion(saved));
       this.draftRevision.set(saved.draftRevision ?? undefined);
@@ -578,6 +828,87 @@ export class FlowEditorPageComponent {
       this.loadState.set('error');
       this.notifications.show('Impossible de charger le flow enregistré.');
     }
+  }
+
+  private async loadTemplate(
+    templateId: string,
+    plugins: readonly FlowPluginCatalog[],
+  ): Promise<void> {
+    try {
+      const template = await this.templates.get(templateId);
+      const name =
+        this.route.snapshot.queryParamMap.get('name') ?? `${template.template.name} — Copie`;
+      const definition = {
+        ...template.definition,
+        id: this.validationFlowId,
+        version: 1,
+        name,
+      };
+      this.flowMediaType.set(definition.mediaType);
+      const nodes = this.mapDefinitionNodes(definition, plugins);
+      this.updateGraphCounters(definition, nodes);
+      this.setGraph(nodes, definition.connections);
+      this.componentPacks.set(definition.componentPacks ?? []);
+      this.savedGraph.set(null);
+      this.savedDocumentKey.set(null);
+      this.storedVersion.set(0);
+      this.draftRevision.set(undefined);
+      this.backupStatus.set(null);
+      this.loadState.set('ready');
+    } catch {
+      this.loadState.set('error');
+      this.notifications.show('Impossible de charger ce modèle de flow.');
+    }
+  }
+
+  private mapDefinitionNodes(
+    definition: FlowDocument,
+    plugins: readonly FlowPluginCatalog[],
+  ): FlowGraphNode[] {
+    return definition.nodes.map((node) => {
+      const resolved = resolveFlowComponent(plugins, node.component);
+      const plugin = resolved?.plugin;
+      const descriptor = resolved?.component;
+      const component: FlowComponentDefinition = descriptor
+        ? { ...descriptor, pluginId: plugin!.id, pluginName: plugin!.name }
+        : {
+            id: node.component.componentId,
+            name: node.name ?? node.component.componentId,
+            description:
+              'Cette version du composant est indisponible. Sa configuration est conservée.',
+            kind: 'action',
+            mediaType: 'general',
+            pluginId: node.component.pluginId,
+            pluginName: node.component.pluginId,
+            outputs: definition.connections
+              .filter((edge) => edge.sourceNodeId === node.id)
+              .map((edge) => ({
+                id: edge.sourceOutputId,
+                label: edge.sourceOutputId,
+                description: '',
+              })),
+          };
+      return {
+        id: node.id,
+        name: node.name ?? undefined,
+        component,
+        reference: node.component,
+        configuration: node.configuration,
+        position: { x: 0, y: 0 },
+      };
+    });
+  }
+
+  private updateGraphCounters(definition: FlowDocument, nodes: readonly FlowGraphNode[]): void {
+    this.nextNodeId =
+      Math.max(0, ...nodes.map((node) => Number(node.id.match(/^flow-node-(\d+)$/)?.[1]) || 0)) + 1;
+    this.nextConnectionId =
+      Math.max(
+        0,
+        ...definition.connections.map(
+          (edge) => Number(edge.id.match(/^connection-(\d+)$/)?.[1]) || 0,
+        ),
+      ) + 1;
   }
 
   protected async saveFlow(): Promise<void> {
@@ -590,7 +921,9 @@ export class FlowEditorPageComponent {
     this.saving.set(true);
     const nodes = this.nodes(),
       connections = this.connections(),
+      packs = this.componentPacks(),
       expected = this.storedVersion();
+    const graphSnapshot = JSON.stringify([nodes, connections, packs]);
     try {
       const document = await this.serverValidation.document(
         this.validationFlowId,
@@ -599,10 +932,11 @@ export class FlowEditorPageComponent {
         this.flowMediaType(),
         nodes,
         connections,
+        packs,
       );
       const unchanged = flowDocumentKey(document) === this.savedDocumentKey();
       if (unchanged && !this.hasDraft()) {
-        this.savedGraph.set(JSON.stringify([nodes, connections]));
+        this.savedGraph.set(graphSnapshot);
         this.notifications.show('Aucune modification à enregistrer.');
         return;
       }
@@ -619,12 +953,15 @@ export class FlowEditorPageComponent {
         );
         return;
       }
-      this.savedGraph.set(JSON.stringify([nodes, connections]));
+      this.savedGraph.set(graphSnapshot);
       this.savedDocumentKey.set(flowDocumentKey(saved.definition));
       this.storedVersion.set(flowPublishedVersion(saved));
       this.draftRevision.set(saved.draftRevision ?? undefined);
       this.backupStatus.set(saved.backupStatus);
-      const changed = this.nodes() !== nodes || this.connections() !== connections;
+      const changed =
+        this.nodes() !== nodes ||
+        this.connections() !== connections ||
+        this.componentPacks() !== packs;
       if (!changed && this.flowId !== saved.definition.id)
         void this.editorRouter.navigate(['/flows', saved.definition.id, 'edit'], {
           replaceUrl: true,
@@ -657,6 +994,7 @@ export class FlowEditorPageComponent {
     this.validating.set(true);
     const checkedNodes = this.nodes();
     const checkedConnections = this.connections();
+    const checkedPacks = this.componentPacks();
     try {
       const result = await this.serverValidation.validate(
         this.validationFlowId,
@@ -664,8 +1002,13 @@ export class FlowEditorPageComponent {
         this.flowMediaType(),
         checkedNodes,
         checkedConnections,
+        checkedPacks,
       );
-      if (this.nodes() !== checkedNodes || this.connections() !== checkedConnections) {
+      if (
+        this.nodes() !== checkedNodes ||
+        this.connections() !== checkedConnections ||
+        this.componentPacks() !== checkedPacks
+      ) {
         this.notifications.show(
           'Le flow a été modifié pendant la vérification. Vérifiez sa nouvelle version.',
         );
@@ -721,19 +1064,38 @@ export class FlowEditorPageComponent {
     readonly sourceOutputId: string;
     readonly targetNodeId: string;
   }): void {
+    const sourcePack = this.componentPacks().find((pack) =>
+      pack.nodeIds.includes(event.sourceNodeId),
+    );
+    const targetPack = this.componentPacks().find((pack) =>
+      pack.nodeIds.includes(event.targetNodeId),
+    );
+    const samePack = sourcePack?.id === targetPack?.id;
+    if (
+      (sourcePack &&
+        !samePack &&
+        !sourcePack.outputs.some(
+          (port) =>
+            port.sourceNodeId === event.sourceNodeId &&
+            port.sourceOutputId === event.sourceOutputId,
+        )) ||
+      (targetPack && !samePack && event.targetNodeId !== targetPack.inputNodeId)
+    ) {
+      this.notifications.show('Cette liaison traverse le pack sans utiliser ses ports déclarés.');
+      return;
+    }
     if (!canConnectFlowGraph(this.nodes(), this.connections(), event)) {
       this.notifications.show(
         'Connexion impossible : vérifiez la sortie, le point d’entrée et l’absence de cycle.',
       );
       return;
     }
-    this.setGraph(
-      [...this.nodes()],
-      [
-        ...this.connections(),
-        this.createConnection(event.sourceNodeId, event.sourceOutputId, event.targetNodeId),
-      ],
-    );
+    const connections = [
+      ...this.connections(),
+      this.createConnection(event.sourceNodeId, event.sourceOutputId, event.targetNodeId),
+    ];
+    this.setGraph([...this.nodes()], connections);
+    this.synchronizePackOutputs(connections);
   }
 
   protected onConnectionsChanged(connections: readonly FlowGraphConnection[]): void {
@@ -751,13 +1113,88 @@ export class FlowEditorPageComponent {
       this.notifications.show('Cette réorganisation produirait une connexion invalide.');
       return;
     }
+    if (
+      connections.some((edge) => {
+        const sourcePack = this.componentPacks().find((pack) =>
+          pack.nodeIds.includes(edge.sourceNodeId),
+        );
+        const targetPack = this.componentPacks().find((pack) =>
+          pack.nodeIds.includes(edge.targetNodeId),
+        );
+        const samePack = sourcePack?.id === targetPack?.id;
+        return (
+          (sourcePack &&
+            !samePack &&
+            !sourcePack.outputs.some(
+              (port) =>
+                port.sourceNodeId === edge.sourceNodeId &&
+                port.sourceOutputId === edge.sourceOutputId,
+            )) ||
+          (targetPack && !samePack && edge.targetNodeId !== targetPack.inputNodeId)
+        );
+      })
+    ) {
+      this.notifications.show(
+        'Cette réorganisation relierait un bloc en dehors des ports du pack.',
+      );
+      return;
+    }
     this.setGraph(nodes, connections);
+    this.synchronizePackOutputs(connections);
+  }
+
+  private synchronizePackOutputs(connections: readonly FlowGraphConnection[]): void {
+    this.componentPacks.update((packs) =>
+      packs.map((pack) => ({
+        ...pack,
+        outputs: pack.outputs.filter(
+          (port) =>
+            !connections.some(
+              (edge) =>
+                edge.sourceNodeId === port.sourceNodeId &&
+                edge.sourceOutputId === port.sourceOutputId &&
+                pack.nodeIds.includes(edge.targetNodeId),
+            ),
+        ),
+      })),
+    );
   }
 
   protected removeNode(nodeId: string): void {
+    const visualPack = this.componentPacks().find((pack) => `flow-pack-${pack.id}` === nodeId);
+    if (visualPack) {
+      const removed = new Set(visualPack.nodeIds);
+      this.setGraph(
+        this.nodes().filter((node) => !removed.has(node.id)),
+        this.connections().filter(
+          (edge) => !removed.has(edge.sourceNodeId) && !removed.has(edge.targetNodeId),
+        ),
+      );
+      this.componentPacks.update((packs) => packs.filter((pack) => pack.id !== visualPack.id));
+      return;
+    }
+    const packOwner = this.componentPacks().find((pack) => pack.nodeIds.includes(nodeId));
+    if (packOwner?.inputNodeId === nodeId) {
+      this.notifications.show(
+        'L’entrée du pack est son point d’ancrage ; supprimez le pack entier pour la retirer.',
+      );
+      return;
+    }
     if (this.nodes().find((node) => node.id === nodeId)?.component.kind === 'input') return;
     const incoming = this.connections().filter((edge) => edge.targetNodeId === nodeId);
     const outgoing = this.connections().filter((edge) => edge.sourceNodeId === nodeId);
+    const restoredPackOutputs = packOwner && outgoing.length === 1 && !packOwner.nodeIds.includes(outgoing[0].targetNodeId)
+      ? incoming.flatMap((edge) => {
+          const source = this.nodes().find((candidate) => candidate.id === edge.sourceNodeId);
+          const output = source?.component.outputs.find((candidate) => candidate.id === edge.sourceOutputId);
+          return source && output ? [{
+            id: `${source.id}:${output.id}`,
+            label: output.label,
+            sourceNodeId: source.id,
+            sourceOutputId: output.id,
+          }] : [];
+        })
+      : [];
     let remaining = this.connections().filter(
       (edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId,
     );
@@ -770,6 +1207,22 @@ export class FlowEditorPageComponent {
       this.nodes().filter((node) => node.id !== nodeId),
       remaining,
     );
+    if (packOwner)
+      this.componentPacks.update((packs) =>
+        packs
+          .map((pack) =>
+            pack.id === packOwner.id
+              ? {
+                  ...pack,
+                  nodeIds: pack.nodeIds.filter((id) => id !== nodeId),
+                  outputs: pack.outputs
+                    .filter((port) => port.sourceNodeId !== nodeId)
+                    .concat(restoredPackOutputs),
+                }
+              : pack,
+          )
+          .filter((pack) => pack.nodeIds.length > 0),
+      );
     if (outgoing.length > 1)
       this.notifications.show(
         'Étape supprimée. Les blocs de ses branches sont conservés parmi les blocs non reliés.',
@@ -777,9 +1230,29 @@ export class FlowEditorPageComponent {
   }
 
   protected removeConnection(connectionId: string): void {
+    const removed = this.connections().find((connection) => connection.id === connectionId);
     const connections = this.connections().filter((connection) => connection.id !== connectionId);
-    if (connections.length !== this.connections().length)
+    if (connections.length !== this.connections().length) {
       this.setGraph([...this.nodes()], connections);
+      const owner = removed && this.componentPacks().find((pack) =>
+        pack.nodeIds.includes(removed.sourceNodeId) && pack.nodeIds.includes(removed.targetNodeId),
+      );
+      const source = removed && this.nodes().find((node) => node.id === removed.sourceNodeId);
+      const output = source?.component.outputs.find((candidate) => candidate.id === removed?.sourceOutputId);
+      if (owner && removed && source && output && !connections.some((edge) =>
+        edge.sourceNodeId === removed.sourceNodeId && edge.sourceOutputId === removed.sourceOutputId,
+      )) {
+        this.componentPacks.update((packs) => packs.map((pack) => pack.id === owner.id &&
+          !pack.outputs.some((port) => port.sourceNodeId === source.id && port.sourceOutputId === output.id)
+          ? { ...pack, outputs: [...pack.outputs, {
+              id: `${source.id}:${output.id}`,
+              label: output.label,
+              sourceNodeId: source.id,
+              sourceOutputId: output.id,
+            }] }
+          : pack));
+      }
+    }
   }
 
   private createConnection(
@@ -802,4 +1275,11 @@ export class FlowEditorPageComponent {
     this.nodes.set(nodes);
     this.connections.set(connections);
   }
+}
+
+function findEntryId(definition: FlowDocument): string | undefined {
+  return definition.nodes.find(
+    (node) =>
+      node.component.pluginId === 'base' && node.component.componentId.startsWith('base-input-'),
+  )?.id;
 }

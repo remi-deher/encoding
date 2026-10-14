@@ -128,4 +128,12 @@ La publication conserve la source et crée un résultat distinct dans .encoding-
 
 Le retrait d’un nœud révoque son identité sans supprimer l’historique et refuse les baux actifs ; voir [0017](docs/architecture/0017-node-removal-and-capability-detail.md). Ne pas réactiver implicitement une identité retirée via un heartbeat ou un enrôlement.
 
+Les packs de composants sont des fragments copiés d’une version publiée précise. L’éditeur les affiche comme blocs composites repliables, mais stocke les composants et liaisons internes dans le graphe aplati du flow avec une interface d’entrée/sorties validée. Les modifications d’une instance restent locales au flow ; voir [0026](docs/architecture/0026-component-packs.md).
+
 La surveillance et les plafonds utilisent [0018](docs/architecture/0018-library-monitoring-and-processing-limits.md) : global nœud toutes bibliothèques, global bibliothèque tous nœuds, puis couple nœud/bibliothèque. Les limites sont des plafonds sans réservation. La surveillance périodique utilise des réceptions transactionnelles par fichier/version/empreinte taille-date pour éviter les répétitions automatiques.
+
+La section **Librairies** regroupe les bibliothèques média et les scripts partagés. Les scripts ont des brouillons révisés et des versions publiées immuables ; les flows copient le code choisi et conservent sa référence de version. Voir [0024](docs/architecture/0024-script-library.md).
+
+Les encodeurs vidéo sont décrits par un catalogue partagé et les profils de qualité versionnés associent une cible à chaque encodeur. Un flow embarque l’instantané du profil publié. L’agent distingue les encodeurs déclarés par FFmpeg de ceux vérifiés utilisables par une mire synthétique ; le mode automatique choisit parmi les encodeurs utilisables selon les priorités du profil. Le cluster et le worker appliquent la même politique. Le worker conserve la résolution appliquée dans les checkpoints et l’historique expose les options FFmpeg réellement retenues ; voir [0027](docs/architecture/0027-video-encoder-quality-profiles.md).
+
+La section **Modèles** contient des copies immuables de versions publiées de flows. Un flow créé depuis un modèle reçoit un nouvel identifiant ; voir [0025](docs/architecture/0025-flow-templates.md).

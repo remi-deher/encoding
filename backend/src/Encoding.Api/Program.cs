@@ -36,6 +36,10 @@ builder.Services.AddSingleton<FlowSimulator>();
 builder.Services.AddSingleton<FlowMetadataImporter>();
 builder.Services.AddSingleton<FlowRepository>();
 builder.Services.AddSingleton<FlowArchiveService>();
+builder.Services.AddSingleton<FlowScriptRepository>();
+builder.Services.AddSingleton<FlowTemplateRepository>();
+builder.Services.AddSingleton<FlowComponentPackRepository>();
+builder.Services.AddSingleton<EncodingProfileRepository>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
 builder.Services.AddSingleton<PluginConnectionTester>();
 builder.Services.AddHttpClient("PluginConnectionTest", client => client.Timeout = TimeSpan.FromSeconds(10))
@@ -67,6 +71,10 @@ await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSour
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFlowEndpoints();
+app.MapFlowScriptEndpoints();
+app.MapFlowTemplateEndpoints();
+app.MapFlowComponentPackEndpoints();
+app.MapEncodingProfileEndpoints();
 app.MapFlowSimulationEndpoints();
 app.MapPluginConfigurationEndpoints();
 app.MapRuntimeEndpoints();
@@ -305,6 +313,8 @@ executions.MapGet("/{id:guid}", async (Guid id, ExecutionRepository repository, 
 }).WithName("GetExecution");
 executions.MapGet("/{id:guid}/events", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
     await repository.GetAsync(id, ct) is null ? (IResult)Results.NotFound() : Results.Ok(await repository.EventsAsync(id, ct))).WithName("GetExecutionEvents");
+executions.MapGet("/{id:guid}/pipeline", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
+    await repository.GetAsync(id, ct) is null ? (IResult)Results.NotFound() : Results.Ok(await repository.PipelineAsync(id, ct))).WithName("GetExecutionPipeline");
 executions.MapPost("",()=>Results.Json(new{title="Lancez les traitements depuis les fichiers détectés de la bibliothèque."},statusCode:410));
 executions.MapPost("/{id:guid}/cancel", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
     await repository.CancelAsync(id, ct) ? Results.NoContent() : Results.Conflict(new { title = "Cette exécution ne peut pas être annulée dans son état actuel." }))

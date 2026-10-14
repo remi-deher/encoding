@@ -21,6 +21,8 @@ import {
 } from '../ui/data-table.component';
 import { DetailField, DetailFieldListComponent } from '../ui/detail-field-list.component';
 import { PageHeaderComponent } from '../ui/page-header.component';
+import { ExecutionPipelineLogsComponent } from '../ui/execution-pipeline-logs.component';
+import { ExecutionPipelineStep } from '../models/execution';
 
 export type ExecutionMonitorView = 'queue' | 'active' | 'errors' | 'cancelled' | 'history';
 
@@ -40,6 +42,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     DetailFieldListComponent,
     MatTabsModule,
     PageHeaderComponent,
+    ExecutionPipelineLogsComponent,
   ],
   template: `
     <app-page-header [title]="title()" [actions]="pageActions()" />
@@ -173,33 +176,63 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       (closed)="selectedId.set(null); executionOpened.emit(null)"
     >
       <ng-template #executionDetail>
-        <app-detail-field-list
-          [fields]="executionDetailFields()"
-          [tabbed]="true"
-          tabsLabel="Sections de l’exécution"
-        />
-        @if (artifactRows().length || artifactFeedback()) {
-          <h3>Fichiers produits</h3>
-          @if (artifactFeedback()) {
-            <p role="status">{{ artifactFeedback() }}</p>
-          }
-          <app-data-table
-            [columns]="artifactColumns"
-            [rows]="artifactRows()"
-            [rowActions]="artifactActions"
-            (rowAction)="artifactDownload.emit($event.row)"
-            emptyMessage="Aucun fichier produit."
-          />
-        }
-        <h3>Chronologie</h3>
-        @if (eventFeedback()) {
-          <p role="status">{{ eventFeedback() }}</p>
-        }
-        <app-data-table
-          [columns]="eventColumns"
-          [rows]="eventRows()"
-          emptyMessage="Aucun événement enregistré."
-        />
+        <mat-tab-group class="execution-detail-tabs" aria-label="Informations de l’exécution">
+          <mat-tab label="Synthèse">
+            <div class="execution-detail-tab">
+              <app-detail-field-list [fields]="executionDetailFields()" />
+            </div>
+          </mat-tab>
+          <mat-tab label="Pipeline">
+            <div class="execution-detail-tab">
+              <app-execution-pipeline-logs
+                [executionId]="pipelineExecutionId()"
+                [steps]="pipelineSteps()"
+                [feedback]="pipelineFeedback()"
+              />
+            </div>
+          </mat-tab>
+          <mat-tab label="Événements">
+            <div class="execution-detail-tab">
+              <h3>Historique de l’exécution</h3>
+              @if (eventFeedback()) {
+                <p role="status">{{ eventFeedback() }}</p>
+              }
+              <app-data-table
+                [columns]="eventColumns"
+                [rows]="eventRows()"
+                emptyMessage="Aucun événement enregistré."
+              />
+            </div>
+          </mat-tab>
+          <mat-tab label="Résultats">
+            <div class="execution-detail-tab">
+              @if (artifactFeedback()) {
+                <p role="status">{{ artifactFeedback() }}</p>
+              }
+              @if (artifactRows().length) {
+                <h3>Fichiers produits</h3>
+                <app-data-table
+                  [columns]="artifactColumns"
+                  [rows]="artifactRows()"
+                  [rowActions]="artifactActions"
+                  (rowAction)="artifactDownload.emit($event.row)"
+                  emptyMessage="Aucun fichier produit."
+                />
+              }
+              @if (videoEncodingRows().length) {
+                <h3>Configuration vidéo retenue</h3>
+                <app-data-table
+                  [columns]="videoEncodingColumns"
+                  [rows]="videoEncodingRows()"
+                  emptyMessage="Aucun encodeur vidéo résolu pour cette exécution."
+                />
+              }
+              @if (!artifactRows().length && !artifactFeedback() && !videoEncodingRows().length) {
+                <p class="execution-detail-empty">Aucun fichier ou réglage vidéo enregistré.</p>
+              }
+            </div>
+          </mat-tab>
+        </mat-tab-group>
       </ng-template>
     </app-detail-drawer>
   `,
@@ -264,6 +297,11 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     .tab-content {
       padding-top: 14px;
     }
+
+    .execution-detail-tabs { display: block; }
+    .execution-detail-tab { display: grid; gap: 18px; padding: 18px 2px 4px; }
+    .execution-detail-tab h3 { margin: 0; color: var(--text-primary); font-size: 14px; }
+    .execution-detail-empty { margin: 0; color: var(--text-secondary); font-size: 13px; }
 
     .monitor-note {
       margin: 14px 2px 0;
@@ -344,6 +382,30 @@ export class ExecutionMonitorTemplateComponent {
   readonly executionOpened = output<string | null>();
   readonly eventRows = input<readonly DataTableRow[]>([]);
   readonly eventFeedback = input('');
+  readonly pipelineSteps = input<readonly ExecutionPipelineStep[]>([]);
+  readonly pipelineFeedback = input('');
+  readonly pipelineExecutionId = input('execution');
+  protected readonly videoEncodingRows = computed(() => {
+    const serialized = this.selectedExecution()?.['videoEncodingsJson'];
+    if (typeof serialized !== 'string') return [];
+    try {
+      const rows: unknown = JSON.parse(serialized);
+      return Array.isArray(rows) ? rows as DataTableRow[] : [];
+    } catch {
+      return [];
+    }
+  });
+  protected readonly videoEncodingColumns: readonly DataTableColumn[] = [
+    { key: 'flowNode', label: 'Bloc' },
+    { key: 'codec', label: 'Codec' },
+    { key: 'encoder', label: 'Encodeur' },
+    { key: 'ffmpeg', label: 'Version FFmpeg' },
+    { key: 'acceleration', label: 'Accélération' },
+    { key: 'quality', label: 'Qualité appliquée' },
+    { key: 'preset', label: 'Preset appliqué' },
+    { key: 'profile', label: 'Profil figé' },
+    { key: 'worker', label: 'Identifiant worker' },
+  ];
   protected readonly eventColumns: readonly DataTableColumn[] = [
     { key: 'revision', label: 'Ordre' },
     { key: 'createdAt', label: 'Date' },

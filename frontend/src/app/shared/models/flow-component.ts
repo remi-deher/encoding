@@ -1,5 +1,6 @@
 import type { MediaType } from './media-type';
 import type { ConditionGroup, ConditionFieldDefinition, ConditionPreset } from './condition-tree';
+import type { EncodingProfileSnapshot } from './encoding-profiles';
 
 export interface FlowComponentReference {
   readonly pluginId: string;
@@ -46,6 +47,7 @@ export function isFlowComponentCompatible(
 }
 
 export type FlowComponentKind =
+  | 'pack'
   | 'input'
   | 'action'
   | 'condition'
@@ -56,6 +58,7 @@ export type FlowComponentKind =
   | 'terminal';
 
 export const FLOW_COMPONENT_KIND_LABELS: Record<FlowComponentKind, string> = {
+  pack: 'Pack',
   input: 'Entrée',
   action: 'Action',
   condition: 'Condition',
@@ -84,6 +87,9 @@ interface FlowComponentConfigurationFieldBase {
   readonly required?: boolean;
   /** Show this field in the common block, in schema order. */
   readonly inline?: boolean;
+  readonly visibleWhenFieldId?: string;
+  readonly visibleWhenValue?: string;
+  readonly visibleWhenEmpty?: boolean;
 }
 
 export type FlowComponentConfigurationField =
@@ -103,6 +109,18 @@ export type FlowComponentConfigurationField =
       readonly type: 'secret';
       readonly defaultValue?: string;
       readonly placeholder?: string;
+    })
+  | (FlowComponentConfigurationFieldBase & {
+      readonly type: 'script-reference';
+      readonly defaultValue?: string;
+    })
+  | (FlowComponentConfigurationFieldBase & {
+      readonly type: 'encoding-profile';
+      readonly defaultValue?: EncodingProfileSnapshot;
+    })
+  | (FlowComponentConfigurationFieldBase & {
+      readonly type: 'video-encoder';
+      readonly defaultValue?: string;
     })
   | (FlowComponentConfigurationFieldBase & {
       readonly type: 'number';
@@ -161,7 +179,13 @@ export function getFlowConfigurationSchema(
   };
 }
 
-export type FlowComponentConfigurationValue = string | number | boolean | null | ConditionGroup;
+export type FlowComponentConfigurationValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ConditionGroup
+  | EncodingProfileSnapshot;
 export type FlowComponentConfiguration = Readonly<Record<string, FlowComponentConfigurationValue>>;
 
 export function createDefaultFlowComponentConfiguration(

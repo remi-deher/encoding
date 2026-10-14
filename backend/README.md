@@ -61,6 +61,14 @@ GET /api/v1/flows/components expose les manifestes installés (Base 1.0.0, 44 co
 
 Le manifeste déclaratif Base est dans src/Encoding.Api/Flows/Catalog/base.json. Le registre le charge au démarrage ; une absence ou incohérence bloque le démarrage. La présence d’un descripteur ne signifie pas qu’un handler d’exécution est disponible. Les manifestes tiers configurés sont chargés comme descripteurs ; leur exécution reste dans un processus séparé sur le worker.
 
+## Bibliothèque de scripts
+
+La migration 0018 ajoute les brouillons et versions publiées de scripts partagés. L’API `GET/POST /api/v1/scripts`, `GET /api/v1/scripts/{id}`, `PUT /api/v1/scripts/{id}/draft`, `POST /api/v1/scripts/{id}/publish` et `GET /api/v1/scripts/{id}/versions/{version}` gère ces ressources avec contrôle de concurrence. Un flow garde une copie du code choisi et une référence de provenance vers la version publiée ; voir [0024](../docs/architecture/0024-script-library.md).
+
+## Modèles de flow
+
+La migration 0019 ajoute les modèles partagés. `POST /api/v1/templates/from-flow` copie une version publiée précise, et `GET /api/v1/templates` ainsi que `GET /api/v1/templates/{id}` les exposent à l’interface. L’éditeur charge le modèle sous un nouvel identifiant de flow ; voir [0025](../docs/architecture/0025-flow-templates.md).
+
 ## Versions et sauvegardes de flows
 
 La migration 0009 ajoute les versions immuables et la file de sauvegardes. GET /api/v1/flows liste les flows ; GET /api/v1/flows/{id} et /versions/{version} lisent leurs documents ; PUT /api/v1/flows/{id} publie une version validée avec expectedVersion. Un conflit concurrent reçoit HTTP 409. La création d’exécution exige une version enregistrée.

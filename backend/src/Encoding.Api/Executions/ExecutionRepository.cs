@@ -1,21 +1,36 @@
 using Encoding.Contracts.Executions;
+using Encoding.Contracts.Flows;
+using Encoding.Api.Flows;
+using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
 namespace Encoding.Api.Executions;
 
 /// <summary>Persistent lifecycle journal. Does not assign work or publish media.</summary>
-public sealed class ExecutionRepository(NpgsqlDataSource dataSource)
+public sealed class ExecutionRepository(NpgsqlDataSource dataSource, FlowComponentRegistry? components = null)
 {
+    private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private const string Columns = """
  e.id,e.media,e.library_name,e.flow_name,e.flow_version,e.state,e.node_id,n.name,
  e.progress,e.detail,e.attempt,e.revision,e.queued_at,e.started_at,e.finished_at,e.updated_at,w.before_metadata::text,w.after_metadata::text,w.published_path
+ ,(SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),w.library_id
  """;
     private static ExecutionResponse Read(NpgsqlDataReader r) => new(
     r.GetGuid(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4), r.GetString(5),
     r.IsDBNull(6) ? null : r.GetGuid(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetDecimal(8),
     r.GetString(9), r.GetInt32(10), r.GetInt32(11), r.GetFieldValue<DateTimeOffset>(12),
-    r.IsDBNull(13) ? null : r.GetFieldValue<DateTimeOffset>(13), r.IsDBNull(14) ? null : r.GetFieldValue<DateTimeOffset>(14), r.GetFieldValue<DateTimeOffset>(15),ReadMetadata(r,16),ReadMetadata(r,17),r.IsDBNull(18)?null:r.GetString(18));
+    r.IsDBNull(13) ? null : r.GetFieldValue<DateTimeOffset>(13), r.IsDBNull(14) ? null : r.GetFieldValue<DateTimeOffset>(14), r.GetFieldValue<DateTimeOffset>(15),ReadMetadata(r,16),ReadMetadata(r,17),r.IsDBNull(18)?null:r.GetString(18),ReadVideoEncodings(r,19),r.IsDBNull(20)?null:r.GetGuid(20));
     private static System.Text.Json.JsonElement? ReadMetadata(NpgsqlDataReader reader,int index) => reader.IsDBNull(index)?null:System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(reader.GetString(index));
+    private static IReadOnlyList<ResolvedVideoEncoding> ReadVideoEncodings(NpgsqlDataReader reader,int index)
+    {
+        if(reader.IsDBNull(index)) return [];
+        try
+        {
+            var checkpoint=JsonSerializer.Deserialize<RuntimeCheckpoint>(reader.GetString(index),new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            return checkpoint?.Context.VideoEncodings??[];
+        }
+        catch(JsonException) { return []; }
+    }
     public async Task<ExecutionOverviewResponse> OverviewAsync(CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
@@ -49,6 +64,47 @@ public sealed class ExecutionRepository(NpgsqlDataSource dataSource)
         await using var r = await cmd.ExecuteReaderAsync(ct); var list = new List<ExecutionEventResponse>();
         while (await r.ReadAsync(ct)) list.Add(new(r.GetGuid(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetFieldValue<DateTimeOffset>(4)));
         return list;
+    }
+    public async Task<IReadOnlyList<ExecutionPipelineStepResponse>> PipelineAsync(Guid id,CancellationToken ct)
+    {
+        FlowDefinition flow;
+        string executionState;
+        await using (var execution=dataSource.CreateCommand("SELECT flow_definition::text,state FROM executions WHERE id=@id"))
+        {
+            execution.Parameters.AddWithValue("id",id);
+            await using var reader=await execution.ExecuteReaderAsync(ct);
+            if(!await reader.ReadAsync(ct)) return [];
+            flow=JsonSerializer.Deserialize<FlowDefinition>(reader.GetString(0),Json)!;
+            executionState=reader.GetString(1);
+        }
+        var flowNodes=flow.Nodes.ToDictionary(node=>node.Id,StringComparer.Ordinal);
+        await using var cmd=dataSource.CreateCommand("""
+          SELECT s.node_id,s.invocation_id,s.started_at,s.completed_at,s.checkpoint::text,s.command_logs::text
+          FROM execution_steps s WHERE s.execution_id=@id ORDER BY s.started_at,s.node_id
+          """);
+        cmd.Parameters.AddWithValue("id",id); await using var r=await cmd.ExecuteReaderAsync(ct);
+        var result=new List<ExecutionPipelineStepResponse>();
+        while(await r.ReadAsync(ct))
+        {
+            var nodeId=r.GetString(0);
+            var node=flowNodes.GetValueOrDefault(nodeId);
+            var descriptor=node is null?null:components?.Resolve(node.Component);
+            DateTimeOffset? completedAt=r.IsDBNull(3)?null:r.GetFieldValue<DateTimeOffset>(3);
+            var checkpoint=r.IsDBNull(4)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(4),Json);
+            var outputId=checkpoint?.OutputId;
+            var outputLabel=outputId is null?null:descriptor?.Outputs.FirstOrDefault(output=>output.Id==outputId)?.Label??outputId;
+            var status=completedAt is not null?"completed":executionState switch
+            {
+                "failed"=>"failed",
+                "cancelled"=>"cancelled",
+                "cancelling"=>"cancelling",
+                _=>"running"
+            };
+            var logs=JsonSerializer.Deserialize<IReadOnlyList<RuntimeCommandLog>>(r.GetString(5),new JsonSerializerOptions(JsonSerializerDefaults.Web))??[];
+            result.Add(new(nodeId,node?.Name??descriptor?.Name??nodeId,r.GetGuid(1),descriptor?.Kind??"unknown",status,
+                r.GetFieldValue<DateTimeOffset>(2),completedAt,outputId,outputLabel,checkpoint?.NextNodeId,logs));
+        }
+        return result;
     }
     internal static async Task<bool> CreateInTransactionAsync(CreateExecutionRequest request,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
     {

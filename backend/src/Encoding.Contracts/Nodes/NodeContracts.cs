@@ -17,7 +17,11 @@ public sealed record NodeToolCapability(
     string Version,
     IReadOnlyList<string> MediaTypes,
     IReadOnlyList<string> AccelerationTypes,
-    IReadOnlyList<string>? Encoders = null);
+    IReadOnlyList<string>? Encoders = null,
+    IReadOnlyList<NodeEncoderCapability>? EncoderChecks = null);
+
+/// <summary>Result of a safe synthetic encode check for a catalogued video encoder.</summary>
+public sealed record NodeEncoderCapability(string EncoderId, string Status);
 
 public enum NodePresenceStatus
 {

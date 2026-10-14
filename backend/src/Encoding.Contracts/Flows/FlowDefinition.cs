@@ -10,7 +10,24 @@ public sealed record FlowDefinition(
     string Name,
     string MediaType,
     IReadOnlyList<FlowNodeDefinition> Nodes,
-    IReadOnlyList<FlowConnectionDefinition> Connections);
+    IReadOnlyList<FlowConnectionDefinition> Connections,
+    IReadOnlyList<FlowComponentPackInstance>? ComponentPacks = null);
+
+/// <summary>Visual grouping metadata for a flattened, executable pack instance.</summary>
+public sealed record FlowComponentPackInstance(
+    string Id,
+    Guid PackId,
+    int PackVersion,
+    string Name,
+    string InputNodeId,
+    IReadOnlyList<string> NodeIds,
+    IReadOnlyList<FlowComponentPackOutputBinding> Outputs);
+
+public sealed record FlowComponentPackOutputBinding(
+    string Id,
+    string Label,
+    string SourceNodeId,
+    string SourceOutputId);
 
 /// <summary>References an exact installed component; never embeds its implementation.</summary>
 public sealed record FlowComponentReference(
