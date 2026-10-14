@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 using Encoding.Api.Flows;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Libraries;
@@ -20,7 +21,8 @@ public static class RuntimeEndpoints
             return File.Exists(path)?Results.File(path,"application/octet-stream",artifact.Name,enableRangeProcessing:true):Results.NotFound();
         });
         app.MapPost("/api/v1/media-executions",()=>Results.Json(new{title="Lancez les traitements depuis les fichiers détectés de la bibliothèque."},statusCode:410));
-        var group=app.MapGroup("/api/v1/runtime/nodes/{nodeId:guid}").WithTags("Runtime");
+        // Les workers s’authentifient par leur jeton de nœud (filtre ci-dessous), pas par une session utilisateur.
+        var group=app.MapGroup("/api/v1/runtime/nodes/{nodeId:guid}").AllowAnonymous().WithTags("Runtime");
         group.AddEndpointFilter(async(context,next)=>
         {
             var node=Guid.Parse((string)context.HttpContext.Request.RouteValues["nodeId"]!);
@@ -54,6 +56,9 @@ public static class RuntimeEndpoints
             await artifacts.AuthorizeAsync(id,nodeId,epoch,ct) ? (IResult)Results.Ok(await runtime.SourceAsync(id,ct)) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/publication",async(Guid nodeId,Guid id,ConfirmRuntimePublication request,RuntimeTransferRepository transfers,CancellationToken ct)=>
             await transfers.ConfirmAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
+        group.MapGet("/replacements",async(Guid nodeId,SourceReplacementRepository replacements,CancellationToken ct)=>Results.Ok(await replacements.TasksAsync(nodeId,ct)));
+        group.MapPost("/replacements/{id:guid}/report",async(Guid nodeId,Guid id,ReportReplacementTask request,SourceReplacementRepository replacements,CancellationToken ct)=>
+            await replacements.ReportAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapPost("/executions/{id:guid}/source-failure",async(Guid nodeId,Guid id,FinishRuntimeExecution request,RuntimeTransferRepository transfers,CancellationToken ct)=>
             await transfers.FinishAsync(id,nodeId,request,ct,true) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapPut("/executions/{id:guid}/dav/{digest}",async(Guid nodeId,Guid id,string digest,long epoch,bool? original,string? inputPath,HttpRequest request,RuntimeArtifactStore artifacts,IConfiguration configuration,CancellationToken ct)=>

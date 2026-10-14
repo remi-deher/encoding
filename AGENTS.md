@@ -97,6 +97,10 @@ Le catalogue initial des outils associés aux composants de flow est décrit dan
 - Documenter les nouvelles décisions d’architecture et mettre à jour ce fichier si les principes du projet évoluent.
 - Ne jamais lancer une commande de suppression, de remplacement ou de migration destructive sur des médias sans protection explicite et validation du résultat.
 
+## Authentification et rôles
+
+Toute route de gestion exige une session ; les rôles sont `admin` et `viewer` (lecture seule). Les routes joignables sans session, l’autorisation des workers par jeton de nœud et le durcissement du jumelage sont décrits dans [0031](docs/architecture/0031-authentication-roles-and-pairing.md). Une nouvelle route est fermée par défaut ; ne l’ouvrir (`AllowAnonymous`, `AllowViewer`, `AllowNodeCredentials`) qu’avec une décision explicite et la mise à jour du test qui énumère les routes anonymes.
+
 ## Règles absolues de programmation de l’interface
 
 Les règles de [UI_RULES.md](UI_RULES.md) sont obligatoires pour toute conception ou modification de l’interface. Les lire avant de travailler sur l’interface et les appliquer sans contournement propre à une page. En cas de doute sur un besoin métier, demander plutôt qu’inventer. Toute évolution d’un socle ou composant commun doit examiner ses usages et signaler son impact.
@@ -124,7 +128,7 @@ Le testeur de flow est séparé du runtime : il explore une définition validée
 
 Consulter [0015 — Runtime et archives](docs/architecture/0015-flow-runtime-and-portable-archives.md). Les workers utilisent des baux de 60 secondes avec époque, réservations uniques par média et checkpoints transactionnels. Une invocation externe interrompue avant checkpoint exige une relance explicite. Les scripts et plugins nécessitent Linux Landlock et travaillent dans l’espace temporaire de l’exécution ; aucun repli sans restriction des fichiers n’est autorisé.
 
-La publication conserve la source et crée un résultat distinct dans .encoding-results/<executionId>/. Ne pas activer un remplacement automatique sans politique explicite et validation. Les volumes d’artefacts et sauvegardes doivent être partagés durablement par les serveurs d’un cluster multi-hôte. Le nettoyage automatique des artefacts n’est pas activé.
+La publication conserve la source et crée un résultat distinct dans .encoding-results/<executionId>/. Le remplacement de la source n'existe que par la politique de bibliothèque explicite (désactivée par défaut) de [0030](docs/architecture/0030-source-replacement-policy.md) : sauvegarde vérifiée, bascule atomique, restauration pendant la période de grâce. Les volumes d’artefacts et sauvegardes doivent être partagés durablement par les serveurs d’un cluster multi-hôte. Le nettoyage automatique des artefacts est désactivé par défaut ; une rétention explicite et simulable existe, voir [0029](docs/architecture/0029-operations-observability-and-retention.md) (santé, métriques Prometheus, journaux JSON, migrations versionnées avec empreintes et numéros uniques). Exploitation : [supervision](docs/operations/monitoring.md), [sauvegarde et restauration](docs/operations/backup-restore.md).
 
 Le retrait d’un nœud révoque son identité sans supprimer l’historique et refuse les baux actifs ; voir [0017](docs/architecture/0017-node-removal-and-capability-detail.md). Ne pas réactiver implicitement une identité retirée via un heartbeat ou un enrôlement.
 

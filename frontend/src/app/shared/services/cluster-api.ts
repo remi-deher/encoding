@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { LibraryWorkflow, LibraryProcessingSettings } from '../models/library-workflow';
+import { EnrollmentWindow } from '../models/auth';
 import { NodeSchedule } from '../models/node-schedule';
 import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models/cluster';
 
@@ -64,5 +65,14 @@ export class ClusterApi {
   }
   listLibraries() {
     return this.http.get<readonly LibraryResponse[]>('/api/v1/libraries');
+  }
+  enrollmentWindow() {
+    return this.http.get<EnrollmentWindow>('/api/v1/nodes/enrollment-window');
+  }
+  openEnrollmentWindow(minutes: number) {
+    return this.http.put<EnrollmentWindow>('/api/v1/nodes/enrollment-window', { minutes });
+  }
+  closeEnrollmentWindow() {
+    return this.http.delete<void>('/api/v1/nodes/enrollment-window');
   }
 }

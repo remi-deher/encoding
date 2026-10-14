@@ -19,7 +19,7 @@ using Npgsql;
 
 namespace Encoding.Runtime.Tests;
 
-internal static class FlowSimulationTests
+internal static class FlowSimulationScenarios
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static JsonElement J<T>(T value) => JsonSerializer.SerializeToElement(value, Json);
@@ -100,7 +100,6 @@ internal static class FlowSimulationTests
             && normalized.GetProperty("format").GetProperty("duration").GetDecimal() == 1.5m, "MediaInfo codecs, numbers and languages match the native conditions.");
         await ImportAsync();
         await HttpAsync(registry, validator, new(J(basic), file));
-        Console.WriteLine("PASS: flow simulation, yes/no/error branches, explicit results, source/current metadata, variables, handoff defaults, invalid profiles and MediaInfo import.");
     }
     private static void ExpectArgument(Action action)
     {
