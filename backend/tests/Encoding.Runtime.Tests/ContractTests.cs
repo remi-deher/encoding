@@ -20,4 +20,7 @@ public sealed class ContractTests
         var (registry, validator, _) = Harness.Services();
         await FlowSimulationScenarios.RunAsync(registry, validator);
     }
+
+    [Fact]
+    public void OperationsMigrationCatalogMetricsAndRetentionOptionsAreValid() => OperationsScenarios.Run();
 }

@@ -37,7 +37,7 @@ internal static class Harness
         if (!condition) throw new InvalidOperationException(message);
     }
 
-    private static string RepositoryRoot()
+    internal static string RepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
             if (Directory.Exists(Path.Combine(directory.FullName, "backend", "migrations"))) return Path.Combine(directory.FullName, "backend");

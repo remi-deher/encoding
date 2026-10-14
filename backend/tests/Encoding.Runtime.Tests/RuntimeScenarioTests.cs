@@ -45,4 +45,7 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
 
     [MediaToolsFact]
     public Task H265PlanHandedOffBeforeExecution() => Scenarios.MediaRelayAsync(true);
+
+    [PostgresFact]
+    public Task OperationsMigrationsHealthAndArtifactRetention() => OperationsScenarios.RunDatabaseAsync(PostgresFixture.ConnectionString!);
 }

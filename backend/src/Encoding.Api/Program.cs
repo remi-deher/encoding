@@ -4,6 +4,7 @@ using Encoding.Contracts.Executions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Encoding.Api.Infrastructure;
+using Encoding.Api.Infrastructure.Operations;
 using Encoding.Api.Nodes;
 using Encoding.Api.Libraries;
 using Encoding.Api.Plugins;
@@ -13,6 +14,7 @@ using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddOperations();
 var pluginKeyDirectory = builder.Configuration["PluginSettings:KeyDirectory"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "data", "plugin-keys");
 Directory.CreateDirectory(pluginKeyDirectory);
@@ -66,7 +68,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 // Fail startup if the bundled installed catalog is invalid or missing.
 app.Services.GetRequiredService<FlowComponentRegistry>();
-await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping);
+await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
+
+app.UseRequestObservability();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -79,7 +83,7 @@ app.MapFlowSimulationEndpoints();
 app.MapPluginConfigurationEndpoints();
 app.MapRuntimeEndpoints();
 
-app.MapHealthEndpoints();
+app.MapOperationsEndpoints();
 
 app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();
