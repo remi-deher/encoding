@@ -51,6 +51,11 @@ import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-fi
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { NotificationService } from '../../shared/services/notification.service';
 import {
+  DetailCard,
+  DetailCardGridComponent,
+  DetailCardIcon,
+} from '../../shared/ui/detail-card-grid.component';
+import {
   LibraryNodeAccessFormComponent,
   LibraryNodeAccessOption,
   LibraryNodeAccessValue,
@@ -110,6 +115,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
   imports: [
     DataTableComponent,
     DetailFieldListComponent,
+    DetailCardGridComponent,
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     MatButtonModule,
@@ -542,63 +548,114 @@ export class NodeCatalogPageComponent {
       },
     ];
   });
-  protected readonly capabilityRows = computed<readonly DataTableRow[]>(() =>
-    (this.rawNode()?.capabilities ?? []).map((tool) => ({
-      id: tool.toolId,
-      name: tool.toolId,
-      version: tool.version,
-      category: tool.toolId.startsWith('plugin/') ? 'Plugin' : 'Outil',
-      media: tool.mediaTypes.join(' · ') || 'Non déclaré',
-      acceleration: tool.accelerationTypes.join(' · ') || 'Aucune déclarée',
-      encoders: tool.encoders
-        ? [...new Set(tool.encoders)].filter((name) => name !== '=').length
-        : 'Non déclarés',
-      verifiedEncoders: tool.encoderChecks
-        ? `${tool.encoderChecks.filter((check) => check.status === 'usable').length} utilisable(s) · ${tool.encoderChecks.filter((check) => check.status === 'detected').length} détecté(s)`
-        : 'Vérification non déclarée',
-    })),
-  );
-  protected readonly capabilityColumns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Outil / Plugin' },
-    { key: 'version', label: 'Version' },
-    { key: 'media', label: 'Médias' },
-    { key: 'acceleration', label: 'Accélération vérifiée' },
-    { key: 'encoders', label: 'Encodeurs' },
-    { key: 'verifiedEncoders', label: 'Encodeurs vérifiés' },
-  ];
-  protected readonly capabilityActions: readonly DataTableRowAction[] = [
-    {
-      id: 'encoders',
-      label: 'Voir les encodeurs',
-      visibleWhen: (row) => Number(row['encoders']) > 0,
-    },
-  ];
-  protected showEncoders(event: DataTableActionEvent): void {
-    const tool = this.rawNode()?.capabilities.find((tool) => tool.toolId === event.row['id']);
-    if (!tool) return;
-    this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: tool.toolId + ' · État des encodeurs',
-        mode: 'information',
-        items: [...new Set(tool.encoders ?? [])]
-          .filter((name) => name !== '=')
-          .sort()
-          .map((name) => {
-            const check = tool.encoderChecks?.find((item) => item.encoderId === name);
+  protected readonly capabilityCards = computed<readonly DetailCard[]>(() =>
+    (this.rawNode()?.capabilities ?? []).map((tool) => {
+      const isPlugin = tool.toolId.startsWith('plugin/');
+      const accelerationTypes = isPlugin
+        ? []
+        : tool.accelerationTypes.filter((value) => value !== 'process');
+      const encoders = [...new Set(tool.encoders ?? [])]
+        .filter((name) => name !== '=')
+        .sort((left, right) => left.localeCompare(right));
+      const checks = new Map((tool.encoderChecks ?? []).map((check) => [check.encoderId, check]));
+      const usableCount =
+        tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
+      const detectedCount =
+        tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
+      const sections: DetailCard['sections'][number][] = [];
+
+      if (accelerationTypes.length) {
+        sections.push({
+          title: 'Accélérations vérifiées',
+          items: accelerationTypes.map((name) => ({
+            label: this.capabilityLabel(name),
+            description: 'Test synthétique réussi',
+            tone: 'success',
+          })),
+        });
+      }
+
+      if (encoders.length) {
+        sections.push({
+          title: 'Encodeurs vidéo détectés',
+          items: encoders.map((name) => {
+            const check = checks.get(name);
             return {
               label: name,
-              detail:
+              description:
                 check?.status === 'usable'
-                  ? 'Vérifié utilisable par un encodage synthétique'
+                  ? 'Utilisable · test réussi'
                   : check?.status === 'detected'
-                    ? 'Détecté, mais le test d’encodage n’a pas réussi'
-                    : 'Déclaré par FFmpeg · capacité non vérifiée',
+                    ? 'Test non concluant'
+                    : 'Détecté · non vérifié',
+              tone: check?.status === 'usable' ? 'success' : check ? 'warning' : 'neutral',
             };
           }),
-        message:
-          'Les vérifications utilisent une image synthétique et ne lisent aucun média de la bibliothèque.',
-      },
-    });
+        });
+      }
+
+      if (isPlugin) {
+        sections.push({
+          title: 'Plugin',
+          items: [
+            {
+              label: this.capabilityTitle(tool.toolId),
+              description: 'Manifeste lu par le worker',
+              tone: 'accent',
+            },
+          ],
+        });
+      }
+
+      const tags: DetailCard['tags'][number][] = accelerationTypes.map((name) => ({
+        label: `${this.capabilityLabel(name)} utilisable`,
+        tone: 'success',
+      }));
+      if (usableCount)
+        tags.push({ label: `${usableCount} encodeur(s) utilisable(s)`, tone: 'success' });
+      if (detectedCount)
+        tags.push({ label: `${detectedCount} test(s) non concluant(s)`, tone: 'warning' });
+      if (!tags.length)
+        tags.push({ label: isPlugin ? 'Plugin déclaré' : 'Outil détecté', tone: 'neutral' });
+
+      return {
+        id: tool.toolId,
+        title: this.capabilityTitle(tool.toolId),
+        subtitle: `Version ${tool.version} · ${isPlugin ? 'Plugin' : 'Outil'}`,
+        icon: this.capabilityIcon(tool.toolId),
+        status: { label: isPlugin ? 'Déclaré' : 'Détecté', tone: isPlugin ? 'accent' : 'neutral' },
+        tags,
+        sections,
+        initiallyExpanded: tool.toolId === 'ffmpeg',
+      };
+    }),
+  );
+
+  private capabilityTitle(toolId: string): string {
+    const pluginName = toolId.startsWith('plugin/') ? toolId.slice('plugin/'.length) : toolId;
+    const labels: Readonly<Record<string, string>> = {
+      ffmpeg: 'FFmpeg',
+      ffprobe: 'FFprobe',
+      mkvtoolnix: 'MKVToolNix',
+      mediainfo: 'MediaInfo',
+      imagemagick: 'ImageMagick',
+      javascript: 'JavaScript',
+      python: 'Python',
+    };
+    return (
+      labels[pluginName] ?? pluginName.charAt(0).toLocaleUpperCase('fr-FR') + pluginName.slice(1)
+    );
+  }
+
+  private capabilityIcon(toolId: string): DetailCardIcon {
+    if (toolId.startsWith('plugin/')) return 'plugin';
+    if (toolId === 'imagemagick') return 'image';
+    if (toolId === 'ffmpeg') return 'video';
+    return 'tool';
+  }
+
+  private capabilityLabel(value: string): string {
+    return value.toLocaleUpperCase('fr-FR');
   }
   protected readonly nodeActions: readonly DataTableRowAction[] = [
     { id: 'identity', label: 'Nom et étiquettes', visibleWhen: () => this.isAdmin() },
