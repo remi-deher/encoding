@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { LibraryWorkflow, LibraryProcessingSettings } from '../models/library-workflow';
+import { NodeSchedule } from '../models/node-schedule';
 import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models/cluster';
 
 @Injectable({ providedIn: 'root' })
@@ -25,10 +26,16 @@ export class ClusterApi {
   nodeProcessing(id: string) {
     return this.http.get<NodeProcessingSettings>('/api/v1/nodes/' + id + '/processing');
   }
-  saveNodeProcessing(id: string, maxConcurrentTasks: number | null, expectedRevision: number) {
+  saveNodeProcessing(
+    id: string,
+    maxConcurrentTasks: number | null,
+    expectedRevision: number,
+    schedule: NodeSchedule,
+  ) {
     return this.http.put<void>('/api/v1/nodes/' + id + '/processing', {
       maxConcurrentTasks,
       expectedRevision,
+      schedule,
     });
   }
   libraryWorkflow(id: string) {

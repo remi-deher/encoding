@@ -13,6 +13,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
+import { BadgeListComponent } from './badge-list.component';
 import { splitBadges } from '../models/media-badges';
 import {
   ConfirmationDialogComponent,
@@ -84,7 +85,7 @@ export interface DataTableListActionEvent {
 
 @Component({
   selector: 'app-data-table',
-  imports: [MatCheckboxModule, MatDialogModule, MatSortModule, MatTableModule],
+  imports: [BadgeListComponent, MatCheckboxModule, MatDialogModule, MatSortModule, MatTableModule],
   template: `
     <div class="table-scroll-region">
       @if (listActions().length) {
@@ -212,13 +213,7 @@ export interface DataTableListActionEvent {
                   }
                 </div>
               } @else if (column.badges) {
-                <span class="cell-badges">
-                  @for (badge of badgesOf(row[column.key]); track $index) {
-                    <span class="cell-badge">{{ badge }}</span>
-                  } @empty {
-                    —
-                  }
-                </span>
+                <app-badge-list [badges]="badgesOf(row[column.key])" />
               } @else if (rowOpenable() && isFirst) {
                 <button
                   class="row-open"

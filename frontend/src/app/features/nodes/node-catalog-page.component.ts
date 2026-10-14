@@ -6,8 +6,11 @@ import {
   LibraryResponse,
   NodeToolCapability,
   NodeActivityResponse,
+  NodeProcessingSettings,
   NODE_ROLE_LABELS,
 } from '../../shared/models/cluster';
+import { NodeSchedule } from '../../shared/models/node-schedule';
+import { WeeklyScheduleFormComponent } from '../../shared/ui/weekly-schedule-form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
@@ -112,6 +115,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     RecordFormComponent,
     LibraryNodeAccessFormComponent,
     DrawerActionButtonComponent,
+    WeeklyScheduleFormComponent,
   ],
   templateUrl: './node-catalog-page.component.html',
   styleUrl: './node-catalog-page.component.scss',
@@ -138,7 +142,7 @@ export class NodeCatalogPageComponent {
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
   protected readonly actionType = signal<
-    'enrollment' | 'library-access' | 'create-library' | 'processing'
+    'enrollment' | 'library-access' | 'create-library' | 'processing' | 'schedule'
   >('enrollment');
   protected readonly nodeLibraryLoading = signal(false);
   protected readonly accessFormBusy = signal(false);
@@ -234,6 +238,9 @@ export class NodeCatalogPageComponent {
   );
   protected readonly processingForm = signal<RecordFormData | null>(null);
   private processingRevision = 0;
+  private processingSettings: NodeProcessingSettings | null = null;
+  protected readonly scheduleBusy = signal(false);
+  protected readonly scheduleValue = signal<NodeSchedule | null>(null);
   protected async configureNodeProcessing(): Promise<void> {
     const node = this.rawNode();
     if (!node || this.removalBusy()) return;
@@ -241,6 +248,7 @@ export class NodeCatalogPageComponent {
       const settings = await firstValueFrom(this.clusterApi.nodeProcessing(node.id));
       if (this.rawNode()?.id !== node.id) return;
       this.processingRevision = settings.revision;
+      this.processingSettings = settings;
       this.processingForm.set({
         title: 'Limite globale du nœud',
         description:
@@ -270,6 +278,43 @@ export class NodeCatalogPageComponent {
       this.notifications.show('Impossible de charger la limite du nœud.');
     }
   }
+  protected async configureNodeSchedule(): Promise<void> {
+    const node = this.rawNode();
+    if (!node || this.removalBusy()) return;
+    try {
+      const settings = await firstValueFrom(this.clusterApi.nodeProcessing(node.id));
+      if (this.rawNode()?.id !== node.id) return;
+      this.processingRevision = settings.revision;
+      this.processingSettings = settings;
+      this.scheduleValue.set(settings.schedule);
+      this.actionType.set('schedule');
+      this.actionOpen.set(true);
+    } catch {
+      this.notifications.show('Impossible de charger le calendrier du nœud.');
+    }
+  }
+  protected async saveNodeSchedule(schedule: NodeSchedule): Promise<void> {
+    const node = this.rawNode();
+    const settings = this.processingSettings;
+    if (!node || !settings || this.scheduleBusy()) return;
+    this.scheduleBusy.set(true);
+    try {
+      await firstValueFrom(
+        this.clusterApi.saveNodeProcessing(
+          node.id,
+          settings.maxConcurrentTasks,
+          this.processingRevision,
+          schedule,
+        ),
+      );
+      this.actionOpen.set(false);
+      this.notifications.show('Calendrier du nœud enregistré.');
+    } catch {
+      this.notifications.show('Calendrier invalide ou configuration modifiée ailleurs.');
+    } finally {
+      this.scheduleBusy.set(false);
+    }
+  }
   protected async saveNodeProcessing(values: Record<string, string>): Promise<void> {
     const node = this.rawNode();
     if (!node) return;
@@ -279,6 +324,7 @@ export class NodeCatalogPageComponent {
           node.id,
           values['maximum'] ? Number(values['maximum']) : null,
           this.processingRevision,
+          this.processingSettings!.schedule,
         ),
       );
       this.actionOpen.set(false);
@@ -452,7 +498,9 @@ export class NodeCatalogPageComponent {
       });
   }
   protected readonly actionTitle = computed(() =>
-    this.actionType() === 'processing'
+    this.actionType() === 'schedule'
+      ? 'Calendrier du nœud'
+      : this.actionType() === 'processing'
       ? 'Limite globale du nœud'
       : this.actionType() === 'library-access'
         ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
@@ -461,7 +509,9 @@ export class NodeCatalogPageComponent {
           : this.createFormData.title,
   );
   protected readonly actionDescription = computed(() =>
-    this.actionType() === 'processing'
+    this.actionType() === 'schedule'
+      ? 'Plages horaires pendant lesquelles ce nœud peut démarrer de nouveaux traitements.'
+      : this.actionType() === 'processing'
       ? 'Plafond simultané, toutes bibliothèques confondues.'
       : this.actionType() === 'library-access'
         ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
