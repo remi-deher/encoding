@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Le test d’intégration des plugins relance l’hôte de test comme exécuteur du bac à sable (argument isolated-process). -->
+    <InternalsVisibleTo Include="Encoding.Plugins.Tests" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Haukcode.Mdns" Version="1.0.21" />

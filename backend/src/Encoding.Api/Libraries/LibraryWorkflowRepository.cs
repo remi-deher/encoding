@@ -144,7 +144,9 @@ public sealed class LibraryWorkflowRepository(NpgsqlDataSource dataSource,FlowDe
     }
     public Task<(int Queued,int Skipped)?> EnqueueAsync(Guid library,IReadOnlyList<Guid> ids,int assignmentRevision,CancellationToken ct)=>QueueAsync(library,ids,assignmentRevision,false,ct);
     public async Task EnqueueAutomaticallyAsync(Guid library,CancellationToken ct)=>await QueueAsync(library,[],null,true,ct);
-    private async Task<(int Queued,int Skipped)?> QueueAsync(Guid library,IReadOnlyList<Guid> ids,int? assignmentRevision,bool automatic,CancellationToken ct)
+    /// <summary>Mise en file déclenchée par un service externe : fichiers choisis, flow actuellement attribué, sans retraiter une empreinte déjà reçue.</summary>
+    public Task<(int Queued,int Skipped)?> EnqueueTriggeredAsync(Guid library,IReadOnlyList<Guid> ids,CancellationToken ct)=>QueueAsync(library,ids,null,false,ct,true);
+    private async Task<(int Queued,int Skipped)?> QueueAsync(Guid library,IReadOnlyList<Guid> ids,int? assignmentRevision,bool automatic,CancellationToken ct,bool skipReceipted=false)
     {
         if(!automatic && (ids.Count is <1 or >10000 || ids.Distinct().Count()!=ids.Count)) return null;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
@@ -159,9 +161,9 @@ public sealed class LibraryWorkflowRepository(NpgsqlDataSource dataSource,FlowDe
             enabled.Parameters.AddWithValue("id",library);if(!(bool)(await enabled.ExecuteScalarAsync(ct))!)return null;
         }
         var files=new List<(Guid Id,string Path,long Bytes,DateTimeOffset Modified)>();
-        await using(var select=new NpgsqlCommand("SELECT m.id,m.relative_path,m.byte_length,m.modified_at FROM library_media m WHERE m.library_id=@library           AND (NOT @automatic AND m.id=ANY(@ids) OR @automatic AND m.stable_since<=clock_timestamp()-interval '30 seconds' AND m.modified_at<=clock_timestamp()-interval '30 seconds'           AND NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at))           ORDER BY m.relative_path LIMIT 10000",c,tx))
+        await using(var select=new NpgsqlCommand("SELECT m.id,m.relative_path,m.byte_length,m.modified_at FROM library_media m WHERE m.library_id=@library           AND (NOT @automatic AND m.id=ANY(@ids) AND (NOT @skipReceipted OR NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at)) OR @automatic AND m.stable_since<=clock_timestamp()-interval '30 seconds' AND m.modified_at<=clock_timestamp()-interval '30 seconds'           AND NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at))           ORDER BY m.relative_path LIMIT 10000",c,tx))
         {
-            select.Parameters.AddWithValue("automatic",automatic);select.Parameters.AddWithValue("flow",flow.Id);select.Parameters.AddWithValue("version",flow.Version);select.Parameters.AddWithValue("library",library); select.Parameters.AddWithValue("ids",ids.ToArray());
+            select.Parameters.AddWithValue("automatic",automatic);select.Parameters.AddWithValue("skipReceipted",skipReceipted);select.Parameters.AddWithValue("flow",flow.Id);select.Parameters.AddWithValue("version",flow.Version);select.Parameters.AddWithValue("library",library); select.Parameters.AddWithValue("ids",ids.ToArray());
             await using var r=await select.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) files.Add((r.GetGuid(0),r.GetString(1),r.GetInt64(2),r.GetFieldValue<DateTimeOffset>(3)));
         }
         if(!automatic && files.Count!=ids.Count || files.Any(file=>!LibraryMediaTypes.Matches(file.Path,flow.MediaType))) return null;

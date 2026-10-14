@@ -42,6 +42,9 @@ builder.Services.AddSingleton<FlowComponentPackRepository>();
 builder.Services.AddSingleton<EncodingProfileRepository>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
 builder.Services.AddSingleton<PluginConnectionTester>();
+builder.Services.AddSingleton<IntegrationTriggerRepository>();
+builder.Services.AddSingleton<IntegrationTriggerService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<IntegrationTriggerService>());
 builder.Services.AddHttpClient("PluginConnectionTest", client => client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<RuntimeEligibility>();
@@ -77,6 +80,7 @@ app.MapFlowComponentPackEndpoints();
 app.MapEncodingProfileEndpoints();
 app.MapFlowSimulationEndpoints();
 app.MapPluginConfigurationEndpoints();
+app.MapArrWebhookEndpoints();
 app.MapRuntimeEndpoints();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))

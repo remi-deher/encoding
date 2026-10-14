@@ -1,0 +1,86 @@
+# Plugins d’intégration
+
+Un plugin ajoute des composants de flow (actions, conditions) fournis par un processus séparé. Le contrat est décrit dans [0012](../../docs/architecture/0012-flow-engine-foundation.md) et [0015](../../docs/architecture/0015-flow-runtime-and-portable-archives.md) ; les plugins Sonarr/Radarr et ce SDK dans [0032](../../docs/architecture/0032-integration-plugins-and-sdk.md).
+
+```
+sdk/encoding_plugin_sdk.py   SDK Python (un seul fichier, bibliothèque standard)
+arr/plugin.py                Sonarr et Radarr (python3 plugin.py sonarr|radarr)
+example/                     plugin tiers minimal : plugin.py + manifest.json
+tests/                       tests Python (python3 -m unittest discover -s backend/plugins/tests)
+```
+
+## Modèle d’exécution
+
+- Un plugin est un programme lancé **à chaque appel** par le worker, qui lui transmet une requête JSON d’une ligne sur stdin et lit une réponse JSON d’une ligne sur stdout.
+- Il s’exécute sous Linux Landlock : écriture seulement dans son espace temporaire, lecture des exécutables et dépendances déclarés, pas d’accès au jeton du nœud ni aux montages média. Le réseau reste disponible (HTTP/HTTPS, DNS).
+- Ne lisez pas `/proc` ni `/sys` : un exécutable .NET/CoreCLR ne démarre pas dans ce bac à sable (voir 0032). Python 3 de la bibliothèque standard fonctionne ; Node.js dépend de sa configuration OpenSSL.
+- Un plugin ne choisit jamais de chemin de publication et ne déclare pas une tâche terminée : l’hôte analyse et valide les sorties.
+
+## Écrire un plugin
+
+1. **Manifeste** (`manifest.json`) : identité, version, contrat hôte `[1]`, composants (id, version, type `action`/`condition`, médias compatibles, sorties, schéma de configuration déclaratif). Voir `example/manifest.json`. Le plugin ne fournit aucun code d’interface : le formulaire est rendu à partir du schéma (`text`, `number`, `boolean`, `select`, et `secret` pour la configuration du plugin).
+2. **Code** (`plugin.py`) :
+
+```python
+from encoding_plugin_sdk import Plugin, Outcome, InfrastructureError
+
+plugin = Plugin(manifest)            # dict chargé depuis manifest.json
+
+@plugin.component("example-tag-file")
+def tag_file(ctx):
+    nom = ctx.text("name")                       # paramètre de l'instance du composant
+    adresse = ctx.plugin_text("baseUrl")         # configuration effective du plugin
+    # ctx.media_path, ctx.library_id, ctx.variables : fichier traité et variables du flow
+    return Outcome.output("success", "terminé", variables={"nom": "valeur"})
+
+if __name__ == "__main__":
+    raise SystemExit(plugin.run())
+```
+
+   - Retournez une **sortie déclarée** pour un résultat métier attendu (« introuvable » → sortie `notFound`/`error`).
+   - Levez `InfrastructureError` pour une panne technique (service injoignable, authentification refusée) : le processus se termine en code 1, l’hôte considère l’effet incertain et n’en fait jamais une sortie métier.
+   - N’écrivez aucun secret sur stdout/stderr. Les clés ne passent que par la configuration du plugin (`secret`, chiffrée en base).
+3. **Idempotence** : une invocation peut être relancée après une perte de bail ; préférez des effets idempotents (une commande de relecture l’est, un ajout ne l’est pas).
+
+## Protocole (contrat 1)
+
+```json
+{"type":"describe","contractVersion":1}
+→ le manifeste (PluginManifest)
+
+{"type":"execute","contractVersion":1,"invocation":{ "invocationId":"…","leaseEpoch":3,
+  "component":{"pluginId":"example","pluginVersion":"1.0.0","componentId":"example-tag-file","componentVersion":"1.0.0","configurationSchemaVersion":1},
+  "configuration":{…},"pluginConfiguration":{…},
+  "context":{"mediaPath":"Show/S01/e1.mkv","libraryId":"…","variables":{…},"currentArtifactId":"current.mkv"}}}
+→ {"contractVersion":1,"invocationId":"…","leaseEpoch":3,"outputId":"success","terminalResult":null,
+   "variableChanges":{…},"candidateArtifactId":null,"detail":"…"}
+```
+
+Exactement un de `outputId` ou `terminalResult` (`unchanged`, `success`, `failed`, `deferred`). Le SDK vérifie la version du contrat, l’identité du plugin, le composant et la sortie déclarée ; l’hôte contrôle de nouveau l’identité de l’invocation et l’époque du bail.
+
+## Installer un plugin tiers
+
+- **Serveur** : copier le manifeste dans le dossier `FlowPlugins:ManifestDirectory` (variable `FlowPlugins__ManifestDirectory`) et redémarrer. Le catalogue valide le manifeste ; les composants apparaissent dans l’éditeur.
+- **Chaque worker** qui doit exécuter le plugin : installer les fichiers hors du dossier de données du nœud (par exemple `/opt/encoding/plugins/mon-plugin`) et déclarer :
+
+```
+Runtime__Plugins__0__Id=mon-plugin
+Runtime__Plugins__0__Version=1.0.0
+Runtime__Plugins__0__Executable=/usr/bin/python3
+Runtime__Plugins__0__Arguments__0=-B
+Runtime__Plugins__0__Arguments__1=/opt/encoding/plugins/mon-plugin/plugin.py
+Runtime__Plugins__0__ReadOnlyPaths__0=/opt/encoding/plugins/mon-plugin
+```
+
+  La version déclarée doit être celle du manifeste. Le worker n’annonce la capacité `plugin/mon-plugin` que si la poignée de main réussit ; un flow qui utilise le plugin n’est attribué qu’aux workers qui l’ont. Copiez `encoding_plugin_sdk.py` à côté de `plugin.py` (ou dans un dossier ajouté à `ReadOnlyPaths`).
+
+## Sonarr et Radarr
+
+Dans **Plugins**, configurer le plugin (adresse, clé API, test de connexion), puis :
+
+- **Correspondance des chemins** : une ligne par bibliothèque Encoding, `identifiant-bibliothèque=/chemin/vu/par/Sonarr` (par exemple `3f2c…=/tv`). Elle sert au déclencheur et aux composants à retrouver le fichier traité.
+- **Secret du webhook** : une valeur aléatoire longue.
+- Dans Sonarr/Radarr, **Paramètres → Connexions → Webhook**, événement **À l’import** (et **Mise à niveau**) : URL `http://<serveur-encoding>:8080/api/v1/integrations/sonarr/webhook` (ou `radarr`), méthode POST, mot de passe = secret du webhook (nom d’utilisateur libre) ; le bouton Tester doit répondre OK.
+- Attribuer à la bibliothèque un flow publié : à chaque import, le fichier est découvert puis traité par ce flow.
+
+Composants : Sonarr — *Actualiser une série*, *Rechercher les épisodes manquants*, *Vérifier l’épisode* ; Radarr — *Actualiser un film*, *Rechercher le film*, *Vérifier le film*. Sans identifiant dans le composant, l’élément est celui qui contient le fichier traité.

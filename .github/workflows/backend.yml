@@ -23,7 +23,11 @@ jobs:
       - uses: actions/checkout@v4
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
-      - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg mediainfo
+      - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg mediainfo python3
+      - run: python3 -m unittest discover -s backend/plugins/tests -v
       - run: dotnet run --project backend/tests/Encoding.Runtime.Tests --configuration Release
+        env:
+          ENCODING_TEST_DATABASE: Host=postgres;Database=encoding_test;Username=encoding;Password=encoding_test
+      - run: dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
         env:
           ENCODING_TEST_DATABASE: Host=postgres;Database=encoding_test;Username=encoding;Password=encoding_test

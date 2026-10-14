@@ -21,6 +21,20 @@
         "type": "secret",
         "label": "Clé API Sonarr",
         "required": true
+      },
+      {
+        "id": "pathMappings",
+        "type": "text",
+        "label": "Correspondance des chemins",
+        "description": "Une ligne par bibliothèque Encoding : identifiant-bibliothèque=/chemin/vu/par/Sonarr. Active le déclencheur d’import (POST /api/v1/integrations/sonarr/webhook) et permet aux composants de retrouver le fichier traité.",
+        "multiline": true,
+        "placeholder": "00000000-0000-0000-0000-000000000000=/tv"
+      },
+      {
+        "id": "webhookSecret",
+        "type": "secret",
+        "label": "Secret du webhook",
+        "description": "Mot de passe (authentification de base, utilisateur quelconque) ou en-tête X-Encoding-Webhook-Secret à configurer dans la connexion Webhook de Sonarr."
       }
     ]
   },
@@ -29,7 +43,7 @@
       "id": "sonarr-refresh-series",
       "version": "1.0.0",
       "name": "Actualiser une série Sonarr",
-      "description": "Synchronise le statut de la série après traitement.",
+      "description": "Demande à Sonarr de relire les fichiers du série qui contient le fichier traité.",
       "kind": "action",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
@@ -39,12 +53,12 @@
         {
           "id": "success",
           "label": "Suite",
-          "description": "Le composant a terminé son traitement."
+          "description": "Sonarr a accepté la demande."
         },
         {
           "id": "error",
           "label": "Erreur",
-          "description": "Le composant n’a pas pu terminer son traitement."
+          "description": "Le série est introuvable ou la configuration est incomplète."
         }
       ],
       "configurationSchema": {
@@ -89,9 +103,10 @@
             "id": "episodeId",
             "type": "number",
             "label": "ID de l’épisode Sonarr",
-            "required": true,
+            "required": false,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "description": "Laisser vide pour vérifier le fichier traité."
           }
         ]
       },
@@ -128,9 +143,10 @@
             "id": "seriesId",
             "type": "number",
             "label": "ID de la série Sonarr",
-            "required": true,
+            "required": false,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "description": "Laisser vide pour utiliser le série qui contient le fichier traité."
           }
         ]
       },

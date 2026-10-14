@@ -21,6 +21,10 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
             : ToResponse(plugin, 0, new Dictionary<string, JsonElement>());
     }
 
+    /// <summary>Valeurs globales déchiffrées, secrets compris, pour un usage serveur uniquement (jamais renvoyées à un client).</summary>
+    public Task<Dictionary<string, JsonElement>> ReadGlobalValuesAsync(PluginManifest plugin, CancellationToken ct) =>
+        ReadAsync("SELECT encrypted_values FROM plugin_configurations WHERE plugin_id=@id", "id", plugin.Id, ct);
+
     public async Task<PluginConfigurationResponse?> GetFlowAsync(Guid flowId, PluginManifest plugin, CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("SELECT revision,encrypted_values FROM flow_plugin_configurations WHERE flow_id=@flow AND plugin_id=@plugin");
@@ -40,6 +44,7 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
         var validation = Validate(plugin.ConfigurationSchema, values, requireRequired: true);
         if (validation is not null) throw new PluginConfigurationValidationException(validation);
         ValidateNodeDefaults(plugin, values, requireTarget: true);
+        ValidatePathMappings(values);
 
         await using var command = dataSource.CreateCommand("""
             INSERT INTO plugin_configurations(plugin_id,revision,encrypted_values)
@@ -77,6 +82,7 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
         var validation = Validate(plugin.ConfigurationSchema, values, requireRequired: false);
         if (validation is not null) throw new PluginConfigurationValidationException(validation);
         ValidateNodeDefaults(plugin, values, requireTarget: false);
+        ValidatePathMappings(values);
 
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
@@ -224,6 +230,13 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
             }
         }
         return null;
+    }
+
+    private static void ValidatePathMappings(IReadOnlyDictionary<string, JsonElement> values)
+    {
+        if (!values.TryGetValue("pathMappings", out var mappings) || mappings.ValueKind != JsonValueKind.String) return;
+        try { LibraryPathMapping.Parse(mappings.GetString()); }
+        catch (FormatException exception) { throw new PluginConfigurationValidationException(exception.Message); }
     }
 
     private static void ValidateNodeDefaults(PluginManifest plugin,IReadOnlyDictionary<string,JsonElement> values,bool requireTarget)

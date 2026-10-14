@@ -106,8 +106,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     category: 'Intégration *ARR',
     version: '1.0.0',
     components: 'Actualisation, vérification et recherche d’épisodes',
-    runtime: 'Processus plugin à configurer sur le worker',
-    configuration: 'Configuration globale et test de connexion',
+    runtime: 'Processus plugin livré avec l’image worker (déclaré dans Runtime:Plugins)',
+    configuration: 'Connexion, correspondance des chemins, déclencheur d’import (webhook) et test de connexion',
     state: 'Catalogue intégré',
   },
   {
@@ -118,8 +118,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     category: 'Intégration *ARR',
     version: '1.0.0',
     components: 'Actualisation, vérification et recherche de films',
-    runtime: 'Processus plugin à configurer sur le worker',
-    configuration: 'Configuration globale et test de connexion',
+    runtime: 'Processus plugin livré avec l’image worker (déclaré dans Runtime:Plugins)',
+    configuration: 'Connexion, correspondance des chemins, déclencheur d’import (webhook) et test de connexion',
     state: 'Catalogue intégré',
   },
 ];

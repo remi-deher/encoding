@@ -29,3 +29,14 @@ La suite couvre aussi les conditions structurées : groupes ET / OU, types et do
 Le testeur de flow est couvert sans lancer de traitement : branches et reconvergence, probes/variables, résultats fictifs de transformation, conservation de l’origine, relais avec paramètres hérités, plan non exécuté, contrats HTTP et erreurs de profil. Un fichier synthétique vérifie MediaInfo et l’intégrité de la source ; saturation et annulation vérifient la libération des ressources.
 
 La suite vérifie également les publications inchangées et concurrentes, l’absence de nouvelles sauvegardes, la concurrence des brouillons, les modifications réelles, la version exacte retournée par l’API et la conservation des versions identiques lors d’un import d’archives.
+
+## Plugins et déclencheur d’import
+
+`backend/tests/Encoding.Plugins.Tests` vérifie la correspondance des chemins, l’analyse des webhooks Sonarr/Radarr, l’acceptation des manifestes par le catalogue, l’exécution du plugin Sonarr par `PluginProcessHost` dans le bac à sable (ignorée si Landlock ou python3 est absent) et, avec `ENCODING_TEST_DATABASE`, le déclencheur sur PostgreSQL :
+
+```powershell
+dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
+python3 -m unittest discover -s backend/plugins/tests -v
+```
+
+Les tests Python lancent le SDK, le plugin d’exemple et les plugins Sonarr/Radarr comme processus réels contre un faux service HTTP local ; ils n’utilisent aucun service personnel.

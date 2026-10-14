@@ -55,6 +55,21 @@ services:
       Node__HeartbeatIntervalSeconds: 10
       Worker__AutoAcceptEnrollment: ${WORKER_AUTO_ACCEPT_ENROLLMENT:-false}
       WorkerUi__Port: 8081
+      # Plugins Sonarr et Radarr livrés dans l'image (processus Python isolés par Landlock).
+      Runtime__Plugins__0__Id: sonarr
+      Runtime__Plugins__0__Version: 1.0.0
+      Runtime__Plugins__0__Executable: /usr/bin/python3
+      Runtime__Plugins__0__Arguments__0: -B
+      Runtime__Plugins__0__Arguments__1: /opt/encoding/plugins/arr/plugin.py
+      Runtime__Plugins__0__Arguments__2: sonarr
+      Runtime__Plugins__0__ReadOnlyPaths__0: /opt/encoding/plugins/arr
+      Runtime__Plugins__1__Id: radarr
+      Runtime__Plugins__1__Version: 1.0.0
+      Runtime__Plugins__1__Executable: /usr/bin/python3
+      Runtime__Plugins__1__Arguments__0: -B
+      Runtime__Plugins__1__Arguments__1: /opt/encoding/plugins/arr/plugin.py
+      Runtime__Plugins__1__Arguments__2: radarr
+      Runtime__Plugins__1__ReadOnlyPaths__0: /opt/encoding/plugins/arr
       WorkerUi__Origins: ${WORKER_UI_ORIGINS:-http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201,http://localhost:5080,http://127.0.0.1:5080}
     ports:
       - "127.0.0.1:5081:8081"

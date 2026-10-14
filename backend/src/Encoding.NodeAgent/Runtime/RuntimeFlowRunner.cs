@@ -167,7 +167,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     {
                         await EnsureScanAsync();
                         var invocation=new FlowStepInvocation(1,started.InvocationId,lease.ExecutionId,lease.Attempt,client.NodeId,lease.Epoch,node.Id,node.Component,c,
-                            new(sourceSha,Path.GetFileName(current),context.BeforeMetadata,context.CurrentMetadata,variables),DateTimeOffset.UtcNow.AddHours(6),
+                            new(sourceSha,Path.GetFileName(current),context.BeforeMetadata,context.CurrentMetadata,variables,lease.MediaPath,lease.LibraryId),DateTimeOffset.UtcNow.AddHours(6),
                             lease.PluginConfigurations?.GetValueOrDefault(node.Component.PluginId));
                         var response=await plugins.ExecuteAsync(invocation,directory,job.Token);
                         output=response.OutputId; terminal=response.TerminalResult?.ToString().ToLowerInvariant();

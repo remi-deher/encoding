@@ -13,6 +13,10 @@ RUN dotnet publish ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj --configur
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg mkvtoolnix mediainfo imagemagick nodejs python3 && rm -rf /var/lib/apt/lists/*
+# Plugins d'intégration livrés avec le worker (processus Python séparés, voir backend/plugins/README.md).
+# Le manifeste copié est le JSON que le serveur charge : une seule définition des composants.
+COPY plugins/sdk/encoding_plugin_sdk.py plugins/arr/plugin.py /opt/encoding/plugins/arr/
+COPY src/Encoding.Api/Flows/Catalog/sonarr.json src/Encoding.Api/Flows/Catalog/radarr.json /opt/encoding/plugins/arr/manifests/
 WORKDIR /app
 COPY --from=build /app/publish .
 EXPOSE 8081
