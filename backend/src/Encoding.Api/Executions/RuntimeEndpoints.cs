@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 using Encoding.Api.Flows;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Libraries;
@@ -20,7 +21,8 @@ public static class RuntimeEndpoints
             return File.Exists(path)?Results.File(path,"application/octet-stream",artifact.Name,enableRangeProcessing:true):Results.NotFound();
         });
         app.MapPost("/api/v1/media-executions",()=>Results.Json(new{title="Lancez les traitements depuis les fichiers détectés de la bibliothèque."},statusCode:410));
-        var group=app.MapGroup("/api/v1/runtime/nodes/{nodeId:guid}").WithTags("Runtime");
+        // Les workers s’authentifient par leur jeton de nœud (filtre ci-dessous), pas par une session utilisateur.
+        var group=app.MapGroup("/api/v1/runtime/nodes/{nodeId:guid}").AllowAnonymous().WithTags("Runtime");
         group.AddEndpointFilter(async(context,next)=>
         {
             var node=Guid.Parse((string)context.HttpContext.Request.RouteValues["nodeId"]!);

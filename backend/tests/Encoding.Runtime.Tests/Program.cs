@@ -64,6 +64,7 @@ internal static class Program
         var branch = flow with { Nodes = [.. flow.Nodes, Node(registry, "other", "base-variable", new() { ["name"] = J("x"), ["value"] = J("1") })], Connections = [.. flow.Connections, new("branch", "entry", "error", "other")] };
         Check(RuntimeHandoffPolicy.Segment(branch, "entry").Any(node => node.Id == "other"), "All possible branches within the segment are considered.");
         Console.WriteLine("PASS: relay contracts, segment eligibility, inheritance and old-agent compatibility.");
+        AuthTests.RunUnit();
 
         var connection = Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");
         if (string.IsNullOrWhiteSpace(connection))
@@ -71,6 +72,7 @@ internal static class Program
             Console.WriteLine("PostgreSQL tests require ENCODING_TEST_DATABASE; see README.md.");
             return;
         }
+        await AuthTests.RunAsync(connection);
         await using var fixture = await Fixture.CreateAsync(connection, registry, validator, eligibility);
         await fixture.FlowSavingAsync();
         await fixture.BackendRelayAsync(false);

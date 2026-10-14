@@ -97,6 +97,10 @@ Le catalogue initial des outils associés aux composants de flow est décrit dan
 - Documenter les nouvelles décisions d’architecture et mettre à jour ce fichier si les principes du projet évoluent.
 - Ne jamais lancer une commande de suppression, de remplacement ou de migration destructive sur des médias sans protection explicite et validation du résultat.
 
+## Authentification et rôles
+
+Toute route de gestion exige une session ; les rôles sont `admin` et `viewer` (lecture seule). Les routes joignables sans session, l’autorisation des workers par jeton de nœud et le durcissement du jumelage sont décrits dans [0031](docs/architecture/0031-authentication-roles-and-pairing.md). Une nouvelle route est fermée par défaut ; ne l’ouvrir (`AllowAnonymous`, `AllowViewer`, `AllowNodeCredentials`) qu’avec une décision explicite et la mise à jour du test qui énumère les routes anonymes.
+
 ## Règles absolues de programmation de l’interface
 
 Les règles de [UI_RULES.md](UI_RULES.md) sont obligatoires pour toute conception ou modification de l’interface. Les lire avant de travailler sur l’interface et les appliquer sans contournement propre à une page. En cas de doute sur un besoin métier, demander plutôt qu’inventer. Toute évolution d’un socle ou composant commun doit examiner ses usages et signaler son impact.

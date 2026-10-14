@@ -1,0 +1,128 @@
+using System.Security.Claims;
+using Encoding.Contracts.Auth;
+using Microsoft.AspNetCore.Authorization;
+
+namespace Encoding.Api.Auth;
+
+public static class AuthEndpoints
+{
+    public static void MapAuthEndpoints(this WebApplication app)
+    {
+        var auth = app.MapGroup("/api/v1/auth").WithTags("Authentification");
+        auth.MapGet("/status", async (HttpContext http, AuthService service, CancellationToken ct) =>
+            Results.Ok(new AuthStatusResponse(await service.SetupRequiredAsync(ct), Current(http.User))))
+            .AllowAnonymous().WithName("GetAuthStatus");
+
+        auth.MapPost("/setup", async (SetupRequest request, HttpContext http, AuthService service, AuthOptions options, CancellationToken ct) =>
+        {
+            var errors = AuthService.ValidateNewUser(request.Username, request.Password);
+            if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            var (outcome, _) = await service.SetupAsync(request, ct);
+            switch (outcome)
+            {
+                case SetupOutcome.InvalidSetupToken:
+                    return Results.Json(new { title = "Le jeton d’initialisation est invalide." }, statusCode: StatusCodes.Status403Forbidden);
+                case SetupOutcome.AlreadyConfigured:
+                    return Results.Conflict(new { title = "Le cluster possède déjà un administrateur." });
+            }
+            var login = await service.LoginAsync(request.Username, request.Password, ct);
+            if (login is null) return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "Le compte a été créé mais la session n’a pas pu être ouverte.");
+            SetSessionCookie(http, login.SessionToken, options);
+            return Results.Created("/api/v1/auth/me", login.User);
+        }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("SetupFirstAdministrator");
+
+        auth.MapPost("/login", async (LoginRequest request, HttpContext http, AuthService service, AuthOptions options, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrEmpty(request.Password) || request.Password.Length > AuthService.MaximumPasswordLength)
+                return Results.Json(new { title = "Identifiants invalides." }, statusCode: StatusCodes.Status401Unauthorized);
+            var login = await service.LoginAsync(request.Username, request.Password, ct);
+            if (login is null)
+                return Results.Json(new { title = "Identifiants invalides ou compte temporairement verrouillé." }, statusCode: StatusCodes.Status401Unauthorized);
+            SetSessionCookie(http, login.SessionToken, options);
+            return Results.Ok(login.User);
+        }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("Login");
+
+        auth.MapPost("/logout", async (HttpContext http, AuthService service, CancellationToken ct) =>
+        {
+            if (http.Request.Cookies.TryGetValue(SessionAuthentication.CookieName, out var token)) await service.LogoutAsync(token, ct);
+            http.Response.Cookies.Delete(SessionAuthentication.CookieName, new CookieOptions { Path = "/" });
+            return Results.NoContent();
+        }).AllowViewer().WithName("Logout");
+
+        auth.MapGet("/me", (HttpContext http) => Results.Ok(Current(http.User))).WithName("GetCurrentUser");
+
+        auth.MapPut("/password", async (ChangePasswordRequest request, HttpContext http, AuthService service, CancellationToken ct) =>
+        {
+            var errors = AuthService.ValidatePassword("newPassword", request.NewPassword);
+            if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            if (!http.Request.Cookies.TryGetValue(SessionAuthentication.CookieName, out var token)) return Results.Unauthorized();
+            var changed = await service.ChangePasswordAsync(Current(http.User)!.Id, request.CurrentPassword ?? string.Empty, request.NewPassword, token, ct);
+            return changed ? Results.NoContent() : Results.ValidationProblem(new Dictionary<string, string[]> { ["currentPassword"] = ["Le mot de passe actuel est incorrect."] });
+        }).AllowViewer().WithName("ChangeOwnPassword");
+
+        var users = app.MapGroup("/api/v1/users").WithTags("Utilisateurs").RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        users.MapGet("", async (UserRepository repository, CancellationToken ct) => Results.Ok(await repository.ListAsync(ct)))
+            .WithName("ListUsers");
+
+        users.MapPost("", async (CreateUserRequest request, UserRepository repository, CancellationToken ct) =>
+        {
+            var errors = AuthService.ValidateNewUser(request.Username, request.Password);
+            if (!Enum.IsDefined(request.Role)) errors["role"] = ["Le rôle est inconnu."];
+            if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            var created = await repository.CreateAsync(request.Username.Trim(), PasswordHasher.Hash(request.Password), request.Role, ct);
+            return created is null
+                ? Results.Conflict(new { title = "Ce nom d’utilisateur existe déjà." })
+                : Results.Created($"/api/v1/users/{created.Id}", created);
+        }).WithName("CreateUser");
+
+        users.MapPut("/{id:guid}", async (Guid id, UpdateUserRequest request, HttpContext http, UserRepository repository, CancellationToken ct) =>
+        {
+            if (!Enum.IsDefined(request.Role)) return (IResult)Results.ValidationProblem(new Dictionary<string, string[]> { ["role"] = ["Le rôle est inconnu."] });
+            if (id == Current(http.User)!.Id && (!request.IsActive || request.Role != UserRole.Admin))
+                return Results.Conflict(new { title = "Vous ne pouvez pas retirer vos propres droits d’administration ni désactiver votre compte." });
+            return await repository.UpdateAsync(id, request.Role, request.IsActive, ct) switch
+            {
+                UserChangeResult.Updated => Results.NoContent(),
+                UserChangeResult.LastAdministrator => Results.Conflict(new { title = "Le cluster doit conserver au moins un administrateur actif." }),
+                _ => Results.NotFound(),
+            };
+        }).WithName("UpdateUser");
+
+        users.MapPut("/{id:guid}/password", async (Guid id, ResetPasswordRequest request, AuthService service, CancellationToken ct) =>
+        {
+            var errors = AuthService.ValidatePassword("newPassword", request.NewPassword);
+            if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            return await service.ResetPasswordAsync(id, request.NewPassword, ct) ? Results.NoContent() : Results.NotFound();
+        }).WithName("ResetUserPassword");
+
+        users.MapDelete("/{id:guid}", async (Guid id, HttpContext http, UserRepository repository, CancellationToken ct) =>
+        {
+            if (id == Current(http.User)!.Id) return Results.Conflict(new { title = "Vous ne pouvez pas supprimer votre propre compte." });
+            return await repository.DeleteAsync(id, ct) switch
+            {
+                UserChangeResult.Updated => Results.NoContent(),
+                UserChangeResult.LastAdministrator => Results.Conflict(new { title = "Le cluster doit conserver au moins un administrateur actif." }),
+                _ => Results.NotFound(),
+            };
+        }).WithName("DeleteUser");
+    }
+
+    private static CurrentUserResponse? Current(ClaimsPrincipal principal) =>
+        principal.Identity?.IsAuthenticated == true
+            ? new CurrentUserResponse(
+                Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!),
+                principal.FindFirstValue(ClaimTypes.Name)!,
+                UserRepository.ParseRole(principal.FindFirstValue(ClaimTypes.Role)!))
+            : null;
+
+    private static void SetSessionCookie(HttpContext http, string token, AuthOptions options) =>
+        http.Response.Cookies.Append(SessionAuthentication.CookieName, token, new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Strict,
+            Secure = options.SecureCookie ?? http.Request.IsHttps,
+            Path = "/",
+            Expires = DateTimeOffset.UtcNow + options.SessionAbsoluteLifetime,
+            IsEssential = true,
+        });
+}

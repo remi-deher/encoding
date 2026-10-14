@@ -6,10 +6,18 @@ import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter, map, of, switchMap } from 'rxjs';
 import { PrimaryNavigationComponent } from '../navigation/primary-navigation.component';
+import { AuthService } from '../auth/auth.service';
+import { UserMenuComponent } from '../auth/user-menu.component';
 
 @Component({
   selector: 'app-shell',
-  imports: [MatToolbarModule, PrimaryNavigationComponent, RouterLink, RouterOutlet],
+  imports: [
+    MatToolbarModule,
+    PrimaryNavigationComponent,
+    RouterLink,
+    RouterOutlet,
+    UserMenuComponent,
+  ],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.scss',
 })
@@ -31,11 +39,17 @@ export class AppShellComponent {
   });
   protected readonly workerMode = computed(() => this.navigationEnd().workerMode);
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
+  protected readonly authMode = computed(() => this.navigationEnd().authMode);
 
+  private readonly auth = inject(AuthService);
+  // Aucun appel à l’API de gestion sans session : console worker, pages d’authentification et visiteur anonyme.
+  private readonly pollingDisabled = computed(
+    () => this.workerMode() || this.authMode() || !this.auth.user(),
+  );
   private readonly overview = inject(ClusterOverview);
   private readonly clusterState = toSignal(
-    toObservable(this.workerMode).pipe(
-      switchMap((worker) => (worker ? of(INITIAL_CLUSTER_OVERVIEW) : this.overview.state$)),
+    toObservable(this.pollingDisabled).pipe(
+      switchMap((disabled) => (disabled ? of(INITIAL_CLUSTER_OVERVIEW) : this.overview.state$)),
     ),
     { initialValue: INITIAL_CLUSTER_OVERVIEW },
   );
@@ -52,6 +66,7 @@ export class AppShellComponent {
     url: string;
     workerMode: boolean;
     workspaceMode: boolean;
+    authMode: boolean;
   } {
     let route = this.router.routerState.snapshot.root;
 
@@ -64,6 +79,7 @@ export class AppShellComponent {
       title: (route.data['title'] as string | undefined) ?? 'Vue d’ensemble',
       workerMode: route.data['workerMode'] === true,
       workspaceMode: route.data['layout'] === 'workspace',
+      authMode: route.data['authPage'] !== undefined,
     };
   }
 }

@@ -23,15 +23,19 @@ Le worker découvre les clusters annoncés en DNS-SD/mDNS (`_encoding._tcp`). Le
 2. Ouvrir `/worker` depuis le navigateur de cette même machine.
 3. Dans l’onglet **Nœud**, sélectionner le cluster détecté puis confirmer **Rejoindre**.
 
-Autre parcours : cliquer sur **Générer une clé** dans la console worker, puis ouvrir **Ajouter un nœud** dans le catalogue du serveur et saisir la clé. Elle expire après 10 minutes et ne peut servir qu’une fois. Le worker attend la confirmation sur son heartbeat avant de se déclarer enrôlé.
+Ce parcours (confirmation locale) n’est accepté que si un administrateur a ouvert la **fenêtre d’enrôlement direct** depuis **Nœuds → Ajouter un nœud** (10 minutes). Autre parcours, sans fenêtre : cliquer sur **Générer une clé** dans la console worker, puis ouvrir **Ajouter un nœud** dans le catalogue du serveur et saisir la clé ; l’approbation exige un administrateur. Elle expire après 10 minutes et ne peut servir qu’une fois. Le worker attend la confirmation sur son heartbeat avant de se déclarer enrôlé.
 
 L’acceptation automatique se règle sur le worker avec `Worker__AutoAcceptEnrollment` (Compose : `WORKER_AUTO_ACCEPT_ENROLLMENT`). Elle est désactivée par défaut. Lorsqu’elle est activée, le worker accepte automatiquement le seul cluster détecté ; s’il en voit plusieurs, il attend un choix explicite.
 
 L’identité et le jeton aléatoire sont créés par l’agent, puis conservés dans son répertoire de données. Le serveur stocke uniquement le SHA-256 du jeton et l’exige pour les heartbeats via `X-Node-Token`. Les répétitions d’un enrôlement avec la même identité et le même jeton sont idempotentes. Un worker déjà enrôlé ne peut pas être déplacé par l’interface ; il faut réinitialiser son identité locale après avoir arrêté l’agent.
 
-La découverte mDNS facilite la sélection, mais ne prouve pas l’identité du serveur. La confirmation locale est une action utilisateur, pas une attestation cryptographique auprès du serveur. Utiliser HTTPS et ne rendre l’API accessible qu’aux réseaux de confiance. L’API n’a pas encore d’authentification utilisateur pour ses routes d’administration et de lecture.
+La découverte mDNS facilite la sélection, mais ne prouve pas l’identité du serveur. La confirmation locale est une action utilisateur, pas une attestation cryptographique auprès du serveur. Utiliser HTTPS et ne rendre l’API accessible qu’aux réseaux de confiance.
 
 La page **Tâches** est prête pour la console worker, mais la file et le répartiteur ne sont pas encore implémentés : elle affiche explicitement cet état.
+
+## Authentification
+
+Au premier démarrage, l’interface demande de créer le premier administrateur (`/setup`). Définir `Auth__SetupToken` (Compose : `AUTH_SETUP_TOKEN`) pour exiger un jeton lors de cette création si le serveur est joignable avant que vous l’ayez faite. Les autres comptes se gèrent dans **Paramètres** ; le rôle lecture seule consulte sans modifier. Réglages optionnels, identiques pour tous les serveurs du cluster : `Auth__SessionIdleMinutes` (480), `Auth__SessionAbsoluteHours` (168), `Auth__MaxFailedAttempts` (5), `Auth__MaxPendingPairingRequests` (20), `Auth__AnonymousRequestsPerMinute` (20), `Auth__CookieSecure` (`auto`, `true` ou `false` ; `true` derrière un proxy TLS) et `Auth__TrustForwardedHeaders` (`true` derrière un proxy de confiance, pour limiter par adresse réelle). Voir [0031](../docs/architecture/0031-authentication-roles-and-pairing.md).
 
 ## API `v1`
 

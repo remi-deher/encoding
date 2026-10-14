@@ -6,16 +6,23 @@ using NpgsqlTypes;
 
 namespace Encoding.Api.Nodes;
 
+public enum PairingRequestResult { Created, Conflict, TooMany }
+
 public sealed class NodeRepository(NpgsqlDataSource dataSource)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<NodeResponse?> EnrollAsync(NodeEnrollmentRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// Enrôle un nœud. Une nouvelle identité n’est acceptée que fenêtre ouverte ; une identité déjà connue
+    /// avec le même secret peut répéter l’appel (reprise après interruption).
+    /// </summary>
+    public async Task<NodeResponse?> EnrollAsync(NodeEnrollmentRequest request, bool allowNewNode, CancellationToken cancellationToken)
     {
         var tokenHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(request.NodeToken));
         const string sql = """
             INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, node_token_hash)
-            VALUES (@id, @name, @roles, @max_concurrent_tasks, @capabilities, clock_timestamp(), @node_token_hash)
+            SELECT @id, @name, @roles, @max_concurrent_tasks, @capabilities, clock_timestamp(), @node_token_hash
+            WHERE @allow_new OR EXISTS (SELECT 1 FROM cluster_nodes WHERE id = @id AND deleted_at IS NULL AND node_token_hash = @node_token_hash)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 roles = EXCLUDED.roles,
@@ -29,14 +36,26 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         await using var command = new NpgsqlCommand(sql, connection);
         AddNodeParameters(command, request);
         command.Parameters.AddWithValue("node_token_hash", NpgsqlDbType.Bytea, tokenHash);
+        command.Parameters.AddWithValue("allow_new", allowNewNode);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, true) : null;
     }
 
-    public async Task<bool> CreatePairingRequestAsync(CreateNodeEnrollmentRequest request, CancellationToken cancellationToken)
+    /// <summary>Authentifie un worker par son seul secret ; l’empreinte SHA-256 de ce secret aléatoire à 256 bits identifie le nœud.</summary>
+    public async Task<bool> AuthenticateTokenAsync(string token, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE node_token_hash = @hash AND deleted_at IS NULL)");
+        command.Parameters.AddWithValue("hash", NpgsqlDbType.Bytea, HashSecret(token));
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
+    public async Task<PairingRequestResult> CreatePairingRequestAsync(CreateNodeEnrollmentRequest request, int maxPending, CancellationToken cancellationToken)
     {
         await using var deleted=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND deleted_at IS NOT NULL)");
-        deleted.Parameters.AddWithValue("id",request.Node.Id); if((bool)(await deleted.ExecuteScalarAsync(cancellationToken))!) return false;
+        deleted.Parameters.AddWithValue("id",request.Node.Id); if((bool)(await deleted.ExecuteScalarAsync(cancellationToken))!) return PairingRequestResult.Conflict;
+        // Borne les demandes en attente pour qu’un appelant anonyme ne puisse pas saturer la liste d’approbation.
+        await using var pending=dataSource.CreateCommand("SELECT count(*) FROM node_enrollment_requests WHERE expires_at > clock_timestamp() AND node_id <> @id");
+        pending.Parameters.AddWithValue("id",request.Node.Id); if((long)(await pending.ExecuteScalarAsync(cancellationToken))! >= maxPending) return PairingRequestResult.TooMany;
         var pairingKeyHash = HashSecret(request.PairingKey);
         var nodeTokenHash = HashSecret(request.Node.NodeToken);
         const string sql = """
@@ -66,7 +85,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
             request.Node.Capabilities));
         command.Parameters.AddWithValue("pairing_key_hash", NpgsqlDbType.Bytea, pairingKeyHash);
         command.Parameters.AddWithValue("node_token_hash", NpgsqlDbType.Bytea, nodeTokenHash);
-        return await command.ExecuteScalarAsync(cancellationToken) is not null;
+        return await command.ExecuteScalarAsync(cancellationToken) is not null ? PairingRequestResult.Created : PairingRequestResult.Conflict;
     }
 
     public async Task<IReadOnlyList<PendingNodeEnrollmentResponse>> ListPendingPairingRequestsAsync(CancellationToken cancellationToken)

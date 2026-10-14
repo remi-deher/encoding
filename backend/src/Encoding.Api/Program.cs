@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Contracts.Executions;
@@ -29,6 +30,8 @@ if (offlineAfterSeconds <= 0)
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
+builder.Services.AddSingleton<EnrollmentWindowRepository>();
+builder.Services.AddClusterAuthentication(builder.Configuration);
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
 builder.Services.AddSingleton<FlowDefinitionValidator>();
@@ -70,6 +73,9 @@ await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSour
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseClusterAuthentication();
+app.MapAuthEndpoints();
+app.MapEnrollmentWindowEndpoints();
 app.MapFlowEndpoints();
 app.MapFlowScriptEndpoints();
 app.MapFlowTemplateEndpoints();
@@ -80,7 +86,7 @@ app.MapPluginConfigurationEndpoints();
 app.MapRuntimeEndpoints();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
-    .WithTags("Health");
+    .AllowAnonymous().WithTags("Health");
 app.MapGet("/health/ready", async (NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
 {
     try
@@ -94,7 +100,7 @@ app.MapGet("/health/ready", async (NpgsqlDataSource dataSource, CancellationToke
     {
         return (IResult)Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Base de données indisponible.");
     }
-}).WithTags("Health");
+}).AllowAnonymous().WithTags("Health");
 
 app.MapLibraryWorkflowEndpoints();
 var libraries = app.MapGroup("/api/v1/libraries").WithTags("Libraries");
@@ -193,33 +199,41 @@ app.MapGet("/api/v1/cluster", async (ClusterIdentityRepository repository, Cance
 {
     var identity = await repository.GetAsync(cancellationToken);
     return Results.Ok(new { identity.Id, identity.Name });
-}).WithTags("Cluster").WithName("GetClusterIdentity");
+}).AllowAnonymous().WithTags("Cluster").WithName("GetClusterIdentity");
 
 nodes.MapPost("/enroll", async (
     NodeEnrollmentRequest request,
     NodeRepository repository,
+    EnrollmentWindowRepository window,
     CancellationToken cancellationToken) =>
 {
     var errors = NodeHeartbeatValidator.Validate(request);
     if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-    var node = await repository.EnrollAsync(request, cancellationToken);
-    return node is null
+    var windowOpen = (await window.GetAsync(cancellationToken)).IsOpen;
+    var node = await repository.EnrollAsync(request, windowOpen, cancellationToken);
+    if (node is not null) return Results.Ok(node);
+    return windowOpen
         ? Results.Conflict(new { title = "Cet identifiant appartient déjà à un autre nœud." })
-        : Results.Ok(node);
-}).WithName("EnrollNode");
+        : Results.Json(new { title = "L’enrôlement direct est fermé. Ouvrez la fenêtre d’enrôlement depuis l’interface ou utilisez une clé de jumelage." },
+            statusCode: StatusCodes.Status403Forbidden);
+}).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("EnrollNode");
 
 nodes.MapPost("/enrollment-requests", async (
     CreateNodeEnrollmentRequest request,
     NodeRepository repository,
+    AuthOptions authOptions,
     CancellationToken cancellationToken) =>
 {
     var errors = NodeHeartbeatValidator.Validate(request);
     if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-    var created = await repository.CreatePairingRequestAsync(request, cancellationToken);
-    return created
-        ? Results.Accepted()
-        : Results.Conflict(new { title = "Une demande de jumelage active existe déjà pour une autre identité." });
-}).WithName("CreateNodeEnrollmentRequest");
+    return await repository.CreatePairingRequestAsync(request, authOptions.MaxPendingPairingRequests, cancellationToken) switch
+    {
+        PairingRequestResult.Created => Results.Accepted(),
+        PairingRequestResult.TooMany => Results.Json(new { title = "Trop de demandes de jumelage sont en attente. Approuvez ou laissez expirer les demandes existantes." },
+            statusCode: StatusCodes.Status429TooManyRequests),
+        _ => Results.Conflict(new { title = "Une demande de jumelage active existe déjà pour une autre identité." }),
+    };
+}).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("CreateNodeEnrollmentRequest");
 
 nodes.MapGet("/enrollment-requests", async (
     NodeRepository repository,
@@ -272,7 +286,7 @@ nodes.MapPut("/{nodeId:guid}/heartbeat", async (
 
     var node = await repository.RecordHeartbeatAsync(nodeId, providedToken, request, cancellationToken);
     return node is null ? (IResult)Results.Unauthorized() : Results.Ok(node);
-}).WithName("RecordNodeHeartbeat");
+}).AllowAnonymous().WithName("RecordNodeHeartbeat");
 
 nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, CancellationToken cancellationToken) =>
     Results.Ok(await repository.ListAsync(options.OfflineAfter, cancellationToken)))
@@ -310,7 +324,7 @@ executions.MapGet("/{id:guid}", async (Guid id, ExecutionRepository repository, 
 {
     var execution = await repository.GetAsync(id, ct);
     return execution is null ? (IResult)Results.NotFound() : Results.Ok(execution);
-}).WithName("GetExecution");
+}).AllowNodeCredentials().WithName("GetExecution");
 executions.MapGet("/{id:guid}/events", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
     await repository.GetAsync(id, ct) is null ? (IResult)Results.NotFound() : Results.Ok(await repository.EventsAsync(id, ct))).WithName("GetExecutionEvents");
 executions.MapGet("/{id:guid}/pipeline", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
@@ -326,7 +340,7 @@ executions.MapPost("/{id:guid}/retry", async (Guid id, ExecutionRepository repos
         : Results.Created($"/api/v1/executions/{retryId}", new { id = retryId });
 }).WithName("RetryExecution");
 
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html").AllowAnonymous();
 
 app.Run();
 

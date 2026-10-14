@@ -1,8 +1,8 @@
 import { unsavedChangesGuard } from './shared/guards/unsaved-changes-guard';
 import { Routes } from '@angular/router';
-import { SectionPlaceholderComponent } from './features/section-placeholder/section-placeholder.component';
+import { authGuard, guestGuard } from './core/auth/auth.guard';
 
-export const routes: Routes = [
+const applicationRoutes: Routes = [
   {
     path: '',
     pathMatch: 'full',
@@ -158,12 +158,43 @@ export const routes: Routes = [
   },
   {
     path: 'settings',
-    component: SectionPlaceholderComponent,
+    loadComponent: () =>
+      import('./features/settings/user-management-page.component').then(
+        (module) => module.UserManagementPageComponent,
+      ),
     data: {
       title: 'Paramètres',
       primaryNavigation: true,
-      description: 'Réglez les options générales de votre installation.',
+      adminOnly: true,
+      description: 'Gérez les comptes utilisateurs et leurs rôles.',
     },
   },
+];
+
+const publicRoutes: Routes = [
+  {
+    path: 'login',
+    canActivate: [guestGuard],
+    loadComponent: () =>
+      import('./features/auth/login-page.component').then((module) => module.LoginPageComponent),
+    data: { title: 'Connexion', authPage: 'login' },
+  },
+  {
+    path: 'setup',
+    canActivate: [guestGuard],
+    loadComponent: () =>
+      import('./features/auth/login-page.component').then((module) => module.LoginPageComponent),
+    data: { title: 'Initialisation', authPage: 'setup' },
+  },
+];
+
+/** Toute route de gestion exige une session ; la console worker locale (`workerMode`) reste publique. */
+export const routes: Routes = [
+  ...publicRoutes,
+  ...applicationRoutes.map((route) =>
+    route.data?.['workerMode']
+      ? route
+      : { ...route, canActivate: [authGuard, ...(route.canActivate ?? [])] },
+  ),
   { path: '**', redirectTo: '' },
 ];

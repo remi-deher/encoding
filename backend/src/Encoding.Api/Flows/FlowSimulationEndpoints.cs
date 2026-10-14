@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 using System.ComponentModel;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
@@ -30,7 +31,7 @@ public static class FlowSimulationEndpoints
             catch (ArgumentException e) { return Results.BadRequest(new { title = e.Message }); }
             catch (Exception e) when (e is JsonException or InvalidOperationException)
             { return Results.BadRequest(new { title = "Profil ou résultat simulé invalide. Vérifiez les types et identifiants." }); }
-        }).WithTags("Flows");
+        }).AllowViewer().WithTags("Flows");
         app.MapPost("/api/v1/flows/inspect-metadata", async (HttpRequest request, FlowMetadataImporter importer, CancellationToken ct) =>
         {
             if (request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit) limit.MaxRequestBodySize = FlowMetadataImporter.MaxBytes;
@@ -40,6 +41,6 @@ public static class FlowSimulationEndpoints
             catch (Win32Exception) { return Results.Json(new { title = "MediaInfo est indisponible sur ce serveur." }, statusCode: 503); }
             catch (Exception e) when (e is InvalidDataException or JsonException)
             { return Results.BadRequest(new { title = e is InvalidDataException ? e.Message : "Rapport MediaInfo invalide." }); }
-        }).WithTags("Flows");
+        }).AllowViewer().WithTags("Flows");
     }
 }
