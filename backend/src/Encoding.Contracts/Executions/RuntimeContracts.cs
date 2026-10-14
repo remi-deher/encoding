@@ -15,7 +15,8 @@ public sealed record RuntimeTransfer(Guid ExecutionId, long Epoch, string Root, 
 public sealed record RuntimeContext(string CurrentSha256, string Extension, IReadOnlyDictionary<string,JsonElement> Variables,
     JsonElement? BeforeMetadata, JsonElement? CurrentMetadata, IReadOnlyList<RuntimePlanStep> Plan);
 public sealed record RuntimePlanStep(string ComponentId, IReadOnlyDictionary<string,JsonElement> Configuration);
-public sealed record RuntimeCheckpoint(string NodeId, Guid InvocationId, string? OutputId, string? NextNodeId, RuntimeContext Context, string? TerminalResult);
+public sealed record RuntimeCheckpoint(string NodeId, Guid InvocationId, string? OutputId, string? NextNodeId, RuntimeContext Context, string? TerminalResult,
+    RuntimeHandoffSelector? Handoff = null);
 public sealed record StartRuntimeStep(long Epoch, string NodeId);
 public sealed record StartedRuntimeStep(Guid InvocationId, RuntimeCheckpoint? Completed);
 public sealed record CompleteRuntimeStep(long Epoch, Guid EventId, int ExpectedRevision, RuntimeCheckpoint Checkpoint);
