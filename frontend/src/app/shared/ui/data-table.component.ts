@@ -13,6 +13,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
+import { splitBadges } from '../models/media-badges';
 import {
   ConfirmationDialogComponent,
   ConfirmationDialogData,
@@ -37,6 +38,8 @@ export interface DataTableColumn {
   readonly sortable?: boolean;
   readonly sortValueKey?: string;
   readonly toggle?: DataTableToggle;
+  /** La valeur est une liste de pastilles sérialisée avec `joinBadges`. */
+  readonly badges?: boolean;
 }
 
 export interface DataTableRowAction {
@@ -208,6 +211,14 @@ export interface DataTableListActionEvent {
                     }}</span>
                   }
                 </div>
+              } @else if (column.badges) {
+                <span class="cell-badges">
+                  @for (badge of badgesOf(row[column.key]); track $index) {
+                    <span class="cell-badge">{{ badge }}</span>
+                  } @empty {
+                    —
+                  }
+                </span>
               } @else if (rowOpenable() && isFirst) {
                 <button
                   class="row-open"
@@ -342,6 +353,10 @@ export class DataTableComponent {
       const value = row[sortValueKey ?? property];
       return typeof value === 'boolean' ? Number(value) : (value ?? '');
     };
+  }
+
+  protected badgesOf(value: DataTableValue | undefined): string[] {
+    return splitBadges(value);
   }
 
   protected requestRowAction(action: DataTableRowAction, row: DataTableRow): void {
