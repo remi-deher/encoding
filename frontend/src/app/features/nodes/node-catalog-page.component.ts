@@ -236,6 +236,32 @@ export class NodeCatalogPageComponent {
     ),
     { initialValue: null },
   );
+  protected readonly processingFields = computed<readonly DetailField[]>(() => {
+    const node = this.rawNode();
+    const state = this.nodeProcessingState();
+    if (!node) return [];
+    const schedule = state?.schedule;
+    const openShare = schedule?.enabled
+      ? Math.round((schedule.slots.split('1').length - 1) * 100 / schedule.slots.length)
+      : null;
+    return [
+      {
+        label: 'Limite globale',
+        value: state
+          ? state.effectiveMaxConcurrentTasks +
+            (state.maxConcurrentTasks == null ? ' (annoncée par le worker)' : ' (définie)')
+          : node.maxConcurrentTasks + ' (annoncée par le worker)',
+      },
+      {
+        label: 'Calendrier',
+        value: !state
+          ? '—'
+          : openShare == null
+            ? 'Désactivé : démarrage possible à toute heure'
+            : 'Actif : ' + openShare + ' % de la semaine autorisée (' + schedule!.timeZone + ')',
+      },
+    ];
+  });
   protected readonly processingForm = signal<RecordFormData | null>(null);
   private processingRevision = 0;
   private processingSettings: NodeProcessingSettings | null = null;

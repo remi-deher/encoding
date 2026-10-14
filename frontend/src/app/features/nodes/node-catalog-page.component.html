@@ -41,10 +41,32 @@
 
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group class="node-detail-tabs" aria-label="Sections du nœud">
-      <mat-tab label="Vue d’ensemble">
+      <mat-tab label="Général">
         <app-detail-field-list [fields]="summaryFields()" layout="cards" />
         <app-detail-field-list [fields]="overviewFields()" />
       </mat-tab>
+      @if (rawNode()?.roles?.includes('worker')) {
+        <mat-tab label="Traitement">
+          <div class="node-processing-tab">
+            <app-detail-field-list [fields]="processingFields()" layout="cards" />
+            <p class="node-tab-note">
+              Les plafonds de bibliothèque et de couple nœud et bibliothèque s’appliquent aussi.
+              Hors des plages du calendrier, aucun nouveau traitement ne démarre ; ceux en cours ne
+              sont pas interrompus.
+            </p>
+            <div class="node-tab-actions">
+              <app-drawer-action-button
+                label="Modifier la limite globale"
+                (activated)="configureNodeProcessing()"
+              />
+              <app-drawer-action-button
+                label="Modifier le calendrier"
+                (activated)="configureNodeSchedule()"
+              />
+            </div>
+          </div>
+        </mat-tab>
+      }
       <mat-tab label="Capacités">
         <app-detail-field-list [fields]="capabilityFields()" layout="cards" />
         <app-data-table
@@ -116,20 +138,23 @@
           </section>
         }
       </mat-tab>
+      <mat-tab label="Avancé">
+        <div class="node-processing-tab">
+          <p class="node-tab-note">
+            Retirer le nœud révoque son identité et refuse ses baux actifs, sans supprimer
+            l’historique. Il ne peut pas être réactivé par un simple signal de présence.
+          </p>
+          <div class="node-tab-actions">
+            <app-drawer-action-button
+              label="Supprimer le nœud"
+              tone="danger"
+              [disabled]="removalBusy()"
+              (activated)="confirmNodeRemoval()"
+            />
+          </div>
+        </div>
+      </mat-tab>
     </mat-tab-group>
-  </ng-template>
-
-  <ng-template #detailHeaderActions>
-    @if (rawNode()?.roles?.includes('worker')) {
-      <app-drawer-action-button label="Limite globale" (activated)="configureNodeProcessing()" />
-      <app-drawer-action-button label="Calendrier" (activated)="configureNodeSchedule()" />
-    }
-    <app-drawer-action-button
-      label="Supprimer le nœud"
-      tone="danger"
-      [disabled]="removalBusy()"
-      (activated)="confirmNodeRemoval()"
-    />
   </ng-template>
   <ng-template #actionContent>
     @if (actionType() === 'schedule') {
