@@ -33,6 +33,8 @@
     [selectable]="true"
     [rowOpenable]="true"
     rowOpenLabel="Consulter"
+    [rowActions]="nodeActions"
+    (rowAction)="onNodeAction($event)"
     (rowOpen)="onNodeOpen($event)"
     emptyMessage="Aucun nœud ne correspond à ce rôle."
   />
@@ -40,10 +42,18 @@
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group class="node-detail-tabs" aria-label="Sections du nœud">
       <mat-tab label="Vue d’ensemble">
+        <app-detail-field-list [fields]="summaryFields()" layout="cards" />
         <app-detail-field-list [fields]="overviewFields()" />
       </mat-tab>
       <mat-tab label="Capacités">
-        <app-detail-field-list [fields]="capabilityFields()" />
+        <app-detail-field-list [fields]="capabilityFields()" layout="cards" />
+        <app-data-table
+          [columns]="capabilityColumns"
+          [rows]="capabilityRows()"
+          [rowActions]="capabilityActions"
+          (rowAction)="showEncoders($event)"
+          emptyMessage="Aucune capacité déclarée par ce nœud."
+        />
       </mat-tab>
       <mat-tab label="Bibliothèques">
         @if (selectedNode(); as node) {
@@ -51,21 +61,36 @@
             <header class="node-libraries-heading">
               <div>
                 <h3>Accès autorisés par le serveur</h3>
-                <p>Le serveur déclare les bibliothèques et autorise les nœuds. Configurez ici le chemin visible depuis {{ node.name }}.</p>
+                <p>
+                  Le serveur déclare les bibliothèques et autorise les nœuds. Configurez ici le
+                  chemin visible depuis {{ node.name }}.
+                </p>
               </div>
-              <button matButton="filled" type="button" (click)="openAddLibrary()">Déclarer une bibliothèque</button>
+              <button matButton="filled" type="button" (click)="openAddLibrary()">
+                Déclarer une bibliothèque
+              </button>
             </header>
             @if (availableLibraries().length) {
               <div class="add-library-row">
                 <mat-form-field appearance="outline">
                   <mat-label>Bibliothèque déjà déclarée</mat-label>
-                  <mat-select [value]="selectedAvailableLibraryId()" (selectionChange)="selectedAvailableLibraryId.set($event.value)">
+                  <mat-select
+                    [value]="selectedAvailableLibraryId()"
+                    (selectionChange)="selectedAvailableLibraryId.set($event.value)"
+                  >
                     @for (library of availableLibraries(); track library.id) {
                       <mat-option [value]="library.id">{{ library.name }}</mat-option>
                     }
                   </mat-select>
                 </mat-form-field>
-                <button matButton="outlined" type="button" [disabled]="!selectedAvailableLibraryId()" (click)="addExistingLibrary()">Ajouter au nœud</button>
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [disabled]="!selectedAvailableLibraryId()"
+                  (click)="addExistingLibrary()"
+                >
+                  Ajouter au nœud
+                </button>
               </div>
             }
             @if (nodeLibraryLoading()) {
@@ -83,7 +108,9 @@
             } @else {
               <div class="node-libraries-empty">
                 <strong>Aucune bibliothèque autorisée</strong>
-                <p>Choisissez une bibliothèque déjà déclarée par le serveur ou créez-en une nouvelle.</p>
+                <p>
+                  Choisissez une bibliothèque déjà déclarée par le serveur ou créez-en une nouvelle.
+                </p>
               </div>
             }
           </section>
@@ -92,8 +119,27 @@
     </mat-tab-group>
   </ng-template>
 
+  <ng-template #detailHeaderActions>
+    @if (rawNode()?.roles?.includes('worker')) {
+      <app-drawer-action-button label="Limite globale" (activated)="configureNodeProcessing()" />
+    }
+    <app-drawer-action-button
+      label="Supprimer le nœud"
+      tone="danger"
+      [disabled]="removalBusy()"
+      (activated)="confirmNodeRemoval()"
+    />
+  </ng-template>
   <ng-template #actionContent>
-    @if (actionType() === 'library-access' && selectedNode(); as node) {
+    @if (actionType() === 'processing') {
+      @if (processingForm(); as form) {
+        <app-record-form
+          [data]="form"
+          (submitted)="saveNodeProcessing($event)"
+          (cancelled)="closeCreateNode()"
+        />
+      }
+    } @else if (actionType() === 'library-access' && selectedNode(); as node) {
       @if (nodeLibraryLoading()) {
         <p role="status">Chargement de la configuration…</p>
       } @else {
@@ -107,13 +153,20 @@
         />
       }
     } @else if (actionType() === 'create-library') {
-      <app-record-form [data]="createLibraryFormData" (submitted)="createLibraryFromNode($event)" (cancelled)="closeCreateNode()" />
+      <app-record-form
+        [data]="createLibraryFormData"
+        (submitted)="createLibraryFromNode($event)"
+        (cancelled)="closeCreateNode()"
+      />
     } @else if (enrollmentView() === 'requests') {
       <section class="enrollment-guide" aria-label="Demandes de jumelage">
         <div class="enrollment-step">
           <span>Étape 1 sur 2</span>
           <h3>Repérer le worker</h3>
-          <p>Depuis la console du worker, sélectionnez ce cluster puis générez une clé. La demande apparaîtra ici pour vérification.</p>
+          <p>
+            Depuis la console du worker, sélectionnez ce cluster puis générez une clé. La demande
+            apparaîtra ici pour vérification.
+          </p>
         </div>
         @if (enrollmentRows().length) {
           <app-data-table
@@ -125,35 +178,65 @@
             emptyMessage="Aucune demande de jumelage en attente."
           />
         } @else {
-          <p class="enrollment-empty" role="status">Aucune demande en attente. La clé reste valide pendant 10 minutes. Si l’acceptation automatique est activée sur le worker, il rejoindra le cluster sans validation manuelle.</p>
+          <p class="enrollment-empty" role="status">
+            Aucune demande en attente. La clé reste valide pendant 10 minutes. Si l’acceptation
+            automatique est activée sur le worker, il rejoindra le cluster sans validation manuelle.
+          </p>
         }
-        <button matButton="text" type="button" (click)="showPairingKey()">J’ai déjà une clé de jumelage</button>
+        <button matButton="text" type="button" (click)="showPairingKey()">
+          J’ai déjà une clé de jumelage
+        </button>
       </section>
     } @else if (enrollmentView() === 'review' && selectedEnrollment(); as request) {
       <section class="enrollment-review" aria-label="Vérification du worker">
-        <button matButton="text" type="button" (click)="showPendingRequests()">← Retour aux demandes</button>
+        <button matButton="text" type="button" (click)="showPendingRequests()">
+          ← Retour aux demandes
+        </button>
         <div class="enrollment-step">
           <span>Étape 2 sur 2</span>
           <h3>Vérifier avant d’accepter</h3>
           <p>Ce worker rejoindra le cluster avec les rôles et capacités annoncés ci-dessous.</p>
         </div>
         <dl class="enrollment-facts">
-          <div><dt>Nom</dt><dd>{{ request.name }}</dd></div>
-          <div><dt>Rôles</dt><dd>{{ rolesLabel(request.roles) }}</dd></div>
-          <div><dt>Capacités</dt><dd>{{ capabilitiesLabel(request.capabilities) }}</dd></div>
-          <div><dt>Exécution simultanée</dt><dd>{{ request.maxConcurrentTasks }} tâche(s)</dd></div>
-          <div><dt>Demande valable jusqu’à</dt><dd>{{ formatExpiryTime(request.expiresAt) }}</dd></div>
+          <div>
+            <dt>Nom</dt>
+            <dd>{{ request.name }}</dd>
+          </div>
+          <div>
+            <dt>Rôles</dt>
+            <dd>{{ rolesLabel(request.roles) }}</dd>
+          </div>
+          <div>
+            <dt>Capacités</dt>
+            <dd>{{ capabilitiesLabel(request.capabilities) }}</dd>
+          </div>
+          <div>
+            <dt>Exécution simultanée</dt>
+            <dd>{{ request.maxConcurrentTasks }} tâche(s)</dd>
+          </div>
+          <div>
+            <dt>Demande valable jusqu’à</dt>
+            <dd>{{ formatExpiryTime(request.expiresAt) }}</dd>
+          </div>
         </dl>
         <div class="form-actions">
           <button matButton="text" type="button" (click)="showPendingRequests()">Annuler</button>
-          <button matButton="filled" type="button" (click)="approveEnrollment()">Accepter ce worker</button>
+          <button matButton="filled" type="button" (click)="approveEnrollment()">
+            Accepter ce worker
+          </button>
         </div>
       </section>
     } @else if (enrollmentView() === 'key') {
       <div class="pairing-key-header">
-        <button matButton="text" type="button" (click)="showPendingRequests()">← Retour aux demandes</button>
+        <button matButton="text" type="button" (click)="showPendingRequests()">
+          ← Retour aux demandes
+        </button>
       </div>
-      <app-record-form [data]="createFormData" (submitted)="acceptNode($event)" (cancelled)="closeCreateNode()" />
+      <app-record-form
+        [data]="createFormData"
+        (submitted)="acceptNode($event)"
+        (cancelled)="closeCreateNode()"
+      />
     }
   </ng-template>
 </app-management-catalog-template>

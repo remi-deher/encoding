@@ -9,7 +9,7 @@ public sealed record LibraryResponse(
     int ConfiguredNodeCount = 0,
     int DirectAccessNodeCount = 0,
     int TransferNodeCount = 0,
-    bool IsActive = true);
+    bool IsActive = true, string? FlowName = null, int? FlowVersion = null);
 
 public sealed record UpdateLibraryRequest(string Name);
 

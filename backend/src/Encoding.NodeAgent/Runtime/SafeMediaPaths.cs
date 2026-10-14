@@ -28,12 +28,16 @@ public static class SafeMediaPaths
     {
         public void Dispose() { stream.Dispose(); ActiveLocks.TryRemove(path,out _); }
     }
-    public static IDisposable Lock(string path)
+    public static IDisposable Lock(string path,string lockDirectory)
     {
         if(OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("Le verrouillage média requiert Linux ou Windows.");
         if(!ActiveLocks.TryAdd(path,0)) throw new MediaLockBusyException();
         FileStream stream;
-        try { stream=new FileStream(path+".encoding.lock",FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.ReadWrite); }
+        try {
+            Directory.CreateDirectory(lockDirectory);
+            var key=Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(path))));
+            stream=new FileStream(Path.Combine(lockDirectory,key+".lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.ReadWrite);
+        }
         catch { ActiveLocks.TryRemove(path,out _); throw; }
         try { stream.Lock(0,1); return new MediaLock(path,stream); }
         catch(IOException) { stream.Dispose(); ActiveLocks.TryRemove(path,out _); throw new MediaLockBusyException(); }

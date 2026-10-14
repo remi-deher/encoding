@@ -49,7 +49,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             {
                 if(context.BeforeMetadata is null)
                 {
-                    if(await SafeMediaPaths.DigestAsync(original,job.Token)!=sourceSha) throw new IOException("La copie de rÃƒÂ©fÃƒÂ©rence a ÃƒÂ©tÃƒÂ© altÃƒÂ©rÃƒÂ©e.");
+                    if(await SafeMediaPaths.DigestAsync(original,job.Token)!=sourceSha) throw new IOException("La copie de référence a été altérée.");
                     context=context with { BeforeMetadata=await scanner.ScanAsync(original,job.Token) };
                 }
                 if(context.CurrentMetadata is null) context=context with { CurrentMetadata=await scanner.ScanAsync(current,job.Token) };
@@ -175,7 +175,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 }
                 catch(MediaToolException exception)
                 {
-                    logger.LogInformation("Ãƒâ€°chec de lÃ¢â‚¬â„¢outil pendant lÃ¢â‚¬â„¢ÃƒÂ©tape {Node}: {Detail}",node.Id,exception.Message);
+                    logger.LogInformation("Échec de l’outil pendant l’étape {Node}: {Detail}",node.Id,exception.Message);
                     if(node.Component.PluginId!="base") throw;
                     output="error";
                     await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
@@ -189,11 +189,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             await EnsureScanAsync(); context=context with { Variables=variables };
             var failed=terminal=="failed" || terminal is null && lastOutput=="error";
-            if(context.Plan.Count>0 && !failed) throw new IOException("Le flow se termine avec un plan non exÃƒÂ©cutÃƒÂ©.");
+            if(context.Plan.Count>0 && !failed) throw new IOException("Le flow se termine avec un plan non exécuté.");
 
             var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=sourceSha;
             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),failed?"failed":terminal=="deferred"?"deferred":"succeeded",
-                failed?"Le flow a atteint une fin en ÃƒÂ©chec.":"Flow terminÃƒÂ© ; scans mÃƒÂ©dia rÃƒÂ©alisÃƒÂ©s.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null),job.Token);
+                failed?"Le flow a atteint une fin en échec.":"Flow terminé ; scans média réalisés.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null),job.Token);
             if(changed)
             {
                 while(true)
@@ -205,12 +205,12 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         }
         catch(OperationCanceledException) when(job.IsCancellationRequested)
         {
-            if(cancelled && !lost) await FailureAsync("cancelled","Annulation confirmÃƒÂ©e aprÃƒÂ¨s arrÃƒÂªt des processus.");
+            if(cancelled && !lost) await FailureAsync("cancelled","Annulation confirmée après arrêt des processus.");
         }
         catch(Exception exception)
         {
-            logger.LogWarning("ExÃƒÂ©cution {ExecutionId} interrompue : {Type}",lease.ExecutionId,exception.GetType().Name);
-            if(!lost) await FailureAsync("failed",exception is MediaToolException?exception.Message:"LÃ¢â‚¬â„¢exÃƒÂ©cution a ÃƒÂ©chouÃƒÂ© ; aucun remplacement de source nÃ¢â‚¬â„¢a ÃƒÂ©tÃƒÂ© effectuÃƒÂ©.");
+            logger.LogWarning("Exécution {ExecutionId} interrompue : {Type}",lease.ExecutionId,exception.GetType().Name);
+            if(!lost) await FailureAsync("failed",exception is MediaToolException?exception.Message:"L’exécution a échoué ; aucun remplacement de source n’a été effectué.");
         }
         finally { job.Cancel(); await renewal; }
 
@@ -222,7 +222,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 var status=await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch),timeout.Token);
                 await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),status!.Revision,state,detail,null,null),timeout.Token);
             }
-            catch(Exception) { logger.LogWarning("Le rÃƒÂ©sultat de lÃ¢â‚¬â„¢exÃƒÂ©cution {ExecutionId} nÃ¢â‚¬â„¢a pas pu ÃƒÂªtre confirmÃƒÂ© par le cluster.",lease.ExecutionId); }
+            catch(Exception) { logger.LogWarning("Le résultat de l’exécution {ExecutionId} n’a pas pu être confirmé par le cluster.",lease.ExecutionId); }
         }
     }
 
@@ -241,7 +241,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         await File.WriteAllTextAsync(file,body,ct);
         try
         {
-            var executable=ProcessToolRunner.Find(python?"python3":"node")??throw new IOException("InterprÃƒÂ©teur indisponible.");
+            var executable=ProcessToolRunner.Find(python?"python3":"node")??throw new IOException("Interpréteur indisponible.");
             var result=await tools.RunAsync(executable,[file],directory,TimeSpan.FromSeconds(id=="base-condition"?30:int.Parse(MediaActions.Number(config,"timeoutSeconds",60))),ct,JsonSerializer.Serialize(context),1048576,true);
             if(result.ExitCode==79) throw new IOException("Isolation du processus indisponible.");
             if(result.ExitCode!=0) throw new MediaToolException(python?"python":"javascript",result.ExitCode);

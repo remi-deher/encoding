@@ -27,6 +27,7 @@ Le projet s’inspire des outils d’automatisation de fichiers existants, tout 
 ## Bibliothèques partagées
 
 - Une bibliothèque est une définition logique commune au cluster, avec ses règles, profils et paramètres.
+- Les flows sont créés indépendamment puis attribués à une bibliothèque via une version publiée précise. La découverte des fichiers est effectuée par un nœud en accès direct ; le lancement part des fichiers détectés dans la bibliothèque, sans saisie de chemin média. Voir [0016](docs/architecture/0016-library-workflow-and-discovery.md).
 - Chaque nœud déclare séparément son accès à chaque bibliothèque. Les chemins locaux peuvent différer d’un nœud à l’autre.
 - Un nœud sans point d’accès configuré à une bibliothèque ne peut pas traiter directement ses fichiers.
 - L’accès doit préciser les capacités de lecture et d’écriture nécessaires à la tâche.
@@ -119,3 +120,7 @@ Les versions validées des flows sont enregistrées dans PostgreSQL avec contrô
 Consulter [0015 — Runtime et archives](docs/architecture/0015-flow-runtime-and-portable-archives.md). Les workers utilisent des baux de 60 secondes avec époque, réservations uniques par média et checkpoints transactionnels. Une invocation externe interrompue avant checkpoint exige une relance explicite. Les scripts et plugins nécessitent Linux Landlock et travaillent dans l’espace temporaire de l’exécution ; aucun repli sans restriction des fichiers n’est autorisé.
 
 La publication conserve la source et crée un résultat distinct dans .encoding-results/<executionId>/. Ne pas activer un remplacement automatique sans politique explicite et validation. Les volumes d’artefacts et sauvegardes doivent être partagés durablement par les serveurs d’un cluster multi-hôte. Le nettoyage automatique des artefacts n’est pas activé.
+
+Le retrait d’un nœud révoque son identité sans supprimer l’historique et refuse les baux actifs ; voir [0017](docs/architecture/0017-node-removal-and-capability-detail.md). Ne pas réactiver implicitement une identité retirée via un heartbeat ou un enrôlement.
+
+La surveillance et les plafonds utilisent [0018](docs/architecture/0018-library-monitoring-and-processing-limits.md) : global nœud toutes bibliothèques, global bibliothèque tous nœuds, puis couple nœud/bibliothèque. Les limites sont des plafonds sans réservation. La surveillance périodique utilise des réceptions transactionnelles par fichier/version/empreinte taille-date pour éviter les répétitions automatiques.

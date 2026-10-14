@@ -30,7 +30,7 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
         Guid worker;
         await using(var read=new NpgsqlCommand("SELECT worker_node_id FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
         { read.Parameters.AddWithValue("id",id); read.Parameters.AddWithValue("sha",request.Sha256); read.Parameters.AddWithValue("path",request.PublishedPath); if(await read.ExecuteScalarAsync(ct) is not Guid node) return false; worker=node; }
-        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"succeeded",worker,100,"RÃ©sultat validÃ© et publiÃ© ; fichier source conservÃ©."),c,tx,ct)) return false;
+        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"succeeded",worker,100,"Résultat validé et publié ; fichier source conservé."),c,tx,ct)) return false;
         await using var update=new NpgsqlCommand("UPDATE execution_work SET published_path=@path WHERE execution_id=@id",c,tx);
         update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("path",request.PublishedPath); await update.ExecuteNonQueryAsync(ct);
         await RuntimeRepository.ReleaseAsync(id,c,tx,ct); await tx.CommitAsync(ct); return true;
@@ -77,7 +77,7 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
               """,c,tx);
             set.Parameters.AddWithValue("id",id); set.Parameters.AddWithValue("sha",sha); set.Parameters.AddWithValue("extension",request.Extension);
             if(await set.ExecuteNonQueryAsync(ct)!=1) return false;
-            if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,"RÃ©sultat validÃ© ; publication demandÃ©e au nÅ“ud dâ€™accÃ¨s."),c,tx,ct)) return false;
+            if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,"Résultat validé ; publication demandée au nœud d’accès."),c,tx,ct)) return false;
         }
         else
         {
@@ -88,10 +88,10 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
                 var next=Guid.NewGuid();
                 await using var schedule=new NpgsqlCommand("""
                   INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,retry_of,detail)
-                  SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,'Nouvelle tentative planifiÃ©e aprÃ¨s report.' FROM executions WHERE id=@id;
+                  SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,'Nouvelle tentative planifiée après report.' FROM executions WHERE id=@id;
                   INSERT INTO execution_work(execution_id,library_id,media_path,media_key,available_at)
                   SELECT @next,library_id,media_path,media_key,clock_timestamp()+@delay FROM execution_work WHERE execution_id=@id;
-                  INSERT INTO execution_events(id,execution_id,revision,state,detail) VALUES(@event,@next,0,'queued','Nouvelle tentative planifiÃ©e aprÃ¨s report.');
+                  INSERT INTO execution_events(id,execution_id,revision,state,detail) VALUES(@event,@next,0,'queued','Nouvelle tentative planifiée après report.');
                   """,c,tx);
                 schedule.Parameters.AddWithValue("id",id); schedule.Parameters.AddWithValue("next",next); schedule.Parameters.AddWithValue("event",Guid.NewGuid());
                 schedule.Parameters.AddWithValue("delay",TimeSpan.FromMinutes(request.DeferMinutes!.Value)); await schedule.ExecuteNonQueryAsync(ct);

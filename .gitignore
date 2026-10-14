@@ -24,6 +24,8 @@
 *.temp
 tmp/
 temp/
+media-test/*
+!media-test/README.md
 
 # Operating system files
 .DS_Store

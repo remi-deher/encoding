@@ -8,7 +8,11 @@ import { MatSelectModule } from '@angular/material/select';
 export interface RecordFormField {
   readonly id: string;
   readonly label: string;
-  readonly type: 'text' | 'select';
+  readonly type: 'text' | 'select' | 'number';
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
+  readonly hint?: string;
   readonly required?: boolean;
   readonly maxLength?: number;
   readonly filterOptionsByFieldId?: string;
@@ -61,9 +65,16 @@ export interface RecordFormData {
                 <mat-label>{{ field.label }}</mat-label>
                 <input
                   matInput
+                  [type]="field.type === 'number' ? 'number' : 'text'"
+                  [attr.min]="field.min ?? null"
+                  [attr.max]="field.max ?? null"
+                  [attr.step]="field.step ?? null"
                   [formControlName]="field.id"
                   [attr.maxlength]="field.maxLength ?? null"
                 />
+                @if (field.hint) {
+                  <mat-hint>{{ field.hint }}</mat-hint>
+                }
               </mat-form-field>
             }
           }
@@ -155,6 +166,11 @@ export class RecordFormComponent implements OnChanges {
         const validators = [];
         if (field.required) validators.push(Validators.required);
         if (field.maxLength) validators.push(Validators.maxLength(field.maxLength));
+        if (field.type === 'number') {
+          if (field.min !== undefined) validators.push(Validators.min(field.min));
+          if (field.max !== undefined) validators.push(Validators.max(field.max));
+          if (field.step === 1) validators.push(Validators.pattern(/^[0-9]+$/));
+        }
         this.form.addControl(
           field.id,
           new FormControl(this.data().initialValues?.[field.id] ?? '', {
@@ -169,7 +185,15 @@ export class RecordFormComponent implements OnChanges {
   }
 
   protected save(): void {
-    if (!this.busy() && this.form.valid) this.submitted.emit(this.form.getRawValue());
+    if (!this.busy() && this.form.valid)
+      this.submitted.emit(
+        Object.fromEntries(
+          Object.entries(this.form.getRawValue()).map(([key, value]) => [
+            key,
+            value == null ? '' : String(value),
+          ]),
+        ),
+      );
   }
 
   protected review(): void {
@@ -217,7 +241,7 @@ export class RecordFormComponent implements OnChanges {
 
   protected displayValue(fieldId: string): string {
     const field = this.data().fields.find((item) => item.id === fieldId);
-    const value = this.form.controls[fieldId]?.value ?? '';
+    const value = String(this.form.controls[fieldId]?.value ?? '');
     return field?.options?.find((option) => option.value === value)?.label ?? value;
   }
 }

@@ -54,3 +54,9 @@ public sealed record PendingNodeEnrollmentResponse(
     IReadOnlyList<NodeToolCapability> Capabilities,
     DateTimeOffset CreatedAt,
     DateTimeOffset ExpiresAt);
+
+public sealed record NodeActivityResponse(int Active,int Succeeded,int Failed,int Cancelled,DateTimeOffset? LastActivity,int SourceTasks);
+
+public sealed record NodeProcessingSettings(int? MaxConcurrentTasks,int EffectiveMaxConcurrentTasks,int Revision);
+public sealed record SaveNodeProcessingSettings(int? MaxConcurrentTasks,int ExpectedRevision);
+public sealed record RuntimeCapacity(int MaxConcurrentTasks);

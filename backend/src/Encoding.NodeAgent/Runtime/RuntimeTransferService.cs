@@ -61,7 +61,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
         try
         {
             var original=SafeMediaPaths.Resolve(transfer.Root,transfer.MediaPath);
-            using var mediaLock=transfer.CanWrite?SafeMediaPaths.Lock(original):null;
+            using var mediaLock=transfer.CanWrite?SafeMediaPaths.Lock(original,Path.Combine(options.DataDirectory,"media-locks")):null;
             if(!transfer.Publish)
             {
                 async Task UploadAsync(string relative,bool main)

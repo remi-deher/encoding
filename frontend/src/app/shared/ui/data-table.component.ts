@@ -22,6 +22,7 @@ export type DataTableValue = string | number | boolean;
 export type DataTableRow = Readonly<Record<string, DataTableValue>>;
 
 export interface DataTableToggle {
+  readonly showStatusLabel?: boolean;
   readonly ariaLabel: (row: DataTableRow, checked: boolean) => string;
   readonly disabledWhen?: (row: DataTableRow) => boolean;
   readonly confirmation?: (
@@ -201,9 +202,11 @@ export interface DataTableListActionEvent {
                   >
                     <span></span>
                   </button>
-                  <span class="row-toggle-status">{{
-                    row[column.key] ? 'Activée' : 'Désactivée'
-                  }}</span>
+                  @if (column.toggle.showStatusLabel !== false) {
+                    <span class="row-toggle-status">{{
+                      row[column.key] ? 'Activée' : 'Désactivée'
+                    }}</span>
+                  }
                 </div>
               } @else if (rowOpenable() && isFirst) {
                 <button

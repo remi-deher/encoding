@@ -27,10 +27,12 @@ export interface DetailField {
         }
       </mat-tab-group>
     } @else {
-      <dl class="detail-field-list">
+      <dl class="detail-field-list" [class.detail-field-list_cards]="layout() === 'cards'">
         @for (section of sections(); track section.title) {
           <section class="detail-section">
-            @if (section.title) { <h3>{{ section.title }}</h3> }
+            @if (section.title) {
+              <h3>{{ section.title }}</h3>
+            }
             @for (field of section.fields; track field.label) {
               <div>
                 <dt>{{ field.label }}</dt>
@@ -43,9 +45,39 @@ export interface DetailField {
     }
   `,
   styles: `
-    :host { display: block; }
+    :host {
+      display: block;
+    }
+    .detail-field-list.detail-field-list_cards {
+      margin-bottom: 24px;
+    }
+    .detail-field-list_cards .detail-section {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .detail-field-list_cards .detail-section h3 {
+      grid-column: 1/-1;
+      margin: 4px 0;
+    }
+    .detail-field-list_cards .detail-section > div {
+      padding: 16px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    .detail-field-list_cards .detail-section dd {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    @media (max-width: 600px) {
+      .detail-field-list_cards .detail-section {
+        grid-template-columns: 1fr;
+      }
+    }
 
-    .detail-tabs { display: block; }
+    .detail-tabs {
+      display: block;
+    }
 
     .tab-fields {
       min-height: 120px;
@@ -87,7 +119,7 @@ export interface DetailField {
       color: var(--text-muted);
       font-size: 10px;
       font-weight: 700;
-      letter-spacing: .035em;
+      letter-spacing: 0.035em;
       text-transform: uppercase;
     }
 
@@ -103,6 +135,7 @@ export interface DetailField {
 })
 export class DetailFieldListComponent {
   readonly fields = input.required<readonly DetailField[]>();
+  readonly layout = input<'list' | 'cards'>('list');
   readonly tabbed = input(false);
   readonly tabsLabel = input('Sections du détail');
 

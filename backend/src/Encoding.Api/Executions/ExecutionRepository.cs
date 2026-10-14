@@ -54,13 +54,13 @@ public sealed class ExecutionRepository(NpgsqlDataSource dataSource)
     {
         await using var cmd = new NpgsqlCommand("""
    INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,detail)
-   VALUES(@id,@media,@library,@flow,@version,@definition,'queued',1,'En attente du moteur dâ€™exÃ©cution.') ON CONFLICT(id) DO NOTHING
+   VALUES(@id,@media,@library,@flow,@version,@definition,'queued',1,'En attente du moteur d’exécution.') ON CONFLICT(id) DO NOTHING
    """, c, tx);
         cmd.Parameters.AddWithValue("id", request.Id); cmd.Parameters.AddWithValue("media", request.Media);
         cmd.Parameters.AddWithValue("library", request.Library); cmd.Parameters.AddWithValue("flow", request.Flow);
         cmd.Parameters.AddWithValue("version", request.FlowVersion); cmd.Parameters.AddWithValue("definition", NpgsqlDbType.Jsonb, request.FlowDefinition.GetRawText());
         var inserted = await cmd.ExecuteNonQueryAsync(ct) > 0;
-        if (inserted) await AddEvent(c, tx, request.Id, Guid.NewGuid(), 0, "queued", "En attente du moteur dâ€™exÃ©cution.", ct);
+        if (inserted) await AddEvent(c, tx, request.Id, Guid.NewGuid(), 0, "queued", "En attente du moteur d’exécution.", ct);
         return inserted;
     }
     public async Task<bool> CancelAsync(Guid id, CancellationToken ct)
@@ -68,7 +68,7 @@ public sealed class ExecutionRepository(NpgsqlDataSource dataSource)
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
         await using var cmd = new NpgsqlCommand("""
    UPDATE executions SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancelling' END,
-   detail=CASE WHEN state='queued' THEN 'AnnulÃ©e avant dÃ©marrage.' ELSE 'Annulation demandÃ©e ; attente de confirmation du worker.' END,
+   detail=CASE WHEN state='queued' THEN 'Annulée avant démarrage.' ELSE 'Annulation demandée ; attente de confirmation du worker.' END,
    finished_at=CASE WHEN state='queued' THEN clock_timestamp() ELSE NULL END,
    updated_at=clock_timestamp(),revision=revision+1 WHERE id=@id AND state IN ('queued','running')
    RETURNING revision,state,detail
@@ -83,11 +83,11 @@ public sealed class ExecutionRepository(NpgsqlDataSource dataSource)
         var next = Guid.NewGuid();
         await using var cmd = new NpgsqlCommand("""
    INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,retry_of,detail)
-   SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,'En attente du moteur dâ€™exÃ©cution.'
+   SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,'En attente du moteur d’exécution.'
    FROM executions WHERE id=@id AND state='failed' ON CONFLICT(retry_of) DO NOTHING RETURNING id
    """, c, tx); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("next", next);
         if (await cmd.ExecuteScalarAsync(ct) is not Guid created) return null;
-        await AddEvent(c, tx, created, Guid.NewGuid(), 0, "queued", "Nouvelle tentative demandÃ©e.", ct);
+        await AddEvent(c, tx, created, Guid.NewGuid(), 0, "queued", "Nouvelle tentative demandée.", ct);
         await using(var work=new NpgsqlCommand("INSERT INTO execution_work(execution_id,library_id,media_path,media_key) SELECT @next,library_id,media_path,media_key FROM execution_work WHERE execution_id=@id",c,tx))
         { work.Parameters.AddWithValue("next",created); work.Parameters.AddWithValue("id",id); await work.ExecuteNonQueryAsync(ct); }
 

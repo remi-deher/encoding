@@ -1,4 +1,6 @@
 using Encoding.Api.Flows;
+using Encoding.Api.Libraries;
+using Encoding.Contracts.Libraries;
 using Encoding.Contracts.Executions;
 using Microsoft.AspNetCore.Http.Features;
 
@@ -17,16 +19,7 @@ public static class RuntimeEndpoints
             var path=artifacts.PathFor(id,digest);
             return File.Exists(path)?Results.File(path,"application/octet-stream",artifact.Name,enableRangeProcessing:true):Results.NotFound();
         });
-        app.MapPost("/api/v1/media-executions",async(EnqueueMediaRequest request,FlowRepository flows,FlowDefinitionValidator validator,RuntimeRepository runtime,CancellationToken ct)=>
-        {
-            if(request.Id==Guid.Empty || request.LibraryId==Guid.Empty) return (IResult)Results.BadRequest();
-            var saved=await flows.GetAsync(request.FlowId,request.FlowVersion,ct);
-            if(saved is null) return Results.NotFound(new { title="Version publiée du flow introuvable." });
-            var validation=validator.Validate(saved.Definition);
-            if(!validation.IsValid) return Results.UnprocessableEntity(validation);
-            try { return await runtime.EnqueueAsync(request,saved.Definition,ct) ? Results.Created($"/api/v1/executions/{request.Id}",new { request.Id }) : Results.Conflict(); }
-            catch(ArgumentException e) { return Results.BadRequest(new { title=e.Message }); }
-        });
+        app.MapPost("/api/v1/media-executions",()=>Results.Json(new{title="Lancez les traitements depuis les fichiers détectés de la bibliothèque."},statusCode:410));
         var group=app.MapGroup("/api/v1/runtime/nodes/{nodeId:guid}").WithTags("Runtime");
         group.AddEndpointFilter(async(context,next)=>
         {
@@ -34,6 +27,17 @@ public static class RuntimeEndpoints
             var runtime=context.HttpContext.RequestServices.GetRequiredService<RuntimeRepository>();
             if(!await runtime.AuthenticateAsync(node,context.HttpContext.Request.Headers["X-Node-Token"].ToString(),context.HttpContext.RequestAborted)) return Results.Unauthorized();
             return await next(context);
+        });
+        group.MapGet("/capacity",async(Guid nodeId,LibraryProcessingRepository repository,CancellationToken ct)=>
+            await repository.NodeAsync(nodeId,ct) is {} settings?(IResult)Results.Ok(new Encoding.Contracts.Nodes.RuntimeCapacity(settings.EffectiveMaxConcurrentTasks)):Results.NotFound());
+        group.MapPost("/library-scans/claim",async(Guid nodeId,LibraryWorkflowRepository repository,CancellationToken ct)=>
+            await repository.ClaimScanAsync(nodeId,ct) is {} scan?(IResult)Results.Ok(scan):Results.NoContent());
+        group.MapPost("/library-scans/{id:guid}/renew",async(Guid nodeId,Guid id,LibraryScanFence request,LibraryWorkflowRepository repository,CancellationToken ct)=>
+            await repository.RenewScanAsync(id,nodeId,request.Epoch,ct)?(IResult)Results.NoContent():Results.Conflict());
+        group.MapPost("/library-scans/{id:guid}/complete",async(Guid nodeId,Guid id,CompleteLibraryScan request,LibraryWorkflowRepository repository,CancellationToken ct)=>
+        {
+            try {return await repository.CompleteScanAsync(id,nodeId,request,ct)?(IResult)Results.NoContent():Results.Conflict();}
+            catch(ArgumentException) {return Results.BadRequest();}
         });
         group.MapPost("/claim",async(Guid nodeId,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.ClaimAsync(nodeId,ct) is { } lease ? (IResult)Results.Ok(lease) : Results.NoContent());

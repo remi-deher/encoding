@@ -58,6 +58,7 @@ services:
       - "127.0.0.1:5081:8081"
     volumes:
       - encoding-node-data:/var/lib/encoding-node
+      - ../media-test:/media/test
     depends_on:
       api:
         condition: service_started

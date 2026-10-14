@@ -8,7 +8,8 @@ public sealed class WorkerEnrollmentService(
     WorkerIdentityStore identityStore,
     WorkerClusterDiscovery discovery,
     IToolCapabilityProbe capabilityProbe,
-    ILogger<WorkerEnrollmentService> logger)
+    ILogger<WorkerEnrollmentService> logger,
+    Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> jsonOptions)
 {
     public async Task<NodeResponse> EnrollAsync(Guid clusterId, CancellationToken cancellationToken)
     {
@@ -39,7 +40,7 @@ public sealed class WorkerEnrollmentService(
             throw new HttpRequestException($"Le serveur du cluster a refusé l’enrôlement (HTTP {(int)response.StatusCode}).");
         }
 
-        var node = await response.Content.ReadFromJsonAsync<NodeResponse>(cancellationToken: cancellationToken)
+        var node = await response.Content.ReadFromJsonAsync<NodeResponse>(jsonOptions.Value.SerializerOptions, cancellationToken)
             ?? throw new HttpRequestException("Le serveur n’a pas retourné la confirmation de l’enrôlement.");
         await identityStore.MarkEnrolledAsync(cancellationToken);
         logger.LogInformation("Le worker {NodeId} a rejoint le cluster {ClusterId}.", node.Id, cluster.Id);

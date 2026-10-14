@@ -73,7 +73,7 @@ FlowBackups__Directory configure le dossier JSON. Compose monte encoding-flow-ba
 Voir [0015 — Runtime et archives portables](../docs/architecture/0015-flow-runtime-and-portable-archives.md) pour les baux, checkpoints, outils, contrats plugin et restrictions Linux Landlock.
 
 - Le tableau propose brouillons, publication validée, comparaison des versions, import JSON/ZIP, export JSON individuel et export ZIP d’une sélection.
-- Exécuter la version publiée demande une bibliothèque active et un chemin relatif. Configurez les montages du worker et les accès de bibliothèque avant de lancer une tâche.
+- La bibliothèque reçoit une version publiée du flow. Découvrez les fichiers puis traitez une sélection depuis la bibliothèque ; aucun chemin n’est saisi. Configurez les montages et les accès des nœuds au préalable. Voir [0016](../docs/architecture/0016-library-workflow-and-discovery.md).
 - Scripts et plugins nécessitent Landlock sur le noyau Linux hôte ; ils ne sont pas annoncés si cette restriction est absente.
 - Le nœud source transfère le média par WebDAV ; les outils travaillent sur une copie locale. Le résultat validé est publié sous .encoding-results/<executionId>/ sans remplacer la source.
 - Les métadonnées avant/après, événements et fichiers produits sont consultables dans le suivi.

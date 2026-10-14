@@ -11,7 +11,9 @@
   note="Le serveur déclare chaque bibliothèque et décide quels nœuds y sont autorisés. Les réglages d’accès sont conservés par bibliothèque et par nœud."
 >
   <ng-template #pageActions>
-    <button matButton="filled" type="button" (click)="addLibrary()">Ajouter une bibliothèque</button>
+    <button matButton="filled" type="button" (click)="addLibrary()">
+      Ajouter une bibliothèque
+    </button>
   </ng-template>
 
   <app-data-table
@@ -30,14 +32,40 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list [fields]="detailFields()" [tabbed]="true" tabsLabel="Sections de la bibliothèque" />
+    <app-detail-field-list
+      [fields]="detailFields()"
+      [tabbed]="true"
+      tabsLabel="Sections de la bibliothèque"
+    />
     @if (selectedLibrary()) {
+      <h3>Traitement de la bibliothèque</h3>
+      <p>{{ workflowLabel() }}</p>
+      <p>{{ processingSummary() }}</p>
+      <p role="status">{{ discoveryStatus() }}</p>
+      <app-data-table
+        [columns]="mediaColumns"
+        [rows]="mediaRows()"
+        [selectable]="true"
+        [listActions]="mediaListActions"
+        [rowActions]="mediaRowActions"
+        [selectionActions]="mediaSelectionActions"
+        (listAction)="discoverFiles()"
+        (rowAction)="processFiles([$event.row['id'].toString()])"
+        (selectionAction)="onMediaSelection($event)"
+        emptyMessage="Aucun fichier détecté. Attribuez un flow puis lancez la découverte."
+      />
+
       <section class="library-access-summary" aria-labelledby="library-access-heading">
         <div>
           <h3 id="library-access-heading">Nœuds autorisés par le serveur</h3>
           <p>{{ accessStatus() }}</p>
         </div>
-        <button matButton="outlined" type="button" [disabled]="selectedAccessesLoading()" (click)="showLibraryNodes()">
+        <button
+          matButton="outlined"
+          type="button"
+          [disabled]="selectedAccessesLoading()"
+          (click)="showLibraryNodes()"
+        >
           {{ selectedAccessesLoading() ? 'Chargement des nœuds…' : 'Voir les nœuds' }}
         </button>
       </section>
@@ -52,13 +80,21 @@
           emptyMessage="Aucun accès configuré."
         />
       } @else {
-        <p class="library-access-empty">Aucun nœud n’a encore accès à cette bibliothèque. Elle ne sera pas traitée tant qu’un accès n’est pas configuré.</p>
+        <p class="library-access-empty">
+          Aucun nœud n’a encore accès à cette bibliothèque. Elle ne sera pas traitée tant qu’un
+          accès n’est pas configuré.
+        </p>
       }
     }
   </ng-template>
 
   <ng-template #detailHeaderActions>
     @if (selectedLibrary(); as library) {
+      <app-drawer-action-button
+        label="Surveillance et limites"
+        (activated)="configureProcessing()"
+      />
+      <app-drawer-action-button label="Attribuer un flow" (activated)="assignFlow()" />
       <app-drawer-action-button
         [label]="library.configuredNodeCount ? 'Modifier les accès' : 'Configurer les accès'"
         (activated)="configureAccesses()"
@@ -68,9 +104,35 @@
 
   <ng-template #actionContent>
     @if (actionType() === 'create') {
-      <app-record-form [data]="createFormData" (submitted)="createLibrary($event)" (cancelled)="closeCreateLibrary()" />
+      <app-record-form
+        [data]="createFormData"
+        (submitted)="createLibrary($event)"
+        (cancelled)="closeCreateLibrary()"
+      />
     } @else if (actionType() === 'edit') {
-      <app-record-form [data]="editFormData()" (submitted)="updateLibrary($event)" (cancelled)="closeCreateLibrary()" />
+      <app-record-form
+        [data]="editFormData()"
+        (submitted)="updateLibrary($event)"
+        (cancelled)="closeCreateLibrary()"
+      />
+    } @else if (actionType() === 'processing') {
+      @if (processingForm(); as form) {
+        <app-record-form
+          [data]="form"
+          [busy]="workflowBusy()"
+          (submitted)="saveProcessing($event)"
+          (cancelled)="closeCreateLibrary()"
+        />
+      }
+    } @else if (actionType() === 'flow') {
+      @if (assignmentForm(); as form) {
+        <app-record-form
+          [data]="form"
+          [busy]="workflowBusy()"
+          (submitted)="saveFlowAssignment($event)"
+          (cancelled)="closeCreateLibrary()"
+        />
+      }
     } @else if (accessFormLoading()) {
       <p role="status">Chargement des nœuds et des accès…</p>
     } @else {

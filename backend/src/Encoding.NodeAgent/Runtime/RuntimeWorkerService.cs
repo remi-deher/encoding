@@ -17,10 +17,12 @@ public sealed class RuntimeWorkerService(NodeAgentOptions options,WorkerIdentity
                 try
                 {
                     var identity=await identities.GetAsync(ct);
-                    if(identity.IsEnrolled && options.Roles.Contains(NodeRole.Worker) && tasks.Count<options.MaxConcurrentTasks)
+                    if(identity.IsEnrolled && options.Roles.Contains(NodeRole.Worker))
                     {
                         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
                         using var client=new RuntimeClient(identity);
+                        var capacity=await client.GetAsync<RuntimeCapacity>("capacity",timeout.Token);
+                        if(tasks.Count>=capacity.MaxConcurrentTasks) {await Task.Delay(TimeSpan.FromSeconds(2),ct);continue;}
                         var lease=await client.PostAsync<RuntimeLease>("claim",new { },timeout.Token);
                         if(lease is not null)
                         {

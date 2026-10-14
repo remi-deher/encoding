@@ -46,7 +46,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
             SELECT a.library_id, a.node_id, n.name, a.mode, a.is_enabled, a.local_path, a.can_read, a.can_write,
                    a.transfer_source_node_id, source.name, a.updated_at
             FROM library_node_accesses a
-            JOIN cluster_nodes n ON n.id = a.node_id
+            JOIN cluster_nodes n ON n.id = a.node_id AND n.deleted_at IS NULL
             LEFT JOIN cluster_nodes source ON source.id = a.transfer_source_node_id
             WHERE a.library_id = @library_id
             ORDER BY n.name, n.id
@@ -81,7 +81,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
         var nodeRoles = new Dictionary<Guid, string[]>();
         if (nodes.Count > 0)
         {
-            await using var nodeCommand = new NpgsqlCommand("SELECT id, roles FROM cluster_nodes WHERE id = ANY(@ids)", connection, transaction);
+            await using var nodeCommand = new NpgsqlCommand("SELECT id, roles FROM cluster_nodes WHERE id = ANY(@ids) AND deleted_at IS NULL", connection, transaction);
             nodeCommand.Parameters.AddWithValue("ids", nodes.Select(item => item.NodeId).Distinct().ToArray());
             await using var nodeReader = await nodeCommand.ExecuteReaderAsync(cancellationToken);
             while (await nodeReader.ReadAsync(cancellationToken)) nodeRoles[nodeReader.GetGuid(0)] = nodeReader.GetFieldValue<string[]>(1);

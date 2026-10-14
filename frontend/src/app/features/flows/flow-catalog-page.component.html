@@ -61,7 +61,6 @@
   <ng-template #actionContent>
     <app-record-form
       [data]="actionForm()"
-      [busy]="enqueueing()"
       (submitted)="submitAction($event)"
       (cancelled)="closeFlowCreation()"
     />

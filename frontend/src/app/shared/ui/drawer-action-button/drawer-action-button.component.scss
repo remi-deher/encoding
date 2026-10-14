@@ -17,3 +17,8 @@
     max-width: 220px;
   }
 }
+
+.drawer-action-button_danger {
+  --mat-button-filled-container-color: #b42318;
+  --mat-button-filled-label-text-color: #fff;
+}

@@ -1,5 +1,6 @@
 export type NodeRole = 'server' | 'worker';
 export interface NodeToolCapability {
+  readonly encoders?: readonly string[] | null;
   readonly toolId: string;
   readonly version: string;
   readonly mediaTypes: readonly string[];
@@ -15,6 +16,8 @@ export interface NodeResponse {
   readonly lastSeenAt: string;
 }
 export interface LibraryResponse {
+  readonly flowName?: string | null;
+  readonly flowVersion?: number | null;
   readonly id: string;
   readonly name: string;
   readonly createdAt: string;
@@ -27,3 +30,18 @@ export const NODE_ROLE_LABELS: Readonly<Record<NodeRole, string>> = {
   server: 'Serveur',
   worker: 'Worker',
 };
+
+export interface NodeActivityResponse {
+  readonly active: number;
+  readonly succeeded: number;
+  readonly failed: number;
+  readonly cancelled: number;
+  readonly lastActivity: string | null;
+  readonly sourceTasks: number;
+}
+
+export interface NodeProcessingSettings {
+  readonly maxConcurrentTasks: number | null;
+  readonly effectiveMaxConcurrentTasks: number;
+  readonly revision: number;
+}

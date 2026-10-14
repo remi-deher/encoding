@@ -12,7 +12,9 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
                    count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode <> 'unsupported')::integer,
                    count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'direct')::integer,
                    count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'transfer')::integer,
-                   l.is_active
+                   l.is_active,
+                   (SELECT v.definition->>'name' FROM library_flow_assignments f JOIN flow_versions v ON v.flow_id=f.flow_id AND v.version=f.flow_version WHERE f.library_id=l.id),
+                   (SELECT f.flow_version FROM library_flow_assignments f WHERE f.library_id=l.id)
             FROM libraries l
             LEFT JOIN library_node_accesses a ON a.library_id = l.id
             GROUP BY l.id
@@ -84,7 +86,9 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
                    count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode <> 'unsupported')::integer,
                    count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'direct')::integer,
                    count(a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'transfer')::integer,
-                   l.is_active
+                   l.is_active,
+                   (SELECT v.definition->>'name' FROM library_flow_assignments f JOIN flow_versions v ON v.flow_id=f.flow_id AND v.version=f.flow_version WHERE f.library_id=l.id),
+                   (SELECT f.flow_version FROM library_flow_assignments f WHERE f.library_id=l.id)
             FROM libraries l LEFT JOIN library_node_accesses a ON a.library_id = l.id
             WHERE l.id = @id GROUP BY l.id
             """;
@@ -98,5 +102,5 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
     private static LibraryResponse Read(NpgsqlDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1),
         new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(2), DateTimeKind.Utc)),
-        reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetBoolean(6));
+        reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetBoolean(6), reader.FieldCount>7 && !reader.IsDBNull(7)?reader.GetString(7):null, reader.FieldCount>8 && !reader.IsDBNull(8)?reader.GetInt32(8):null);
 }

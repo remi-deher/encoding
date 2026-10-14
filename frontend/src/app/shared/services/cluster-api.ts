@@ -1,12 +1,59 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { NodeResponse, LibraryResponse } from '../models/cluster';
+import { LibraryWorkflow, LibraryProcessingSettings } from '../models/library-workflow';
+import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models/cluster';
 
 @Injectable({ providedIn: 'root' })
 export class ClusterApi {
   private readonly http = inject(HttpClient);
   listNodes() {
     return this.http.get<readonly NodeResponse[]>('/api/v1/nodes');
+  }
+  libraryProcessing(id: string) {
+    return this.http.get<LibraryProcessingSettings>('/api/v1/libraries/' + id + '/processing');
+  }
+  saveLibraryProcessing(
+    id: string,
+    settings: Omit<LibraryProcessingSettings, 'revision'>,
+    expectedRevision: number,
+  ) {
+    return this.http.put<void>('/api/v1/libraries/' + id + '/processing', {
+      ...settings,
+      expectedRevision,
+    });
+  }
+  nodeProcessing(id: string) {
+    return this.http.get<NodeProcessingSettings>('/api/v1/nodes/' + id + '/processing');
+  }
+  saveNodeProcessing(id: string, maxConcurrentTasks: number | null, expectedRevision: number) {
+    return this.http.put<void>('/api/v1/nodes/' + id + '/processing', {
+      maxConcurrentTasks,
+      expectedRevision,
+    });
+  }
+  libraryWorkflow(id: string) {
+    return this.http.get<LibraryWorkflow>('/api/v1/libraries/' + id + '/workflow');
+  }
+  assignLibraryFlow(
+    id: string,
+    flowId: string | null,
+    version: number | null,
+    expectedRevision: number,
+  ) {
+    return this.http.put<void>('/api/v1/libraries/' + id + '/flow', {
+      flowId,
+      version,
+      expectedRevision,
+    });
+  }
+  discoverLibrary(id: string) {
+    return this.http.post<{ id: string }>('/api/v1/libraries/' + id + '/discover', {});
+  }
+  enqueueLibraryFiles(id: string, fileIds: readonly string[], assignmentRevision: number) {
+    return this.http.post<{ queued: number; skipped: number }>(
+      '/api/v1/libraries/' + id + '/executions',
+      { fileIds, assignmentRevision },
+    );
   }
   listLibraries() {
     return this.http.get<readonly LibraryResponse[]>('/api/v1/libraries');

@@ -48,7 +48,7 @@ public sealed class RuntimeArtifactStore(NpgsqlDataSource dataSource,IConfigurat
                 var buffer=new byte[81920]; int count;
                 while((count=await source.ReadAsync(buffer,ct))>0)
                 {
-                    length+=count; if(length>configuration.GetValue<long>("Runtime:MaxArtifactBytes",1024L*1024*1024*1024)) throw new IOException("Lâ€™artefact dÃ©passe la limite configurÃ©e.");
+                    length+=count; if(length>configuration.GetValue<long>("Runtime:MaxArtifactBytes",1024L*1024*1024*1024)) throw new IOException("L’artefact dépasse la limite configurée.");
                     hash.AppendData(buffer,0,count); await output.WriteAsync(buffer.AsMemory(0,count),ct);
                 }
                 await output.FlushAsync(ct); output.Flush(true);
@@ -68,7 +68,7 @@ public sealed class RuntimeArtifactStore(NpgsqlDataSource dataSource,IConfigurat
                 catch(IOException) when(File.Exists(target)) { }
             }
             await using(var existing=File.OpenRead(target))
-                if(Convert.ToHexStringLower(await SHA256.HashDataAsync(existing,ct))!=digest) throw new IOException("Lâ€™artefact durable existant est corrompu.");
+                if(Convert.ToHexStringLower(await SHA256.HashDataAsync(existing,ct))!=digest) throw new IOException("L’artefact durable existant est corrompu.");
             Encoding.Core.AtomicFilePublication.Confirm(target);
             await using var register=new NpgsqlCommand("INSERT INTO execution_artifacts(execution_id,sha256,byte_length) VALUES(@id,@sha,@length) ON CONFLICT DO NOTHING",c,tx);
             register.Parameters.AddWithValue("id",id); register.Parameters.AddWithValue("sha",digest); register.Parameters.AddWithValue("length",length);

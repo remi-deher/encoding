@@ -1,7 +1,5 @@
 import { compareFlowVersions } from '../../shared/models/flow-version-comparison';
 import { FlowDocument } from '../../shared/models/flow-validation';
-import { ClusterApi } from '../../shared/services/cluster-api';
-import { firstValueFrom } from 'rxjs';
 import { RecordFormData } from '../../shared/ui/record-form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
@@ -64,12 +62,9 @@ export class FlowCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
 
-  private readonly clusterApi = inject(ClusterApi);
   private readonly comparisonVersions = signal<readonly FlowDocument[] | null>(null);
-  private readonly runForm = signal<RecordFormData | null>(null);
-  private readonly runningFlow = signal<DataTableRow | null>(null);
-  protected readonly enqueueing = signal(false);
-  protected readonly actionForm = computed(() => this.runForm() ?? this.flowCreationForm);
+  private readonly comparisonForm = signal<RecordFormData | null>(null);
+  protected readonly actionForm = computed(() => this.comparisonForm() ?? this.flowCreationForm);
   protected async submitAction(values: Record<string, string>): Promise<void> {
     const versions = this.comparisonVersions();
     if (versions) {
@@ -93,43 +88,15 @@ export class FlowCatalogPageComponent {
       }
       return;
     }
-    const flow = this.runningFlow();
-    if (!flow) {
-      this.startFlow(values);
-      return;
-    }
-    if (this.enqueueing()) return;
-    this.enqueueing.set(true);
-    try {
-      const queued = await this.api.enqueue(
-        values['libraryId'],
-        values['mediaPath'],
-        String(flow['id']),
-        Number(String(flow['version']).replace('v', '')),
-      );
-      this.actionOpen.set(false);
-      this.notifications.show('Exécution ajoutée à la file : ' + queued.id);
-    } catch (error) {
-      this.notifications.show(
-        error instanceof HttpErrorResponse
-          ? (error.error?.title ?? 'Exécution impossible.')
-          : 'Exécution impossible.',
-      );
-    } finally {
-      this.enqueueing.set(false);
-    }
+    this.startFlow(values);
   }
+
   private readonly dialog = inject(MatDialog);
   private readonly downloads = inject(FileDownload);
   private readonly notifications = inject(NotificationService);
   protected readonly listActions = [{ id: 'import', label: 'Importer', fileAccept: '.json,.zip' }];
   protected readonly rowActions = [
     { id: 'export', label: 'Exporter' },
-    {
-      id: 'run',
-      label: 'Exécuter la version publiée',
-      visibleWhen: (row: DataTableRow) => Number(String(row['version']).replace('v', '')) > 0,
-    },
     { id: 'versions', label: 'Versions / Comparer' },
   ];
   protected readonly selectionActions = [{ id: 'export', label: 'Exporter la sélection (ZIP)' }];
@@ -149,41 +116,6 @@ export class FlowCatalogPageComponent {
     }
   }
   protected async onRowAction(event: DataTableActionEvent): Promise<void> {
-    if (event.actionId === 'run') {
-      this.comparisonVersions.set(null);
-      try {
-        const libraries = await firstValueFrom(this.clusterApi.listLibraries());
-        this.runningFlow.set(event.row);
-        this.runForm.set({
-          title: 'Exécuter ' + String(event.row['name']),
-          description:
-            'Saisissez le chemin du média relatif à la bibliothèque. La source sera conservée ; une sortie validée sera publiée séparément.',
-          submitLabel: 'Ajouter à la file',
-          fields: [
-            {
-              id: 'libraryId',
-              label: 'Bibliothèque',
-              type: 'select',
-              required: true,
-              options: libraries
-                .filter((library) => library.isActive)
-                .map((library) => ({ value: library.id, label: library.name })),
-            },
-            {
-              id: 'mediaPath',
-              label: 'Chemin relatif du média',
-              type: 'text',
-              required: true,
-              maxLength: 2048,
-            },
-          ],
-        });
-        this.actionOpen.set(true);
-      } catch {
-        this.notifications.show('Bibliothèques indisponibles.');
-      }
-      return;
-    }
     if (event.actionId === 'versions') {
       try {
         const versions = await this.api.versions(String(event.row['id']));
@@ -199,8 +131,7 @@ export class FlowCatalogPageComponent {
           return;
         }
         this.comparisonVersions.set(versions);
-        this.runningFlow.set(null);
-        this.runForm.set({
+        this.comparisonForm.set({
           title: 'Comparer les versions',
           description: 'Choisissez deux versions publiées du flow.',
           submitLabel: 'Comparer',
@@ -347,8 +278,7 @@ export class FlowCatalogPageComponent {
 
   protected openFlowCreation(): void {
     this.comparisonVersions.set(null);
-    this.runForm.set(null);
-    this.runningFlow.set(null);
+    this.comparisonForm.set(null);
     this.actionOpen.set(true);
   }
 

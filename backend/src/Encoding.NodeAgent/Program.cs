@@ -21,6 +21,7 @@ builder.Services.AddSingleton<MediaScanner>();
 builder.Services.AddSingleton<MediaActions>();
 builder.Services.AddSingleton<RuntimeFlowRunner>();
 builder.Services.AddHostedService<RuntimeTransferService>();
+builder.Services.AddHostedService<LibraryDiscoveryService>();
 builder.Services.AddHostedService<RuntimeWorkerService>();
 builder.Services.AddSingleton<IToolCapabilityProbe, ToolCapabilityProbe>();
 builder.Services.AddSingleton<WorkerClusterDiscovery>();

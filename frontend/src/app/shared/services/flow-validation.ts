@@ -21,17 +21,7 @@ export class FlowValidation {
   versionStatus(id: string, version: number) {
     return this.http.get<FlowVersionResponse>('/api/v1/flows/' + id + '/versions/' + version);
   }
-  enqueue(libraryId: string, mediaPath: string, flowId: string, flowVersion: number) {
-    return firstValueFrom(
-      this.http.post<{ id: string }>('/api/v1/media-executions', {
-        id: crypto.randomUUID(),
-        libraryId,
-        mediaPath,
-        flowId,
-        flowVersion,
-      }),
-    );
-  }
+
   export(id: string) {
     return firstValueFrom(
       this.http.get('/api/v1/flows/' + id + '/export', { responseType: 'blob' }),

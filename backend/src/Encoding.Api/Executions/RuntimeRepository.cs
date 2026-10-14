@@ -16,26 +16,33 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
     public async Task<bool> AuthenticateAsync(Guid node,string token,CancellationToken ct)
     {
         if(string.IsNullOrWhiteSpace(token) || token.Length>256) return false;
-        await using var cmd=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@node AND node_token_hash=@hash)");
+        await using var cmd=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL AND node_token_hash=@hash)");
         cmd.Parameters.AddWithValue("node",node); cmd.Parameters.AddWithValue("hash",SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)));
         return (bool)(await cmd.ExecuteScalarAsync(ct))!;
     }
 
     public async Task<bool> EnqueueAsync(EnqueueMediaRequest request,FlowDefinition flow,CancellationToken ct)
     {
-        var path=NormalizePath(request.MediaPath);
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
-        await using var library=new NpgsqlCommand("SELECT name FROM libraries WHERE id=@id AND is_active",c,tx);
+        if(!await EnqueueInTransactionAsync(request,flow,c,tx,ct)) return false;
+        await tx.CommitAsync(ct); return true;
+    }
+
+    internal static async Task<bool> EnqueueInTransactionAsync(EnqueueMediaRequest request,FlowDefinition flow,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
+    {
+        var path=NormalizePath(request.MediaPath);
+        await using var library=new NpgsqlCommand("SELECT name FROM libraries WHERE id=@id AND is_active FOR UPDATE",c,tx);
         library.Parameters.AddWithValue("id",request.LibraryId);
         if(await library.ExecuteScalarAsync(ct) is not string name) return false;
+        await using var duplicate=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.library_id=@library AND w.media_key=@key AND e.state IN ('queued','running','cancelling'))",c,tx);
+        duplicate.Parameters.AddWithValue("library",request.LibraryId); duplicate.Parameters.AddWithValue("key",path.ToUpperInvariant());
+        if((bool)(await duplicate.ExecuteScalarAsync(ct))!) return false;
         var creation=new CreateExecutionRequest(request.Id,path,name,flow.Name,flow.Version,JsonSerializer.SerializeToElement(flow,Json));
         if(!await ExecutionRepository.CreateInTransactionAsync(creation,c,tx,ct)) return false;
-        await using var work=new NpgsqlCommand("""
-          INSERT INTO execution_work(execution_id,library_id,media_path,media_key) VALUES(@id,@library,@path,@key);
-          """,c,tx);
-        work.Parameters.AddWithValue("id",request.Id); work.Parameters.AddWithValue("library",request.LibraryId); work.Parameters.AddWithValue("path",path);
-        work.Parameters.AddWithValue("key",path.ToUpperInvariant());
-        await work.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return true;
+        await using var work=new NpgsqlCommand("INSERT INTO execution_work(execution_id,library_id,media_path,media_key) VALUES(@id,@library,@path,@key)",c,tx);
+        work.Parameters.AddWithValue("id",request.Id); work.Parameters.AddWithValue("library",request.LibraryId);
+        work.Parameters.AddWithValue("path",path); work.Parameters.AddWithValue("key",path.ToUpperInvariant());
+        await work.ExecuteNonQueryAsync(ct); return true;
     }
 
     public static string NormalizePath(string? path)=>Encoding.Contracts.Libraries.MediaPathRules.Normalize(path);
@@ -44,7 +51,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         IReadOnlyList<NodeToolCapability> capabilities; int capacity;
-        await using(var node=new NpgsqlCommand("SELECT capabilities::text,max_concurrent_tasks FROM cluster_nodes WHERE id=@node AND 'worker'=ANY(roles) AND last_seen_at>clock_timestamp()-@offline FOR UPDATE",c,tx))
+        await using(var node=new NpgsqlCommand("SELECT capabilities::text,COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id),max_concurrent_tasks) FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL AND 'worker'=ANY(roles) AND last_seen_at>clock_timestamp()-@offline FOR UPDATE",c,tx))
         {
             node.Parameters.AddWithValue("offline",presence.OfflineAfter); node.Parameters.AddWithValue("node",worker); await using var r=await node.ExecuteReaderAsync(ct);
             if(!await r.ReadAsync(ct)) return null;
@@ -57,16 +64,41 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
           SELECT e.id,w.library_id,w.media_path,w.media_key,e.flow_definition::text,e.attempt,e.revision,w.lease_epoch
           FROM execution_work w JOIN executions e ON e.id=w.execution_id JOIN libraries l ON l.id=w.library_id
           WHERE e.state IN ('queued','running') AND l.is_active AND w.available_at<=clock_timestamp()
-          AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()) ORDER BY e.queued_at,e.id LIMIT 100
+          AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp())
+          AND NOT EXISTS(SELECT 1 FROM library_processing_settings p WHERE p.library_id=l.id AND p.max_concurrent_tasks IS NOT NULL
+            AND p.max_concurrent_tasks<=(SELECT count(*) FROM execution_work aw JOIN executions ae ON ae.id=aw.execution_id WHERE aw.library_id=l.id AND aw.lease_until>clock_timestamp() AND ae.state IN ('running','cancelling')))
+          AND NOT EXISTS(SELECT 1 FROM library_node_processing_limits p WHERE p.library_id=l.id AND p.node_id=@worker
+            AND p.max_concurrent_tasks<=(SELECT count(*) FROM execution_work aw JOIN executions ae ON ae.id=aw.execution_id WHERE aw.library_id=l.id AND aw.worker_node_id=@worker AND aw.lease_until>clock_timestamp() AND ae.state IN ('running','cancelling')))
+          ORDER BY e.queued_at,e.id LIMIT 100
           FOR UPDATE OF e,w SKIP LOCKED
           """,c,tx))
         {
+            read.Parameters.AddWithValue("worker",worker);
             await using var r=await read.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct)) candidates.Add((r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetString(3),JsonSerializer.Deserialize<FlowDefinition>(r.GetString(4),Json)!,r.GetInt32(5),r.GetInt32(6),r.GetInt64(7)));
         }
         foreach(var item in candidates)
         {
             if(!eligibility.CanRun(item.Flow,capabilities)) continue;
+            // Library row serializes claims from all workers before counting active leases.
+            await using(var limits=new NpgsqlCommand("""
+              SELECT p.max_concurrent_tasks,(SELECT max_concurrent_tasks FROM library_node_processing_limits WHERE library_id=l.id AND node_id=@worker)
+              FROM libraries l LEFT JOIN library_processing_settings p ON p.library_id=l.id
+              WHERE l.id=@library AND l.is_active FOR UPDATE OF l SKIP LOCKED
+              """,c,tx))
+            {
+                limits.Parameters.AddWithValue("library",item.Library); limits.Parameters.AddWithValue("worker",worker);
+                await using var r=await limits.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
+                int? global=r.IsDBNull(0)?null:r.GetInt32(0); int? local=r.IsDBNull(1)?null:r.GetInt32(1); await r.DisposeAsync();
+                await using var count=new NpgsqlCommand("""
+                  SELECT count(*)::integer,count(*) FILTER(WHERE w.worker_node_id=@worker)::integer
+                  FROM execution_work w JOIN executions e ON e.id=w.execution_id
+                  WHERE w.library_id=@library AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')
+                  """,c,tx);
+                count.Parameters.AddWithValue("library",item.Library); count.Parameters.AddWithValue("worker",worker);
+                await using var counts=await count.ExecuteReaderAsync(ct); await counts.ReadAsync(ct);
+                if(global is {} maximum && counts.GetInt32(0)>=maximum || local is {} maximumLocal && counts.GetInt32(1)>=maximumLocal) continue;
+            }
             Guid source; string? root;
             var needsWrite=item.Flow.Nodes.Any(n=>components.Resolve(n.Component)!.RequiresWriteAccess);
             await using(var access=new NpgsqlCommand("""
@@ -77,7 +109,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
               WHERE a.library_id=@library AND a.node_id=@worker AND a.is_enabled AND a.can_read
               AND ((a.mode='direct' AND a.local_path IS NOT NULL AND (NOT @write OR a.can_write))
                 OR (a.mode='transfer' AND s.mode='direct' AND s.is_enabled AND s.can_read AND (NOT @write OR s.can_write)
-                    AND sn.last_seen_at>clock_timestamp()-@offline))
+                    AND sn.deleted_at IS NULL AND sn.last_seen_at>clock_timestamp()-@offline))
               """,c,tx))
             {
                 access.Parameters.AddWithValue("offline",presence.OfflineAfter); access.Parameters.AddWithValue("library",item.Library); access.Parameters.AddWithValue("worker",worker); access.Parameters.AddWithValue("write",needsWrite);
@@ -107,11 +139,11 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
                 uncertain.Parameters.AddWithValue("id",item.Id);
                 if((bool)(await uncertain.ExecuteScalarAsync(ct))!)
                 {
-                    await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,"Une Ã©tape externe a un effet incertain aprÃ¨s interruption. Une relance explicite est nÃ©cessaire."),c,tx,ct);
+                    await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,"Une étape externe a un effet incertain après interruption. Une relance explicite est nécessaire."),c,tx,ct);
                     await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return null;
                 }
             }
-            await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"running",worker,null,"Flow attribuÃ© au worker ; bail actif."),c,tx,ct);
+            await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"running",worker,null,"Flow attribué au worker ; bail actif."),c,tx,ct);
             RuntimeCheckpoint? checkpoint=null; string? sourceSha=null; DateTimeOffset expires;
             await using(var state=new NpgsqlCommand("SELECT source_sha,lease_until,(SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1) FROM execution_work WHERE execution_id=@id",c,tx))
             {
@@ -222,7 +254,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
             metadata.Parameters.AddWithValue("after",NpgsqlDbType.Jsonb,(object?)cp.Context.CurrentMetadata?.GetRawText()??DBNull.Value);
             await metadata.ExecuteNonQueryAsync(ct);
         }
-        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,$"Ã‰tape terminÃ©e : {node.Name??component.Name}."),c,tx,ct)) return false;
+        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,$"Étape terminée : {node.Name??component.Name}."),c,tx,ct)) return false;
         await tx.CommitAsync(ct); return true;
     }
     public async Task<RuntimeSourceState> SourceAsync(Guid id,CancellationToken ct)

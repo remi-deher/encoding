@@ -22,7 +22,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
                 capabilities = EXCLUDED.capabilities,
                 last_seen_at = clock_timestamp()
-            WHERE cluster_nodes.node_token_hash IS NULL OR cluster_nodes.node_token_hash = EXCLUDED.node_token_hash
+            WHERE cluster_nodes.deleted_at IS NULL AND (cluster_nodes.node_token_hash IS NULL OR cluster_nodes.node_token_hash = EXCLUDED.node_token_hash)
             RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -35,6 +35,8 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
 
     public async Task<bool> CreatePairingRequestAsync(CreateNodeEnrollmentRequest request, CancellationToken cancellationToken)
     {
+        await using var deleted=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND deleted_at IS NOT NULL)");
+        deleted.Parameters.AddWithValue("id",request.Node.Id); if((bool)(await deleted.ExecuteScalarAsync(cancellationToken))!) return false;
         var pairingKeyHash = HashSecret(request.PairingKey);
         var nodeTokenHash = HashSecret(request.Node.NodeToken);
         const string sql = """
@@ -72,7 +74,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         const string sql = """
             SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at
             FROM node_enrollment_requests
-            WHERE expires_at > clock_timestamp()
+            WHERE expires_at > clock_timestamp() AND NOT EXISTS(SELECT 1 FROM cluster_nodes n WHERE n.id=node_enrollment_requests.node_id AND n.deleted_at IS NOT NULL)
             ORDER BY created_at, node_id
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -143,7 +145,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
                 capabilities = EXCLUDED.capabilities,
                 last_seen_at = clock_timestamp()
-            WHERE cluster_nodes.node_token_hash IS NULL OR cluster_nodes.node_token_hash = EXCLUDED.node_token_hash
+            WHERE cluster_nodes.deleted_at IS NULL AND (cluster_nodes.node_token_hash IS NULL OR cluster_nodes.node_token_hash = EXCLUDED.node_token_hash)
             RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at
             """;
         NodeResponse? node;
@@ -180,7 +182,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
                 max_concurrent_tasks = @max_concurrent_tasks,
                 capabilities = @capabilities,
                 last_seen_at = clock_timestamp()
-            WHERE id = @id AND node_token_hash = @node_token_hash
+            WHERE id = @id AND deleted_at IS NULL AND node_token_hash = @node_token_hash
             RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -196,7 +198,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         const string sql = """
             SELECT id, name, roles, max_concurrent_tasks, capabilities, last_seen_at,
                    last_seen_at >= clock_timestamp() - @offline_after AS is_online
-            FROM cluster_nodes
+            FROM cluster_nodes WHERE deleted_at IS NULL
             ORDER BY name, id
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -213,7 +215,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         const string sql = """
             SELECT id, name, roles, max_concurrent_tasks, capabilities, last_seen_at,
                    last_seen_at >= clock_timestamp() - @offline_after AS is_online
-            FROM cluster_nodes WHERE id = @id
+            FROM cluster_nodes WHERE id = @id AND deleted_at IS NULL
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
@@ -221,6 +223,42 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         command.Parameters.AddWithValue("offline_after", offlineAfter);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, reader.GetBoolean(6)) : null;
+    }
+
+
+    public async Task<string> DeleteAsync(Guid id,CancellationToken ct)
+    {
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        await using var node=new NpgsqlCommand("SELECT id FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL FOR UPDATE",c,tx);
+        node.Parameters.AddWithValue("id",id); if(await node.ExecuteScalarAsync(ct) is null) return "missing";
+        await using var active=new NpgsqlCommand("""
+          SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id
+            WHERE (w.worker_node_id=@id OR w.source_node_id=@id) AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling'))
+          OR EXISTS(SELECT 1 FROM library_scans WHERE node_id=@id AND state='running' AND lease_until>clock_timestamp())
+          """,c,tx);
+        active.Parameters.AddWithValue("id",id); if((bool)(await active.ExecuteScalarAsync(ct))!) return "busy";
+        await using var remove=new NpgsqlCommand("""
+          UPDATE cluster_nodes SET deleted_at=clock_timestamp(),node_token_hash=NULL WHERE id=@id;
+          DELETE FROM library_node_accesses WHERE node_id=@id;
+          UPDATE library_node_accesses SET is_enabled=false WHERE transfer_source_node_id=@id;
+          DELETE FROM node_enrollment_requests WHERE node_id=@id;
+          """,c,tx);
+        remove.Parameters.AddWithValue("id",id); await remove.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return "deleted";
+    }
+
+    public async Task<NodeActivityResponse> ActivityAsync(Guid id,CancellationToken ct)
+    {
+        await using var cmd=dataSource.CreateCommand("""
+          SELECT
+           (SELECT count(*)::integer FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@id AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')),
+           (SELECT count(*)::integer FROM executions WHERE node_id=@id AND state='succeeded'),
+           (SELECT count(*)::integer FROM executions WHERE node_id=@id AND state='failed'),
+           (SELECT count(*)::integer FROM executions WHERE node_id=@id AND state='cancelled'),
+           (SELECT max(updated_at) FROM executions WHERE node_id=@id),
+           (SELECT count(*)::integer FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.source_node_id=@id AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling'))
+          """);
+        cmd.Parameters.AddWithValue("id",id); await using var r=await cmd.ExecuteReaderAsync(ct); await r.ReadAsync(ct);
+        return new(r.GetInt32(0),r.GetInt32(1),r.GetInt32(2),r.GetInt32(3),r.IsDBNull(4)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(4),r.GetInt32(5));
     }
 
     private static void AddNodeParameters(NpgsqlCommand command, NodeEnrollmentRequest request)

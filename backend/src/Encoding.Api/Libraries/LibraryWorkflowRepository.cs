@@ -1,0 +1,180 @@
+
+using System.Text.Json;
+using Encoding.Api.Executions;
+using Encoding.Api.Flows;
+using Encoding.Api.Nodes;
+using Encoding.Contracts.Flows;
+using Encoding.Contracts.Libraries;
+using Npgsql;
+
+namespace Encoding.Api.Libraries;
+
+public sealed class LibraryWorkflowRepository(NpgsqlDataSource dataSource,FlowDefinitionValidator validator,NodePresenceOptions presence)
+{
+    private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
+    public async Task<LibraryWorkflowResponse> GetAsync(Guid library,CancellationToken ct)
+    {
+        LibraryFlowAssignment? assignment=null; LibraryScanStatus? scan=null; int revision=0;
+        await using(var cmd=dataSource.CreateCommand("SELECT l.flow_assignment_revision,a.flow_id,a.flow_version,a.revision,v.definition->>'name' FROM libraries l LEFT JOIN library_flow_assignments a ON a.library_id=l.id LEFT JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version WHERE l.id=@id"))
+        {
+            cmd.Parameters.AddWithValue("id",library); await using var r=await cmd.ExecuteReaderAsync(ct);
+            if(await r.ReadAsync(ct)) {revision=r.GetInt32(0); if(!r.IsDBNull(1)) assignment=new(r.GetGuid(1),r.GetInt32(2),r.GetInt32(3),r.GetString(4));}
+        }
+        await using(var cmd=dataSource.CreateCommand("SELECT id,state,detail,completed_at FROM library_scans WHERE library_id=@id ORDER BY created_at DESC,id DESC LIMIT 1"))
+        {
+            cmd.Parameters.AddWithValue("id",library); await using var r=await cmd.ExecuteReaderAsync(ct);
+            if(await r.ReadAsync(ct)) scan=new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.IsDBNull(3)?null:r.GetFieldValue<DateTimeOffset>(3));
+        }
+        var files=new List<LibraryMediaFile>();
+        await using(var cmd=dataSource.CreateCommand("SELECT id,relative_path,byte_length,modified_at FROM library_media WHERE library_id=@id ORDER BY relative_path,id LIMIT 10000"))
+        {
+            cmd.Parameters.AddWithValue("id",library); await using var r=await cmd.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) files.Add(new(r.GetGuid(0),r.GetString(1),r.GetInt64(2),r.GetFieldValue<DateTimeOffset>(3)));
+        }
+        return new(assignment,scan,files,revision);
+    }
+    public async Task<bool> AssignAsync(Guid library,AssignLibraryFlowRequest request,CancellationToken ct)
+    {
+        if(request.ExpectedRevision<0 || request.ExpectedRevision==int.MaxValue || (request.FlowId is null)!=(request.Version is null)) return false;
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        if(!await LockLibraryAsync(library,c,tx,ct)) return false;
+        await using var current=new NpgsqlCommand("SELECT flow_assignment_revision FROM libraries WHERE id=@id",c,tx);
+        current.Parameters.AddWithValue("id",library);
+        if((await current.ExecuteScalarAsync(ct) as int? ?? 0)!=request.ExpectedRevision) return false;
+        if(request.FlowId is {} flow)
+        {
+            await using var version=new NpgsqlCommand("SELECT definition::text FROM flow_versions WHERE flow_id=@flow AND version=@version",c,tx);
+            version.Parameters.AddWithValue("flow",flow); version.Parameters.AddWithValue("version",request.Version!.Value);
+            if(await version.ExecuteScalarAsync(ct) is not string document || !validator.Validate(JsonSerializer.Deserialize<FlowDefinition>(document,Json)!).IsValid) return false;
+            await using var save=new NpgsqlCommand("INSERT INTO library_flow_assignments(library_id,flow_id,flow_version,revision) VALUES(@id,@flow,@version,@revision) ON CONFLICT(library_id) DO UPDATE SET flow_id=@flow,flow_version=@version,revision=@revision",c,tx);
+            save.Parameters.AddWithValue("id",library); save.Parameters.AddWithValue("flow",flow); save.Parameters.AddWithValue("version",request.Version.Value); save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);
+            await save.ExecuteNonQueryAsync(ct);
+        }
+        else
+        {
+            await using var delete=new NpgsqlCommand("DELETE FROM library_flow_assignments WHERE library_id=@id",c,tx);
+            delete.Parameters.AddWithValue("id",library); await delete.ExecuteNonQueryAsync(ct);
+        }
+        await using var advance=new NpgsqlCommand("UPDATE libraries SET flow_assignment_revision=flow_assignment_revision+1 WHERE id=@id",c,tx);
+        advance.Parameters.AddWithValue("id",library); await advance.ExecuteNonQueryAsync(ct);
+        await tx.CommitAsync(ct); return true;
+    }
+    private static async Task<bool> LockLibraryAsync(Guid id,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
+    {
+        await using var cmd=new NpgsqlCommand("SELECT id FROM libraries WHERE id=@id FOR UPDATE",c,tx);
+        cmd.Parameters.AddWithValue("id",id); return await cmd.ExecuteScalarAsync(ct) is Guid;
+    }
+    public async Task<Guid?> RequestScanAsync(Guid library,CancellationToken ct)
+    {
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        if(!await LockLibraryAsync(library,c,tx,ct)) return null;
+        await using var type=new NpgsqlCommand("SELECT v.definition->>'mediaType' FROM library_flow_assignments a JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version JOIN libraries l ON l.id=a.library_id WHERE a.library_id=@id AND l.is_active",c,tx);
+        type.Parameters.AddWithValue("id",library); if(await type.ExecuteScalarAsync(ct) is not string mediaType) return null;
+        await using var active=new NpgsqlCommand("SELECT id FROM library_scans WHERE library_id=@id AND state IN ('queued','running')",c,tx);
+        active.Parameters.AddWithValue("id",library);
+        if(await active.ExecuteScalarAsync(ct) is Guid existing) return existing;
+        var id=Guid.NewGuid();
+        await using var cmd=new NpgsqlCommand("INSERT INTO library_scans(id,library_id,media_type) VALUES(@id,@library,@type)",c,tx);
+        cmd.Parameters.AddWithValue("id",id); cmd.Parameters.AddWithValue("library",library); cmd.Parameters.AddWithValue("type",mediaType);
+        await cmd.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return id;
+    }
+    public async Task<LibraryScanLease?> ClaimScanAsync(Guid node,CancellationToken ct)
+    {
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        await using var cmd=new NpgsqlCommand("""
+          SELECT s.id,s.library_id,s.epoch,a.local_path,s.media_type FROM library_scans s
+          JOIN libraries l ON l.id=s.library_id AND l.is_active
+          JOIN library_node_accesses a ON a.library_id=s.library_id AND a.node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
+          JOIN cluster_nodes n ON n.id=a.node_id AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
+          WHERE s.state IN ('queued','running') AND (s.lease_until IS NULL OR s.lease_until<=clock_timestamp())
+          ORDER BY s.created_at LIMIT 1 FOR UPDATE OF s SKIP LOCKED
+          """,c,tx);
+        cmd.Parameters.AddWithValue("node",node); cmd.Parameters.AddWithValue("offline",presence.OfflineAfter);
+        await using var r=await cmd.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) return null;
+        var lease=new LibraryScanLease(r.GetGuid(0),r.GetGuid(1),r.GetInt64(2)+1,r.GetString(3),r.GetString(4)); await r.DisposeAsync();
+        await using var update=new NpgsqlCommand("UPDATE library_scans SET node_id=@node,source_root=@root,epoch=@epoch,state='running',lease_until=clock_timestamp()+interval '60 seconds',detail='Découverte des fichiers en cours.' WHERE id=@id",c,tx);
+        update.Parameters.AddWithValue("root",lease.Root); update.Parameters.AddWithValue("id",lease.Id); update.Parameters.AddWithValue("node",node); update.Parameters.AddWithValue("epoch",lease.Epoch);
+        await update.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return lease;
+    }
+    public async Task<bool> RenewScanAsync(Guid id,Guid node,long epoch,CancellationToken ct)
+    {
+        await using var cmd=dataSource.CreateCommand("""
+          UPDATE library_scans s SET lease_until=clock_timestamp()+interval '60 seconds'
+          WHERE s.id=@id AND s.node_id=@node AND s.epoch=@epoch AND s.state='running' AND s.lease_until>clock_timestamp()
+          AND EXISTS(SELECT 1 FROM library_node_accesses a JOIN libraries l ON l.id=a.library_id WHERE a.library_id=s.library_id AND a.node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path=s.source_root AND l.is_active)
+          """);
+        cmd.Parameters.AddWithValue("id",id); cmd.Parameters.AddWithValue("node",node); cmd.Parameters.AddWithValue("epoch",epoch);
+        return await cmd.ExecuteNonQueryAsync(ct)==1;
+    }
+    public async Task<bool> CompleteScanAsync(Guid id,Guid node,CompleteLibraryScan request,CancellationToken ct)
+    {
+        if(request.Files is null || request.Files.Count>10000 || request.Error?.Length>512) return false;
+        var files=request.Files.Select(file=>file with {RelativePath=MediaPathRules.Normalize(file.RelativePath)}).ToArray();
+        if(files.Any(file=>file.Bytes<0) || files.Select(file=>file.RelativePath).Distinct().Count()!=files.Length) return false;
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        await using var cmd=new NpgsqlCommand("""
+          SELECT s.library_id,s.media_type FROM library_scans s
+          JOIN library_node_accesses a ON a.library_id=s.library_id AND a.node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path=s.source_root
+          JOIN libraries l ON l.id=s.library_id AND l.is_active
+          WHERE s.id=@id AND s.node_id=@node AND s.epoch=@epoch AND s.state='running' AND s.lease_until>clock_timestamp()
+          FOR UPDATE OF s
+          """,c,tx);
+        cmd.Parameters.AddWithValue("id",id); cmd.Parameters.AddWithValue("node",node); cmd.Parameters.AddWithValue("epoch",request.Epoch);
+        await using var r=await cmd.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) return false;
+        var library=r.GetGuid(0); var type=r.GetString(1); await r.DisposeAsync();
+        if(files.Any(file=>!LibraryMediaTypes.Matches(file.RelativePath,type))) return false;
+        if(request.Error is null)
+        {
+            await using var save=new NpgsqlCommand("""
+              INSERT INTO library_media(id,library_id,relative_path,byte_length,modified_at,scan_id)
+              SELECT gen_random_uuid(),@library,item."relativePath",item.bytes,item."modifiedAt",@scan
+              FROM jsonb_to_recordset(@files) AS item("relativePath" text,bytes bigint,"modifiedAt" timestamptz)
+              ON CONFLICT(library_id,relative_path) DO UPDATE
+              SET stable_since=CASE WHEN library_media.byte_length=EXCLUDED.byte_length AND library_media.modified_at=EXCLUDED.modified_at THEN library_media.stable_since ELSE clock_timestamp() END,byte_length=EXCLUDED.byte_length,modified_at=EXCLUDED.modified_at,scan_id=EXCLUDED.scan_id
+              """,c,tx);
+            save.Parameters.AddWithValue("library",library); save.Parameters.AddWithValue("scan",id);
+            save.Parameters.AddWithValue("files",NpgsqlTypes.NpgsqlDbType.Jsonb,JsonSerializer.Serialize(files,Json)); await save.ExecuteNonQueryAsync(ct);
+            await using var remove=new NpgsqlCommand("DELETE FROM library_media WHERE library_id=@library AND scan_id<>@scan",c,tx);
+            remove.Parameters.AddWithValue("library",library); remove.Parameters.AddWithValue("scan",id); await remove.ExecuteNonQueryAsync(ct);
+        }
+        await using var done=new NpgsqlCommand("UPDATE library_scans SET state=@state,detail=@detail,completed_at=clock_timestamp(),lease_until=NULL WHERE id=@id AND lease_until>clock_timestamp()",c,tx);
+        done.Parameters.AddWithValue("id",id); done.Parameters.AddWithValue("state",request.Error is null?"completed":"failed");
+        done.Parameters.AddWithValue("detail",request.Error??$"{files.Length} fichier(s) détecté(s).");
+        if(await done.ExecuteNonQueryAsync(ct)!=1) return false; await tx.CommitAsync(ct); return true;
+    }
+    public Task<(int Queued,int Skipped)?> EnqueueAsync(Guid library,IReadOnlyList<Guid> ids,int assignmentRevision,CancellationToken ct)=>QueueAsync(library,ids,assignmentRevision,false,ct);
+    public async Task EnqueueAutomaticallyAsync(Guid library,CancellationToken ct)=>await QueueAsync(library,[],null,true,ct);
+    private async Task<(int Queued,int Skipped)?> QueueAsync(Guid library,IReadOnlyList<Guid> ids,int? assignmentRevision,bool automatic,CancellationToken ct)
+    {
+        if(!automatic && (ids.Count is <1 or >10000 || ids.Distinct().Count()!=ids.Count)) return null;
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        if(!await LockLibraryAsync(library,c,tx,ct)) return null;
+        await using var assignment=new NpgsqlCommand("SELECT v.definition::text FROM library_flow_assignments a JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version WHERE a.library_id=@id AND (@revision IS NULL OR a.revision=@revision) AND EXISTS(SELECT 1 FROM libraries l WHERE l.id=a.library_id AND l.is_active)",c,tx);
+        assignment.Parameters.AddWithValue("id",library); assignment.Parameters.AddWithValue("revision",NpgsqlTypes.NpgsqlDbType.Integer,(object?)assignmentRevision??DBNull.Value);
+        if(await assignment.ExecuteScalarAsync(ct) is not string json) return null;
+        var flow=JsonSerializer.Deserialize<FlowDefinition>(json,Json)!; if(!validator.Validate(flow).IsValid) return null;
+        if(automatic)
+        {
+            await using var enabled=new NpgsqlCommand("SELECT COALESCE((SELECT watch_enabled FROM library_processing_settings WHERE library_id=@id),true)",c,tx);
+            enabled.Parameters.AddWithValue("id",library);if(!(bool)(await enabled.ExecuteScalarAsync(ct))!)return null;
+        }
+        var files=new List<(Guid Id,string Path,long Bytes,DateTimeOffset Modified)>();
+        await using(var select=new NpgsqlCommand("SELECT m.id,m.relative_path,m.byte_length,m.modified_at FROM library_media m WHERE m.library_id=@library           AND (NOT @automatic AND m.id=ANY(@ids) OR @automatic AND m.stable_since<=clock_timestamp()-interval '30 seconds' AND m.modified_at<=clock_timestamp()-interval '30 seconds'           AND NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at))           ORDER BY m.relative_path LIMIT 10000",c,tx))
+        {
+            select.Parameters.AddWithValue("automatic",automatic);select.Parameters.AddWithValue("flow",flow.Id);select.Parameters.AddWithValue("version",flow.Version);select.Parameters.AddWithValue("library",library); select.Parameters.AddWithValue("ids",ids.ToArray());
+            await using var r=await select.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) files.Add((r.GetGuid(0),r.GetString(1),r.GetInt64(2),r.GetFieldValue<DateTimeOffset>(3)));
+        }
+        if(!automatic && files.Count!=ids.Count || files.Any(file=>!LibraryMediaTypes.Matches(file.Path,flow.MediaType))) return null;
+        int queued=0;
+        foreach(var file in files)
+        {
+            var execution=Guid.NewGuid();
+            if(!await RuntimeRepository.EnqueueInTransactionAsync(new(execution,library,file.Path,flow.Id,flow.Version),flow,c,tx,ct))continue;
+            queued++;
+            await using var receipt=new NpgsqlCommand("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) VALUES(@library,@file,@flow,@version,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",c,tx);
+            receipt.Parameters.AddWithValue("library",library);receipt.Parameters.AddWithValue("file",file.Id);receipt.Parameters.AddWithValue("flow",flow.Id);receipt.Parameters.AddWithValue("version",flow.Version);
+            receipt.Parameters.AddWithValue("bytes",file.Bytes);receipt.Parameters.AddWithValue("modified",file.Modified.ToUniversalTime());receipt.Parameters.AddWithValue("execution",execution);await receipt.ExecuteNonQueryAsync(ct);
+        }
+        await tx.CommitAsync(ct); return(queued,files.Count-queued);
+    }
+}

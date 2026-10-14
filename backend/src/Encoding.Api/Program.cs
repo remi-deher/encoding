@@ -33,6 +33,9 @@ builder.Services.AddSingleton<RuntimeTransferRepository>();
 builder.Services.AddHostedService<RuntimeRecoveryService>();
 builder.Services.AddHostedService<FlowBackupService>();
 builder.Services.AddSingleton<LibraryRepository>();
+builder.Services.AddSingleton<LibraryWorkflowRepository>();
+builder.Services.AddSingleton<LibraryProcessingRepository>();
+builder.Services.AddHostedService<LibraryMonitoringService>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
 builder.Services.AddSingleton<ClusterIdentityRepository>();
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
@@ -69,6 +72,7 @@ app.MapGet("/health/ready", async (NpgsqlDataSource dataSource, CancellationToke
     }
 }).WithTags("Health");
 
+app.MapLibraryWorkflowEndpoints();
 var libraries = app.MapGroup("/api/v1/libraries").WithTags("Libraries");
 libraries.MapGet("", async (LibraryRepository repository, CancellationToken cancellationToken) =>
     Results.Ok(await repository.ListAsync(cancellationToken)))
@@ -250,6 +254,24 @@ nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, 
     Results.Ok(await repository.ListAsync(options.OfflineAfter, cancellationToken)))
     .WithName("ListNodes");
 
+nodes.MapGet("/{nodeId:guid}/processing",async(Guid nodeId,LibraryProcessingRepository repository,CancellationToken ct)=>
+    await repository.NodeAsync(nodeId,ct) is {} settings?(IResult)Results.Ok(settings):Results.NotFound());
+nodes.MapPut("/{nodeId:guid}/processing",async(Guid nodeId,SaveNodeProcessingSettings request,LibraryProcessingRepository repository,CancellationToken ct)=>
+{
+    try{return await repository.SaveNodeAsync(nodeId,request,ct)?(IResult)Results.NoContent():Results.Conflict(new{title="La configuration du nœud a changé."});}
+    catch(ArgumentException e){return Results.BadRequest(new{title=e.Message});}
+});
+
+nodes.MapDelete("/{nodeId:guid}",async(Guid nodeId,NodeRepository repository,CancellationToken ct)=>
+{
+    return await repository.DeleteAsync(nodeId,ct) switch {
+        "deleted"=>(IResult)Results.NoContent(),
+        "busy"=>Results.Conflict(new{title="Ce nœud participe à un traitement ou une découverte. Attendez sa fin ou annulez les tâches avant de le supprimer."}),
+        _=>Results.NotFound()
+    };
+});
+nodes.MapGet("/{nodeId:guid}/activity",async(Guid nodeId,NodeRepository repository,CancellationToken ct)=>Results.Ok(await repository.ActivityAsync(nodeId,ct)));
+
 nodes.MapGet("/{nodeId:guid}", async (Guid nodeId, NodeRepository repository, NodePresenceOptions options, CancellationToken cancellationToken) =>
 {
     var node = await repository.GetAsync(nodeId, options.OfflineAfter, cancellationToken);
@@ -267,34 +289,7 @@ executions.MapGet("/{id:guid}", async (Guid id, ExecutionRepository repository, 
 }).WithName("GetExecution");
 executions.MapGet("/{id:guid}/events", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
     await repository.GetAsync(id, ct) is null ? (IResult)Results.NotFound() : Results.Ok(await repository.EventsAsync(id, ct))).WithName("GetExecutionEvents");
-executions.MapPost("", async (CreateExecutionRequest request, LibraryRepository libraryRepository, RuntimeRepository runtime, FlowDefinitionValidator validator, FlowRepository flowRepository, CancellationToken ct) =>
-{
-    var errors = new Dictionary<string, string[]>();
-    if (request.Id == Guid.Empty) errors["id"] = ["Un identifiant unique est obligatoire."];
-    if (string.IsNullOrWhiteSpace(request.Media) || request.Media.Length > 2048) errors["media"] = ["Le média doit contenir entre 1 et 2048 caractères."];
-    if (string.IsNullOrWhiteSpace(request.Library) || request.Library.Length > 128) errors["library"] = ["La bibliothèque doit contenir entre 1 et 128 caractères."];
-    if (string.IsNullOrWhiteSpace(request.Flow) || request.Flow.Length > 128) errors["flow"] = ["Le flow doit contenir entre 1 et 128 caractères."];
-    if (request.FlowVersion <= 0) errors["flowVersion"] = ["La version doit être positive."];
-    if (request.FlowDefinition.ValueKind != JsonValueKind.Object) errors["flowDefinition"] = ["La définition doit être un objet JSON."];
-    else if (request.FlowDefinition.GetRawText().Length > 1048576) errors["flowDefinition"] = ["La définition dépasse 1 Mo."];
-    if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-    var (definition, validation) = validator.ValidateDocument(request.FlowDefinition);
-    if (!validation.IsValid) return Results.UnprocessableEntity(validation);
-    if (definition!.Version != request.FlowVersion)
-        return Results.ValidationProblem(new Dictionary<string, string[]> { ["flowVersion"] = ["La version doit correspondre à celle de la définition."] });
-    var storedFlow = await flowRepository.GetAsync(definition.Id,definition.Version,ct);
-    if (storedFlow is null) return Results.Conflict(new { title="La version du flow doit être enregistrée avant de créer une exécution." });
-    var canonical = JsonSerializer.SerializeToElement(storedFlow.Definition,FlowRepository.JsonOptions);
-    if (!JsonElement.DeepEquals(canonical,JsonSerializer.SerializeToElement(definition,FlowRepository.JsonOptions)))
-        return Results.Conflict(new { title="La définition ne correspond pas à la version enregistrée." });
-    request = request with { Flow=storedFlow.Definition.Name, FlowDefinition=canonical };
-    var library=(await libraryRepository.ListAsync(ct)).SingleOrDefault(l=>l.Name==request.Library);
-    if(library is null) return Results.NotFound(new { title="Bibliothèque introuvable." });
-    try {
-        return await runtime.EnqueueAsync(new(request.Id,library.Id,request.Media,definition.Id,definition.Version),storedFlow.Definition,ct)
-            ? Results.Created($"/api/v1/executions/{request.Id}",new { request.Id }) : Results.Conflict(new { title="Identifiant déjà utilisé ou bibliothèque inactive." });
-    } catch(ArgumentException e) { return Results.BadRequest(new { title=e.Message }); }
-}).WithName("RegisterExecution");
+executions.MapPost("",()=>Results.Json(new{title="Lancez les traitements depuis les fichiers détectés de la bibliothèque."},statusCode:410));
 executions.MapPost("/{id:guid}/cancel", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
     await repository.CancelAsync(id, ct) ? Results.NoContent() : Results.Conflict(new { title = "Cette exécution ne peut pas être annulée dans son état actuel." }))
     .WithName("CancelExecution");
