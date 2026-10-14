@@ -233,7 +233,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         node.Parameters.AddWithValue("id",id); if(await node.ExecuteScalarAsync(ct) is null) return "missing";
         await using var active=new NpgsqlCommand("""
           SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id
-            WHERE (w.worker_node_id=@id OR w.source_node_id=@id) AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling'))
+            WHERE (w.worker_node_id=@id OR w.source_node_id=@id) AND (w.lease_until>clock_timestamp() OR w.handoff_pending) AND e.state IN ('running','cancelling'))
           OR EXISTS(SELECT 1 FROM library_scans WHERE node_id=@id AND state='running' AND lease_until>clock_timestamp())
           """,c,tx);
         active.Parameters.AddWithValue("id",id); if((bool)(await active.ExecuteScalarAsync(ct))!) return "busy";

@@ -87,7 +87,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         foreach(var item in candidates)
         {
             if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value))) continue;
-            if(!eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null)) continue;
+            if(!eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context)) continue;
             // Library row serializes claims from all workers before counting active leases.
             await using(var limits=new NpgsqlCommand("""
               SELECT p.max_concurrent_tasks,(SELECT max_concurrent_tasks FROM library_node_processing_limits WHERE library_id=l.id AND node_id=@worker)
@@ -170,7 +170,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
                 }
             }
             if(!await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"running",worker,null,
-                item.Selector is null?"Flow attribué au worker ; bail actif.":"Relais attribué au worker ; reprise depuis le checkpoint durable."),c,tx,ct)) continue;
+                item.Selector is null?"Flow attribué au worker ; bail actif.":"Relais attribué au worker ; reprise depuis le checkpoint durable."),c,tx,ct)) return null;
             RuntimeCheckpoint? checkpoint=null; string? sourceSha=null; DateTimeOffset expires;
             await using(var state=new NpgsqlCommand("SELECT source_sha,lease_until,(SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1) FROM execution_work WHERE execution_id=@id",c,tx))
             {
@@ -197,7 +197,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
     }
     internal static async Task ReleaseAsync(Guid id,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
     {
-        await using var cmd=new NpgsqlCommand("DELETE FROM media_reservations WHERE execution_id=@id; UPDATE execution_work SET lease_until=NULL WHERE execution_id=@id",c,tx);
+        await using var cmd=new NpgsqlCommand("DELETE FROM media_reservations WHERE execution_id=@id; UPDATE execution_work SET lease_until=NULL,handoff_pending=false WHERE execution_id=@id",c,tx);
         cmd.Parameters.AddWithValue("id",id); await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -269,6 +269,15 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         await using(var artifact=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx))
         {
             artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",cp.Context.CurrentSha256);
+            if(!(bool)(await artifact.ExecuteScalarAsync(ct))!) return false;
+        }
+        // Additional files produced by a prior step must remain available after the workspace changes.
+        foreach(var variable in cp.Context.Variables.Where(pair=>pair.Key.StartsWith("artifact.",StringComparison.Ordinal)))
+        {
+            if(variable.Value.ValueKind!=JsonValueKind.Object || !variable.Value.TryGetProperty("sha256",out var digest)
+                || digest.ValueKind!=JsonValueKind.String || !RuntimeArtifactStore.ValidDigest(digest.GetString()!)) return false;
+            await using var artifact=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx);
+            artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",digest.GetString()!);
             if(!(bool)(await artifact.ExecuteScalarAsync(ct))!) return false;
         }
         var node=flow.Nodes.SingleOrDefault(n=>n.Id==cp.NodeId); if(node is null) return false;

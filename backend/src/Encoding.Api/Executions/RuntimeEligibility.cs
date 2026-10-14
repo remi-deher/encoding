@@ -7,11 +7,14 @@ namespace Encoding.Api.Executions;
 
 public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefinitionValidator validator)
 {
-    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false)
+    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null)
     {
         if(!validator.Validate(flow).IsValid) return false;
         var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
-        foreach(var node in entry is null?Array.Empty<FlowNodeDefinition>():RuntimeHandoffPolicy.Segment(flow,entry))
+        var segment=entry is null?Array.Empty<FlowNodeDefinition>():RuntimeHandoffPolicy.Segment(flow,entry);
+        var planned=(context?.Plan??[]).Select((step,index)=>new FlowNodeDefinition("plan-"+index,null,
+            new("base","1.0.0",step.ComponentId,"1.0.0",1),step.Configuration));
+        foreach(var node in segment.Concat(planned))
         {
             if(!capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId && (c.Version==node.Component.PluginVersion
                 || node.Component.PluginId=="nodes" && node.Component.PluginVersion=="1.0.0" && c.Version=="1.1.0"))) return false;
@@ -28,6 +31,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                     && (string.IsNullOrWhiteSpace(required) || capability.AccelerationTypes.Contains(required,StringComparer.Ordinal)))) return false;
             }
             var component=registry.Resolve(node.Component)!;
+            if(component is null) return false;
             if(node.Component.PluginId=="base" && node.Component.ComponentId=="base-prepare-processing"
                 && !capabilities.Any(c=>c.ToolId==(node.Configuration.TryGetValue("tool",out var chosen)?chosen.GetString():"ffmpeg"))) return false;
             if(node.Component.PluginId=="base" && node.Component.ComponentId=="base-execute-processing"
