@@ -43,6 +43,7 @@ internal static class Program
         var validator = new FlowDefinitionValidator(registry);
         var eligibility = new RuntimeEligibility(registry, validator);
         ConditionTests.Run(registry,validator,eligibility);
+        NodeScheduleTests.Run();
         await FlowSimulationTests.RunAsync(registry,validator);
         var destination = Guid.NewGuid();
         var relay = Node(registry, "relay", "nodes-handoff", new() { ["mode"] = J("node"), ["targetNodeId"] = J(destination) });
@@ -80,6 +81,8 @@ internal static class Program
         await fixture.ConcurrentRelayAsync();
         await fixture.EarlyRunnerAsync();
         await fixture.CancellationAsync();
+        await fixture.NodeScheduleAsync();
+        Console.WriteLine("PASS: node schedule blocks new claims only.");
         await fixture.ConditionalRelayAsync("yes");
         await fixture.ConditionalRelayAsync("no");
         await fixture.ConditionalRelayAsync("error");
@@ -365,6 +368,35 @@ internal static class Program
             options=NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Node:DataDirectory"]=Path.Combine(directory,name) }).Build());
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
             return new(options,scanner,new MediaActions(tools,scanner,new Probe()),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),NullLogger<RuntimeFlowRunner>.Instance);
+        }
+        public async Task NodeScheduleAsync()
+        {
+            var library=Guid.NewGuid(); var id=Guid.NewGuid(); var flow=RelayFlow();
+            await using(var command=db.CreateCommand("""
+                INSERT INTO libraries(id,name) VALUES(@library,@name);
+                INSERT INTO library_node_accesses(library_id,node_id,mode,local_path,can_read,can_write) VALUES(@library,@a,'direct',@root,true,true);
+                """))
+            {
+                command.Parameters.AddWithValue("library",library); command.Parameters.AddWithValue("name",library.ToString());
+                command.Parameters.AddWithValue("root",directory); command.Parameters.AddWithValue("a",a); await command.ExecuteNonQueryAsync();
+            }
+            Check(await runtime.EnqueueAsync(new(id,library,"scheduled.mkv",flow.Id,flow.Version),flow,CancellationToken.None),"Enqueue scheduled fixture.");
+            async Task Schedule(bool enabled,string slots)
+            {
+                await using var save=db.CreateCommand("INSERT INTO node_processing_settings(node_id,schedule_enabled,schedule_timezone,schedule_slots) VALUES(@a,@enabled,'UTC',@slots) ON CONFLICT(node_id) DO UPDATE SET schedule_enabled=@enabled,schedule_timezone='UTC',schedule_slots=@slots");
+                save.Parameters.AddWithValue("a",a); save.Parameters.AddWithValue("enabled",enabled); save.Parameters.AddWithValue("slots",slots); await save.ExecuteNonQueryAsync();
+            }
+            await Schedule(true,new string('0',NodeSchedule.SlotCount));
+            Check(await runtime.ClaimAsync(a,CancellationToken.None) is null,"A closed node calendar blocks new claims.");
+            var now=DateTimeOffset.UtcNow; var open=new char[NodeSchedule.SlotCount]; Array.Fill(open,'0');
+            open[(int)now.DayOfWeek*NodeSchedule.SlotsPerDay+now.Hour*NodeSchedule.SlotsPerHour+now.Minute/15]='1';
+            await Schedule(true,new string(open));
+            var lease=await runtime.ClaimAsync(a,CancellationToken.None);
+            Check(lease is not null,"A calendar slot covering the current time allows the claim.");
+            Check(await runtime.RenewAsync(lease!.ExecutionId,a,lease.Epoch,CancellationToken.None) is not null,"A calendar never revokes an active lease.");
+            await Schedule(true,new string('0',NodeSchedule.SlotCount));
+            Check(await runtime.RenewAsync(lease.ExecutionId,a,lease.Epoch,CancellationToken.None) is not null,"Closing the calendar does not interrupt running work.");
+            await Schedule(false,new string('0',NodeSchedule.SlotCount));
         }
         public async Task EarlyRunnerAsync()
         {

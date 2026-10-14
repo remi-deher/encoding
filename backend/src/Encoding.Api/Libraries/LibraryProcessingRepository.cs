@@ -58,20 +58,21 @@ public sealed class LibraryProcessingRepository(NpgsqlDataSource dataSource)
     }
     public async Task<NodeProcessingSettings?> NodeAsync(Guid node,CancellationToken ct)
     {
-        await using var cmd=dataSource.CreateCommand("SELECT p.max_concurrent_tasks,COALESCE(p.max_concurrent_tasks,n.max_concurrent_tasks),COALESCE(p.revision,0) FROM cluster_nodes n LEFT JOIN node_processing_settings p ON p.node_id=n.id WHERE n.id=@id AND n.deleted_at IS NULL");
+        await using var cmd=dataSource.CreateCommand("SELECT p.max_concurrent_tasks,COALESCE(p.max_concurrent_tasks,n.max_concurrent_tasks),COALESCE(p.revision,0),COALESCE(p.schedule_enabled,false),COALESCE(p.schedule_timezone,'UTC'),COALESCE(p.schedule_slots,repeat('1',672)) FROM cluster_nodes n LEFT JOIN node_processing_settings p ON p.node_id=n.id WHERE n.id=@id AND n.deleted_at IS NULL");
         cmd.Parameters.AddWithValue("id",node);await using var r=await cmd.ExecuteReaderAsync(ct);
-        return await r.ReadAsync(ct)?new(r.IsDBNull(0)?null:r.GetInt32(0),r.GetInt32(1),r.GetInt32(2)):null;
+        return await r.ReadAsync(ct)?new(r.IsDBNull(0)?null:r.GetInt32(0),r.GetInt32(1),r.GetInt32(2),new NodeSchedule(r.GetBoolean(3),r.GetString(4),r.GetString(5))):null;
     }
     public async Task<bool> SaveNodeAsync(Guid node,SaveNodeProcessingSettings request,CancellationToken ct)
     {
         if(request.MaxConcurrentTasks is <1 or >1000 || request.ExpectedRevision is <0 or int.MaxValue)throw new ArgumentException("La limite doit être comprise entre 1 et 1 000, ou laissée vide.");
+        var schedule=request.Schedule??NodeSchedule.AlwaysOpen; if(schedule.Validate() is {} scheduleError)throw new ArgumentException(scheduleError);
         await using var c=await dataSource.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
         await using var locked=new NpgsqlCommand("SELECT id FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL FOR UPDATE",c,tx);
         locked.Parameters.AddWithValue("id",node);if(await locked.ExecuteScalarAsync(ct) is null)return false;
         await using var current=new NpgsqlCommand("SELECT revision FROM node_processing_settings WHERE node_id=@id",c,tx);current.Parameters.AddWithValue("id",node);
         if((await current.ExecuteScalarAsync(ct) as int? ?? 0)!=request.ExpectedRevision)return false;
-        await using var save=new NpgsqlCommand("INSERT INTO node_processing_settings(node_id,max_concurrent_tasks,revision) VALUES(@id,@max,@revision) ON CONFLICT(node_id) DO UPDATE SET max_concurrent_tasks=@max,revision=@revision",c,tx);
-        save.Parameters.AddWithValue("id",node);save.Parameters.AddWithValue("max",NpgsqlDbType.Integer,(object?)request.MaxConcurrentTasks??DBNull.Value);save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);
+        await using var save=new NpgsqlCommand("INSERT INTO node_processing_settings(node_id,max_concurrent_tasks,revision,schedule_enabled,schedule_timezone,schedule_slots) VALUES(@id,@max,@revision,@enabled,@zone,@slots) ON CONFLICT(node_id) DO UPDATE SET max_concurrent_tasks=@max,revision=@revision,schedule_enabled=@enabled,schedule_timezone=@zone,schedule_slots=@slots",c,tx);
+        save.Parameters.AddWithValue("id",node);save.Parameters.AddWithValue("max",NpgsqlDbType.Integer,(object?)request.MaxConcurrentTasks??DBNull.Value);save.Parameters.AddWithValue("revision",request.ExpectedRevision+1);save.Parameters.AddWithValue("enabled",schedule.Enabled);save.Parameters.AddWithValue("zone",schedule.TimeZone);save.Parameters.AddWithValue("slots",schedule.Slots);
         await save.ExecuteNonQueryAsync(ct);await tx.CommitAsync(ct);return true;
     }
 }
