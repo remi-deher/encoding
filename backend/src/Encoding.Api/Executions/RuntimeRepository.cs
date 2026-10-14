@@ -122,7 +122,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
               INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until)
               VALUES(@library,@key,@id,@epoch,clock_timestamp()+interval '60 seconds')
               ON CONFLICT(library_id,media_key) DO UPDATE SET execution_id=@id,lease_epoch=@epoch,lease_until=clock_timestamp()+interval '60 seconds'
-              WHERE media_reservations.lease_until<=clock_timestamp() RETURNING execution_id
+              WHERE media_reservations.execution_id=@id OR media_reservations.lease_until<=clock_timestamp() RETURNING execution_id
               """,c,tx))
             {
                 reserve.Parameters.AddWithValue("library",item.Library); reserve.Parameters.AddWithValue("key",item.Key);
@@ -209,7 +209,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
           SELECT invocation_id,checkpoint::text FROM execution_steps WHERE execution_id=@id AND node_id=@node
           """,c,tx);
         start.Parameters.AddWithValue("id",id); start.Parameters.AddWithValue("node",request.NodeId); start.Parameters.AddWithValue("invocation",Guid.NewGuid());
-        start.Parameters.AddWithValue("idempotent",node.Component.PluginId=="base" && node.Component.ComponentId!="base-script");
+        start.Parameters.AddWithValue("idempotent",node.Component.PluginId=="nodes" || node.Component.PluginId=="base" && node.Component.ComponentId!="base-script");
         await using var r=await start.ExecuteReaderAsync(ct); await r.ReadAsync(ct);
         var result=new StartedRuntimeStep(r.GetGuid(0),r.IsDBNull(1)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(1),Json));
         await r.DisposeAsync(); await tx.CommitAsync(ct); return result;
@@ -217,36 +217,64 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
 
     public async Task<bool> CompleteStepAsync(Guid id,Guid worker,CompleteRuntimeStep request,CancellationToken ct)
     {
-        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
-        if(!await FenceAsync(id,worker,request.Epoch,c,tx,ct)) return false;
-        FlowDefinition flow;
-        await using(var cmd=new NpgsqlCommand("SELECT flow_definition::text FROM executions WHERE id=@id AND state='running'",c,tx))
-        { cmd.Parameters.AddWithValue("id",id); if(await cmd.ExecuteScalarAsync(ct) is not string json) return false; flow=JsonSerializer.Deserialize<FlowDefinition>(json,Json)!; }
         var cp=request.Checkpoint;
         if(cp is null || cp.Context is null || cp.Context.Variables is null || cp.Context.Plan is null
             || !RuntimeArtifactStore.ValidDigest(cp.Context.CurrentSha256)
             || cp.Context.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(cp.Context.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
+        var serialized=JsonSerializer.Serialize(cp,Json); if(serialized.Length>1048576) return false;
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        // A lost handoff response can be retried after its lease has already been revoked.
+        // Only the exact checkpoint, actor and completed epoch can acknowledge this duplicate.
+        await using(var duplicate=new NpgsqlCommand("""
+          SELECT s.checkpoint=@checkpoint FROM execution_steps s JOIN execution_work w ON w.execution_id=s.execution_id
+          JOIN executions e ON e.id=w.execution_id
+          WHERE s.execution_id=@id AND s.node_id=@node AND s.invocation_id=@invocation
+            AND s.completed_at IS NOT NULL AND s.completed_epoch=@epoch AND s.completed_worker_node_id=@worker
+          FOR UPDATE OF e,w
+          """,c,tx))
+        {
+            duplicate.Parameters.AddWithValue("id",id); duplicate.Parameters.AddWithValue("node",cp.NodeId);
+            duplicate.Parameters.AddWithValue("invocation",cp.InvocationId); duplicate.Parameters.AddWithValue("epoch",request.Epoch);
+            duplicate.Parameters.AddWithValue("worker",worker); duplicate.Parameters.AddWithValue("checkpoint",NpgsqlDbType.Jsonb,serialized);
+            if(await duplicate.ExecuteScalarAsync(ct) is bool same) return same;
+        }
+        if(!await FenceAsync(id,worker,request.Epoch,c,tx,ct)) return false;
+        FlowDefinition flow;
+        await using(var cmd=new NpgsqlCommand("SELECT flow_definition::text FROM executions WHERE id=@id AND state='running'",c,tx))
+        { cmd.Parameters.AddWithValue("id",id); if(await cmd.ExecuteScalarAsync(ct) is not string json) return false; flow=JsonSerializer.Deserialize<FlowDefinition>(json,Json)!; }
         await using(var artifact=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx))
         {
             artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",cp.Context.CurrentSha256);
             if(!(bool)(await artifact.ExecuteScalarAsync(ct))!) return false;
         }
         var node=flow.Nodes.SingleOrDefault(n=>n.Id==cp.NodeId); if(node is null) return false;
+        RuntimeHandoffSelector? handoff=null;
+        if(RuntimeHandoffPolicy.IsHandoff(node))
+        {
+            await using var settings=new NpgsqlCommand("SELECT plugin_configuration_snapshot FROM execution_work WHERE execution_id=@id",c,tx);
+            settings.Parameters.AddWithValue("id",id);
+            var snapshot=await settings.ExecuteScalarAsync(ct) as byte[];
+            try { handoff=RuntimeHandoffPolicy.Resolve(node,snapshot is null?null:pluginConfigurations.ReadSnapshot(snapshot).GetValueOrDefault("nodes")); }
+            catch(ArgumentException) { return false; }
+            if(cp.Handoff!=handoff || cp.NextNodeId is null || handoff.Mode=="node" && handoff.TargetNodeId==worker) return false;
+        }
+        else if(cp.Handoff is not null) return false;
         var component=components.Resolve(node.Component)!;
         if(component.Kind=="terminal" ? cp.OutputId is not null || cp.TerminalResult is not("success" or "unchanged" or "failed" or "deferred")
             : cp.TerminalResult is not null || !component.Outputs.Any(o=>o.Id==cp.OutputId)) return false;
         if(cp.NextNodeId!=flow.Connections.SingleOrDefault(e=>e.SourceNodeId==node.Id && e.SourceOutputId==cp.OutputId)?.TargetNodeId) return false;
-        var serialized=JsonSerializer.Serialize(cp,Json); if(serialized.Length>1048576) return false;
         await using(var existing=new NpgsqlCommand("SELECT checkpoint=@checkpoint FROM execution_steps WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NOT NULL",c,tx))
         {
             existing.Parameters.AddWithValue("id",id); existing.Parameters.AddWithValue("node",cp.NodeId); existing.Parameters.AddWithValue("invocation",cp.InvocationId); existing.Parameters.AddWithValue("checkpoint",NpgsqlDbType.Jsonb,serialized);
             if(await existing.ExecuteScalarAsync(ct) is bool same) return same;
         }
         await using var update=new NpgsqlCommand("""
-          UPDATE execution_steps SET completed_at=clock_timestamp(),completed_revision=@completed_revision,checkpoint=@checkpoint
+          UPDATE execution_steps SET completed_at=clock_timestamp(),completed_revision=@completed_revision,checkpoint=@checkpoint,
+            completed_epoch=@epoch,completed_worker_node_id=@worker
           WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NULL RETURNING node_id
           """,c,tx);
         update.Parameters.AddWithValue("completed_revision",request.ExpectedRevision+1); update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("node",cp.NodeId); update.Parameters.AddWithValue("invocation",cp.InvocationId); update.Parameters.AddWithValue("checkpoint",NpgsqlDbType.Jsonb,serialized);
+        update.Parameters.AddWithValue("epoch",request.Epoch); update.Parameters.AddWithValue("worker",worker);
         update.Parameters.AddWithValue("before",NpgsqlDbType.Jsonb,(object?)cp.Context.BeforeMetadata?.GetRawText()??DBNull.Value);
         update.Parameters.AddWithValue("after",NpgsqlDbType.Jsonb,(object?)cp.Context.CurrentMetadata?.GetRawText()??DBNull.Value);
         if(await update.ExecuteScalarAsync(ct) is null) return false;
@@ -257,7 +285,20 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
             metadata.Parameters.AddWithValue("after",NpgsqlDbType.Jsonb,(object?)cp.Context.CurrentMetadata?.GetRawText()??DBNull.Value);
             await metadata.ExecuteNonQueryAsync(ct);
         }
-        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,$"Étape terminée : {node.Name??component.Name}."),c,tx,ct)) return false;
+        var detail=handoff is null?$"Étape terminée : {node.Name??component.Name}.":handoff.Mode=="node"
+            ?$"Relais en attente vers le nœud {handoff.TargetNodeId:D}.":"Relais en attente d'un autre worker éligible.";
+        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,detail),c,tx,ct)) return false;
+        if(handoff is not null)
+        {
+            await using var yield=new NpgsqlCommand("""
+              UPDATE execution_work SET handoff_pending=true,handoff_selector=@selector,previous_worker_node_id=@worker,
+                worker_node_id=NULL,lease_until=NULL,lease_epoch=lease_epoch+1 WHERE execution_id=@id;
+              UPDATE media_reservations SET lease_epoch=@epoch+1,lease_until='infinity'::timestamptz WHERE execution_id=@id;
+              """,c,tx);
+            yield.Parameters.AddWithValue("id",id); yield.Parameters.AddWithValue("worker",worker); yield.Parameters.AddWithValue("epoch",request.Epoch);
+            yield.Parameters.AddWithValue("selector",NpgsqlDbType.Jsonb,JsonSerializer.Serialize(handoff,Json));
+            await yield.ExecuteNonQueryAsync(ct);
+        }
         await tx.CommitAsync(ct); return true;
     }
     public async Task<RuntimeSourceState> SourceAsync(Guid id,CancellationToken ct)
