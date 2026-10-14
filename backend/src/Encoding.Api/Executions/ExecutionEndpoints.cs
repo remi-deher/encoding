@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 
 
 namespace Encoding.Api.Executions;
