@@ -83,3 +83,7 @@ p[role='note'] {
 .pairing-key-header {
   margin-block: -8px 12px;
 }
+
+.node-processing-tab { display: grid; gap: 16px; padding-top: 14px; }
+.node-tab-note { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.node-tab-actions { display: flex; flex-wrap: wrap; gap: 8px; }
