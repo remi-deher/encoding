@@ -29,6 +29,7 @@ services:
       Runtime__ArtifactDirectory: /var/lib/encoding/runtime-artifacts
       PluginSettings__KeyDirectory: /var/lib/encoding/plugin-keys
       Cluster__DiscoveryPort: 8080
+      Auth__SetupToken: ${AUTH_SETUP_TOKEN:-}
       Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://api:8080/}
     ports:
       - "127.0.0.1:5080:8080"

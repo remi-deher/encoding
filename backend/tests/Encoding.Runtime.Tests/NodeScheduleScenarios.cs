@@ -2,7 +2,7 @@ using Encoding.Contracts.Nodes;
 
 namespace Encoding.Runtime.Tests;
 
-internal static class NodeScheduleTests
+internal static class NodeScheduleScenarios
 {
     private static void Check(bool condition, string message)
     {

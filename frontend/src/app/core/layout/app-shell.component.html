@@ -9,11 +9,11 @@
       <span class="brand-name">{{ pageTitle() }}</span>
     </a>
 
-    @if (!workerMode()) {
+    @if (!workerMode() && !authMode()) {
       <app-primary-navigation />
     }
 
-    @if (!workerMode()) {
+    @if (!workerMode() && !authMode()) {
       <div class="header-status">
         @if (activeExecutionCount() > 0) {
           <a
@@ -31,6 +31,7 @@
           <span class="cluster-label">Nœuds</span>
           <span class="cluster-state">{{ clusterLabel() }}</span>
         </div>
+        <app-user-menu />
       </div>
     }
   </mat-toolbar>
@@ -40,7 +41,7 @@
       <router-outlet />
     </main>
 
-    @if (!workerMode() && !workspaceMode()) {
+    @if (!workerMode() && !authMode() && !workspaceMode()) {
       <footer class="application-footer">
         <span
           >Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span

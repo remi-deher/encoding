@@ -1,10 +1,12 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { AuthService } from '../auth/auth.service';
 
 interface NavigationItem {
   readonly label: string;
   readonly path: string;
   readonly exact?: boolean;
+  readonly adminOnly?: boolean;
 }
 
 @Component({
@@ -15,8 +17,9 @@ interface NavigationItem {
 })
 export class PrimaryNavigationComponent {
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
 
-  protected readonly items: readonly NavigationItem[] = this.router.config.flatMap((route) => {
+  private readonly allItems: readonly NavigationItem[] = this.router.config.flatMap((route) => {
     if (!route.data?.['primaryNavigation']) {
       return [];
     }
@@ -31,7 +34,12 @@ export class PrimaryNavigationComponent {
         label,
         path: route.path ? `/${route.path}` : '/',
         exact: route.path === '',
+        adminOnly: route.data['adminOnly'] === true,
       },
     ];
   });
+
+  protected readonly items = computed(() =>
+    this.allItems.filter((item) => !item.adminOnly || this.auth.isAdmin()),
+  );
 }

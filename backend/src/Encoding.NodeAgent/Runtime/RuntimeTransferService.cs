@@ -39,6 +39,11 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
         catch(OperationCanceledException) when(ct.IsCancellationRequested) { }
         finally { await Task.WhenAll(active.Values); }
     }
+    private static async Task<bool> TryRenewSourceAsync(RuntimeClient client,RuntimeTransfer transfer,CancellationToken ct)
+    {
+        try { await client.GetAsync<RuntimeSourceState>($"executions/{transfer.ExecutionId:D}/source?epoch={transfer.Epoch}",ct); return true; }
+        catch(HttpRequestException) { return false; }
+    }
     private async Task TransferAsync(RuntimeTransfer transfer,RuntimeClient client,CancellationToken ct)
     {
         using var watch=CancellationTokenSource.CreateLinkedTokenSource(ct); ct=watch.Token;
@@ -85,6 +90,12 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
             else
             {
                 if(transfer.ResultSha256 is null || transfer.ResultExtension is null || transfer.SourceSha256 is null) throw new IOException("Résultat de transfert incomplet.");
+                if(transfer.ReplacementGraceHours is not null && await SourceReplacer.ResumeAsync(transfer.Root,transfer.ExecutionId,transfer.MediaPath,transfer.SourceSha256,transfer.ResultSha256,transfer.ResultExtension,ct) is {} resumed)
+                {
+                    var current=await client.ExecutionAsync(transfer.ExecutionId,ct);
+                    await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/publication",new ConfirmRuntimePublication(transfer.Epoch,Guid.NewGuid(),current.Revision,$".encoding-results/{transfer.ExecutionId:D}/result{transfer.ResultExtension}",transfer.ResultSha256,resumed),ct);
+                    return;
+                }
                 if(await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256) throw new IOException("La source a changé depuis le début du traitement.");
                 var incoming=Path.Combine(directory,"result"+transfer.ResultExtension);
                 await client.DownloadAsync(transfer.ExecutionId,transfer.Epoch,transfer.ResultSha256,incoming,ct);
@@ -109,8 +120,12 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                     }
                     if(await SafeMediaPaths.DigestAsync(target,ct)!=transfer.ResultSha256) throw new IOException("La sortie existante est différente du résultat validé.");
                     Encoding.Core.AtomicFilePublication.Confirm(target);
+                    SourceReplacementReport? replacement=null;
+                    if(transfer.ReplacementGraceHours is not null)
+                        replacement=await SourceReplacer.ReplaceAsync(transfer.Root,transfer.ExecutionId,transfer.MediaPath,incoming,transfer.SourceSha256,transfer.ResultSha256,transfer.ResultExtension,
+                            async token=>(await client.ExecutionAsync(transfer.ExecutionId,token)).State=="running" && await TryRenewSourceAsync(client,transfer,token),ct);
                     var status=await client.ExecutionAsync(transfer.ExecutionId,ct);
-                    await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/publication",new ConfirmRuntimePublication(transfer.Epoch,Guid.NewGuid(),status.Revision,relative,transfer.ResultSha256),ct);
+                    await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/publication",new ConfirmRuntimePublication(transfer.Epoch,Guid.NewGuid(),status.Revision,relative,transfer.ResultSha256,replacement),ct);
                 }
                 finally { if(File.Exists(temporary)) File.Delete(temporary); }
             }
