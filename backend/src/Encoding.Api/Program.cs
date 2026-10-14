@@ -32,6 +32,7 @@ if (offlineAfterSeconds <= 0)
 builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
+builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
 builder.Services.AddClusterAuthentication(builder.Configuration);
 builder.Services.AddSingleton<ExecutionRepository>();
@@ -103,6 +104,7 @@ app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();
 app.MapClusterEndpoints();
 app.MapNodeEndpoints();
+app.MapNodeGroupEndpoints();
 app.MapExecutionEndpoints();
 
 app.MapFallbackToFile("index.html").AllowAnonymous();

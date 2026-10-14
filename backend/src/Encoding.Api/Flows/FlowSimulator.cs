@@ -89,9 +89,14 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                         return new("waiting", "Choisissez explicitement le résultat de cette étape pour poursuivre. Sa capacité réelle d’exécution n’est pas vérifiée.", steps, node.Id);
                     assumed = true; output = result.OutputId;
                     detail = "Résultat fourni par le scénario ; aucune action réelle exécutée.";
-                    if (node.Component.PluginId == "nodes" && id == "nodes-run-on-node" && output == "success"
-                        && (!Guid.TryParse(Text("targetNodeId"), out var requiredWorker) || requiredWorker != worker))
-                        throw new ArgumentException("Le worker courant du profil ne correspond pas à la contrainte de ce bloc. Modifiez le profil ou le résultat du relais précédent.");
+                    if (node.Component.PluginId == "nodes" && id == "nodes-run-on-node" && output == "success")
+                    {
+                        var exactNode = Guid.TryParse(Text("targetNodeId"), out var requiredWorker);
+                        var hasOtherFilter = Guid.TryParse(Text("targetGroupId"), out _) || !string.IsNullOrWhiteSpace(Text("requiredLabels"));
+                        if (exactNode && requiredWorker != worker || !exactNode && !hasOtherFilter)
+                            throw new ArgumentException("Le worker courant du profil ne correspond pas à la contrainte de ce bloc. Modifiez le profil ou le résultat du relais précédent.");
+                        if (hasOtherFilter) detail += " L’appartenance au groupe et les étiquettes ne sont pas vérifiées par la simulation.";
+                    }
                     if (result.Variables is not null) foreach (var pair in result.Variables) variables[pair.Key] = pair.Value;
                     if (result.Metadata is { } metadata) context = context with { CurrentMetadata = metadata };
                     if (result.Modified) context = context with { CurrentSha256 = "simulated-" + node.Id };
@@ -101,8 +106,9 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                         if (result.WorkerNodeId is not { } target || target == worker)
                             throw new ArgumentException("Indiquez un autre worker pour simuler le relais. Son éligibilité n’est pas attestée par le test.");
                         var selector = RuntimeHandoffPolicy.Resolve(node, nodeDefaults);
-                        if (!selector.Accepts(target, worker))
+                        if (!selector.Accepts(target, worker) && selector.Mode != "selector")
                             throw new ArgumentException("Le worker simulé doit correspondre au worker choisi dans le bloc.");
+                        if (selector.Mode == "selector") detail += " Le scénario suppose que le worker satisfait les filtres de groupe et d’étiquettes.";
                         worker = target;
                         detail += context.CurrentSha256 == "source" ? " Relais des données et délégation de la source." : " Relais avec transfert du fichier transformé.";
                     }

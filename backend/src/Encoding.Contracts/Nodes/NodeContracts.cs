@@ -10,7 +10,10 @@ public sealed record NodeHeartbeatRequest(
     string Name,
     IReadOnlyList<NodeRole> Roles,
     int MaxConcurrentTasks,
-    IReadOnlyList<NodeToolCapability> Capabilities);
+    IReadOnlyList<NodeToolCapability> Capabilities,
+    NodeInventory? Inventory = null);
+
+public sealed record NodeInventory(string OperatingSystem, string Architecture, int ProcessorCount, long MemoryMb);
 
 public sealed record NodeToolCapability(
     string ToolId,
@@ -36,7 +39,10 @@ public sealed record NodeResponse(
     int MaxConcurrentTasks,
     IReadOnlyList<NodeToolCapability> Capabilities,
     NodePresenceStatus Status,
-    DateTimeOffset LastSeenAt);
+    DateTimeOffset LastSeenAt,
+    NodeInventory? Inventory = null,
+    string? DisplayName = null,
+    IReadOnlyDictionary<string, string?>? Labels = null);
 
 public sealed record NodeEnrollmentRequest(
     Guid Id,
@@ -44,7 +50,8 @@ public sealed record NodeEnrollmentRequest(
     IReadOnlyList<NodeRole> Roles,
     int MaxConcurrentTasks,
     IReadOnlyList<NodeToolCapability> Capabilities,
-    string NodeToken);
+    string NodeToken,
+    NodeInventory? Inventory = null);
 
 public sealed record CreateNodeEnrollmentRequest(NodeEnrollmentRequest Node, string PairingKey);
 
@@ -57,7 +64,8 @@ public sealed record PendingNodeEnrollmentResponse(
     int MaxConcurrentTasks,
     IReadOnlyList<NodeToolCapability> Capabilities,
     DateTimeOffset CreatedAt,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    NodeInventory? Inventory = null);
 
 public sealed record NodeActivityResponse(int Active,int Succeeded,int Failed,int Cancelled,DateTimeOffset? LastActivity,int SourceTasks);
 

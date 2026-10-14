@@ -25,6 +25,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { takeUntilDestroyed, toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import {
   catchError,
   EMPTY,
@@ -120,6 +121,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     DrawerActionButtonComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
+    RouterLink,
   ],
   templateUrl: './node-catalog-page.component.html',
   styleUrl: './node-catalog-page.component.scss',
@@ -143,12 +145,15 @@ export class NodeCatalogPageComponent {
   private readonly libraryAccessLoadState = signal<'loading' | 'ready' | 'error'>('loading');
 
   protected readonly isAdmin = inject(AuthService).isAdmin;
-  protected readonly enrollmentWindow = signal<EnrollmentWindow>({ isOpen: false, openUntil: null });
+  protected readonly enrollmentWindow = signal<EnrollmentWindow>({
+    isOpen: false,
+    openUntil: null,
+  });
   protected readonly loadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
   protected readonly actionType = signal<
-    'enrollment' | 'library-access' | 'create-library' | 'processing' | 'schedule'
+    'enrollment' | 'library-access' | 'create-library' | 'processing' | 'schedule' | 'identity'
   >('enrollment');
   protected readonly nodeLibraryLoading = signal(false);
   protected readonly accessFormBusy = signal(false);
@@ -157,6 +162,7 @@ export class NodeCatalogPageComponent {
   protected readonly enrollmentView = signal<'requests' | 'key' | 'review'>('requests');
   protected readonly selectedEnrollment = signal<PendingNodeEnrollmentResponse | null>(null);
   protected readonly selectedNode = signal<NodeRecord | null>(null);
+  protected readonly identityForm = signal<RecordFormData | null>(null);
   protected readonly createFormData: RecordFormData = {
     title: 'Ajouter un nœud worker',
     description:
@@ -179,7 +185,9 @@ export class NodeCatalogPageComponent {
       ? 'Impossible de joindre l’API du cluster. Vérifiez que le backend et PostgreSQL sont démarrés.'
       : 'Chargement des nœuds du cluster…',
   );
-  protected readonly detailTitle = computed(() => this.rawNode()?.name ?? 'Détails du nœud');
+  protected readonly detailTitle = computed(
+    () => this.rawNode()?.displayName?.trim() || this.rawNode()?.name || 'Détails du nœud',
+  );
   protected readonly detailDescription = computed(
     () => this.selectedNode()?.roleLabel ?? 'État observé par le cluster',
   );
@@ -248,7 +256,7 @@ export class NodeCatalogPageComponent {
     if (!node) return [];
     const schedule = state?.schedule;
     const openShare = schedule?.enabled
-      ? Math.round((schedule.slots.split('1').length - 1) * 100 / schedule.slots.length)
+      ? Math.round(((schedule.slots.split('1').length - 1) * 100) / schedule.slots.length)
       : null;
     return [
       {
@@ -365,12 +373,115 @@ export class NodeCatalogPageComponent {
       this.notifications.show('Limite invalide ou configuration modifiée ailleurs.');
     }
   }
+
+  private async editNodeIdentity(node: NodeRecord): Promise<void> {
+    try {
+      const identity = await firstValueFrom(
+        this.http.get<{
+          displayName: string | null;
+          labels: Readonly<Record<string, string | null>>;
+          effectiveLabels: Readonly<Record<string, string | null>>;
+          groupIds: readonly string[];
+        }>(`/api/v1/nodes/${node.id}/identity`),
+      );
+      this.selectedNode.set(node);
+      this.identityForm.set({
+        title: 'Nom et étiquettes',
+        description: `Groupes actuels : ${identity.groupIds.length}. Étiquettes effectives : ${
+          Object.entries(identity.effectiveLabels)
+            .map(([key, value]) => (value == null ? key : `${key}=${value}`))
+            .join(', ') || 'aucune'
+        }.`,
+        submitLabel: 'Enregistrer',
+        fields: [
+          { id: 'displayName', label: 'Nom d’affichage', type: 'text', maxLength: 128 },
+          {
+            id: 'labels',
+            label: 'Étiquettes locales',
+            type: 'textarea',
+            hint: 'Une par ligne : gpu=nvidia ou production.',
+          },
+        ],
+        initialValues: {
+          displayName: identity.displayName ?? '',
+          labels: Object.entries(identity.labels)
+            .map(([key, value]) => (value == null ? key : `${key}=${value}`))
+            .join('\n'),
+        },
+      });
+      this.actionType.set('identity');
+      this.actionOpen.set(true);
+    } catch {
+      this.notifications.show('Impossible de charger l’identité du nœud.');
+    }
+  }
+
+  protected async saveNodeIdentity(values: Record<string, string>): Promise<void> {
+    const node = this.selectedNode();
+    if (!node) return;
+    const labels: Record<string, string | null> = {};
+    for (const line of values['labels']
+      .split(/[\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)) {
+      const equals = line.indexOf('=');
+      const key = (equals < 0 ? line : line.slice(0, equals)).trim();
+      if (!/^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/.test(key)) {
+        this.notifications.show('Clé d’étiquette invalide.');
+        return;
+      }
+      labels[key] = equals < 0 ? null : line.slice(equals + 1).trim();
+    }
+    try {
+      await firstValueFrom(
+        this.http.put(`/api/v1/nodes/${node.id}/identity`, {
+          displayName: values['displayName'] || null,
+          labels,
+        }),
+      );
+      this.nodes.update((nodes) =>
+        nodes.map((item) =>
+          item.id === node.id
+            ? { ...item, displayName: values['displayName'] || null, labels }
+            : item,
+        ),
+      );
+      this.actionOpen.set(false);
+      this.notifications.show('Identité du nœud enregistrée.');
+    } catch {
+      this.notifications.show('Les étiquettes ou le nom du nœud sont invalides.');
+    }
+  }
   protected readonly overviewFields = computed<readonly DetailField[]>(() => {
     const node = this.rawNode();
     const activity = this.nodeActivity();
     if (!node) return [];
     return [
       { section: 'Identité et connexion', label: 'Identifiant', value: node.id },
+      ...(node.inventory
+        ? [
+            {
+              section: 'Inventaire déclaré',
+              label: 'Système',
+              value: node.inventory.operatingSystem,
+            },
+            {
+              section: 'Inventaire déclaré',
+              label: 'Architecture',
+              value: node.inventory.architecture,
+            },
+            {
+              section: 'Inventaire déclaré',
+              label: 'Processeurs disponibles',
+              value: node.inventory.processorCount,
+            },
+            {
+              section: 'Inventaire déclaré',
+              label: 'Mémoire totale disponible',
+              value: `${node.inventory.memoryMb} Mo`,
+            },
+          ]
+        : []),
       {
         section: 'Identité et connexion',
         label: 'Dernier signal reçu',
@@ -421,8 +532,12 @@ export class NodeCatalogPageComponent {
       {
         label: 'Encodeurs vérifiés utilisables',
         value: [
-          ...new Set(tools.flatMap((tool) => tool.encoderChecks ?? [])
-            .filter((check) => check.status === 'usable').map((check) => check.encoderId)),
+          ...new Set(
+            tools
+              .flatMap((tool) => tool.encoderChecks ?? [])
+              .filter((check) => check.status === 'usable')
+              .map((check) => check.encoderId),
+          ),
         ].length,
       },
     ];
@@ -472,18 +587,21 @@ export class NodeCatalogPageComponent {
             const check = tool.encoderChecks?.find((item) => item.encoderId === name);
             return {
               label: name,
-              detail: check?.status === 'usable'
-                ? 'Vérifié utilisable par un encodage synthétique'
-                : check?.status === 'detected'
-                  ? 'Détecté, mais le test d’encodage n’a pas réussi'
-                  : 'Déclaré par FFmpeg · capacité non vérifiée',
+              detail:
+                check?.status === 'usable'
+                  ? 'Vérifié utilisable par un encodage synthétique'
+                  : check?.status === 'detected'
+                    ? 'Détecté, mais le test d’encodage n’a pas réussi'
+                    : 'Déclaré par FFmpeg · capacité non vérifiée',
             };
           }),
-        message: 'Les vérifications utilisent une image synthétique et ne lisent aucun média de la bibliothèque.',
+        message:
+          'Les vérifications utilisent une image synthétique et ne lisent aucun média de la bibliothèque.',
       },
     });
   }
   protected readonly nodeActions: readonly DataTableRowAction[] = [
+    { id: 'identity', label: 'Nom et étiquettes', visibleWhen: () => this.isAdmin() },
     {
       id: 'delete',
       label: 'Supprimer',
@@ -500,6 +618,11 @@ export class NodeCatalogPageComponent {
     },
   ];
   protected onNodeAction(event: DataTableActionEvent): void {
+    if (event.actionId === 'identity') {
+      const node = this.filteredNodes().find((item) => item.id === event.row['id']);
+      if (node) void this.editNodeIdentity(node);
+      return;
+    }
     if (event.actionId !== 'delete' || this.removalBusy()) return;
     const id = String(event.row['id']);
     this.removalBusy.set(true);
@@ -523,7 +646,9 @@ export class NodeCatalogPageComponent {
     const row = this.selectedNode();
     if (!row || this.removalBusy()) return;
     this.dialog
-      .open(ConfirmationDialogComponent, { data: this.nodeActions[0].confirmation!(row) })
+      .open(ConfirmationDialogComponent, {
+        data: this.nodeActions.find((action) => action.id === 'delete')!.confirmation!(row),
+      })
       .afterClosed()
       .subscribe((confirmed) => {
         if (confirmed) this.onNodeAction({ actionId: 'delete', row });
@@ -532,24 +657,28 @@ export class NodeCatalogPageComponent {
   protected readonly actionTitle = computed(() =>
     this.actionType() === 'schedule'
       ? 'Calendrier du nœud'
-      : this.actionType() === 'processing'
-      ? 'Limite globale du nœud'
-      : this.actionType() === 'library-access'
-        ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
-        : this.actionType() === 'create-library'
-          ? 'Déclarer une bibliothèque'
-          : this.createFormData.title,
+      : this.actionType() === 'identity'
+        ? 'Nom et étiquettes du nœud'
+        : this.actionType() === 'processing'
+          ? 'Limite globale du nœud'
+          : this.actionType() === 'library-access'
+            ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
+            : this.actionType() === 'create-library'
+              ? 'Déclarer une bibliothèque'
+              : this.createFormData.title,
   );
   protected readonly actionDescription = computed(() =>
     this.actionType() === 'schedule'
       ? 'Plages horaires pendant lesquelles ce nœud peut démarrer de nouveaux traitements.'
-      : this.actionType() === 'processing'
-      ? 'Plafond simultané, toutes bibliothèques confondues.'
-      : this.actionType() === 'library-access'
-        ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
-        : this.actionType() === 'create-library'
-          ? 'Le serveur crée la définition partagée. Vous pourrez ensuite autoriser les nœuds et configurer leurs chemins.'
-          : this.createFormData.description,
+      : this.actionType() === 'identity'
+        ? 'Le nom affiché est distinct du nom envoyé par heartbeat. Les étiquettes locales remplacent celles des groupes.'
+        : this.actionType() === 'processing'
+          ? 'Plafond simultané, toutes bibliothèques confondues.'
+          : this.actionType() === 'library-access'
+            ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
+            : this.actionType() === 'create-library'
+              ? 'Le serveur crée la définition partagée. Vous pourrez ensuite autoriser les nœuds et configurer leurs chemins.'
+              : this.createFormData.description,
   );
   protected readonly createLibraryFormData: RecordFormData = {
     title: 'Déclarer une bibliothèque',
@@ -1128,7 +1257,7 @@ export class NodeCatalogPageComponent {
     const worker = node.roles.includes('worker');
     return {
       id: node.id,
-      name: node.name,
+      name: node.displayName?.trim() || node.name,
       roleFilter: `|${node.roles.join('|')}|`,
       roleLabel,
       capabilities: capabilityLabels.length

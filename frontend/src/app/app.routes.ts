@@ -145,6 +145,18 @@ const applicationRoutes: Routes = [
     },
   },
   {
+    path: 'node-groups',
+    loadComponent: () =>
+      import('./features/nodes/node-groups-page.component').then(
+        (module) => module.NodeGroupsPageComponent,
+      ),
+    data: {
+      title: 'Groupes de nœuds',
+      primaryNavigation: false,
+      description: 'Organisez les workers et leurs critères de sélection.',
+    },
+  },
+  {
     path: 'plugins',
     loadComponent: () =>
       import('./features/plugins/plugin-catalog-page.component').then(

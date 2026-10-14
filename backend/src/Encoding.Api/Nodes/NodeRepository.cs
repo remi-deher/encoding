@@ -20,17 +20,18 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
     {
         var tokenHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(request.NodeToken));
         const string sql = """
-            INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, node_token_hash)
-            SELECT @id, @name, @roles, @max_concurrent_tasks, @capabilities, clock_timestamp(), @node_token_hash
+            INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, inventory, last_seen_at, node_token_hash)
+            SELECT @id, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp(), @node_token_hash
             WHERE @allow_new OR EXISTS (SELECT 1 FROM cluster_nodes WHERE id = @id AND deleted_at IS NULL AND node_token_hash = @node_token_hash)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 roles = EXCLUDED.roles,
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
                 capabilities = EXCLUDED.capabilities,
+                inventory = EXCLUDED.inventory,
                 last_seen_at = clock_timestamp()
             WHERE cluster_nodes.deleted_at IS NULL AND (cluster_nodes.node_token_hash IS NULL OR cluster_nodes.node_token_hash = EXCLUDED.node_token_hash)
-            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at
+            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, inventory, display_name, labels
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
@@ -60,9 +61,9 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         var nodeTokenHash = HashSecret(request.Node.NodeToken);
         const string sql = """
             INSERT INTO node_enrollment_requests
-                (node_id, pairing_key_hash, node_token_hash, name, roles, max_concurrent_tasks, capabilities, expires_at)
+                (node_id, pairing_key_hash, node_token_hash, name, roles, max_concurrent_tasks, capabilities, inventory, expires_at)
             VALUES
-                (@id, @pairing_key_hash, @node_token_hash, @name, @roles, @max_concurrent_tasks, @capabilities, clock_timestamp() + interval '10 minutes')
+                (@id, @pairing_key_hash, @node_token_hash, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp() + interval '10 minutes')
             ON CONFLICT (node_id) DO UPDATE SET
                 pairing_key_hash = EXCLUDED.pairing_key_hash,
                 node_token_hash = EXCLUDED.node_token_hash,
@@ -70,6 +71,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
                 roles = EXCLUDED.roles,
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
                 capabilities = EXCLUDED.capabilities,
+                inventory = EXCLUDED.inventory,
                 created_at = clock_timestamp(),
                 expires_at = EXCLUDED.expires_at
             WHERE node_enrollment_requests.node_token_hash = EXCLUDED.node_token_hash
@@ -82,7 +84,8 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
             request.Node.Name,
             request.Node.Roles,
             request.Node.MaxConcurrentTasks,
-            request.Node.Capabilities));
+            request.Node.Capabilities,
+            request.Node.Inventory));
         command.Parameters.AddWithValue("pairing_key_hash", NpgsqlDbType.Bytea, pairingKeyHash);
         command.Parameters.AddWithValue("node_token_hash", NpgsqlDbType.Bytea, nodeTokenHash);
         return await command.ExecuteScalarAsync(cancellationToken) is not null ? PairingRequestResult.Created : PairingRequestResult.Conflict;
@@ -91,7 +94,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
     public async Task<IReadOnlyList<PendingNodeEnrollmentResponse>> ListPendingPairingRequestsAsync(CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at
+            SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at, inventory
             FROM node_enrollment_requests
             WHERE expires_at > clock_timestamp() AND NOT EXISTS(SELECT 1 FROM cluster_nodes n WHERE n.id=node_enrollment_requests.node_id AND n.deleted_at IS NOT NULL)
             ORDER BY created_at, node_id
@@ -107,7 +110,8 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
             requests.Add(new PendingNodeEnrollmentResponse(
                 reader.GetGuid(0), reader.GetString(1), roles, reader.GetInt32(3), capabilities,
                 new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc)),
-                new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc))));
+                new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc)),
+                ReadInventory(reader.GetString(7))));
         }
         return requests;
     }
@@ -128,7 +132,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var requestPredicate = requestedNodeId.HasValue ? "node_id = @node_id" : "pairing_key_hash = @pairing_key_hash";
         var selectSql = $"""
-            SELECT node_id, node_token_hash, name, roles, max_concurrent_tasks, capabilities
+            SELECT node_id, node_token_hash, name, roles, max_concurrent_tasks, capabilities, inventory
             FROM node_enrollment_requests
             WHERE {requestPredicate} AND expires_at > clock_timestamp()
             FOR UPDATE
@@ -152,20 +156,22 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
                 reader.GetString(2),
                 reader.GetFieldValue<string[]>(3).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray(),
                 reader.GetInt32(4),
-                JsonSerializer.Deserialize<IReadOnlyList<NodeToolCapability>>(reader.GetString(5), JsonOptions) ?? []);
+                JsonSerializer.Deserialize<IReadOnlyList<NodeToolCapability>>(reader.GetString(5), JsonOptions) ?? [],
+                ReadInventory(reader.GetString(6)));
         }
 
         const string enrollSql = """
-            INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, node_token_hash)
-            VALUES (@id, @name, @roles, @max_concurrent_tasks, @capabilities, clock_timestamp(), @node_token_hash)
+            INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, inventory, last_seen_at, node_token_hash)
+            VALUES (@id, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp(), @node_token_hash)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 roles = EXCLUDED.roles,
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
                 capabilities = EXCLUDED.capabilities,
+                inventory = EXCLUDED.inventory,
                 last_seen_at = clock_timestamp()
             WHERE cluster_nodes.deleted_at IS NULL AND (cluster_nodes.node_token_hash IS NULL OR cluster_nodes.node_token_hash = EXCLUDED.node_token_hash)
-            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at
+            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, inventory, display_name, labels
             """;
         NodeResponse? node;
         await using (var enrollCommand = new NpgsqlCommand(enrollSql, connection, transaction))
@@ -200,9 +206,10 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
                 roles = @roles,
                 max_concurrent_tasks = @max_concurrent_tasks,
                 capabilities = @capabilities,
+                inventory = @inventory,
                 last_seen_at = clock_timestamp()
             WHERE id = @id AND deleted_at IS NULL AND node_token_hash = @node_token_hash
-            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at
+            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, inventory, display_name, labels
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
@@ -216,7 +223,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
     {
         const string sql = """
             SELECT id, name, roles, max_concurrent_tasks, capabilities, last_seen_at,
-                   last_seen_at >= clock_timestamp() - @offline_after AS is_online
+                   last_seen_at >= clock_timestamp() - @offline_after AS is_online, inventory, display_name, labels
             FROM cluster_nodes WHERE deleted_at IS NULL
             ORDER BY name, id
             """;
@@ -233,7 +240,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
     {
         const string sql = """
             SELECT id, name, roles, max_concurrent_tasks, capabilities, last_seen_at,
-                   last_seen_at >= clock_timestamp() - @offline_after AS is_online
+                   last_seen_at >= clock_timestamp() - @offline_after AS is_online, inventory, display_name, labels
             FROM cluster_nodes WHERE id = @id AND deleted_at IS NULL
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -258,6 +265,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         active.Parameters.AddWithValue("id",id); if((bool)(await active.ExecuteScalarAsync(ct))!) return "busy";
         await using var remove=new NpgsqlCommand("""
           UPDATE cluster_nodes SET deleted_at=clock_timestamp(),node_token_hash=NULL WHERE id=@id;
+          DELETE FROM node_group_members WHERE node_id=@id;
           DELETE FROM library_node_accesses WHERE node_id=@id;
           UPDATE library_node_accesses SET is_enabled=false WHERE transfer_source_node_id=@id;
           DELETE FROM node_enrollment_requests WHERE node_id=@id;
@@ -282,7 +290,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
 
     private static void AddNodeParameters(NpgsqlCommand command, NodeEnrollmentRequest request)
     {
-        AddNodeParameters(command, request.Id, new NodeHeartbeatRequest(request.Name, request.Roles, request.MaxConcurrentTasks, request.Capabilities));
+        AddNodeParameters(command, request.Id, new NodeHeartbeatRequest(request.Name, request.Roles, request.MaxConcurrentTasks, request.Capabilities, request.Inventory));
     }
 
     private static void AddNodeParameters(NpgsqlCommand command, Guid nodeId, NodeHeartbeatRequest request)
@@ -295,16 +303,28 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         {
             Value = JsonSerializer.Serialize(request.Capabilities, JsonOptions)
         });
+        command.Parameters.Add(new NpgsqlParameter("inventory", NpgsqlDbType.Jsonb)
+        {
+            Value = JsonSerializer.Serialize(request.Inventory ?? new NodeInventory("unknown", "unknown", 0, 0), JsonOptions)
+        });
     }
 
-    private static NodeResponse ReadResponse(NpgsqlDataReader reader, bool isOnline)
+    internal static NodeResponse ReadResponse(NpgsqlDataReader reader, bool isOnline)
     {
         var lastSeenAt = new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc));
         var roles = reader.GetFieldValue<string[]>(2).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray();
         var capabilities = JsonSerializer.Deserialize<IReadOnlyList<NodeToolCapability>>(reader.GetString(4), JsonOptions) ?? [];
+        var inventoryOrdinal = reader.FieldCount >= 10 ? 7 : 6;
+        var inventory = ReadInventory(reader.GetString(inventoryOrdinal));
+        var displayName = reader.FieldCount > inventoryOrdinal + 1 && !reader.IsDBNull(inventoryOrdinal + 1) ? reader.GetString(inventoryOrdinal + 1) : null;
+        var labels = reader.FieldCount > inventoryOrdinal + 2
+            ? JsonSerializer.Deserialize<Dictionary<string, string?>>(reader.GetString(inventoryOrdinal + 2), JsonOptions) ?? []
+            : new Dictionary<string, string?>();
         return new NodeResponse(reader.GetGuid(0), reader.GetString(1), roles, reader.GetInt32(3), capabilities,
-            isOnline ? NodePresenceStatus.Online : NodePresenceStatus.Offline, lastSeenAt);
+            isOnline ? NodePresenceStatus.Online : NodePresenceStatus.Offline, lastSeenAt, inventory, displayName, labels);
     }
 
     private static byte[] HashSecret(string value) => SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
+
+    private static NodeInventory? ReadInventory(string json) => json == "{}" ? null : JsonSerializer.Deserialize<NodeInventory>(json, JsonOptions);
 }

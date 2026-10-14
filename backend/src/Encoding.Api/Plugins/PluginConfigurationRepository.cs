@@ -246,8 +246,18 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
         var provided=target.ValueKind==JsonValueKind.String && !string.IsNullOrWhiteSpace(target.GetString());
         if(provided && (!Guid.TryParse(target.GetString(),out var id) || id==Guid.Empty))
             throw new PluginConfigurationValidationException("L'identifiant du worker est invalide.");
+        if(values.TryGetValue("targetGroupId",out var groupTarget) && groupTarget.ValueKind==JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(groupTarget.GetString()) && (!Guid.TryParse(groupTarget.GetString(),out var groupId) || groupId==Guid.Empty))
+            throw new PluginConfigurationValidationException("L'identifiant du groupe destinataire est invalide.");
         if(requireTarget && values.TryGetValue("mode",out var mode) && mode.GetString()=="node" && !provided)
             throw new PluginConfigurationValidationException("Choisissez le nœud par défaut pour cette destination.");
+        if(requireTarget && values.TryGetValue("mode",out mode) && mode.GetString()=="selector"
+            && !(values.TryGetValue("targetGroupId",out var group) && group.ValueKind==JsonValueKind.String && Guid.TryParse(group.GetString(),out _))
+            && !(values.TryGetValue("requiredLabels",out var labels) && labels.ValueKind==JsonValueKind.String && !string.IsNullOrWhiteSpace(labels.GetString())))
+            throw new PluginConfigurationValidationException("Choisissez un groupe ou des étiquettes pour cette destination.");
+        if(values.TryGetValue("requiredLabels",out var labelSelector) && labelSelector.ValueKind==JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(labelSelector.GetString()) && !Encoding.Contracts.Nodes.NodeLabelSelector.IsValid(labelSelector.GetString()))
+            throw new PluginConfigurationValidationException("Le filtre d’étiquettes doit utiliser clé ou clé=valeur, séparés par des virgules.");
     }
 
     private PluginConfigurationResponse ToResponse(PluginManifest plugin, int revision, IReadOnlyDictionary<string, JsonElement> values)

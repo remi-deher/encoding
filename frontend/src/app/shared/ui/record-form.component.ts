@@ -8,7 +8,7 @@ import { MatSelectModule } from '@angular/material/select';
 export interface RecordFormField {
   readonly id: string;
   readonly label: string;
-  readonly type: 'text' | 'select' | 'number' | 'password';
+  readonly type: 'text' | 'select' | 'number' | 'password' | 'textarea';
   readonly autocomplete?: string;
   readonly min?: number;
   readonly max?: number;
@@ -62,6 +62,19 @@ export interface RecordFormData {
                 </mat-select>
                 @if (field.filterOptionsByFieldId) {
                   <mat-hint>Les choix proposés dépendent du type de média.</mat-hint>
+                }
+              </mat-form-field>
+            } @else if (field.type === 'textarea') {
+              <mat-form-field appearance="outline">
+                <mat-label>{{ field.label }}</mat-label>
+                <textarea
+                  matInput
+                  rows="4"
+                  [formControlName]="field.id"
+                  [attr.maxlength]="field.maxLength ?? null"
+                ></textarea>
+                @if (field.hint) {
+                  <mat-hint>{{ field.hint }}</mat-hint>
                 }
               </mat-form-field>
             } @else {

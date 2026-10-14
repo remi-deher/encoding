@@ -11,7 +11,7 @@ using NpgsqlTypes;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations)
+public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     public async Task<bool> AuthenticateAsync(Guid node,string token,CancellationToken ct)
@@ -62,6 +62,8 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         }
         await using(var active=new NpgsqlCommand("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@worker AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')",c,tx))
         { active.Parameters.AddWithValue("worker",worker); if((long)(await active.ExecuteScalarAsync(ct))!>=capacity) return null; }
+        var nodeIdentity=await nodeGroups.GetNodeIdentityAsync(worker,ct);
+        if(nodeIdentity is null) return null;
         var candidates=new List<(Guid Id,Guid Library,string Path,string Key,FlowDefinition Flow,int Attempt,int Revision,long Epoch,
             RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe)>();
         await using(var read=new NpgsqlCommand("""
@@ -94,8 +96,8 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
             {
                 if(!eligibility.CanProbe(item.Flow,capabilities,wanted.BlockNodeId)) continue;
             }
-            else if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value))) continue;
-            if(item.Probe is null && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context)) continue;
+            else if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value,nodeIdentity))) continue;
+            if(item.Probe is null && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity)) continue;
             // Library row serializes claims from all workers before counting active leases.
             await using(var limits=new NpgsqlCommand("""
               SELECT p.max_concurrent_tasks,(SELECT max_concurrent_tasks FROM library_node_processing_limits WHERE library_id=l.id AND node_id=@worker)

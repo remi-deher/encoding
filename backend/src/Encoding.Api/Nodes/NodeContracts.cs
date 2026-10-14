@@ -23,6 +23,11 @@ public static class NodeHeartbeatValidator
             errors["roles"] = ["Déclarez au moins un rôle sans doublon."];
         if (request.MaxConcurrentTasks < 0 || request.MaxConcurrentTasks > 1024)
             errors["maxConcurrentTasks"] = ["La limite doit être comprise entre 0 et 1024."];
+        if (request.Inventory is { } inventory && (string.IsNullOrWhiteSpace(inventory.OperatingSystem)
+            || inventory.OperatingSystem.Length > 128 || string.IsNullOrWhiteSpace(inventory.Architecture)
+            || inventory.Architecture.Length > 64 || inventory.ProcessorCount is < 0 or > 4096
+            || inventory.MemoryMb is < 0 or > 4_194_304))
+            errors["inventory"] = ["L’inventaire système contient des valeurs invalides."];
         if (request.Capabilities is null || request.Capabilities.Count > 256)
             errors["capabilities"] = ["La liste des capacités est obligatoire et limitée à 256 éléments."];
         else
@@ -52,7 +57,7 @@ public static class NodeHeartbeatValidator
 
     public static Dictionary<string, string[]> Validate(NodeEnrollmentRequest request)
     {
-        var errors = Validate(new NodeHeartbeatRequest(request.Name, request.Roles, request.MaxConcurrentTasks, request.Capabilities));
+        var errors = Validate(new NodeHeartbeatRequest(request.Name, request.Roles, request.MaxConcurrentTasks, request.Capabilities, request.Inventory));
         if (request.Id == Guid.Empty) errors["id"] = ["L’identifiant du nœud doit être un UUID non vide."];
         if (string.IsNullOrWhiteSpace(request.NodeToken) || request.NodeToken.Length is < 40 or > 256)
             errors["nodeToken"] = ["L’identité locale du nœud est invalide."];

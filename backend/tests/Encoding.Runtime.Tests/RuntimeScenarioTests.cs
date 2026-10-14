@@ -11,6 +11,9 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
     public Task FlowSavingIsIdempotentAndConcurrencySafe() => Scenarios.FlowSavingAsync();
 
     [PostgresFact]
+    public Task NodeGroupsResolveAutomaticMembershipAndLabelInheritance() => Scenarios.NodeGroupsAndLabelsAsync();
+
+    [PostgresFact]
     public Task DurableRelayBeforeTransformation() => Scenarios.BackendRelayAsync(false);
 
     [PostgresFact]
