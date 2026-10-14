@@ -23,4 +23,7 @@ public sealed class ContractTests
 
     [Fact]
     public void OperationsMigrationCatalogMetricsAndRetentionOptionsAreValid() => OperationsScenarios.Run();
+
+    [Fact]
+    public Task SourceReplacementFilesPolicyGraceAndRestore() => SourceReplacementScenarios.RunAsync();
 }

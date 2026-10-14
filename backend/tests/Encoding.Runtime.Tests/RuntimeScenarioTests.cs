@@ -48,4 +48,16 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
 
     [PostgresFact]
     public Task OperationsMigrationsHealthAndArtifactRetention() => OperationsScenarios.RunDatabaseAsync(PostgresFixture.ConnectionString!);
+
+    [PostgresFact]
+    public Task SourceReplacementLifecycle() => Scenarios.ReplacementLifecycleAsync();
+
+    [PostgresFact]
+    public Task WorkerLossFailover() => Scenarios.WorkerLossFailoverAsync();
+
+    [PostgresFact]
+    public Task ServerLossFailover() => Scenarios.ServerLossFailoverAsync();
+
+    [MediaToolsFact]
+    public Task H265SourceReplacedThenRestored() => Scenarios.MediaRelayAsync(false, true);
 }
