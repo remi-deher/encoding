@@ -74,7 +74,7 @@ WebDAV est ici un canal de transfert de fichiers entre nœuds. Les outils d’en
 - Les plugins tiers s’exécutent dans un processus séparé de l’application hôte. Leur communication avec l’application passe par un contrat interprocessus versionné ; ils ne sont pas chargés directement dans le processus ASP.NET Core ou worker.
 - À ce stade, l’isolation des plugins repose sur ce processus séparé. Ne pas imposer de conteneur dédié par plugin.
 - Le moteur valide un flow selon les composants et versions disponibles avant son exécution. Une exécution référence une version précise de sa définition.
-- Par défaut, le traitement complet d’un fichier est attribué à un worker éligible ; le moteur ne distribue pas chaque étape du flow séparément.
+- Par défaut, le traitement complet d’un fichier est attribué à un worker éligible. Un bloc explicite `nodes-handoff` permet de céder la suite à un autre worker à un checkpoint durable, sous un nouveau bail, en conservant la réservation du média ; voir l’architecture 0021. Le moteur ne distribue pas implicitement chaque étape.
 - Dans le code, distinguer les composants de flow des composants UI Angular et des nœuds de cluster.
 - Les plugins ne contournent pas les garanties du système sur l’attribution des tâches, l’accès aux bibliothèques et l’intégrité des fichiers.
 

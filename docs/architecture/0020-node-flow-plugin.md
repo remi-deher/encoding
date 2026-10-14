@@ -13,7 +13,7 @@ Le répartiteur vérifie ces contraintes au moment de réclamer une tâche. Si a
 
 ## Transfert et limites
 
-Une étape d’un flow ne peut pas céder une exécution en cours à un autre worker. Le runtime attribue tout le traitement du fichier à un worker, conserve son bail et ses checkpoints, et traite le média dans son espace local. La configuration d’accès bibliothèque détermine l’accès direct ou le transfert WebDAV du média vers ce worker. Le bloc « Exécuter sur un nœud précis » choisit donc le worker avant le démarrage ; il ne déclenche pas un transfert à mi-parcours.
+Les contraintes choisissent le worker d'un segment du flow. Le bloc explicite `nodes-handoff` permet de céder la suite à un autre worker selon l'architecture 0021, sans rejouer les étapes terminées. La configuration d'accès bibliothèque et le stockage durable des artefacts assurent le transfert des fichiers.
 
 Le plugin ne contourne pas les contrôles existants d’éligibilité des outils, de rôle worker, de capacité, de limites de traitement ou d’accès à la bibliothèque.
 
