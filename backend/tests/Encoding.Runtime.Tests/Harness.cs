@@ -178,6 +178,7 @@ internal static partial class Harness
         {
             // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
             await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            await ResetNodesAsync();
             var library=Guid.NewGuid(); var id=Guid.NewGuid();
             await using var command=db.CreateCommand("""
                 INSERT INTO libraries(id,name) VALUES(@library,@name);
