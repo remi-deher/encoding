@@ -53,6 +53,9 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
     public Task SourceReplacementLifecycle() => Scenarios.ReplacementLifecycleAsync();
 
     [PostgresFact]
+    public Task WaitMediaPolicy() => Scenarios.WaitMediaPolicyAsync();
+
+    [PostgresFact]
     public Task WorkerLossFailover() => Scenarios.WorkerLossFailoverAsync();
 
     [PostgresFact]
@@ -66,4 +69,25 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
 
     [PostgresFact]
     public Task NodeScheduleBlocksNewClaimsOnly() => Scenarios.NodeScheduleAsync();
+
+    [PostgresFact]
+    public Task WaitTimerReleasesTheWorkerAndResumesAfterTheBlock() => Scenarios.WaitTimerAsync();
+
+    [PostgresFact]
+    public Task WaitDeadlineWithTimeoutOutput() => Scenarios.WaitDeadlineAsync(true);
+
+    [PostgresFact]
+    public Task WaitDeadlineWithoutTimeoutOutputFails() => Scenarios.WaitDeadlineAsync(false);
+
+    [PostgresFact]
+    public Task WaitServerEvaluatedEvents() => Scenarios.WaitServerEventsAsync();
+
+    [PostgresFact]
+    public Task WaitOnPluginConditionUsesFencedProbes() => Scenarios.WaitBlockProbeAsync();
+
+    [PostgresFact]
+    public Task WaitRunnerYieldsAndCancellationClosesTheWait() => Scenarios.WaitRunnerAndCancellationAsync();
+
+    [PostgresFact]
+    public void WaitBlockContractsAndCompatibility() => Scenarios.WaitContracts();
 }

@@ -49,6 +49,8 @@ public static class RuntimeEndpoints
             await runtime.StartStepAsync(id,nodeId,request,ct) is { } step ? (IResult)Results.Ok(step) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/steps/complete",async(Guid nodeId,Guid id,CompleteRuntimeStep request,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.CompleteStepAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
+        group.MapPost("/executions/{id:guid}/wait/probe",async(Guid nodeId,Guid id,ReportWaitProbe request,ExecutionWaitRepository waits,CancellationToken ct)=>
+            await waits.ReportProbeAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapPost("/executions/{id:guid}/finish",async(Guid nodeId,Guid id,FinishRuntimeExecution request,RuntimeTransferRepository transfers,CancellationToken ct)=>
             await transfers.FinishAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapGet("/transfers",async(Guid nodeId,RuntimeTransferRepository transfers,CancellationToken ct)=>Results.Ok(await transfers.ListAsync(nodeId,ct)));

@@ -28,6 +28,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             finally { leaseGate.Release(); }
         }
+        if(lease.Probe is { } wanted) { await ProbeAsync(lease,wanted,client,directory,stoppingToken); return; }
         var renewal=Task.Run(async()=>
         {
             try { while(!job.IsCancellationRequested) { await Task.Delay(TimeSpan.FromSeconds(15),job.Token); await RenewAsync(job.Token); } }
@@ -119,7 +120,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 }
                 using var commandStep=commandCapture.BeginStep(node.Id,started.InvocationId);
                 string? output="success"; terminal=null;
-                RuntimeHandoffSelector? handoff=null;
+                RuntimeHandoffSelector? handoff=null; RuntimeWait? wait=null;
                 try
                 {
                     var id=node.Component.PluginId=="base"?node.Component.ComponentId:""; var c=node.Configuration;
@@ -152,6 +153,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         output=ConditionTree.Evaluate(tree,new(context with { Variables=variables },lease.SourceNodeId,client.NodeId,
                             lease.LibraryId,lease.MediaPath,sourceSha))?"yes":"no";
                     }
+                    else if(RuntimeWaitPolicy.IsWait(node)) { wait=RuntimeWaitPolicy.Resolve(node); output="resumed"; }
                     else if(RuntimeHandoffPolicy.IsHandoff(node))
                     {
                         handoff=RuntimeHandoffPolicy.Resolve(node,lease.PluginConfigurations?.GetValueOrDefault("nodes"));
@@ -232,7 +234,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 }
                 context=context with { Variables=new Dictionary<string,JsonElement>(variables) };
                 next=FlowPath.NextNodeId(lease.Flow,node.Id,output);
-                var checkpoint=new RuntimeCheckpoint(node.Id,started.InvocationId,output,next,context,terminal,handoff);
+                if(next is null) wait=null;
+                var checkpoint=new RuntimeCheckpoint(node.Id,started.InvocationId,output,next,context,terminal,handoff,wait);
                 var eventId=Guid.NewGuid();
                 await leaseGate.WaitAsync(job.Token);
                 try
@@ -247,13 +250,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             commandCapture.MarkPersisted(node.Id,started.InvocationId);
                             break;
                         }
-                        catch(HttpRequestException exception) when(handoff is not null && retry<2
+                        catch(HttpRequestException exception) when((handoff is not null || wait is not null) && retry<2
                             && (exception.StatusCode is null || (int)exception.StatusCode>=500))
                         { await Task.Delay(TimeSpan.FromSeconds(1),job.Token); }
                     }
-                    if(handoff is not null)
+                    if(handoff is not null || wait is not null)
                     {
-                        logger.LogInformation("Exécution {ExecutionId} cédée après le bloc {Node}.",lease.ExecutionId,node.Id);
+                        logger.LogInformation(wait is not null?"Exécution {ExecutionId} mise en attente par le bloc {Node}.":"Exécution {ExecutionId} cédée après le bloc {Node}.",lease.ExecutionId,node.Id);
                         job.Cancel(); return;
                     }
                 }
@@ -305,6 +308,26 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             catch(Exception) { logger.LogWarning("Le résultat de l’exécution {ExecutionId} n’a pas pu être confirmé par le cluster.",lease.ExecutionId); }
         }
+    }
+
+    /// <summary>Évalue la condition de plugin d'une attente avec le contexte figé du checkpoint ; aucune étape n'est créée.</summary>
+    private async Task ProbeAsync(RuntimeLease lease,RuntimeWaitProbe probe,RuntimeClient client,string directory,CancellationToken ct)
+    {
+        string? output=null;
+        try
+        {
+            var node=lease.Flow.Nodes.Single(item=>item.Id==probe.BlockNodeId);
+            var context=lease.Checkpoint?.Context??throw new InvalidOperationException("Sonde sans checkpoint.");
+            var invocation=new FlowStepInvocation(1,Guid.NewGuid(),lease.ExecutionId,lease.Attempt,client.NodeId,lease.Epoch,node.Id,node.Component,node.Configuration,
+                new(lease.SourceSha256,"current"+context.Extension,context.BeforeMetadata,context.CurrentMetadata,new Dictionary<string,JsonElement>(context.Variables),lease.MediaPath,lease.LibraryId),
+                DateTimeOffset.UtcNow.AddSeconds(45),lease.PluginConfigurations?.GetValueOrDefault(node.Component.PluginId));
+            var response=await plugins.ExecuteAsync(invocation,directory,ct);
+            output=response.OutputId;
+        }
+        catch(OperationCanceledException) when(ct.IsCancellationRequested) { return; }
+        catch(Exception exception) { logger.LogInformation("Sonde d'attente {ExecutionId} sans résultat : {Type}.",lease.ExecutionId,exception.GetType().Name); }
+        try { await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/wait/probe",new ReportWaitProbe(lease.Epoch,output),ct); }
+        catch(HttpRequestException exception) { logger.LogInformation("Résultat de sonde non confirmé ({Status}) ; le bail expirera.",exception.StatusCode); }
     }
 
     private static bool IsFfmpegPlan(string id)=>FlowMediaValues.IsFfmpegPlan(id);

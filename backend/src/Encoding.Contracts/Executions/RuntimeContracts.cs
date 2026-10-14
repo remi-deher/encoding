@@ -6,7 +6,8 @@ namespace Encoding.Contracts.Executions;
 public sealed record EnqueueMediaRequest(Guid Id, Guid LibraryId, string MediaPath, Guid FlowId, int FlowVersion);
 public sealed record RuntimeLease(Guid ExecutionId, int Attempt, int Revision, long Epoch, DateTimeOffset ExpiresAt,
     Guid SourceNodeId, string? SourceRoot, string MediaPath, string? SourceSha256, FlowDefinition Flow, RuntimeCheckpoint? Checkpoint, string EntryNodeId,
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null);
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null,
+    RuntimeWaitProbe? Probe = null);
 public sealed record RuntimeFence(long Epoch);
 public sealed record RuntimeLeaseStatus(bool CancelRequested, int Revision, DateTimeOffset ExpiresAt);
 public sealed record RuntimeSourceState(string? SourceSha256, IReadOnlyDictionary<string,string>? Inputs = null);
@@ -21,7 +22,7 @@ public sealed record ResolvedVideoEncoding(string FlowNodeId, Guid WorkerId, str
     Guid ProfileId, int ProfileVersion, string ProfileName, int Priority, DateTimeOffset ResolvedAt);
 public sealed record RuntimePlanStep(string ComponentId, IReadOnlyDictionary<string,JsonElement> Configuration, string? FlowNodeId = null);
 public sealed record RuntimeCheckpoint(string NodeId, Guid InvocationId, string? OutputId, string? NextNodeId, RuntimeContext Context, string? TerminalResult,
-    RuntimeHandoffSelector? Handoff = null);
+    RuntimeHandoffSelector? Handoff = null, RuntimeWait? Wait = null);
 public sealed record RuntimeCommandLog(Guid Id, string Command, string StandardOutput, string StandardError, int? ExitCode,
     DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, bool Truncated);
 public sealed record RuntimeStepCommand(string NodeId, Guid InvocationId, RuntimeCommandLog Command);

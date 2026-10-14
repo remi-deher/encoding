@@ -32,11 +32,12 @@ internal static partial class Harness
         }
 
         /// <summary>Exécution terminée côté worker : résultat enregistré, publication demandée au nœud d'accès (a).</summary>
-        private async Task<(Guid Id,RuntimeLease Lease,Guid Library,string SourceSha,string ResultSha)> PublicationRequestedAsync(bool replacement,int graceHours=1)
+        private async Task<(Guid Id,RuntimeLease Lease,Guid Library,string SourceSha,string ResultSha)> PublicationRequestedAsync(bool replacement,int graceHours=1,string mediaPolicy="keep")
         {
             var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
             var(id,lease,context)=await EnqueueAsync(flow); var library=lease.LibraryId!.Value;
             if(replacement) Check(await new SourceReplacementRepository(db).SavePolicyAsync(library,new(true,graceHours,0),CancellationToken.None),"Enable the replacement policy.");
+            if(mediaPolicy!="keep") await using(var set=db.CreateCommand("UPDATE execution_work SET media_policy=@policy WHERE execution_id=@id")){ set.Parameters.AddWithValue("policy",mediaPolicy); set.Parameters.AddWithValue("id",id); await set.ExecuteNonQueryAsync(); }
             await CompleteAsync(id,a,lease,"entry",context); await CompleteAsync(id,a,lease,"end",context);
             var result=System.Text.Encoding.UTF8.GetBytes("encoded-result-"+id); var resultSha=Convert.ToHexStringLower(SHA256.HashData(result));
             Check(await artifacts.PutAsync(id,a,lease.Epoch,resultSha,new MemoryStream(result),false,CancellationToken.None),"Register the validated result.");

@@ -8,6 +8,14 @@ namespace Encoding.Api.Executions;
 
 public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefinitionValidator validator)
 {
+    /// <summary>Une sonde n'exécute qu'une condition de plugin : seule la capacité de ce plugin est requise.</summary>
+    public bool CanProbe(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,string blockNodeId)
+    {
+        var node=flow.Nodes.SingleOrDefault(item=>item.Id==blockNodeId);
+        return node is not null && registry.Resolve(node.Component) is not null && capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId
+            && (c.Version==node.Component.PluginVersion || c.Version==registry.RuntimePluginVersion(node.Component)));
+    }
+
     public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null)
     {
         if(!validator.Validate(flow).IsValid) return false;
