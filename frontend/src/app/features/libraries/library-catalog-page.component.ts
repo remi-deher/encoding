@@ -44,7 +44,7 @@ import {
 
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 
-import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
+import { DetailCard, DetailCardGridComponent } from '../../shared/ui/detail-card-grid.component';
 
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 
@@ -66,7 +66,10 @@ import { NotificationService } from '../../shared/services/notification.service'
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { formatFileSize } from '../../shared/models/file-size';
-import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../../shared/services/execution-tracking';
+import {
+  ExecutionTracking,
+  INITIAL_EXECUTION_TRACKING,
+} from '../../shared/services/execution-tracking';
 import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeline-logs.component';
 
 interface LibraryRecord extends DataTableRow {
@@ -119,7 +122,7 @@ interface LibraryAccessRecord extends DataTableRow {
   imports: [
     DataTableComponent,
 
-    DetailFieldListComponent,
+    DetailCardGridComponent,
 
     ManagementCatalogTemplateComponent,
 
@@ -368,7 +371,10 @@ export class LibraryCatalogPageComponent {
                 this.executionTracking.pipeline(id).pipe(
                   map((steps) => ({ message: '', steps })),
                   catchError(() =>
-                    of({ message: 'Impossible de charger les commandes de cette exécution.', steps: [] }),
+                    of({
+                      message: 'Impossible de charger les commandes de cette exécution.',
+                      steps: [],
+                    }),
                   ),
                 ),
               ),
@@ -881,22 +887,136 @@ export class LibraryCatalogPageComponent {
     })),
   );
 
-  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+  protected readonly libraryCards = computed<readonly DetailCard[]>(() => {
     const library = this.selectedLibrary();
+    if (!library) return [];
 
-    return library
-      ? [
-          { section: 'Accès par nœud', label: 'Nœuds configurés', value: library.configuredNodes },
+    const assignment = this.workflowState()?.assignment;
+    const processing = this.processingState();
+    const scan = this.workflowState()?.scan;
+    const accessCount = library.configuredNodeCount;
+    const scanState = scan?.state;
+    const scanStatus = scanState
+      ? {
+          label:
+            scanState === 'queued'
+              ? 'En attente'
+              : scanState === 'running'
+                ? 'En cours'
+                : scanState === 'completed'
+                  ? 'Terminé'
+                  : 'Échec',
+          tone: scanState === 'completed' ? ('success' as const) : ('warning' as const),
+        }
+      : {
+          label: this.workflowError() ? 'Indisponible' : 'Pas de scan',
+          tone: this.workflowError() ? ('warning' as const) : ('neutral' as const),
+        };
 
-          { section: 'Accès par nœud', label: 'Modes actifs', value: library.accessModes },
-
-          { section: 'Activité', label: 'Dernière analyse', value: library.lastScan },
-
-          { section: 'Activité', label: 'Flows associés', value: this.workflowLabel() },
-
-          { section: 'Activité', label: 'Créée le', value: library.modifiedAt },
-        ]
-      : [];
+    return [
+      {
+        id: 'library-access',
+        title: 'Accès du cluster',
+        subtitle: accessCount ? `${accessCount} nœud(s) configuré(s)` : 'Aucun nœud configuré',
+        icon: 'tool',
+        status: {
+          label: accessCount ? 'Accès déclarés' : 'À configurer',
+          tone: accessCount ? 'success' : 'warning',
+        },
+        tags: [
+          ...(library.directAccessNodeCount
+            ? [{ label: `${library.directAccessNodeCount} direct(s)`, tone: 'accent' as const }]
+            : []),
+          ...(library.transferNodeCount
+            ? [{ label: `${library.transferNodeCount} transfert(s)`, tone: 'accent' as const }]
+            : []),
+        ],
+        sections: [
+          {
+            title: 'Modes configurés',
+            items: [
+              {
+                label: 'Accès direct',
+                description: `${library.directAccessNodeCount} nœud(s)`,
+              },
+              {
+                label: 'Transfert vers worker',
+                description: `${library.transferNodeCount} nœud(s)`,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'library-processing',
+        title: 'Flow et traitement',
+        subtitle: assignment
+          ? `${assignment.name} · v${assignment.version}`
+          : 'Aucun flow attribué',
+        icon: 'video',
+        status: {
+          label: assignment ? 'Flow attribué' : 'À configurer',
+          tone: assignment ? 'success' : 'warning',
+        },
+        tags: [
+          {
+            label: processing
+              ? processing.watchEnabled
+                ? `Surveillance · ${processing.scanIntervalSeconds} s`
+                : 'Surveillance arrêtée'
+              : 'Règles de traitement…',
+            tone: processing?.watchEnabled ? 'accent' : 'neutral',
+          },
+          {
+            label: processing?.maxConcurrentTasks
+              ? `${processing.maxConcurrentTasks} tâche(s) max.`
+              : 'Sans plafond global',
+          },
+        ],
+        sections: [
+          {
+            title: 'Configuration appliquée',
+            items: [
+              { label: 'Flow', description: this.workflowLabel() },
+              { label: 'Surveillance et limites', description: this.processingSummary() },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'library-discovery',
+        title: 'Découverte et activité',
+        subtitle: scan?.detail ?? this.discoveryStatus(),
+        icon: 'tool',
+        status: scanStatus,
+        tags: [
+          { label: `${this.mediaRows().length} fichier(s) détecté(s)` },
+          ...(scan?.completedAt
+            ? [
+                {
+                  label: new Date(scan.completedAt).toLocaleString('fr-FR'),
+                  tone: 'neutral' as const,
+                },
+              ]
+            : []),
+        ],
+        sections: [
+          {
+            title: 'Dernière découverte',
+            items: [
+              { label: 'État', description: this.discoveryStatus() },
+              {
+                label: 'Terminée le',
+                description: scan?.completedAt
+                  ? new Date(scan.completedAt).toLocaleString('fr-FR')
+                  : 'Aucune date enregistrée',
+              },
+              { label: 'Créée le', description: library.modifiedAt },
+            ],
+          },
+        ],
+      },
+    ];
   });
 
   protected readonly columns: readonly DataTableColumn[] = [
