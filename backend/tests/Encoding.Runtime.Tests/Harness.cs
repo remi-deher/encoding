@@ -176,6 +176,8 @@ internal static partial class Harness
         }
         private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
         {
+            // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
+            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
             var library=Guid.NewGuid(); var id=Guid.NewGuid();
             await using var command=db.CreateCommand("""
                 INSERT INTO libraries(id,name) VALUES(@library,@name);
