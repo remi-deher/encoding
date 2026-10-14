@@ -397,6 +397,16 @@ class PlexTests(unittest.TestCase):
         self.assertEqual(self.run_component("plex-check-media-indexed", media="Show/Season 1/e2.mkv")["outputId"], "notFound",
                          "un filtre ignoré par Plex ne doit pas valoir « trouvé »")
 
+    def test_playback_by_file_or_globally(self):
+        sessions = {"MediaContainer": {"Metadata": [{"Media": [{"Part": [{"file": "/tv/Show/Season 1/e1.mkv"}]}]}]}}
+        self.routes[("GET", "/status/sessions")] = (200, sessions)
+        self.assertEqual(self.run_component("plex-check-playback")["outputId"], "playing")
+        self.assertEqual(self.run_component("plex-check-playback", media="Show/Season 1/e2.mkv")["outputId"], "idle")
+        self.assertEqual(self.run_component("plex-check-playback", {"scope": "global"}, media="Show/Season 1/e2.mkv")["outputId"], "playing")
+        self.routes[("GET", "/status/sessions")] = (200, {"MediaContainer": {"size": 0}})
+        self.assertEqual(self.run_component("plex-check-playback", {"scope": "global"})["outputId"], "idle")
+        self.assertEqual(self.run_component("plex-check-playback")["outputId"], "idle")
+
     @staticmethod
     def paths_for_check():
         for name in ("Show/Season 1/e1.mkv", "Show/Season 1/e2.mkv"):
@@ -480,6 +490,15 @@ class JellyfinTests(unittest.TestCase):
         self.route("GET", self.items_path(), 200, {"Items": [{"Id": "x", "Path": "/media/tv/autre.mkv"}]})
         self.assertEqual(self.run_component("jellyfin-check-item-indexed")["outputId"], "notFound",
                          "un filtre ignoré par Jellyfin ne doit pas valoir « trouvé »")
+
+    def test_playback_by_file_or_globally(self):
+        playing = [{"NowPlayingItem": {"Id": "a", "Path": "/media/tv/Show/Season 1/e1.mkv"}}, {"Id": "idle-session"}]
+        self.route("GET", "/Sessions", 200, playing)
+        self.assertEqual(self.run_component("jellyfin-check-playback")["outputId"], "playing")
+        self.assertEqual(self.run_component("jellyfin-check-playback", media="Show/Season 1/e2.mkv")["outputId"], "idle")
+        self.assertEqual(self.run_component("jellyfin-check-playback", {"scope": "global"}, media="x.mkv")["outputId"], "playing")
+        self.route("GET", "/Sessions", 200, [{"Id": "idle-session"}])
+        self.assertEqual(self.run_component("jellyfin-check-playback", {"scope": "global"})["outputId"], "idle")
 
     def test_infrastructure_failures_exit_without_output_or_key(self):
         for status in (401, 500, 302):

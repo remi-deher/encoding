@@ -40,6 +40,16 @@ class JellyfinClient:
     def item_exists(self, item_id):
         return any(i["Id"].replace("-", "").lower() == item_id.replace("-", "").lower() for i in self.items({"ids": item_id}))
 
+    def playing_files(self):
+        """Fichiers des sessions qui lisent un contenu (lectures en pause comprises) ; None = fichier inconnu."""
+        _, payload = self.api.request("GET", "Sessions")
+        result = []
+        for session in payload or []:
+            item = session.get("NowPlayingItem") if isinstance(session, dict) else None
+            if isinstance(item, dict):
+                result.append(item.get("Path") if isinstance(item.get("Path"), str) else None)
+        return result
+
     def refresh_item(self, item_id):
         self.api.request("POST", "Items/%s/Refresh?%s" % (urllib.parse.quote(item_id, safe=""), REFRESH_QUERY))
 
@@ -99,6 +109,19 @@ def build(opener=None):
                 return Outcome.output("error", error)
             found = api.item_id_for_path(path) is not None
         return Outcome.output("found", "Élément connu de Jellyfin.") if found else Outcome.output("notFound", "Élément absent de Jellyfin.")
+
+    @plugin.component("jellyfin-check-playback")
+    def playback(ctx):
+        api = client(ctx)
+        files = api.playing_files()
+        if ctx.text("scope") == "global":
+            return Outcome.output("playing", "Jellyfin est en cours de lecture.") if files else Outcome.output("idle", "Aucune lecture en cours dans Jellyfin.")
+        path, error = remote_path(ctx)
+        if error:
+            return Outcome.output("error", error)
+        if any(f is not None and _norm(f) == _norm(path) for f in files):
+            return Outcome.output("playing", "Le fichier est en cours de lecture dans Jellyfin.")
+        return Outcome.output("idle", "Le fichier n'est pas en cours de lecture dans Jellyfin.")
 
     return plugin
 

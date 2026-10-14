@@ -143,6 +143,58 @@
       "requiredTools": [],
       "requiresMedia": false,
       "requiresWriteAccess": false
+    },
+    {
+      "id": "jellyfin-check-playback",
+      "version": "1.0.0",
+      "name": "Lecture en cours dans Jellyfin",
+      "description": "Indique si le fichier traité (ou n’importe quel contenu) est en cours de lecture ; une lecture en pause compte comme en cours. Combiner avec « Différer le traitement » pour attendre la fin.",
+      "kind": "condition",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "playing",
+          "label": "Lecture en cours",
+          "description": "Le fichier (ou le service) est en cours de lecture."
+        },
+        {
+          "id": "idle",
+          "label": "Libre",
+          "description": "Aucune lecture concernée."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "La vérification n’a pas pu aboutir."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "scope",
+            "label": "Portée",
+            "type": "select",
+            "defaultValue": "file",
+            "options": [
+              {
+                "value": "file",
+                "label": "Fichier en cours de traitement"
+              },
+              {
+                "value": "global",
+                "label": "Toute lecture sur Jellyfin"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
     }
   ]
 }

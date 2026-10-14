@@ -53,6 +53,15 @@ class PlexClient:
         status, _ = self.api.request("GET", "library/metadata/%s" % urllib.parse.quote(rating_key, safe=""))
         return status != 404
 
+    def playing_files(self):
+        """Fichiers des sessions de lecture en cours (lectures en pause comprises) ; None dans la liste = session sans fichier connu."""
+        _, payload = self.api.request("GET", "status/sessions")
+        files = []
+        for item in ((payload or {}).get("MediaContainer") or {}).get("Metadata") or []:
+            parts = [part.get("file") for media in item.get("Media") or [] for part in media.get("Part") or [] if isinstance(part.get("file"), str)]
+            files.extend(parts or [None])
+        return files
+
     def has_file(self, section, kind, path):
         query = {"file": path, "X-Plex-Container-Start": 0, "X-Plex-Container-Size": 50}
         if kind in ITEM_TYPES:
@@ -158,6 +167,19 @@ def build(opener=None, sleep=time.sleep, clock=time.monotonic):
         if section is None:
             return Outcome.output("notFound", "Aucune bibliothèque Plex ne contient ce fichier.")
         return Outcome.output("found", "Fichier connu de Plex.") if api.has_file(section[0], section[1], path) else Outcome.output("notFound", "Fichier absent de Plex.")
+
+    @plugin.component("plex-check-playback")
+    def playback(ctx):
+        api = client(ctx)
+        files = api.playing_files()
+        if ctx.text("scope") == "global":
+            return Outcome.output("playing", "Plex est en cours de lecture.") if files else Outcome.output("idle", "Aucune lecture en cours dans Plex.")
+        path, error = remote_path(ctx)
+        if error:
+            return Outcome.output("error", error)
+        if any(f is not None and _norm(f) == _norm(path) for f in files):
+            return Outcome.output("playing", "Le fichier est en cours de lecture dans Plex.")
+        return Outcome.output("idle", "Le fichier n'est pas en cours de lecture dans Plex.")
 
     return plugin
 
