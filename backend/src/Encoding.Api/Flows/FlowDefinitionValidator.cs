@@ -11,7 +11,7 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
     public FlowValidationResult ValidateDraft(FlowDefinition flow)
     {
         var result=Validate(flow,true);
-        var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown","node.constraint.conflict"};
+        var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown","node.constraint.conflict","wait.invalid","wait.block.invalid"};
         var issues=result.Issues.Where(issue=>!allowed.Contains(issue.Code)
             && !(issue.Code=="field.invalid" && (issue.Message=="Ce paramètre est obligatoire."
                 || issue.Path.EndsWith("/targetNodeId",StringComparison.Ordinal)
@@ -215,6 +215,21 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             if(node.Configuration?.TryGetValue("targetNodeId",out var target)==true && target.ValueKind==JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(target.GetString()) && (!Guid.TryParse(target.GetString(),out var targetId) || targetId==Guid.Empty))
                 Issue("field.invalid","/nodes/"+node.Id+"/configuration/targetNodeId","Utilisez un identifiant de worker valide.");
+        }
+        foreach(var node in flow.Nodes.Where(node=>node?.Component is not null && node.Configuration is not null && RuntimeWaitPolicy.IsWait(node)))
+        {
+            RuntimeWait wait;
+            try { wait=RuntimeWaitPolicy.Resolve(node); }
+            catch(ArgumentException exception) { Issue("wait.invalid","/nodes/"+node.Id+"/configuration",exception.Message); continue; }
+            if(!flow.Connections.Any(edge=>edge.SourceNodeId==node.Id && edge.SourceOutputId=="resumed"))
+                Issue("wait.next.required","/nodes",$"Le bloc Attendre « {node.Name??node.Id} » doit être relié à la suite du flow (sortie Reprise).");
+            if(wait.Mode!="block") continue;
+            var watched=flow.Nodes.SingleOrDefault(item=>item?.Id==wait.BlockNodeId);
+            var descriptor=watched?.Component is null?null:registry.Resolve(watched.Component);
+            if(watched is null || watched.Id==node.Id || descriptor is null || descriptor.Kind!="condition" || watched.Component.PluginId is "base" or "conditions" or "nodes")
+                Issue("wait.block.invalid","/nodes/"+node.Id+"/configuration/blockNodeId","Désignez une condition de plugin (Plex, Jellyfin…) de ce flow.");
+            else if(wait.MetOutputs!.Split(',').Any(output=>descriptor.Outputs.All(declared=>declared.Id!=output)))
+                Issue("wait.block.invalid","/nodes/"+node.Id+"/configuration/blockOutputs","Une sortie indiquée n’existe pas sur le bloc surveillé.");
         }
         return new(issues);
     }

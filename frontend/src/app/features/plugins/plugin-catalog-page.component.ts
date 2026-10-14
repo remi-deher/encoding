@@ -45,7 +45,7 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     familyLabel: 'Noyau',
     category: 'Composants de flow',
     version: 'Intégré',
-    components: 'Composants généraux',
+    components: 'Composants généraux, attente durable (délai, état d’un worker, charge, condition de plugin)',
     runtime: 'Fourni par le serveur',
     configuration: 'Aucune connexion externe requise',
     state: 'Actif',

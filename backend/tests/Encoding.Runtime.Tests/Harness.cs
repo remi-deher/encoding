@@ -76,8 +76,8 @@ internal static partial class Harness
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
-        new("plugin/base", "1.0.0", ["general"], []), new("plugin/nodes", "1.1.0", ["general"], []),new("plugin/conditions","1.0.0",["general"],[]),
-        new("ffprobe", "7.0", ["video"], []), .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
+        new("plugin/base", "1.1.0", ["general"], []), new("plugin/nodes", "1.1.0", ["general"], []),new("plugin/conditions","1.0.0",["general"],[]),
+        new("plugin/plex","1.0.0",["general"],["process"]),new("ffprobe", "7.0", ["video"], []), .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
 
     private static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)
     {
@@ -139,7 +139,7 @@ internal static partial class Harness
             }
             var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0"); builder.Logging.ClearProviders();
             builder.Services.AddSingleton(db); builder.Services.AddSingleton(runtime); builder.Services.AddSingleton(artifacts);
-            builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
+            builder.Services.AddSingleton(new ExecutionWaitRepository(db,new NodePresenceOptions(TimeSpan.FromHours(1)))); builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
             builder.Services.AddSingleton<LibraryProcessingRepository>(); builder.Services.AddSingleton<LibraryWorkflowRepository>();
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromHours(1)));
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton<FlowRepository>(); builder.Services.AddSingleton<FlowArchiveService>();

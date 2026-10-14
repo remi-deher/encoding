@@ -1,6 +1,6 @@
 # 0033 — Attentes durables et gestion du temps dans Base
 
-Statut : proposition (conception avant implémentation).
+Statut : implémentée (décisions de Rémi : reprise à l'étape suivante, délai maximal facultatif, sans sortie « Délai dépassé » reliée l'exécution échoue, média réservé dans cette première version).
 
 ## Besoin
 
@@ -14,14 +14,14 @@ Le plugin `base` fournit un composant **Attendre** (`base-wait`, action, sorties
 
 | Type | Évaluée par | Exemple |
 |---|---|---|
-| `timer` | serveur | durée (`PT30M`) ou heure du jour/date |
+| `timer` | serveur | délai en minutes (1 min à 7 jours) ; une heure du jour ou une date pourra s'ajouter |
 | `nodeState` | serveur | un worker donné (ou tout worker) est en ligne / hors ligne / libre |
 | `workload` | serveur | nombre de tâches en cours ou en file (global, bibliothèque, nœud) comparé à un seuil |
 | `block` | un worker éligible | une condition d'un plugin (ex. `plex-check-playback`) renvoie l'une des sorties « remplies » choisies |
 
 Les conditions `block` réutilisent n'importe quel composant de kind `condition` : le bloc stocke la référence du composant, sa configuration et la liste des sorties qui valent « remplie ». Le plugin n'a rien de nouveau à implémenter, et la validation (composant, version, sorties) est celle du moteur. Les types `timer`, `nodeState` et `workload` ne nécessitent aucun worker.
 
-Paramètres communs : `pollSeconds` (intervalle de réévaluation des conditions `block`, 15 s à 1 h), `maxWaitMinutes` (optionnel : vide = illimité) et la sortie `timeout` (facultative ; si elle n'est pas reliée, un délai dépassé termine l'exécution en échec explicite plutôt que de continuer).
+Paramètres communs : `pollSeconds` (intervalle de réévaluation, 15 s à 1 h), `maxWaitMinutes` (optionnel : vide = illimité, 1 min à 30 jours) et la sortie `timeout` (facultative ; si elle n'est pas reliée, un délai dépassé termine l'exécution en échec explicite plutôt que de continuer). Le bloc surveillé (`blockNodeId`) est une condition de plugin du même flow ; la validation refuse un identifiant inconnu, un bloc natif ou une sortie non déclarée.
 
 ### Mécanisme durable (modèle du relais 0021)
 
@@ -43,6 +43,15 @@ Un plugin peut fournir de nouvelles conditions simplement en déclarant un compo
 ### Média pendant l'attente (à trancher)
 
 Première version : le média reste **réservé** par l'exécution en attente (aucune autre tâche ne le modifie, la source est intacte), comme pendant un relais. Rémi souhaite ensuite pouvoir, selon le flow : reprendre le média en cours, créer un autre média à côté, ou écraser le média en cours. Cela touche la politique de remplacement (0030) et la notion de nœud d'accès ; le champ `mediaPolicy` est réservé dans la spécification d'attente (`keep` seul accepté pour l'instant) pour ne pas changer le contrat plus tard.
+
+## Implémentation
+
+- Plugin Base 1.1.0 : `base-wait` (les composants existants restent résolubles en 1.0.0 par `compatiblePluginVersions`). Un agent qui n'annonce pas `plugin/base` 1.1.0 ne peut pas réclamer un flow qui contient le bloc.
+- Migration `0029_flow_waits` : table `execution_waits` (état `waiting` / `met` / `timeout` / `cancelled`, échéances, compteur de sondes) et `execution_work.wait_probe_due`. L'attente met `available_at` à l'infini : aucune réclamation ordinaire n'est possible tant que la décision n'est pas prise.
+- `RuntimeCheckpoint.Wait` porte la demande ; le serveur la recalcule depuis le flow publié et refuse toute différence, comme pour le relais. `RuntimeLease.Probe` désigne une réclamation de sonde (capacité du seul plugin surveillé, aucun accès bibliothèque, aucun plafond de segment).
+- `ExecutionWaitService` (chaque serveur, toutes les 5 s) : `ProcessDueAsync` verrouille les attentes dues avec `SKIP LOCKED` et décide. `POST /runtime/nodes/{id}/executions/{id}/wait/probe` rend le résultat d'une sonde, protégé par l'époque du bail.
+- Un échec de sonde (plugin injoignable) compte comme « non remplie » : l'attente continue jusqu'au délai maximal. La mise en attente n'évalue pas la condition avant de libérer le worker : la première évaluation a lieu à la première échéance du service.
+- Limites connues : l'éditeur affiche tous les paramètres du bloc quel que soit le mode (les champs ne sont pas encore conditionnels) ; `blockNodeId` se saisit comme texte ; l'état « en attente » n'a pas de colonne dédiée dans la liste des exécutions (visible dans le détail et l'historique) ; les sondes comptent comme un bail ordinaire pendant leur courte exécution.
 
 ## Garanties à vérifier
 

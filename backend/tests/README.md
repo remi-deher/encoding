@@ -36,6 +36,8 @@ Les tests de remplacement de source (fichiers, politique, période de grâce, re
 
 `npm test` (dans `frontend/`) exécute les tests de logique pure (`node --test`) puis les tests de composants Angular (Vitest, `*.spec.ts`, via `ng test`). `npm run test:e2e` lance le parcours E2E léger Playwright (bureau et mobile, API simulée, vérifications d’accessibilité axe) ; il ne requiert ni backend ni média. En CI, les rapports et traces sont conservés en cas d’échec. Exception temporaire documentée : la règle axe `color-contrast` est désactivée dans `e2e/smoke.spec.ts` tant que les jetons de thème de la vue d’ensemble ne sont pas corrigés (12 éléments signalés).
 
+Les attentes durables (0033) sont vérifiées sur PostgreSQL : libération du worker et réservation conservée, reprise à l'étape suivante, délai maximal avec et sans sortie « Délai dépassé », deux évaluations concurrentes pour une seule décision, événements serveur (charge, état d'un worker), sondes de plugin protégées par l'époque (mauvais worker, époque périmée, doublon, bail perdu réattribué), runner réel et annulation.
+
 ## Plugins et déclencheur d’import
 
 `backend/tests/Encoding.Plugins.Tests` vérifie la correspondance des chemins, l’analyse des webhooks Sonarr/Radarr, l’acceptation des manifestes par le catalogue, l’exécution du plugin Sonarr par `PluginProcessHost` dans le bac à sable (ignorée si Landlock ou python3 est absent) et, avec `ENCODING_TEST_DATABASE`, le déclencheur sur PostgreSQL :

@@ -29,7 +29,7 @@ public sealed class ToolCapabilityProbe(
             Directory.CreateDirectory(options.DataDirectory);
             var list = new List<NodeToolCapability>
             {
-                new("plugin/base", "1.0.0", ["general"], ["cpu"]),
+                new("plugin/base", "1.1.0", ["general"], ["cpu"]),
                 new("plugin/nodes", "1.1.0", ["general"], []),
                 new("plugin/conditions", "1.0.0", ["general"], [])
             };

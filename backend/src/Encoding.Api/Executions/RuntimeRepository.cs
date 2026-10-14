@@ -63,11 +63,12 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         await using(var active=new NpgsqlCommand("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@worker AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')",c,tx))
         { active.Parameters.AddWithValue("worker",worker); if((long)(await active.ExecuteScalarAsync(ct))!>=capacity) return null; }
         var candidates=new List<(Guid Id,Guid Library,string Path,string Key,FlowDefinition Flow,int Attempt,int Revision,long Epoch,
-            RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings)>();
+            RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe)>();
         await using(var read=new NpgsqlCommand("""
           SELECT e.id,w.library_id,w.media_path,w.media_key,e.flow_definition::text,e.attempt,e.revision,w.lease_epoch,
             (SELECT checkpoint::text FROM execution_steps WHERE execution_id=e.id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1),
-            w.handoff_selector::text,w.previous_worker_node_id,w.source_node_id,w.plugin_configuration_snapshot
+            w.handoff_selector::text,w.previous_worker_node_id,w.source_node_id,w.plugin_configuration_snapshot,
+            CASE WHEN w.wait_probe_due THEN (SELECT x.spec::text FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting') END
           FROM execution_work w JOIN executions e ON e.id=w.execution_id JOIN libraries l ON l.id=w.library_id
           WHERE e.state IN ('queued','running') AND l.is_active AND w.available_at<=clock_timestamp()
           AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp())
@@ -84,12 +85,17 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
             while(await r.ReadAsync(ct)) candidates.Add((r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetString(3),JsonSerializer.Deserialize<FlowDefinition>(r.GetString(4),Json)!,r.GetInt32(5),r.GetInt32(6),r.GetInt64(7),
                 r.IsDBNull(8)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(8),Json),
                 r.IsDBNull(9)?null:JsonSerializer.Deserialize<RuntimeHandoffSelector>(r.GetString(9),Json),
-                r.IsDBNull(10)?null:r.GetGuid(10),r.IsDBNull(11)?null:r.GetGuid(11),r.IsDBNull(12)?null:(byte[])r[12]));
+                r.IsDBNull(10)?null:r.GetGuid(10),r.IsDBNull(11)?null:r.GetGuid(11),r.IsDBNull(12)?null:(byte[])r[12],
+                r.IsDBNull(13)?null:ExecutionWaitRepository.ProbeOf(JsonSerializer.Deserialize<RuntimeWait>(r.GetString(13),Json)!)));
         }
         foreach(var item in candidates)
         {
-            if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value))) continue;
-            if(!eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context)) continue;
+            if(item.Probe is {} wanted)
+            {
+                if(!eligibility.CanProbe(item.Flow,capabilities,wanted.BlockNodeId)) continue;
+            }
+            else if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value))) continue;
+            if(item.Probe is null && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context)) continue;
             // Library row serializes claims from all workers before counting active leases.
             await using(var limits=new NpgsqlCommand("""
               SELECT p.max_concurrent_tasks,(SELECT max_concurrent_tasks FROM library_node_processing_limits WHERE library_id=l.id AND node_id=@worker)
@@ -109,41 +115,44 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
                 await using var counts=await count.ExecuteReaderAsync(ct); await counts.ReadAsync(ct);
                 if(global is {} maximum && counts.GetInt32(0)>=maximum || local is {} maximumLocal && counts.GetInt32(1)>=maximumLocal) continue;
             }
-            Guid source; string? root;
+            Guid source=item.Source??worker; string? root=null;
             var needsWrite=item.Flow.Nodes.Any(n=>components.Resolve(n.Component)!.RequiresWriteAccess);
-            await using(var access=new NpgsqlCommand("""
-              SELECT COALESCE(a.transfer_source_node_id,a.node_id),CASE WHEN a.mode='direct' THEN a.local_path END
-              FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
-              LEFT JOIN library_node_accesses s ON s.library_id=a.library_id AND s.node_id=a.transfer_source_node_id
-              LEFT JOIN cluster_nodes sn ON sn.id=s.node_id
-              WHERE a.library_id=@library AND a.node_id=@worker AND a.is_enabled AND a.can_read
-              AND ((a.mode='direct' AND a.local_path IS NOT NULL AND (NOT @write OR a.can_write))
-                OR (a.mode='transfer' AND s.mode='direct' AND s.is_enabled AND s.can_read AND (NOT @write OR s.can_write)
-                    AND sn.deleted_at IS NULL AND sn.last_seen_at>clock_timestamp()-@offline))
-              """,c,tx))
+            if(item.Probe is null)
             {
-                access.Parameters.AddWithValue("offline",presence.OfflineAfter); access.Parameters.AddWithValue("library",item.Library); access.Parameters.AddWithValue("worker",worker); access.Parameters.AddWithValue("write",needsWrite);
-                await using var r=await access.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
-                source=r.GetGuid(0); root=r.IsDBNull(1)?null:r.GetString(1);
-            }
-            if(item.Source is {} originalSource)
-            {
-                // A relay does not move ownership of the library or reinterpret the source path.
-                await using var originalAccess=new NpgsqlCommand("""
-                  SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
-                    WHERE a.library_id=@library AND a.node_id=@source AND a.mode='direct' AND a.is_enabled
-                    AND a.can_read AND (NOT @write OR a.can_write) AND a.local_path IS NOT NULL
-                    AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline)
-                  """,c,tx);
-                originalAccess.Parameters.AddWithValue("library",item.Library); originalAccess.Parameters.AddWithValue("source",originalSource);
-                originalAccess.Parameters.AddWithValue("write",needsWrite); originalAccess.Parameters.AddWithValue("offline",presence.OfflineAfter);
-                if(!(bool)(await originalAccess.ExecuteScalarAsync(ct))!) continue;
-                source=originalSource; if(source!=worker) root=null;
+                await using(var access=new NpgsqlCommand("""
+                  SELECT COALESCE(a.transfer_source_node_id,a.node_id),CASE WHEN a.mode='direct' THEN a.local_path END
+                  FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
+                  LEFT JOIN library_node_accesses s ON s.library_id=a.library_id AND s.node_id=a.transfer_source_node_id
+                  LEFT JOIN cluster_nodes sn ON sn.id=s.node_id
+                  WHERE a.library_id=@library AND a.node_id=@worker AND a.is_enabled AND a.can_read
+                  AND ((a.mode='direct' AND a.local_path IS NOT NULL AND (NOT @write OR a.can_write))
+                    OR (a.mode='transfer' AND s.mode='direct' AND s.is_enabled AND s.can_read AND (NOT @write OR s.can_write)
+                        AND sn.deleted_at IS NULL AND sn.last_seen_at>clock_timestamp()-@offline))
+                  """,c,tx))
+                {
+                    access.Parameters.AddWithValue("offline",presence.OfflineAfter); access.Parameters.AddWithValue("library",item.Library); access.Parameters.AddWithValue("worker",worker); access.Parameters.AddWithValue("write",needsWrite);
+                    await using var r=await access.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
+                    source=r.GetGuid(0); root=r.IsDBNull(1)?null:r.GetString(1);
+                }
+                if(item.Source is {} originalSource)
+                {
+                    // A relay does not move ownership of the library or reinterpret the source path.
+                    await using var originalAccess=new NpgsqlCommand("""
+                      SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
+                        WHERE a.library_id=@library AND a.node_id=@source AND a.mode='direct' AND a.is_enabled
+                        AND a.can_read AND (NOT @write OR a.can_write) AND a.local_path IS NOT NULL
+                        AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline)
+                      """,c,tx);
+                    originalAccess.Parameters.AddWithValue("library",item.Library); originalAccess.Parameters.AddWithValue("source",originalSource);
+                    originalAccess.Parameters.AddWithValue("write",needsWrite); originalAccess.Parameters.AddWithValue("offline",presence.OfflineAfter);
+                    if(!(bool)(await originalAccess.ExecuteScalarAsync(ct))!) continue;
+                    source=originalSource; if(source!=worker) root=null;
+                }
             }
             var pluginSettings=item.Settings is {} savedSettings?pluginConfigurations.ReadSnapshot(savedSettings)
                 :await pluginConfigurations.ResolveEffectiveAsync(item.Flow.Id,item.Flow.Nodes.Select(node=>node.Component.PluginId).Where(id=>id!="base"),c,tx,ct);
             var segmentEntry=item.Checkpoint?.NextNodeId??(item.Checkpoint is null?item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id:null);
-            if(segmentEntry is not null)
+            if(segmentEntry is not null && item.Probe is null)
             {
                 var returnsToSelf=false;
                 foreach(var relay in RuntimeHandoffPolicy.Segment(item.Flow,segmentEntry).Where(RuntimeHandoffPolicy.IsHandoff))
@@ -191,7 +200,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
                 }
             }
             if(!await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"running",worker,null,
-                item.Selector is null?"Flow attribué au worker ; bail actif.":"Relais attribué au worker ; reprise depuis le checkpoint durable."),c,tx,ct)) return null;
+                item.Probe is not null?"Vérification de la condition d'attente confiée au worker.":item.Selector is null?"Flow attribué au worker ; bail actif.":"Relais attribué au worker ; reprise depuis le checkpoint durable."),c,tx,ct)) return null;
             RuntimeCheckpoint? checkpoint=null; string? sourceSha=null; DateTimeOffset expires;
             await using(var state=new NpgsqlCommand("SELECT source_sha,lease_until,(SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1) FROM execution_work WHERE execution_id=@id",c,tx))
             {
@@ -199,7 +208,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
                 sourceSha=r.IsDBNull(0)?null:r.GetString(0); expires=r.GetFieldValue<DateTimeOffset>(1);
                 if(!r.IsDBNull(2)) checkpoint=JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(2),Json);
             }
-            await tx.CommitAsync(ct); return new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library);
+            await tx.CommitAsync(ct); return new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe);
         }
         return null;
     }
@@ -325,6 +334,14 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
             if(cp.Handoff!=handoff || cp.NextNodeId is null || handoff.Mode=="node" && handoff.TargetNodeId==worker) return false;
         }
         else if(cp.Handoff is not null) return false;
+        RuntimeWait? wait=null;
+        if(RuntimeWaitPolicy.IsWait(node))
+        {
+            try { wait=RuntimeWaitPolicy.Resolve(node); }
+            catch(ArgumentException) { return false; }
+            if(cp.Wait!=wait || cp.NextNodeId is null || cp.OutputId!="resumed" || handoff is not null) return false;
+        }
+        else if(cp.Wait is not null) return false;
         var component=components.Resolve(node.Component)!;
         if(component.Kind=="terminal" ? cp.OutputId is not null || cp.TerminalResult is not("success" or "unchanged" or "failed" or "deferred")
             : cp.TerminalResult is not null || !component.Outputs.Any(o=>o.Id==cp.OutputId)) return false;
@@ -355,6 +372,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
         }
         var detail=handoff is null?$"Étape terminée : {node.Name??component.Name}.":handoff.Mode=="node"
             ?$"Relais en attente vers le nœud {handoff.TargetNodeId:D}.":"Relais en attente d'un autre worker éligible.";
+        if(wait is not null) detail=ExecutionWaitRepository.Describe(wait);
         if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,detail),c,tx,ct)) return false;
         if(handoff is not null)
         {
@@ -367,6 +385,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
             yield.Parameters.AddWithValue("selector",NpgsqlDbType.Jsonb,JsonSerializer.Serialize(handoff,Json));
             await yield.ExecuteNonQueryAsync(ct);
         }
+        if(wait is not null) await ExecutionWaitRepository.BeginAsync(id,node.Id,wait,request.Epoch,c,tx,ct);
         await tx.CommitAsync(ct); return true;
     }
 
