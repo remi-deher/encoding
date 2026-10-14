@@ -22,7 +22,6 @@ import { FlowPluginCatalog } from '../../shared/models/flow-validation';
 import { FlowComponentDefinition } from '../../shared/models/flow-component';
 import { FlowComponentListComponent } from '../../shared/ui/flow-component-list.component';
 import { DetailCard, DetailCardGridComponent } from '../../shared/ui/detail-card-grid.component';
-import { FLOW_COMPONENT_KIND_LABELS } from '../../shared/models/flow-component';
 
 type PluginFamily = 'base' | 'cluster' | 'media' | 'automation';
 
@@ -257,7 +256,7 @@ export class PluginCatalogPageComponent {
       },
       {
         id: 'plugin-components',
-        title: 'Blocs fournis',
+        title: 'Catalogue des composants',
         subtitle: `${components.length} composant(s) dans le catalogue`,
         icon: 'video',
         status: {
@@ -267,11 +266,11 @@ export class PluginCatalogPageComponent {
         tags: mediaTypes.map((mediaType) => ({ label: mediaType, tone: 'accent' })),
         sections: [
           {
-            title: 'Composants',
-            items: components.map((component) => ({
-              label: component.name,
-              description: `${FLOW_COMPONENT_KIND_LABELS[component.kind]} · ${component.description}`,
-            })),
+            title: 'Résumé',
+            items: [
+              { label: 'Blocs déclarés', description: `${components.length} composant(s)` },
+              { label: 'Liste détaillée', description: 'Consulter l’onglet Composants' },
+            ],
           },
         ],
       },

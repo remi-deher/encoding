@@ -38,6 +38,7 @@ import {
   DataTableActionEvent,
   DataTableRow,
   DataTableRowAction,
+  DataTableRowDetailDirective,
   DataTableToggleEvent,
   DataTableSelectionActionEvent,
 } from '../../shared/ui/data-table.component';
@@ -121,6 +122,7 @@ interface LibraryAccessRecord extends DataTableRow {
 
   imports: [
     DataTableComponent,
+    DataTableRowDetailDirective,
 
     DetailCardGridComponent,
 
@@ -410,7 +412,7 @@ export class LibraryCatalogPageComponent {
   ];
 
   protected readonly libraryExecutionActions: readonly DataTableRowAction[] = [
-    { id: 'pipeline', label: 'Voir le pipeline' },
+    { id: 'pipeline', label: 'Voir le pipeline', expandedLabel: 'Masquer le pipeline' },
   ];
 
   protected readonly actionTitle = computed(() => {
@@ -1072,8 +1074,11 @@ export class LibraryCatalogPageComponent {
   }
 
   protected onProcessingExecutionAction(event: DataTableActionEvent): void {
-    if (event.actionId === 'pipeline')
-      this.selectedProcessingExecutionId.set(String(event.row['id']));
+    if (event.actionId !== 'pipeline') return;
+    const executionId = String(event.row['id']);
+    this.selectedProcessingExecutionId.update((selectedId) =>
+      selectedId === executionId ? null : executionId,
+    );
   }
 
   protected showLibraryNodes(): void {

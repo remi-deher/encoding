@@ -2,7 +2,8 @@ import { Component, input } from '@angular/core';
 import { CdkAccordion, CdkAccordionItem } from '@angular/cdk/accordion';
 
 export type DetailCardTone = 'neutral' | 'accent' | 'success' | 'warning';
-export type DetailCardIcon = 'video' | 'image' | 'audio' | 'plugin' | 'tool';
+export type DetailCardIcon =
+  'video' | 'image' | 'audio' | 'plugin' | 'tool' | 'server' | 'activity' | 'system' | 'library';
 
 export interface DetailCardTag {
   readonly label: string;
@@ -86,6 +87,29 @@ export interface DetailCard {
                         <path
                           d="M9 4a2 2 0 1 1 4 0v2h4a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 4h2v3a2 2 0 0 1-2 2h-4v-2a2 2 0 1 0-4 0v2H6a2 2 0 0 1-2-2v-4h2a2 2 0 1 0 0-4H4V8a2 2 0 0 1 2-2h3z"
                         />
+                      </svg>
+                    }
+                    @case ('server') {
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <rect x="4" y="4" width="16" height="6" rx="1.5" />
+                        <rect x="4" y="14" width="16" height="6" rx="1.5" />
+                        <path d="M8 7h.01M8 17h.01M12 7h5M12 17h5" />
+                      </svg>
+                    }
+                    @case ('activity') {
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M3 12h4l3-7 4 14 3-7h4" />
+                      </svg>
+                    }
+                    @case ('system') {
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <rect x="7" y="7" width="10" height="10" rx="2" />
+                        <path d="M9 1v4m6-4v4M9 19v4m6-4v4M1 9h4m-4 6h4m14-6h4m-4 6h4" />
+                      </svg>
+                    }
+                    @case ('library') {
+                      <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M4 5h16v15H4zM8 5v15m8-15v15M2 3h20" />
                       </svg>
                     }
                     @default {
