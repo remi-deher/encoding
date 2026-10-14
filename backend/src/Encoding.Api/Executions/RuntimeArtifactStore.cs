@@ -7,6 +7,8 @@ namespace Encoding.Api.Executions;
 public sealed class RuntimeArtifactStore(NpgsqlDataSource dataSource,IConfiguration configuration)
 {
     private readonly string root=Path.GetFullPath(configuration["Runtime:ArtifactDirectory"]??Path.Combine(AppContext.BaseDirectory,"runtime-artifacts"));
+    public string Root=>root;
+    public string DirectoryFor(Guid id)=>Path.Combine(root,id.ToString("D"));
     public static bool ValidDigest(string digest)=>Regex.IsMatch(digest??"","^[0-9a-f]{64}$",RegexOptions.CultureInvariant);
     public sealed record ProducedArtifact(string Sha256,string Name,long Bytes);
     public async Task<IReadOnlyList<ProducedArtifact>> ProducedAsync(Guid id,CancellationToken ct)

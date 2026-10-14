@@ -44,6 +44,7 @@ internal static class Program
         var eligibility = new RuntimeEligibility(registry, validator);
         ConditionTests.Run(registry,validator,eligibility);
         await FlowSimulationTests.RunAsync(registry,validator);
+        OperationsTests.Run();
         var destination = Guid.NewGuid();
         var relay = Node(registry, "relay", "nodes-handoff", new() { ["mode"] = J("node"), ["targetNodeId"] = J(destination) });
         var flow = Chain(Node(registry, "entry", "base-input-file"), relay,
@@ -71,6 +72,7 @@ internal static class Program
             Console.WriteLine("PostgreSQL tests require ENCODING_TEST_DATABASE; see README.md.");
             return;
         }
+        await OperationsTests.RunDatabaseAsync(connection);
         await using var fixture = await Fixture.CreateAsync(connection, registry, validator, eligibility);
         await fixture.FlowSavingAsync();
         await fixture.BackendRelayAsync(false);

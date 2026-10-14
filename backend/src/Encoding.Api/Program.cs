@@ -4,6 +4,7 @@ using Encoding.Contracts.Executions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Encoding.Api.Infrastructure;
+using Encoding.Api.Infrastructure.Operations;
 using Encoding.Api.Nodes;
 using Encoding.Api.Libraries;
 using Encoding.Api.Plugins;
@@ -13,6 +14,7 @@ using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddOperations();
 var pluginKeyDirectory = builder.Configuration["PluginSettings:KeyDirectory"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "data", "plugin-keys");
 Directory.CreateDirectory(pluginKeyDirectory);
@@ -66,7 +68,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 // Fail startup if the bundled installed catalog is invalid or missing.
 app.Services.GetRequiredService<FlowComponentRegistry>();
-await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping);
+await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
+
+app.UseRequestObservability();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -79,22 +83,7 @@ app.MapFlowSimulationEndpoints();
 app.MapPluginConfigurationEndpoints();
 app.MapRuntimeEndpoints();
 
-app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
-    .WithTags("Health");
-app.MapGet("/health/ready", async (NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
-{
-    try
-    {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand("SELECT 1", connection);
-        await command.ExecuteScalarAsync(cancellationToken);
-        return (IResult)Results.Ok(new { status = "ready" });
-    }
-    catch (NpgsqlException)
-    {
-        return (IResult)Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Base de données indisponible.");
-    }
-}).WithTags("Health");
+app.MapOperationsEndpoints();
 
 app.MapLibraryWorkflowEndpoints();
 var libraries = app.MapGroup("/api/v1/libraries").WithTags("Libraries");
