@@ -30,4 +30,4 @@ Le testeur de flow est couvert sans lancer de traitement : branches et reconverg
 
 La suite vérifie également les publications inchangées et concurrentes, l’absence de nouvelles sauvegardes, la concurrence des brouillons, les modifications réelles, la version exacte retournée par l’API et la conservation des versions identiques lors d’un import d’archives.
 
-Les tests de remplacement de source (fichiers, politique, période de grâce, restauration) et de bascule multi-nœud (perte d’un worker, d’un nœud d’accès, d’un serveur) sont décrits dans l’architecture 0029. Le remplacement réel d’une source H.265 puis sa restauration sont aussi vérifiés avec FFmpeg.
+Les tests de remplacement de source (fichiers, politique, période de grâce, restauration) et de bascule multi-nœud (perte d’un worker, d’un nœud d’accès, d’un serveur) sont décrits dans l’architecture 0030. Le remplacement réel d’une source H.265 puis sa restauration sont aussi vérifiés avec FFmpeg.
