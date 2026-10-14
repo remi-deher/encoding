@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 
@@ -34,7 +35,7 @@ public static class FlowEndpoints
         {
             try { var bytes=await archives.ExportAsync(ids,ct); return bytes is null ? (IResult)Results.BadRequest(new { title="Sélection invalide ou flow introuvable." }) : Results.File(bytes,"application/zip","flows.zip"); }
             catch(InvalidDataException e) { return Results.BadRequest(new { title=e.Message }); }
-        });
+        }).AllowViewer();
         flows.MapPost("/import",async(HttpRequest request,FlowArchiveService archives,CancellationToken ct)=>
         {
             try
@@ -66,6 +67,6 @@ public static class FlowEndpoints
         {
             var (_, result) = validator.ValidateDocument(document);
             return result.IsValid ? (IResult)Results.Ok(result) : Results.UnprocessableEntity(result);
-        }).WithName("ValidateFlowDefinition");
+        }).AllowViewer().WithName("ValidateFlowDefinition");
     }
 }

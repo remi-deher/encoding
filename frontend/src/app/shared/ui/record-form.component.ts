@@ -8,7 +8,8 @@ import { MatSelectModule } from '@angular/material/select';
 export interface RecordFormField {
   readonly id: string;
   readonly label: string;
-  readonly type: 'text' | 'select' | 'number';
+  readonly type: 'text' | 'select' | 'number' | 'password';
+  readonly autocomplete?: string;
   readonly min?: number;
   readonly max?: number;
   readonly step?: number;
@@ -30,6 +31,9 @@ export interface RecordFormData {
   readonly description: string;
   readonly submitLabel: string;
   readonly reviewTitle?: string;
+  /** `false` soumet directement, sans étape de récapitulatif (connexion, changement de mot de passe). */
+  readonly review?: boolean;
+  readonly cancellable?: boolean;
   readonly fields: readonly RecordFormField[];
   readonly initialValues?: Readonly<Record<string, string>>;
 }
@@ -46,7 +50,7 @@ export interface RecordFormData {
   template: `
     <section class="record-form" [attr.aria-label]="data().title">
       @if (!reviewing) {
-        <form [formGroup]="form" (ngSubmit)="review()">
+        <form [formGroup]="form" (ngSubmit)="data().review === false ? save() : review()">
           @for (field of data().fields; track field.id) {
             @if (field.type === 'select') {
               <mat-form-field appearance="outline">
@@ -65,7 +69,10 @@ export interface RecordFormData {
                 <mat-label>{{ field.label }}</mat-label>
                 <input
                   matInput
-                  [type]="field.type === 'number' ? 'number' : 'text'"
+                  [type]="
+                    field.type === 'number' || field.type === 'password' ? field.type : 'text'
+                  "
+                  [attr.autocomplete]="field.autocomplete ?? null"
                   [attr.min]="field.min ?? null"
                   [attr.max]="field.max ?? null"
                   [attr.step]="field.step ?? null"
@@ -79,10 +86,14 @@ export interface RecordFormData {
             }
           }
           <div class="form-actions">
-            <button matButton="text" type="button" [disabled]="busy()" (click)="cancelled.emit()">
-              Annuler
+            @if (data().cancellable !== false) {
+              <button matButton="text" type="button" [disabled]="busy()" (click)="cancelled.emit()">
+                Annuler
+              </button>
+            }
+            <button matButton="filled" type="submit" [disabled]="!canReview()">
+              {{ data().review === false ? data().submitLabel : 'Vérifier' }}
             </button>
-            <button matButton="filled" type="submit" [disabled]="!canReview()">Vérifier</button>
           </div>
         </form>
       } @else {
@@ -242,6 +253,7 @@ export class RecordFormComponent implements OnChanges {
   protected displayValue(fieldId: string): string {
     const field = this.data().fields.find((item) => item.id === fieldId);
     const value = String(this.form.controls[fieldId]?.value ?? '');
+    if (field?.type === 'password') return '••••••••';
     return field?.options?.find((option) => option.value === value)?.label ?? value;
   }
 }

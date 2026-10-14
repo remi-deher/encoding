@@ -13,11 +13,11 @@ Deux modes d’acceptation sont disponibles. La confirmation locale rejoint dire
 
 ## Sécurité et limites
 
-mDNS annonce une identité et une adresse, sans authentifier le serveur. La confirmation dans le navigateur garantit le choix explicite du cluster par l’utilisateur, mais ne constitue pas une preuve vérifiable par le serveur. L’API n’a pas encore d’authentification utilisateur ni de fenêtre d’enrôlement côté serveur. Les déploiements hors du développement local doivent employer HTTPS et limiter l’accès réseau.
+mDNS annonce une identité et une adresse, sans authentifier le serveur. La confirmation dans le navigateur garantit le choix explicite du cluster par l’utilisateur, mais ne constitue pas une preuve vérifiable par le serveur. L’approbation d’un jumelage exige un administrateur et l’enrôlement direct d’une nouvelle identité exige une fenêtre ouverte par un administrateur ; voir [0031](0031-authentication-roles-and-pairing.md). Les déploiements hors du développement local doivent employer HTTPS et limiter l’accès réseau.
 
 Le worker n’accepte les requêtes de modification de sa console locale que depuis les origines configurées. Le navigateur appelle l’agent sur `localhost`, afin que l’interface chargée depuis le serveur agisse sur la machine où se trouve l’utilisateur. L’API locale de l’agent doit rester liée à l’hôte local lors de son exposition par Docker.
 
-Le multicast mDNS n’est pas garanti entre sous-réseaux, hôtes Docker ou VLAN. La configuration bootstrap et l’URL annoncée `Cluster:AdvertisedApiBaseUrl` couvrent les topologies où une adresse directe joignable est requise. Le comportement exact dépend des réseaux et ports exposés par l’installation. L’authentification utilisateur des routes de gestion n’est pas encore en place : protéger l’API par le réseau dans cette version.
+Le multicast mDNS n’est pas garanti entre sous-réseaux, hôtes Docker ou VLAN. La configuration bootstrap et l’URL annoncée `Cluster:AdvertisedApiBaseUrl` couvrent les topologies où une adresse directe joignable est requise. Le comportement exact dépend des réseaux et ports exposés par l’installation. Les routes de gestion exigent une session utilisateur depuis [0031](0031-authentication-roles-and-pairing.md).
 
 ## Conséquences
 

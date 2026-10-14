@@ -37,7 +37,9 @@ public sealed class WorkerEnrollmentService(
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("L’enrôlement auprès du cluster {ClusterId} a échoué avec HTTP {StatusCode}.", clusterId, (int)response.StatusCode);
-            throw new HttpRequestException($"Le serveur du cluster a refusé l’enrôlement (HTTP {(int)response.StatusCode}).");
+            throw new HttpRequestException(response.StatusCode == System.Net.HttpStatusCode.Forbidden
+                ? "L’enrôlement direct est fermé sur ce cluster. Demandez à un administrateur de l’ouvrir depuis la page Nœuds, ou générez une clé de jumelage."
+                : $"Le serveur du cluster a refusé l’enrôlement (HTTP {(int)response.StatusCode}).");
         }
 
         var node = await response.Content.ReadFromJsonAsync<NodeResponse>(jsonOptions.Value.SerializerOptions, cancellationToken)
@@ -75,7 +77,9 @@ public sealed class WorkerEnrollmentService(
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("La demande de jumelage auprès du cluster {ClusterId} a échoué avec HTTP {StatusCode}.", clusterId, (int)response.StatusCode);
-            throw new HttpRequestException($"Le serveur du cluster a refusé la demande de jumelage (HTTP {(int)response.StatusCode}).");
+            throw new HttpRequestException(response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
+                ? "Trop de demandes de jumelage sont en attente sur ce cluster. Réessayez après leur approbation ou leur expiration."
+                : $"Le serveur du cluster a refusé la demande de jumelage (HTTP {(int)response.StatusCode}).");
         }
 
         await identityStore.MarkPairingPublishedAsync(cancellationToken);

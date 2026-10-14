@@ -8,8 +8,10 @@ import {
 } from '../../shared/services/execution-tracking';
 import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
 import { formatFileSize } from '../../shared/models/file-size';
+import { joinBadges, mediaBadges } from '../../shared/models/media-badges';
 import { NotificationService } from '../../shared/services/notification.service';
 import { Component, computed, inject, signal, DestroyRef } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import {
   DataTableActionEvent,
   DataTableColumn,
@@ -22,6 +24,8 @@ import {
   ExecutionMonitorTemplateComponent,
   ExecutionMonitorView,
 } from '../../shared/templates/execution-monitor-template.component';
+
+const VIEWS: readonly ExecutionMonitorView[] = ['queue', 'active', 'errors', 'cancelled', 'history'];
 
 interface ExecutionRecord extends DataTableRow {
   readonly id: string;
@@ -194,11 +198,15 @@ export class TaskMonitoringPageComponent {
         priority: encoding.priority + 1,
         resolvedAt: this.date(encoding.resolvedAt),
       }))),
+      mediaBadges: joinBadges(mediaBadges(e.beforeMetadata)),
       attempt: e.attempt,
       progress: e.progress === null ? '—' : e.progress + ' %',
     })),
   );
-  protected readonly selectedView = signal<ExecutionMonitorView>('queue');
+  private readonly route = inject(ActivatedRoute);
+  protected readonly selectedView = signal<ExecutionMonitorView>(
+    VIEWS.find((view) => view === this.route.snapshot.queryParamMap.get('view')) ?? 'queue',
+  );
   protected readonly feedback = computed(() =>
     this.trackingState().status === 'loading'
       ? 'Chargement des exécutions…'
@@ -244,6 +252,7 @@ export class TaskMonitoringPageComponent {
   ];
   protected readonly activeColumns: readonly DataTableColumn[] = [
     { key: 'media', label: 'Média', sortable: true },
+    { key: 'mediaBadges', label: 'Caractéristiques', badges: true },
     { key: 'library', label: 'Bibliothèque', sortable: true },
     { key: 'flow', label: 'Flow', sortable: true },
     { key: 'node', label: 'Worker', sortable: true },

@@ -23,5 +23,8 @@ COPY plugins/sdk/encoding_plugin_sdk.py plugins/jellyfin/plugin.py /opt/encoding
 COPY src/Encoding.Api/Flows/Catalog/jellyfin.json /opt/encoding/plugins/jellyfin/manifests/
 WORKDIR /app
 COPY --from=build /app/publish .
+ENV Logging__Console__FormatterName=json \
+    Logging__Console__FormatterOptions__UseUtcTimestamp=true \
+    Logging__Console__FormatterOptions__IncludeScopes=true
 EXPOSE 8081
 ENTRYPOINT ["dotnet", "Encoding.NodeAgent.dll"]

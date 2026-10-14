@@ -1,3 +1,7 @@
+import {
+  ExecutionTracking,
+  INITIAL_EXECUTION_TRACKING,
+} from '../../shared/services/execution-tracking';
 import { PageTitle } from '../../shared/services/page-title';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
 import { Component, computed, inject } from '@angular/core';
@@ -6,10 +10,18 @@ import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter, map, of, switchMap } from 'rxjs';
 import { PrimaryNavigationComponent } from '../navigation/primary-navigation.component';
+import { AuthService } from '../auth/auth.service';
+import { UserMenuComponent } from '../auth/user-menu.component';
 
 @Component({
   selector: 'app-shell',
-  imports: [MatToolbarModule, PrimaryNavigationComponent, RouterLink, RouterOutlet],
+  imports: [
+    MatToolbarModule,
+    PrimaryNavigationComponent,
+    RouterLink,
+    RouterOutlet,
+    UserMenuComponent,
+  ],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.scss',
 })
@@ -31,11 +43,17 @@ export class AppShellComponent {
   });
   protected readonly workerMode = computed(() => this.navigationEnd().workerMode);
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
+  protected readonly authMode = computed(() => this.navigationEnd().authMode);
 
+  private readonly auth = inject(AuthService);
+  // Aucun appel à l’API de gestion sans session : console worker, pages d’authentification et visiteur anonyme.
+  private readonly pollingDisabled = computed(
+    () => this.workerMode() || this.authMode() || !this.auth.user(),
+  );
   private readonly overview = inject(ClusterOverview);
   private readonly clusterState = toSignal(
-    toObservable(this.workerMode).pipe(
-      switchMap((worker) => (worker ? of(INITIAL_CLUSTER_OVERVIEW) : this.overview.state$)),
+    toObservable(this.pollingDisabled).pipe(
+      switchMap((disabled) => (disabled ? of(INITIAL_CLUSTER_OVERVIEW) : this.overview.state$)),
     ),
     { initialValue: INITIAL_CLUSTER_OVERVIEW },
   );
@@ -47,11 +65,23 @@ export class AppShellComponent {
     return nodes.filter((n) => n.status === 'online').length + ' / ' + nodes.length + ' en ligne';
   });
 
+  private readonly tracking = inject(ExecutionTracking);
+  private readonly executionState = toSignal(
+    toObservable(this.workerMode).pipe(
+      switchMap((worker) => (worker ? of(INITIAL_EXECUTION_TRACKING) : this.tracking.state$)),
+    ),
+    { initialValue: INITIAL_EXECUTION_TRACKING },
+  );
+  protected readonly activeExecutionCount = computed(
+    () => this.executionState().data?.activeCount ?? 0,
+  );
+
   private getCurrentPageContext(): {
     title: string;
     url: string;
     workerMode: boolean;
     workspaceMode: boolean;
+    authMode: boolean;
   } {
     let route = this.router.routerState.snapshot.root;
 
@@ -64,6 +94,7 @@ export class AppShellComponent {
       title: (route.data['title'] as string | undefined) ?? 'Vue d’ensemble',
       workerMode: route.data['workerMode'] === true,
       workspaceMode: route.data['layout'] === 'workspace',
+      authMode: route.data['authPage'] !== undefined,
     };
   }
 }

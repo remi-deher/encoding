@@ -9,14 +9,29 @@
       <span class="brand-name">{{ pageTitle() }}</span>
     </a>
 
-    @if (!workerMode()) {
+    @if (!workerMode() && !authMode()) {
       <app-primary-navigation />
     }
 
-    @if (!workerMode()) {
-      <div class="cluster-indicator" [attr.aria-label]="'Présence des nœuds : ' + clusterLabel()">
-        <span class="cluster-label">Nœuds</span>
-        <span class="cluster-state">{{ clusterLabel() }}</span>
+    @if (!workerMode() && !authMode()) {
+      <div class="header-status">
+        @if (activeExecutionCount() > 0) {
+          <a
+            class="processing-indicator"
+            routerLink="/tasks"
+            [queryParams]="{ view: 'active' }"
+            [attr.aria-label]="
+              activeExecutionCount() + ' en traitement, ouvrir les tâches en cours'
+            "
+          >
+            {{ activeExecutionCount() }} en traitement
+          </a>
+        }
+        <div class="cluster-indicator" [attr.aria-label]="'Présence des nœuds : ' + clusterLabel()">
+          <span class="cluster-label">Nœuds</span>
+          <span class="cluster-state">{{ clusterLabel() }}</span>
+        </div>
+        <app-user-menu />
       </div>
     }
   </mat-toolbar>
@@ -26,7 +41,7 @@
       <router-outlet />
     </main>
 
-    @if (!workerMode() && !workspaceMode()) {
+    @if (!workerMode() && !authMode() && !workspaceMode()) {
       <footer class="application-footer">
         <span
           >Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span

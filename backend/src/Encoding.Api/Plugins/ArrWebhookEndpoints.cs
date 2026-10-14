@@ -69,7 +69,7 @@ public static class ArrWebhookEndpoints
                 }
                 return Results.Accepted(value: new { status = "accepted", accepted, duplicate, unmapped });
             }
-        }).WithTags("Plugins");
+        }).AllowAnonymous().WithTags("Plugins");
     }
 
     internal static bool IsAuthorized(HttpRequest request, string secret)

@@ -28,22 +28,32 @@ using NpgsqlTypes;
 
 namespace Encoding.Runtime.Tests;
 
-internal static class Program
+internal static partial class Harness
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static JsonElement J<T>(T value) => JsonSerializer.SerializeToElement(value, Json);
-    private static void Check(bool condition, string message)
+    internal static void Check(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
     }
 
-    public static async Task Main()
+    internal static string RepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            if (Directory.Exists(Path.Combine(directory.FullName, "backend", "migrations"))) return Path.Combine(directory.FullName, "backend");
+        throw new DirectoryNotFoundException("The backend migrations directory was not found from the test output.");
+    }
+
+    internal static (FlowComponentRegistry Registry, FlowDefinitionValidator Validator, RuntimeEligibility Eligibility) Services()
     {
         var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
         var validator = new FlowDefinitionValidator(registry);
-        var eligibility = new RuntimeEligibility(registry, validator);
-        ConditionTests.Run(registry,validator,eligibility);
-        await FlowSimulationTests.RunAsync(registry,validator);
+        return (registry, validator, new RuntimeEligibility(registry, validator));
+    }
+
+    internal static void RelayContracts()
+    {
+        var (registry, validator, eligibility) = Services();
         var destination = Guid.NewGuid();
         var relay = Node(registry, "relay", "nodes-handoff", new() { ["mode"] = J("node"), ["targetNodeId"] = J(destination) });
         var flow = Chain(Node(registry, "entry", "base-input-file"), relay,
@@ -63,33 +73,6 @@ internal static class Program
         Check(!validator.Validate(Chain(Node(registry, "entry", "base-input-file"), relay)).IsValid, "A relay requires a connected continuation.");
         var branch = flow with { Nodes = [.. flow.Nodes, Node(registry, "other", "base-variable", new() { ["name"] = J("x"), ["value"] = J("1") })], Connections = [.. flow.Connections, new("branch", "entry", "error", "other")] };
         Check(RuntimeHandoffPolicy.Segment(branch, "entry").Any(node => node.Id == "other"), "All possible branches within the segment are considered.");
-        Console.WriteLine("PASS: relay contracts, segment eligibility, inheritance and old-agent compatibility.");
-
-        var connection = Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");
-        if (string.IsNullOrWhiteSpace(connection))
-        {
-            Console.WriteLine("PostgreSQL tests require ENCODING_TEST_DATABASE; see README.md.");
-            return;
-        }
-        await using var fixture = await Fixture.CreateAsync(connection, registry, validator, eligibility);
-        await fixture.FlowSavingAsync();
-        await fixture.BackendRelayAsync(false);
-        await fixture.BackendRelayAsync(true);
-        await fixture.FrozenConfigurationAsync();
-        await fixture.IntegrityAndAvailabilityAsync();
-        await fixture.ConcurrentRelayAsync();
-        await fixture.EarlyRunnerAsync();
-        await fixture.CancellationAsync();
-        await fixture.ConditionalRelayAsync("yes");
-        await fixture.ConditionalRelayAsync("no");
-        await fixture.ConditionalRelayAsync("error");
-        if(ProcessToolRunner.Find("ffmpeg") is not null)
-        {
-            await fixture.MediaRelayAsync(false);
-            await fixture.MediaRelayAsync(true);
-        }
-        else Console.WriteLine("Media relay test requires ffmpeg and ffprobe (included in the test Dockerfile).");
-        Console.WriteLine("PASS: all PostgreSQL relay scenarios.");
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
@@ -112,7 +95,7 @@ internal static class Program
         public Task<IReadOnlyList<NodeToolCapability>> DiscoverAsync(CancellationToken ct) => Task.FromResult(Capabilities(true));
     }
 
-    private sealed class Fixture : IAsyncDisposable
+    internal sealed partial class Fixture : IAsyncDisposable
     {
         private readonly string schema = "handoff_" + Guid.NewGuid().ToString("N");
         private readonly string directory = Path.Combine(Path.GetTempPath(), "encoding-handoff-" + Guid.NewGuid().ToString("N"));
@@ -142,7 +125,7 @@ internal static class Program
             Directory.CreateDirectory(directory);
             await using(var admin=NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"CREATE SCHEMA {schema}").ExecuteNonQueryAsync();
             db=NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(connection) { SearchPath=schema }.ConnectionString);
-            await DatabaseMigrator.ApplyAsync(db,Path.GetFullPath("backend"),CancellationToken.None);
+            await DatabaseMigrator.ApplyAsync(db,RepositoryRoot(),CancellationToken.None);
             var config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Runtime:ArtifactDirectory"]=Path.Combine(directory,"durable") }).Build();
             configurations=new(db,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
             runtime=new(db,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),configurations);
@@ -156,7 +139,7 @@ internal static class Program
             }
             var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0"); builder.Logging.ClearProviders();
             builder.Services.AddSingleton(db); builder.Services.AddSingleton(runtime); builder.Services.AddSingleton(artifacts);
-            builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(config);
+            builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
             builder.Services.AddSingleton<LibraryProcessingRepository>(); builder.Services.AddSingleton<LibraryWorkflowRepository>();
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromHours(1)));
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton<FlowRepository>(); builder.Services.AddSingleton<FlowArchiveService>();
@@ -190,10 +173,12 @@ internal static class Program
             var importId=Guid.NewGuid(); var imported=flow with { Id=importId };
             Check(await repository.SaveManyAsync([new(0,imported),new(1,imported with {Version=2})],false,CancellationToken.None)
                 && (await repository.VersionsAsync(importId,CancellationToken.None)).Count==2,"Archive imports preserve historical versions even with identical contents.");
-            Console.WriteLine("PASS: unchanged flow saves, concurrent clicks, backup jobs, draft CAS, real edits, HTTP response and archive history.");
         }
         private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
         {
+            // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
+            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            await ResetNodesAsync();
             var library=Guid.NewGuid(); var id=Guid.NewGuid();
             await using var command=db.CreateCommand("""
                 INSERT INTO libraries(id,name) VALUES(@library,@name);
@@ -275,7 +260,6 @@ internal static class Program
             await CompleteAsync(id,b,received,"end",context);
             var status=await runtime.RenewAsync(id,b,received.Epoch,CancellationToken.None);
             Check(await new RuntimeTransferRepository(db).FinishAsync(id,b,new(received.Epoch,Guid.NewGuid(),status!.Revision,"succeeded","Finished relay fixture",null,null,context.BeforeMetadata,context.CurrentMetadata),CancellationToken.None),"The receiver finishes the same execution.");
-            Console.WriteLine("PASS: durable relay "+(converted?"after transformation":"before transformation")+", exact duplicate receipt, fencing and artifact download.");
         }
         public async Task ConcurrentRelayAsync()
         {
@@ -286,7 +270,6 @@ internal static class Program
             Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel concurrent fixture.");
             await ExpireAsync(id);
             await RecoverCancellationAsync(id);
-            Console.WriteLine("PASS: concurrent receiver claims preserve one owner.");
         }
         public async Task IntegrityAndAvailabilityAsync()
         {
@@ -313,7 +296,6 @@ internal static class Program
             Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"The receiver needs an enabled library access.");
             Check(await new NodeRepository(db).DeleteAsync(a,CancellationToken.None)=="busy","The original source cannot be removed during a waiting relay.");
             Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel integrity fixture.");await RecoverCancellationAsync(id);
-            Console.WriteLine("PASS: missing/corrupt artifacts, offline targets, capacity and access limits, source removal protection.");
         }
         public async Task FrozenConfigurationAsync()
         {
@@ -343,7 +325,6 @@ internal static class Program
             await using var connection=await db.OpenConnectionAsync();await using var transaction=await connection.BeginTransactionAsync();
             var effective=await configurations.ResolveEffectiveAsync(overrideFlow,["nodes"],connection,transaction,CancellationToken.None);
             Check(effective["nodes"]["targetNodeId"].GetGuid()==b,"A flow override takes precedence over global settings.");
-            Console.WriteLine("PASS: configuration snapshots remain fixed and forged relay targets are rejected.");
         }
         private async Task ExpireAsync(Guid id)
         {
@@ -378,14 +359,12 @@ internal static class Program
             await ExpireAsync(id);var resumed=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("Receiver crash must resume.");
             Check(resumed.Checkpoint?.NextNodeId=="end" && resumed.Epoch>received.Epoch,"Lease expiration resumes after the relay without repeating it.");
             Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel early fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
-            Console.WriteLine("PASS: real early worker relay avoids downloads and survives receiver loss.");
         }
         public async Task CancellationAsync()
         {
             var(id,lease,context)=await EnqueueAsync(RelayFlow());
             await CompleteAsync(id,a,lease,"entry",context);await CompleteAsync(id,a,lease,"variable",context);await CompleteAsync(id,a,lease,"relay",context);
             Check(await executions.CancelAsync(id,CancellationToken.None),"A waiting relay can be cancelled.");await RecoverCancellationAsync(id);
-            Console.WriteLine("PASS: cancellation while waiting releases the durable reservation.");
         }
         public async Task ConditionalRelayAsync(string outcome)
         {
@@ -403,9 +382,8 @@ internal static class Program
             Check(!Directory.EnumerateFiles(options.DataDirectory,"*",SearchOption.AllDirectories).Any(),"Variable and origin conditions must not download or scan media before the relay.");
             var received=await runtime.ClaimAsync(b,CancellationToken.None);Check(received?.ExecutionId==id,"The condition branch hands off the same execution.");
             Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel condition fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
-            Console.WriteLine("PASS: native condition "+outcome+" branch before any media scan, checkpoint persistence and worker handoff.");
         }
-        public async Task MediaRelayAsync(bool planned)
+        public async Task MediaRelayAsync(bool planned,bool replace=false)
         {
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
             var source=Path.Combine(directory,"source.mkv");
@@ -421,6 +399,7 @@ internal static class Program
                 Node(registry,"end","base-complete-flow",new(){["result"]=J("success")})]);
             if(!planned) flow=flow with { Connections=flow.Connections.Select(edge=>edge.SourceNodeId=="condition"?edge with { SourceOutputId="yes" }:edge).ToArray() };
             var(id,lease,context)=await EnqueueAsync(flow,await File.ReadAllBytesAsync(source));
+            if(replace) Check(await new SourceReplacementRepository(db).SavePolicyAsync(lease.LibraryId!.Value,new(true,1,0),CancellationToken.None),"Enable source replacement for the media library.");
             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(40));
             using(var client=Client(a)) await Runner("media-a",out _).RunAsync(lease,client,deadline.Token);
             var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("Converted media must yield.");
@@ -455,8 +434,21 @@ internal static class Program
             Check(await SafeMediaPaths.DigestAsync(published,deadline.Token)==publication!.ResultSha256,"The source service publishes the exact validated artifact.");
             var finalMetadata=await scanner.ScanAsync(published,deadline.Token);
             Check(finalMetadata.GetProperty("streams").EnumerateArray().Any(stream=>stream.GetProperty("codec_name").GetString()=="hevc"),"The published video was actually encoded to H.265.");
+            if(replace)
+            {
+                var replacement=await new SourceReplacementRepository(db).GetAsync(id,deadline.Token);
+                Check(replacement is { State: "replaced", FinalPath: "source.mp4" } && !File.Exists(source),"The agent replaced the source with the validated .mp4 and recorded the replacement.");
+                Check(await SafeMediaPaths.DigestAsync(Path.Combine(directory,"source.mp4"),deadline.Token)==publication.ResultSha256,"The library now holds exactly the validated result.");
+                Check(await SafeMediaPaths.DigestAsync(Path.Combine(directory,replacement!.BackupPath!),deadline.Token)==context.CurrentSha256,"The original is kept in the backup during the grace period.");
+                var task=(await new SourceReplacementRepository(db).TasksAsync(a,deadline.Token)).SingleOrDefault(item=>item.ExecutionId==id);
+                Check(task is null && await new SourceReplacementRepository(db).RequestRollbackAsync(id,deadline.Token)=="ok","A rollback is requested during the grace period.");
+                var restoreTask=(await new SourceReplacementRepository(db).TasksAsync(a,deadline.Token)).Single(item=>item.ExecutionId==id);
+                var restored=await SourceReplacer.RollbackAsync(restoreTask.Root,restoreTask,deadline.Token);
+                Check(restored.Status=="restored" && Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(source)))==context.CurrentSha256 && !File.Exists(Path.Combine(directory,"source.mp4")),"The restored library file is byte-identical to the original.");
+                Console.WriteLine("PASS: real agent replaces the source after H.265 validation, then restores it byte for byte.");
+                return;
+            }
             Check(Convert.ToHexStringLower(SHA256.HashData(await File.ReadAllBytesAsync(source)))==context.CurrentSha256,"The source media remains intact.");
-            Console.WriteLine("PASS: H.265 "+(planned?"plan handed off before execution":"conversion handed off after execution")+", receiver scan and actual source publication.");
         }
         public async ValueTask DisposeAsync()
         {

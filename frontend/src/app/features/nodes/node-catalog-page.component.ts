@@ -1,17 +1,23 @@
 import { firstValueFrom } from 'rxjs';
 import { ClusterApi } from '../../shared/services/cluster-api';
+import { EnrollmentWindow } from '../../shared/models/auth';
 import {
   NodeRole,
   NodeResponse,
   LibraryResponse,
   NodeToolCapability,
   NodeActivityResponse,
+  NodeProcessingSettings,
   NODE_ROLE_LABELS,
 } from '../../shared/models/cluster';
+import { NodeSchedule } from '../../shared/models/node-schedule';
+import { WeeklyScheduleFormComponent } from '../../shared/ui/weekly-schedule-form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
+import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { AuthService } from '../../core/auth/auth.service';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -112,6 +118,8 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     RecordFormComponent,
     LibraryNodeAccessFormComponent,
     DrawerActionButtonComponent,
+    DatePipe,
+    WeeklyScheduleFormComponent,
   ],
   templateUrl: './node-catalog-page.component.html',
   styleUrl: './node-catalog-page.component.scss',
@@ -134,11 +142,13 @@ export class NodeCatalogPageComponent {
   private readonly nodeAccessActivationBusy = signal<ReadonlySet<string>>(new Set());
   private readonly libraryAccessLoadState = signal<'loading' | 'ready' | 'error'>('loading');
 
+  protected readonly isAdmin = inject(AuthService).isAdmin;
+  protected readonly enrollmentWindow = signal<EnrollmentWindow>({ isOpen: false, openUntil: null });
   protected readonly loadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
   protected readonly actionType = signal<
-    'enrollment' | 'library-access' | 'create-library' | 'processing'
+    'enrollment' | 'library-access' | 'create-library' | 'processing' | 'schedule'
   >('enrollment');
   protected readonly nodeLibraryLoading = signal(false);
   protected readonly accessFormBusy = signal(false);
@@ -234,6 +244,9 @@ export class NodeCatalogPageComponent {
   );
   protected readonly processingForm = signal<RecordFormData | null>(null);
   private processingRevision = 0;
+  private processingSettings: NodeProcessingSettings | null = null;
+  protected readonly scheduleBusy = signal(false);
+  protected readonly scheduleValue = signal<NodeSchedule | null>(null);
   protected async configureNodeProcessing(): Promise<void> {
     const node = this.rawNode();
     if (!node || this.removalBusy()) return;
@@ -241,6 +254,7 @@ export class NodeCatalogPageComponent {
       const settings = await firstValueFrom(this.clusterApi.nodeProcessing(node.id));
       if (this.rawNode()?.id !== node.id) return;
       this.processingRevision = settings.revision;
+      this.processingSettings = settings;
       this.processingForm.set({
         title: 'Limite globale du nœud',
         description:
@@ -270,6 +284,43 @@ export class NodeCatalogPageComponent {
       this.notifications.show('Impossible de charger la limite du nœud.');
     }
   }
+  protected async configureNodeSchedule(): Promise<void> {
+    const node = this.rawNode();
+    if (!node || this.removalBusy()) return;
+    try {
+      const settings = await firstValueFrom(this.clusterApi.nodeProcessing(node.id));
+      if (this.rawNode()?.id !== node.id) return;
+      this.processingRevision = settings.revision;
+      this.processingSettings = settings;
+      this.scheduleValue.set(settings.schedule);
+      this.actionType.set('schedule');
+      this.actionOpen.set(true);
+    } catch {
+      this.notifications.show('Impossible de charger le calendrier du nœud.');
+    }
+  }
+  protected async saveNodeSchedule(schedule: NodeSchedule): Promise<void> {
+    const node = this.rawNode();
+    const settings = this.processingSettings;
+    if (!node || !settings || this.scheduleBusy()) return;
+    this.scheduleBusy.set(true);
+    try {
+      await firstValueFrom(
+        this.clusterApi.saveNodeProcessing(
+          node.id,
+          settings.maxConcurrentTasks,
+          this.processingRevision,
+          schedule,
+        ),
+      );
+      this.actionOpen.set(false);
+      this.notifications.show('Calendrier du nœud enregistré.');
+    } catch {
+      this.notifications.show('Calendrier invalide ou configuration modifiée ailleurs.');
+    } finally {
+      this.scheduleBusy.set(false);
+    }
+  }
   protected async saveNodeProcessing(values: Record<string, string>): Promise<void> {
     const node = this.rawNode();
     if (!node) return;
@@ -279,6 +330,7 @@ export class NodeCatalogPageComponent {
           node.id,
           values['maximum'] ? Number(values['maximum']) : null,
           this.processingRevision,
+          this.processingSettings!.schedule,
         ),
       );
       this.actionOpen.set(false);
@@ -452,7 +504,9 @@ export class NodeCatalogPageComponent {
       });
   }
   protected readonly actionTitle = computed(() =>
-    this.actionType() === 'processing'
+    this.actionType() === 'schedule'
+      ? 'Calendrier du nœud'
+      : this.actionType() === 'processing'
       ? 'Limite globale du nœud'
       : this.actionType() === 'library-access'
         ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
@@ -461,7 +515,9 @@ export class NodeCatalogPageComponent {
           : this.createFormData.title,
   );
   protected readonly actionDescription = computed(() =>
-    this.actionType() === 'processing'
+    this.actionType() === 'schedule'
+      ? 'Plages horaires pendant lesquelles ce nœud peut démarrer de nouveaux traitements.'
+      : this.actionType() === 'processing'
       ? 'Plafond simultané, toutes bibliothèques confondues.'
       : this.actionType() === 'library-access'
         ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
@@ -644,6 +700,44 @@ export class NodeCatalogPageComponent {
     this.enrollmentView.set('requests');
     this.selectedEnrollment.set(null);
     this.actionOpen.set(true);
+    this.refreshEnrollmentWindow();
+  }
+
+  private refreshEnrollmentWindow(): void {
+    this.clusterApi
+      .enrollmentWindow()
+      .pipe(catchError(() => EMPTY))
+      .subscribe((window) => this.enrollmentWindow.set(window));
+  }
+
+  protected openEnrollmentWindow(): void {
+    this.clusterApi
+      .openEnrollmentWindow(10)
+      .pipe(
+        catchError(() => {
+          this.notifications.show('La fenêtre d’enrôlement n’a pas pu être ouverte.');
+          return EMPTY;
+        }),
+      )
+      .subscribe((window) => {
+        this.enrollmentWindow.set(window);
+        this.notifications.show('L’enrôlement direct est ouvert pendant 10 minutes.');
+      });
+  }
+
+  protected closeEnrollmentWindow(): void {
+    this.clusterApi
+      .closeEnrollmentWindow()
+      .pipe(
+        catchError(() => {
+          this.notifications.show('La fenêtre d’enrôlement n’a pas pu être fermée.');
+          return EMPTY;
+        }),
+      )
+      .subscribe(() => {
+        this.enrollmentWindow.set({ isOpen: false, openUntil: null });
+        this.notifications.show('L’enrôlement direct est fermé.');
+      });
   }
 
   protected closeCreateNode(): void {

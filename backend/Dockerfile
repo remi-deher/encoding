@@ -25,6 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends mediainfo && rm
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY --from=frontend-build /frontend/dist/frontend/browser ./wwwroot
-ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_URLS=http://+:8080 \
+    Logging__Console__FormatterName=json \
+    Logging__Console__FormatterOptions__UseUtcTimestamp=true \
+    Logging__Console__FormatterOptions__IncludeScopes=true
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Encoding.Api.dll"]
