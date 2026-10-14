@@ -19,7 +19,7 @@ using Npgsql;
 namespace Encoding.Runtime.Tests;
 
 /// <summary>Outillage d’exploitation : migrations versionnées, métriques, health checks et rétention des artefacts.</summary>
-internal static class OperationsTests
+internal static class OperationsScenarios
 {
     private static void Check(bool condition, string message)
     {
@@ -28,7 +28,7 @@ internal static class OperationsTests
 
     public static void Run()
     {
-        var repositoryMigrations = Path.GetFullPath(Path.Combine("backend", "migrations"));
+        var repositoryMigrations = Path.Combine(Harness.RepositoryRoot(), "migrations");
         var catalog = MigrationCatalog.Load(repositoryMigrations);
         Check(catalog.Count > 20 && catalog.Select(file => file.Number).Distinct().Count() == catalog.Count, "Chaque numéro de migration du dépôt est unique.");
         Check(MigrationCatalog.RenamedFrom.Keys.All(version => catalog.Any(file => file.Version == version)), "Une migration renommée référence un fichier existant.");
@@ -70,7 +70,7 @@ internal static class OperationsTests
     {
         var schema = "ops_" + Guid.NewGuid().ToString("N");
         var directory = Directory.CreateTempSubdirectory("encoding-ops-").FullName;
-        var contentRoot = Path.GetFullPath("backend");
+        var contentRoot = Harness.RepositoryRoot();
         try
         {
             await using (var admin = NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"CREATE SCHEMA {schema}").ExecuteNonQueryAsync();
