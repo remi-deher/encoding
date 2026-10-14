@@ -86,8 +86,15 @@ public sealed class FlowRepository(NpgsqlDataSource dataSource)
     }
 
     /// <summary>CAS publication and backup outbox share one transaction. Versions are append-only.</summary>
-    public async Task<bool> SaveAsync(SaveFlowRequest request, CancellationToken ct)
-        => await SaveManyAsync([request], false, ct);
+    public async Task<FlowVersionResponse?> SaveAsync(SaveFlowRequest request, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        var version = await SaveCoreAsync(request, false, connection, tx, ct, skipUnchanged: true);
+        if (version is null) return null;
+        await tx.CommitAsync(ct);
+        return await GetAsync(request.Definition.Id, version.Value, ct);
+    }
 
     public async Task<bool> SaveManyAsync(IReadOnlyList<SaveFlowRequest> requests, bool restore, CancellationToken ct,IReadOnlyList<FlowDraftImport>? drafts=null)
     {
@@ -99,7 +106,7 @@ public sealed class FlowRepository(NpgsqlDataSource dataSource)
         }
         foreach (var request in requests.OrderBy(r => r.Definition.Id).ThenBy(r => r.Definition.Version))
         {
-            if (!await SaveCoreAsync(request, restore, connection, tx, ct)) { await tx.RollbackAsync(ct); return false; }
+            if (await SaveCoreAsync(request, restore, connection, tx, ct) is null) { await tx.RollbackAsync(ct); return false; }
         }
         foreach(var imported in drafts??[]) {
             var draft=imported.Definition;
@@ -116,7 +123,7 @@ public sealed class FlowRepository(NpgsqlDataSource dataSource)
         await tx.CommitAsync(ct); return true;
     }
 
-    private static async Task<bool> SaveCoreAsync(SaveFlowRequest request, bool restore, NpgsqlConnection connection, NpgsqlTransaction tx, CancellationToken ct)
+    private static async Task<int?> SaveCoreAsync(SaveFlowRequest request, bool restore, NpgsqlConnection connection, NpgsqlTransaction tx, CancellationToken ct, bool skipUnchanged = false)
     {
         var definition = request.Definition;
         await using (var insert = new NpgsqlCommand("INSERT INTO flows(id) VALUES(@id) ON CONFLICT DO NOTHING",connection,tx))
@@ -131,15 +138,26 @@ public sealed class FlowRepository(NpgsqlDataSource dataSource)
             repeat.Parameters.AddWithValue("id",definition.Id); repeat.Parameters.AddWithValue("version",definition.Version);
             repeat.Parameters.AddWithValue("document",NpgsqlDbType.Jsonb,json);
             var same = await repeat.ExecuteScalarAsync(ct);
-            if (same is bool identical) return identical;
+            if (same is bool identical) return identical ? definition.Version : null;
         }
         if(request.ExpectedDraftRevision is { } expectedDraft)
         {
             await using var draft=new NpgsqlCommand("SELECT revision FROM flow_drafts WHERE flow_id=@id",connection,tx);
             draft.Parameters.AddWithValue("id",definition.Id);
-            if(await draft.ExecuteScalarAsync(ct) is not int revision || revision!=expectedDraft) return false;
+            if(await draft.ExecuteScalarAsync(ct) is not int revision || revision!=expectedDraft) return null;
         }
-        if (!restore && (current != request.ExpectedVersion || definition.Version != current + 1)) return false;
+        if (!restore && (current != request.ExpectedVersion || definition.Version != current + 1)) return null;
+        if (skipUnchanged && current > 0)
+        {
+            await using var unchanged = new NpgsqlCommand("SELECT (definition - 'version') = (@document::jsonb - 'version') FROM flow_versions WHERE flow_id=@id AND version=@version", connection, tx);
+            unchanged.Parameters.AddWithValue("id", definition.Id); unchanged.Parameters.AddWithValue("version", current);
+            unchanged.Parameters.AddWithValue("document", NpgsqlDbType.Jsonb, json);
+            if (await unchanged.ExecuteScalarAsync(ct) is true)
+            {
+                await ClearDraftAsync(request, connection, tx, ct);
+                return current;
+            }
+        }
         await using var command = new NpgsqlCommand("""
             INSERT INTO flow_versions(flow_id,version,definition) VALUES(@id,@version,@document);
             INSERT INTO flow_backup_jobs(flow_id,version) VALUES(@id,@version);
@@ -148,12 +166,17 @@ public sealed class FlowRepository(NpgsqlDataSource dataSource)
         command.Parameters.AddWithValue("id",definition.Id); command.Parameters.AddWithValue("version",definition.Version);
         command.Parameters.AddWithValue("document",NpgsqlDbType.Jsonb,json);
         await command.ExecuteNonQueryAsync(ct);
+        await ClearDraftAsync(request, connection, tx, ct);
+        return definition.Version;
+    }
+
+    private static async Task ClearDraftAsync(SaveFlowRequest request, NpgsqlConnection connection, NpgsqlTransaction tx, CancellationToken ct)
+    {
         if(request.ExpectedDraftRevision is { } draftRevision)
         {
             await using var clear=new NpgsqlCommand("DELETE FROM flow_drafts WHERE flow_id=@id AND revision=@revision",connection,tx);
-            clear.Parameters.AddWithValue("id",definition.Id); clear.Parameters.AddWithValue("revision",draftRevision);
+            clear.Parameters.AddWithValue("id",request.Definition.Id); clear.Parameters.AddWithValue("revision",draftRevision);
             await clear.ExecuteNonQueryAsync(ct);
         }
-        return true;
     }
 }

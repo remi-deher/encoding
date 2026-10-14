@@ -132,6 +132,37 @@ export class FlowValidation {
     );
   }
 
+  async saveAutomatically(
+    definition: FlowDocument,
+    expectedVersion: number,
+    expectedDraftRevision: number | undefined,
+    unchanged: boolean,
+  ) {
+    let validation = await this.validateDocument(definition);
+    if (validation.isValid) {
+      try {
+        return {
+          saved: await this.save(definition, expectedVersion, expectedDraftRevision),
+          published: true,
+          validation,
+        };
+      } catch (error) {
+        if (
+          !(error instanceof HttpErrorResponse) ||
+          error.status !== 422 ||
+          !Array.isArray(error.error?.issues)
+        )
+          throw error;
+        validation = error.error as FlowValidationResult;
+      }
+    }
+    return {
+      saved: unchanged ? null : await this.saveDraft(definition, expectedDraftRevision ?? 0),
+      published: false,
+      validation,
+    };
+  }
+
   async validate(
     id: string,
     name: string,
@@ -140,6 +171,10 @@ export class FlowValidation {
     connections: readonly FlowGraphConnection[],
   ): Promise<FlowValidationResult> {
     const document = await this.document(id, 1, name, mediaType, nodes, connections);
+    return this.validateDocument(document);
+  }
+
+  async validateDocument(document: FlowDocument): Promise<FlowValidationResult> {
     try {
       return await firstValueFrom(
         this.http.post<FlowValidationResult>('/api/v1/flows/validate', document),

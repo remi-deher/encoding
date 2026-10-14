@@ -91,3 +91,9 @@
 .page-header_workspace .page-tools:empty {
   display: none;
 }
+.page-heading_empty:has(> .page-metadata:empty) {
+  display: none;
+}
+.page-header_workspace .page-heading_empty .page-metadata {
+  margin-top: 0;
+}

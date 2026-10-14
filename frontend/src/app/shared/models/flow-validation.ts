@@ -51,6 +51,19 @@ export interface FlowVersionResponse {
 export function flowPublishedVersion(saved: FlowVersionResponse): number {
   return saved.draftRevision != null ? (saved.publishedVersion ?? 0) : saved.definition.version;
 }
+export function flowDocumentKey(definition: FlowDocument): string {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value !== null && typeof value === 'object')
+      return Object.fromEntries(
+        Object.entries(value)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, item]) => [key, canonical(item)]),
+      );
+    return value;
+  };
+  return JSON.stringify(canonical({ ...definition, version: 0 }));
+}
 export interface FlowSummary {
   readonly isDraft: boolean;
   readonly id: string;

@@ -2,7 +2,7 @@
   [title]="flowTitle()"
   [shellTitle]="flowTitle()"
   layout="workspace"
-  description="Composez les étapes, explorez les branches et publiez votre flow."
+  [showHeading]="false"
 >
   <span page-metadata role="status">
     {{ editorStatus() }}
@@ -39,22 +39,13 @@
   >
     {{ validating() ? 'Vérification…' : 'Vérifier le flow' }}
   </button>
-  <button
-    page-tools
-    matButton="text"
-    type="button"
-    [disabled]="saving() || loadState() !== 'ready'"
-    (click)="saveFlow()"
-  >
-    Publier une version
-  </button>
   <a page-actions matButton="text" routerLink="/flows">Annuler</a>
   <button
     page-actions
     matButton="filled"
     type="button"
-    [disabled]="saving() || loadState() !== 'ready'"
-    (click)="saveFlow(true)"
+    [disabled]="saving() || loadState() !== 'ready' || (!hasUnsavedChanges() && !hasDraft())"
+    (click)="saveFlow()"
   >
     {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
   </button>

@@ -23,3 +23,30 @@ test('a published definition retains its version when draft metadata is absent o
     3,
   );
 });
+
+test('portable flow comparison ignores version and JSON property order', async () => {
+  const { flowDocumentKey } = await loadModel('flow-validation');
+  const original = {
+    id: 'flow',
+    version: 1,
+    name: 'Test',
+    nodes: [{ id: 'step', configuration: { quality: 23, codec: 'hevc' } }],
+    connections: [],
+  };
+  const reordered = {
+    connections: [],
+    nodes: [{ configuration: { codec: 'hevc', quality: 23 }, id: 'step' }],
+    name: 'Test',
+    version: 2,
+    id: 'flow',
+  };
+  assert.equal(flowDocumentKey(original), flowDocumentKey(reordered));
+  assert.notEqual(flowDocumentKey(original), flowDocumentKey({ ...original, name: 'Changed' }));
+  assert.notEqual(
+    flowDocumentKey(original),
+    flowDocumentKey({
+      ...original,
+      nodes: [{ id: 'step', configuration: { quality: 24, codec: 'hevc' } }],
+    }),
+  );
+});

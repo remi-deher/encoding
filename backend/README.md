@@ -84,3 +84,5 @@ Voir [0015 — Runtime et archives portables](../docs/architecture/0015-flow-run
 Depuis l’éditeur, **Tester le flow** explore le document en cours avec un profil fictif ou un fichier importé via MediaInfo. Le nom, les métadonnées, les pistes et les variables restent modifiables. Les conditions natives affichent leurs comparaisons et sorties ; les actions externes s’arrêtent pour demander le résultat à supposer avant de poursuivre.
 
 Aucune exécution, conversion, invocation de plugin ou transfert réel n’est créé. Les résultats du test restent dans la session de l’éditeur. L’import MediaInfo est limité à 512 Mio, deux minutes et deux lectures simultanées par serveur ; la copie temporaire est supprimée après lecture. Voir [0023](../docs/architecture/0023-flow-simulation.md) pour les contrats et limites.
+
+L’action Enregistrer de l’éditeur valide automatiquement le document : publication s’il est valide, brouillon sinon. Une publication inchangée retourne la version existante et ne crée ni version ni tâche de sauvegarde supplémentaire. Ce contrôle transactionnel conserve les conflits de concurrence et les versions des archives importées.

@@ -57,8 +57,8 @@ public static class FlowEndpoints
                 return (IResult)Results.BadRequest(new { title="Identifiant ou version attendue invalide." });
             var (_,validation)=validator.ValidateDocument(JsonSerializer.SerializeToElement(request.Definition,FlowRepository.JsonOptions));
             if (!validation.IsValid) return Results.UnprocessableEntity(validation);
-            if (!await repository.SaveAsync(request,ct)) return Results.Conflict(new { title="Une autre version a été enregistrée. Rechargez le flow avant de publier vos modifications." });
-            return Results.Ok(await repository.GetAsync(id,request.Definition.Version,ct));
+            if (await repository.SaveAsync(request,ct) is not { } saved) return Results.Conflict(new { title="Une autre version a été enregistrée. Rechargez le flow avant de publier vos modifications." });
+            return Results.Ok(saved);
         });
         flows.MapGet("/components", (FlowComponentRegistry registry) => Results.Ok(registry.Plugins))
             .WithName("GetFlowComponentCatalog");

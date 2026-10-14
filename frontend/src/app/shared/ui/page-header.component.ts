@@ -8,15 +8,15 @@ import { Component, TemplateRef, input, inject, effect, DestroyRef } from '@angu
   imports: [NgTemplateOutlet],
   template: `
     <div class="page-header" [class.page-header_workspace]="layout() === 'workspace'">
-      @if (showHeading()) {
-        <div class="page-heading">
+      <div class="page-heading" [class.page-heading_empty]="!showHeading()">
+        @if (showHeading()) {
           <h1>{{ title() }}</h1>
           @if (description()) {
             <p class="page-description">{{ description() }}</p>
           }
-          <div class="page-metadata"><ng-content select="[page-metadata]" /></div>
-        </div>
-      }
+        }
+        <div class="page-metadata"><ng-content select="[page-metadata]" /></div>
+      </div>
       <div class="page-actions">
         <ng-content select="[page-actions]" />
         <ng-container [ngTemplateOutlet]="actions()" />

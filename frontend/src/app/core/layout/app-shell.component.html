@@ -15,7 +15,7 @@
 
     @if (!workerMode()) {
       <div class="cluster-indicator" [attr.aria-label]="'Présence des nœuds : ' + clusterLabel()">
-        <span class="cluster-label">Cluster</span>
+        <span class="cluster-label">Nœuds</span>
         <span class="cluster-state">{{ clusterLabel() }}</span>
       </div>
     }

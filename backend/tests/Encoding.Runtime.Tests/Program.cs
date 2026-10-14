@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Net.Http.Json;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Infrastructure;
@@ -71,6 +72,7 @@ internal static class Program
             return;
         }
         await using var fixture = await Fixture.CreateAsync(connection, registry, validator, eligibility);
+        await fixture.FlowSavingAsync();
         await fixture.BackendRelayAsync(false);
         await fixture.BackendRelayAsync(true);
         await fixture.FrozenConfigurationAsync();
@@ -157,11 +159,39 @@ internal static class Program
             builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(config);
             builder.Services.AddSingleton<LibraryProcessingRepository>(); builder.Services.AddSingleton<LibraryWorkflowRepository>();
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromHours(1)));
-            app=builder.Build(); app.MapRuntimeEndpoints();
+            builder.Services.AddSingleton(registry); builder.Services.AddSingleton<FlowRepository>(); builder.Services.AddSingleton<FlowArchiveService>();
+            app=builder.Build(); app.MapRuntimeEndpoints(); app.MapFlowEndpoints();
             app.MapGet("/api/v1/executions/{id:guid}",async(Guid id)=>await executions.GetAsync(id,CancellationToken.None));
             await app.StartAsync();
         }
         private RuntimeClient Client(Guid node) => new(new WorkerIdentityState(node,"fixture","fixture",app.Urls.Single()+"/",Token,true));
+        public async Task FlowSavingAsync()
+        {
+            var repository = new FlowRepository(db);
+            var flow = Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
+            var first = await repository.SaveAsync(new(0,flow),CancellationToken.None);
+            Check(first?.Definition.Version==1,"The first save publishes v1.");
+            var same = flow with { Version=2 };
+            var repeated = await Task.WhenAll(Enumerable.Range(0,4).Select(_=>repository.SaveAsync(new(1,same),CancellationToken.None)));
+            Check(repeated.All(result=>result?.Definition.Version==1),"Concurrent unchanged saves acknowledge v1 without incrementing.");
+            Check((await repository.VersionsAsync(flow.Id,CancellationToken.None)).Count==1,"Only one immutable version exists after unchanged saves.");
+            await using(var count=db.CreateCommand("SELECT count(*) FROM flow_backup_jobs WHERE flow_id=@id"))
+            { count.Parameters.AddWithValue("id",flow.Id); Check((long)(await count.ExecuteScalarAsync())! == 1,"Unchanged saves create no extra backup jobs."); }
+            var draft = await repository.SaveDraftAsync(new(0,same),CancellationToken.None);
+            Check(await repository.SaveAsync(new(1,same,draft!.DraftRevision+1),CancellationToken.None) is null,"An unchanged save still enforces draft concurrency.");
+            Check((await repository.SaveAsync(new(1,same,draft.DraftRevision),CancellationToken.None))?.Definition.Version==1
+                && await repository.DraftAsync(flow.Id,CancellationToken.None) is null,"An unchanged matching draft is finalized without a new publication.");
+            var changed = same with { Name="Modified flow" };
+            Check((await repository.SaveAsync(new(1,changed),CancellationToken.None))?.Definition.Version==2,"A meaningful edit creates exactly one new version.");
+            Check(await repository.SaveAsync(new(1,changed with { Version=3 },null),CancellationToken.None) is null,"A stale editor cannot overwrite a newer version.");
+            using var client=new HttpClient { BaseAddress=new Uri(app.Urls.Single()) };
+            using var response=await client.PutAsJsonAsync($"/api/v1/flows/{flow.Id}",new SaveFlowRequest(2,changed with { Version=3 }));
+            Check(response.IsSuccessStatusCode && (await response.Content.ReadFromJsonAsync<FlowVersionResponse>())?.Definition.Version==2,"The API returns the exact existing version for an unchanged request.");
+            var importId=Guid.NewGuid(); var imported=flow with { Id=importId };
+            Check(await repository.SaveManyAsync([new(0,imported),new(1,imported with {Version=2})],false,CancellationToken.None)
+                && (await repository.VersionsAsync(importId,CancellationToken.None)).Count==2,"Archive imports preserve historical versions even with identical contents.");
+            Console.WriteLine("PASS: unchanged flow saves, concurrent clicks, backup jobs, draft CAS, real edits, HTTP response and archive history.");
+        }
         private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
         {
             var library=Guid.NewGuid(); var id=Guid.NewGuid();

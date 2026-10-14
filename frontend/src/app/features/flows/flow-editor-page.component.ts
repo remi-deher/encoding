@@ -2,7 +2,11 @@ import { toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { timer, switchMap, catchError, of, from } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FlowValidation } from '../../shared/services/flow-validation';
-import { flowPublishedVersion, resolveFlowComponent } from '../../shared/models/flow-validation';
+import {
+  flowDocumentKey,
+  flowPublishedVersion,
+  resolveFlowComponent,
+} from '../../shared/models/flow-validation';
 import { FlowContinuationSource } from '../../shared/models/flow-sequence';
 import { Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -482,6 +486,8 @@ export class FlowEditorPageComponent {
       : crypto.randomUUID();
 
   private readonly savedGraph = signal<string | null>(null);
+  private readonly savedDocumentKey = signal<string | null>(null);
+  protected readonly hasDraft = computed(() => this.draftRevision() !== undefined);
   protected readonly editorStatus = computed(() =>
     this.loadState() === 'loading'
       ? 'Chargement du flow…'
@@ -563,6 +569,7 @@ export class FlowEditorPageComponent {
         ) + 1;
       this.setGraph(nodes, definition.connections);
       this.savedGraph.set(JSON.stringify([nodes, definition.connections]));
+      this.savedDocumentKey.set(flowDocumentKey(definition));
       this.storedVersion.set(flowPublishedVersion(saved));
       this.draftRevision.set(saved.draftRevision ?? undefined);
       this.backupStatus.set(saved.backupStatus);
@@ -573,8 +580,13 @@ export class FlowEditorPageComponent {
     }
   }
 
-  protected async saveFlow(draft = false): Promise<void> {
-    if (this.saving() || this.loadState() !== 'ready') return;
+  protected async saveFlow(): Promise<void> {
+    if (
+      this.saving() ||
+      this.loadState() !== 'ready' ||
+      (!this.hasUnsavedChanges() && !this.hasDraft())
+    )
+      return;
     this.saving.set(true);
     const nodes = this.nodes(),
       connections = this.connections(),
@@ -588,13 +600,28 @@ export class FlowEditorPageComponent {
         nodes,
         connections,
       );
-      const saved = draft
-        ? await this.serverValidation.saveDraft(document, this.draftRevision() ?? 0)
-        : await this.serverValidation.save(document, expected, this.draftRevision());
-      this.savedGraph.set(JSON.stringify([nodes, connections]));
-      this.storedVersion.set(
-        draft ? (saved.publishedVersion ?? expected) : saved.definition.version,
+      const unchanged = flowDocumentKey(document) === this.savedDocumentKey();
+      if (unchanged && !this.hasDraft()) {
+        this.savedGraph.set(JSON.stringify([nodes, connections]));
+        this.notifications.show('Aucune modification à enregistrer.');
+        return;
+      }
+      const { saved, published, validation } = await this.serverValidation.saveAutomatically(
+        document,
+        expected,
+        this.draftRevision(),
+        unchanged,
       );
+      if (!saved) {
+        this.notifications.show(
+          'Le brouillon est déjà enregistré. Publication impossible : ' +
+            validation.issues.map((issue) => issue.message).join(' '),
+        );
+        return;
+      }
+      this.savedGraph.set(JSON.stringify([nodes, connections]));
+      this.savedDocumentKey.set(flowDocumentKey(saved.definition));
+      this.storedVersion.set(flowPublishedVersion(saved));
       this.draftRevision.set(saved.draftRevision ?? undefined);
       this.backupStatus.set(saved.backupStatus);
       const changed = this.nodes() !== nodes || this.connections() !== connections;
@@ -603,8 +630,9 @@ export class FlowEditorPageComponent {
           replaceUrl: true,
         });
       this.notifications.show(
-        draft
-          ? 'Brouillon enregistré.'
+        !published
+          ? 'Brouillon enregistré. Publication impossible : ' +
+              validation.issues.map((issue) => issue.message).join(' ')
           : 'Version ' +
               saved.definition.version +
               ' publiée. Sauvegarde JSON : ' +
