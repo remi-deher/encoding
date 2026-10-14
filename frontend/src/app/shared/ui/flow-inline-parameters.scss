@@ -13,6 +13,17 @@ mat-form-field {
   max-width: 100%;
   min-width: 0;
 }
+.condition-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1 1 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
 @media (max-width: 600px) {
   mat-form-field {
     flex: 1 1 140px;

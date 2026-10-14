@@ -1,4 +1,5 @@
 import type { MediaType } from './media-type';
+import type { ConditionGroup, ConditionFieldDefinition, ConditionPreset } from './condition-tree';
 
 export interface FlowComponentReference {
   readonly pluginId: string;
@@ -87,6 +88,12 @@ interface FlowComponentConfigurationFieldBase {
 
 export type FlowComponentConfigurationField =
   | (FlowComponentConfigurationFieldBase & {
+      readonly type: 'condition-tree';
+      readonly defaultValue?: ConditionGroup;
+      readonly conditionFields: readonly ConditionFieldDefinition[];
+      readonly conditionPresets?: readonly ConditionPreset[];
+    })
+  | (FlowComponentConfigurationFieldBase & {
       readonly type: 'text';
       readonly defaultValue?: string;
       readonly placeholder?: string;
@@ -128,6 +135,16 @@ export function getFlowConfigurationSchema(
   return {
     ...schema,
     fields: schema.fields.map((field) => {
+      if (field.type === 'condition-tree')
+        return {
+          ...field,
+          conditionFields: field.conditionFields.filter((condition) =>
+            condition.supportedFlowMediaTypes.includes(mediaType),
+          ),
+          conditionPresets: field.conditionPresets?.filter((preset) =>
+            preset.supportedFlowMediaTypes.includes(mediaType),
+          ),
+        };
       if (field.type !== 'select') return field;
       const options = field.options.filter(
         (option) =>
@@ -144,7 +161,7 @@ export function getFlowConfigurationSchema(
   };
 }
 
-export type FlowComponentConfigurationValue = string | number | boolean | null;
+export type FlowComponentConfigurationValue = string | number | boolean | null | ConditionGroup;
 export type FlowComponentConfiguration = Readonly<Record<string, FlowComponentConfigurationValue>>;
 
 export function createDefaultFlowComponentConfiguration(

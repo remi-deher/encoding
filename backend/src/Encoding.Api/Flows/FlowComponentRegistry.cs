@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Plugins;
+using Encoding.Contracts.Flows.Conditions;
 
 namespace Encoding.Api.Flows;
 
@@ -43,6 +44,21 @@ public sealed class FlowComponentRegistry
                 manifests.Add(extra);
             }
         }
+        manifests=manifests.Select(installed=>installed with
+        {
+            Components=installed.Components.Select(component=>component with
+            {
+                ConfigurationSchema=component.ConfigurationSchema with
+                {
+                    Fields=component.ConfigurationSchema.Fields.Select(field=>field.Type=="condition-tree"?field with
+                    {
+                        ConditionFields=ConditionTree.Fields,
+                        ConditionPresets=ConditionTree.Presets,
+                        DefaultValue=field.DefaultValue??ConditionTree.Serialize(new ConditionGroup("all",[]))
+                    }:field).ToArray()
+                }
+            }).ToArray()
+        }).ToList();
         foreach (var installed in manifests)
         {
             if (installed.ConfigurationSchema is { } pluginSchema
@@ -56,7 +72,7 @@ public sealed class FlowComponentRegistry
                     || component.ConfigurationSchema.Version != 1
                     || component.Outputs.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != component.Outputs.Count
                     || component.ConfigurationSchema.Fields.Select(f => f.Id).Distinct(StringComparer.Ordinal).Count() != component.ConfigurationSchema.Fields.Count
-                    || component.ConfigurationSchema.Fields.Any(f => f.Type is not ("text" or "number" or "boolean" or "select")))
+                    || component.ConfigurationSchema.Fields.Any(f => f.Type is not ("text" or "number" or "boolean" or "select" or "condition-tree")))
                     throw new InvalidOperationException($"Descripteur invalide : {component.Id}.");
                 var reference = new FlowComponentReference(
                     installed.Id,

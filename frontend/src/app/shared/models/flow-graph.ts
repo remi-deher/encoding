@@ -5,6 +5,7 @@ import type {
   FlowGraphConnection,
   FlowGraphNode,
 } from './flow-component';
+import { conditionTreeError } from './condition-tree';
 
 /** Plusieurs chemins alternatifs peuvent converger ; une sortie ne déclenche qu’un chemin. */
 export function canConnectFlowGraph(
@@ -101,6 +102,8 @@ export function flowConfigurationFieldError(
     value === undefined || value === null || (typeof value === 'string' && !value.trim());
   if (empty) return field.required ? 'Ce paramètre est obligatoire.' : undefined;
   switch (field.type) {
+    case 'condition-tree':
+      return conditionTreeError(value, field.conditionFields);
     case 'text':
     case 'secret':
       return typeof value === 'string' ? undefined : 'Une valeur textuelle est attendue.';

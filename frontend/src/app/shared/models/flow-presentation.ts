@@ -10,6 +10,7 @@ const MEDIA: Record<FlowComponentDefinition['mediaType'], { color: string; backg
 const PLUGINS: Record<string, string> = {
   base: '#365969',
   nodes: '#315c4d',
+  conditions: '#6b3fa0',
   plex: '#805700',
   sonarr: '#14667c',
   radarr: '#755300',

@@ -8,6 +8,7 @@ using Encoding.Api.Nodes;
 using Encoding.Api.Plugins;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
+using Encoding.Contracts.Flows.Conditions;
 using Encoding.Contracts.Nodes;
 using Encoding.Contracts.Plugins;
 using Encoding.NodeAgent;
@@ -40,6 +41,7 @@ internal static class Program
         var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
         var validator = new FlowDefinitionValidator(registry);
         var eligibility = new RuntimeEligibility(registry, validator);
+        ConditionTests.Run(registry,validator,eligibility);
         var destination = Guid.NewGuid();
         var relay = Node(registry, "relay", "nodes-handoff", new() { ["mode"] = J("node"), ["targetNodeId"] = J(destination) });
         var flow = Chain(Node(registry, "entry", "base-input-file"), relay,
@@ -75,6 +77,9 @@ internal static class Program
         await fixture.ConcurrentRelayAsync();
         await fixture.EarlyRunnerAsync();
         await fixture.CancellationAsync();
+        await fixture.ConditionalRelayAsync("yes");
+        await fixture.ConditionalRelayAsync("no");
+        await fixture.ConditionalRelayAsync("error");
         if(ProcessToolRunner.Find("ffmpeg") is not null)
         {
             await fixture.MediaRelayAsync(false);
@@ -85,7 +90,7 @@ internal static class Program
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
-        new("plugin/base", "1.0.0", ["general"], []), new("plugin/nodes", "1.1.0", ["general"], []),
+        new("plugin/base", "1.0.0", ["general"], []), new("plugin/nodes", "1.1.0", ["general"], []),new("plugin/conditions","1.0.0",["general"],[]),
         new("ffprobe", "7.0", ["video"], []), .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
 
     private static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)
@@ -351,6 +356,24 @@ internal static class Program
             Check(await executions.CancelAsync(id,CancellationToken.None),"A waiting relay can be cancelled.");await RecoverCancellationAsync(id);
             Console.WriteLine("PASS: cancellation while waiting releases the durable reservation.");
         }
+        public async Task ConditionalRelayAsync(string outcome)
+        {
+            var tree=new ConditionGroup("all",[new ConditionRule("variable.number","eq",J(outcome=="no"?99:42),outcome=="error"?"missing":"selected"),
+                new ConditionGroup("any",[new ConditionRule("source.nodeId","eq",J(a.ToString("D"))),new ConditionRule("library.id","exists")])]);
+            var flow=RelayFlow();
+            var condition=Node(registry,"condition","conditions-match",new(){["rules"]=ConditionTree.Serialize(tree)});
+            flow=flow with { Nodes=[..flow.Nodes,condition],Connections=[..flow.Connections.Where(edge=>edge.SourceNodeId!="variable"),
+                new("to-condition","variable","success","condition"),new("conditional-relay","condition",outcome,"relay")] };
+            var(id,lease,_)=await EnqueueAsync(flow);
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(20));using var client=Client(a);
+            var runner=Runner("condition-"+outcome,out var options);await runner.RunAsync(lease,client,deadline.Token);
+            await using var read=db.CreateCommand("SELECT checkpoint->>'outputId' FROM execution_steps WHERE execution_id=@id AND node_id='condition'");
+            read.Parameters.AddWithValue("id",id);Check((string?)await read.ExecuteScalarAsync()==outcome,"A native condition must take its declared "+outcome+" output.");
+            Check(!Directory.EnumerateFiles(options.DataDirectory,"*",SearchOption.AllDirectories).Any(),"Variable and origin conditions must not download or scan media before the relay.");
+            var received=await runtime.ClaimAsync(b,CancellationToken.None);Check(received?.ExecutionId==id,"The condition branch hands off the same execution.");
+            Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel condition fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
+            Console.WriteLine("PASS: native condition "+outcome+" branch before any media scan, checkpoint persistence and worker handoff.");
+        }
         public async Task MediaRelayAsync(bool planned)
         {
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
@@ -360,9 +383,12 @@ internal static class Program
                 .. planned?new[]{Node(registry,"prepare","base-prepare-processing")}:Array.Empty<FlowNodeDefinition>(),
                 Node(registry,"encode","base-transcode-video",new(){["processingMode"]=J(planned?"plan":"direct"),["videoCodec"]=J("hevc"),["preset"]=J("fast")}),
                 Node(registry,"convert","base-remux-media",new(){["container"]=J("mp4"),["processingMode"]=J(planned?"plan":"direct")}),
+                .. planned?Array.Empty<FlowNodeDefinition>():new[]{Node(registry,"condition","conditions-match",new(){["rules"]=ConditionTree.Serialize(new ConditionGroup("all",[
+                    new ConditionRule("video.codec","eq",J("hevc")),new ConditionRule("video.codec","eq",J("h264"),Scope:"source")]))})},
                 Node(registry,"relay","nodes-handoff",new(){["mode"]=J("node"),["targetNodeId"]=J(b)}),
                 .. planned?new[]{Node(registry,"execute","base-execute-processing")}:Array.Empty<FlowNodeDefinition>(),
                 Node(registry,"end","base-complete-flow",new(){["result"]=J("success")})]);
+            if(!planned) flow=flow with { Connections=flow.Connections.Select(edge=>edge.SourceNodeId=="condition"?edge with { SourceOutputId="yes" }:edge).ToArray() };
             var(id,lease,context)=await EnqueueAsync(flow,await File.ReadAllBytesAsync(source));
             using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(40));
             using(var client=Client(a)) await Runner("media-a",out _).RunAsync(lease,client,deadline.Token);

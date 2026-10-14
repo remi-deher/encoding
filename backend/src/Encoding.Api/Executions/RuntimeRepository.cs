@@ -197,7 +197,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
                 sourceSha=r.IsDBNull(0)?null:r.GetString(0); expires=r.GetFieldValue<DateTimeOffset>(1);
                 if(!r.IsDBNull(2)) checkpoint=JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(2),Json);
             }
-            await tx.CommitAsync(ct); return new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings);
+            await tx.CommitAsync(ct); return new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library);
         }
         return null;
     }
@@ -252,7 +252,7 @@ public sealed class RuntimeRepository(NpgsqlDataSource dataSource,RuntimeEligibi
           SELECT invocation_id,checkpoint::text FROM execution_steps WHERE execution_id=@id AND node_id=@node
           """,c,tx);
         start.Parameters.AddWithValue("id",id); start.Parameters.AddWithValue("node",request.NodeId); start.Parameters.AddWithValue("invocation",Guid.NewGuid());
-        start.Parameters.AddWithValue("idempotent",node.Component.PluginId=="nodes" || node.Component.PluginId=="base" && node.Component.ComponentId!="base-script");
+        start.Parameters.AddWithValue("idempotent",node.Component.PluginId is "nodes" or "conditions" || node.Component.PluginId=="base" && node.Component.ComponentId!="base-script");
         await using var r=await start.ExecuteReaderAsync(ct); await r.ReadAsync(ct);
         var result=new StartedRuntimeStep(r.GetGuid(0),r.IsDBNull(1)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(1),Json));
         await r.DisposeAsync(); await tx.CommitAsync(ct); return result;

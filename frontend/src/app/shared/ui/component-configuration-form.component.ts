@@ -7,6 +7,8 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { ConditionTreeEditorComponent } from './condition-tree-editor.component';
+import { ConditionGroup } from '../models/condition-tree';
 import {
   FlowComponentConfiguration,
   FlowComponentConfigurationField,
@@ -27,6 +29,7 @@ type ConfigurationFormGroup = FormGroup<
     MatInputModule,
     MatSelectModule,
     ReactiveFormsModule,
+    ConditionTreeEditorComponent,
   ],
   template: `
     <form class="configuration-form" [formGroup]="form" (ngSubmit)="save()">
@@ -41,6 +44,20 @@ type ConfigurationFormGroup = FormGroup<
         <div class="configuration-fields">
           @for (field of fields; track field.id) {
             @switch (field.type) {
+              @case ('condition-tree') {
+                <section class="condition-field" [attr.aria-label]="field.label">
+                  <h3>{{ field.label }}</h3>
+                  @if (field.description) {
+                    <p>{{ field.description }}</p>
+                  }
+                  <app-condition-tree-editor
+                    [value]="conditionValue(field.id)"
+                    [fields]="field.conditionFields"
+                    [presets]="field.conditionPresets ?? []"
+                    (valueChange)="setConditionValue(field.id, $event)"
+                  />
+                </section>
+              }
               @case ('boolean') {
                 <div class="boolean-field">
                   <mat-checkbox [formControlName]="field.id">{{ field.label }}</mat-checkbox>
@@ -276,6 +293,17 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   protected testConnection(): void {
     if (this.form.invalid || this.connectionTestBusy()) return;
     this.connectionTestRequested.emit(this.form.getRawValue());
+  }
+
+  protected conditionValue(fieldId: string): ConditionGroup | undefined {
+    const value = this.form.controls[fieldId]?.value;
+    return value && typeof value === 'object' ? value : undefined;
+  }
+  protected setConditionValue(fieldId: string, value: ConditionGroup): void {
+    const control = this.form.controls[fieldId];
+    control.setValue(value);
+    control.markAsDirty();
+    control.markAsTouched();
   }
 
   protected setSecretCleared(fieldId: string, cleared: boolean): void {

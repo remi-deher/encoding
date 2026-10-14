@@ -13,6 +13,7 @@ import {
 } from '../models/flow-component';
 import { flowConfigurationValue } from '../models/flow-configuration';
 import { flowFieldValidator } from './flow-configuration-controls';
+import { conditionTreeSummary } from '../models/condition-tree';
 
 @Component({
   selector: 'app-flow-inline-parameters',
@@ -73,6 +74,11 @@ export class FlowInlineParameters implements OnChanges, OnDestroy {
     ]
       .filter((value) => !flowConfigurationFieldError(field, value))
       .sort((a, b) => a - b);
+  }
+  protected conditionSummary(
+    field: Extract<FlowComponentConfigurationField, { type: 'condition-tree' }>,
+  ): string {
+    return conditionTreeSummary(this.form.controls[field.id]?.value, field.conditionFields);
   }
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();

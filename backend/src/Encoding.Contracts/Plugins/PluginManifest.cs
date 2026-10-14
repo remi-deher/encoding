@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Encoding.Contracts.Flows.Conditions;
 
 namespace Encoding.Contracts.Plugins;
 
@@ -53,7 +54,9 @@ public sealed record FlowConfigurationField(
     decimal? Max = null,
     decimal? Step = null,
     IReadOnlyList<decimal>? Suggestions = null,
-    IReadOnlyList<FlowSelectOption>? Options = null);
+    IReadOnlyList<FlowSelectOption>? Options = null,
+    IReadOnlyList<ConditionFieldDefinition>? ConditionFields = null,
+    IReadOnlyList<ConditionPreset>? ConditionPresets = null);
 
 public sealed record FlowSelectOption(
     string Value,

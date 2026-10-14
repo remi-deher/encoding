@@ -63,6 +63,18 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     state: 'Actif par défaut',
   },
   {
+    id: 'conditions',
+    name: 'Conditions',
+    family: 'base',
+    familyLabel: 'Noyau',
+    category: 'Aiguillage des flows',
+    version: '1.0.0',
+    components: 'Règles et groupes ET / OU imbriqués',
+    runtime: 'Évaluation native sur les workers',
+    configuration: 'Conditions définies sur chaque bloc',
+    state: 'Actif par défaut',
+  },
+  {
     id: 'plex',
     name: 'Plex',
     family: 'media',

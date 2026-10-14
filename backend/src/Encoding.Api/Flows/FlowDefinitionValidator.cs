@@ -2,6 +2,7 @@ using System.Text.Json;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Plugins;
 using Encoding.Contracts.Executions;
+using Encoding.Contracts.Flows.Conditions;
 
 namespace Encoding.Api.Flows;
 
@@ -9,7 +10,7 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
 {
     public FlowValidationResult ValidateDraft(FlowDefinition flow)
     {
-        var result=Validate(flow);
+        var result=Validate(flow,true);
         var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown","node.constraint.conflict"};
         var issues=result.Issues.Where(issue=>!allowed.Contains(issue.Code)
             && !(issue.Code=="field.invalid" && (issue.Message=="Ce paramètre est obligatoire."
@@ -41,7 +42,9 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
         }
     }
 
-    public FlowValidationResult Validate(FlowDefinition flow)
+    public FlowValidationResult Validate(FlowDefinition flow)=>Validate(flow,false);
+
+    private FlowValidationResult Validate(FlowDefinition flow,bool allowIncompleteConditions)
     {
         var issues = new List<FlowValidationIssue>();
         void Issue(string code, string path, string message) => issues.Add(new(code, path, message));
@@ -78,7 +81,7 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             foreach (var field in component.ConfigurationSchema.Fields)
             {
                 node.Configuration.TryGetValue(field.Id, out var value);
-                var message = ValidateField(field, value, flow.MediaType);
+                var message = ValidateField(field, value, flow.MediaType,allowIncompleteConditions);
                 if (message is not null) Issue("field.invalid", path + "/configuration/" + Pointer(field.Id), message);
             }
             if (node.Component!.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node"
@@ -152,13 +155,14 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
 
     private static string Pointer(string key) => key.Replace("~", "~0").Replace("/", "~1");
 
-    private static string? ValidateField(FlowConfigurationField field, JsonElement value, string mediaType)
+    private static string? ValidateField(FlowConfigurationField field, JsonElement value, string mediaType,bool allowIncompleteConditions)
     {
         var empty = value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined
             || value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(value.GetString());
         if (empty) return field.Required ? "Ce paramètre est obligatoire." : null;
         switch (field.Type)
         {
+            case "condition-tree": return ConditionTree.Validate(value,mediaType,allowIncompleteConditions);
             case "text":
                 if(field.Id=="sourceFile" && value.ValueKind==JsonValueKind.String) {
                     try { Encoding.Contracts.Libraries.MediaPathRules.Normalize(value.GetString()); }

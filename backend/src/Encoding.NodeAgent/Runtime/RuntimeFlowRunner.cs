@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
+using Encoding.Contracts.Flows.Conditions;
 using Encoding.NodeAgent.Runtime.Media;
 
 namespace Encoding.NodeAgent.Runtime;
@@ -142,6 +143,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(result.TryGetProperty("variables",out var changes)) foreach(var change in changes.EnumerateObject()) variables[change.Name]=change.Value.Clone();
                         if(result.TryGetProperty("candidate",out var candidate)) { await EnsureScanAsync(); await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate.GetString()!),[]),node.Id); }
                     }
+                    else if(node.Component.PluginId=="conditions" && node.Component.ComponentId=="conditions-match")
+                    {
+                        var tree=ConditionTree.Parse(c["rules"],lease.Flow.MediaType);
+                        if(ConditionTree.RequiresMetadata(tree) && (context.CurrentMetadata is null || context.BeforeMetadata is null)) await EnsureScanAsync();
+                        output=ConditionTree.Evaluate(tree,new(context with { Variables=variables },lease.SourceNodeId,client.NodeId,
+                            lease.LibraryId,lease.MediaPath,sourceSha))?"yes":"no";
+                    }
                     else if(RuntimeHandoffPolicy.IsHandoff(node))
                     {
                         handoff=RuntimeHandoffPolicy.Resolve(node,lease.PluginConfigurations?.GetValueOrDefault("nodes"));
@@ -208,10 +216,15 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         await EnsureScanAsync(); await ApplyOutcomeAsync(new(current,[]),node.Id);
                     }
                 }
+                catch(ConditionEvaluationException exception)
+                {
+                    logger.LogInformation("Condition {Node} impossible à évaluer : {Detail}",node.Id,exception.Message);
+                    output="error";
+                }
                 catch(MediaToolException exception)
                 {
                     logger.LogInformation("Échec de l’outil pendant l’étape {Node}: {Detail}",node.Id,exception.Message);
-                    if(node.Component.PluginId!="base") throw;
+                    if(node.Component.PluginId is not ("base" or "conditions")) throw;
                     output="error";
                     await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
                 }

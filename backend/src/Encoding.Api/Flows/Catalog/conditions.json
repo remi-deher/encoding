@@ -1,0 +1,33 @@
+{
+  "contractVersion": 1,
+  "id": "conditions",
+  "version": "1.0.0",
+  "name": "Conditions",
+  "supportedHostContractVersions": [1],
+  "components": [
+    {
+      "id": "conditions-match",
+      "version": "1.0.0",
+      "name": "Évaluer des conditions",
+      "description": "Combine des règles dans des groupes ET / OU imbriqués. Les préréglages restent entièrement modifiables. Un scan est demandé uniquement pour les critères média.",
+      "kind": "condition",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": ["video", "image", "music", "subtitles"],
+      "outputs": [
+        { "id": "yes", "label": "Oui", "description": "Les conditions sont satisfaites." },
+        { "id": "no", "label": "Non", "description": "Les conditions ne sont pas satisfaites." },
+        { "id": "error", "label": "Erreur", "description": "Une donnée nécessaire est absente ou ne permet pas la comparaison." }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          { "id": "rules", "type": "condition-tree", "label": "Conditions", "required": true, "inline": true,
+            "description": "Les comparaisons textuelles ignorent la casse. Les langues utilisent les codes du média, par exemple fra. Pour les données facultatives, utilisez d'abord est renseigné / est absent." }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    }
+  ]
+}
