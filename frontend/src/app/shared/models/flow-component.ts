@@ -180,12 +180,7 @@ export function getFlowConfigurationSchema(
 }
 
 export type FlowComponentConfigurationValue =
-  | string
-  | number
-  | boolean
-  | null
-  | ConditionGroup
-  | EncodingProfileSnapshot;
+  string | number | boolean | null | ConditionGroup | EncodingProfileSnapshot;
 export type FlowComponentConfiguration = Readonly<Record<string, FlowComponentConfigurationValue>>;
 
 export function createDefaultFlowComponentConfiguration(

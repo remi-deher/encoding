@@ -1183,18 +1183,25 @@ export class FlowEditorPageComponent {
     if (this.nodes().find((node) => node.id === nodeId)?.component.kind === 'input') return;
     const incoming = this.connections().filter((edge) => edge.targetNodeId === nodeId);
     const outgoing = this.connections().filter((edge) => edge.sourceNodeId === nodeId);
-    const restoredPackOutputs = packOwner && outgoing.length === 1 && !packOwner.nodeIds.includes(outgoing[0].targetNodeId)
-      ? incoming.flatMap((edge) => {
-          const source = this.nodes().find((candidate) => candidate.id === edge.sourceNodeId);
-          const output = source?.component.outputs.find((candidate) => candidate.id === edge.sourceOutputId);
-          return source && output ? [{
-            id: `${source.id}:${output.id}`,
-            label: output.label,
-            sourceNodeId: source.id,
-            sourceOutputId: output.id,
-          }] : [];
-        })
-      : [];
+    const restoredPackOutputs =
+      packOwner && outgoing.length === 1 && !packOwner.nodeIds.includes(outgoing[0].targetNodeId)
+        ? incoming.flatMap((edge) => {
+            const source = this.nodes().find((candidate) => candidate.id === edge.sourceNodeId);
+            const output = source?.component.outputs.find(
+              (candidate) => candidate.id === edge.sourceOutputId,
+            );
+            return source && output
+              ? [
+                  {
+                    id: `${source.id}:${output.id}`,
+                    label: output.label,
+                    sourceNodeId: source.id,
+                    sourceOutputId: output.id,
+                  },
+                ]
+              : [];
+          })
+        : [];
     let remaining = this.connections().filter(
       (edge) => edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId,
     );
@@ -1234,23 +1241,49 @@ export class FlowEditorPageComponent {
     const connections = this.connections().filter((connection) => connection.id !== connectionId);
     if (connections.length !== this.connections().length) {
       this.setGraph([...this.nodes()], connections);
-      const owner = removed && this.componentPacks().find((pack) =>
-        pack.nodeIds.includes(removed.sourceNodeId) && pack.nodeIds.includes(removed.targetNodeId),
-      );
+      const owner =
+        removed &&
+        this.componentPacks().find(
+          (pack) =>
+            pack.nodeIds.includes(removed.sourceNodeId) &&
+            pack.nodeIds.includes(removed.targetNodeId),
+        );
       const source = removed && this.nodes().find((node) => node.id === removed.sourceNodeId);
-      const output = source?.component.outputs.find((candidate) => candidate.id === removed?.sourceOutputId);
-      if (owner && removed && source && output && !connections.some((edge) =>
-        edge.sourceNodeId === removed.sourceNodeId && edge.sourceOutputId === removed.sourceOutputId,
-      )) {
-        this.componentPacks.update((packs) => packs.map((pack) => pack.id === owner.id &&
-          !pack.outputs.some((port) => port.sourceNodeId === source.id && port.sourceOutputId === output.id)
-          ? { ...pack, outputs: [...pack.outputs, {
-              id: `${source.id}:${output.id}`,
-              label: output.label,
-              sourceNodeId: source.id,
-              sourceOutputId: output.id,
-            }] }
-          : pack));
+      const output = source?.component.outputs.find(
+        (candidate) => candidate.id === removed?.sourceOutputId,
+      );
+      if (
+        owner &&
+        removed &&
+        source &&
+        output &&
+        !connections.some(
+          (edge) =>
+            edge.sourceNodeId === removed.sourceNodeId &&
+            edge.sourceOutputId === removed.sourceOutputId,
+        )
+      ) {
+        this.componentPacks.update((packs) =>
+          packs.map((pack) =>
+            pack.id === owner.id &&
+            !pack.outputs.some(
+              (port) => port.sourceNodeId === source.id && port.sourceOutputId === output.id,
+            )
+              ? {
+                  ...pack,
+                  outputs: [
+                    ...pack.outputs,
+                    {
+                      id: `${source.id}:${output.id}`,
+                      label: output.label,
+                      sourceNodeId: source.id,
+                      sourceOutputId: output.id,
+                    },
+                  ],
+                }
+              : pack,
+          ),
+        );
       }
     }
   }
