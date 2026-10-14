@@ -178,6 +178,19 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
           [tabbed]="true"
           tabsLabel="Sections de l’exécution"
         />
+        @if (artifactRows().length || artifactFeedback()) {
+          <h3>Fichiers produits</h3>
+          @if (artifactFeedback()) {
+            <p role="status">{{ artifactFeedback() }}</p>
+          }
+          <app-data-table
+            [columns]="artifactColumns"
+            [rows]="artifactRows()"
+            [rowActions]="artifactActions"
+            (rowAction)="artifactDownload.emit($event.row)"
+            emptyMessage="Aucun fichier produit."
+          />
+        }
         <h3>Chronologie</h3>
         @if (eventFeedback()) {
           <p role="status">{{ eventFeedback() }}</p>
@@ -298,6 +311,16 @@ export class ExecutionMonitorTemplateComponent {
   readonly historyColumns = input.required<readonly DataTableColumn[]>();
   readonly historyRows = input.required<readonly DataTableRow[]>();
   readonly feedback = input('');
+  readonly artifactRows = input<readonly DataTableRow[]>([]);
+  readonly artifactFeedback = input('');
+  readonly artifactDownload = output<DataTableRow>();
+  protected readonly artifactColumns: readonly DataTableColumn[] = [
+    { key: 'name', label: 'Fichier' },
+    { key: 'size', label: 'Taille' },
+  ];
+  protected readonly artifactActions: readonly DataTableRowAction[] = [
+    { id: 'download', label: 'T�l�charger' },
+  ];
   readonly note = input('');
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
   readonly viewChange = output<ExecutionMonitorView>();
@@ -345,6 +368,9 @@ export class ExecutionMonitorTemplateComponent {
           { section: 'Exécution', label: 'Identifiant', value: execution['id'] ?? '—' },
           { section: 'Exécution', label: 'État', value: execution['state'] ?? '—' },
           { section: 'Exécution', label: 'Progression', value: execution['progress'] ?? '—' },
+          { section: 'Média', label: 'Taille avant', value: execution['beforeSize'] ?? '—' },
+          { section: 'Média', label: 'Taille après', value: execution['afterSize'] ?? '—' },
+          { section: 'Média', label: 'Résultat publié', value: execution['publishedPath'] ?? '—' },
           { section: 'Exécution', label: 'Étape ou résultat', value: execution['detail'] ?? '—' },
           {
             section: 'Source et traitement',

@@ -2,8 +2,8 @@
   [title]="title()"
   [detailOpen]="selectedFlow() !== null"
   [actionOpen]="actionOpen()"
-  [actionTitle]="flowCreationForm.title"
-  [actionDescription]="flowCreationForm.description"
+  [actionTitle]="actionForm().title"
+  [actionDescription]="actionForm().description"
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
@@ -30,6 +30,12 @@
   <app-data-table
     catalogue-table
     [columns]="columns"
+    [listActions]="listActions"
+    [rowActions]="rowActions"
+    [selectionActions]="selectionActions"
+    (listAction)="onListAction($event)"
+    (rowAction)="onRowAction($event)"
+    (selectionAction)="onSelectionAction($event)"
     [rows]="filteredFlows()"
     [selectable]="true"
     [rowOpenable]="true"
@@ -54,8 +60,9 @@
 
   <ng-template #actionContent>
     <app-record-form
-      [data]="flowCreationForm"
-      (submitted)="startFlow($event)"
+      [data]="actionForm()"
+      [busy]="enqueueing()"
+      (submitted)="submitAction($event)"
       (cancelled)="closeFlowCreation()"
     />
   </ng-template>

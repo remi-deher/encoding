@@ -44,7 +44,7 @@ WebDAV est ici un canal de transfert de fichiers entre nœuds. Les outils d’en
 
 ## Tâches et intégrité des fichiers
 
-- Les tâches doivent être durables, observables et récupérables après la perte d’un nœud. Le registre des exécutions et leur journal sont stockés dans PostgreSQL ; voir [l’architecture 0009](docs/architecture/0009-execution-tracking.md). Le registre ne remplace pas les futurs baux et le moteur.
+- Les tâches doivent être durables, observables et récupérables après la perte d’un nœud. Le registre des exécutions et leur journal sont stockés dans PostgreSQL ; voir [l’architecture 0009](docs/architecture/0009-execution-tracking.md). Le runtime utilise ce registre avec des baux et réservations transactionnels ; voir l’architecture 0015.
 - L’attribution doit utiliser un mécanisme temporaire récupérable (par exemple un bail avec expiration) afin qu’une tâche abandonnée puisse être reprise.
 - Une seule tâche à la fois peut modifier un média donné.
 - Une sortie est d’abord écrite dans un emplacement temporaire, puis validée avant de remplacer ou publier le fichier de bibliothèque.
@@ -107,8 +107,15 @@ Les règles de [TEST_RULES.md](TEST_RULES.md) sont obligatoires. Le lint doit ê
 
 ## Préparation du moteur de flow
 
-Les premiers contrats de définition, de catalogue plugin et d’invocation sont préparés dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins. Le runtime n’est pas encore activé ; les endpoints de catalogue, validation et stockage sont décrits dans 0013 et 0014. Consulter [0012 — Préparation du moteur](docs/architecture/0012-flow-engine-foundation.md) avant leur implémentation ; réutiliser le registre d’exécutions existant et préserver les garanties de bail, d’accès et de validation des artefacts.
+Les premiers contrats de définition, de catalogue plugin et d’invocation sont préparés dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins. Le runtime worker est activé (architecture 0015) ; les endpoints de catalogue, validation et stockage sont décrits dans 0013 et 0014. Consulter [0012 — Préparation du moteur](docs/architecture/0012-flow-engine-foundation.md) avant leur implémentation ; réutiliser le registre d’exécutions existant et préserver les garanties de bail, d’accès et de validation des artefacts.
 
-Le registre déclaratif Base et la validation backend sont implémentés : consulter [0013 — Catalogue et validation](docs/architecture/0013-flow-catalog-and-validation.md). La création d’une exécution utilise cette validation. Le runtime worker et les plugins tiers restent à implémenter ; disponibilité d’un descripteur et capacité d’exécution sont distinctes.
+Le registre déclaratif Base et la validation backend sont implémentés : consulter [0013 — Catalogue et validation](docs/architecture/0013-flow-catalog-and-validation.md). La création d’une exécution utilise cette validation. Le runtime worker exécute Base et les plugins tiers configurés en processus séparés ; disponibilité d’un descripteur et capacité d’exécution sont distinctes.
 
-Les versions validées des flows sont enregistrées dans PostgreSQL avec contrôle de concurrence. Une file transactionnelle écrit et vérifie leurs sauvegardes JSON dans un dossier persistant séparé. Le catalogue et l’éditeur utilisent ce stockage ; voir [0014 — Stockage et sauvegardes](docs/architecture/0014-flow-version-storage-and-backups.md). Les brouillons incomplets et la restauration guidée restent à implémenter.
+Les versions validées des flows sont enregistrées dans PostgreSQL avec contrôle de concurrence. Une file transactionnelle écrit et vérifie leurs sauvegardes JSON dans un dossier persistant séparé. Le catalogue et l’éditeur utilisent ce stockage ; voir [0014 — Stockage et sauvegardes](docs/architecture/0014-flow-version-storage-and-backups.md). Les brouillons incomplets, leurs sauvegardes immuables et l’import/export JSON/ZIP sont implémentés ; la restauration utilise les actions du tableau.
+
+
+## Runtime des flows
+
+Consulter [0015 — Runtime et archives](docs/architecture/0015-flow-runtime-and-portable-archives.md). Les workers utilisent des baux de 60 secondes avec époque, réservations uniques par média et checkpoints transactionnels. Une invocation externe interrompue avant checkpoint exige une relance explicite. Les scripts et plugins nécessitent Linux Landlock et travaillent dans l’espace temporaire de l’exécution ; aucun repli sans restriction des fichiers n’est autorisé.
+
+La publication conserve la source et crée un résultat distinct dans .encoding-results/<executionId>/. Ne pas activer un remplacement automatique sans politique explicite et validation. Les volumes d’artefacts et sauvegardes doivent être partagés durablement par les serveurs d’un cluster multi-hôte. Le nettoyage automatique des artefacts n’est pas activé.

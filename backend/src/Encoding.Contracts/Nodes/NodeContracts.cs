@@ -16,7 +16,8 @@ public sealed record NodeToolCapability(
     string ToolId,
     string Version,
     IReadOnlyList<string> MediaTypes,
-    IReadOnlyList<string> AccelerationTypes);
+    IReadOnlyList<string> AccelerationTypes,
+    IReadOnlyList<string>? Encoders = null);
 
 public enum NodePresenceStatus
 {

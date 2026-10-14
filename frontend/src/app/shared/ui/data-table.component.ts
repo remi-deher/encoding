@@ -1,10 +1,22 @@
 import { SelectionModel } from '@angular/cdk/collections';
-import { Component, computed, effect, inject, input, output, signal, ViewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  ViewChild,
+} from '@angular/core';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import { ConfirmationDialogComponent, ConfirmationDialogData } from './confirmation-dialog.component';
+import {
+  ConfirmationDialogComponent,
+  ConfirmationDialogData,
+} from './confirmation-dialog.component';
 
 export type DataTableValue = string | number | boolean;
 export type DataTableRow = Readonly<Record<string, DataTableValue>>;
@@ -12,7 +24,10 @@ export type DataTableRow = Readonly<Record<string, DataTableValue>>;
 export interface DataTableToggle {
   readonly ariaLabel: (row: DataTableRow, checked: boolean) => string;
   readonly disabledWhen?: (row: DataTableRow) => boolean;
-  readonly confirmation?: (row: DataTableRow, checked: boolean) => ConfirmationDialogData | undefined;
+  readonly confirmation?: (
+    row: DataTableRow,
+    checked: boolean,
+  ) => ConfirmationDialogData | undefined;
 }
 
 export interface DataTableColumn {
@@ -53,14 +68,58 @@ export interface DataTableSelectionActionEvent {
   readonly actionId: string;
   readonly rows: readonly DataTableRow[];
 }
+export interface DataTableListAction {
+  readonly id: string;
+  readonly label: string;
+  readonly fileAccept?: string;
+}
+export interface DataTableListActionEvent {
+  readonly actionId: string;
+  readonly file?: File;
+}
 
 @Component({
   selector: 'app-data-table',
   imports: [MatCheckboxModule, MatDialogModule, MatSortModule, MatTableModule],
   template: `
     <div class="table-scroll-region">
+      @if (listActions().length) {
+        <div class="selection-toolbar" role="toolbar" aria-label="Actions du tableau">
+          @for (action of listActions(); track action.id) {
+            @if (action.fileAccept) {
+              <input
+                #filePicker
+                type="file"
+                hidden
+                [accept]="action.fileAccept"
+                (change)="pickFile(action.id, $event)"
+              />
+              <button class="selection-action" type="button" (click)="filePicker.click()">
+                {{ action.label }}
+              </button>
+            } @else {
+              <button
+                class="selection-action"
+                type="button"
+                (click)="listAction.emit({ actionId: action.id })"
+              >
+                {{ action.label }}
+              </button>
+            }
+          }
+        </div>
+      }
       @if (selectable()) {
-        <button class="mobile-select-all" type="button" [attr.aria-label]="isAllSelected() ? 'Désélectionner les lignes affichées' : 'Sélectionner toutes les lignes affichées'" (click)="toggleAll()">
+        <button
+          class="mobile-select-all"
+          type="button"
+          [attr.aria-label]="
+            isAllSelected()
+              ? 'Désélectionner les lignes affichées'
+              : 'Sélectionner toutes les lignes affichées'
+          "
+          (click)="toggleAll()"
+        >
           {{ isAllSelected() ? 'Désélectionner les lignes affichées' : 'Tout sélectionner' }}
         </button>
       }
@@ -68,7 +127,8 @@ export interface DataTableSelectionActionEvent {
       @if (selectable() && selectedRows().length) {
         <div class="selection-toolbar" role="toolbar" aria-label="Actions sur la sélection">
           <span class="selection-count" aria-live="polite">
-            {{ selectedRows().length }} {{ selectedRows().length === 1 ? 'élément sélectionné' : 'éléments sélectionnés' }}
+            {{ selectedRows().length }}
+            {{ selectedRows().length === 1 ? 'élément sélectionné' : 'éléments sélectionnés' }}
           </span>
           <div class="selection-actions">
             @if (rowOpenable() && selectedRows().length === 1) {
@@ -78,12 +138,18 @@ export interface DataTableSelectionActionEvent {
             }
             @for (action of selectionActions(); track action.id) {
               @if (!action.visibleWhen || action.visibleWhen(selectedRows())) {
-                <button class="selection-action" type="button" (click)="requestSelectionAction(action)">
+                <button
+                  class="selection-action"
+                  type="button"
+                  (click)="requestSelectionAction(action)"
+                >
                   {{ action.label }}
                 </button>
               }
             }
-            <button class="selection-clear" type="button" (click)="clearSelection()">Tout désélectionner</button>
+            <button class="selection-clear" type="button" (click)="clearSelection()">
+              Tout désélectionner
+            </button>
           </div>
         </div>
       }
@@ -132,8 +198,12 @@ export interface DataTableSelectionActionEvent {
                     [attr.aria-label]="column.toggle.ariaLabel(row, !!row[column.key])"
                     [disabled]="column.toggle.disabledWhen?.(row) ?? false"
                     (click)="requestToggle(column, row)"
-                  ><span></span></button>
-                  <span class="row-toggle-status">{{ row[column.key] ? 'Activée' : 'Désactivée' }}</span>
+                  >
+                    <span></span>
+                  </button>
+                  <span class="row-toggle-status">{{
+                    row[column.key] ? 'Activée' : 'Désactivée'
+                  }}</span>
                 </div>
               } @else if (rowOpenable() && isFirst) {
                 <button
@@ -155,9 +225,20 @@ export interface DataTableSelectionActionEvent {
           @for (action of rowActions(); track action.id) {
             <ng-container [matColumnDef]="'row-action-' + action.id">
               <th mat-header-cell *matHeaderCellDef>{{ action.label }}</th>
-              <td mat-cell *matCellDef="let row" class="row-actions-cell" [attr.data-label]="action.label">
+              <td
+                mat-cell
+                *matCellDef="let row"
+                class="row-actions-cell"
+                [attr.data-label]="action.label"
+              >
                 @if (!action.visibleWhen || action.visibleWhen(row)) {
-                  <button class="row-action" [class.row-action_danger]="action.tone === 'danger'" type="button" [attr.aria-label]="action.label + ' ' + rowActionSubject(row)" (click)="requestRowAction(action, row)">
+                  <button
+                    class="row-action"
+                    [class.row-action_danger]="action.tone === 'danger'"
+                    type="button"
+                    [attr.aria-label]="action.label + ' ' + rowActionSubject(row)"
+                    (click)="requestRowAction(action, row)"
+                  >
                     {{ action.label }}
                   </button>
                 }
@@ -188,7 +269,11 @@ export interface DataTableSelectionActionEvent {
         }
 
         <tr mat-header-row *matHeaderRowDef="displayedColumnKeys()"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumnKeys()" [attr.aria-selected]="selectable() ? selection.isSelected(row) : null"></tr>
+        <tr
+          mat-row
+          *matRowDef="let row; columns: displayedColumnKeys()"
+          [attr.aria-selected]="selectable() ? selection.isSelected(row) : null"
+        ></tr>
         <tr class="mat-row empty-row" *matNoDataRow>
           <td class="mat-cell" [attr.colspan]="displayedColumnKeys().length">
             {{ emptyMessage() }}
@@ -208,6 +293,14 @@ export class DataTableComponent {
   readonly rowOpenable = input(false);
   readonly rowOpenLabel = input('Ouvrir');
   readonly rowActions = input<readonly DataTableRowAction[]>([]);
+  readonly listActions = input<readonly DataTableListAction[]>([]);
+  readonly listAction = output<DataTableListActionEvent>();
+  protected pickFile(actionId: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) this.listAction.emit({ actionId, file });
+    input.value = '';
+  }
   readonly separateRowActionColumns = input(false);
   readonly selectionActions = input<readonly DataTableSelectionAction[]>([]);
   readonly selectionChange = output<readonly DataTableRow[]>();
@@ -224,7 +317,9 @@ export class DataTableComponent {
     ...this.columns().map((column) => column.key),
     ...(this.separateRowActionColumns()
       ? this.rowActions().map((action) => `row-action-${action.id}`)
-      : this.rowActions().length > 0 ? ['row-actions'] : []),
+      : this.rowActions().length > 0
+        ? ['row-actions']
+        : []),
   ]);
 
   @ViewChild(MatSort)
@@ -242,7 +337,7 @@ export class DataTableComponent {
     this.dataSource.sortingDataAccessor = (row, property) => {
       const sortValueKey = this.columns().find((column) => column.key === property)?.sortValueKey;
       const value = row[sortValueKey ?? property];
-      return typeof value === 'boolean' ? Number(value) : value ?? '';
+      return typeof value === 'boolean' ? Number(value) : (value ?? '');
     };
   }
 
@@ -368,7 +463,9 @@ export class DataTableComponent {
       const targetIndex = rows.indexOf(row);
       if (anchorIndex >= 0 && targetIndex >= 0) {
         if (!event.ctrlKey && !event.metaKey) this.selection.clear();
-        this.selection.select(...rows.slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1));
+        this.selection.select(
+          ...rows.slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1),
+        );
         this.emitSelectionChange();
         return;
       }
@@ -385,7 +482,11 @@ export class DataTableComponent {
   }
 
   private hasSelectionModifier(event: MouseEvent): boolean {
-    return this.selectable() && this.selectedRows().length > 0 && (event.ctrlKey || event.metaKey || event.shiftKey);
+    return (
+      this.selectable() &&
+      this.selectedRows().length > 0 &&
+      (event.ctrlKey || event.metaKey || event.shiftKey)
+    );
   }
 
   private emitSelectionChange(): void {

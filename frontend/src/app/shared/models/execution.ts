@@ -1,5 +1,5 @@
 export type ExecutionState =
-  'queued' | 'running' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled';
+  'queued' | 'running' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled' | 'deferred';
 export interface ExecutionResponse {
   readonly id: string;
   readonly media: string;
@@ -16,6 +16,15 @@ export interface ExecutionResponse {
   readonly queuedAt: string;
   readonly startedAt: string | null;
   readonly finishedAt: string | null;
+  readonly beforeMetadata?: {
+    readonly format?: { readonly size?: string };
+    readonly streams?: readonly unknown[];
+  } | null;
+  readonly afterMetadata?: {
+    readonly format?: { readonly size?: string };
+    readonly streams?: readonly unknown[];
+  } | null;
+  readonly publishedPath?: string | null;
   readonly updatedAt: string;
 }
 export interface ExecutionEventResponse {
@@ -32,6 +41,7 @@ export interface ExecutionOverviewResponse {
   readonly failedCount: number;
   readonly cancelledCount: number;
   readonly succeededCount: number;
+  readonly deferredCount?: number;
   readonly observedAt: string;
   readonly activity: readonly ExecutionActivityResponse[];
 }
@@ -42,6 +52,7 @@ export const EXECUTION_STATE_LABELS: Record<ExecutionState, string> = {
   succeeded: 'Réussie',
   failed: 'Échec',
   cancelled: 'Annulée',
+  deferred: 'Reportée',
 };
 
 export interface ExecutionActivityResponse {

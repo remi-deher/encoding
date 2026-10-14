@@ -26,6 +26,7 @@ services:
       ConnectionStrings__Cluster: Host=postgres;Port=5432;Database=encoding;Username=encoding;Password=encoding
       NodePresence__OfflineAfterSeconds: 30
       FlowBackups__Directory: /var/lib/encoding/flow-backups
+      Runtime__ArtifactDirectory: /var/lib/encoding/runtime-artifacts
       Cluster__DiscoveryPort: 8080
       Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://api:8080/}
     ports:
@@ -36,6 +37,7 @@ services:
         condition: service_healthy
     volumes:
       - encoding-flow-backups:/var/lib/encoding/flow-backups
+      - encoding-runtime-artifacts:/var/lib/encoding/runtime-artifacts
     restart: unless-stopped
 
   node-agent:
@@ -63,5 +65,6 @@ services:
 
 volumes:
   encoding-flow-backups:
+  encoding-runtime-artifacts:
   encoding-postgres-data:
   encoding-node-data:

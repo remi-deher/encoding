@@ -21,11 +21,46 @@ export class FlowValidation {
   versionStatus(id: string, version: number) {
     return this.http.get<FlowVersionResponse>('/api/v1/flows/' + id + '/versions/' + version);
   }
+  enqueue(libraryId: string, mediaPath: string, flowId: string, flowVersion: number) {
+    return firstValueFrom(
+      this.http.post<{ id: string }>('/api/v1/media-executions', {
+        id: crypto.randomUUID(),
+        libraryId,
+        mediaPath,
+        flowId,
+        flowVersion,
+      }),
+    );
+  }
+  export(id: string) {
+    return firstValueFrom(
+      this.http.get('/api/v1/flows/' + id + '/export', { responseType: 'blob' }),
+    );
+  }
+  exportMany(ids: readonly string[]) {
+    return firstValueFrom(this.http.post('/api/v1/flows/export', ids, { responseType: 'blob' }));
+  }
+  import(file: File) {
+    return firstValueFrom(
+      this.http.post<{ imported: number }>('/api/v1/flows/import', file, {
+        headers: {
+          'Content-Type': file.name.toLowerCase().endsWith('.zip')
+            ? 'application/zip'
+            : 'application/json',
+        },
+      }),
+    );
+  }
+  versions(id: string) {
+    return firstValueFrom(
+      this.http.get<readonly FlowDocument[]>('/api/v1/flows/' + id + '/versions'),
+    );
+  }
   list() {
     return this.http.get<readonly FlowSummary[]>('/api/v1/flows');
   }
   get(id: string) {
-    return firstValueFrom(this.http.get<FlowVersionResponse>('/api/v1/flows/' + id));
+    return firstValueFrom(this.http.get<FlowVersionResponse>('/api/v1/flows/' + id + '/edit'));
   }
   catalog() {
     return firstValueFrom(
@@ -35,6 +70,13 @@ export class FlowValidation {
             ...plugin,
             components: plugin.components.map((component) => ({
               ...component,
+              reference: {
+                pluginId: plugin.id,
+                pluginVersion: plugin.version,
+                componentId: component.id,
+                componentVersion: component.version,
+                configurationSchemaVersion: component.configurationSchema?.version ?? 1,
+              },
               configurationSchema: component.configurationSchema
                 ? {
                     ...component.configurationSchema,
@@ -82,11 +124,20 @@ export class FlowValidation {
     };
   }
 
-  save(definition: FlowDocument, expectedVersion: number) {
+  saveDraft(definition: FlowDocument, expectedRevision: number) {
+    return firstValueFrom(
+      this.http.put<FlowVersionResponse>('/api/v1/flows/' + definition.id + '/draft', {
+        definition,
+        expectedRevision,
+      }),
+    );
+  }
+  save(definition: FlowDocument, expectedVersion: number, expectedDraftRevision?: number) {
     return firstValueFrom(
       this.http.put<FlowVersionResponse>('/api/v1/flows/' + definition.id, {
         definition,
         expectedVersion,
+        expectedDraftRevision,
       }),
     );
   }

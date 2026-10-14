@@ -24,7 +24,16 @@
         [disabled]="saving() || loadState() !== 'ready'"
         (click)="saveFlow()"
       >
-        {{ saving() ? 'Enregistrement…' : 'Enregistrer une version' }}
+        {{ saving() ? 'Enregistrement…' : 'Publier une version' }}
+      </button>
+      <button
+        page-actions
+        matButton="text"
+        type="button"
+        [disabled]="saving() || loadState() !== 'ready'"
+        (click)="saveFlow(true)"
+      >
+        Enregistrer le brouillon
       </button>
       <a page-actions matButton="text" routerLink="/flows">Annuler</a>
     </app-page-header>

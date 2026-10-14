@@ -9,5 +9,6 @@
   <ItemGroup>
     <PackageReference Include="Haukcode.Mdns" Version="1.0.21" />
     <ProjectReference Include="..\Encoding.Contracts\Encoding.Contracts.csproj" />
+    <ProjectReference Include="..\Encoding.Core\Encoding.Core.csproj" />
   </ItemGroup>
 </Project>

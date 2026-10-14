@@ -1,0 +1,133 @@
+using System.Collections.Concurrent;
+using Encoding.Contracts.Executions;
+using Encoding.NodeAgent.Runtime.Media;
+using Encoding.NodeAgent.Services;
+
+namespace Encoding.NodeAgent.Runtime;
+
+public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdentityStore identities,MediaScanner scanner,ILogger<RuntimeTransferService> logger) : BackgroundService
+{
+    private readonly ConcurrentDictionary<Guid,Task> active=new();
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        try
+        {
+            while(!ct.IsCancellationRequested)
+            {
+                foreach(var pair in active) if(pair.Value.IsCompleted) active.TryRemove(pair.Key,out _);
+                try
+                {
+                    var identity=await identities.GetAsync(ct);
+                    if(identity.IsEnrolled)
+                    {
+                        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+                        using var client=new RuntimeClient(identity);
+                        var transfers=await client.GetAsync<RuntimeTransfer[]>("transfers",timeout.Token);
+                        foreach(var transfer in transfers)
+                        {
+                            if(active.Count>=Math.Max(1,options.MaxConcurrentTasks)||active.ContainsKey(transfer.ExecutionId)) continue;
+                            var task=Task.Run(async()=> { using var transferClient=new RuntimeClient(identity); await TransferAsync(transfer,transferClient,ct); },CancellationToken.None);
+                            active.TryAdd(transfer.ExecutionId,task);
+                        }
+                    }
+                }
+                catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
+                catch(Exception exception) { logger.LogWarning("Canal de transfert momentanément indisponible : {Type}.",exception.GetType().Name); }
+                await Task.Delay(TimeSpan.FromSeconds(2),ct);
+            }
+        }
+        catch(OperationCanceledException) when(ct.IsCancellationRequested) { }
+        finally { await Task.WhenAll(active.Values); }
+    }
+    private async Task TransferAsync(RuntimeTransfer transfer,RuntimeClient client,CancellationToken ct)
+    {
+        using var watch=CancellationTokenSource.CreateLinkedTokenSource(ct); ct=watch.Token;
+        var guard=Task.Run(async()=>
+        {
+            try
+            {
+                while(!watch.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(15),watch.Token);
+                    using var timeout=CancellationTokenSource.CreateLinkedTokenSource(watch.Token); timeout.CancelAfter(TimeSpan.FromSeconds(15));
+                    await client.GetAsync<RuntimeSourceState>($"executions/{transfer.ExecutionId:D}/source?epoch={transfer.Epoch}",timeout.Token);
+                    if((await client.ExecutionAsync(transfer.ExecutionId,timeout.Token)).State!="running") { watch.Cancel(); break; }
+                }
+            }
+            catch(OperationCanceledException) when(watch.IsCancellationRequested) { }
+            catch(Exception) { watch.Cancel(); }
+        },CancellationToken.None);
+        var directory=Path.Combine(options.DataDirectory,"transfers",transfer.ExecutionId.ToString("D")); Directory.CreateDirectory(directory);
+        try
+        {
+            var original=SafeMediaPaths.Resolve(transfer.Root,transfer.MediaPath);
+            using var mediaLock=transfer.CanWrite?SafeMediaPaths.Lock(original):null;
+            if(!transfer.Publish)
+            {
+                async Task UploadAsync(string relative,bool main)
+                {
+                    var path=SafeMediaPaths.Resolve(transfer.Root,relative);
+                    var temporary=Path.Combine(directory,"source-"+Guid.NewGuid().ToString("N")+Path.GetExtension(path));
+                    try
+                    {
+                        await using(var source=File.OpenRead(path))
+                        await using(var copy=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
+                        { await source.CopyToAsync(copy,ct); await copy.FlushAsync(ct); copy.Flush(true); }
+                        var sha=await SafeMediaPaths.DigestAsync(temporary,ct);
+                        if(await SafeMediaPaths.DigestAsync(path,ct)!=sha) throw new IOException("La source a changé pendant sa copie.");
+                        await client.PutAsync(transfer.ExecutionId,transfer.Epoch,temporary,sha,main,ct,main?null:relative);
+                    }
+                    finally { if(File.Exists(temporary)) File.Delete(temporary); }
+                }
+                foreach(var input in transfer.InputPaths??[]) await UploadAsync(input,false);
+                await UploadAsync(transfer.MediaPath,true);
+            }
+            else
+            {
+                if(transfer.ResultSha256 is null || transfer.ResultExtension is null || transfer.SourceSha256 is null) throw new IOException("Résultat de transfert incomplet.");
+                if(await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256) throw new IOException("La source a changé depuis le début du traitement.");
+                var incoming=Path.Combine(directory,"result"+transfer.ResultExtension);
+                await client.DownloadAsync(transfer.ExecutionId,transfer.Epoch,transfer.ResultSha256,incoming,ct);
+                var before=await scanner.ScanAsync(original,ct);
+                await scanner.ValidateAsync(incoming,transfer.MediaType,before,ct,false);
+                var relative=$".encoding-results/{transfer.ExecutionId:D}/result{transfer.ResultExtension}";
+                var target=SafeMediaPaths.Resolve(transfer.Root,relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!); target=SafeMediaPaths.Resolve(transfer.Root,relative);
+                var temporary=target+"."+Guid.NewGuid().ToString("N")+".tmp";
+                try
+                {
+                    if(!File.Exists(target))
+                    {
+                        await using(var source=File.OpenRead(incoming))
+                        await using(var destination=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
+                        { await source.CopyToAsync(destination,ct); await destination.FlushAsync(ct); destination.Flush(true); }
+                        var state=await client.ExecutionAsync(transfer.ExecutionId,ct);
+                        if(state.State!="running") return;
+                        await client.GetAsync<RuntimeSourceState>($"executions/{transfer.ExecutionId:D}/source?epoch={transfer.Epoch}",ct);
+                        if(await SafeMediaPaths.DigestAsync(original,ct)!=transfer.SourceSha256) throw new IOException("La source a changé avant publication.");
+                        Encoding.Core.AtomicFilePublication.Publish(temporary,target);
+                    }
+                    if(await SafeMediaPaths.DigestAsync(target,ct)!=transfer.ResultSha256) throw new IOException("La sortie existante est différente du résultat validé.");
+                    Encoding.Core.AtomicFilePublication.Confirm(target);
+                    var status=await client.ExecutionAsync(transfer.ExecutionId,ct);
+                    await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/publication",new ConfirmRuntimePublication(transfer.Epoch,Guid.NewGuid(),status.Revision,relative,transfer.ResultSha256),ct);
+                }
+                finally { if(File.Exists(temporary)) File.Delete(temporary); }
+            }
+        }
+        catch(SafeMediaPaths.MediaLockBusyException) { }
+        catch(OperationCanceledException) when(ct.IsCancellationRequested) { }
+        catch(HttpRequestException) { logger.LogWarning("Transfert {ExecutionId} interrompu ; il pourra être retenté.",transfer.ExecutionId); }
+        catch(Exception exception)
+        {
+            logger.LogWarning("Transfert {ExecutionId} refusé : {Type}.",transfer.ExecutionId,exception.GetType().Name);
+            try
+            {
+                var status=await client.ExecutionAsync(transfer.ExecutionId,ct);
+                await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/source-failure",new FinishRuntimeExecution(transfer.Epoch,Guid.NewGuid(),status.Revision,"failed","Lecture ou publication du média impossible ; source conservée.",null,null),ct);
+            }
+            catch(Exception) { }
+        }
+        finally { watch.Cancel(); await guard; }
+    }
+}

@@ -12,10 +12,12 @@ WORKDIR /source
 
 COPY backend/src/Encoding.Api/Encoding.Api.csproj ./src/Encoding.Api/
 COPY backend/src/Encoding.Contracts/Encoding.Contracts.csproj ./src/Encoding.Contracts/
+COPY backend/src/Encoding.Core/Encoding.Core.csproj ./src/Encoding.Core/
 RUN dotnet restore ./src/Encoding.Api/Encoding.Api.csproj
 COPY backend/migrations ./migrations
 COPY backend/src/Encoding.Api ./src/Encoding.Api
 COPY backend/src/Encoding.Contracts ./src/Encoding.Contracts
+COPY backend/src/Encoding.Core ./src/Encoding.Core
 RUN dotnet publish ./src/Encoding.Api/Encoding.Api.csproj --configuration Release --output /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime

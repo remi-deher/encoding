@@ -1,6 +1,14 @@
 import type { MediaType } from './media-type';
 
+export interface FlowComponentReference {
+  readonly pluginId: string;
+  readonly pluginVersion: string;
+  readonly componentId: string;
+  readonly componentVersion: string;
+  readonly configurationSchemaVersion: number;
+}
 export interface FlowComponentDefinition {
+  readonly reference?: FlowComponentReference;
   readonly id: string;
   readonly name: string;
   readonly description: string;
@@ -156,13 +164,7 @@ export interface FlowGraphPosition {
 }
 
 export interface FlowGraphNode {
-  readonly reference?: {
-    readonly pluginId: string;
-    readonly pluginVersion: string;
-    readonly componentId: string;
-    readonly componentVersion: string;
-    readonly configurationSchemaVersion: number;
-  };
+  readonly reference?: FlowComponentReference;
   readonly id: string;
   readonly name?: string;
   readonly component: FlowComponentDefinition;

@@ -4,12 +4,15 @@ WORKDIR /source
 
 COPY src/Encoding.NodeAgent/Encoding.NodeAgent.csproj ./src/Encoding.NodeAgent/
 COPY src/Encoding.Contracts/Encoding.Contracts.csproj ./src/Encoding.Contracts/
+COPY src/Encoding.Core/Encoding.Core.csproj ./src/Encoding.Core/
 RUN dotnet restore ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj
 COPY src/Encoding.NodeAgent ./src/Encoding.NodeAgent
 COPY src/Encoding.Contracts ./src/Encoding.Contracts
+COPY src/Encoding.Core ./src/Encoding.Core
 RUN dotnet publish ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj --configuration Release --output /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg mkvtoolnix mediainfo imagemagick nodejs python3 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
 EXPOSE 8081

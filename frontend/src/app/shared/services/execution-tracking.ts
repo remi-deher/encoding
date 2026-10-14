@@ -43,6 +43,11 @@ export class ExecutionTracking {
       '/api/v1/executions/' + encodeURIComponent(id) + '/events',
     );
   }
+  artifacts(id: string) {
+    return this.http.get<readonly { sha256: string; name: string; bytes: number }[]>(
+      '/api/v1/executions/' + encodeURIComponent(id) + '/artifacts',
+    );
+  }
   cancel(id: string) {
     return this.http.post<void>('/api/v1/executions/' + encodeURIComponent(id) + '/cancel', {});
   }

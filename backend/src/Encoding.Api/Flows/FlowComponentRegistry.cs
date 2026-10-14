@@ -10,7 +10,7 @@ public sealed class FlowComponentRegistry
     private readonly Dictionary<FlowComponentReference, FlowComponentDescriptor> components = [];
     public IReadOnlyList<PluginManifest> Plugins { get; }
 
-    public FlowComponentRegistry()
+    public FlowComponentRegistry(IConfiguration configuration)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Flows", "Catalog", "base.json");
         var manifest = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web))
@@ -18,7 +18,18 @@ public sealed class FlowComponentRegistry
         if (manifest.ContractVersion != 1 || !manifest.SupportedHostContractVersions.Contains(1)
             || manifest.Id != "base" || string.IsNullOrWhiteSpace(manifest.Version))
             throw new InvalidOperationException("Le manifeste Base est incompatible.");
-        foreach (var component in manifest.Components)
+        var manifests=new List<PluginManifest> { manifest };
+        var additional=configuration["FlowPlugins:ManifestDirectory"];
+        if(additional is not null && Directory.Exists(additional)) {
+            foreach(var file in Directory.EnumerateFiles(additional,"*.json").Order()) {
+                var extra=JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(file),new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                    ??throw new InvalidOperationException("Manifeste plugin invalide.");
+                if(extra.Id=="base" || extra.ContractVersion!=1 || !extra.SupportedHostContractVersions.Contains(1)) throw new InvalidOperationException("Manifeste plugin incompatible.");
+                manifests.Add(extra);
+            }
+        }
+        foreach(var installed in manifests)
+        foreach (var component in installed.Components)
         {
             if (string.IsNullOrWhiteSpace(component.Id) || string.IsNullOrWhiteSpace(component.Version)
                 || component.ConfigurationSchema.Version != 1
@@ -26,10 +37,10 @@ public sealed class FlowComponentRegistry
                 || component.ConfigurationSchema.Fields.Select(f => f.Id).Distinct(StringComparer.Ordinal).Count() != component.ConfigurationSchema.Fields.Count
                 || component.ConfigurationSchema.Fields.Any(f => f.Type is not ("text" or "number" or "boolean" or "select")))
                 throw new InvalidOperationException($"Descripteur invalide : {component.Id}.");
-            var reference = new FlowComponentReference(manifest.Id, manifest.Version, component.Id, component.Version, component.ConfigurationSchema.Version);
+            var reference = new FlowComponentReference(installed.Id, installed.Version, component.Id, component.Version, component.ConfigurationSchema.Version);
             if (!components.TryAdd(reference, component)) throw new InvalidOperationException($"Composant dupliqué : {component.Id}.");
         }
-        Plugins = [manifest];
+        Plugins = manifests;
     }
 
     public FlowComponentDescriptor? Resolve(FlowComponentReference reference) => components.GetValueOrDefault(reference);

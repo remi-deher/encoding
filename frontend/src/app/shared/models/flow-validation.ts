@@ -31,11 +31,14 @@ export interface FlowDocument {
   readonly connections: readonly FlowGraphConnection[];
 }
 export interface FlowVersionResponse {
+  readonly draftRevision?: number;
+  readonly publishedVersion?: number;
   readonly definition: FlowDocument;
   readonly backupStatus: string;
   readonly createdAt: string;
 }
 export interface FlowSummary {
+  readonly isDraft: boolean;
   readonly id: string;
   readonly name: string;
   readonly mediaType: MediaType;
@@ -58,6 +61,7 @@ export function flowComponentReference(
   component: FlowComponentDefinition,
   plugins: readonly FlowPluginCatalog[],
 ) {
+  if (component.reference) return component.reference;
   const plugin = plugins.find((plugin) => plugin.id === component.pluginId);
   const descriptor = plugin?.components.find((candidate) => candidate.id === component.id);
   return {

@@ -1,13 +1,27 @@
 using Encoding.NodeAgent;
 using Encoding.NodeAgent.Services;
+using Encoding.NodeAgent.Runtime;
+using Encoding.NodeAgent.Runtime.Media;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+if (args.FirstOrDefault() == "--isolated-process")
+{
+    Environment.Exit(ProcessSandbox.Run(args));
+    return;
+}
 var builder = WebApplication.CreateBuilder(args);
 var options = NodeAgentOptions.FromConfiguration(builder.Configuration);
 builder.WebHost.ConfigureKestrel(server => server.ListenAnyIP(options.LocalApiPort));
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<WorkerIdentityStore>();
+builder.Services.AddSingleton<ProcessToolRunner>();
+builder.Services.AddSingleton<PluginProcessHost>();
+builder.Services.AddSingleton<MediaScanner>();
+builder.Services.AddSingleton<MediaActions>();
+builder.Services.AddSingleton<RuntimeFlowRunner>();
+builder.Services.AddHostedService<RuntimeTransferService>();
+builder.Services.AddHostedService<RuntimeWorkerService>();
 builder.Services.AddSingleton<IToolCapabilityProbe, ToolCapabilityProbe>();
 builder.Services.AddSingleton<WorkerClusterDiscovery>();
 builder.Services.AddSingleton<WorkerEnrollmentService>();

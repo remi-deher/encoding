@@ -61,7 +61,16 @@ import {
       </div>
 
       <div class="component-list" aria-live="polite">
-        @for (component of filteredComponents(); track component.id) {
+        @for (
+          component of filteredComponents();
+          track component.pluginId +
+            ':' +
+            component.id +
+            ':' +
+            (component.reference?.pluginVersion ?? '') +
+            ':' +
+            (component.reference?.componentVersion ?? '')
+        ) {
           <button class="component-option" type="button" (click)="selected.emit(component)">
             <span class="component-option-heading">
               <span class="component-name">{{ component.name }}</span>

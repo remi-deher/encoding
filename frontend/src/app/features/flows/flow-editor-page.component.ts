@@ -1,5 +1,5 @@
 import { toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { timer, switchMap, catchError, of } from 'rxjs';
+import { timer, switchMap, catchError, of, from } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { FlowContinuationSource } from '../../shared/models/flow-sequence';
@@ -40,14 +40,6 @@ const TYPE_OPTIONS = [
   { value: 'subtitles', label: 'Sous-titres' },
   { value: 'general', label: 'Logique' },
 ] as const;
-const PLUGIN_OPTIONS = [
-  { value: 'base', label: 'Base' },
-  { value: 'plex', label: 'Plex' },
-  { value: 'sonarr', label: 'Sonarr' },
-  { value: 'radarr', label: 'Radarr' },
-  { value: 'jellyfin', label: 'Jellyfin' },
-] as const;
-
 interface FlowNodeSeed {
   readonly id: string;
   readonly componentId: string;
@@ -139,9 +131,11 @@ export class FlowEditorPageComponent {
   protected readonly nodes = signal<readonly FlowGraphNode[]>([]);
   protected readonly connections = signal<readonly FlowGraphConnection[]>([]);
   protected readonly flowMediaType = signal<MediaType>('video');
+  private readonly installedComponents = signal<readonly FlowComponentDefinition[]>([]);
   protected readonly components = computed(() =>
-    FLOW_COMPONENT_CATALOG.filter((component) =>
-      isFlowComponentCompatible(component, this.flowMediaType()),
+    this.installedComponents().filter(
+      (component) =>
+        component.kind !== 'input' && isFlowComponentCompatible(component, this.flowMediaType()),
     ),
   );
   protected readonly typeOptions = computed(() =>
@@ -149,11 +143,14 @@ export class FlowEditorPageComponent {
       this.components().some((component) => component.mediaType === option.value),
     ),
   );
-  protected readonly pluginOptions = computed(() =>
-    PLUGIN_OPTIONS.filter((option) =>
-      this.components().some((component) => component.pluginId === option.value),
-    ),
-  );
+  protected readonly pluginOptions = computed(() => [
+    ...new Map(
+      this.components().map((component) => [
+        component.pluginId,
+        { value: component.pluginId, label: component.pluginName },
+      ]),
+    ).values(),
+  ]);
   protected readonly configuringNode = computed(() =>
     this.nodes().find((node) => node.id === this.configuringNodeId()),
   );
@@ -238,19 +235,38 @@ export class FlowEditorPageComponent {
     if (initialNodes.length)
       initialConnections.unshift(this.createConnection(entry.id, 'success', initialNodes[0].id));
     this.setGraph([entry, ...initialNodes], initialConnections);
+    void this.serverValidation
+      .catalog()
+      .then((plugins) => {
+        this.installedComponents.set(
+          plugins.flatMap((plugin) =>
+            plugin.components.map((component) => ({
+              ...component,
+              pluginId: plugin.id,
+              pluginName: plugin.name,
+            })),
+          ),
+        );
+      })
+      .catch(() =>
+        this.notifications.show(
+          'Catalogue des composants indisponible. Aucun nouveau bloc ne peut être ajouté.',
+        ),
+      );
     if (this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)) {
       this.loadState.set('loading');
       void this.loadSavedFlow(this.flowId);
     }
-    toObservable(this.storedVersion)
+    toObservable(computed(() => ({ version: this.storedVersion(), draft: this.draftRevision() })))
       .pipe(
-        switchMap((version) =>
-          version > 0
+        switchMap(({ version, draft }) =>
+          version > 0 || draft !== undefined
             ? timer(0, 5000).pipe(
                 switchMap(() =>
-                  this.serverValidation
-                    .versionStatus(this.validationFlowId, version)
-                    .pipe(catchError(() => of(null))),
+                  (draft !== undefined
+                    ? from(this.serverValidation.get(this.validationFlowId))
+                    : this.serverValidation.versionStatus(this.validationFlowId, version)
+                  ).pipe(catchError(() => of(null))),
                 ),
               )
             : of(null),
@@ -258,7 +274,8 @@ export class FlowEditorPageComponent {
         takeUntilDestroyed(),
       )
       .subscribe((response) => {
-        if (response) this.backupStatus.set(response.backupStatus);
+        if (response && (response.draftRevision ?? undefined) === this.draftRevision())
+          this.backupStatus.set(response.backupStatus);
       });
   }
 
@@ -266,9 +283,7 @@ export class FlowEditorPageComponent {
     readonly sourceNodeId: string;
     readonly output: FlowComponentOutput;
   }): void {
-    const component = FLOW_COMPONENT_CATALOG.find(
-      (component) => component.id === 'base-complete-flow',
-    );
+    const component = this.components().find((component) => component.id === 'base-complete-flow');
     if (!component) return;
     this.componentDestination.set({ kind: 'branch', ...event });
     this.addComponent(component);
@@ -423,6 +438,7 @@ export class FlowEditorPageComponent {
       event.returnValue = '';
     }
   }
+  private readonly draftRevision = signal<number | undefined>(undefined);
   protected readonly storedVersion = signal(0);
   protected readonly saving = signal(false);
   protected readonly loadState = signal<'ready' | 'loading' | 'error'>('ready');
@@ -487,7 +503,8 @@ export class FlowEditorPageComponent {
         ) + 1;
       this.setGraph(nodes, definition.connections);
       this.savedGraph.set(JSON.stringify([nodes, definition.connections]));
-      this.storedVersion.set(definition.version);
+      this.storedVersion.set(saved.publishedVersion ?? definition.version);
+      this.draftRevision.set(saved.draftRevision);
       this.backupStatus.set(saved.backupStatus);
       this.loadState.set('ready');
     } catch {
@@ -496,7 +513,7 @@ export class FlowEditorPageComponent {
     }
   }
 
-  protected async saveFlow(): Promise<void> {
+  protected async saveFlow(draft = false): Promise<void> {
     if (this.saving() || this.loadState() !== 'ready') return;
     this.saving.set(true);
     const nodes = this.nodes(),
@@ -511,9 +528,14 @@ export class FlowEditorPageComponent {
         nodes,
         connections,
       );
-      const saved = await this.serverValidation.save(document, expected);
+      const saved = draft
+        ? await this.serverValidation.saveDraft(document, this.draftRevision() ?? 0)
+        : await this.serverValidation.save(document, expected, this.draftRevision());
       this.savedGraph.set(JSON.stringify([nodes, connections]));
-      this.storedVersion.set(saved.definition.version);
+      this.storedVersion.set(
+        draft ? (saved.publishedVersion ?? expected) : saved.definition.version,
+      );
+      this.draftRevision.set(saved.draftRevision);
       this.backupStatus.set(saved.backupStatus);
       const changed = this.nodes() !== nodes || this.connections() !== connections;
       if (!changed && this.flowId !== saved.definition.id)
@@ -521,11 +543,13 @@ export class FlowEditorPageComponent {
           replaceUrl: true,
         });
       this.notifications.show(
-        'Version ' +
-          saved.definition.version +
-          ' enregistrée en base. Sauvegarde JSON : ' +
-          (saved.backupStatus === 'ready' ? 'disponible.' : 'en attente.') +
-          (changed ? ' Des modifications plus récentes restent à enregistrer.' : ''),
+        draft
+          ? 'Brouillon enregistré.'
+          : 'Version ' +
+              saved.definition.version +
+              ' publiée. Sauvegarde JSON : ' +
+              (saved.backupStatus === 'ready' ? 'disponible.' : 'en attente.') +
+              (changed ? ' Des modifications plus récentes restent à enregistrer.' : ''),
       );
     } catch (error) {
       const message =

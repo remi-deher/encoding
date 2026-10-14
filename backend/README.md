@@ -49,20 +49,32 @@ Une définition de bibliothèque ne configure aucun accès média. Les chemins l
 
 ## Suivi des exécutions
 
-La migration 0008 ajoute le registre et son journal. L’API /api/v1/executions expose les compteurs et tentatives persistants, les demandes d’annulation et les relances. Les rapports de progression restent internes au futur moteur, qui devra contrôler ses baux et valider les sorties avant une réussite. Aucun traitement média n’est lancé par cette évolution. Voir docs/architecture/0009-execution-tracking.md pour les contrats et les limites.
+La migration 0008 ajoute le registre et son journal. L’API /api/v1/executions expose les compteurs et tentatives persistants, les demandes d’annulation et les relances. Le runtime utilise ce registre, contrôle les baux et valide les sorties avant une réussite. Voir docs/architecture/0009-execution-tracking.md pour les contrats et les limites.
 
 ## Préparation du moteur de flow
 
-Les contrats de préparation se trouvent dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins : définition versionnée, manifeste déclaratif, invocation et résultat d’étape. Ils ne sont pas encore exposés par l’API ni exécutés par l’agent. L’ordre d’implémentation et les garanties attendues sont décrits dans [l’architecture 0012](../docs/architecture/0012-flow-engine-foundation.md).
+Les contrats de préparation se trouvent dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins : définition versionnée, manifeste déclaratif, invocation et résultat d’étape. Ils sont exposés par l’API et exécutés par l’agent via le runtime décrit dans l’architecture 0015. L’ordre d’implémentation et les garanties attendues sont décrits dans [l’architecture 0012](../docs/architecture/0012-flow-engine-foundation.md).
 
 ## Catalogue et validation des flows
 
 GET /api/v1/flows/components expose les manifestes installés (Base 1.0.0, 44 composants). POST /api/v1/flows/validate reçoit le document FlowDefinition et retourne isValid et issues ; une définition invalide reçoit HTTP 422. Les erreurs comprennent code, path (JSON Pointer) et message. POST /api/v1/executions utilise la même validation et contrôle la concordance de flowVersion. Il n’accepte plus un objet JSON arbitraire comme définition.
 
-Le manifeste déclaratif Base est dans src/Encoding.Api/Flows/Catalog/base.json. Le registre le charge au démarrage ; une absence ou incohérence bloque le démarrage. La présence d’un descripteur ne signifie pas qu’un handler d’exécution est disponible. Aucun plugin tiers n’est chargé par ce registre.
+Le manifeste déclaratif Base est dans src/Encoding.Api/Flows/Catalog/base.json. Le registre le charge au démarrage ; une absence ou incohérence bloque le démarrage. La présence d’un descripteur ne signifie pas qu’un handler d’exécution est disponible. Les manifestes tiers configurés sont chargés comme descripteurs ; leur exécution reste dans un processus séparé sur le worker.
 
 ## Versions et sauvegardes de flows
 
 La migration 0009 ajoute les versions immuables et la file de sauvegardes. GET /api/v1/flows liste les flows ; GET /api/v1/flows/{id} et /versions/{version} lisent leurs documents ; PUT /api/v1/flows/{id} publie une version validée avec expectedVersion. Un conflit concurrent reçoit HTTP 409. La création d’exécution exige une version enregistrée.
 
 FlowBackups__Directory configure le dossier JSON. Compose monte encoding-flow-backups dans /var/lib/encoding/flow-backups, séparément de PostgreSQL. Les erreurs sont visibles dans backupStatus et retentées. En cluster multi-hôte, monter un dossier commun durable sur tous les serveurs consommateurs. Voir [0014](../docs/architecture/0014-flow-version-storage-and-backups.md) pour la récupération et les limites.
+
+
+## Runtime, brouillons et restauration
+
+Voir [0015 — Runtime et archives portables](../docs/architecture/0015-flow-runtime-and-portable-archives.md) pour les baux, checkpoints, outils, contrats plugin et restrictions Linux Landlock.
+
+- Le tableau propose brouillons, publication validée, comparaison des versions, import JSON/ZIP, export JSON individuel et export ZIP d’une sélection.
+- Exécuter la version publiée demande une bibliothèque active et un chemin relatif. Configurez les montages du worker et les accès de bibliothèque avant de lancer une tâche.
+- Scripts et plugins nécessitent Landlock sur le noyau Linux hôte ; ils ne sont pas annoncés si cette restriction est absente.
+- Le nœud source transfère le média par WebDAV ; les outils travaillent sur une copie locale. Le résultat validé est publié sous .encoding-results/<executionId>/ sans remplacer la source.
+- Les métadonnées avant/après, événements et fichiers produits sont consultables dans le suivi.
+- Runtime__ArtifactDirectory désigne le stockage durable des blobs. Compose ajoute un volume séparé ; les serveurs multi-hôtes doivent utiliser un stockage partagé. Prévoir sa capacité : aucun nettoyage automatique n’est activé.

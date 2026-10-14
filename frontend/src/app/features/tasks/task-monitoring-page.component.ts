@@ -1,4 +1,5 @@
 import { toSignal, toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FileDownload } from '../../shared/services/file-download';
 import { MatButtonModule } from '@angular/material/button';
 import { catchError, exhaustMap, forkJoin, map, of, switchMap, startWith, timer } from 'rxjs';
 import {
@@ -43,6 +44,7 @@ interface ExecutionRecord extends DataTableRow {
   templateUrl: './task-monitoring-page.component.html',
 })
 export class TaskMonitoringPageComponent {
+  private readonly downloads = inject(FileDownload);
   private readonly tracking = inject(ExecutionTracking);
   private readonly notifications = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
@@ -80,6 +82,42 @@ export class TaskMonitoringPageComponent {
     ),
     { initialValue: { message: 'Chargement de la chronologie…', rows: [] } },
   );
+  protected readonly artifactsState = toSignal(
+    toObservable(this.selectedExecutionId).pipe(
+      switchMap((id) =>
+        id
+          ? timer(0, 5000).pipe(
+              exhaustMap(() =>
+                this.tracking.artifacts(id).pipe(
+                  map((items) => ({
+                    message: '',
+                    rows: items.map((item) => ({
+                      id: item.sha256,
+                      name: item.name,
+                      size: item.bytes.toLocaleString('fr-FR') + ' octets',
+                    })),
+                  })),
+                  catchError(() =>
+                    of({ message: 'Impossible de charger les fichiers produits.', rows: [] }),
+                  ),
+                ),
+              ),
+            )
+          : of({ message: '', rows: [] }),
+      ),
+    ),
+    { initialValue: { message: '', rows: [] } },
+  );
+  protected downloadArtifact(row: DataTableRow): void {
+    const id = this.selectedExecutionId();
+    if (id)
+      this.downloads.fromUrl(
+        '/api/v1/executions/' +
+          encodeURIComponent(id) +
+          '/artifacts/' +
+          encodeURIComponent(String(row['id'])),
+      );
+  }
   protected readonly executions = computed<readonly ExecutionRecord[]>(() =>
     (this.trackingState().data?.executions ?? []).map((e) => ({
       id: e.id,
@@ -112,6 +150,13 @@ export class TaskMonitoringPageComponent {
             ),
           ) + ' s'
         : '—',
+      beforeSize: e.beforeMetadata?.format?.size
+        ? Number(e.beforeMetadata.format.size).toLocaleString('fr-FR') + ' octets'
+        : '—',
+      afterSize: e.afterMetadata?.format?.size
+        ? Number(e.afterMetadata.format.size).toLocaleString('fr-FR') + ' octets'
+        : '—',
+      publishedPath: e.publishedPath ?? '—',
       attempt: e.attempt,
       progress: e.progress === null ? '—' : e.progress + ' %',
     })),
@@ -185,11 +230,12 @@ export class TaskMonitoringPageComponent {
     { key: 'duration', label: 'Durée', sortable: true },
   ];
   protected readonly historyColumns: readonly DataTableColumn[] = [
+    { key: 'state', label: 'État', sortable: true },
     { key: 'media', label: 'Média', sortable: true },
     { key: 'library', label: 'Bibliothèque', sortable: true },
     { key: 'flow', label: 'Flow', sortable: true },
     { key: 'node', label: 'Worker', sortable: true },
-    { key: 'finishedAt', label: 'Réussie le', sortable: true },
+    { key: 'finishedAt', label: 'Terminée le', sortable: true },
     { key: 'duration', label: 'Durée', sortable: true },
   ];
   protected readonly errorActions: readonly DataTableRowAction[] = [

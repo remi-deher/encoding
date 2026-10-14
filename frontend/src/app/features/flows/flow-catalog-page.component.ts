@@ -1,3 +1,13 @@
+import { compareFlowVersions } from '../../shared/models/flow-version-comparison';
+import { FlowDocument } from '../../shared/models/flow-validation';
+import { ClusterApi } from '../../shared/services/cluster-api';
+import { firstValueFrom } from 'rxjs';
+import { RecordFormData } from '../../shared/ui/record-form.component';
+import { MatDialog } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
+import { FileDownload } from '../../shared/services/file-download';
+import { NotificationService } from '../../shared/services/notification.service';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { map, catchError, of, timer, switchMap } from 'rxjs';
 import { Component, computed, inject, signal } from '@angular/core';
@@ -6,6 +16,9 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import {
   DataTableColumn,
+  DataTableListActionEvent,
+  DataTableActionEvent,
+  DataTableSelectionActionEvent,
   DataTableComponent,
   DataTableRow,
 } from '../../shared/ui/data-table.component';
@@ -51,6 +64,192 @@ export class FlowCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
 
+  private readonly clusterApi = inject(ClusterApi);
+  private readonly comparisonVersions = signal<readonly FlowDocument[] | null>(null);
+  private readonly runForm = signal<RecordFormData | null>(null);
+  private readonly runningFlow = signal<DataTableRow | null>(null);
+  protected readonly enqueueing = signal(false);
+  protected readonly actionForm = computed(() => this.runForm() ?? this.flowCreationForm);
+  protected async submitAction(values: Record<string, string>): Promise<void> {
+    const versions = this.comparisonVersions();
+    if (versions) {
+      const before = versions.find((version) => version.version === Number(values['before']));
+      const after = versions.find((version) => version.version === Number(values['after']));
+      if (before && after) {
+        const differences = compareFlowVersions(before, after);
+        this.actionOpen.set(false);
+        this.dialog.open(ConfirmationDialogComponent, {
+          data: {
+            title: 'Comparaison v' + before.version + ' → v' + after.version,
+            mode: 'information',
+            items: differences.slice(0, 100),
+            emptyMessage: 'Aucune différence de définition.',
+            message:
+              differences.length > 100
+                ? 'Les 100 premières différences sont affichées.'
+                : undefined,
+          },
+        });
+      }
+      return;
+    }
+    const flow = this.runningFlow();
+    if (!flow) {
+      this.startFlow(values);
+      return;
+    }
+    if (this.enqueueing()) return;
+    this.enqueueing.set(true);
+    try {
+      const queued = await this.api.enqueue(
+        values['libraryId'],
+        values['mediaPath'],
+        String(flow['id']),
+        Number(String(flow['version']).replace('v', '')),
+      );
+      this.actionOpen.set(false);
+      this.notifications.show('Exécution ajoutée à la file : ' + queued.id);
+    } catch (error) {
+      this.notifications.show(
+        error instanceof HttpErrorResponse
+          ? (error.error?.title ?? 'Exécution impossible.')
+          : 'Exécution impossible.',
+      );
+    } finally {
+      this.enqueueing.set(false);
+    }
+  }
+  private readonly dialog = inject(MatDialog);
+  private readonly downloads = inject(FileDownload);
+  private readonly notifications = inject(NotificationService);
+  protected readonly listActions = [{ id: 'import', label: 'Importer', fileAccept: '.json,.zip' }];
+  protected readonly rowActions = [
+    { id: 'export', label: 'Exporter' },
+    {
+      id: 'run',
+      label: 'Exécuter la version publiée',
+      visibleWhen: (row: DataTableRow) => Number(String(row['version']).replace('v', '')) > 0,
+    },
+    { id: 'versions', label: 'Versions / Comparer' },
+  ];
+  protected readonly selectionActions = [{ id: 'export', label: 'Exporter la sélection (ZIP)' }];
+  protected async onListAction(event: DataTableListActionEvent): Promise<void> {
+    if (!event.file) return;
+    try {
+      const result = await this.api.import(event.file);
+      this.notifications.show(result.imported + ' flow(s) importé(s).');
+    } catch (error) {
+      this.notifications.show(
+        error instanceof HttpErrorResponse
+          ? (error.error?.title ??
+              error.error?.issues?.map((issue: { message: string }) => issue.message).join(' ') ??
+              'Import impossible.')
+          : 'Import impossible.',
+      );
+    }
+  }
+  protected async onRowAction(event: DataTableActionEvent): Promise<void> {
+    if (event.actionId === 'run') {
+      this.comparisonVersions.set(null);
+      try {
+        const libraries = await firstValueFrom(this.clusterApi.listLibraries());
+        this.runningFlow.set(event.row);
+        this.runForm.set({
+          title: 'Exécuter ' + String(event.row['name']),
+          description:
+            'Saisissez le chemin du média relatif à la bibliothèque. La source sera conservée ; une sortie validée sera publiée séparément.',
+          submitLabel: 'Ajouter à la file',
+          fields: [
+            {
+              id: 'libraryId',
+              label: 'Bibliothèque',
+              type: 'select',
+              required: true,
+              options: libraries
+                .filter((library) => library.isActive)
+                .map((library) => ({ value: library.id, label: library.name })),
+            },
+            {
+              id: 'mediaPath',
+              label: 'Chemin relatif du média',
+              type: 'text',
+              required: true,
+              maxLength: 2048,
+            },
+          ],
+        });
+        this.actionOpen.set(true);
+      } catch {
+        this.notifications.show('Bibliothèques indisponibles.');
+      }
+      return;
+    }
+    if (event.actionId === 'versions') {
+      try {
+        const versions = await this.api.versions(String(event.row['id']));
+        if (versions.length < 2) {
+          this.dialog.open(ConfirmationDialogComponent, {
+            data: {
+              title: 'Versions du flow',
+              mode: 'information',
+              message: 'Une seconde version publiée est nécessaire pour comparer.',
+              items: versions.map((v) => ({ label: 'Version ' + v.version, detail: v.name })),
+            },
+          });
+          return;
+        }
+        this.comparisonVersions.set(versions);
+        this.runningFlow.set(null);
+        this.runForm.set({
+          title: 'Comparer les versions',
+          description: 'Choisissez deux versions publiées du flow.',
+          submitLabel: 'Comparer',
+          initialValues: {
+            before: String(versions.at(-2)!.version),
+            after: String(versions.at(-1)!.version),
+          },
+          fields: [
+            {
+              id: 'before',
+              label: 'Version de référence',
+              type: 'select',
+              required: true,
+              options: versions.map((v) => ({ value: String(v.version), label: 'v' + v.version })),
+            },
+            {
+              id: 'after',
+              label: 'Version à comparer',
+              type: 'select',
+              required: true,
+              options: versions.map((v) => ({ value: String(v.version), label: 'v' + v.version })),
+            },
+          ],
+        });
+        this.actionOpen.set(true);
+      } catch {
+        this.notifications.show('Historique indisponible.');
+      }
+      return;
+    }
+    try {
+      this.downloads.save(
+        await this.api.export(String(event.row['id'])),
+        String(event.row['id']) + '.json',
+      );
+    } catch {
+      this.notifications.show('Export impossible.');
+    }
+  }
+  protected async onSelectionAction(event: DataTableSelectionActionEvent): Promise<void> {
+    try {
+      this.downloads.save(
+        await this.api.exportMany(event.rows.map((row) => String(row['id']))),
+        'flows.zip',
+      );
+    } catch {
+      this.notifications.show('Export de la sélection impossible.');
+    }
+  }
   private readonly api = inject(FlowValidation);
   private readonly catalog = toSignal(
     timer(0, 5000).pipe(
@@ -67,13 +266,15 @@ export class FlowCatalogPageComponent {
           version: 'v' + flow.version,
           summary: flow.nodeCount + ' étapes',
           components: flow.nodeCount + ' composants',
-          state: 'Enregistré',
+          state: flow.isDraft ? 'Brouillon' : 'Publié',
           backup:
-            flow.backupStatus === 'ready'
-              ? 'Disponible'
-              : flow.backupStatus === 'failed'
-                ? 'En échec'
-                : 'En attente',
+            flow.backupStatus === 'draft'
+              ? 'Brouillon en base'
+              : flow.backupStatus === 'ready'
+                ? 'Disponible'
+                : flow.backupStatus === 'failed'
+                  ? 'En échec'
+                  : 'En attente',
           modifiedAt: new Date(flow.updatedAt).toLocaleString('fr-FR'),
           modifiedOrder: Date.parse(flow.updatedAt),
         })),
@@ -145,6 +346,9 @@ export class FlowCatalogPageComponent {
   }
 
   protected openFlowCreation(): void {
+    this.comparisonVersions.set(null);
+    this.runForm.set(null);
+    this.runningFlow.set(null);
     this.actionOpen.set(true);
   }
 

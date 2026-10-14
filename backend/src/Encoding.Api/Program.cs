@@ -25,6 +25,12 @@ builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
 builder.Services.AddSingleton<FlowDefinitionValidator>();
 builder.Services.AddSingleton<FlowRepository>();
+builder.Services.AddSingleton<FlowArchiveService>();
+builder.Services.AddSingleton<RuntimeEligibility>();
+builder.Services.AddSingleton<RuntimeRepository>();
+builder.Services.AddSingleton<RuntimeArtifactStore>();
+builder.Services.AddSingleton<RuntimeTransferRepository>();
+builder.Services.AddHostedService<RuntimeRecoveryService>();
 builder.Services.AddHostedService<FlowBackupService>();
 builder.Services.AddSingleton<LibraryRepository>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
@@ -44,6 +50,7 @@ await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSour
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFlowEndpoints();
+app.MapRuntimeEndpoints();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
     .WithTags("Health");
@@ -260,7 +267,7 @@ executions.MapGet("/{id:guid}", async (Guid id, ExecutionRepository repository, 
 }).WithName("GetExecution");
 executions.MapGet("/{id:guid}/events", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
     await repository.GetAsync(id, ct) is null ? (IResult)Results.NotFound() : Results.Ok(await repository.EventsAsync(id, ct))).WithName("GetExecutionEvents");
-executions.MapPost("", async (CreateExecutionRequest request, ExecutionRepository repository, FlowDefinitionValidator validator, FlowRepository flowRepository, CancellationToken ct) =>
+executions.MapPost("", async (CreateExecutionRequest request, LibraryRepository libraryRepository, RuntimeRepository runtime, FlowDefinitionValidator validator, FlowRepository flowRepository, CancellationToken ct) =>
 {
     var errors = new Dictionary<string, string[]>();
     if (request.Id == Guid.Empty) errors["id"] = ["Un identifiant unique est obligatoire."];
@@ -281,9 +288,12 @@ executions.MapPost("", async (CreateExecutionRequest request, ExecutionRepositor
     if (!JsonElement.DeepEquals(canonical,JsonSerializer.SerializeToElement(definition,FlowRepository.JsonOptions)))
         return Results.Conflict(new { title="La définition ne correspond pas à la version enregistrée." });
     request = request with { Flow=storedFlow.Definition.Name, FlowDefinition=canonical };
-    return await repository.CreateAsync(request, ct)
-        ? Results.Created($"/api/v1/executions/{request.Id}", new { request.Id })
-        : Results.Conflict(new { title = "Cet identifiant d’exécution est déjà enregistré." });
+    var library=(await libraryRepository.ListAsync(ct)).SingleOrDefault(l=>l.Name==request.Library);
+    if(library is null) return Results.NotFound(new { title="Bibliothèque introuvable." });
+    try {
+        return await runtime.EnqueueAsync(new(request.Id,library.Id,request.Media,definition.Id,definition.Version),storedFlow.Definition,ct)
+            ? Results.Created($"/api/v1/executions/{request.Id}",new { request.Id }) : Results.Conflict(new { title="Identifiant déjà utilisé ou bibliothèque inactive." });
+    } catch(ArgumentException e) { return Results.BadRequest(new { title=e.Message }); }
 }).WithName("RegisterExecution");
 executions.MapPost("/{id:guid}/cancel", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
     await repository.CancelAsync(id, ct) ? Results.NoContent() : Results.Conflict(new { title = "Cette exécution ne peut pas être annulée dans son état actuel." }))
