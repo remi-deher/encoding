@@ -9,7 +9,7 @@
 
 .data-table th {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.045em;
   white-space: nowrap;
@@ -17,7 +17,7 @@
 
 .data-table td {
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .selection-toolbar {
@@ -40,7 +40,7 @@
 
 .selection-count {
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -62,7 +62,7 @@
   background: var(--surface);
   color: var(--accent-strong);
   font: inherit;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 650;
   cursor: pointer;
 }
@@ -224,7 +224,7 @@
     margin-bottom: 5px;
     color: var(--text-muted);
     content: attr(data-label);
-    font-size: 10px;
+    font-size: 14px;
     font-weight: 650;
   }
 
@@ -252,7 +252,7 @@
     background: var(--surface);
     color: var(--accent-strong);
     font: inherit;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 650;
   }
 

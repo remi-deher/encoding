@@ -5,13 +5,13 @@
 .option-count {
   margin-left: 6px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 
 :host ::ng-deep .category-tabs .mat-mdc-tab .mdc-tab__text-label {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 650;
 }
 

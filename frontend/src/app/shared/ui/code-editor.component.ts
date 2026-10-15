@@ -40,7 +40,7 @@ import { python } from '@codemirror/lang-python';
         max-height: 560px;
         color: var(--text-primary);
         background: var(--surface);
-        font-size: 13px;
+        font-size: 14px;
       }
       .code-editor_roomy ::ng-deep .cm-editor {
         min-height: 420px;
@@ -61,7 +61,7 @@ import { python } from '@codemirror/lang-python';
       @media (max-width: 600px) {
         :host ::ng-deep .cm-editor {
           min-height: 220px;
-          font-size: 12px;
+          font-size: 14px;
         }
       }
     `,
