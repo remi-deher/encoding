@@ -33,7 +33,16 @@ public static class ClusterProtocol
     }
 }
 
-public sealed record NodeInventory(string OperatingSystem, string Architecture, int ProcessorCount, long MemoryMb);
+public sealed record NodeInventory(
+    string OperatingSystem,
+    string Architecture,
+    int ProcessorCount,
+    long MemoryMb,
+    string? ProcessorModel = null,
+    IReadOnlyList<NodeGpu>? Gpus = null);
+
+/// <summary>Processeur graphique déclaré par l'agent ; informations matérielles statiques, jamais une mesure de charge.</summary>
+public sealed record NodeGpu(string Name, string? Vendor = null, string? Driver = null, string? Device = null);
 
 public sealed record NodeToolCapability(
     string ToolId,

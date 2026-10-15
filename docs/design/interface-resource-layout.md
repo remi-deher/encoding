@@ -1,6 +1,6 @@
 # Référence d’interface — Ressources et sections pleine largeur
 
-Statut : référence de conception demandée après validation de la présentation de l’onglet **Cluster**. La refonte de **Ce nœud** décrite ici reste à implémenter.
+Statut : référence de conception demandée après validation de la présentation de l’onglet **Cluster**. La refonte de **Ce nœud** décrite ici est implémentée (voir [0050](../architecture/0050-local-node-resource-sheet.md)).
 
 Ce document complète [UI_RULES.md](../../UI_RULES.md) et la décision [0049 — Cartes horizontales du cluster](../architecture/0049-cluster-resource-cards.md). Il fixe la direction à suivre pour les prochaines évolutions des vues de gestion et de consultation.
 

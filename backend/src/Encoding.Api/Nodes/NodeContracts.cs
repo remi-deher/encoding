@@ -26,7 +26,11 @@ public static class NodeHeartbeatValidator
         if (request.Inventory is { } inventory && (string.IsNullOrWhiteSpace(inventory.OperatingSystem)
             || inventory.OperatingSystem.Length > 128 || string.IsNullOrWhiteSpace(inventory.Architecture)
             || inventory.Architecture.Length > 64 || inventory.ProcessorCount is < 0 or > 4096
-            || inventory.MemoryMb is < 0 or > 4_194_304))
+            || inventory.MemoryMb is < 0 or > 4_194_304
+            || inventory.ProcessorModel?.Length > 256
+            || inventory.Gpus is { Count: > 16 }
+            || inventory.Gpus?.Any(g => string.IsNullOrWhiteSpace(g.Name) || g.Name.Length > 256
+                || g.Vendor?.Length > 64 || g.Driver?.Length > 64 || g.Device?.Length > 128) == true))
             errors["inventory"] = ["L’inventaire système contient des valeurs invalides."];
         if (request.Capabilities is null || request.Capabilities.Count > 256)
             errors["capabilities"] = ["La liste des capacités est obligatoire et limitée à 256 éléments."];

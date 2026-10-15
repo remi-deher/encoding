@@ -7,6 +7,7 @@ if (args.FirstOrDefault() == "--isolated-process") return ProcessSandbox.Run(arg
 
 
 PluginTests.Run();
+HardwareInventoryTests.Run();
 await MembershipTests.RunAsync();
 await ProcessTests.RunAsync();
 
