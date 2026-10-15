@@ -15,7 +15,7 @@ public sealed class FirstLinkRepository(DbDataSource dataSource)
     public async Task<FirstLinkResponse> GetAsync(CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("SELECT expires_at FROM first_link_acceptance WHERE expires_at > clock_timestamp()");
-        return await command.ExecuteScalarAsync(ct) is DateTime expiresAt
+        return await command.ScalarInstantAsync(ct) is {} expiresAt
             ? new FirstLinkResponse(true, new DateTimeOffset(DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc)))
             : new FirstLinkResponse(false, null);
     }
@@ -29,7 +29,7 @@ public sealed class FirstLinkRepository(DbDataSource dataSource)
             """);
         command.Parameters.AddWithValue("minutes", minutes);
         command.Parameters.AddWithValue("by", administrator);
-        var expiresAt = (DateTime)(await command.ExecuteScalarAsync(ct))!;
+        var expiresAt = (await command.ScalarInstantAsync(ct))!.Value;
         return new FirstLinkResponse(true, new DateTimeOffset(DateTime.SpecifyKind(expiresAt, DateTimeKind.Utc)));
     }
 

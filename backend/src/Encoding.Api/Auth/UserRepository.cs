@@ -21,7 +21,7 @@ public sealed class UserRepository(DbDataSource dataSource)
     public async Task<bool> AnyAsync(CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM users)");
-        return (bool)(await command.ExecuteScalarAsync(ct))!;
+        return (await command.ScalarBoolAsync(ct));
     }
 
     /// <summary>Crée le premier administrateur ; retourne null si un utilisateur existe déjà (course entre serveurs comprise).</summary>
@@ -31,7 +31,7 @@ public sealed class UserRepository(DbDataSource dataSource)
         await using var transaction = await connection.BeginTransactionAsync(ct);
         await using (var @lock = Sql.Command(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
         await using (var exists = Sql.Command("SELECT EXISTS(SELECT 1 FROM users)", connection, transaction))
-            if ((bool)(await exists.ExecuteScalarAsync(ct))!) return null;
+            if ((await exists.ScalarBoolAsync(ct))) return null;
         var user = await InsertAsync(connection, transaction, username, passwordHash, UserRole.Admin, ct);
         await transaction.CommitAsync(ct);
         return user;
@@ -159,7 +159,7 @@ public sealed class UserRepository(DbDataSource dataSource)
     {
         await using var command = Sql.Command("SELECT EXISTS(SELECT 1 FROM users WHERE id = @id)", connection, transaction);
         command.Parameters.AddWithValue("id", id);
-        return (bool)(await command.ExecuteScalarAsync(ct))!;
+        return (await command.ScalarBoolAsync(ct));
     }
 
     private static async Task<bool> IsLastActiveAdministratorAsync(DbConnection connection, DbTransaction transaction, Guid id, CancellationToken ct)
@@ -169,11 +169,23 @@ public sealed class UserRepository(DbDataSource dataSource)
                AND NOT EXISTS(SELECT 1 FROM users WHERE id <> @id AND role = 'admin' AND is_active)
             """, connection, transaction);
         command.Parameters.AddWithValue("id", id);
-        return (bool)(await command.ExecuteScalarAsync(ct))!;
+        return (await command.ScalarBoolAsync(ct));
     }
 
     public async Task CreateSessionAsync(Guid userId, byte[] tokenHash, AuthOptions options, CancellationToken ct)
     {
+        if (Sql.IsSqlite(dataSource))
+        {
+            await using var local = dataSource.CreateCommand("""
+                DELETE FROM user_sessions WHERE expires_at <= clock_timestamp();
+                INSERT INTO user_sessions(token_hash, user_id, expires_at) VALUES (@hash, @user, @expires)
+                """);
+            local.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
+            local.Parameters.AddWithValue("user", userId);
+            local.Parameters.AddWithValue("expires", DateTimeOffset.UtcNow + (options.SessionIdleTimeout < options.SessionAbsoluteLifetime ? options.SessionIdleTimeout : options.SessionAbsoluteLifetime));
+            await local.ExecuteNonQueryAsync(ct);
+            return;
+        }
         await using var command = dataSource.CreateCommand("""
             DELETE FROM user_sessions WHERE expires_at <= clock_timestamp();
             INSERT INTO user_sessions(token_hash, user_id, expires_at)
@@ -189,6 +201,7 @@ public sealed class UserRepository(DbDataSource dataSource)
     /// <summary>Valide une session et prolonge son inactivité (au plus une écriture par minute), sans dépasser sa durée absolue.</summary>
     public async Task<SessionUser?> ValidateSessionAsync(byte[] tokenHash, AuthOptions options, CancellationToken ct)
     {
+        if (Sql.IsSqlite(dataSource)) return await ValidateSessionLocalAsync(tokenHash, options, ct);
         await using var command = dataSource.CreateCommand("""
             WITH current AS (
                 SELECT s.token_hash, s.created_at, s.last_seen_at, u.id, u.username, u.role
@@ -208,6 +221,41 @@ public sealed class UserRepository(DbDataSource dataSource)
         command.Parameters.AddWithValue("absolute", options.SessionAbsoluteLifetime);
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? new SessionUser(reader.GetGuid(0), reader.GetString(1), ParseRole(reader.GetString(2))) : null;
+    }
+
+    // SQLite n'accepte pas d'écriture dans une expression de table : lecture puis prolongation en deux ordres, dans une transaction.
+    private async Task<SessionUser?> ValidateSessionLocalAsync(byte[] tokenHash, AuthOptions options, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        SessionUser? user;
+        DateTimeOffset createdAt, lastSeenAt;
+        await using (var read = Sql.Command("""
+            SELECT u.id, u.username, u.role, s.created_at, s.last_seen_at
+            FROM user_sessions s JOIN users u ON u.id = s.user_id
+            WHERE s.token_hash = @hash AND u.is_active AND s.expires_at > clock_timestamp()
+            """, connection, transaction))
+        {
+            read.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
+            await using var reader = await read.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return null;
+            user = new SessionUser(reader.GetGuid(0), reader.GetString(1), ParseRole(reader.GetString(2)));
+            createdAt = reader.GetFieldValue<DateTimeOffset>(3);
+            lastSeenAt = reader.GetFieldValue<DateTimeOffset>(4);
+        }
+        var now = DateTimeOffset.UtcNow;
+        if (lastSeenAt < now - TimeSpan.FromMinutes(1))
+        {
+            var absolute = createdAt + options.SessionAbsoluteLifetime;
+            var idle = now + options.SessionIdleTimeout;
+            await using var touch = Sql.Command("UPDATE user_sessions SET last_seen_at = @now, expires_at = @expires WHERE token_hash = @hash", connection, transaction);
+            touch.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
+            touch.Parameters.AddWithValue("now", now);
+            touch.Parameters.AddWithValue("expires", absolute < idle ? absolute : idle);
+            await touch.ExecuteNonQueryAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return user;
     }
 
     public async Task DeleteSessionAsync(byte[] tokenHash, CancellationToken ct)

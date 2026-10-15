@@ -52,7 +52,7 @@ internal static partial class Harness
             return (id,lease,context,checkpoint);
         }
 
-        private Task<string?> ReservationUntilAsync(Guid id)=>ScalarAsync<string>("SELECT CASE WHEN lease_until='infinity' THEN 'infinity' ELSE 'finite' END FROM media_reservations WHERE execution_id=@id",("id",id));
+        private Task<string?> ReservationUntilAsync(Guid id)=>ScalarAsync<string>("SELECT CASE WHEN lease_until='infinity' THEN 'unbounded' ELSE 'finite' END FROM media_reservations WHERE execution_id=@id",("id",id));
         private Task AgeWaitAsync(Guid id,string column)=>ScalarAsync<object>($"UPDATE execution_waits SET {column}=clock_timestamp()-interval '1 second',next_check_at=clock_timestamp()-interval '1 second' WHERE execution_id=@id RETURNING 1",("id",id));
 
         public async Task WaitTimerAsync()
@@ -60,7 +60,7 @@ internal static partial class Harness
             var flow=WaitFlow(new(){["mode"]=J("timer"),["delayMinutes"]=J(30)});
             var (id,lease,_,_)=await WaitingAsync(flow);
             Check(await runtime.RenewAsync(id,a,lease.Epoch,CancellationToken.None) is null,"The waiting execution gives up its lease: the worker is free.");
-            Check(await ReservationUntilAsync(id)=="infinity","The media stays reserved while waiting.");
+            Check(await ReservationUntilAsync(id)=="unbounded","The media stays reserved while waiting.");
             Check(await ScalarAsync<long>("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.execution_id=@id AND w.lease_until>clock_timestamp()",("id",id))==0,"A waiting execution holds no active lease, so no processing slot.");
             Check((await executions.GetAsync(id,CancellationToken.None))!.Detail.StartsWith("En attente",StringComparison.Ordinal),"The wait is visible in the execution detail.");
             foreach(var worker in new[]{a,b,c}) Check(await runtime.ClaimAsync(worker,CancellationToken.None) is null,"No worker can claim a waiting execution.");
@@ -117,7 +117,9 @@ internal static partial class Harness
             Check(validator.Validate(flow).IsValid,"A wait watching a plugin condition validates.");
             var (id,lease,_,_)=await WaitingAsync(flow,["playback"]);
             // Seuls les workers disposant du plugin surveillé peuvent évaluer la condition.
-            await ScalarAsync<object>("UPDATE cluster_nodes SET capabilities=(SELECT jsonb_agg(c) FROM jsonb_array_elements(capabilities) c WHERE c->>'toolId'<>'plugin/plex') WHERE id=@c RETURNING 1",("c",c));
+            await ScalarAsync<object>(TestDatabase.IsSqlite
+                ? "UPDATE cluster_nodes SET capabilities=(SELECT COALESCE(json_group_array(json(c.value)),'[]') FROM json_each(capabilities) c WHERE c.value->>'toolId'<>'plugin/plex') WHERE id=@c RETURNING 1"
+                : "UPDATE cluster_nodes SET capabilities=(SELECT jsonb_agg(c) FROM jsonb_array_elements(capabilities) c WHERE c->>'toolId'<>'plugin/plex') WHERE id=@c RETURNING 1",("c",c));
             await Waits.ProcessDueAsync(CancellationToken.None);
             Check(await runtime.ClaimAsync(c,CancellationToken.None) is null,"A worker without the plugin cannot evaluate the condition.");
             var probe=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("A capable worker must receive the probe.");
@@ -127,7 +129,7 @@ internal static partial class Harness
             Check(await Waits.ReportProbeAsync(id,b,new(probe.Epoch,"playing"),CancellationToken.None),"The probe result is accepted.");
             Check(!await Waits.ReportProbeAsync(id,b,new(probe.Epoch,"idle"),CancellationToken.None),"A probe cannot be reported twice.");
             Check(await ScalarAsync<string>("SELECT state FROM execution_waits WHERE execution_id=@id",("id",id))=="waiting","An unmet condition keeps waiting.");
-            Check(await ReservationUntilAsync(id)=="infinity" && await runtime.ClaimAsync(b,CancellationToken.None) is null,"After an unmet probe the media stays reserved and the worker is free.");
+            Check(await ReservationUntilAsync(id)=="unbounded" && await runtime.ClaimAsync(b,CancellationToken.None) is null,"After an unmet probe the media stays reserved and the worker is free.");
             // Un bail de sonde perdu (worker disparu) rend la sonde à un autre worker.
             await AgeWaitAsync(id,"due_at");
             await Waits.ProcessDueAsync(CancellationToken.None);

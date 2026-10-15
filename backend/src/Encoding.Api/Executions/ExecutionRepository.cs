@@ -163,7 +163,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         await using (var rowLock = Sql.Command("SELECT id FROM executions WHERE id=@id FOR UPDATE", c, tx))
         { rowLock.Parameters.AddWithValue("id", id); if (await rowLock.ExecuteScalarAsync(ct) is null) return false; }
         await using (var duplicate = Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_events WHERE id=@event AND execution_id=@id)", c, tx))
-        { duplicate.Parameters.AddWithValue("event", update.EventId); duplicate.Parameters.AddWithValue("id", id); if ((bool)(await duplicate.ExecuteScalarAsync(ct) ?? false)) return true; }
+        { duplicate.Parameters.AddWithValue("event", update.EventId); duplicate.Parameters.AddWithValue("id", id); if ((await duplicate.ScalarBoolAsync(ct))) return true; }
         await using var cmd = Sql.Command("""
    UPDATE executions SET state=@state,node_id=COALESCE(node_id,@node),progress=@progress,detail=@detail,
    revision=revision+1,updated_at=clock_timestamp(),
@@ -179,7 +179,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("revision", update.ExpectedRevision);
         cmd.Parameters.AddWithValue("state", update.State); cmd.Parameters.AddWithValue("node", SqlKind.Uuid, (object?)update.NodeId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("progress", SqlKind.Decimal, (object?)update.Progress ?? DBNull.Value); cmd.Parameters.AddWithValue("detail", update.Detail);
-        if (await cmd.ExecuteScalarAsync(ct) is not int revision) return false;
+        if (await cmd.ScalarInt32Async(ct) is not {} revision) return false;
         await AddEvent(c, tx, id, update.EventId, revision, update.State, update.Detail, ct); return true;
     }
     private static readonly HashSet<string> AllowedStates = ["running", "succeeded", "failed", "cancelled", "deferred"];

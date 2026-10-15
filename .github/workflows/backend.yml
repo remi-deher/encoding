@@ -32,6 +32,10 @@ jobs:
           ENCODING_TEST_DATABASE: Host=postgres;Database=encoding_test;Username=encoding;Password=encoding_test
           ENCODING_TEST_REQUIRE_DATABASE: '1'
           ENCODING_TEST_REQUIRE_MEDIA_TOOLS: '1'
+      - run: dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
+        env:
+          ENCODING_TEST_PROVIDER: sqlite
+          ENCODING_TEST_REQUIRE_MEDIA_TOOLS: '1'
       - run: dotnet run --project backend/tests/Encoding.Launcher.Tests --configuration Release
       - run: dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
         env:

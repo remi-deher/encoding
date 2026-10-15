@@ -1,3 +1,4 @@
+using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Auth;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
@@ -30,7 +31,7 @@ if (offlineAfterSeconds <= 0)
 {
     throw new InvalidOperationException("NodePresence:OfflineAfterSeconds doit être supérieur à zéro.");
 }
-builder.Services.AddSingleton<System.Data.Common.DbDataSource>(NpgsqlDataSource.Create(connectionString));
+builder.Services.AddSingleton<System.Data.Common.DbDataSource>(DatabaseProvider.Create(builder.Configuration, connectionString));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
 builder.Services.AddSingleton<NodeGroupRepository>();

@@ -58,7 +58,7 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
         command.Parameters.AddWithValue("id", plugin.Id);
         command.Parameters.AddWithValue("expected", request.ExpectedRevision);
         command.Parameters.AddWithValue("values", SqlKind.Bytes, Protect(values));
-        if (await command.ExecuteScalarAsync(ct) is not int revision) return null;
+        if (await command.ScalarInt32Async(ct) is not {} revision) return null;
         return ToResponse(plugin, revision, values);
     }
 
@@ -104,7 +104,7 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
         command.Parameters.AddWithValue("plugin", plugin.Id);
         command.Parameters.AddWithValue("expected", request.ExpectedRevision);
         command.Parameters.AddWithValue("values", SqlKind.Bytes, Protect(values));
-        if (await command.ExecuteScalarAsync(ct) is not int revision)
+        if (await command.ScalarInt32Async(ct) is not {} revision)
         {
             await transaction.RollbackAsync(ct);
             return null;

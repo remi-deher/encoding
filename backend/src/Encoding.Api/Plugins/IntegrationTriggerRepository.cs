@@ -20,7 +20,7 @@ public sealed class IntegrationTriggerRepository(DbDataSource dataSource)
     {
         await using var exists = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM libraries WHERE id=@library AND is_active)");
         exists.Parameters.AddWithValue("library", library);
-        if (!(bool)(await exists.ExecuteScalarAsync(ct))!) return TriggerRecordResult.UnknownLibrary;
+        if (!(await exists.ScalarBoolAsync(ct))) return TriggerRecordResult.UnknownLibrary;
         await using var insert = dataSource.CreateCommand("""
             INSERT INTO integration_trigger_requests(id,plugin_id,library_id,relative_path) VALUES(@id,@plugin,@library,@path)
             ON CONFLICT DO NOTHING
@@ -78,7 +78,7 @@ public sealed class IntegrationTriggerRepository(DbDataSource dataSource)
             "SELECT EXISTS(SELECT 1 FROM library_scans WHERE library_id=@library AND state='completed' AND created_at>=@since)");
         command.Parameters.AddWithValue("library", library);
         command.Parameters.AddWithValue("since", since);
-        return (bool)(await command.ExecuteScalarAsync(ct))!;
+        return (await command.ScalarBoolAsync(ct));
     }
 
     public async Task<Guid?> FindMediaAsync(Guid library, string relativePath, CancellationToken ct)

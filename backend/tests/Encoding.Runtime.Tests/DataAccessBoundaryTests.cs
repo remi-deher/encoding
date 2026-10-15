@@ -5,7 +5,7 @@ namespace Encoding.Runtime.Tests;
 /// <summary>Architecture 0043 : seul le fournisseur de données connaît Npgsql.</summary>
 public sealed class DataAccessBoundaryTests
 {
-    private static readonly string[] Allowed = ["Infrastructure/Data/Sql.cs", "Program.cs"];
+    private static readonly string[] Allowed = ["Infrastructure/Data/Sql.cs", "Infrastructure/Data/DatabaseProvider.cs", "Program.cs"];
 
     [Fact]
     public void OnlyTheDataProviderReferencesNpgsql()

@@ -21,10 +21,12 @@ public static partial class MigrationCatalog
     [GeneratedRegex("^(?<number>[0-9]{4})_[a-z0-9]+(_[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
     private static partial Regex VersionPattern();
 
-    public static string ResolveDirectory(string contentRoot)
+    /// <summary>Dossier des migrations du fournisseur : <c>migrations/</c> pour PostgreSQL, <c>migrations/sqlite/</c> pour SQLite.</summary>
+    public static string ResolveDirectory(string contentRoot, bool sqlite = false)
     {
         var outputDirectory = Path.Combine(AppContext.BaseDirectory, "migrations");
         var directory = Directory.Exists(outputDirectory) ? outputDirectory : Path.Combine(contentRoot, "migrations");
+        if (sqlite) directory = Path.Combine(directory, "sqlite");
         return Directory.Exists(directory) ? directory : throw new DirectoryNotFoundException($"Dossier de migrations introuvable : {directory}");
     }
 

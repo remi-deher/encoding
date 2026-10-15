@@ -48,13 +48,13 @@ public sealed class NodeRepository(DbDataSource dataSource)
     {
         await using var command = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE node_token_hash = @hash AND deleted_at IS NULL)");
         command.Parameters.AddWithValue("hash", SqlKind.Bytes, HashSecret(token));
-        return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
+        return (await command.ScalarBoolAsync(cancellationToken));
     }
 
     public async Task<PairingRequestResult> CreatePairingRequestAsync(CreateNodeEnrollmentRequest request, int maxPending, CancellationToken cancellationToken)
     {
         await using var deleted=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND deleted_at IS NOT NULL)");
-        deleted.Parameters.AddWithValue("id",request.Node.Id); if((bool)(await deleted.ExecuteScalarAsync(cancellationToken))!) return PairingRequestResult.Conflict;
+        deleted.Parameters.AddWithValue("id",request.Node.Id); if((await deleted.ScalarBoolAsync(cancellationToken))) return PairingRequestResult.Conflict;
         // Borne les demandes en attente pour qu’un appelant anonyme ne puisse pas saturer la liste d’approbation.
         await using var pending=dataSource.CreateCommand("SELECT count(*) FROM node_enrollment_requests WHERE expires_at > clock_timestamp() AND node_id <> @id");
         pending.Parameters.AddWithValue("id",request.Node.Id); if((long)(await pending.ExecuteScalarAsync(cancellationToken))! >= maxPending) return PairingRequestResult.TooMany;
@@ -106,7 +106,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
         var requests = new List<PendingNodeEnrollmentResponse>();
         while (await reader.ReadAsync(cancellationToken))
         {
-            var roles = reader.GetFieldValue<string[]>(2).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray();
+            var roles = reader.GetStringArray(2).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray();
             var capabilities = JsonSerializer.Deserialize<IReadOnlyList<NodeToolCapability>>(reader.GetString(4), JsonOptions) ?? [];
             requests.Add(new PendingNodeEnrollmentResponse(
                 reader.GetGuid(0), reader.GetString(1), roles, reader.GetInt32(3), capabilities,
@@ -156,7 +156,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
             nodeTokenHash = reader.GetFieldValue<byte[]>(1);
             heartbeat = new NodeHeartbeatRequest(
                 reader.GetString(2),
-                reader.GetFieldValue<string[]>(3).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray(),
+                reader.GetStringArray(3).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray(),
                 reader.GetInt32(4),
                 JsonSerializer.Deserialize<IReadOnlyList<NodeToolCapability>>(reader.GetString(5), JsonOptions) ?? [],
                 ReadInventory(reader.GetString(6)));
@@ -353,7 +353,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
         await using (var select = Sql.Command("SELECT roles FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL FOR UPDATE", c, tx))
         {
             select.Parameters.AddWithValue("id", nodeId);
-            if (await select.ExecuteScalarAsync(ct) is not string[] current) return ModeRequestResult.NotFound;
+            if (Sql.ToStringArray(await select.ExecuteScalarAsync(ct)) is not { } current) return ModeRequestResult.NotFound;
             roles = current;
         }
         if (roles.Contains("server") && !server)
@@ -387,7 +387,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
         await using var owner = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id = @id AND node_token_hash = @hash AND deleted_at IS NULL)");
         owner.Parameters.AddWithValue("id", id);
         owner.Parameters.AddWithValue("hash", SqlKind.Bytes, HashSecret(token));
-        return (bool)(await owner.ExecuteScalarAsync(ct))! ? await DeleteAsync(id, ct) : "unauthorized";
+        return (await owner.ScalarBoolAsync(ct)) ? await DeleteAsync(id, ct) : "unauthorized";
     }
 
     public async Task<string> DeleteAsync(Guid id,CancellationToken ct)
@@ -400,7 +400,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
             WHERE (w.worker_node_id=@id OR w.source_node_id=@id) AND (w.lease_until>clock_timestamp() OR w.handoff_pending) AND e.state IN ('running','cancelling'))
           OR EXISTS(SELECT 1 FROM library_scans WHERE node_id=@id AND state='running' AND lease_until>clock_timestamp())
           """,c,tx);
-        active.Parameters.AddWithValue("id",id); if((bool)(await active.ExecuteScalarAsync(ct))!) return "busy";
+        active.Parameters.AddWithValue("id",id); if((await active.ScalarBoolAsync(ct))) return "busy";
         await using var remove=Sql.Command("""
           UPDATE cluster_nodes SET deleted_at=clock_timestamp(),node_token_hash=NULL WHERE id=@id;
           DELETE FROM node_group_members WHERE node_id=@id;
@@ -444,7 +444,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
     internal static NodeResponse ReadResponse(DbDataReader reader, bool isOnline)
     {
         var lastSeenAt = new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc));
-        var roles = reader.GetFieldValue<string[]>(2).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray();
+        var roles = reader.GetStringArray(2).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray();
         var capabilities = JsonSerializer.Deserialize<IReadOnlyList<NodeToolCapability>>(reader.GetString(4), JsonOptions) ?? [];
         var inventoryOrdinal = reader.FieldCount >= 10 ? 7 : 6;
         var inventory = ReadInventory(reader.GetString(inventoryOrdinal));
@@ -454,7 +454,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
             : new Dictionary<string, string?>();
         var desiredOrdinal = inventoryOrdinal + 3;
         var desired = reader.FieldCount > desiredOrdinal && !reader.IsDBNull(desiredOrdinal)
-            ? reader.GetFieldValue<string[]>(desiredOrdinal).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray()
+            ? reader.GetStringArray(desiredOrdinal).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray()
             : null;
         return new NodeResponse(reader.GetGuid(0), reader.GetString(1), roles, reader.GetInt32(3), capabilities,
             isOnline ? NodePresenceStatus.Online : NodePresenceStatus.Offline, lastSeenAt, inventory, displayName, labels, desired);

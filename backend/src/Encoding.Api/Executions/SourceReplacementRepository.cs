@@ -24,7 +24,7 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource)
         await using var locked=Sql.Command("SELECT id FROM libraries WHERE id=@id FOR UPDATE",c,tx); locked.Parameters.AddWithValue("id",library);
         if(await locked.ExecuteScalarAsync(ct) is null) return false;
         await using var current=Sql.Command("SELECT revision FROM library_replacement_policies WHERE library_id=@id",c,tx); current.Parameters.AddWithValue("id",library);
-        if((await current.ExecuteScalarAsync(ct) as int? ?? 0)!=request.ExpectedRevision) return false;
+        if((await current.ScalarInt32Async(ct) ?? 0)!=request.ExpectedRevision) return false;
         await using var save=Sql.Command("""
           INSERT INTO library_replacement_policies(library_id,enabled,grace_period_hours,revision) VALUES(@id,@enabled,@hours,@revision)
           ON CONFLICT(library_id) DO UPDATE SET enabled=@enabled,grace_period_hours=@hours,revision=@revision
