@@ -352,7 +352,7 @@ internal static class AuthScenarios
         Check(await anonymous.StatusAsync(post, leave, csrf: false, nodeToken: token) == HttpStatusCode.Unauthorized, "Another node's token cannot make a node leave.");
         Check(await anonymous.StatusAsync(post, leave, csrf: false, nodeToken: leaving.NodeToken) == HttpStatusCode.NoContent, "A node leaves its cluster with its own token.");
         Check(await anonymous.StatusAsync(post, leave, csrf: false, nodeToken: leaving.NodeToken) == HttpStatusCode.Unauthorized, "A node that left cannot act again with its old identity.");
-        Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{leaving.Id}/heartbeat", new NodeHeartbeatRequest(leaving.Name, leaving.Roles, 1, leaving.Capabilities), csrf: false, nodeToken: leaving.NodeToken) == HttpStatusCode.Unauthorized, "A node that left is not reactivated by a heartbeat.");
+        Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{leaving.Id}/heartbeat", new NodeHeartbeatRequest(leaving.Name, leaving.Roles, 1, leaving.Capabilities), csrf: false, nodeToken: leaving.NodeToken) == HttpStatusCode.Gone, "A node that left is not reactivated by a heartbeat (it is told its identity is revoked).");
         var after = (await (await admin.SendAsync(get, "/api/v1/nodes")).Content.ReadFromJsonAsync<List<NodeResponse>>(Json))!;
         Check(after.All(node => node.Id != leaving.Id), "A node that left no longer appears in the cluster.");
 
