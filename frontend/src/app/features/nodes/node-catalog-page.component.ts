@@ -34,6 +34,7 @@ import {
   EMPTY,
   finalize,
   forkJoin,
+  map,
   of,
   switchMap,
   timer,
@@ -52,7 +53,7 @@ import {
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { LocalNodePanelComponent } from '../../shared/ui/local-node-panel.component';
-import { ResourceCardAction, ResourceCardComponent, ResourceCardFact, ResourceCardTag } from '../../shared/ui/resource-card.component';
+import { ResourceCardAction, ResourceCardComponent, ResourceCardFact, ResourceCardMeter, ResourceCardTag } from '../../shared/ui/resource-card.component';
 import type { StatusTone } from '../../shared/ui/status-badge.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
@@ -124,6 +125,7 @@ interface NodeCard {
   readonly tags: readonly ResourceCardTag[];
   readonly facts: readonly ResourceCardFact[];
   readonly note: string;
+  readonly meter: ResourceCardMeter | null;
   readonly actions: readonly ResourceCardAction[];
   readonly order: number;
 }
@@ -1050,6 +1052,11 @@ export class NodeCatalogPageComponent {
   });
 
   /** Cartes de nœuds : ce qui demande une action d'abord, puis par nom (architecture 0046). */
+  /** Tâches actives par nœud (clé : identifiant), rafraîchies avec la liste. */
+  private readonly activeTasks = signal<Readonly<Record<string, number>>>({});
+  protected readonly selectedIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly bulkBusy = signal(false);
+  protected readonly selectedCount = computed(() => this.selectedIds().size);
   protected readonly selectedState = signal('all');
   /** Regroupe les états de cycle de vie : en ligne, hors ligne, ou à traiter (vidange, incompatible, quarantaine). */
   private stateGroup(node: NodeResponse): 'online' | 'offline' | 'attention' {
@@ -1111,6 +1118,15 @@ export class NodeCatalogPageComponent {
           badges: node.roles.map((nodeRole) => NODE_ROLE_LABELS[nodeRole]),
           tags,
           facts,
+          meter:
+            node.roles.includes('worker') && node.maxConcurrentTasks > 0 && this.activityKnown()
+              ? {
+                  value: this.activeTasks()[node.id] ?? 0,
+                  max: node.maxConcurrentTasks,
+                  label: `Tâches ${this.activeTasks()[node.id] ?? 0} / ${node.maxConcurrentTasks}`,
+                  caption: this.formatLastSeen(node.lastSeenAt),
+                }
+              : null,
           note: node.lifecycleReason ?? (node.desiredRoles ? 'Changement de mode en attente' : ''),
           actions,
           order: tone === 'success' ? 2 : tone === 'neutral' ? 1 : 0,
@@ -1127,6 +1143,75 @@ export class NodeCatalogPageComponent {
   protected changeSelectedNodeMode(): void {
     const node = this.rawNode();
     if (node) void this.requestNodeMode(node);
+  }
+
+  private readonly activityLoaded = signal(false);
+  private activityKnown(): boolean {
+    return this.activityLoaded();
+  }
+
+  protected toggleNodeSelection(id: string, selected: boolean): void {
+    this.selectedIds.update((current) => {
+      const next = new Set(current);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  protected clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
+
+  /** Action groupée : appelle l'API existante pour chaque nœud sélectionné, puis rapporte le bilan. */
+  protected bulkDrain(draining: boolean): void {
+    const ids = [...this.selectedIds()];
+    if (!ids.length || this.bulkBusy()) return;
+    this.runBulk(ids, (id) => this.http.put<void>('/api/v1/nodes/' + id + '/draining', { draining }), draining ? 'vidange' : 'reprise');
+  }
+
+  protected bulkRemove(): void {
+    const ids = [...this.selectedIds()];
+    if (!ids.length || this.bulkBusy()) return;
+    this.dialog
+      .open(ConfirmationDialogComponent, {
+        data: {
+          title: `Supprimer ${ids.length} nœud(s) ?`,
+          message:
+            'Les nœuds sélectionnés seront retirés du cluster et leurs accès révoqués. Les fichiers et l’historique sont conservés. Pour les rattacher de nouveau, leur identité locale devra être renouvelée.',
+          confirmLabel: 'Supprimer les nœuds',
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (confirmed) this.runBulk(ids, (id) => this.http.delete<void>('/api/v1/nodes/' + id), 'suppression');
+      });
+  }
+
+  private runBulk(ids: readonly string[], call: (id: string) => Observable<void>, label: string): void {
+    this.bulkBusy.set(true);
+    forkJoin(
+      ids.map((id) =>
+        call(id).pipe(
+          map(() => true),
+          catchError(() => of(false)),
+        ),
+      ),
+    )
+      .pipe(finalize(() => this.bulkBusy.set(false)))
+      .subscribe((results) => {
+        const failed = results.filter((ok) => !ok).length;
+        this.notifications.show(
+          failed
+            ? `${label} : ${results.length - failed} nœud(s) traité(s), ${failed} en échec.`
+            : `${label} : ${results.length} nœud(s) traité(s).`,
+        );
+        this.clearSelection();
+        this.clusterApi
+          .listNodes()
+          .pipe(catchError(() => EMPTY))
+          .subscribe((nodes) => this.nodes.set(nodes));
+      });
   }
 
   protected openNodeCard(id: string): void {
@@ -1184,6 +1269,9 @@ export class NodeCatalogPageComponent {
             pending: this.http.get<readonly PendingNodeEnrollmentResponse[]>(
               '/api/v1/nodes/enrollment-requests',
             ),
+            activity: this.http
+              .get<Readonly<Record<string, number>>>('/api/v1/nodes/activity')
+              .pipe(catchError(() => of(null))),
           }).pipe(
             catchError(() => {
               this.loadState.set(this.nodes().length ? 'ready' : 'error');
@@ -1193,7 +1281,11 @@ export class NodeCatalogPageComponent {
         ),
         takeUntilDestroyed(),
       )
-      .subscribe(({ nodes, pending }) => {
+      .subscribe(({ nodes, pending, activity }) => {
+        if (activity) {
+          this.activeTasks.set(activity);
+          this.activityLoaded.set(true);
+        }
         this.nodes.set(nodes);
         this.pendingEnrollments.set(pending);
         this.loadState.set('ready');

@@ -56,6 +56,10 @@
         [tags]="card.tags"
         [facts]="card.facts"
         [note]="card.note"
+        [meter]="card.meter"
+        [selectable]="isAdmin()"
+        [selected]="selectedIds().has(card.id)"
+        (selectedChange)="toggleNodeSelection(card.id, $event)"
         [active]="selectedNode()?.id === card.id"
         [actions]="card.actions"
         openLabel="Consulter"
@@ -77,6 +81,18 @@
       <app-drawer-action-button label="Changer le mode" (activated)="changeSelectedNodeMode()" />
     }
   </ng-template>
+
+  @if (isAdmin() && selectedCount() > 0) {
+    <div catalogue-table class="node-bulk-bar" role="region" aria-label="Actions groupées">
+      <span>{{ selectedCount() }} nœud(s) sélectionné(s)</span>
+      <span class="node-bulk-actions">
+        <button matButton="outlined" type="button" [disabled]="bulkBusy()" (click)="bulkDrain(true)">Vidanger</button>
+        <button matButton="outlined" type="button" [disabled]="bulkBusy()" (click)="bulkDrain(false)">Reprendre le travail</button>
+        <button matButton="outlined" class="node-bulk-danger" type="button" [disabled]="bulkBusy()" (click)="bulkRemove()">Supprimer</button>
+        <button matButton="text" type="button" [disabled]="bulkBusy()" (click)="clearSelection()">Annuler</button>
+      </span>
+    </div>
+  }
 
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group

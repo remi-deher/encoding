@@ -418,6 +418,21 @@ public sealed class NodeRepository(DbDataSource dataSource)
         remove.Parameters.AddWithValue("id",id); await remove.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return "deleted";
     }
 
+    /// <summary>Tâches actives (bail valide) par nœud worker, en une requête : alimente la charge des cartes de nœuds.</summary>
+    public async Task<IReadOnlyDictionary<Guid,int>> ActiveTaskCountsAsync(CancellationToken ct)
+    {
+        await using var cmd=dataSource.CreateCommand("""
+          SELECT w.worker_node_id, count(*)::integer
+          FROM execution_work w JOIN executions e ON e.id=w.execution_id
+          WHERE w.worker_node_id IS NOT NULL AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')
+          GROUP BY w.worker_node_id
+          """);
+        await using var r=await cmd.ExecuteReaderAsync(ct);
+        var counts=new Dictionary<Guid,int>();
+        while(await r.ReadAsync(ct)) counts[r.GetGuid(0)]=r.GetInt32(1);
+        return counts;
+    }
+
     public async Task<NodeActivityResponse> ActivityAsync(Guid id,CancellationToken ct)
     {
         await using var cmd=dataSource.CreateCommand("""

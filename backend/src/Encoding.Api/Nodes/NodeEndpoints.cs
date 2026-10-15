@@ -168,6 +168,9 @@ public static class NodeEndpoints
                 _=>Results.NotFound()
             };
         });
+        nodes.MapGet("/activity", async (NodeRepository repository, CancellationToken ct) =>
+            Results.Ok((await repository.ActiveTaskCountsAsync(ct)).ToDictionary(item => item.Key.ToString("D"), item => item.Value)))
+            .WithName("ListNodesActiveTasks");
         nodes.MapGet("/{nodeId:guid}/activity",async(Guid nodeId,NodeRepository repository,CancellationToken ct)=>Results.Ok(await repository.ActivityAsync(nodeId,ct)));
 
         nodes.MapGet("/{nodeId:guid}", async (Guid nodeId, NodeRepository repository, NodePresenceOptions options, CancellationToken cancellationToken) =>
