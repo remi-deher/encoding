@@ -306,6 +306,15 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         return ModeRequestResult.Accepted;
     }
 
+    /// <summary>Départ volontaire d’un worker (0039) : même retrait que la suppression par un administrateur, mais authentifié par le jeton du nœud lui-même.</summary>
+    public async Task<string> LeaveAsync(Guid id, string token, CancellationToken ct)
+    {
+        await using var owner = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id = @id AND node_token_hash = @hash AND deleted_at IS NULL)");
+        owner.Parameters.AddWithValue("id", id);
+        owner.Parameters.AddWithValue("hash", NpgsqlDbType.Bytea, HashSecret(token));
+        return (bool)(await owner.ExecuteScalarAsync(ct))! ? await DeleteAsync(id, ct) : "unauthorized";
+    }
+
     public async Task<string> DeleteAsync(Guid id,CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);

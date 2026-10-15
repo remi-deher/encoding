@@ -11,6 +11,12 @@ public static class LibraryEndpoints
         libraries.MapGet("", async (LibraryRepository repository, CancellationToken cancellationToken) =>
             Results.Ok(await repository.ListAsync(cancellationToken)))
             .WithName("ListLibraries");
+        libraries.MapGet("/export", async (LibraryRepository repository, Infrastructure.ClusterIdentityRepository cluster, HttpContext http, CancellationToken cancellationToken) =>
+        {
+            var identity = await cluster.GetAsync(cancellationToken);
+            http.Response.Headers.ContentDisposition = "attachment; filename=\"bibliotheques.json\"";
+            return Results.Ok(new LibraryExport(1, DateTimeOffset.UtcNow, identity.Name, await repository.ListAsync(cancellationToken)));
+        }).WithName("ExportLibraries");
         libraries.MapPost("", async (CreateLibraryRequest request, LibraryRepository repository, CancellationToken cancellationToken) =>
         {
             var errors = new Dictionary<string, string[]>();

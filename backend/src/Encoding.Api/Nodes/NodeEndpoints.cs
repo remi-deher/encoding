@@ -103,6 +103,18 @@ public static class NodeEndpoints
             return node is null ? (IResult)Results.Unauthorized() : Results.Ok(node);
         }).AllowAnonymous().WithName("RecordNodeHeartbeat");
 
+        nodes.MapPost("/{nodeId:guid}/leave", async (Guid nodeId, NodeRepository repository, HttpContext httpContext, CancellationToken ct) =>
+        {
+            var token = httpContext.Request.Headers["X-Node-Token"].ToString();
+            if (string.IsNullOrWhiteSpace(token)) return (IResult)Results.Unauthorized();
+            return await repository.LeaveAsync(nodeId, token, ct) switch
+            {
+                "deleted" => Results.NoContent(),
+                "busy" => Results.Conflict(new { title = "Ce nœud participe à un traitement ou une découverte. Attendez sa fin avant de quitter le cluster." }),
+                _ => Results.Unauthorized()
+            };
+        }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("LeaveCluster");
+
         nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, CancellationToken cancellationToken) =>
             Results.Ok(await repository.ListAsync(options.OfflineAfter, cancellationToken)))
             .WithName("ListNodes");

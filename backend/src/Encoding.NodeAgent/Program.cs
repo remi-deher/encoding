@@ -82,7 +82,7 @@ app.MapPost("/api/v1/worker/enroll", async (
 {
     try
     {
-        return (IResult)Results.Ok(await enrollment.EnrollAsync(request.ClusterId, cancellationToken));
+        return (IResult)Results.Ok(await enrollment.EnrollAsync(request.ClusterId, cancellationToken, request.LeaveCurrent));
     }
     catch (InvalidOperationException exception)
     {
@@ -101,7 +101,7 @@ app.MapPost("/api/v1/worker/pairing-key", async (
 {
     try
     {
-        return (IResult)Results.Ok(await enrollment.CreatePairingKeyAsync(request.ClusterId, cancellationToken));
+        return (IResult)Results.Ok(await enrollment.CreatePairingKeyAsync(request.ClusterId, cancellationToken, request.LeaveCurrent));
     }
     catch (InvalidOperationException exception)
     {
@@ -113,6 +113,23 @@ app.MapPost("/api/v1/worker/pairing-key", async (
     }
 }).WithName("CreateWorkerPairingKey");
 
+app.MapPost("/api/v1/worker/leave", async (WorkerEnrollmentService enrollment, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        await enrollment.LeaveAsync(cancellationToken);
+        return (IResult)Results.NoContent();
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { title = exception.Message });
+    }
+    catch (HttpRequestException exception)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: exception.Message);
+    }
+}).WithName("LeaveWorkerCluster");
+
 await app.RunAsync();
 
-public sealed record WorkerEnrollmentRequest(Guid ClusterId);
+public sealed record WorkerEnrollmentRequest(Guid ClusterId, bool LeaveCurrent = false);

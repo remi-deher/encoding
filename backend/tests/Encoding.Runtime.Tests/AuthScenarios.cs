@@ -319,6 +319,21 @@ internal static class AuthScenarios
         using (var ack = await anonymous.SendAsync(put, $"/api/v1/nodes/{first.Id}/heartbeat", applied, csrf: false, nodeToken: token))
             Check((await ack.Content.ReadFromJsonAsync<NodeResponse>(Json))?.DesiredRoles is null, "Reporting the requested roles clears the request.");
         Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(false, true)) == HttpStatusCode.Conflict, "The last online server cannot lose its server function.");
+
+        // Départ volontaire d'un cluster (0039) : authentifié par le jeton du nœud lui-même, jamais par celui d'un autre.
+        var leaving = requests[1].Node;
+        var leave = $"/api/v1/nodes/{leaving.Id}/leave";
+        Check(await anonymous.StatusAsync(post, leave, csrf: false) == HttpStatusCode.Unauthorized, "Leaving a cluster needs the node token.");
+        Check(await anonymous.StatusAsync(post, leave, csrf: false, nodeToken: token) == HttpStatusCode.Unauthorized, "Another node's token cannot make a node leave.");
+        Check(await anonymous.StatusAsync(post, leave, csrf: false, nodeToken: leaving.NodeToken) == HttpStatusCode.NoContent, "A node leaves its cluster with its own token.");
+        Check(await anonymous.StatusAsync(post, leave, csrf: false, nodeToken: leaving.NodeToken) == HttpStatusCode.Unauthorized, "A node that left cannot act again with its old identity.");
+        Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{leaving.Id}/heartbeat", new NodeHeartbeatRequest(leaving.Name, leaving.Roles, 1, leaving.Capabilities), csrf: false, nodeToken: leaving.NodeToken) == HttpStatusCode.Unauthorized, "A node that left is not reactivated by a heartbeat.");
+        var after = (await (await admin.SendAsync(get, "/api/v1/nodes")).Content.ReadFromJsonAsync<List<NodeResponse>>(Json))!;
+        Check(after.All(node => node.Id != leaving.Id), "A node that left no longer appears in the cluster.");
+
+        // Export des bibliothèques avant de quitter un cluster : lecture seule, session requise.
+        Check(await anonymous.StatusAsync(get, "/api/v1/libraries/export") == HttpStatusCode.Unauthorized, "Library export needs a session.");
+        Check(await viewer.StatusAsync(get, "/api/v1/libraries/export") == HttpStatusCode.OK, "Viewers can export library definitions.");
         Console.WriteLine("PASS: enrollment window, capped pairing requests, admin-only approval and node-token isolation.");
     }
 
@@ -340,6 +355,7 @@ internal static class AuthScenarios
             "POST /api/v1/integrations/{pluginId}/webhook",
             "POST /api/v1/nodes/enroll",
             "POST /api/v1/nodes/enrollment-requests",
+            "POST /api/v1/nodes/{nodeId:guid}/leave",
             "PUT /api/v1/nodes/{nodeId:guid}/heartbeat",
         };
         var runtime = anonymous.Where(item => item.Contains("/api/v1/runtime/nodes/{nodeId:guid}")).ToArray();

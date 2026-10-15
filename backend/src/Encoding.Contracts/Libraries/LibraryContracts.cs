@@ -47,3 +47,6 @@ public sealed record LibraryNodeAccessResponse(
     Guid? TransferSourceNodeId,
     string? TransferSourceNodeName,
     DateTimeOffset UpdatedAt);
+
+/// <summary>Définitions de bibliothèques d'un cluster, exportées avant de le quitter (0039). Format 1 : définitions seules, sans chemins d'accès des nœuds.</summary>
+public sealed record LibraryExport(int Format, DateTimeOffset ExportedAt, string ClusterName, IReadOnlyList<LibraryResponse> Libraries);
