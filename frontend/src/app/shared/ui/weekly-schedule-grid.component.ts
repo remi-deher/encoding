@@ -65,14 +65,14 @@ import {
     }
     .hour {
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 14px;
       text-align: center;
       grid-row: 1;
     }
     .day {
       align-self: center;
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: 14px;
     }
     .cell {
       height: 26px;

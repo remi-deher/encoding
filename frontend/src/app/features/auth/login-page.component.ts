@@ -35,7 +35,7 @@ import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form
     p {
       margin: 0 0 18px;
       color: var(--text-secondary);
-      font-size: 12px;
+      font-size: 14px;
       line-height: 1.6;
     }
   `,

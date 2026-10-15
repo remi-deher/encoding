@@ -80,7 +80,7 @@ import { WeeklyScheduleGridComponent } from './weekly-schedule-grid.component';
     .schedule-hint {
       margin: 0;
       color: var(--text-secondary);
-      font-size: 12px;
+      font-size: 14px;
       line-height: 1.5;
     }
     .schedule-tools,
@@ -97,7 +97,7 @@ import { WeeklyScheduleGridComponent } from './weekly-schedule-grid.component';
     .schedule-error {
       margin: 0;
       color: var(--danger, #b3261e);
-      font-size: 12px;
+      font-size: 14px;
     }
   `,
 })

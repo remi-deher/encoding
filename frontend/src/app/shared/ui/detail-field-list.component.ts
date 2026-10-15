@@ -134,7 +134,7 @@ export interface DetailField {
     .detail-section h3 {
       margin: 0;
       color: var(--text-primary);
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 700;
     }
 
@@ -145,7 +145,7 @@ export interface DetailField {
 
     .detail-field-list dt {
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 14px;
       font-weight: 700;
       letter-spacing: 0.035em;
       text-transform: uppercase;
@@ -154,7 +154,7 @@ export interface DetailField {
     .detail-field-list dd {
       margin: 0;
       color: var(--text-primary);
-      font-size: 13px;
+      font-size: 14px;
       line-height: 1.5;
       overflow-wrap: anywhere;
       white-space: pre-line;

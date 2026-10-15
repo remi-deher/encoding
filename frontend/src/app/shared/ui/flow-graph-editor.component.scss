@@ -11,7 +11,7 @@
 .detached > p,
 .branch-return {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 .graph-notice {
@@ -52,13 +52,13 @@
 }
 .step-kind {
   color: var(--step-color);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   min-width: 0;
 }
 .step-provider {
   color: var(--plugin-color);
-  font-size: 11px;
+  font-size: 14px;
   text-align: right;
   overflow-wrap: anywhere;
 }
@@ -132,7 +132,7 @@
   padding-top: 6px;
 }
 .output-label {
-  font-size: 12px;
+  font-size: 14px;
   max-width: 100%;
   white-space: normal;
   line-height: 1.3;
@@ -196,7 +196,7 @@
 .continuation-label {
   text-align: center;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 14px;
 }
 .insertion {
   display: flex;
@@ -237,7 +237,7 @@
   align-items: center;
   position: relative;
   z-index: 3;
-  font-size: 13px;
+  font-size: 14px;
 }
 @container (max-width:640px) {
   .branches {

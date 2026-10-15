@@ -160,7 +160,7 @@ export interface RecordFormData {
     }
     dt {
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: 14px;
       font-weight: 700;
       text-transform: uppercase;
     }
