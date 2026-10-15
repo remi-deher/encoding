@@ -1,5 +1,6 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Flows;
-using Npgsql;
 
 namespace Encoding.Api.Flows;
 
@@ -22,7 +23,7 @@ public static class EncodingProfileEndpoints
                 var profile = await repository.CreateAsync(id, request.Draft, ct);
                 return Results.Created($"/api/v1/encoding-profiles/{id:D}", profile);
             }
-            catch (PostgresException exception) when (exception.SqlState == "23505")
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
             {
                 return Results.Conflict(new { title = "Un profil d’encodage porte déjà ce nom." });
             }
@@ -45,7 +46,7 @@ public static class EncodingProfileEndpoints
                     ? Results.NotFound()
                     : Results.Conflict(new { title = "Le profil a été modifié ailleurs. Rechargez-le avant de continuer." });
             }
-            catch (PostgresException exception) when (exception.SqlState == "23505")
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
             {
                 return Results.Conflict(new { title = "Un profil d’encodage porte déjà ce nom." });
             }

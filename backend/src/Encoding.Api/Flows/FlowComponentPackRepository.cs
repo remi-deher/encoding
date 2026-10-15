@@ -1,11 +1,11 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace Encoding.Api.Flows;
 
-public sealed class FlowComponentPackRepository(NpgsqlDataSource dataSource, FlowComponentRegistry registry)
+public sealed class FlowComponentPackRepository(DbDataSource dataSource, FlowComponentRegistry registry)
 {
     public async Task<IReadOnlyList<FlowComponentPackSummary>> ListAsync(CancellationToken ct)
     {
@@ -46,7 +46,7 @@ public sealed class FlowComponentPackRepository(NpgsqlDataSource dataSource, Flo
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using var source = new NpgsqlCommand(
+        await using var source = Sql.Command(
             "SELECT definition::text FROM flow_versions WHERE flow_id=@flowId AND version=@version",
             connection, transaction);
         source.Parameters.AddWithValue("flowId", request.SourceFlowId);
@@ -69,7 +69,7 @@ public sealed class FlowComponentPackRepository(NpgsqlDataSource dataSource, Flo
                 .Where(output => !connectedOutputs.Contains((node.Id, output.Id)))
                 .Select(output => new FlowComponentPackOutput(node.Id + ":" + output.Id, output.Label, node.Id, output.Id)) ?? [])
             .ToArray();
-        await using var insert = new NpgsqlCommand("""
+        await using var insert = Sql.Command("""
             INSERT INTO flow_component_packs(
                 id,name,description,source_flow_id,source_version,source_flow_name,media_type,input_node_id,definition,outputs)
             VALUES(@id,@name,@description,@sourceFlowId,@sourceVersion,@sourceFlowName,@mediaType,@inputNodeId,@definition,@outputs)
@@ -83,14 +83,14 @@ public sealed class FlowComponentPackRepository(NpgsqlDataSource dataSource, Flo
         insert.Parameters.AddWithValue("sourceFlowName", definition.Name);
         insert.Parameters.AddWithValue("mediaType", definition.MediaType);
         insert.Parameters.AddWithValue("inputNodeId", inputNodeId);
-        insert.Parameters.AddWithValue("definition", NpgsqlDbType.Jsonb, sourceJson);
-        insert.Parameters.AddWithValue("outputs", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(outputs, FlowRepository.JsonOptions));
+        insert.Parameters.AddWithValue("definition", SqlKind.Json, sourceJson);
+        insert.Parameters.AddWithValue("outputs", SqlKind.Json, JsonSerializer.Serialize(outputs, FlowRepository.JsonOptions));
         if (await insert.ExecuteScalarAsync(ct) is null) return null;
         await transaction.CommitAsync(ct);
         return await GetAsync(id, ct);
     }
 
-    private static FlowComponentPackSummary ReadSummary(NpgsqlDataReader reader) => new(
+    private static FlowComponentPackSummary ReadSummary(DbDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
         reader.GetGuid(4), reader.GetInt32(5), reader.GetString(6), reader.GetInt32(7),
         reader.GetFieldValue<DateTimeOffset>(8));

@@ -1,12 +1,12 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Text.Json;
 using Encoding.Contracts.Plugins;
 using Microsoft.AspNetCore.DataProtection;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace Encoding.Api.Plugins;
 
-public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, IDataProtectionProvider protection)
+public sealed class PluginConfigurationRepository(DbDataSource dataSource, IDataProtectionProvider protection)
 {
     private readonly IDataProtector protector = protection.CreateProtector("Encoding.PluginConfiguration.v1");
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -57,7 +57,7 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
             """);
         command.Parameters.AddWithValue("id", plugin.Id);
         command.Parameters.AddWithValue("expected", request.ExpectedRevision);
-        command.Parameters.Add("values", NpgsqlDbType.Bytea).Value = Protect(values);
+        command.Parameters.AddWithValue("values", SqlKind.Bytes, Protect(values));
         if (await command.ExecuteScalarAsync(ct) is not int revision) return null;
         return ToResponse(plugin, revision, values);
     }
@@ -86,12 +86,12 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
 
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var ensureFlow = new NpgsqlCommand("INSERT INTO flows(id) VALUES(@flow) ON CONFLICT DO NOTHING", connection, transaction))
+        await using (var ensureFlow = Sql.Command("INSERT INTO flows(id) VALUES(@flow) ON CONFLICT DO NOTHING", connection, transaction))
         {
             ensureFlow.Parameters.AddWithValue("flow", flowId);
             await ensureFlow.ExecuteNonQueryAsync(ct);
         }
-        await using var command = new NpgsqlCommand("""
+        await using var command = Sql.Command("""
             INSERT INTO flow_plugin_configurations(flow_id,plugin_id,revision,encrypted_values)
             SELECT @flow,@plugin,1,@values WHERE @expected=0
               OR EXISTS(SELECT 1 FROM flow_plugin_configurations WHERE flow_id=@flow AND plugin_id=@plugin AND revision=@expected)
@@ -103,7 +103,7 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
         command.Parameters.AddWithValue("flow", flowId);
         command.Parameters.AddWithValue("plugin", plugin.Id);
         command.Parameters.AddWithValue("expected", request.ExpectedRevision);
-        command.Parameters.Add("values", NpgsqlDbType.Bytea).Value = Protect(values);
+        command.Parameters.AddWithValue("values", SqlKind.Bytes, Protect(values));
         if (await command.ExecuteScalarAsync(ct) is not int revision)
         {
             await transaction.RollbackAsync(ct);
@@ -122,19 +122,19 @@ public sealed class PluginConfigurationRepository(NpgsqlDataSource dataSource, I
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>> ResolveEffectiveAsync(
-        Guid flowId, IEnumerable<string> pluginIds, NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken ct)
+        Guid flowId, IEnumerable<string> pluginIds, DbConnection connection, DbTransaction transaction, CancellationToken ct)
     {
         var result = new Dictionary<string, IReadOnlyDictionary<string, JsonElement>>(StringComparer.Ordinal);
         var ids = pluginIds.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         if (ids.Length == 0) return result;
-        await using var command = new NpgsqlCommand("""
+        await using var command = Sql.Command("""
             SELECT requested.plugin_id,global.encrypted_values,flow.encrypted_values
             FROM unnest(@plugins::text[]) AS requested(plugin_id)
             LEFT JOIN plugin_configurations global ON global.plugin_id=requested.plugin_id
             LEFT JOIN flow_plugin_configurations flow ON flow.flow_id=@flow AND flow.plugin_id=requested.plugin_id
             ORDER BY requested.plugin_id
             """, connection, transaction);
-        command.Parameters.Add("plugins", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = ids;
+        command.Parameters.AddWithValue("plugins", SqlKind.TextArray, ids);
         command.Parameters.AddWithValue("flow", flowId);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))

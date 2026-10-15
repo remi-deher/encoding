@@ -1,4 +1,5 @@
-using Npgsql;
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 
 namespace Encoding.Api.Infrastructure;
 
@@ -9,18 +10,18 @@ public static class DatabaseMigrator
 {
     private const string LockSql = "SELECT pg_advisory_lock(hashtext('encoding.schema_migrations'))";
 
-    public static async Task ApplyAsync(NpgsqlDataSource dataSource, string contentRoot, CancellationToken cancellationToken, ILogger? logger = null)
+    public static async Task ApplyAsync(DbDataSource dataSource, string contentRoot, CancellationToken cancellationToken, ILogger? logger = null)
     {
         var files = MigrationCatalog.Load(MigrationCatalog.ResolveDirectory(contentRoot));
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using (var lockCommand = new NpgsqlCommand(LockSql, connection))
+        await using (var lockCommand = Sql.Command(LockSql, connection))
             await lockCommand.ExecuteNonQueryAsync(cancellationToken);
         try
         {
-            await using (var command = new NpgsqlCommand("CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())", connection))
+            await using (var command = Sql.Command("CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())", connection))
                 await command.ExecuteNonQueryAsync(cancellationToken);
-            await using (var command = new NpgsqlCommand("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum text", connection))
+            await using (var command = Sql.Command("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum text", connection))
                 await command.ExecuteNonQueryAsync(cancellationToken);
 
             var applied = await ReadAppliedAsync(connection, cancellationToken);
@@ -42,7 +43,7 @@ public static class DatabaseMigrator
                 else
                 {
                     var sql = await File.ReadAllTextAsync(file.Path, cancellationToken);
-                    await using (var apply = new NpgsqlCommand(sql, connection, transaction))
+                    await using (var apply = Sql.Command(sql, connection, transaction))
                         await apply.ExecuteNonQueryAsync(cancellationToken);
                     await RecordAsync(connection, transaction, file, backfill: false, cancellationToken);
                     logger?.LogInformation("Migration {Version} appliquée.", file.Version);
@@ -52,18 +53,18 @@ public static class DatabaseMigrator
         }
         finally
         {
-            await using var unlockCommand = new NpgsqlCommand("SELECT pg_advisory_unlock(hashtext('encoding.schema_migrations'))", connection);
+            await using var unlockCommand = Sql.Command("SELECT pg_advisory_unlock(hashtext('encoding.schema_migrations'))", connection);
             await unlockCommand.ExecuteNonQueryAsync(CancellationToken.None);
         }
     }
 
     /// <summary>Lecture seule : ne crée ni ne modifie rien, pour le health check et les métriques.</summary>
-    public static async Task<MigrationStatus> StatusAsync(NpgsqlDataSource dataSource, string contentRoot, CancellationToken cancellationToken)
+    public static async Task<MigrationStatus> StatusAsync(DbDataSource dataSource, string contentRoot, CancellationToken cancellationToken)
     {
         var files = MigrationCatalog.Load(MigrationCatalog.ResolveDirectory(contentRoot));
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         Dictionary<string, string?> applied;
-        await using (var exists = new NpgsqlCommand("SELECT to_regclass('schema_migrations') IS NOT NULL", connection))
+        await using (var exists = Sql.Command("SELECT to_regclass('schema_migrations') IS NOT NULL", connection))
             applied = (bool)(await exists.ExecuteScalarAsync(cancellationToken))!
                 ? await ReadAppliedAsync(connection, cancellationToken)
                 : [];
@@ -75,21 +76,21 @@ public static class DatabaseMigrator
         return new(applied.Count, pending, unknown, applied.Keys.Order(StringComparer.Ordinal).LastOrDefault());
     }
 
-    private static async Task<Dictionary<string, string?>> ReadAppliedAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    private static async Task<Dictionary<string, string?>> ReadAppliedAsync(DbConnection connection, CancellationToken cancellationToken)
     {
         var result = new Dictionary<string, string?>(StringComparer.Ordinal);
-        await using var command = new NpgsqlCommand("SELECT version, checksum FROM schema_migrations", connection);
+        await using var command = Sql.Command("SELECT version, checksum FROM schema_migrations", connection);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken)) result[reader.GetString(0)] = reader.IsDBNull(1) ? null : reader.GetString(1);
         return result;
     }
 
-    private static async Task RecordAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, MigrationFile file, bool backfill, CancellationToken cancellationToken)
+    private static async Task RecordAsync(DbConnection connection, DbTransaction? transaction, MigrationFile file, bool backfill, CancellationToken cancellationToken)
     {
         var sql = backfill
             ? "UPDATE schema_migrations SET checksum = @checksum WHERE version = @version AND checksum IS NULL"
             : "INSERT INTO schema_migrations(version, checksum) VALUES (@version, @checksum)";
-        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        await using var command = Sql.Command(sql, connection, transaction);
         command.Parameters.AddWithValue("version", file.Version);
         command.Parameters.AddWithValue("checksum", file.Checksum);
         await command.ExecuteNonQueryAsync(cancellationToken);

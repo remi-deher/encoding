@@ -1,11 +1,12 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Npgsql;
 
 namespace Encoding.Api.Flows;
 
 /// <summary>Replays the transactional outbox and periodically checks completed snapshots.</summary>
-public sealed class FlowBackupService(NpgsqlDataSource dataSource, IConfiguration configuration, ILogger<FlowBackupService> logger) : BackgroundService
+public sealed class FlowBackupService(DbDataSource dataSource, IConfiguration configuration, ILogger<FlowBackupService> logger) : BackgroundService
 {
     private readonly string directory = Path.GetFullPath(configuration["FlowBackups:Directory"] ?? Path.Combine(AppContext.BaseDirectory,"flow-backups"));
 
@@ -39,7 +40,7 @@ public sealed class FlowBackupService(NpgsqlDataSource dataSource, IConfiguratio
             WHERE b.next_attempt_at <= clock_timestamp() ORDER BY b.next_attempt_at,b.flow_id,b.version
             LIMIT 1 FOR UPDATE OF b SKIP LOCKED
             """;
-        await using (var command = new NpgsqlCommand(select,connection,tx))
+        await using (var command = Sql.Command(select,connection,tx))
         await using (var reader = await command.ExecuteReaderAsync(ct))
         {
             if (!await reader.ReadAsync(ct)) return false;
@@ -53,7 +54,7 @@ public sealed class FlowBackupService(NpgsqlDataSource dataSource, IConfiguratio
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         { status="failed"; logger.LogWarning(exception,"Sauvegarde impossible pour le flow {FlowId}, version {Version}.",id,version); }
         var table=draft?"flow_draft_backups":"flow_backup_jobs"; var number=draft?"revision":"version";
-        await using var update=new NpgsqlCommand($"UPDATE {table} SET status=@status,checked_at=clock_timestamp(),next_attempt_at=clock_timestamp()+@delay WHERE flow_id=@id AND {number}=@version",connection,tx);
+        await using var update=Sql.Command($"UPDATE {table} SET status=@status,checked_at=clock_timestamp(),next_attempt_at=clock_timestamp()+@delay WHERE flow_id=@id AND {number}=@version",connection,tx);
         update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("version",version);
         update.Parameters.AddWithValue("status",status); update.Parameters.AddWithValue("delay",status=="ready" ? TimeSpan.FromMinutes(10) : TimeSpan.FromSeconds(30));
         await update.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return true;

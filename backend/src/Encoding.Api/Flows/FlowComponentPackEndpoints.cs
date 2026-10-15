@@ -1,5 +1,6 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Flows;
-using Npgsql;
 
 namespace Encoding.Api.Flows;
 
@@ -27,7 +28,7 @@ public static class FlowComponentPackEndpoints
                     ? Results.UnprocessableEntity(new { title = "Le flow publié doit contenir une entrée reliée à au moins un composant." })
                     : Results.Created($"/api/v1/component-packs/{pack.Pack.Id:D}", pack);
             }
-            catch (PostgresException exception) when (exception.SqlState == "23505")
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
             {
                 return Results.Conflict(new { title = "Un pack de composants porte déjà ce nom." });
             }

@@ -1,9 +1,10 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Executions;
-using Npgsql;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
+public sealed class RuntimeTransferRepository(DbDataSource dataSource)
 {
     public async Task<IReadOnlyList<RuntimeTransfer>> ListAsync(Guid node,CancellationToken ct)
     {
@@ -28,7 +29,7 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await RuntimeRepository.FenceAsync(id,source,request.Epoch,c,tx,ct,true)) return false;
         Guid worker; Guid library; string original; string sourceSha; string resultSha; int? graceHours; string mediaPolicy;
-        await using(var read=new NpgsqlCommand("SELECT worker_node_id,library_id,media_path,source_sha,result_sha,replacement_grace_hours,media_policy FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
+        await using(var read=Sql.Command("SELECT worker_node_id,library_id,media_path,source_sha,result_sha,replacement_grace_hours,media_policy FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
         {
             read.Parameters.AddWithValue("id",id); read.Parameters.AddWithValue("sha",request.Sha256); read.Parameters.AddWithValue("path",request.PublishedPath);
             await using var row=await read.ExecuteReaderAsync(ct); if(!await row.ReadAsync(ct)) return false;
@@ -41,7 +42,7 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
             :mediaPolicy=="overwrite"?"Résultat validé et publié ; écrasement demandé par le flow mais la bibliothèque n’a pas de politique de remplacement active : fichier source conservé.":"Résultat validé et publié ; fichier source conservé.";
         if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"succeeded",worker,100,detail),c,tx,ct)) return false;
         if(replacement is not null) await SourceReplacementRepository.RecordInTransactionAsync(id,library,source,original,sourceSha,resultSha,graceHours!.Value,replacement,c,tx,ct);
-        await using var update=new NpgsqlCommand("UPDATE execution_work SET published_path=@path WHERE execution_id=@id",c,tx);
+        await using var update=Sql.Command("UPDATE execution_work SET published_path=@path WHERE execution_id=@id",c,tx);
         update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("path",request.PublishedPath); await update.ExecuteNonQueryAsync(ct);
         await RuntimeRepository.ReleaseAsync(id,c,tx,ct); await tx.CommitAsync(ct); return true;
     }
@@ -60,26 +61,26 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
             foreach(var group in commands.GroupBy(item=>(item.NodeId,item.InvocationId)))
             {
                 var logs=System.Text.Json.JsonSerializer.Serialize(group.Select(item=>item.Command),json);
-                await using var append=new NpgsqlCommand("UPDATE execution_steps SET command_logs=command_logs || @logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation",c,tx);
+                await using var append=Sql.Command("UPDATE execution_steps SET command_logs=command_logs || @logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation",c,tx);
                 append.Parameters.AddWithValue("id",id); append.Parameters.AddWithValue("node",group.Key.NodeId);
                 append.Parameters.AddWithValue("invocation",group.Key.InvocationId);
-                append.Parameters.AddWithValue("logs",NpgsqlTypes.NpgsqlDbType.Jsonb,logs);
+                append.Parameters.AddWithValue("logs",SqlKind.Json,logs);
                 if(await append.ExecuteNonQueryAsync(ct)!=1) return false;
             }
         }
         if(request.State=="cancelled")
         {
-            await using var cancellation=new NpgsqlCommand("SELECT state='cancelling' FROM executions WHERE id=@id",c,tx); cancellation.Parameters.AddWithValue("id",id);
+            await using var cancellation=Sql.Command("SELECT state='cancelling' FROM executions WHERE id=@id",c,tx); cancellation.Parameters.AddWithValue("id",id);
             if(!(bool)(await cancellation.ExecuteScalarAsync(ct))!) return false;
         }
         if(sourceFailure)
         {
             if(request.State!="failed") return false;
-            await using var read=new NpgsqlCommand("SELECT worker_node_id FROM execution_work WHERE execution_id=@id",c,tx); read.Parameters.AddWithValue("id",id); worker=(Guid)(await read.ExecuteScalarAsync(ct))!;
+            await using var read=Sql.Command("SELECT worker_node_id FROM execution_work WHERE execution_id=@id",c,tx); read.Parameters.AddWithValue("id",id); worker=(Guid)(await read.ExecuteScalarAsync(ct))!;
         }
         if(request.State is "succeeded" or "deferred")
         {
-            await using var reached=new NpgsqlCommand("SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1",c,tx);
+            await using var reached=Sql.Command("SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1",c,tx);
             reached.Parameters.AddWithValue("id",id);
             if(await reached.ExecuteScalarAsync(ct) is not string json) return false;
             var cp=System.Text.Json.JsonSerializer.Deserialize<RuntimeCheckpoint>(json,new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
@@ -87,17 +88,17 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
             if(request.State=="deferred" && (cp.TerminalResult!="deferred" || request.DeferMinutes is not >=1 or >1440)) return false;
             if(request.BeforeMetadata is null || request.AfterMetadata is null) return false;
         }
-        await using(var metadata=new NpgsqlCommand("UPDATE execution_work SET before_metadata=COALESCE(@before,before_metadata),after_metadata=COALESCE(@after,after_metadata) WHERE execution_id=@id",c,tx))
+        await using(var metadata=Sql.Command("UPDATE execution_work SET before_metadata=COALESCE(@before,before_metadata),after_metadata=COALESCE(@after,after_metadata) WHERE execution_id=@id",c,tx))
         {
             metadata.Parameters.AddWithValue("id",id);
-            metadata.Parameters.AddWithValue("before",NpgsqlTypes.NpgsqlDbType.Jsonb,(object?)request.BeforeMetadata?.GetRawText()??DBNull.Value);
-            metadata.Parameters.AddWithValue("after",NpgsqlTypes.NpgsqlDbType.Jsonb,(object?)request.AfterMetadata?.GetRawText()??DBNull.Value);
+            metadata.Parameters.AddWithValue("before",SqlKind.Json,(object?)request.BeforeMetadata?.GetRawText()??DBNull.Value);
+            metadata.Parameters.AddWithValue("after",SqlKind.Json,(object?)request.AfterMetadata?.GetRawText()??DBNull.Value);
             await metadata.ExecuteNonQueryAsync(ct);
         }
         if(request.State=="succeeded" && request.ResultSha256 is { } sha)
         {
             if(!RuntimeArtifactStore.ValidDigest(sha) || request.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(request.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
-            await using var set=new NpgsqlCommand("""
+            await using var set=Sql.Command("""
               UPDATE execution_work w SET result_sha=@sha,result_extension=@extension,publication_requested=true,
               replacement_grace_hours=CASE WHEN w.media_policy='beside' THEN NULL ELSE (SELECT p.grace_period_hours FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled) END
               WHERE execution_id=@id AND EXISTS(SELECT 1 FROM execution_artifacts a WHERE a.execution_id=w.execution_id AND a.sha256=@sha)
@@ -114,7 +115,7 @@ public sealed class RuntimeTransferRepository(NpgsqlDataSource dataSource)
             if(request.State=="deferred")
             {
                 var next=Guid.NewGuid();
-                await using var schedule=new NpgsqlCommand("""
+                await using var schedule=Sql.Command("""
                   INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,retry_of,detail)
                   SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,'Nouvelle tentative planifiée après report.' FROM executions WHERE id=@id;
                   INSERT INTO execution_work(execution_id,library_id,media_path,media_key,available_at)

@@ -1,4 +1,5 @@
-using Npgsql;
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 
 namespace Encoding.Api.Plugins;
 
@@ -10,7 +11,7 @@ public sealed record IntegrationTriggerRequest(Guid Id, string PluginId, Guid Li
 /// Demandes de traitement reçues d’un service externe. PostgreSQL est l’autorité : plusieurs serveurs peuvent
 /// recevoir et traiter les demandes, chacune n’étant réclamée que par un serveur à la fois et pour une durée bornée.
 /// </summary>
-public sealed class IntegrationTriggerRepository(NpgsqlDataSource dataSource)
+public sealed class IntegrationTriggerRepository(DbDataSource dataSource)
 {
     public static readonly TimeSpan ClaimDuration = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan Lifetime = TimeSpan.FromHours(1);

@@ -1,5 +1,6 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Libraries;
-using Npgsql;
 
 namespace Encoding.Api.Libraries;
 
@@ -44,7 +45,7 @@ public static class LibraryEndpoints
                 var updated = await repository.UpdateAsync(libraryId, request, cancellationToken);
                 return updated is null ? (IResult)Results.NotFound() : Results.Ok(updated);
             }
-            catch (PostgresException exception) when (exception.SqlState == "23505")
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
             {
                 return Results.Conflict(new { title = "Une bibliothèque porte déjà ce nom." });
             }

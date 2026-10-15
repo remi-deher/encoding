@@ -1,5 +1,6 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Libraries;
-using Npgsql;
 
 namespace Encoding.Api.Libraries;
 
@@ -9,7 +10,7 @@ public sealed class LibraryNodeAccessValidationException(IReadOnlyDictionary<str
     public IReadOnlyDictionary<string, string[]> Errors { get; } = errors;
 }
 
-public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
+public sealed class LibraryNodeAccessRepository(DbDataSource dataSource)
 {
     public async Task<LibraryNodeAccessResponse?> SetEnabledAsync(
         Guid libraryId,
@@ -23,7 +24,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
             WHERE library_id = @library_id AND node_id = @node_id AND mode <> 'unsupported'
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         command.Parameters.AddWithValue("library_id", libraryId);
         command.Parameters.AddWithValue("node_id", nodeId);
         command.Parameters.AddWithValue("is_enabled", isEnabled);
@@ -36,7 +37,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
     public async Task<IReadOnlyList<LibraryNodeAccessResponse>?> ListAsync(Guid libraryId, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using (var exists = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM libraries WHERE id = @id)", connection))
+        await using (var exists = Sql.Command("SELECT EXISTS (SELECT 1 FROM libraries WHERE id = @id)", connection))
         {
             exists.Parameters.AddWithValue("id", libraryId);
             if ((bool)(await exists.ExecuteScalarAsync(cancellationToken) ?? false) is false) return null;
@@ -51,7 +52,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
             WHERE a.library_id = @library_id
             ORDER BY n.name, n.id
             """;
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         command.Parameters.AddWithValue("library_id", libraryId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var accesses = new List<LibraryNodeAccessResponse>();
@@ -68,7 +69,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        await using (var exists = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM libraries WHERE id = @id)", connection, transaction))
+        await using (var exists = Sql.Command("SELECT EXISTS (SELECT 1 FROM libraries WHERE id = @id)", connection, transaction))
         {
             exists.Parameters.AddWithValue("id", libraryId);
             if ((bool)(await exists.ExecuteScalarAsync(cancellationToken) ?? false) is false)
@@ -81,7 +82,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
         var nodeRoles = new Dictionary<Guid, string[]>();
         if (nodes.Count > 0)
         {
-            await using var nodeCommand = new NpgsqlCommand("SELECT id, roles FROM cluster_nodes WHERE id = ANY(@ids) AND deleted_at IS NULL", connection, transaction);
+            await using var nodeCommand = Sql.Command("SELECT id, roles FROM cluster_nodes WHERE id = ANY(@ids) AND deleted_at IS NULL", connection, transaction);
             nodeCommand.Parameters.AddWithValue("ids", nodes.Select(item => item.NodeId).Distinct().ToArray());
             await using var nodeReader = await nodeCommand.ExecuteReaderAsync(cancellationToken);
             while (await nodeReader.ReadAsync(cancellationToken)) nodeRoles[nodeReader.GetGuid(0)] = nodeReader.GetFieldValue<string[]>(1);
@@ -94,7 +95,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
             throw new LibraryNodeAccessValidationException(errors);
         }
 
-        await using (var delete = new NpgsqlCommand("DELETE FROM library_node_accesses WHERE library_id = @library_id", connection, transaction))
+        await using (var delete = Sql.Command("DELETE FROM library_node_accesses WHERE library_id = @library_id", connection, transaction))
         {
             delete.Parameters.AddWithValue("library_id", libraryId);
             await delete.ExecuteNonQueryAsync(cancellationToken);
@@ -108,7 +109,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
             """;
         foreach (var item in nodes)
         {
-            await using var insert = new NpgsqlCommand(insertSql, connection, transaction);
+            await using var insert = Sql.Command(insertSql, connection, transaction);
             insert.Parameters.AddWithValue("library_id", libraryId);
             insert.Parameters.AddWithValue("node_id", item.NodeId);
             insert.Parameters.AddWithValue("mode", item.Mode.ToString().ToLowerInvariant());
@@ -178,7 +179,7 @@ public sealed class LibraryNodeAccessRepository(NpgsqlDataSource dataSource)
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static LibraryNodeAccessResponse Read(NpgsqlDataReader reader) => new(
+    private static LibraryNodeAccessResponse Read(DbDataReader reader) => new(
         reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2),
         Enum.Parse<LibraryNodeAccessMode>(reader.GetString(3), true),
         reader.GetBoolean(4), reader.IsDBNull(5) ? null : reader.GetString(5), reader.GetBoolean(6), reader.GetBoolean(7),
