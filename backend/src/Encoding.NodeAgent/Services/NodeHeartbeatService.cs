@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Encoding.Contracts.Nodes;
+using Encoding.Core.Nodes;
 using System.Runtime.InteropServices;
 
 namespace Encoding.NodeAgent.Services;
@@ -8,7 +9,8 @@ public sealed class NodeHeartbeatService(
     NodeAgentOptions options,
     WorkerIdentityStore identityStore,
     IToolCapabilityProbe capabilityProbe,
-    ILogger<NodeHeartbeatService> logger) : BackgroundService
+    ILogger<NodeHeartbeatService> logger,
+    LauncherControlClient? launcher = null) : BackgroundService
 {
     private readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
@@ -45,6 +47,8 @@ public sealed class NodeHeartbeatService(
                             logger.LogInformation("L’enrôlement en attente du worker {NodeId} a été confirmé par le cluster.", identity.Id);
                         }
                         logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", identity.Id);
+                        var node = await response.Content.ReadFromJsonAsync<NodeResponse>(stoppingToken);
+                        await ApplyDesiredModeAsync(node?.DesiredRoles, stoppingToken);
                     }
                 }
             }
@@ -62,6 +66,28 @@ public sealed class NodeHeartbeatService(
             }
 
             await Task.Delay(options.HeartbeatInterval, stoppingToken);
+        }
+    }
+
+    // Mode demandé par un administrateur du cluster (0036) : appliqué par le lanceur local, qui relance l'agent avec ses nouveaux rôles.
+    private async Task ApplyDesiredModeAsync(IReadOnlyList<NodeRole>? desiredRoles, CancellationToken cancellationToken)
+    {
+        if (desiredRoles is not { Count: > 0 }) return;
+        var desired = new NodeMode(desiredRoles.Contains(NodeRole.Server), desiredRoles.Contains(NodeRole.Worker));
+        if (desired == new NodeMode(options.Roles.Contains(NodeRole.Server), options.Roles.Contains(NodeRole.Worker))) return;
+        if (launcher is null)
+        {
+            logger.LogWarning("Le cluster demande le mode {Mode}, mais ce nœud n'est pas géré par un lanceur (image unique) ; demande ignorée.", desired.ToRoles());
+            return;
+        }
+        try
+        {
+            await launcher.SetAsync(desired, cancellationToken);
+            logger.LogInformation("Mode du nœud changé à la demande du cluster : {Mode}.", desired.ToRoles());
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Le lanceur a refusé le changement de mode demandé par le cluster.");
         }
     }
 

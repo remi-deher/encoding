@@ -1,3 +1,4 @@
+using Encoding.Core.Nodes;
 using Encoding.NodeAgent;
 using Encoding.NodeAgent.Services;
 using Encoding.NodeAgent.Runtime;
@@ -30,6 +31,7 @@ builder.Services.AddSingleton<WorkerEnrollmentService>();
 builder.Services.AddHostedService<WorkerClusterDiscovery>(provider => provider.GetRequiredService<WorkerClusterDiscovery>());
 builder.Services.AddHostedService<WorkerAutoEnrollmentService>();
 builder.Services.AddHostedService<NodeHeartbeatService>();
+builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
 builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy => policy
     .WithOrigins(options.WorkerUiOrigins.ToArray())
     .AllowAnyHeader()
@@ -41,7 +43,7 @@ var app = builder.Build();
 var allowedOrigins = new HashSet<string>(options.WorkerUiOrigins, StringComparer.OrdinalIgnoreCase);
 app.Use(async (context, next) =>
 {
-    if (HttpMethods.IsPost(context.Request.Method)
+    if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method) && !HttpMethods.IsOptions(context.Request.Method)
         && (!context.Request.Headers.TryGetValue("Origin", out var origin) || !allowedOrigins.Contains(origin.ToString())))
     {
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -52,6 +54,7 @@ app.Use(async (context, next) =>
 app.UseCors();
 
 app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));
+app.MapNodeMode("/api/v1/worker/mode");
 app.MapGet("/api/v1/worker/clusters", (WorkerClusterDiscovery discovery) => Results.Ok(discovery.List()));
 app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe, CancellationToken cancellationToken) =>
 {

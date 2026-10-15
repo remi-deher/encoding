@@ -152,7 +152,7 @@ internal static class AuthScenarios
         }
         Check(await anonymous.StatusAsync(get, "/health/live") == HttpStatusCode.OK, "Liveness stays public.");
         Check(await anonymous.StatusAsync(get, "/api/v1/cluster") == HttpStatusCode.OK, "Cluster identity stays public for worker discovery.");
-        foreach (var url in new[] { "/api/v1/libraries", "/api/v1/flows", "/api/v1/nodes", "/api/v1/executions", "/api/v1/plugins/base/configuration", "/api/v1/users", "/api/v1/nodes/enrollment-requests" })
+        foreach (var url in new[] { "/api/v1/libraries", "/api/v1/flows", "/api/v1/nodes", "/api/v1/executions", "/api/v1/plugins/base/configuration", "/api/v1/users", "/api/v1/nodes/enrollment-requests", "/api/v1/node/mode" })
             Check(await anonymous.StatusAsync(get, url) == HttpStatusCode.Unauthorized, "Anonymous reads of " + url + " are refused.");
         Check(await anonymous.StatusAsync(post, "/api/v1/libraries", new { name = "x" }) == HttpStatusCode.Unauthorized, "Anonymous writes are refused.");
 
@@ -171,6 +171,7 @@ internal static class AuthScenarios
 
         // Administrateur : lecture, écriture avec protection CSRF.
         Check(await admin.StatusAsync(get, "/api/v1/libraries") == HttpStatusCode.OK, "An administrator reads.");
+        Check(await admin.StatusAsync(put, "/api/v1/node/mode", new { server = true, worker = true }) == HttpStatusCode.Conflict, "Without a launcher, an administrator gets a clear refusal to change the node mode.");
         Check(await admin.StatusAsync(post, "/api/v1/libraries", new { name = "sans-csrf" }, csrf: false) == HttpStatusCode.Forbidden, "Cookie-authenticated writes need the anti-CSRF header.");
         Check(await admin.StatusAsync(post, "/api/v1/libraries", new { name = "films" }) == HttpStatusCode.Created, "An administrator writes.");
         Check(await admin.StatusAsync(get, "/api/v1/users") == HttpStatusCode.OK, "Administrators list users.");
@@ -183,6 +184,8 @@ internal static class AuthScenarios
         Check(await viewer.StatusAsync(post, "/api/v1/libraries", new { name = "interdit" }) == HttpStatusCode.Forbidden, "A viewer cannot create.");
         Check(await viewer.StatusAsync(delete, "/api/v1/libraries/" + Guid.NewGuid()) == HttpStatusCode.Forbidden, "A viewer cannot delete.");
         Check(await viewer.StatusAsync(get, "/api/v1/users") == HttpStatusCode.Forbidden, "A viewer cannot list users.");
+        Check(await viewer.StatusAsync(get, "/api/v1/node/mode") == HttpStatusCode.OK, "A viewer reads the node mode.");
+        Check(await viewer.StatusAsync(put, "/api/v1/node/mode", new { server = false, worker = true }) == HttpStatusCode.Forbidden, "A viewer cannot change the node mode.");
         Check(await viewer.StatusAsync(post, "/api/v1/nodes/enrollment-requests/approve", new ApproveNodeEnrollmentRequest("0123456789ABCDEF")) == HttpStatusCode.Forbidden, "A viewer cannot approve a node.");
         Check(await viewer.StatusAsync(put, "/api/v1/nodes/enrollment-window", new OpenEnrollmentWindowRequest(5)) == HttpStatusCode.Forbidden, "A viewer cannot open enrollment.");
         Check(await viewer.StatusAsync(post, "/api/v1/plugins/base/connection-test", new { }) == HttpStatusCode.Forbidden, "A viewer cannot make the server call external services.");
@@ -279,6 +282,28 @@ internal static class AuthScenarios
         Check(await admin.StatusAsync(post, $"/api/v1/nodes/enrollment-requests/{requests[1].Node.Id}/approve") == HttpStatusCode.OK, "An administrator approves by identifier.");
         Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{requests[0].Node.Id}/heartbeat", new NodeHeartbeatRequest(requests[0].Node.Name, requests[0].Node.Roles, 1, requests[0].Node.Capabilities), csrf: false, nodeToken: requests[0].Node.NodeToken) == HttpStatusCode.OK,
             "A paired worker heartbeats with the secret it generated.");
+
+        // Changement de mode à distance : route fermée par défaut, demande enregistrée puis livrée par le heartbeat.
+        var mode = $"/api/v1/nodes/{first.Id}/mode";
+        Check(await anonymous.StatusAsync(put, mode, new ChangeNodeModeRequest(true, true), csrf: false) == HttpStatusCode.Unauthorized, "Anonymous callers cannot change a node mode.");
+        Check(await anonymous.StatusAsync(put, mode, new ChangeNodeModeRequest(true, true), csrf: false, nodeToken: token) == HttpStatusCode.Unauthorized, "A node token cannot change a node mode.");
+        Check(await viewer.StatusAsync(put, mode, new ChangeNodeModeRequest(true, true)) == HttpStatusCode.Forbidden, "A viewer cannot change a node mode.");
+        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(false, false)) == HttpStatusCode.BadRequest, "A node keeps at least one function.");
+        Check(await admin.StatusAsync(put, $"/api/v1/nodes/{Guid.NewGuid()}/mode", new ChangeNodeModeRequest(true, true)) == HttpStatusCode.NotFound, "An unknown node is reported.");
+        async Task<NodeResponse?> Beat() => await (await anonymous.SendAsync(put, $"/api/v1/nodes/{first.Id}/heartbeat", heartbeat, csrf: false, nodeToken: token)).Content.ReadFromJsonAsync<NodeResponse>(Json);
+        Check((await Beat())?.DesiredRoles is null, "Without a request, the heartbeat carries no desired mode.");
+        var current = first.Roles.Contains(NodeRole.Server);
+        var otherServer = !current;
+        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(!current, true)) == HttpStatusCode.Accepted, "An administrator requests a mode for a node.");
+        var delivered = (await Beat())?.DesiredRoles;
+        Check(delivered is not null && delivered.Contains(NodeRole.Worker) && delivered.Contains(NodeRole.Server) == otherServer, "The heartbeat answer delivers the desired mode.");
+        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(current, first.Roles.Contains(NodeRole.Worker))) == HttpStatusCode.Accepted, "Asking for the current mode cancels the request.");
+        Check((await Beat())?.DesiredRoles is null, "A cancelled request is not delivered.");
+        var applied = new NodeHeartbeatRequest(first.Name, new[] { NodeRole.Worker, NodeRole.Server }, 1, first.Capabilities);
+        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(true, true)) == HttpStatusCode.Accepted, "A request for both functions is accepted.");
+        using (var ack = await anonymous.SendAsync(put, $"/api/v1/nodes/{first.Id}/heartbeat", applied, csrf: false, nodeToken: token))
+            Check((await ack.Content.ReadFromJsonAsync<NodeResponse>(Json))?.DesiredRoles is null, "Reporting the requested roles clears the request.");
+        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(false, true)) == HttpStatusCode.Conflict, "The last online server cannot lose its server function.");
         Console.WriteLine("PASS: enrollment window, capped pairing requests, admin-only approval and node-token isolation.");
     }
 

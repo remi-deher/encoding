@@ -49,6 +49,7 @@ import {
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
+import { NodeModeController } from '../../shared/services/node-mode-controller';
 import { NotificationService } from '../../shared/services/notification.service';
 import {
   DetailCard,
@@ -138,6 +139,7 @@ export class NodeCatalogPageComponent {
   private readonly clusterApi = inject(ClusterApi);
   private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
+  private readonly nodeMode = inject(NodeModeController);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
@@ -257,6 +259,14 @@ export class NodeCatalogPageComponent {
             items: [
               { label: 'Nom affiché', description: node.displayName?.trim() || node.name },
               { label: 'Identifiant', description: node.id },
+              ...(node.desiredRoles?.length
+                ? [
+                    {
+                      label: 'Mode demandé',
+                      description: `${node.desiredRoles.map((role) => NODE_ROLE_LABELS[role]).join(' · ')} (en attente du prochain signal du nœud)`,
+                    },
+                  ]
+                : []),
             ],
           },
         ],
@@ -420,7 +430,10 @@ export class NodeCatalogPageComponent {
     });
   }
 
-  private processingLimitForm(node: NodeResponse, settings: NodeProcessingSettings): RecordFormData {
+  private processingLimitForm(
+    node: NodeResponse,
+    settings: NodeProcessingSettings,
+  ): RecordFormData {
     return {
       title: 'Limite globale du nœud',
       description:
@@ -721,6 +734,7 @@ export class NodeCatalogPageComponent {
   }
   protected readonly nodeActions: readonly DataTableRowAction[] = [
     { id: 'identity', label: 'Nom et étiquettes', visibleWhen: () => this.isAdmin() },
+    { id: 'mode', label: 'Changer le mode', visibleWhen: () => this.isAdmin() },
     {
       id: 'delete',
       label: 'Supprimer',
@@ -740,6 +754,11 @@ export class NodeCatalogPageComponent {
     if (event.actionId === 'identity') {
       const node = this.filteredNodes().find((item) => item.id === event.row['id']);
       if (node) void this.editNodeIdentity(node);
+      return;
+    }
+    if (event.actionId === 'mode') {
+      const node = this.nodes().find((item) => item.id === event.row['id']);
+      if (node) void this.requestNodeMode(node);
       return;
     }
     if (event.actionId !== 'delete' || this.removalBusy()) return;
@@ -960,6 +979,25 @@ export class NodeCatalogPageComponent {
 
   protected onRoleChange(role: string): void {
     this.selectedRole.set(role);
+  }
+
+  private async requestNodeMode(node: NodeResponse): Promise<void> {
+    const roles = node.desiredRoles ?? node.roles;
+    const accepted = await this.nodeMode.request(
+      node.id,
+      node.displayName?.trim() || node.name,
+      { server: roles.includes('server'), worker: roles.includes('worker') },
+      node.status === 'online',
+    );
+    if (!accepted) return;
+    this.clusterApi
+      .listNodes()
+      .pipe(catchError(() => EMPTY))
+      .subscribe((nodes) => this.nodes.set(nodes));
+  }
+
+  protected changeLocalMode(): void {
+    void this.nodeMode.change('/api/v1/node/mode');
   }
 
   protected addNode(): void {

@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, EMPTY, forkJoin, switchMap, timer } from 'rxjs';
+import { NodeModeController } from '../../shared/services/node-mode-controller';
 import { NotificationService } from '../../shared/services/notification.service';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
@@ -44,6 +45,7 @@ interface WorkerPairingResponse {
 export class WorkerConsolePageComponent {
   private readonly http = inject(HttpClient);
   private readonly notifications = inject(NotificationService);
+  private readonly nodeMode = inject(NodeModeController);
   private readonly status = signal<WorkerStatus | null>(null);
   protected readonly clusters = signal<readonly WorkerCluster[]>([]);
   protected readonly selectedTab = signal('tasks');
@@ -78,6 +80,10 @@ export class WorkerConsolePageComponent {
       this.refreshError.set(false);
       this.loading.set(false);
     });
+  }
+
+  protected async changeMode(): Promise<void> {
+    if (await this.nodeMode.change(`${WORKER_AGENT_API}/mode`)) this.refreshStatus();
   }
 
   protected selectTab(tab: string): void {

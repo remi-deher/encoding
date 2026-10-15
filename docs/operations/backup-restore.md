@@ -47,7 +47,7 @@ docker rm -f encoding-restore-check
 
 ## Restauration complète
 
-1. Arrêter tous les serveurs et agents (`docker compose stop api node-agent`). Les workers ne doivent pas tenir de bail pendant la restauration.
+1. Arrêter tous les serveurs et agents (`docker compose stop encoding`). Les workers ne doivent pas tenir de bail pendant la restauration.
 2. Restaurer les clés de plugins dans `encoding-plugin-keys` **avant** de redémarrer un serveur.
 3. Recréer la base vide puis restaurer :
    ```bash

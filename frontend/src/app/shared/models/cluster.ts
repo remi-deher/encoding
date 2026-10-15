@@ -23,6 +23,8 @@ export interface NodeResponse {
   readonly inventory?: NodeInventory | null;
   readonly displayName?: string | null;
   readonly labels?: Readonly<Record<string, string | null>>;
+  /** Mode demandé par un administrateur et pas encore appliqué par le nœud. */
+  readonly desiredRoles?: readonly NodeRole[] | null;
 }
 export interface NodeInventory {
   readonly operatingSystem: string;

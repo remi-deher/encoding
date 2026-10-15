@@ -10,6 +10,7 @@ using Encoding.Api.Nodes;
 using Encoding.Api.Libraries;
 using Encoding.Api.Plugins;
 using Encoding.Contracts.Nodes;
+using Encoding.Core.Nodes;
 using Encoding.Contracts.Libraries;
 using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
@@ -68,6 +69,7 @@ builder.Services.AddSingleton<LibraryProcessingRepository>();
 builder.Services.AddHostedService<LibraryMonitoringService>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
 builder.Services.AddSingleton<ClusterIdentityRepository>();
+builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -105,6 +107,7 @@ app.MapLibraryEndpoints();
 app.MapClusterEndpoints();
 app.MapNodeEndpoints();
 app.MapNodeGroupEndpoints();
+app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
 
 app.MapFallbackToFile("index.html").AllowAnonymous();
