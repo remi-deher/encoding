@@ -15,15 +15,15 @@ import { Component, input } from '@angular/core';
     .badges {
       display: inline-flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: var(--space-1);
     }
     .badge {
-      padding: 2px 8px;
+      padding: 2px var(--space-2);
       border: 1px solid var(--border-subtle);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--surface-muted);
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
       font-weight: 600;
       white-space: nowrap;
     }

@@ -151,30 +151,30 @@ interface EncoderGroup {
     </app-management-catalog-template>
   `,
   styles: `
-    .profile-layout { display:grid; grid-template-columns:minmax(280px,.85fr) minmax(0,1.6fr); gap:20px; padding:16px 20px 20px; }
+    .profile-layout { display:grid; grid-template-columns:minmax(280px,.85fr) minmax(0,1.6fr); gap:20px; padding:var(--space-4) 20px 20px; }
     .profile-list,.profile-editor { min-width:0; }
     .profile-editor { padding-left:20px; border-left:1px solid var(--border-subtle); }
-    form { display:grid; gap:12px; }
+    form { display:grid; gap:var(--space-3); }
     mat-form-field { width:100%; }
-    .editor-heading,.target-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .editor-heading,.target-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-3); }
     h2,h3,h4,p { margin:0; }
-    h2 { font-size:16px; font-weight:600; }
-    h3 { font-size:14px; }
-    h4 { margin:0 0 10px; font-size: 14px; }
-    .editor-heading p,.target-heading p { margin-top:4px; color:var(--text-muted); font-size: 14px; }
-    .profile-badge,.no-preset { color:var(--text-secondary); font-size: 14px; }
-    .codec-group { display:grid; gap:8px; padding:12px 0; border-top:1px solid var(--border-subtle); }
+    h2 { font-size:var(--font-title); font-weight:600; }
+    h3 { font-size:var(--font-body); }
+    h4 { margin:0 0 10px; font-size: var(--font-body); }
+    .editor-heading p,.target-heading p { margin-top:var(--space-1); color:var(--text-muted); font-size: var(--font-body); }
+    .profile-badge,.no-preset { color:var(--text-secondary); font-size: var(--font-body); }
+    .codec-group { display:grid; gap:var(--space-2); padding:var(--space-3) 0; border-top:1px solid var(--border-subtle); }
     .encoder-row { display:grid; grid-template-columns:minmax(125px,1fr) minmax(90px,.55fr) minmax(150px,.8fr) minmax(82px,.45fr); gap:10px; align-items:center; }
     .encoder-description { display:grid; gap:3px; min-width:0; }
-    .encoder-description strong { font-size: 14px; }
-    .encoder-description span { color:var(--text-muted); font-size: 14px; }
+    .encoder-description strong { font-size: var(--font-body); }
+    .encoder-description span { color:var(--text-muted); font-size: var(--font-body); }
     .encoder-row mat-form-field { margin:0; }
-    .no-preset { padding:0 8px; }
-    .editor-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; padding-top:6px; }
-    .editor-message { color:var(--text-secondary); font-size: 14px; }
+    .no-preset { padding:0 var(--space-2); }
+    .editor-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--space-2); padding-top:6px; }
+    .editor-message { color:var(--text-secondary); font-size: var(--font-body); }
     .empty-editor { display:grid; align-content:center; justify-items:start; gap:10px; min-height:260px; }
     @media(max-width:1000px) { .profile-layout { grid-template-columns:1fr; } .profile-editor { padding:18px 0 0; border-left:0; border-top:1px solid var(--border-subtle); } }
-    @media(max-width:620px) { .profile-layout { padding:12px; } .encoder-row { grid-template-columns:1fr 1fr; } .encoder-description { grid-column:1/-1; } .profile-badge { display:none; } }
+    @media(max-width:620px) { .profile-layout { padding:var(--space-3); } .encoder-row { grid-template-columns:1fr 1fr; } .encoder-description { grid-column:1/-1; } .profile-badge { display:none; } }
   `,
 })
 export class EncodingProfileLibraryPageComponent {

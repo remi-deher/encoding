@@ -23,19 +23,19 @@ import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form
       margin: 6vh auto 0;
       padding: 28px;
       border: 1px solid var(--border-subtle);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       background: var(--surface);
     }
     h1 {
       margin: 0 0 6px;
       color: var(--text-primary);
-      font-size: 19px;
+      font-size: var(--font-title-lg);
       letter-spacing: -0.02em;
     }
     p {
       margin: 0 0 18px;
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.6;
     }
   `,

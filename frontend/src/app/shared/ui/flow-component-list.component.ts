@@ -81,8 +81,8 @@ interface FlowComponentGroup {
     }
     .component-groups {
       display: grid;
-      gap: 8px;
-      padding: 12px 0 4px;
+      gap: var(--space-2);
+      padding: var(--space-3) 0 var(--space-1);
     }
     .flow-component-list {
       list-style: none;
@@ -90,14 +90,14 @@ interface FlowComponentGroup {
       justify-items: center;
       gap: 18px;
       margin: 0;
-      padding: 14px 4px 10px;
+      padding: 14px var(--space-1) 10px;
     }
     .flow-block-preview {
       min-width: 0;
       width: min(100%, 520px);
       box-sizing: border-box;
       border: 1px solid var(--border-subtle);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       background: var(--surface);
       overflow: hidden;
       box-shadow: 0 2px 7px rgb(0 0 0 / 5%);
@@ -106,19 +106,19 @@ interface FlowComponentGroup {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);
       align-items: center;
-      gap: 8px;
+      gap: var(--space-2);
       min-height: 40px;
-      padding: 8px 14px;
+      padding: var(--space-2) 14px;
       background: var(--component-background);
     }
     .block-kind {
       color: var(--component-color);
-      font-size: 14px;
+      font-size: var(--font-body);
       font-weight: 600;
     }
     .block-provider {
       color: var(--component-color);
-      font-size: 14px;
+      font-size: var(--font-body);
       text-align: right;
       overflow-wrap: anywhere;
     }
@@ -128,22 +128,22 @@ interface FlowComponentGroup {
       display: grid;
       place-items: center;
       color: var(--component-color);
-      font-size: 25px;
+      font-size: var(--font-headline);
       opacity: 0.35;
     }
     .block-heading {
       padding: 18px 28px 6px;
       text-align: center;
       color: var(--text-primary);
-      font-size: 19px;
+      font-size: var(--font-title-lg);
       line-height: 1.3;
       overflow-wrap: anywhere;
     }
     .block-summary {
-      margin: 0 0 12px;
+      margin: 0 0 var(--space-3);
       padding: 0 20px;
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.5;
       text-align: center;
       overflow-wrap: anywhere;
@@ -153,9 +153,9 @@ interface FlowComponentGroup {
       justify-content: center;
       flex-wrap: wrap;
       gap: 18px;
-      margin-top: 12px;
+      margin-top: var(--space-3);
       border-top: 1px solid var(--border-subtle);
-      padding: 8px 12px 0;
+      padding: var(--space-2) var(--space-3) 0;
     }
     .block-output {
       min-width: 52px;
@@ -164,7 +164,7 @@ interface FlowComponentGroup {
       align-items: center;
       gap: 7px;
       color: var(--component-color);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
     .output-port {
       display: block;
@@ -176,7 +176,7 @@ interface FlowComponentGroup {
       background: var(--surface);
     }
     .empty-message {
-      padding: 16px 4px;
+      padding: var(--space-4) var(--space-1);
     }
     @media (max-width: 480px) {
       .component-heading {

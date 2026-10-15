@@ -26,8 +26,8 @@ html {
   --page-background: #f7f8f7;
   --border-subtle: #e5e9e7;
   --text-primary: #202b28;
-  --text-secondary: #66736e;
-  --text-muted: #87928d;
+  --text-secondary: #53605b;
+  --text-muted: #66736e;
   --accent: #3b7867;
   --accent-strong: #326b5b;
   --accent-soft: #e9f2ef;
@@ -37,6 +37,39 @@ html {
   --warning-soft: #f8f1e4;
   --danger: #b74e4e;
   --danger-soft: #faeeee;
+  --danger-strong: #b42318;
+  --danger-stronger: #8f1d14;
+  --on-danger: #ffffff;
+
+  /* Échelle d'espacement (grille de 4 px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Rayons de bordure */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* Échelle typographique (Material Design 3) */
+  --font-label: 12px;
+  --font-body: 14px;
+  --font-title: 16px;
+  --font-title-md: 18px;
+  --font-title-lg: 20px;
+  --font-headline: 22px;
+
+  /* Élévations */
+  --elevation-1: 0 2px 8px rgb(24 40 33 / 3%);
+  --elevation-2: 0 8px 24px rgb(0 0 0 / 18%);
+
+  /* Cible tactile minimale recommandée */
+  --touch-target: 48px;
   font-family: Inter, 'Segoe UI', sans-serif;
   color: var(--text-primary);
   background: var(--page-background);
@@ -44,6 +77,28 @@ html {
 
 * {
   box-sizing: border-box;
+}
+
+@media (pointer: coarse) {
+  html {
+    @include mat.all-component-densities(0);
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .cdk-overlay-pane,
@@ -75,7 +130,7 @@ body {
 
 body {
   background: var(--page-background);
-  font-size: 14px;
+  font-size: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 

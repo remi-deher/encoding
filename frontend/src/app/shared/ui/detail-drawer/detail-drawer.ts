@@ -65,7 +65,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 
     .drawer-header {
       min-height: 72px;
-      padding: 16px 24px;
+      padding: var(--space-4) var(--space-5);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -82,7 +82,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     .drawer-header-controls {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--space-2);
       flex: 0 0 auto;
       margin-left: auto;
     }
@@ -90,14 +90,14 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     .drawer-heading h2 {
       margin: 0;
       color: var(--text-primary);
-      font-size: 18px;
+      font-size: var(--font-title-md);
       font-weight: 700;
     }
 
     .drawer-heading p {
       margin: 5px 0 0;
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
 
     .drawer-close {
@@ -107,11 +107,11 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       display: grid;
       place-items: center;
       border: 1px solid var(--border-subtle);
-      border-radius: 8px;
+      border-radius: var(--radius-md);
       background: var(--surface);
       color: var(--text-secondary);
       font: inherit;
-      font-size: 22px;
+      font-size: var(--font-headline);
       line-height: 1;
       cursor: pointer;
     }
@@ -128,7 +128,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 
     .drawer-body {
       min-height: 0;
-      padding: 24px;
+      padding: var(--space-5);
       flex: 1;
       overflow: auto;
     }
@@ -136,16 +136,16 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     @media (max-width: 700px) {
       .drawer-header {
         min-height: 64px;
-        padding-inline: 16px;
+        padding-inline: var(--space-4);
         flex-wrap: wrap;
-        gap: 12px;
+        gap: var(--space-3);
       }
       .drawer-heading {
         flex-basis: 100%;
       }
 
       .drawer-body {
-        padding: 16px;
+        padding: var(--space-4);
       }
     }
   `,

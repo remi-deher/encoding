@@ -91,17 +91,17 @@ import {
   styles: `
     :host {
       display: grid;
-      gap: 16px;
+      gap: var(--space-4);
       min-width: 0;
     }
     p {
-      margin: 0 0 16px;
+      margin: 0 0 var(--space-4);
       line-height: 1.5;
       color: var(--text-secondary);
     }
     h3 {
       margin: 0;
-      font-size: 16px;
+      font-size: var(--font-title);
     }
     mat-panel-title {
       white-space: normal;

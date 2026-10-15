@@ -80,7 +80,7 @@ import { WeeklyScheduleGridComponent } from './weekly-schedule-grid.component';
     .schedule-hint {
       margin: 0;
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.5;
     }
     .schedule-tools,
@@ -89,7 +89,7 @@ import { WeeklyScheduleGridComponent } from './weekly-schedule-grid.component';
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
+      gap: var(--space-2);
     }
     .form-actions {
       justify-content: flex-end;
@@ -97,7 +97,7 @@ import { WeeklyScheduleGridComponent } from './weekly-schedule-grid.component';
     .schedule-error {
       margin: 0;
       color: var(--danger, #b3261e);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
   `,
 })

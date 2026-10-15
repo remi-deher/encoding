@@ -40,7 +40,7 @@
   grid-area: brand;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   color: var(--text-primary);
   text-decoration: none;
 }
@@ -55,16 +55,16 @@
   height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: white;
-  font-size: 17px;
+  font-size: var(--font-title);
   font-weight: 750;
   letter-spacing: -0.06em;
 }
 
 .brand-name {
-  font-size: 14px;
+  font-size: var(--font-body);
   font-weight: 760;
   letter-spacing: 0.12em;
 }
@@ -73,15 +73,15 @@
   grid-area: status;
   display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .processing-indicator {
   padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent-soft);
   color: var(--accent-strong);
-  font-size: 14px;
+  font-size: var(--font-body);
   font-weight: 650;
   text-decoration: none;
 }
@@ -96,7 +96,7 @@
   align-items: center;
   gap: 9px;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: var(--font-body);
 }
 
 .cluster-label {
@@ -107,7 +107,7 @@
 .cluster-state {
   padding: 5px 9px;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
   background: var(--surface-muted);
 }
@@ -121,18 +121,18 @@
 
 .application-footer {
   min-height: 52px;
-  padding: 12px clamp(20px, 5vw, 72px);
+  padding: var(--space-3) clamp(20px, 5vw, 72px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
   border-top: 1px solid var(--border-subtle);
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--font-body);
 }
 
 .footer-separator {
-  padding-inline: 4px;
+  padding-inline: var(--space-1);
   color: var(--accent);
 }
 
@@ -146,9 +146,9 @@
     grid-template-areas:
       'brand status'
       'navigation navigation';
-    column-gap: 12px;
-    padding-top: 8px;
-    padding-inline: 16px;
+    column-gap: var(--space-3);
+    padding-top: var(--space-2);
+    padding-inline: var(--space-4);
   }
 
   .application-header app-primary-navigation {
@@ -183,7 +183,7 @@
 .workspace-shell .main-content {
   width: 100%;
   min-height: 0;
-  padding: 16px;
+  padding: var(--space-4);
   overflow-y: auto;
   overflow-x: hidden;
 }

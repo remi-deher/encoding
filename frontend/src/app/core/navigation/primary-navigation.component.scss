@@ -30,7 +30,7 @@
   flex: 0 0 auto;
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 14px;
+  font-size: var(--font-body);
   font-weight: 590;
 }
 
@@ -64,7 +64,7 @@
 
 @media (max-width: 600px) {
   .primary-navigation {
-    padding-inline: 16px;
+    padding-inline: var(--space-4);
     border-top: 1px solid var(--border-subtle);
   }
 
