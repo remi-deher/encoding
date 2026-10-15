@@ -39,6 +39,10 @@
     </p>
   }
 
+  @if (health(); as health) {
+    <app-health-banner [title]="health.title" [tone]="health.tone" [issues]="health.issues" />
+  }
+
   <section class="metrics-grid" aria-label="Indicateurs du cluster">
     @for (metric of metrics(); track metric.label) {
       <app-metric-card [label]="metric.label" [value]="metric.value" [detail]="metric.detail" />
@@ -111,10 +115,7 @@
               <p>{{ roleLabel(node.roles) }}</p>
             </div>
             <div class="node-state">
-              <app-status-badge
-                [label]="node.status === 'online' ? 'En ligne' : 'Hors ligne'"
-                [tone]="node.status === 'online' ? 'success' : 'warning'"
-              />
+              <app-status-badge [label]="lifecycleLabel(node)" [tone]="lifecycleTone(node)" />
               <span class="node-workload"
                 >Dernier signal : {{ node.lastSeenAt | date: 'dd/MM HH:mm:ss' }}</span
               >
@@ -128,6 +129,24 @@
       </div>
     </section>
   </div>
+
+  @if (matrixColumns().length && matrixRows().length) {
+    <section class="surface-panel" aria-labelledby="matrix-heading">
+      <div class="panel-heading">
+        <div>
+          <h2 id="matrix-heading">Accès aux bibliothèques</h2>
+          <p>Comment chaque nœud atteint chaque bibliothèque.</p>
+        </div>
+      </div>
+      <app-matrix-table
+        caption="Accès de chaque nœud à chaque bibliothèque"
+        cornerLabel="Nœud"
+        [rows]="matrixRows()"
+        [columns]="matrixColumns()"
+        [cells]="matrixCells()"
+      />
+    </section>
+  }
 
   <section class="activity-panel surface-panel" aria-labelledby="activity-heading">
     <div class="panel-heading">

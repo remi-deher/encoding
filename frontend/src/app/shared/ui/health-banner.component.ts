@@ -1,0 +1,37 @@
+import { Component, input } from '@angular/core';
+import { StatusBadgeComponent, StatusTone } from './status-badge.component';
+
+@Component({
+  selector: 'app-health-banner',
+  imports: [StatusBadgeComponent],
+  template: `
+    <section class="health-banner" [class]="'health-banner tone-' + tone()" aria-live="polite">
+      <app-status-badge [label]="title()" [tone]="tone()" />
+      @if (issues().length) {
+        <ul>
+          @for (issue of issues(); track issue) {
+            <li>{{ issue }}</li>
+          }
+        </ul>
+      }
+    </section>
+  `,
+  styles: `
+    .health-banner {
+      display: grid;
+      gap: var(--space-2, 8px);
+      padding: var(--space-3, 12px) var(--space-4, 16px);
+      border: 1px solid var(--border, currentColor);
+      border-radius: var(--radius-md, 8px);
+    }
+    ul {
+      margin: 0;
+      padding-left: 1.2em;
+    }
+  `,
+})
+export class HealthBannerComponent {
+  readonly title = input.required<string>();
+  readonly tone = input<StatusTone>('neutral');
+  readonly issues = input<readonly string[]>([]);
+}

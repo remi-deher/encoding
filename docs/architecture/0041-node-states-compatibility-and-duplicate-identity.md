@@ -23,3 +23,7 @@ Chaque processus d'agent tire un nonce de session aléatoire et l'envoie avec sa
 ## Non implémenté
 
 L'état « Silencieux » (nœud en ligne mais sans progrès) n'existe pas.
+
+## Lecture dans l'interface
+
+La page « Vue d'ensemble » affiche une bannière de santé (`assessClusterHealth`) : nœuds en quarantaine, incompatibles ou hors ligne, absence de worker disponible, bibliothèque active qu'aucun worker disponible n'atteint. Une matrice nœuds × bibliothèques montre le mode d'accès de chaque couple (direct, transfert, non pris en charge, désactivé). Les accès sont lus avec les nœuds et les bibliothèques à chaque actualisation de `ClusterOverview` (une requête de plus par bibliothèque).
