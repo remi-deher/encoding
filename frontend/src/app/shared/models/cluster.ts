@@ -34,6 +34,15 @@ export interface NodeInventory {
   readonly architecture: string;
   readonly processorCount: number;
   readonly memoryMb: number;
+  /** Informations matérielles statiques, absentes des agents antérieurs. */
+  readonly processorModel?: string | null;
+  readonly gpus?: readonly NodeGpu[] | null;
+}
+export interface NodeGpu {
+  readonly name: string;
+  readonly vendor?: string | null;
+  readonly driver?: string | null;
+  readonly device?: string | null;
 }
 export type NodeGroupMode = 'manual' | 'automatic';
 export interface NodeGroupCriteria {

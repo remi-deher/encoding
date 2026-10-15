@@ -1,4 +1,10 @@
 import { DetailCard } from '../ui/detail-card-grid.component';
+import {
+  ResourceSheetBadge,
+  ResourceSheetMetric,
+  ResourceSheetNotice,
+  ResourceSheetSection,
+} from '../ui/resource-sheet.component';
 import { RecordFormData } from '../ui/record-form.component';
 import { GuidedStep } from '../ui/guided-setup.component';
 import { DiscoveredCluster, LocalNodePairing, LocalNodeStatus } from './local-node';
@@ -35,70 +41,179 @@ function informationCard(
   return { id, title, subtitle, icon: 'server', tags: [], sections: [{ title: 'Détails', items }] };
 }
 
-/** Présentation fondée uniquement sur les états observés, sans supposer qu'un nœud est en ligne. */
-export function localNodeCards(
-  status: LocalNodeStatus | null,
-  node: NodeResponse | null,
-  mode: NodeModeStatus | null,
-  standalone: boolean,
-): readonly DetailCard[] {
-  const roleState = (enabled: boolean | undefined) =>
-    enabled === undefined ? 'État indisponible' : enabled ? 'Actif' : 'Inactif';
+/** Formate un délai écoulé ; une date invalide reste « indisponible », jamais zéro. */
+export function formatLastSignal(value: string | null | undefined, now = Date.now()): string | null {
+  const time = value ? new Date(value).getTime() : NaN;
+  if (Number.isNaN(time)) return null;
+  const seconds = Math.max(0, Math.floor((now - time) / 1000));
+  if (seconds < 5) return 'À l’instant';
+  if (seconds < 60) return `Il y a ${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `Il y a ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Il y a ${hours} h`;
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(time));
+}
+
+function formatMemory(memoryMb: number): string {
+  return memoryMb >= 1024 ? `${Math.round((memoryMb / 1024) * 10) / 10} Go` : `${memoryMb} Mo`;
+}
+
+export interface LocalNodeSheetInput {
+  readonly status: LocalNodeStatus | null;
+  readonly node: NodeResponse | null;
+  readonly mode: NodeModeStatus | null;
+  readonly standalone: boolean;
+  readonly clusterName: string | null;
+  readonly agentUnavailable: boolean;
+  /** Tâches actives observées ; `null` tant que la source n'a pas répondu. */
+  readonly activeTasks: number | null;
+  readonly now?: number;
+}
+
+/**
+ * Fiche du nœud local, fondée uniquement sur les états observés : une fonction inconnue n'est jamais présentée
+ * comme inactive, et une valeur périmée est identifiée comme dernière valeur connue.
+ */
+export function localNodeSheet(input: LocalNodeSheetInput): {
+  readonly title: string;
+  readonly subtitle: string;
+  readonly notices: readonly ResourceSheetNotice[];
+  readonly sections: readonly ResourceSheetSection[];
+} {
+  const { status, node, standalone, agentUnavailable } = input;
   const roles =
-    mode ??
-    (status
-      ? { server: status.roles.includes('server'), worker: status.roles.includes('worker') }
-      : null);
-  return [
-    informationCard('local-functions', 'Rôle du nœud', 'Fonctions de cette installation', [
-      {
-        label: `Serveur · ${roleState(roles?.server)}`,
-        description: 'Interface web, configuration partagée et orchestration.',
-      },
-      {
-        label: `Worker · ${roleState(roles?.worker)}`,
-        description: 'Traitement des médias avec les outils de ce nœud.',
-      },
-    ]),
-    informationCard('local-identity', 'Cette installation', 'Identité et appartenance', [
-      {
-        label: node?.displayName?.trim() || status?.name || 'Ce nœud',
-        description: status?.nodeId ?? 'Identité de l’agent indisponible.',
-      },
-      {
-        label: standalone ? 'Nœud autonome' : status?.clusterName || 'Cluster',
-        description: standalone
-          ? 'Aucun cluster associé.'
-          : (status?.clusterId ?? 'Identité du cluster indisponible.'),
-      },
-    ]),
+    input.mode ??
+    (status ? { server: status.roles.includes('server'), worker: status.roles.includes('worker') } : null);
+  const desired = node?.desiredRoles ?? null;
+  const roleBadges = (role: 'server' | 'worker'): readonly ResourceSheetBadge[] => {
+    const enabled = roles ? roles[role] : undefined;
+    const badges: ResourceSheetBadge[] =
+      enabled === undefined
+        ? [{ label: 'État indisponible', tone: 'warning' }]
+        : agentUnavailable
+          ? [{ label: `Dernier état connu : ${enabled ? 'actif' : 'inactif'}`, tone: 'warning' }]
+          : [{ label: enabled ? 'Actif' : 'Inactif', tone: enabled ? 'success' : 'neutral' }];
+    if (desired && desired.includes(role) !== (enabled ?? false))
+      badges.push({ label: `Demandé : ${desired.includes(role) ? 'actif' : 'inactif'}`, tone: 'accent' });
+    return badges;
+  };
+  const workerOff = roles?.worker === false;
+  const max = status?.maxConcurrentTasks ?? node?.maxConcurrentTasks ?? null;
+  const processing: ResourceSheetMetric = workerOff
+    ? { label: 'Traitements actifs', value: 'Non applicable', unavailable: true, detail: 'La fonction worker est désactivée.' }
+    : input.activeTasks === null || max === null
+      ? { label: 'Traitements actifs', value: 'Indisponible', unavailable: true, detail: max === null ? undefined : `${max} traitement(s) simultané(s) au maximum` }
+      : {
+          label: 'Traitements actifs',
+          value: `${input.activeTasks} / ${max}`,
+          stale: agentUnavailable,
+          detail: agentUnavailable ? 'Dernière valeur connue, pas une occupation actuelle' : undefined,
+          meter: { value: input.activeTasks, max, label: `${input.activeTasks} places de traitement occupées sur ${max}`, stale: agentUnavailable },
+        };
+  const signal = formatLastSignal(node?.lastSeenAt, input.now);
+  const inventory = node?.inventory ?? null;
+  const gpus = inventory?.gpus ?? [];
+  const tools = status?.capabilities ?? [];
+  const notices: ResourceSheetNotice[] = [];
+  if (agentUnavailable)
+    notices.push({
+      tone: 'danger',
+      title: 'L’agent de ce nœud ne répond pas',
+      description: 'Les informations ci-dessous sont les dernières connues ; elles peuvent ne plus être exactes.',
+    });
+  if (status?.switchFailure)
+    notices.push({ tone: 'danger', title: 'Rattachement annulé', description: status.switchFailure });
+  if (desired && roles && (desired.includes('server') !== roles.server || desired.includes('worker') !== roles.worker))
+    notices.push({
+      tone: 'accent',
+      title: 'Changement de fonctions en attente',
+      description: 'Les fonctions appliquées ne changent qu’après confirmation du nœud.',
+    });
+  const sections: ResourceSheetSection[] = [
     {
-      ...informationCard(
-        'local-capabilities',
-        'Capacités de traitement',
-        'Observées sur cette installation',
-        [
-          {
-            label: node?.inventory
-              ? `${node.inventory.processorCount} cœurs · ${node.inventory.memoryMb} Mo de mémoire`
-              : 'Matériel non renseigné',
-            description: node?.inventory
-              ? `${node.inventory.operatingSystem} · ${node.inventory.architecture}`
-              : 'Consultez les capacités du nœud après son prochain signal.',
-          },
-          {
-            label: status?.capabilities.length
-              ? status.capabilities.map((tool) => `${tool.toolId} ${tool.version}`).join(' · ')
-              : 'Aucun outil déclaré',
-            description: status
-              ? `${status.maxConcurrentTasks} traitement(s) simultané(s) au maximum.`
-              : 'La fonction worker est nécessaire pour déclarer les outils de traitement.',
-          },
-        ],
-      ),
-      icon: 'tool',
+      id: 'state',
+      title: 'État et activité',
+      caption: agentUnavailable ? 'Agent injoignable' : 'Agent joignable',
+      items: [
+        { label: 'Serveur', badges: roleBadges('server') },
+        { label: 'Worker', badges: roleBadges('worker') },
+      ],
+      metrics: [
+        processing,
+        signal
+          ? { label: 'Dernier signal', value: signal, stale: agentUnavailable }
+          : { label: 'Dernier signal', value: 'Indisponible', unavailable: true },
+      ],
+    },
+    {
+      id: 'hardware',
+      title: 'Matériel déclaré',
+      metrics: inventory
+        ? [
+            {
+              label: 'Processeur',
+              value: inventory.processorModel?.trim() || `${inventory.processorCount} cœurs`,
+              detail: `${inventory.processorCount} cœurs logiques · ${formatMemory(inventory.memoryMb)} de mémoire installée · ${inventory.operatingSystem} · ${inventory.architecture}`,
+            },
+            gpus.length
+              ? {
+                  label: gpus.length > 1 ? 'Processeurs graphiques' : 'Processeur graphique',
+                  value: gpus.map((gpu) => gpu.name).join(' · '),
+                  detail: gpus
+                    .map((gpu) => [gpu.device, gpu.driver ? `pilote ${gpu.driver}` : null].filter(Boolean).join(' · '))
+                    .filter(Boolean)
+                    .join(' ; ') || undefined,
+                }
+              : {
+                  label: 'Processeur graphique',
+                  value: inventory.gpus ? 'Aucun détecté' : 'Non déclaré',
+                  unavailable: true,
+                  detail: inventory.gpus ? undefined : 'Cet agent ne remonte pas encore ses GPU.',
+                },
+          ]
+        : [{ label: 'Matériel', value: 'Non renseigné', unavailable: true, detail: 'Disponible après le prochain signal du nœud.' }],
+    },
+    {
+      id: 'capabilities',
+      title: 'Capacités de traitement',
+      notice: workerOff
+        ? 'La fonction worker est désactivée : aucun outil n’est déclaré.'
+        : tools.length
+          ? undefined
+          : 'Aucun outil déclaré.',
+      items: workerOff
+        ? []
+        : tools.map((tool) => {
+            const usable = tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
+            const detected = tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
+            const badges: ResourceSheetBadge[] = [];
+            if (usable) badges.push({ label: `${usable} encodeur(s) vérifié(s)`, tone: 'success' });
+            if (detected) badges.push({ label: `${detected} détecté(s), non vérifié(s)`, tone: 'neutral' });
+            for (const acceleration of tool.accelerationTypes) badges.push({ label: acceleration.toUpperCase(), tone: 'accent' });
+            return { label: `${tool.toolId} ${tool.version}`, badges };
+          }),
+      action: workerOff || !node ? undefined : { id: 'capabilities', label: 'Fiche des capacités' },
+    },
+    {
+      id: 'identity',
+      title: 'Identité et appartenance',
+      fields: [
+        { label: 'Nom technique', value: status?.name ?? 'Indisponible' },
+        { label: 'Identifiant du nœud', value: status?.nodeId ?? 'Indisponible', mono: true },
+        {
+          label: 'Cluster',
+          value: standalone ? 'Aucun (nœud autonome)' : (input.clusterName ?? status?.clusterName ?? 'Cluster'),
+        },
+      ],
     },
   ];
+  return {
+    title: node?.displayName?.trim() || status?.name || 'Ce nœud',
+    subtitle: standalone ? 'Nœud autonome' : `Membre de ${input.clusterName ?? status?.clusterName ?? 'son cluster'}`,
+    notices,
+    sections,
+  };
 }
 
 export const AUTONOMOUS_CARDS: readonly DetailCard[] = [

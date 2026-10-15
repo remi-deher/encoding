@@ -229,11 +229,7 @@ public sealed class WorkerEnrollmentService(
         return new WorkerPairingResponse(pending.PairingKey!, pending.PairingExpiresAt!.Value);
     }
 
-    private static NodeInventory CreateInventory() => new(
-        RuntimeInformation.OSDescription,
-        RuntimeInformation.ProcessArchitecture.ToString(),
-        Environment.ProcessorCount,
-        Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024)));
+    private static NodeInventory CreateInventory() => HardwareInventory.Current();
 }
 
 public sealed record WorkerPairingResponse(string PairingKey, DateTimeOffset ExpiresAt);

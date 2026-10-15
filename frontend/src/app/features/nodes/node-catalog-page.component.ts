@@ -27,6 +27,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { LocalNodeController } from '../../shared/services/local-node-controller';
 import { GuidedSetupComponent } from '../../shared/ui/guided-setup.component';
+import { ResourceSheetComponent } from '../../shared/ui/resource-sheet.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import {
   AUTONOMOUS_CARDS,
@@ -34,7 +35,7 @@ import {
   NODE_MANAGEMENT_TABS,
   clusterAddressForm,
   clusterJoinSteps,
-  localNodeCards,
+  localNodeSheet,
 } from '../../shared/models/node-management';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -140,6 +141,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     DataTableComponent,
     DetailFieldListComponent,
     DetailCardGridComponent,
+    ResourceSheetComponent,
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     MatButtonModule,
@@ -199,13 +201,33 @@ export class NodeCatalogPageComponent {
   protected readonly localName = computed(
     () => this.localNode()?.displayName?.trim() || this.local.status()?.name || 'Ce nœud',
   );
-  protected readonly localCards = computed(() =>
-    localNodeCards(
-      this.local.status(),
-      this.localNode(),
-      this.local.modeUnavailable() ? null : this.local.mode(),
-      this.local.standalone(),
+  /** Tâches actives du nœud local ; inconnues tant que la source n'a pas répondu. */
+  protected readonly localActivity = toSignal(
+    toObservable(computed(() => this.localNode()?.id ?? null)).pipe(
+      switchMap((id) =>
+        id
+          ? timer(0, 5000).pipe(
+              exhaustMap(() =>
+                this.http
+                  .get<NodeActivityResponse>('/api/v1/nodes/' + id + '/activity')
+                  .pipe(catchError(() => of(null))),
+              ),
+            )
+          : of(null),
+      ),
     ),
+    { initialValue: null },
+  );
+  protected readonly localSheet = computed(() =>
+    localNodeSheet({
+      status: this.local.status(),
+      node: this.localNode(),
+      mode: this.local.modeUnavailable() ? null : this.local.mode(),
+      standalone: this.local.standalone(),
+      clusterName: this.local.standalone() ? null : this.clusterName(),
+      agentUnavailable: this.local.agentUnavailable(),
+      activeTasks: this.localActivity()?.active ?? null,
+    }),
   );
   protected readonly clusterName = computed(() =>
     this.local.externalCluster()

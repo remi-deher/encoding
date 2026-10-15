@@ -80,25 +80,7 @@
     (selectedChange)="onManagementTabChange($event)"
   />
   <ng-container catalogue-summary>
-    @if (pageTab() === 'node') {
-      <app-context-banner
-        label="Ce nœud"
-        [title]="localName()"
-        [description]="local.standalone() ? 'Installation autonome' : 'Membre de ' + clusterName()"
-      >
-        <app-status-badge
-          banner-actions
-          [label]="
-            local.agentUnavailable()
-              ? local.mode()?.worker === false
-                ? 'Fonctions worker désactivées'
-                : 'Agent injoignable'
-              : 'Agent joignable'
-          "
-          [tone]="local.agentUnavailable() ? 'warning' : 'success'"
-        />
-      </app-context-banner>
-    } @else if (local.pending()) {
+    @if (pageTab() === 'cluster' && local.pending()) {
       <app-context-banner
         label="Rattachement en cours"
         [title]="'Demande envoyée à ' + local.targetName()"
@@ -110,7 +92,7 @@
           </button>
         }
       </app-context-banner>
-    } @else if (local.standalone()) {
+    } @else if (pageTab() === 'cluster' && local.standalone()) {
       <app-context-banner
         label="Aucun cluster"
         title="Ce nœud est autonome"
@@ -137,7 +119,7 @@
           </div>
         }
       </app-context-banner>
-    } @else if (clusterIdentity()) {
+    } @else if (pageTab() === 'cluster' && clusterIdentity()) {
       <app-context-banner
         label="Cluster actuel"
         [title]="clusterName()"
@@ -150,7 +132,7 @@
         />
       </app-context-banner>
     }
-    @if (local.agentUnavailable() && !local.loading()) {
+    @if (pageTab() === 'cluster' && local.agentUnavailable() && !local.loading()) {
       <app-context-banner
         label="État du nœud"
         [title]="
@@ -167,7 +149,7 @@
         appartenance.
       </p>
     }
-    @if (local.status()?.switchFailure; as failure) {
+    @if (pageTab() === 'cluster' && local.status()?.switchFailure; as failure) {
       <p role="alert">Rattachement annulé : {{ failure }}</p>
     }
     @if (
@@ -199,10 +181,13 @@
   </div>
   <div catalogue-table>
     @if (pageTab() === 'node') {
-      <app-detail-card-grid
+      <app-resource-sheet
         ariaLabel="Fiche du nœud local"
-        [cards]="localCards()"
-        [collapsible]="false"
+        [title]="localSheet().title"
+        [subtitle]="localSheet().subtitle"
+        [notices]="localSheet().notices"
+        [sections]="localSheet().sections"
+        (actionSelected)="localNode() && openNodeCard(localNode()!.id)"
       />
     } @else if (local.standalone()) {
       <app-detail-card-grid

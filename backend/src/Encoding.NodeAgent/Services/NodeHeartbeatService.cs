@@ -34,8 +34,7 @@ public sealed class NodeHeartbeatService(
                 if (identity.HasCredentials)
                 {
                     var capabilities = await capabilityProbe.DiscoverAsync(stoppingToken);
-                    var memoryMb = Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
-                    var inventory = new NodeInventory(RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(), Environment.ProcessorCount, memoryMb);
+                    var inventory = HardwareInventory.Current();
                     var heartbeat = new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory, ClusterProtocol.Current, sessionNonce);
                     using var request = new HttpRequestMessage(HttpMethod.Put,
                         new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/nodes/{identity.Id:D}/heartbeat"))
@@ -94,8 +93,7 @@ public sealed class NodeHeartbeatService(
         try
         {
             var capabilities = await capabilityProbe.DiscoverAsync(cancellationToken);
-            var memoryMb = Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
-            var inventory = new NodeInventory(RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(), Environment.ProcessorCount, memoryMb);
+            var inventory = HardwareInventory.Current();
             using var request = new HttpRequestMessage(HttpMethod.Put, new Uri(new Uri(previous.ApiBaseUrl!), $"api/v1/nodes/{previous.Id:D}/heartbeat"))
             {
                 Content = JsonContent.Create(new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory), options: AgentJson.Options)
