@@ -1,4 +1,5 @@
-import { Component, input, OnChanges, signal } from '@angular/core';
+import { Component, input, OnChanges, signal, TemplateRef } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { CdkAccordion, CdkAccordionItem } from '@angular/cdk/accordion';
 
 export type DetailCardTone = 'neutral' | 'accent' | 'success' | 'warning';
@@ -34,7 +35,7 @@ export interface DetailCard {
 
 @Component({
   selector: 'app-detail-card-grid',
-  imports: [CdkAccordion, CdkAccordionItem],
+  imports: [CdkAccordion, CdkAccordionItem, NgTemplateOutlet],
   template: `
     @if (cards().length) {
       <div
@@ -47,17 +48,18 @@ export interface DetailCard {
         @for (card of cards(); track card.id; let index = $index) {
           <article
             class="detail-card"
-            [class.detail-card_expanded]="expandedState(card.id)"
+            [class.detail-card_expanded]="!collapsible() || expandedState(card.id)"
             cdkAccordionItem
             #item="cdkAccordionItem"
-            [expanded]="expandedState(card.id)"
+            [expanded]="!collapsible() || expandedState(card.id)"
           >
             <h3 class="detail-card-heading">
               <button
                 class="detail-card-toggle"
                 type="button"
+                [disabled]="!collapsible()"
                 [id]="'detail-card-heading-' + index"
-                [attr.aria-expanded]="expandedState(card.id)"
+                [attr.aria-expanded]="!collapsible() || expandedState(card.id)"
                 [attr.aria-controls]="'detail-card-content-' + index"
                 (click)="toggle(item, card.id)"
               >
@@ -131,12 +133,14 @@ export interface DetailCard {
                     {{ status.label }}
                   </span>
                 }
-                <span
-                  class="detail-card-chevron"
-                  [class.detail-card-chevron_open]="expandedState(card.id)"
-                  aria-hidden="true"
-                  >⌄</span
-                >
+                @if (collapsible()) {
+                  <span
+                    class="detail-card-chevron"
+                    [class.detail-card-chevron_open]="expandedState(card.id)"
+                    aria-hidden="true"
+                    >⌄</span
+                  >
+                }
               </button>
             </h3>
 
@@ -152,34 +156,38 @@ export interface DetailCard {
               </div>
             }
 
-            @if (expandedState(card.id)) {
+            @if (!collapsible() || expandedState(card.id)) {
               <div
                 class="detail-card-content"
                 role="region"
                 [id]="'detail-card-content-' + index"
                 [attr.aria-labelledby]="'detail-card-heading-' + index"
               >
-                @for (section of card.sections; track section.title) {
-                  <section class="detail-card-section">
-                    <h4>{{ section.title }}</h4>
-                    <ul>
-                      @for (detail of section.items; track detail.label) {
-                        <li>
-                          <span>{{ detail.label }}</span>
-                          @if (detail.description) {
-                            <span
-                              class="detail-card-detail"
-                              [class]="'detail-card-detail detail-card-detail_' + detail.tone"
-                              >{{ detail.description }}</span
-                            >
-                          }
-                        </li>
-                      }
-                    </ul>
-                  </section>
-                }
-                @if (!card.sections.length) {
-                  <p class="detail-card-empty">Aucun détail supplémentaire déclaré.</p>
+                @if (cardContentTemplates()[card.id]; as contentTemplate) {
+                  <ng-container [ngTemplateOutlet]="contentTemplate" />
+                } @else {
+                  @for (section of card.sections; track section.title) {
+                    <section class="detail-card-section">
+                      <h4>{{ section.title }}</h4>
+                      <ul>
+                        @for (detail of section.items; track detail.label) {
+                          <li>
+                            <span>{{ detail.label }}</span>
+                            @if (detail.description) {
+                              <span
+                                class="detail-card-detail"
+                                [class]="'detail-card-detail detail-card-detail_' + detail.tone"
+                                >{{ detail.description }}</span
+                              >
+                            }
+                          </li>
+                        }
+                      </ul>
+                    </section>
+                  }
+                  @if (!card.sections.length) {
+                    <p class="detail-card-empty">Aucun détail supplémentaire déclaré.</p>
+                  }
                 }
               </div>
             }
@@ -409,18 +417,24 @@ export class DetailCardGridComponent implements OnChanges {
   readonly ariaLabel = input('Détails');
   readonly emptyMessage = input('Aucun élément à afficher.');
   readonly initiallyExpanded = input(false);
+  readonly collapsible = input(true);
+  readonly cardContentTemplates = input<Readonly<Record<string, TemplateRef<unknown>>>>({});
   private readonly expandedCards = signal<ReadonlyMap<string, boolean>>(new Map());
 
   ngOnChanges(): void {
     const current = this.expandedCards();
-    this.expandedCards.set(
-      new Map(
-        this.cards().map((card) => [
-          card.id,
-          current.get(card.id) ?? card.initiallyExpanded ?? this.initiallyExpanded(),
-        ]),
-      ),
+    const next = new Map(
+      this.cards().map((card) => [
+        card.id,
+        current.get(card.id) ?? card.initiallyExpanded ?? this.initiallyExpanded(),
+      ]),
     );
+    if (
+      next.size !== current.size ||
+      [...next].some(([cardId, expanded]) => current.get(cardId) !== expanded)
+    ) {
+      this.expandedCards.set(next);
+    }
   }
 
   protected expandedState(cardId: string): boolean {
@@ -428,6 +442,7 @@ export class DetailCardGridComponent implements OnChanges {
   }
 
   protected toggle(item: CdkAccordionItem, cardId: string): void {
+    if (!this.collapsible()) return;
     item.toggle();
     this.expandedCards.update((current) => new Map(current).set(cardId, item.expanded));
   }
