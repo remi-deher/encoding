@@ -25,7 +25,7 @@ public static class NodeModeEndpoints
 
     /// <summary>
     /// Lecture et changement du mode du nœud local. Une définition unique sert le serveur et le worker ;
-    /// l’autorisation reste celle de l’hôte (session administrateur côté serveur, origine autorisée côté worker).
+    /// l’autorisation reste celle de l’hôte (session administrateur côté serveur, secret local côté worker).
     /// </summary>
     public static void MapNodeMode(this IEndpointRouteBuilder app, string pattern)
     {

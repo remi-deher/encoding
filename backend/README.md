@@ -11,17 +11,17 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-L’interface Angular et l’API sont servies par le même conteneur : ouvrir `http://localhost:4201` pour l’application ou `http://localhost:5080` pour l’API. La console locale de l’agent reste disponible sur `http://localhost:5081` et PostgreSQL sur `localhost:5432`. Depuis le poste worker, ouvrir l’interface Angular à `/worker`. Le navigateur appelle `localhost:5081` sur le poste où il s’exécute ; les origines autorisées se règlent avec `WORKER_UI_ORIGINS`. Les données d’identité du worker sont persistées dans le volume `encoding-node-data`.
+L’interface Angular et l’API sont servies par le même conteneur : ouvrir `http://localhost:4201` pour l’application ou `http://localhost:5080` pour l’API. PostgreSQL est disponible sur `localhost:5432`. La gestion du nœud passe par **Nœuds → Ce nœud et son cluster**, avec la session du serveur. L’agent écoute uniquement en boucle locale dans le conteneur ; le relais utilise le secret créé automatiquement par le lanceur, sans réglage CORS ni `WORKER_UI_ORIGINS` et sans port 8081 à publier. Les données d’identité du worker sont persistées dans le volume `encoding-node-data`. Hors lanceur, configurer le même fichier `Node__LocalEnrollmentSecretFile` pour le serveur et l’agent du même hôte ; sans secret, les routes de l’agent restent fermées.
 
 Les migrations SQL versionnées (`NNNN_nom.sql`, numéro unique, empreinte enregistrée) s’appliquent au démarrage, sous verrou PostgreSQL ; ne jamais modifier une migration publiée, en ajouter une. Pour ne lancer que la base : `docker compose up -d postgres`. Les identifiants PostgreSQL Compose sont réservés au développement local.
 
-Le worker découvre les clusters annoncés en DNS-SD/mDNS (`_encoding._tcp`). Le service prend aussi en charge une adresse bootstrap `Cluster:ApiBaseUrl`, utilisée ici pour la découverte dans le réseau Compose où le multicast peut être indisponible. Pour un worker sur un autre hôte, définissez `CLUSTER_ADVERTISED_API_BASE_URL` avec une URL HTTPS joignable depuis ces machines, puis publiez le port API sur l’interface réseau prévue et configurez les origines navigateur. Le réglage de développement lie volontairement l’API à la boucle locale.
+Le worker découvre les clusters annoncés en DNS-SD/mDNS (`_encoding._tcp`). Le service prend aussi en charge une adresse bootstrap `Cluster:ApiBaseUrl`, utilisée ici pour la découverte dans le réseau Compose où le multicast peut être indisponible. Pour un worker sur un autre hôte, définissez `CLUSTER_ADVERTISED_API_BASE_URL` avec une URL HTTPS joignable depuis ces machines, puis publiez le port API sur l’interface réseau prévue. Le réglage de développement lie volontairement l’API à la boucle locale.
 
 ## Enrôlement worker
 
 1. Démarrer l’agent sur la machine worker.
-2. Ouvrir `/worker` depuis le navigateur de cette même machine.
-3. Dans l’onglet **Nœud**, sélectionner le cluster détecté puis confirmer **Rejoindre**.
+2. Ouvrir **Nœuds → Ce nœud et son cluster** sur le serveur local, avec une session administrateur.
+3. Sélectionner le cluster détecté ou ajouter son adresse, puis confirmer **Rejoindre**.
 
 Ce parcours (confirmation locale) n’est accepté que si un administrateur a ouvert la **fenêtre d’enrôlement direct** depuis **Nœuds → Ajouter un nœud** (10 minutes). Autre parcours, sans fenêtre : cliquer sur **Générer une clé** dans **Nœuds → Ce nœud et son cluster** du nœud à ajouter, puis ouvrir **Ajouter un nœud** dans le catalogue du serveur et saisir la clé ; l’approbation exige un administrateur. Elle expire après 10 minutes et ne peut servir qu’une fois. Le worker attend la confirmation sur son heartbeat avant de se déclarer enrôlé.
 

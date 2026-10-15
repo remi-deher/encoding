@@ -102,6 +102,8 @@ Le catalogue initial des outils associés aux composants de flow est décrit dan
 
 ## Authentification et rôles
 
+La gestion de l'agent local passe par l'API serveur authentifiée. L'agent écoute en boucle locale et exige le secret de l'image unique sur toutes ses routes de gestion ; aucun contrôle d'origine navigateur n'est appliqué à ce canal interne. Voir [0044](docs/architecture/0044-single-node-management-page.md).
+
 Toute route de gestion exige une session ; les rôles sont `admin` et `viewer` (lecture seule). Les routes joignables sans session, l’autorisation des workers par jeton de nœud et le durcissement du jumelage sont décrits dans [0031](docs/architecture/0031-authentication-roles-and-pairing.md). Une nouvelle route est fermée par défaut ; ne l’ouvrir (`AllowAnonymous`, `AllowViewer`, `AllowNodeCredentials`) qu’avec une décision explicite et la mise à jour du test qui énumère les routes anonymes.
 
 ## Règles absolues de programmation de l’interface

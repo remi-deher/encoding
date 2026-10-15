@@ -58,11 +58,13 @@ builder.Services.AddSingleton<PluginConnectionTester>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();
 builder.Services.AddSingleton<IntegrationTriggerService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<IntegrationTriggerService>());
+builder.Services.AddTransient<LocalAgentAuthenticationHandler>();
 builder.Services.AddHttpClient(Encoding.Api.Nodes.LocalNodeEndpoints.HttpClientName, (services, client) =>
 {
     client.BaseAddress = new Uri(Encoding.Api.Nodes.LocalNodeEndpoints.AgentBaseUrl(services.GetRequiredService<IConfiguration>()));
     client.Timeout = TimeSpan.FromSeconds(30);
-});
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+    .AddHttpMessageHandler<LocalAgentAuthenticationHandler>();
 builder.Services.AddHttpClient("PluginConnectionTest", client => client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<RuntimeEligibility>();

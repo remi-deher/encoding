@@ -60,7 +60,7 @@ internal static class ProcessTests
                 ["Runtime:Plugins:2:Arguments:0"] = "-B", ["Runtime:Plugins:2:Arguments:1"] = Path.Combine(plugins, "jellyfin", "plugin.py"),
                 ["Runtime:Plugins:2:ReadOnlyPaths:0"] = plugins, ["Runtime:Plugins:2:ReadOnlyPaths:1"] = Path.Combine(RepositoryRoot(), "backend", "src", "Encoding.Api", "Flows", "Catalog")
             }).Build();
-            var options = new NodeAgentOptions("plugin-test", [NodeRole.Worker], 1, Path.Combine(data, "node"), null, false, TimeSpan.FromSeconds(10), 8081, []);
+            var options = new NodeAgentOptions("plugin-test", [NodeRole.Worker], 1, Path.Combine(data, "node"), null, false, TimeSpan.FromSeconds(10), 8081);
             var host = new PluginProcessHost(new ProcessToolRunner(), configuration, options);
             var registry = new Encoding.Api.Flows.FlowComponentRegistry(new ConfigurationBuilder().Build());
             var manifest = registry.Plugins.Single(plugin => plugin.Id == "sonarr");
