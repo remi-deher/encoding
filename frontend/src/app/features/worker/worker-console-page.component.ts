@@ -1,7 +1,10 @@
 import { MatButtonModule } from '@angular/material/button';
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, EMPTY, filter, forkJoin, switchMap, timer } from 'rxjs';
 import { NodeModeController } from '../../shared/services/node-mode-controller';
@@ -43,7 +46,7 @@ interface WorkerPairingResponse {
 
 @Component({
   selector: 'app-worker-console-page',
-  imports: [CategoryTabsComponent, MatButtonModule, PageHeaderComponent],
+  imports: [CategoryTabsComponent, MatButtonModule, MatFormFieldModule, MatInputModule, PageHeaderComponent, ReactiveFormsModule],
   templateUrl: './worker-console-page.component.html',
   styleUrl: './worker-console-page.component.scss',
 })
@@ -62,6 +65,8 @@ export class WorkerConsolePageComponent {
   protected readonly pairingKey = signal<string | null>(null);
   protected readonly pairingExpiresAt = signal<string | null>(null);
   protected readonly leaving = signal(false);
+  protected readonly clusterAddress = new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(/^https?:\/\/\S+$/i)] });
+  protected readonly addingCluster = signal(false);
   protected readonly refreshError = signal(false);
   protected readonly tabOptions: readonly CategoryTabOption[] = [
     { value: 'tasks', label: 'Tâches' },
@@ -111,6 +116,25 @@ export class WorkerConsolePageComponent {
 
   protected pairingExpiryLabel(value: string): string {
     return new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short' }).format(new Date(value));
+  }
+
+  /** Ajoute un cluster par son adresse quand la détection réseau ne le voit pas (réseau Docker en pont, autre sous-réseau). */
+  protected addCluster(): void {
+    if (this.clusterAddress.invalid || this.addingCluster()) return;
+    this.addingCluster.set(true);
+    this.http.post<WorkerCluster>(`${WORKER_AGENT_API}/clusters`, { address: this.clusterAddress.value.trim() }).pipe(
+      catchError((error: unknown) => {
+        this.addingCluster.set(false);
+        this.notifications.show(this.getErrorMessage(error));
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((cluster) => {
+      this.addingCluster.set(false);
+      this.clusterAddress.reset('');
+      this.notifications.show(`Cluster ${cluster.name} ajouté à la liste.`);
+      this.refreshStatus();
+    });
   }
 
   protected joinCluster(cluster: WorkerCluster): void {

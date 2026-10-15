@@ -130,8 +130,18 @@
                 </article>
               }
             } @else {
-              <p class="feedback">Aucun cluster détecté. Vérifiez que le serveur est démarré et que les deux installations partagent le même réseau local.</p>
+              <p class="feedback">Aucun cluster détecté. Vérifiez que le serveur est démarré et que les deux installations partagent le même réseau local, ou saisissez son adresse ci-dessous.</p>
             }
+            <form class="cluster-address" (ngSubmit)="addCluster()">
+              <mat-form-field appearance="outline">
+                <mat-label>Adresse d’un cluster</mat-label>
+                <input matInput type="url" [formControl]="clusterAddress" placeholder="http://192.168.1.51:8090" autocomplete="off" />
+                <mat-hint>À utiliser quand la détection réseau ne le voit pas.</mat-hint>
+              </mat-form-field>
+              <button matButton="outlined" type="submit" [disabled]="clusterAddress.invalid || addingCluster()">
+                {{ addingCluster() ? 'Vérification…' : 'Ajouter' }}
+              </button>
+            </form>
           </div>
           <p class="security-note">La confirmation crée une identité propre à cette installation. Son jeton reste stocké localement et n’est jamais affiché.</p>
         }

@@ -56,6 +56,21 @@ app.UseCors();
 app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));
 app.MapNodeMode("/api/v1/worker/mode");
 app.MapGet("/api/v1/worker/clusters", (WorkerClusterDiscovery discovery) => Results.Ok(discovery.List()));
+app.MapPost("/api/v1/worker/clusters", async (WorkerClusterAddress request, WorkerClusterDiscovery discovery, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return (IResult)Results.Ok(await discovery.AddManualAsync(request.Address, cancellationToken));
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { title = exception.Message });
+    }
+    catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: "Ce cluster est injoignable ou ne répond pas comme un cluster Encoding.");
+    }
+}).WithName("AddWorkerClusterByAddress");
 app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe, CancellationToken cancellationToken) =>
 {
     var identity = await identityStore.GetAsync(cancellationToken);
@@ -138,3 +153,4 @@ app.MapPost("/api/v1/worker/leave", async (WorkerEnrollmentService enrollment, C
 await app.RunAsync();
 
 public sealed record WorkerEnrollmentRequest(Guid ClusterId, bool LeaveCurrent = false);
+public sealed record WorkerClusterAddress(string Address);

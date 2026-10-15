@@ -28,6 +28,8 @@ internal static class MembershipTests
             leaves.Add((request.Path.Value!, request.Headers["X-Node-Token"].ToString()));
             return Results.StatusCode((int)leaveStatus);
         });
+        var manualClusterId = Guid.NewGuid();
+        cluster.MapGet("/api/v1/cluster", () => Results.Ok(new { id = manualClusterId, name = "Cluster manuel" }));
         await cluster.StartAsync();
         var clusterUrl = cluster.Urls.Single().TrimEnd('/') + "/";
 
@@ -122,7 +124,15 @@ internal static class MembershipTests
             mode = new NodeMode(true, true);
             await enrollment.RetireLocalServerAsync(localUrl, CancellationToken.None);
             Check(mode == new NodeMode(true, true), "Staying in the local cluster keeps the local server.");
-            Console.WriteLine("PASS: cluster membership (leave, two-phase switch, rollback, verification code, local server retirement).");
+            // Adresse saisie à la main (découverte réseau impossible, ex. réseau Docker en pont) : le cluster rejoint la liste.
+            using var discovery = new WorkerClusterDiscovery(options, NullLogger<WorkerClusterDiscovery>.Instance);
+            var manual = await discovery.AddManualAsync(clusterUrl + "api/v1/ignored", CancellationToken.None);
+            Check(manual.Id == manualClusterId && manual.Name == "Cluster manuel" && manual.ApiBaseUrl == clusterUrl && discovery.List().Single().Id == manualClusterId,
+                "A cluster added by address is listed with its real identity and its root address.");
+            await Assert.ThrowsAsync<InvalidOperationException>(() => discovery.AddManualAsync("pas une adresse", CancellationToken.None));
+            await Assert.ThrowsAsync<HttpRequestException>(() => discovery.AddManualAsync("http://127.0.0.1:1/", CancellationToken.None));
+            Check(discovery.List().Count == 1, "Invalid or unreachable addresses add nothing.");
+            Console.WriteLine("PASS: cluster membership (leave, two-phase switch, rollback, verification code, local server retirement, manual address).");
         }
         finally
         {

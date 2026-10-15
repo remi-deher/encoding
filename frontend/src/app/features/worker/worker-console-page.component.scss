@@ -229,3 +229,15 @@
     grid-column: auto;
   }
 }
+
+.cluster-address {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cluster-address mat-form-field {
+  flex: 1 1 320px;
+}

@@ -11,6 +11,8 @@ public sealed class WorkerClusterDiscovery(
     ILogger<WorkerClusterDiscovery> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, DiscoveredCluster> clusters = new();
+    private readonly ConcurrentDictionary<string, byte> manualUrls = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HttpClient probeClient = new() { Timeout = TimeSpan.FromSeconds(5) };
     private MdnsBrowser? browser;
 
     public IReadOnlyList<DiscoveredCluster> List() => clusters.Values.OrderBy(cluster => cluster.Name).ToArray();
@@ -31,10 +33,9 @@ public sealed class WorkerClusterDiscovery(
             {
                 logger.LogWarning(exception, "La découverte DNS-SD est indisponible sur cette interface réseau.");
             }
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             while (!stoppingToken.IsCancellationRequested)
             {
-                await AddConfiguredClusterAsync(client, stoppingToken);
+                await AddConfiguredClusterAsync(stoppingToken);
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
         }
@@ -47,21 +48,45 @@ public sealed class WorkerClusterDiscovery(
         }
     }
 
-    private async Task AddConfiguredClusterAsync(HttpClient client, CancellationToken cancellationToken)
+    /// <summary>Ajoute un cluster par son adresse quand la découverte réseau ne le voit pas (réseau Docker en pont, autre sous-réseau).</summary>
+    public async Task<DiscoveredCluster> AddManualAsync(string address, CancellationToken cancellationToken)
     {
-        if (options.ClusterApiBaseUrl is null) return;
-        try
+        if (!Uri.TryCreate(address?.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            throw new InvalidOperationException("L’adresse du cluster doit être une URL http(s) complète, par exemple http://192.168.1.51:8090.");
+        var baseUrl = new Uri(uri.GetLeftPart(UriPartial.Authority) + "/").AbsoluteUri;
+        var cluster = await ProbeAsync(baseUrl, cancellationToken)
+            ?? throw new InvalidOperationException("Aucun cluster Encoding ne répond à cette adresse.");
+        manualUrls[baseUrl] = 0;
+        return cluster;
+    }
+
+    private async Task AddConfiguredClusterAsync(CancellationToken cancellationToken)
+    {
+        var urls = manualUrls.Keys.AsEnumerable();
+        if (options.ClusterApiBaseUrl is not null) urls = urls.Append(options.ClusterApiBaseUrl);
+        foreach (var url in urls.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var identity = await client.GetFromJsonAsync<ClusterIdentity>(
-                new Uri(new Uri(options.ClusterApiBaseUrl), "api/v1/cluster"), cancellationToken);
-            if (identity is null || identity.Id == Guid.Empty) return;
-            clusters[identity.Id] = new DiscoveredCluster(identity.Id, identity.Name, options.ClusterApiBaseUrl, DateTimeOffset.UtcNow);
-            logger.LogInformation("Cluster configuré découvert : {ClusterName} ({ClusterId}).", identity.Name, identity.Id);
+            try
+            {
+                if (await ProbeAsync(url, cancellationToken) is { } cluster)
+                    logger.LogInformation("Cluster configuré découvert : {ClusterName} ({ClusterId}).", cluster.Name, cluster.Id);
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+                logger.LogDebug("Le point de découverte de cluster configuré n’est pas encore disponible.");
+            }
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
-        {
-            logger.LogDebug("Le point de découverte de cluster configuré n’est pas encore disponible.");
-        }
+    }
+
+    private async Task<DiscoveredCluster?> ProbeAsync(string apiBaseUrl, CancellationToken cancellationToken)
+    {
+        var identity = await probeClient.GetFromJsonAsync<ClusterIdentity>(
+            new Uri(new Uri(apiBaseUrl), "api/v1/cluster"), cancellationToken);
+        if (identity is null || identity.Id == Guid.Empty) return null;
+        var cluster = new DiscoveredCluster(identity.Id, identity.Name, apiBaseUrl, DateTimeOffset.UtcNow);
+        clusters[identity.Id] = cluster;
+        return cluster;
     }
 
     private void OnServiceFound(ServiceProfile service)
@@ -90,6 +115,7 @@ public sealed class WorkerClusterDiscovery(
     {
         browser?.Dispose();
         browser = null;
+        probeClient.Dispose();
         base.Dispose();
     }
 

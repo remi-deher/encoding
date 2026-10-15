@@ -26,3 +26,7 @@ Statut : implémentée (phase P2). Les relations entre clusters et le partage de
 - Aucune base n'est migrée ni fusionnée ; l'historique d'un nœud reste dans le cluster qu'il quitte.
 - Un nœud en attente d'approbation (jumelage non confirmé) peut annuler en quittant ; il retrouve alors son état autonome.
 - Les bibliothèques d'un serveur arrêté ne sont pas visibles depuis le cluster d'accueil ; l'export sert à les réutiliser à la main.
+
+## Adresse saisie à la main
+
+La découverte DNS-SD (multicast) ne traverse ni un réseau Docker en pont ni un autre sous-réseau. La console worker permet donc d'ajouter un cluster par son adresse (`POST /api/v1/worker/clusters`, corps `{ "address": "http://hôte:port" }`). L'agent interroge `GET /api/v1/cluster` à cette adresse, vérifie l'identité du cluster, l'ajoute à la liste proposée et le sonde ensuite toutes les 30 secondes comme un cluster configuré. L'adresse n'est conservée que pour la vie du processus ; l'enrôlement, lui, reste persistant. Le rattachement suit ensuite le parcours habituel (approbation du cluster d'accueil, code de vérification).
