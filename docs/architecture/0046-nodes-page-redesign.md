@@ -1,6 +1,6 @@
 # 0046 — Refonte de la page Nœuds : carte de ressource, tiroir à onglets, résumé
 
-Statut : étape 1 implémentée (carte de ressource et grille) ; étapes 2 et 3 à venir. Demande de Rémi : « refonte totale de la page /nodes, du tiroir, des boutons et des cartes » ; maquette validée (docs/design/nodes-redesign-proposal.html n'est pas versionnée : elle a été validée en conversation).
+Statut : étape 1 implémentée (carte de ressource et grille) ; étapes 2 et 3 à venir. Demande de Rémi : « refonte totale de la page /nodes, du tiroir, des boutons et des cartes » ; maquette validée, conservée dans docs/design/nodes-redesign-proposal.html.
 
 ## Décisions
 
