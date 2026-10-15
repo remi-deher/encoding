@@ -58,9 +58,9 @@ export interface DetailCard {
                 class="detail-card-toggle"
                 type="button"
                 [disabled]="!collapsible()"
-                [id]="'detail-card-heading-' + index"
+                [id]="domId + '-heading-' + index"
                 [attr.aria-expanded]="!collapsible() || expandedState(card.id)"
-                [attr.aria-controls]="'detail-card-content-' + index"
+                [attr.aria-controls]="domId + '-content-' + index"
                 (click)="toggle(item, card.id)"
               >
                 <span class="detail-card-icon" aria-hidden="true">
@@ -160,8 +160,8 @@ export interface DetailCard {
               <div
                 class="detail-card-content"
                 role="region"
-                [id]="'detail-card-content-' + index"
-                [attr.aria-labelledby]="'detail-card-heading-' + index"
+                [id]="domId + '-content-' + index"
+                [attr.aria-labelledby]="domId + '-heading-' + index"
               >
                 @if (cardContentTemplates()[card.id]; as contentTemplate) {
                   <ng-container [ngTemplateOutlet]="contentTemplate" />
@@ -413,6 +413,8 @@ export interface DetailCard {
   `,
 })
 export class DetailCardGridComponent implements OnChanges {
+  private static nextId = 0;
+  protected readonly domId = 'detail-card-grid-' + DetailCardGridComponent.nextId++;
   readonly cards = input.required<readonly DetailCard[]>();
   readonly ariaLabel = input('Détails');
   readonly emptyMessage = input('Aucun élément à afficher.');

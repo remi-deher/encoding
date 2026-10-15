@@ -65,11 +65,9 @@ services:
       Runtime__Plugins__3__Arguments__0: -B
       Runtime__Plugins__3__Arguments__1: /opt/encoding/plugins/jellyfin/plugin.py
       Runtime__Plugins__3__ReadOnlyPaths__0: /opt/encoding/plugins/jellyfin
-      WorkerUi__Origins: ${WORKER_UI_ORIGINS:-http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201,http://localhost:5080,http://127.0.0.1:5080}
     ports:
       - "127.0.0.1:5080:8080"
       - "127.0.0.1:4201:8080"
-      - "127.0.0.1:5081:8081"
     depends_on:
       postgres:
         condition: service_healthy

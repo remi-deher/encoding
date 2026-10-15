@@ -50,6 +50,6 @@ ENV Node__Roles=server,worker \
     Logging__Console__FormatterName=json \
     Logging__Console__FormatterOptions__UseUtcTimestamp=true \
     Logging__Console__FormatterOptions__IncludeScopes=true
-# 8080 : API et interface web ; 8081 : console du worker. Le contrôle du lanceur (8082) reste local au conteneur.
-EXPOSE 8080 8081
+# 8080 : API et interface web. L'agent (8081) et le lanceur (8082) restent locaux au conteneur.
+EXPOSE 8080
 ENTRYPOINT ["dotnet", "/app/launcher/Encoding.Launcher.dll"]

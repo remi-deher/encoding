@@ -26,7 +26,7 @@ Calculé par `.github/scripts/next-version.sh` à partir du dernier tag `vX.Y.Z`
 Sans configuration de base de données, l'image utilise SQLite dans le dossier de données (`/var/lib/encoding-node/cluster.db`), ce qui convient à un cluster à un seul serveur (architecture 0043) :
 
 ```
-docker run -d --name encoding -p 8080:8080 -p 8081:8081 \
+docker run -d --name encoding -p 8080:8080 \
   -e Node__Roles=server,worker \
   -v encoding-node:/var/lib/encoding-node \
   <utilisateur>/encoding:latest
@@ -44,4 +44,4 @@ Pour passer d'un mode à l'autre, voir `Encoding.Api transfer-database` dans [sa
 
 ## Gérer ce nœud depuis la page Nœuds
 
-Sur un nœud qui héberge le serveur, tout se gère depuis la page **Nœuds → Ce nœud et son cluster** : mode, adresse d'un cluster (`http://<serveur>:8080`, utile quand la découverte DNS-SD ne traverse pas le réseau), clé de jumelage, rejoindre, quitter. Le serveur relaie ces actions vers l'agent du même conteneur (`LocalAgent__BaseUrl`, par défaut `http://127.0.0.1:8081/`) derrière la session administrateur : il n'y a rien à publier ni de CORS à régler. Seul un nœud sans serveur (worker seul) garde la page minimale `/worker`, qui parle directement à l'agent (`localhost:5081`, ou même hôte sur le port 8081 ; `WorkerUi__Origins` autorise l'origine de l'interface et `localStorage['encoding.workerAgentUrl']` redéfinit l'URL).
+Sur un nœud qui héberge le serveur, tout se gère depuis la page **Nœuds → Ce nœud et son cluster** : mode, adresse d'un cluster (`http://<serveur>:8080`, utile quand la découverte DNS-SD ne traverse pas le réseau), clé de jumelage, rejoindre, quitter. Le serveur relaie ces actions vers l'agent du même conteneur (`LocalAgent__BaseUrl`, par défaut `http://127.0.0.1:8081/`) derrière la session administrateur et avec le secret local créé par le lanceur. L'agent écoute uniquement en boucle locale, exige le secret pour toutes ses routes de gestion et n'utilise plus `Origin` ni CORS : retirer les anciens ports 8081 publiés et le réglage `WorkerUi__Origins` lors de la mise à jour. La gestion par navigateur d'un nœud nécessite la fonction serveur locale ; un nœud worker seul se pilote depuis son cluster, ou via le canal interne authentifié. Hors image unique, le serveur et l'agent du même hôte doivent partager explicitement le fichier `Node__LocalEnrollmentSecretFile`.

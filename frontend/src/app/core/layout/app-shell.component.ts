@@ -43,15 +43,12 @@ export class AppShellComponent {
     const override = this.dynamicTitle.current();
     return override?.url === context.url ? override.title : context.title;
   });
-  protected readonly workerMode = computed(() => this.navigationEnd().workerMode);
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
 
   private readonly auth = inject(AuthService);
-  // Aucun appel à l’API de gestion sans session : console worker, pages d’authentification et visiteur anonyme.
-  private readonly pollingDisabled = computed(
-    () => this.workerMode() || this.authMode() || !this.auth.user(),
-  );
+  // Aucun appel à l’API de gestion sans session.
+  private readonly pollingDisabled = computed(() => this.authMode() || !this.auth.user());
   private readonly overview = inject(ClusterOverview);
   private readonly clusterState = toSignal(
     toObservable(this.pollingDisabled).pipe(
@@ -69,8 +66,8 @@ export class AppShellComponent {
 
   private readonly tracking = inject(ExecutionTracking);
   private readonly executionState = toSignal(
-    toObservable(this.workerMode).pipe(
-      switchMap((worker) => (worker ? of(INITIAL_EXECUTION_TRACKING) : this.tracking.state$)),
+    toObservable(this.pollingDisabled).pipe(
+      switchMap((disabled) => (disabled ? of(INITIAL_EXECUTION_TRACKING) : this.tracking.state$)),
     ),
     { initialValue: INITIAL_EXECUTION_TRACKING },
   );
@@ -81,7 +78,6 @@ export class AppShellComponent {
   private getCurrentPageContext(): {
     title: string;
     url: string;
-    workerMode: boolean;
     workspaceMode: boolean;
     authMode: boolean;
   } {
@@ -94,7 +90,6 @@ export class AppShellComponent {
     return {
       url: this.router.url,
       title: (route.data['title'] as string | undefined) ?? 'Vue d’ensemble',
-      workerMode: route.data['workerMode'] === true,
       workspaceMode: route.data['layout'] === 'workspace',
       authMode: route.data['authPage'] !== undefined,
     };

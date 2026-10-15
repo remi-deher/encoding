@@ -1,20 +1,16 @@
 <div class="application-shell" [class.workspace-shell]="workspaceMode()">
   <mat-toolbar class="application-header">
-    <a
-      class="brand"
-      [routerLink]="workerMode() ? '/worker' : '/'"
-      [attr.aria-label]="workerMode() ? 'Ce nœud' : 'Accueil'"
-    >
+    <a class="brand" routerLink="/" aria-label="Accueil">
       <span class="brand-mark" aria-hidden="true">E</span>
       <span class="brand-name">{{ pageTitle() }}</span>
     </a>
 
-    @if (!workerMode() && !authMode()) {
+    @if (!authMode()) {
       <app-primary-navigation />
     }
 
     <div class="header-actions">
-      @if (!workerMode() && !authMode()) {
+      @if (!authMode()) {
         <div class="header-status">
           @if (activeExecutionCount() > 0) {
             <a
@@ -47,7 +43,7 @@
       <router-outlet />
     </main>
 
-    @if (!workerMode() && !authMode() && !workspaceMode()) {
+    @if (!authMode() && !workspaceMode()) {
       <footer class="application-footer">
         <span
           >Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span

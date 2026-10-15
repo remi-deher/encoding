@@ -4,7 +4,7 @@ using System.Text;
 namespace Encoding.Core.Nodes;
 
 /// <summary>
-/// Secret d'enrôlement du nœud local de l'image unique (architecture 0037). Le lanceur le génère à chaque démarrage dans un
+/// Secret d'enrôlement et de gestion du nœud local de l'image unique (architectures 0037 et 0044). Le lanceur le génère à chaque démarrage dans un
 /// fichier du dossier de données du nœud (lisible par lui seul) ; le serveur et l'agent du même conteneur le lisent.
 /// Il vit dans un fichier et non dans l'environnement afin que les scripts et plugins sous bac à sable ne l'héritent pas.
 /// </summary>

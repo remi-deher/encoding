@@ -102,9 +102,13 @@ Le catalogue initial des outils associés aux composants de flow est décrit dan
 
 ## Authentification et rôles
 
+La gestion de l'agent local passe par l'API serveur authentifiée. L'agent écoute en boucle locale et exige le secret de l'image unique sur toutes ses routes de gestion ; aucun contrôle d'origine navigateur n'est appliqué à ce canal interne. Voir [0044](docs/architecture/0044-single-node-management-page.md).
+
 Toute route de gestion exige une session ; les rôles sont `admin` et `viewer` (lecture seule). Les routes joignables sans session, l’autorisation des workers par jeton de nœud et le durcissement du jumelage sont décrits dans [0031](docs/architecture/0031-authentication-roles-and-pairing.md). Une nouvelle route est fermée par défaut ; ne l’ouvrir (`AllowAnonymous`, `AllowViewer`, `AllowNodeCredentials`) qu’avec une décision explicite et la mise à jour du test qui énumère les routes anonymes.
 
 ## Règles absolues de programmation de l’interface
+
+La page Nœuds distingue **Ce nœud** et **Cluster** ; la création et le rattachement guidé réutilisent les composants communs Angular Material/CDK et les API authentifiées existantes. Voir [0048](docs/architecture/0048-local-node-and-guided-cluster-management.md).
 
 Les règles de [UI_RULES.md](UI_RULES.md) sont obligatoires pour toute conception ou modification de l’interface. Jetons de design, thème sombre, cartes de données et éditeur de scripts : [0035](docs/architecture/0035-ui-design-tokens-theme-and-cards.md). Les lire avant de travailler sur l’interface et les appliquer sans contournement propre à une page. En cas de doute sur un besoin métier, demander plutôt qu’inventer. Toute évolution d’un socle ou composant commun doit examiner ses usages et signaler son impact.
 

@@ -13,7 +13,7 @@ if (args.FirstOrDefault() == "--isolated-process")
 }
 var builder = WebApplication.CreateBuilder(args);
 var options = NodeAgentOptions.FromConfiguration(builder.Configuration);
-builder.WebHost.ConfigureKestrel(server => server.ListenAnyIP(options.LocalApiPort));
+builder.WebHost.ConfigureKestrel(server => server.ListenLocalhost(options.LocalApiPort));
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<WorkerIdentityStore>();
 builder.Services.AddSingleton<ProcessToolRunner>();
@@ -32,26 +32,23 @@ builder.Services.AddHostedService<WorkerClusterDiscovery>(provider => provider.G
 builder.Services.AddHostedService<WorkerAutoEnrollmentService>();
 builder.Services.AddHostedService<NodeHeartbeatService>();
 builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
-builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy => policy
-    .WithOrigins(options.WorkerUiOrigins.ToArray())
-    .AllowAnyHeader()
-    .AllowAnyMethod()));
 builder.Services.ConfigureHttpJsonOptions(json =>
     json.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 
 var app = builder.Build();
-var allowedOrigins = new HashSet<string>(options.WorkerUiOrigins, StringComparer.OrdinalIgnoreCase);
 app.Use(async (context, next) =>
 {
-    if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method) && !HttpMethods.IsOptions(context.Request.Method)
-        && (!context.Request.Headers.TryGetValue("Origin", out var origin) || !allowedOrigins.Contains(origin.ToString())))
+    // Canal interne du nœud : aucune dépendance aux en-têtes d'un navigateur.
+    // Les lectures sont aussi protégées : l'état contient les clés de jumelage.
+    if (context.Request.Path.StartsWithSegments("/api/v1/worker")
+        && !LocalEnrollment.Matches(options.LocalEnrollmentSecretFile,
+            context.Request.Headers[LocalEnrollment.HeaderName].ToString()))
     {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         return;
     }
     await next();
 });
-app.UseCors();
 
 app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));
 app.MapNodeMode("/api/v1/worker/mode");

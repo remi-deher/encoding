@@ -9,7 +9,6 @@ public sealed record NodeAgentOptions(
     bool AutomaticEnrollmentEnabled,
     TimeSpan HeartbeatInterval,
     int LocalApiPort,
-    IReadOnlyList<string> WorkerUiOrigins,
     string? LocalEnrollmentSecretFile = null)
 {
     public static NodeAgentOptions FromConfiguration(IConfiguration configuration)
@@ -33,8 +32,6 @@ public sealed record NodeAgentOptions(
         if (intervalSeconds is < 1 or > 300) throw new InvalidOperationException("Node:HeartbeatIntervalSeconds doit être compris entre 1 et 300.");
         var localApiPort = configuration.GetValue("WorkerUi:Port", 8081);
         if (localApiPort is < 1 or > 65535) throw new InvalidOperationException("WorkerUi:Port est invalide.");
-        var origins = (configuration["WorkerUi:Origins"] ?? "http://localhost:4200,http://127.0.0.1:4200")
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         return new NodeAgentOptions(
             name,
@@ -45,7 +42,6 @@ public sealed record NodeAgentOptions(
             configuration.GetValue("Worker:AutoAcceptEnrollment", false),
             TimeSpan.FromSeconds(intervalSeconds),
             localApiPort,
-            origins,
             string.IsNullOrWhiteSpace(configuration[Encoding.Core.Nodes.LocalEnrollment.SecretFileSetting]) ? null : configuration[Encoding.Core.Nodes.LocalEnrollment.SecretFileSetting]);
     }
 

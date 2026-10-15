@@ -46,7 +46,7 @@ internal static class MembershipTests
             File.WriteAllText(secretFile, "secret");
             var localUrl = "http://127.0.0.1:18080/";
             var options = new NodeAgentOptions("membership", [Encoding.Contracts.Nodes.NodeRole.Server, Encoding.Contracts.Nodes.NodeRole.Worker], 1, data,
-                localUrl, false, TimeSpan.FromSeconds(10), 8081, [], secretFile);
+                localUrl, false, TimeSpan.FromSeconds(10), 8081, secretFile);
             var store = new WorkerIdentityStore(options);
             var enrollment = new WorkerEnrollmentService(options, store, new WorkerClusterDiscovery(options, NullLogger<WorkerClusterDiscovery>.Instance),
                 null!, NullLogger<WorkerEnrollmentService>.Instance, Microsoft.Extensions.Options.Options.Create(new Microsoft.AspNetCore.Http.Json.JsonOptions()), launcher);
