@@ -61,8 +61,8 @@
           <div class="node-processing-tab">
             <app-detail-card-grid
               [cards]="processingCards()"
-              [initiallyExpanded]="false"
-              [collapsible]="true"
+              [initiallyExpanded]="true"
+              [collapsible]="false"
               [cardContentTemplates]="{
                 'node-processing-limit': processingLimitContent,
                 'node-processing-calendar': processingCalendarContent,
