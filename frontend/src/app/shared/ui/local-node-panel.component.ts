@@ -78,6 +78,14 @@ export class LocalNodePanelComponent {
   protected readonly clusterAddress = signal('');
   protected readonly refreshError = signal(false);
   protected readonly workerStatus = computed(() => this.status());
+  /** Étape du parcours : `member` (rattaché), `switching` (changement en deux phases), `pending` (demande en attente d'approbation) ou `unattached`. */
+  protected readonly phase = computed<'unknown' | 'unattached' | 'pending' | 'switching' | 'member'>(() => {
+    const status = this.status();
+    if (!status) return 'unknown';
+    if (status.switching) return 'switching';
+    if (status.isEnrolled) return 'member';
+    return status.clusterId ? 'pending' : 'unattached';
+  });
   /** Clusters proposés : tous ceux détectés, sauf celui auquel ce nœud est déjà rattaché. */
   protected readonly joinableClusters = computed(() => {
     const current = this.status()?.clusterId?.toLowerCase();
@@ -96,6 +104,7 @@ export class LocalNodePanelComponent {
       }))))),
       takeUntilDestroyed(),
     ).subscribe(({ status, clusters }) => {
+      this.announceTransition(status);
       this.status.set(status);
       this.pairingKey.set(status.pairingKey);
       this.pairingExpiresAt.set(status.pairingExpiresAt);
@@ -237,7 +246,6 @@ export class LocalNodePanelComponent {
       takeUntilDestroyed(),
     ).subscribe(() => {
       this.enrollingClusterId.set(null);
-      this.notifications.show('Ce worker a rejoint le cluster.');
       this.refreshStatus();
     });
   }
@@ -310,11 +318,33 @@ export class LocalNodePanelComponent {
     });
   }
 
+  /** Signale ce qui s'est produit hors de l'écran, pendant l'attente : l'approbation du cluster ou l'abandon de la demande. */
+  private announceTransition(next: WorkerStatus): void {
+    const previous = this.status();
+    if (!previous) return;
+    if (!previous.isEnrolled && next.isEnrolled && next.clusterName)
+      this.notifications.show(`Ce nœud a rejoint le cluster ${next.clusterName}.`);
+    else if (next.switchFailure && next.switchFailure !== previous.switchFailure)
+      this.notifications.show(`Rattachement annulé : ${next.switchFailure}.`);
+  }
+
+  protected async copyPairingKey(): Promise<void> {
+    const key = this.pairingKey();
+    if (!key) return;
+    try {
+      await navigator.clipboard.writeText(key);
+      this.notifications.show('Clé copiée.');
+    } catch {
+      this.notifications.show('Copie impossible : sélectionnez la clé et copiez-la à la main.');
+    }
+  }
+
   private refreshStatus(): void {
     forkJoin({
       status: this.http.get<WorkerStatus>(`${this.api()}/status`),
       clusters: this.http.get<readonly WorkerCluster[]>(`${this.api()}/clusters`),
     }).subscribe(({ status, clusters }) => {
+      this.announceTransition(status);
       this.status.set(status);
       this.pairingKey.set(status.pairingKey);
       this.pairingExpiresAt.set(status.pairingExpiresAt);

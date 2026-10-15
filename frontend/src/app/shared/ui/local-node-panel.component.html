@@ -9,6 +9,8 @@
           <span class="state-chip state-chip--connected">Nœud autonome</span>
         } @else if (workerStatus()?.isEnrolled) {
           <span class="state-chip state-chip--connected">Dans un cluster</span>
+        } @else if (phase() === 'pending') {
+          <span class="state-chip">En attente d’approbation</span>
         } @else {
           <span class="state-chip">Non rattaché</span>
         }
@@ -50,13 +52,16 @@
         @if (worker.switchFailure) {
           <p class="feedback feedback--error" role="alert">Rattachement annulé : {{ worker.switchFailure }}.</p>
         }
-        @if (worker.clusterId && !worker.isEnrolled && worker.verificationCode) {
+        @if (phase() === 'pending' && worker.verificationCode) {
           <div class="pairing-code" role="status">
             <div>
-              <strong>Code de vérification</strong>
-              <p>L’administrateur du cluster d’accueil doit voir le même code avant d’approuver ce nœud.</p>
+              <strong>Demande envoyée à {{ worker.clusterName ?? 'un cluster' }}</strong>
+              <p>
+                Un administrateur de ce cluster doit l’accepter : page Nœuds, « Ajouter un nœud », puis comparer le code de vérification.
+                @if (pairingExpiresAt(); as expiresAt) { Sans réponse avant {{ pairingExpiryLabel(expiresAt) }}, la demande est annulée et ce nœud redevient autonome. }
+              </p>
             </div>
-            <code>{{ worker.verificationCode }}</code>
+            <code aria-label="Code de vérification">{{ worker.verificationCode }}</code>
           </div>
         }
         @if (standalone() && createClusterEndpoint()) {
@@ -83,11 +88,13 @@
               <p>Dans le catalogue Nœuds du serveur, choisissez « Ajouter un nœud » et saisissez cette clé avant son expiration.</p>
             </div>
             <code>{{ pairingKey() }}</code>
+            <button matButton="text" type="button" (click)="copyPairingKey()">Copier la clé</button>
             @if (pairingExpiresAt(); as expiresAt) {
               <span>Expire à {{ pairingExpiryLabel(expiresAt) }}</span>
             }
           </div>
         }
+        @if (phase() !== 'pending') {
         <div class="cluster-list">
           <h3>{{ worker.isEnrolled && !standalone() ? 'Changer de cluster' : 'Rejoindre un cluster' }}</h3>
           @if (joinableClusters().length) {
@@ -112,7 +119,7 @@
                     [disabled]="generatingPairingClusterId() !== null || enrollingClusterId() !== null"
                     (click)="generatePairingKey(cluster)"
                   >
-                    {{ generatingPairingClusterId() === cluster.id ? 'Génération…' : 'Générer une clé' }}
+                    {{ generatingPairingClusterId() === cluster.id ? 'Envoi…' : 'Demander à rejoindre' }}
                   </button>
                   <button
                     matButton="filled"
@@ -120,13 +127,17 @@
                     [disabled]="enrollingClusterId() !== null || generatingPairingClusterId() !== null"
                     (click)="joinCluster(cluster)"
                   >
-                    {{ enrollingClusterId() === cluster.id ? 'Connexion…' : 'Rejoindre' }}
+                    {{ enrollingClusterId() === cluster.id ? 'Connexion…' : 'Rejoindre directement' }}
                   </button>
                 </div>
               </article>
             }
+          <p class="feedback">
+            « Demander à rejoindre » envoie une demande que l’administrateur du cluster accepte après avoir comparé un code : c’est la méthode recommandée.
+            « Rejoindre directement » ne fonctionne que si l’enrôlement direct est ouvert sur ce cluster.
+          </p>
           } @else {
-            <p class="feedback">Aucun cluster détecté. Vérifiez que le serveur est démarré et que les deux installations partagent le même réseau local.</p>
+            <p class="feedback">Aucun cluster détecté. Vérifiez que le serveur est démarré et que les deux installations partagent le même réseau local, ou ajoutez l’adresse du cluster ci-dessous.</p>
           }
         </div>
         <form class="cluster-address" (submit)="$event.preventDefault(); addClusterByAddress(false)">
@@ -144,11 +155,12 @@
               {{ addingCluster() ? 'Vérification…' : 'Ajouter' }}
             </button>
             <button matButton="filled" type="button" [disabled]="!clusterAddress().trim() || addingCluster()" (click)="addClusterByAddress(true)">
-              Ajouter et générer une clé
+              Ajouter et demander à rejoindre
             </button>
           </div>
-          <p class="feedback">À utiliser quand le cluster n’est pas détecté automatiquement. La clé de jumelage est temporaire (10 minutes).</p>
+          <p class="feedback">À utiliser quand le cluster n’est pas détecté automatiquement (par exemple entre deux conteneurs). L’adresse est mémorisée.</p>
         </form>
+        }
         <p class="security-note">La confirmation crée une identité propre à cette installation. Son jeton reste stocké localement et n’est jamais affiché.</p>
       }
     </section>

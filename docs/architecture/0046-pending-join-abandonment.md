@@ -13,6 +13,10 @@ Un nœud autonome qui tentait de rejoindre un cluster enregistrait d’abord une
 - Un nœud en attente d’approbation propose « Annuler la demande » (même opération que « Quitter »).
 - Les clusters connus du nœud portent leur origine (`network`, `manual`, `configured`) et `reachable`. Une adresse ajoutée à la main s’oublie (`DELETE /api/v1/worker/clusters/{id}`, relayé par `DELETE /api/v1/local-node/clusters/{id}`, administrateur seulement) ; elle n’est alors plus mémorisée ni sondée. Un cluster détecté ou le serveur du conteneur ne s’oublie pas.
 
+## Parcours dans le panneau « Ce nœud »
+
+L’étape est dérivée de l’état (`unattached`, `pending`, `switching`, `member`). En attente, le panneau affiche le cluster visé, le code de vérification, la clé (copiable) et l’échéance, et masque la liste des clusters : on annule d’abord la demande. Les deux méthodes sont nommées pour ce qu’elles font : « Demander à rejoindre » (demande approuvée par un administrateur après comparaison du code, recommandée) et « Rejoindre directement » (exige la fenêtre d’enrôlement ouverte). L’approbation ou l’abandon survenus pendant l’attente sont annoncés par une notification.
+
 ## Impacts
 
 Agent worker (`WorkerIdentityStore`, `WorkerEnrollmentService`, `WorkerClusterDiscovery`), relais du serveur, panneau « Ce nœud ». Le contrat `GET /api/v1/worker/clusters` gagne `source` et `reachable` (champs ajoutés). Aucune migration.
