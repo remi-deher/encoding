@@ -1,6 +1,6 @@
 # 0046 — Refonte de la page Nœuds : carte de ressource, tiroir à onglets, résumé
 
-Statut : étape 1 implémentée (carte de ressource et grille) ; étapes 2 et 3 à venir. Demande de Rémi : « refonte totale de la page /nodes, du tiroir, des boutons et des cartes » ; maquette validée, conservée dans docs/design/nodes-redesign-proposal.html.
+Statut : étapes 1, 2 et 3 implémentées (sélection multiple et barre de charge reportées, faute de données côté API). Demande de Rémi : « refonte totale de la page /nodes, du tiroir, des boutons et des cartes » ; maquette validée, conservée dans docs/design/nodes-redesign-proposal.html.
 
 ## Décisions
 
@@ -12,8 +12,8 @@ Statut : étape 1 implémentée (carte de ressource et grille) ; étapes 2 et 3 
 ## Étapes
 
 1. **Fait** : carte de ressource, grille, tri « à traiter d'abord ». Les actions (nom et étiquettes, mode, suppression avec confirmation) et l'ouverture du détail sont inchangées.
-2. Tiroir à onglets (Résumé, Rattachement, Capacités, Bibliothèques) avec pied d'actions collant.
-3. Bandeau de résumé du cluster, alerte d'approbation, filtres d'état, sélection multiple.
+2. **Fait** : le tiroir de détail partagé gagne un pied d'actions collant (`footerActions`, relayé par le gabarit de catalogue) ; la page Nœuds y place « Nom et étiquettes » et « Changer le mode ». Les onglets existants (Général, Traitement, Capacités, Bibliothèques, Avancé) sont conservés : ils couvrent déjà les besoins de la maquette ; l'onglet Rattachement est reporté tant que l'API ne donne pas le cluster par nœud.
+3. **Fait** : le résumé du cluster et l’alerte d’approbation vivent dans le bandeau et les tuiles de 0047 ; filtre d’état (Tous, En ligne, À traiter, Hors ligne) cumulable avec le filtre de rôle. **Reporté** : sélection multiple et barre d’actions groupées, tant qu’aucune action groupée n’existe côté API.
 
 ## Limites
 

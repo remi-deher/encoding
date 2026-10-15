@@ -38,6 +38,12 @@
       [selected]="selectedRole()"
       (selectedChange)="onRoleChange($event)"
     />
+    <app-category-tabs
+      label="État du nœud"
+      [options]="stateOptions()"
+      [selected]="selectedState()"
+      (selectedChange)="selectedState.set($event)"
+    />
   </div>
 
   <div catalogue-table class="node-card-grid">
@@ -57,9 +63,20 @@
         (actionSelected)="onNodeCardAction(card.id, $event)"
       />
     } @empty {
-      <p class="node-card-empty" role="status">Aucun nœud ne correspond à ce rôle.</p>
+      <p class="node-card-empty" role="status">Aucun nœud ne correspond à ces filtres.</p>
     }
   </div>
+
+  <ng-template #detailFooterActions>
+    @if (isAdmin() && selectedNode(); as node) {
+      <app-drawer-action-button
+        label="Nom et étiquettes"
+        variant="outlined"
+        (activated)="editSelectedNodeIdentity()"
+      />
+      <app-drawer-action-button label="Changer le mode" (activated)="changeSelectedNodeMode()" />
+    }
+  </ng-template>
 
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group
