@@ -50,6 +50,7 @@
       <mat-tab label="Général">
         <app-detail-card-grid
           [cards]="generalCards()"
+          [initiallyExpanded]="true"
           ariaLabel="Informations générales du nœud"
           emptyMessage="Aucune information générale disponible pour ce nœud."
         />
