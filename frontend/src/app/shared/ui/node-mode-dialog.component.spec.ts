@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { NodeModeDialogComponent } from './node-mode-dialog.component';
-import { NodeModeStatus } from '../models/node-mode';
+import { NodeModeDialogData } from '../models/node-mode';
 
-function create(status: NodeModeStatus) {
+function create(status: NodeModeDialogData) {
   const close = vi.fn();
   TestBed.configureTestingModule({
     providers: [
@@ -54,5 +54,18 @@ describe('NodeModeDialogComponent', () => {
     const { element } = create({ managed: false, server: true, worker: true });
     expect(element.textContent).toContain('Node__Roles');
     expect(apply(element).disabled).toBe(true);
+  });
+});
+
+describe('NodeModeDialogComponent for a remote node', () => {
+  it('names the node and explains that the change is applied at its next heartbeat', () => {
+    const { element } = create({
+      managed: true,
+      server: false,
+      worker: true,
+      remoteNodeName: 'Transcode A',
+    });
+    expect(element.querySelector('h2')?.textContent).toContain('Transcode A');
+    expect(element.querySelector('[role="note"]')?.textContent).toContain('prochain signal');
   });
 });

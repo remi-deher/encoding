@@ -88,7 +88,7 @@ La décision de stockage des définitions de flow est décrite dans [l’archite
 - Organiser les adaptateurs et services d’intégration des outils par fonction média : vidéo (FFmpeg, MKVToolNix), image (ImageMagick), audio, etc.
 - Les workers détectent et déclarent les outils, versions et capacités disponibles ; le répartiteur en tient compte pour sélectionner un worker.
 - Gérer les exécutables dans les images ou mécanismes d’installation Docker adaptés à la plateforme. Ne pas versionner les binaires tiers dans le dépôt source.
-- Le projet publie une image Docker unique (`encoding`) qui embarque le serveur, l’interface web, le worker et un lanceur ; le mode du nœud (serveur, worker ou les deux) se change à chaud, par nœud, sans redémarrer le conteneur. Voir [0036](docs/architecture/0036-single-image-and-runtime-node-mode.md).
+- Le projet publie une image Docker unique (`encoding`) qui embarque le serveur, l’interface web, le worker et un lanceur ; le mode du nœud (serveur, worker ou les deux) se change à chaud sans redémarrer le conteneur, depuis le nœud lui-même ou à distance par un administrateur du cluster. Voir [0036](docs/architecture/0036-single-image-and-runtime-node-mode.md).
 - Garder les outils média derrière des interfaces remplaçables et testables.
 
 Le catalogue initial des outils associés aux composants de flow est décrit dans [l’architecture 0005](docs/architecture/0005-media-tools-in-flow-components.md). Cette association éditoriale n’atteste pas qu’un binaire est installé sur un worker ; la détection, l’éligibilité et le contrat d’exécution restent à implémenter.

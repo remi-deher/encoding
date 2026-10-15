@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
-import { NodeMode, NodeModeStatus } from '../models/node-mode';
+import { NodeMode, NodeModeDialogData, NodeModeStatus } from '../models/node-mode';
 import { ConfirmationDialogComponent } from '../ui/confirmation-dialog.component';
 import { NodeModeDialogComponent } from '../ui/node-mode-dialog.component';
 import { NotificationService } from './notification.service';
@@ -47,12 +47,48 @@ export class NodeModeController {
     }
   }
 
-  private confirmServerStop(): Promise<boolean> {
+  /**
+   * Demande le mode d'un autre nœud du cluster. Le serveur l'enregistre et le nœud l'applique à son prochain signal :
+   * retourne true si la demande est acceptée, false si l'utilisateur annule ou si elle est refusée (déjà notifié).
+   */
+  async request(
+    nodeId: string,
+    nodeName: string,
+    current: NodeMode,
+    online: boolean,
+  ): Promise<boolean> {
+    const data: NodeModeDialogData = { ...current, managed: true, remoteNodeName: nodeName };
+    const mode = await firstValueFrom(
+      this.dialog
+        .open<NodeModeDialogComponent, NodeModeDialogData, NodeMode>(NodeModeDialogComponent, {
+          data,
+        })
+        .afterClosed(),
+    );
+    if (!mode) return false;
+    if (current.server && !mode.server && !(await this.confirmServerStop(nodeName))) return false;
+    try {
+      await firstValueFrom(this.http.put(`/api/v1/nodes/${nodeId}/mode`, mode));
+      this.notifications.show(
+        online
+          ? 'Changement demandé : le nœud l’applique à son prochain signal.'
+          : 'Changement enregistré : le nœud l’appliquera à son retour en ligne.',
+      );
+      return true;
+    } catch (error) {
+      this.notifications.show(this.errorMessage(error));
+      return false;
+    }
+  }
+
+  private confirmServerStop(nodeName?: string): Promise<boolean> {
     return firstValueFrom(
       this.dialog
         .open<ConfirmationDialogComponent, unknown, boolean>(ConfirmationDialogComponent, {
           data: {
-            title: 'Arrêter le serveur de ce nœud ?',
+            title: nodeName
+              ? `Arrêter le serveur de « ${nodeName} » ?`
+              : 'Arrêter le serveur de ce nœud ?',
             message:
               'L’interface et l’API de ce nœud s’arrêtent. Les workers rattachés à ce serveur le retrouvent s’il revient ou passent par un autre serveur du cluster.',
             confirmLabel: 'Arrêter le serveur',

@@ -42,7 +42,11 @@ public sealed record NodeResponse(
     DateTimeOffset LastSeenAt,
     NodeInventory? Inventory = null,
     string? DisplayName = null,
-    IReadOnlyDictionary<string, string?>? Labels = null);
+    IReadOnlyDictionary<string, string?>? Labels = null,
+    IReadOnlyList<NodeRole>? DesiredRoles = null);
+
+/// <summary>Demande d'un administrateur : mode de fonctionnement voulu pour un nœud, appliqué par le nœud à son prochain signal de présence (architecture 0036).</summary>
+public sealed record ChangeNodeModeRequest(bool Server, bool Worker);
 
 public sealed record NodeEnrollmentRequest(
     Guid Id,

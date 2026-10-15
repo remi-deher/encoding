@@ -8,3 +8,8 @@ export interface NodeMode {
 export interface NodeModeStatus extends NodeMode {
   readonly managed: boolean;
 }
+
+/** Données de la boîte de dialogue : `remoteNodeName` désigne un autre nœud du cluster, dont le mode est appliqué à son prochain signal. */
+export interface NodeModeDialogData extends NodeModeStatus {
+  readonly remoteNodeName?: string;
+}

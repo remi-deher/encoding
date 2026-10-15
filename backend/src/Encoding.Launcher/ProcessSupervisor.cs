@@ -31,7 +31,7 @@ internal sealed class ProcessSupervisor(
 
     public NodeMode Mode => mode;
 
-    /// <summary>Adopte un nouveau mode : arrête ce qui ne doit plus tourner, relance l’agent si sa fonction worker change, démarre le reste.</summary>
+    /// <summary>Adopte un nouveau mode : arrête ce qui ne doit plus tourner, relance l’agent si ses rôles changent, démarre le reste.</summary>
     public async Task ApplyAsync(NodeMode desired, CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
@@ -39,7 +39,7 @@ internal sealed class ProcessSupervisor(
         {
             mode = NodeMode.Validate(desired);
             if (!mode.Server && server.IsRunning) await StopOnPurposeAsync(server);
-            if (agent.IsRunning && agentRunsAs is { } running && running.Worker != mode.Worker)
+            if (agent.IsRunning && agentRunsAs is { } running && running != mode)
                 await StopOnPurposeAsync(agent);
             Reconcile();
         }

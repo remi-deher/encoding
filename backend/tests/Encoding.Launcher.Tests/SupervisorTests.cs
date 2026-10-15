@@ -33,16 +33,16 @@ internal static class SupervisorTests
 
         await supervisor.ApplyAsync(new NodeMode(false, true), token);
         Check.That(!server.IsRunning && server.Stops == 1, "Passer en worker seul arrête le serveur.");
-        Check.That(agent.Starts == 1 && agent.Stops == 0, "L’agent reste en marche quand sa fonction worker ne change pas.");
+        Check.That(agent.Stops == 1 && agent.Starts == 2 && agent.LastEnvironment["Node__Roles"] == "worker", "L’agent est relancé avec ses nouveaux rôles quand la fonction serveur change.");
 
         await supervisor.ApplyAsync(new NodeMode(true, false), token);
         Check.That(server.IsRunning, "Repasser en serveur démarre le serveur.");
-        Check.That(agent.Stops == 1 && agent.Starts == 2 && agent.LastEnvironment["Node__Roles"] == "server",
+        Check.That(agent.Stops == 2 && agent.Starts == 3 && agent.LastEnvironment["Node__Roles"] == "server",
             "L’agent est relancé, après un arrêt propre, quand il perd la fonction worker.");
 
         await supervisor.ApplyAsync(NodeMode.Both, token);
-        Check.That(agent.Starts == 3 && agent.LastEnvironment["Node__Roles"] == "server,worker", "L’agent est relancé quand il gagne la fonction worker.");
-        Check.That(agent.Starts == 3, "Un arrêt voulu ne compte pas comme une panne : la relance est immédiate.");
+        Check.That(agent.Starts == 4 && agent.LastEnvironment["Node__Roles"] == "server,worker", "L’agent est relancé quand il gagne la fonction worker.");
+        Check.That(agent.Starts == 4, "Un arrêt voulu ne compte pas comme une panne : la relance est immédiate.");
 
         // Panne : relance après un délai croissant, jamais en boucle serrée.
         server.Crash();

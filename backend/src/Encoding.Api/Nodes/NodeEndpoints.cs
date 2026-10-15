@@ -100,6 +100,18 @@ public static class NodeEndpoints
             Results.Ok(await repository.ListAsync(options.OfflineAfter, cancellationToken)))
             .WithName("ListNodes");
 
+        nodes.MapPut("/{nodeId:guid}/mode", async (Guid nodeId, ChangeNodeModeRequest request, NodeRepository repository, NodePresenceOptions options, CancellationToken ct) =>
+        {
+            if (!request.Server && !request.Worker)
+                return (IResult)Results.BadRequest(new { title = "Le nœud doit garder au moins une fonction : serveur ou worker." });
+            return await repository.RequestModeAsync(nodeId, request.Server, request.Worker, options.OfflineAfter, ct) switch
+            {
+                NodeRepository.ModeRequestResult.NotFound => Results.NotFound(),
+                NodeRepository.ModeRequestResult.LastServer => Results.Conflict(new { title = "Ce nœud est le dernier serveur en ligne : sa fonction serveur ne peut pas être retirée." }),
+                _ => Results.Accepted()
+            };
+        }).WithName("RequestNodeMode");
+
         nodes.MapGet("/{nodeId:guid}/processing",async(Guid nodeId,LibraryProcessingRepository repository,CancellationToken ct)=>
             await repository.NodeAsync(nodeId,ct) is {} settings?(IResult)Results.Ok(settings):Results.NotFound());
         nodes.MapPut("/{nodeId:guid}/processing",async(Guid nodeId,SaveNodeProcessingSettings request,LibraryProcessingRepository repository,CancellationToken ct)=>

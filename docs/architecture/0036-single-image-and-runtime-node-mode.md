@@ -35,9 +35,20 @@ Le lanceur démarre et arrête ces processus sans redémarrer le conteneur. Le m
 - L'interface propose la même boîte de dialogue « Mode du nœud » depuis la page Nœuds (administrateurs) et depuis la console du worker. Retirer la fonction serveur demande une confirmation, car l'interface cesse de répondre ; le serveur se rétablit depuis la console du worker (port 8081).
 - La variable `Node__Roles` (défaut de l'image : `server,worker`) ne donne que le mode initial. L'agent rejoint par défaut le serveur local (`http://127.0.0.1:8080`) quand la fonction serveur est active et que `Cluster__ApiBaseUrl` n'est pas défini.
 
+## Changer le mode d'un autre nœud
+
+Demande de Rémi : depuis le serveur, un administrateur change le mode de n'importe quel nœud du cluster.
+
+- **Mode voulu dans PostgreSQL** : migration `0031_node_desired_mode.sql`, colonne `cluster_nodes.desired_roles` (nulle sans demande). `PUT /api/v1/nodes/{id}/mode` (`admin`, fermée par défaut) enregistre la demande ; redemander le mode courant l'annule. Plusieurs serveurs voient la même demande, sans coordinateur.
+- **Livraison par le signal de présence** : la réponse du heartbeat (`NodeResponse`) porte `desiredRoles` (champ additif, ignoré par les anciens agents). L'agent compare avec ses rôles déclarés et, s'ils diffèrent, appelle son lanceur local (`LauncherControlClient`) ; le lanceur persiste le mode et relance l'agent avec ses nouveaux rôles. Les rôles du heartbeat suivant égaux au mode voulu effacent la demande (comparaison faite dans la requête SQL du heartbeat). Un nœud hors ligne applique la demande à son retour. Un nœud sans lanceur ignore la demande et le journalise.
+- **Observé et voulu** : l'interface (action de ligne « Changer le mode », administrateurs) affiche le mode demandé en attente dans la fiche du nœud.
+- **Garde** : on ne peut pas retirer la fonction serveur du dernier nœud serveur en ligne (409) ; les changements de mode sont sérialisés par un verrou consultatif transactionnel. Un mode sans fonction est refusé (400).
+- **Le lanceur relance désormais l'agent à tout changement de rôle** (serveur ou worker), afin que le heartbeat annonce les rôles réels.
+- Sécurité : la demande n'arrive qu'à l'agent par sa propre connexion authentifiée par jeton de nœud ; aucune porte d'écoute n'est ajoutée sur les nœuds.
+
 ## Garanties à respecter
 
-- **Pas de coordinateur central** : chaque nœud change son propre mode ; aucun nœud ne force celui d'un autre.
+
 - **Arrêt du worker** : le lanceur envoie SIGTERM, attend 45 s puis force l'arrêt. Un bail non libéré expire (60 s) et la tâche est reprise par la reprise standard après perte d'un nœud ; aucun média n'est modifié par un arrêt forcé, la sortie reste temporaire jusqu'à validation.
 - **Une seule instance de chaque programme** par conteneur ; un redémarrage du lanceur reprend le mode persisté.
 - **Route fermée par défaut** (0031) : `PUT /api/v1/node/mode` exige `admin` ; le scénario d'authentification est étendu (anonyme refusé, lecteur en lecture seule). Un nœud en mode `worker` seul se pilote depuis sa console (port 8081).
@@ -45,11 +56,11 @@ Le lanceur démarre et arrête ces processus sans redémarrer le conteneur. Le m
 
 ## Impacts
 
-`backend/Dockerfile` (image unique, contexte racine), `backend/docker-compose.yml` (un service `encoding`), `.github/workflows/release.yml` (publie `<utilisateur>/encoding`), `.github/workflows/backend.yml` (tests du lanceur et construction de l'image), `docs/operations/release.md`, `docs/operations/backup-restore.md` et `AGENTS.md`.
+`backend/Dockerfile` (image unique, contexte racine), `backend/docker-compose.yml` (un service `encoding`), `.github/workflows/release.yml` (publie `<utilisateur>/encoding`), `.github/workflows/backend.yml` (tests du lanceur et construction de l'image), migration 0031, contrats de nœud (`desiredRoles`, `ChangeNodeModeRequest`), `docs/operations/release.md`, `docs/operations/backup-restore.md` et `AGENTS.md`.
 
 ## Vérifications et limites
 
 - Tests automatisés (`Encoding.Launcher.Tests`) : lecture et validation des modes, persistance, supervision (démarrage, arrêt, redémarrage de l'agent, pannes et délai de relance) et relais serveur/worker vers le lanceur. Le scénario d'authentification vérifie que la route est fermée aux anonymes, lisible par un lecteur et refusée en modification.
 - Essai de bout en bout hors Docker avec les trois programmes publiés : démarrage, changement de mode par l'API du serveur et par la console du worker, relance de l'agent, relance après arrêt brutal du serveur et arrêt propre sur SIGTERM.
 - Non vérifié : la construction de l'image Docker et l'exécution sous Landlock dans l'image unique (contrôlées par la CI et à confirmer sur un déploiement), et le comportement d'un cluster multi-nœuds pendant un changement de mode en charge.
-- Un changement de mode ne pilote que le nœud local ; changer le mode d'un autre nœud n'est pas prévu.
+- La demande à distance est livrée avec le délai du heartbeat (10 s par défaut) puis le délai du lanceur (1 s) ; non vérifié sur un cluster multi-hôtes réel.

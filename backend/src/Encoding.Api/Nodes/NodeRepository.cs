@@ -207,9 +207,10 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
                 max_concurrent_tasks = @max_concurrent_tasks,
                 capabilities = @capabilities,
                 inventory = @inventory,
+                desired_roles = CASE WHEN desired_roles <@ @roles AND @roles <@ desired_roles THEN NULL ELSE desired_roles END,
                 last_seen_at = clock_timestamp()
             WHERE id = @id AND deleted_at IS NULL AND node_token_hash = @node_token_hash
-            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, inventory, display_name, labels
+            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, true AS is_online, inventory, display_name, labels, desired_roles
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
@@ -223,7 +224,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
     {
         const string sql = """
             SELECT id, name, roles, max_concurrent_tasks, capabilities, last_seen_at,
-                   last_seen_at >= clock_timestamp() - @offline_after AS is_online, inventory, display_name, labels
+                   last_seen_at >= clock_timestamp() - @offline_after AS is_online, inventory, display_name, labels, desired_roles
             FROM cluster_nodes WHERE deleted_at IS NULL
             ORDER BY name, id
             """;
@@ -240,7 +241,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
     {
         const string sql = """
             SELECT id, name, roles, max_concurrent_tasks, capabilities, last_seen_at,
-                   last_seen_at >= clock_timestamp() - @offline_after AS is_online, inventory, display_name, labels
+                   last_seen_at >= clock_timestamp() - @offline_after AS is_online, inventory, display_name, labels, desired_roles
             FROM cluster_nodes WHERE id = @id AND deleted_at IS NULL
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -251,6 +252,50 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         return await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, reader.GetBoolean(6)) : null;
     }
 
+
+    public enum ModeRequestResult { Accepted, NotFound, LastServer }
+
+    /// <summary>
+    /// Enregistre le mode voulu d'un nœud ; le nœud l'applique à son prochain signal de présence. Refuse de retirer la fonction
+    /// serveur du dernier nœud serveur en ligne (les changements de mode sont sérialisés par un verrou consultatif).
+    /// </summary>
+    public async Task<ModeRequestResult> RequestModeAsync(Guid nodeId, bool server, bool worker, TimeSpan offlineAfter, CancellationToken ct)
+    {
+        await using var c = await dataSource.OpenConnectionAsync(ct);
+        await using var tx = await c.BeginTransactionAsync(ct);
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtext('cluster_node_mode'))", c, tx))
+            await lockCommand.ExecuteNonQueryAsync(ct);
+        string[] roles;
+        await using (var select = new NpgsqlCommand("SELECT roles FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL FOR UPDATE", c, tx))
+        {
+            select.Parameters.AddWithValue("id", nodeId);
+            if (await select.ExecuteScalarAsync(ct) is not string[] current) return ModeRequestResult.NotFound;
+            roles = current;
+        }
+        if (roles.Contains("server") && !server)
+        {
+            await using var others = new NpgsqlCommand("""
+                SELECT count(*) FROM cluster_nodes
+                WHERE id <> @id AND deleted_at IS NULL AND 'server' = ANY(roles) AND 'server' = ANY(COALESCE(desired_roles, roles))
+                  AND last_seen_at >= clock_timestamp() - @offline_after
+                """, c, tx);
+            others.Parameters.AddWithValue("id", nodeId);
+            others.Parameters.AddWithValue("offline_after", offlineAfter);
+            if ((long)(await others.ExecuteScalarAsync(ct))! == 0) return ModeRequestResult.LastServer;
+        }
+        var desired = new[] { server ? "server" : null, worker ? "worker" : null }.Where(role => role is not null).ToArray();
+        await using (var update = new NpgsqlCommand("""
+            UPDATE cluster_nodes SET desired_roles = CASE WHEN @desired <@ roles AND roles <@ @desired THEN NULL ELSE @desired END
+            WHERE id = @id
+            """, c, tx))
+        {
+            update.Parameters.AddWithValue("id", nodeId);
+            update.Parameters.Add(new NpgsqlParameter("desired", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = desired });
+            await update.ExecuteNonQueryAsync(ct);
+        }
+        await tx.CommitAsync(ct);
+        return ModeRequestResult.Accepted;
+    }
 
     public async Task<string> DeleteAsync(Guid id,CancellationToken ct)
     {
@@ -320,8 +365,12 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         var labels = reader.FieldCount > inventoryOrdinal + 2
             ? JsonSerializer.Deserialize<Dictionary<string, string?>>(reader.GetString(inventoryOrdinal + 2), JsonOptions) ?? []
             : new Dictionary<string, string?>();
+        var desiredOrdinal = inventoryOrdinal + 3;
+        var desired = reader.FieldCount > desiredOrdinal && !reader.IsDBNull(desiredOrdinal)
+            ? reader.GetFieldValue<string[]>(desiredOrdinal).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray()
+            : null;
         return new NodeResponse(reader.GetGuid(0), reader.GetString(1), roles, reader.GetInt32(3), capabilities,
-            isOnline ? NodePresenceStatus.Online : NodePresenceStatus.Offline, lastSeenAt, inventory, displayName, labels);
+            isOnline ? NodePresenceStatus.Online : NodePresenceStatus.Offline, lastSeenAt, inventory, displayName, labels, desired);
     }
 
     private static byte[] HashSecret(string value) => SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));

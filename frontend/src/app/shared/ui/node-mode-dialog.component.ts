@@ -8,7 +8,7 @@ import {
   MAT_DIALOG_DATA,
 } from '@angular/material/dialog';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { NodeMode, NodeModeStatus } from '../models/node-mode';
+import { NodeMode, NodeModeDialogData } from '../models/node-mode';
 
 @Component({
   selector: 'app-node-mode-dialog',
@@ -20,9 +20,16 @@ import { NodeMode, NodeModeStatus } from '../models/node-mode';
     MatSlideToggleModule,
   ],
   template: `
-    <h2 mat-dialog-title>Mode de ce nœud</h2>
+    <h2 mat-dialog-title>
+      {{ data.remoteNodeName ? 'Mode de « ' + data.remoteNodeName + ' »' : 'Mode de ce nœud' }}
+    </h2>
     <mat-dialog-content>
-      @if (!data.managed) {
+      @if (data.remoteNodeName) {
+        <p class="note" role="note">
+          Le nœud applique ce mode à son prochain signal de présence, à condition d’être géré par
+          l’image unique. Il garde son mode actuel tant qu’il est hors ligne.
+        </p>
+      } @else if (!data.managed) {
         <p class="note" role="note">
           Ce nœud n’est pas géré par l’image unique : son mode se règle par la variable
           <code>Node__Roles</code> du déploiement.
@@ -50,7 +57,7 @@ import { NodeMode, NodeModeStatus } from '../models/node-mode';
           cluster.
         </p>
       }
-      @if (data.managed && data.server && !server()) {
+      @if (data.managed && !data.remoteNodeName && data.server && !server()) {
         <p class="note" role="note">
           Le serveur de ce nœud s’arrêtera : cette interface cessera de répondre. Rétablissez-le
           depuis la console du worker.
@@ -98,7 +105,7 @@ import { NodeMode, NodeModeStatus } from '../models/node-mode';
   `,
 })
 export class NodeModeDialogComponent {
-  protected readonly data = inject<NodeModeStatus>(MAT_DIALOG_DATA);
+  protected readonly data = inject<NodeModeDialogData>(MAT_DIALOG_DATA);
   protected readonly dialogRef = inject(MatDialogRef<NodeModeDialogComponent, NodeMode>);
   protected readonly server = signal(this.data.server);
   protected readonly worker = signal(this.data.worker);
