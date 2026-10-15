@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { LibraryWorkflow, LibraryProcessingSettings } from '../models/library-workflow';
-import { EnrollmentWindow } from '../models/auth';
+import { EnrollmentWindow, FirstLinkAcceptance } from '../models/auth';
 import { NodeSchedule } from '../models/node-schedule';
 import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models/cluster';
 
@@ -74,5 +74,14 @@ export class ClusterApi {
   }
   closeEnrollmentWindow() {
     return this.http.delete<void>('/api/v1/nodes/enrollment-window');
+  }
+  firstLinkAcceptance() {
+    return this.http.get<FirstLinkAcceptance>('/api/v1/nodes/first-link');
+  }
+  enableFirstLinkAcceptance(minutes: number) {
+    return this.http.put<FirstLinkAcceptance>('/api/v1/nodes/first-link', { minutes });
+  }
+  disableFirstLinkAcceptance() {
+    return this.http.delete<void>('/api/v1/nodes/first-link');
   }
 }

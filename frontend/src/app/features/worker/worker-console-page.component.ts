@@ -31,6 +31,9 @@ interface WorkerStatus {
   readonly pairingExpiresAt: string | null;
   readonly clusterId: string | null;
   readonly clusterName: string | null;
+  readonly verificationCode: string | null;
+  readonly switching: { readonly previousClusterName: string | null; readonly deadline: string | null } | null;
+  readonly switchFailure: string | null;
 }
 
 interface WorkerPairingResponse {
@@ -121,6 +124,22 @@ export class WorkerConsolePageComponent {
   protected leaveCluster(): void {
     const worker = this.status();
     if (!worker?.clusterId || this.leaving()) return;
+    if (worker.switching) {
+      this.leaving.set(true);
+      this.http.post(`${WORKER_AGENT_API}/leave`, {}).pipe(
+        catchError((error: unknown) => {
+          this.leaving.set(false);
+          this.notifications.show(this.getErrorMessage(error));
+          return EMPTY;
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe(() => {
+        this.leaving.set(false);
+        this.notifications.show('Changement de cluster annulé.');
+        this.refreshStatus();
+      });
+      return;
+    }
     this.dialog.open(ConfirmationDialogComponent, {
       data: {
         title: 'Quitter ce cluster ?',

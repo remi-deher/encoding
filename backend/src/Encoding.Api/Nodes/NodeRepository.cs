@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Contracts.Nodes;
+using Encoding.Core.Nodes;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -94,7 +95,7 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
     public async Task<IReadOnlyList<PendingNodeEnrollmentResponse>> ListPendingPairingRequestsAsync(CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at, inventory
+            SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at, inventory, node_token_hash
             FROM node_enrollment_requests
             WHERE expires_at > clock_timestamp() AND NOT EXISTS(SELECT 1 FROM cluster_nodes n WHERE n.id=node_enrollment_requests.node_id AND n.deleted_at IS NOT NULL)
             ORDER BY created_at, node_id
@@ -111,7 +112,8 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
                 reader.GetGuid(0), reader.GetString(1), roles, reader.GetInt32(3), capabilities,
                 new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc)),
                 new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc)),
-                ReadInventory(reader.GetString(7))));
+                ReadInventory(reader.GetString(7)),
+                NodeVerificationCode.FromTokenHash(reader.GetGuid(0), reader.GetFieldValue<byte[]>(8))));
         }
         return requests;
     }

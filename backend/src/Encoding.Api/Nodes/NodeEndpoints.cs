@@ -37,17 +37,29 @@ public static class NodeEndpoints
             CreateNodeEnrollmentRequest request,
             NodeRepository repository,
             AuthOptions authOptions,
+            FirstLinkRepository firstLink,
+            ILogger<FirstLinkRepository> logger,
             CancellationToken cancellationToken) =>
         {
             var errors = NodeHeartbeatValidator.Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
             return await repository.CreatePairingRequestAsync(request, authOptions.MaxPendingPairingRequests, cancellationToken) switch
             {
-                PairingRequestResult.Created => Results.Accepted(),
+                PairingRequestResult.Created => await AcceptIfFirstLinkAsync(),
                 PairingRequestResult.TooMany => Results.Json(new { title = "Trop de demandes de jumelage sont en attente. Approuvez ou laissez expirer les demandes existantes." },
                     statusCode: StatusCodes.Status429TooManyRequests),
                 _ => Results.Conflict(new { title = "Une demande de jumelage active existe déjà pour une autre identité." }),
             };
+
+            // Mode « première liaison » : la demande est approuvée sans vérification, une seule fois, et le mode se désactive.
+            async Task<IResult> AcceptIfFirstLinkAsync()
+            {
+                if (await firstLink.TryConsumeAsync(cancellationToken) is { } administrator
+                    && await repository.ApprovePairingRequestAsync(request.Node.Id, cancellationToken) is not null)
+                    logger.LogWarning("Le nœud {NodeId} ({NodeName}) a été accepté sans vérification au titre de la première liaison activée par {Administrator}.",
+                        request.Node.Id, request.Node.Name, administrator);
+                return Results.Accepted();
+            }
         }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("CreateNodeEnrollmentRequest");
 
         nodes.MapGet("/enrollment-requests", async (

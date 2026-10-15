@@ -79,11 +79,50 @@ internal static class MembershipTests
             Check(!(await store.GetAsync(CancellationToken.None)).HasCredentials, "An unreachable cluster does not trap the node.");
             Check(orphan.NodeToken is not null, "Sanity: the abandoned enrollment had credentials.");
 
+            // Changement de cluster en deux phases (0040) : l'ancien rattachement reste intact jusqu'à la confirmation du nouveau.
+            mode = new NodeMode(true, true);
+            var clusterA = await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Cluster A", clusterUrl, CancellationToken.None);
+            await store.MarkEnrolledAsync(CancellationToken.None);
+            await store.BeginSwitchAsync(TimeSpan.FromMinutes(5), CancellationToken.None);
+            var target = await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Cluster B", clusterUrl, CancellationToken.None);
+            var switching = await store.GetAsync(CancellationToken.None);
+            Check(switching.IsSwitching && switching.Previous!.IsEnrolled && switching.Previous.Id == clusterA.Id && switching.Previous.NodeToken == clusterA.NodeToken,
+                "During a switch the previous membership is kept intact.");
+            Check(switching.Id != clusterA.Id && !switching.IsEnrolled && switching.ClusterName == "Cluster B", "The new membership starts from a fresh identity, still pending.");
+            Check(!await enrollment.RollbackExpiredSwitchAsync(CancellationToken.None) && (await store.GetAsync(CancellationToken.None)).IsSwitching, "A switch still within its deadline is not rolled back.");
+            leaves.Clear();
+            Check(await store.RollbackSwitchAsync("annulé à la main", CancellationToken.None) && (await store.GetAsync(CancellationToken.None)).Id == clusterA.Id, "A switch can be cancelled by hand.");
+
+            // Échéance dépassée sans approbation : retour automatique à l'ancien cluster, avec la raison.
+            await store.BeginSwitchAsync(TimeSpan.FromSeconds(-1), CancellationToken.None);
+            await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Cluster B", clusterUrl, CancellationToken.None);
+            Check(await enrollment.RollbackExpiredSwitchAsync(CancellationToken.None), "A switch whose deadline passed is rolled back.");
+            var restored = await store.GetAsync(CancellationToken.None);
+            Check(restored.IsEnrolled && restored.Id == clusterA.Id && restored.ClusterName == "Cluster A" && !restored.IsSwitching, "The rollback restores the previous membership as it was.");
+            Check(restored.SwitchFailure is { } failure && failure.Contains("Cluster B") && leaves.Count == 0 && mode == new NodeMode(true, true),
+                "The reason is kept, the old cluster was never told to remove the node and the local server kept running.");
+
+            // Confirmation du nouveau cluster : l'ancien est prévenu, son identité oubliée, le serveur local s'arrête.
+            await store.BeginSwitchAsync(TimeSpan.FromMinutes(5), CancellationToken.None);
+            var arrived = await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Cluster B", "http://127.0.0.1:2/", CancellationToken.None);
+            await store.MarkEnrolledAsync(CancellationToken.None);
+            await enrollment.CompleteSwitchAsync("http://127.0.0.1:2/", CancellationToken.None);
+            var done = await store.GetAsync(CancellationToken.None);
+            Check(done.IsEnrolled && done.Id == arrived.Id && !done.IsSwitching, "After confirmation the node belongs to the new cluster only.");
+            Check(leaves.Single().Path == $"/api/v1/nodes/{clusterA.Id:D}/leave" && leaves.Single().Token == clusterA.NodeToken, "The old cluster is told to remove the node, with the old token.");
+            Check(mode == new NodeMode(false, true), "The local server stops once the new cluster confirmed.");
+
+            // Le code de vérification est le même des deux côtés et change avec l'identité.
+            var code = NodeVerificationCode.FromToken(arrived.Id, arrived.NodeToken!);
+            Check(code.Length == NodeVerificationCode.Length && code == NodeVerificationCode.FromTokenHash(arrived.Id, System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(arrived.NodeToken!))),
+                "The node and the cluster compute the same verification code.");
+            Check(code != NodeVerificationCode.FromToken(Guid.NewGuid(), arrived.NodeToken!) && code != NodeVerificationCode.FromToken(arrived.Id, "autre-jeton"), "Another identity has another code.");
+
             // Cluster local du conteneur : rien à arrêter.
             mode = new NodeMode(true, true);
             await enrollment.RetireLocalServerAsync(localUrl, CancellationToken.None);
             Check(mode == new NodeMode(true, true), "Staying in the local cluster keeps the local server.");
-            Console.WriteLine("PASS: cluster membership (leave, switch, local server retirement).");
+            Console.WriteLine("PASS: cluster membership (leave, two-phase switch, rollback, verification code, local server retirement).");
         }
         finally
         {

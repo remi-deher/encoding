@@ -69,7 +69,8 @@ public sealed record PendingNodeEnrollmentResponse(
     IReadOnlyList<NodeToolCapability> Capabilities,
     DateTimeOffset CreatedAt,
     DateTimeOffset ExpiresAt,
-    NodeInventory? Inventory = null);
+    NodeInventory? Inventory = null,
+    string? VerificationCode = null);
 
 public sealed record NodeActivityResponse(int Active,int Succeeded,int Failed,int Cancelled,DateTimeOffset? LastActivity,int SourceTasks);
 

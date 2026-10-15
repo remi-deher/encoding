@@ -331,6 +331,28 @@ internal static class AuthScenarios
         var after = (await (await admin.SendAsync(get, "/api/v1/nodes")).Content.ReadFromJsonAsync<List<NodeResponse>>(Json))!;
         Check(after.All(node => node.Id != leaving.Id), "A node that left no longer appears in the cluster.");
 
+        // Première liaison implicite (0040) : réservée aux administrateurs, à usage unique, désactivée par défaut.
+        Check(!(await (await admin.SendAsync(get, "/api/v1/nodes/first-link")).Content.ReadFromJsonAsync<FirstLinkResponse>(Json))!.IsActive, "First-link acceptance is off by default.");
+        Check(await anonymous.StatusAsync(put, "/api/v1/nodes/first-link", new OpenEnrollmentWindowRequest(5), csrf: false) == HttpStatusCode.Unauthorized, "Anonymous callers cannot enable first-link acceptance.");
+        Check(await viewer.StatusAsync(put, "/api/v1/nodes/first-link", new OpenEnrollmentWindowRequest(5)) == HttpStatusCode.Forbidden, "Viewers cannot enable first-link acceptance.");
+        Check(await admin.StatusAsync(put, "/api/v1/nodes/first-link", new OpenEnrollmentWindowRequest(0)) == HttpStatusCode.BadRequest, "The first-link duration is bounded.");
+        var pendingBefore = new CreateNodeEnrollmentRequest(NewNode(Guid.NewGuid(), NodeToken()), "BBBBBBBBBBBBBBBB");
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enrollment-requests", pendingBefore, csrf: false) == HttpStatusCode.Accepted, "A request made while the mode is off stays pending.");
+        Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{pendingBefore.Node.Id}/heartbeat", new NodeHeartbeatRequest(pendingBefore.Node.Name, pendingBefore.Node.Roles, 1, pendingBefore.Node.Capabilities), csrf: false, nodeToken: pendingBefore.Node.NodeToken) == HttpStatusCode.Unauthorized, "A pending node is not accepted without approval.");
+        var pendingList = (await (await admin.SendAsync(get, "/api/v1/nodes/enrollment-requests")).Content.ReadFromJsonAsync<List<PendingNodeEnrollmentResponse>>(Json))!;
+        Check(pendingList.Single(item => item.Id == pendingBefore.Node.Id).VerificationCode == Encoding.Core.Nodes.NodeVerificationCode.FromToken(pendingBefore.Node.Id, pendingBefore.Node.NodeToken),
+            "The pending list shows the verification code the node computes on its side.");
+        Check(await admin.StatusAsync(put, "/api/v1/nodes/first-link", new OpenEnrollmentWindowRequest(5)) == HttpStatusCode.OK, "An administrator enables first-link acceptance.");
+        var firstLink = new CreateNodeEnrollmentRequest(NewNode(Guid.NewGuid(), NodeToken()), "CCCCCCCCCCCCCCCC");
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enrollment-requests", firstLink, csrf: false) == HttpStatusCode.Accepted, "The first request is received.");
+        Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{firstLink.Node.Id}/heartbeat", new NodeHeartbeatRequest(firstLink.Node.Name, firstLink.Node.Roles, 1, firstLink.Node.Capabilities), csrf: false, nodeToken: firstLink.Node.NodeToken) == HttpStatusCode.OK,
+            "The first request is accepted without verification.");
+        Check(!(await (await admin.SendAsync(get, "/api/v1/nodes/first-link")).Content.ReadFromJsonAsync<FirstLinkResponse>(Json))!.IsActive, "First-link acceptance switches itself off after one link.");
+        var second = new CreateNodeEnrollmentRequest(NewNode(Guid.NewGuid(), NodeToken()), "DDDDDDDDDDDDDDDD");
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enrollment-requests", second, csrf: false) == HttpStatusCode.Accepted, "The next request is received.");
+        Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{second.Node.Id}/heartbeat", new NodeHeartbeatRequest(second.Node.Name, second.Node.Roles, 1, second.Node.Capabilities), csrf: false, nodeToken: second.Node.NodeToken) == HttpStatusCode.Unauthorized,
+            "The next request needs approval again.");
+
         // Export des bibliothèques avant de quitter un cluster : lecture seule, session requise.
         Check(await anonymous.StatusAsync(get, "/api/v1/libraries/export") == HttpStatusCode.Unauthorized, "Library export needs a session.");
         Check(await viewer.StatusAsync(get, "/api/v1/libraries/export") == HttpStatusCode.OK, "Viewers can export library definitions.");

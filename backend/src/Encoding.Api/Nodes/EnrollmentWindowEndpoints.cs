@@ -23,5 +23,26 @@ public static class EnrollmentWindowEndpoints
             await repository.CloseAsync(ct);
             return Results.NoContent();
         }).WithName("CloseEnrollmentWindow");
+
+        // Première liaison implicite (0040) : réservée aux administrateurs, comme toute écriture de gestion.
+        var firstLink = app.MapGroup("/api/v1/nodes/first-link").WithTags("Nodes");
+        firstLink.MapGet("", async (FirstLinkRepository repository, CancellationToken ct) =>
+            Results.Ok(await repository.GetAsync(ct))).WithName("GetFirstLinkAcceptance");
+        firstLink.MapPut("", async (OpenEnrollmentWindowRequest request, FirstLinkRepository repository, HttpContext http, ILogger<FirstLinkRepository> logger, CancellationToken ct) =>
+        {
+            if (request.Minutes is < 1 or > FirstLinkRepository.MaximumMinutes)
+                return (IResult)Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["minutes"] = [$"La durée doit être comprise entre 1 et {FirstLinkRepository.MaximumMinutes} minutes."],
+                });
+            var administrator = http.User.Identity?.Name ?? "administrateur";
+            logger.LogWarning("Acceptation de la première liaison activée par {Administrator} pour {Minutes} minute(s).", administrator, request.Minutes);
+            return Results.Ok(await repository.EnableAsync(request.Minutes, administrator, ct));
+        }).WithName("EnableFirstLinkAcceptance");
+        firstLink.MapDelete("", async (FirstLinkRepository repository, CancellationToken ct) =>
+        {
+            await repository.DisableAsync(ct);
+            return Results.NoContent();
+        }).WithName("DisableFirstLinkAcceptance");
     }
 }

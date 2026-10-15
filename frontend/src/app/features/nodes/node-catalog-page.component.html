@@ -272,6 +272,27 @@
               </button>
             }
           </div>
+          <div class="enrollment-step enrollment-window">
+            <h3>Première liaison</h3>
+            @if (firstLink().isActive) {
+              <p role="status">
+                La prochaine demande de rattachement sera acceptée <strong>sans vérification</strong>
+                jusqu’à {{ firstLink().expiresAt | date: 'HH:mm' }}, puis ce mode s’éteindra
+                seul.
+              </p>
+              <button matButton="outlined" type="button" (click)="disableFirstLink()">
+                Désactiver maintenant
+              </button>
+            } @else {
+              <p>
+                Désactivé : chaque demande est comparée puis approuvée à la main. Activez-le 10
+                minutes pour accepter sans vérification la toute première demande qui arrive.
+              </p>
+              <button matButton="outlined" type="button" (click)="enableFirstLink()">
+                Accepter la prochaine demande (10 min)
+              </button>
+            }
+          </div>
         }
       </section>
     } @else if (enrollmentView() === 'review' && selectedEnrollment(); as request) {
@@ -285,6 +306,13 @@
           <p>Ce worker rejoindra le cluster avec les rôles et capacités annoncés ci-dessous.</p>
         </div>
         <dl class="enrollment-facts">
+          <div>
+            <dt>Code de vérification</dt>
+            <dd>
+              <code>{{ request.verificationCode ?? '—' }}</code> — doit être identique à celui
+              affiché sur le worker
+            </dd>
+          </div>
           <div>
             <dt>Nom</dt>
             <dd>{{ request.name }}</dd>
