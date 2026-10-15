@@ -35,6 +35,7 @@ builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offli
 builder.Services.AddSingleton<NodeRepository>();
 builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
+builder.Services.AddSingleton<FirstLinkRepository>();
 builder.Services.AddSingleton<LocalNodeRegistry>();
 builder.Services.AddClusterAuthentication(builder.Configuration);
 builder.Services.AddSingleton<ExecutionRepository>();

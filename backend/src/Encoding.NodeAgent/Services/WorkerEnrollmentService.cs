@@ -14,6 +14,9 @@ public sealed class WorkerEnrollmentService(
     Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions> jsonOptions,
     LauncherControlClient? launcher = null)
 {
+    /// <summary>Délai laissé au cluster d'accueil pour approuver un changement de cluster : la clé de jumelage vit 10 minutes, avec une marge.</summary>
+    public static readonly TimeSpan SwitchTimeout = TimeSpan.FromMinutes(12);
+
     public async Task<NodeResponse> EnrollAsync(Guid clusterId, CancellationToken cancellationToken, bool leaveCurrent = false)
     {
         var cluster = discovery.List().FirstOrDefault(candidate => candidate.Id == clusterId)
@@ -21,7 +24,8 @@ public sealed class WorkerEnrollmentService(
         var identity = await identityStore.GetAsync(cancellationToken);
         if (identity.IsEnrolled && leaveCurrent && identity.ClusterId != cluster.Id.ToString("D"))
         {
-            await ForgetClusterAsync(cancellationToken);
+            // Changement en deux phases : l'ancien rattachement reste intact tant que le nouveau cluster n'a pas répondu.
+            await identityStore.BeginSwitchAsync(SwitchTimeout, cancellationToken);
             identity = await identityStore.GetAsync(cancellationToken);
         }
         if (identity.IsEnrolled)
@@ -46,10 +50,21 @@ public sealed class WorkerEnrollmentService(
         // Le secret du conteneur n'est présenté qu'au serveur local : jamais à un cluster distant.
         if (IsLocalCluster(cluster) && LocalEnrollment.Read(options.LocalEnrollmentSecretFile) is { } secret)
             message.Headers.Add(LocalEnrollment.HeaderName, secret);
-        using var response = await client.SendAsync(message, cancellationToken);
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.SendAsync(message, cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            await identityStore.RollbackSwitchAsync($"le cluster {cluster.Name} est injoignable", cancellationToken);
+            throw new HttpRequestException($"Le cluster {cluster.Name} est injoignable.", exception);
+        }
+        using var httpResponse = response;
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("L’enrôlement auprès du cluster {ClusterId} a échoué avec HTTP {StatusCode}.", clusterId, (int)response.StatusCode);
+            await identityStore.RollbackSwitchAsync($"le cluster {cluster.Name} a refusé l'enrôlement (HTTP {(int)response.StatusCode})", cancellationToken);
             throw new HttpRequestException(response.StatusCode == System.Net.HttpStatusCode.Forbidden
                 ? "L’enrôlement direct est fermé sur ce cluster. Demandez à un administrateur de l’ouvrir depuis la page Nœuds, ou générez une clé de jumelage."
                 : $"Le serveur du cluster a refusé l’enrôlement (HTTP {(int)response.StatusCode}).");
@@ -59,7 +74,7 @@ public sealed class WorkerEnrollmentService(
             ?? throw new HttpRequestException("Le serveur n’a pas retourné la confirmation de l’enrôlement.");
         await identityStore.MarkEnrolledAsync(cancellationToken);
         logger.LogInformation("Le worker {NodeId} a rejoint le cluster {ClusterId}.", node.Id, cluster.Id);
-        await RetireLocalServerAsync(cluster.ApiBaseUrl, cancellationToken);
+        await CompleteSwitchAsync(cluster.ApiBaseUrl, cancellationToken);
         return node;
     }
 
@@ -69,6 +84,12 @@ public sealed class WorkerEnrollmentService(
     /// </summary>
     public async Task LeaveAsync(CancellationToken cancellationToken)
     {
+        // Pendant un changement de cluster, « quitter » annule le changement : l'ancien rattachement est rétabli tel quel (0040).
+        if ((await identityStore.GetAsync(cancellationToken)).IsSwitching)
+        {
+            await identityStore.RollbackSwitchAsync("changement annulé à la demande de l'utilisateur", cancellationToken);
+            return;
+        }
         await ForgetClusterAsync(cancellationToken);
         if (launcher is null) return;
         var current = await launcher.GetAsync(cancellationToken);
@@ -80,23 +101,50 @@ public sealed class WorkerEnrollmentService(
     private async Task ForgetClusterAsync(CancellationToken cancellationToken)
     {
         var identity = await identityStore.GetAsync(cancellationToken);
-        if (identity.HasCredentials)
-        {
-            try
-            {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/nodes/{identity.Id:D}/leave"));
-                message.Headers.Add("X-Node-Token", identity.NodeToken);
-                using var response = await client.SendAsync(message, cancellationToken);
-                if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-                    throw new InvalidOperationException("Ce nœud traite encore un média ou une découverte. Attendez la fin du traitement avant de quitter le cluster.");
-            }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
-            {
-                logger.LogWarning(exception, "Le cluster {ClusterName} est injoignable ; le nœud le quitte localement.", identity.ClusterName);
-            }
-        }
+        if (identity.HasCredentials && await NotifyLeaveAsync(identity, cancellationToken) == System.Net.HttpStatusCode.Conflict)
+            throw new InvalidOperationException("Ce nœud traite encore un média ou une découverte. Attendez la fin du traitement avant de quitter le cluster.");
         await identityStore.ResetAsync(cancellationToken);
+    }
+
+    /// <summary>Retourne le statut HTTP du cluster, ou null s'il est injoignable.</summary>
+    private async Task<System.Net.HttpStatusCode?> NotifyLeaveAsync(WorkerIdentityState identity, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/nodes/{identity.Id:D}/leave"));
+            message.Headers.Add("X-Node-Token", identity.NodeToken);
+            using var response = await client.SendAsync(message, cancellationToken);
+            return response.StatusCode;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(exception, "Le cluster {ClusterName} est injoignable ; le nœud le quitte localement.", identity.ClusterName);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Seconde phase d'un changement de cluster (0040), une fois le nouveau cluster confirmé : l'ancien est prévenu (au mieux) et son identité oubliée,
+    /// puis le serveur local s'arrête si le cluster d'accueil n'est pas celui du conteneur. Sans changement en cours, seul l'arrêt du serveur s'applique.
+    /// </summary>
+    public async Task CompleteSwitchAsync(string joinedApiBaseUrl, CancellationToken cancellationToken)
+    {
+        var previous = await identityStore.CommitSwitchAsync(cancellationToken);
+        if (previous is { HasCredentials: true } && await NotifyLeaveAsync(previous, cancellationToken) == System.Net.HttpStatusCode.Conflict)
+            logger.LogWarning("L'ancien cluster {ClusterName} n'a pas retiré ce nœud (traitement en cours) ; ses tâches seront reprises à l'expiration des baux.", previous.ClusterName);
+        await RetireLocalServerAsync(joinedApiBaseUrl, cancellationToken);
+    }
+
+    /// <summary>Annule un changement dont l'approbation n'est pas arrivée à temps et rétablit l'ancien rattachement.</summary>
+    public async Task<bool> RollbackExpiredSwitchAsync(CancellationToken cancellationToken)
+    {
+        var identity = await identityStore.GetAsync(cancellationToken);
+        if (!identity.IsSwitching || identity.IsEnrolled || identity.SwitchDeadline > DateTimeOffset.UtcNow) return false;
+        var target = identity.ClusterName ?? "le cluster d'accueil";
+        var rolledBack = await identityStore.RollbackSwitchAsync($"{target} n'a pas approuvé l'arrivée à temps", cancellationToken);
+        if (rolledBack) logger.LogWarning("Rattachement annulé : {Target} n'a pas approuvé l'arrivée à temps ; retour à {Previous}.", target, identity.Previous?.ClusterName);
+        return rolledBack;
     }
 
     /// <summary>Un nœud serveur+worker qui rejoint un autre cluster devient worker seul : son serveur local s'arrête, sa base et ses bibliothèques restent intactes (0039).</summary>
@@ -125,7 +173,7 @@ public sealed class WorkerEnrollmentService(
         var identity = await identityStore.GetAsync(cancellationToken);
         if (identity.IsEnrolled && leaveCurrent && identity.ClusterId != cluster.Id.ToString("D"))
         {
-            await ForgetClusterAsync(cancellationToken);
+            await identityStore.BeginSwitchAsync(SwitchTimeout, cancellationToken);
             identity = await identityStore.GetAsync(cancellationToken);
         }
         if (identity.IsEnrolled)
@@ -145,12 +193,23 @@ public sealed class WorkerEnrollmentService(
             pending.PairingKey!);
 
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        using var response = await client.PostAsJsonAsync(
-            new Uri(new Uri(cluster.ApiBaseUrl), "api/v1/nodes/enrollment-requests"),
-            request,
-            cancellationToken: cancellationToken);
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.PostAsJsonAsync(
+                new Uri(new Uri(cluster.ApiBaseUrl), "api/v1/nodes/enrollment-requests"),
+                request,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            await identityStore.RollbackSwitchAsync($"le cluster {cluster.Name} est injoignable", cancellationToken);
+            throw new HttpRequestException($"Le cluster {cluster.Name} est injoignable.", exception);
+        }
+        using var httpResponse = response;
         if (!response.IsSuccessStatusCode)
         {
+            await identityStore.RollbackSwitchAsync($"le cluster {cluster.Name} a refusé la demande de jumelage (HTTP {(int)response.StatusCode})", cancellationToken);
             logger.LogWarning("La demande de jumelage auprès du cluster {ClusterId} a échoué avec HTTP {StatusCode}.", clusterId, (int)response.StatusCode);
             throw new HttpRequestException(response.StatusCode == System.Net.HttpStatusCode.TooManyRequests
                 ? "Trop de demandes de jumelage sont en attente sur ce cluster. Réessayez après leur approbation ou leur expiration."

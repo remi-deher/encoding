@@ -1,6 +1,6 @@
 import { firstValueFrom } from 'rxjs';
 import { ClusterApi } from '../../shared/services/cluster-api';
-import { EnrollmentWindow } from '../../shared/models/auth';
+import { EnrollmentWindow, FirstLinkAcceptance } from '../../shared/models/auth';
 import {
   NodeRole,
   NodeResponse,
@@ -83,11 +83,13 @@ interface PendingNodeEnrollmentResponse {
   readonly capabilities: readonly NodeToolCapability[];
   readonly createdAt: string;
   readonly expiresAt: string;
+  readonly verificationCode?: string | null;
 }
 
 interface PendingNodeEnrollmentRecord extends DataTableRow {
   readonly id: string;
   readonly name: string;
+  readonly verificationCode: string;
   readonly rolesLabel: string;
   readonly capabilitiesLabel: string;
   readonly expiresAtLabel: string;
@@ -157,6 +159,7 @@ export class NodeCatalogPageComponent {
     isOpen: false,
     openUntil: null,
   });
+  protected readonly firstLink = signal<FirstLinkAcceptance>({ isActive: false, expiresAt: null });
   protected readonly loadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
@@ -934,6 +937,7 @@ export class NodeCatalogPageComponent {
 
   protected readonly enrollmentColumns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Worker détecté', sortable: true },
+    { key: 'verificationCode', label: 'Code à comparer', sortable: false },
     { key: 'rolesLabel', label: 'Rôle annoncé', sortable: true },
     { key: 'capabilitiesLabel', label: 'Capacités', sortable: true },
     { key: 'expiresAtLabel', label: 'Expiration', sortable: true },
@@ -942,6 +946,7 @@ export class NodeCatalogPageComponent {
     this.pendingEnrollments().map((request) => ({
       id: request.id,
       name: request.name,
+      verificationCode: request.verificationCode ?? '—',
       rolesLabel: request.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · '),
       capabilitiesLabel: request.capabilities.length
         ? request.capabilities.map((item) => `${item.toolId} ${item.version}`).join(' · ')
@@ -1013,6 +1018,42 @@ export class NodeCatalogPageComponent {
       .enrollmentWindow()
       .pipe(catchError(() => EMPTY))
       .subscribe((window) => this.enrollmentWindow.set(window));
+    this.clusterApi
+      .firstLinkAcceptance()
+      .pipe(catchError(() => EMPTY))
+      .subscribe((firstLink) => this.firstLink.set(firstLink));
+  }
+
+  protected enableFirstLink(): void {
+    this.clusterApi
+      .enableFirstLinkAcceptance(10)
+      .pipe(
+        catchError(() => {
+          this.notifications.show('Le mode « première liaison » n’a pas pu être activé.');
+          return EMPTY;
+        }),
+      )
+      .subscribe((firstLink) => {
+        this.firstLink.set(firstLink);
+        this.notifications.show(
+          'La prochaine demande de rattachement sera acceptée sans vérification (10 minutes).',
+        );
+      });
+  }
+
+  protected disableFirstLink(): void {
+    this.clusterApi
+      .disableFirstLinkAcceptance()
+      .pipe(
+        catchError(() => {
+          this.notifications.show('Le mode « première liaison » n’a pas pu être désactivé.');
+          return EMPTY;
+        }),
+      )
+      .subscribe(() => {
+        this.firstLink.set({ isActive: false, expiresAt: null });
+        this.notifications.show('Le mode « première liaison » est désactivé.');
+      });
   }
 
   protected openEnrollmentWindow(): void {

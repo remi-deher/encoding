@@ -24,6 +24,12 @@ export interface EnrollmentWindow {
   readonly openUntil: string | null;
 }
 
+/** Mode « accepter la première liaison » : à usage unique, il s'éteint seul (architecture 0040). */
+export interface FirstLinkAcceptance {
+  readonly isActive: boolean;
+  readonly expiresAt: string | null;
+}
+
 export const USER_ROLE_LABELS: Readonly<Record<UserRole, string>> = {
   admin: 'Administrateur',
   viewer: 'Lecture seule',

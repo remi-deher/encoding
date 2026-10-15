@@ -24,7 +24,10 @@ public sealed class NodeHeartbeatService(
         {
             try
             {
+                await enrollment.RollbackExpiredSwitchAsync(stoppingToken);
                 identity = await identityStore.GetAsync(stoppingToken);
+                // Pendant un changement de cluster, l'ancien rattachement reste vivant : le nœud y garde ses baux et sa présence.
+                if (identity.Previous is { HasCredentials: true } previous) await BeatPreviousAsync(previous, stoppingToken);
                 if (identity.HasCredentials)
                 {
                     var capabilities = await capabilityProbe.DiscoverAsync(stoppingToken);
@@ -46,7 +49,7 @@ public sealed class NodeHeartbeatService(
                         {
                             await identityStore.MarkEnrolledAsync(stoppingToken);
                             logger.LogInformation("L’enrôlement en attente du worker {NodeId} a été confirmé par le cluster.", identity.Id);
-                            await enrollment.RetireLocalServerAsync(identity.ApiBaseUrl!, stoppingToken);
+                            await enrollment.CompleteSwitchAsync(identity.ApiBaseUrl!, stoppingToken);
                         }
                         logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", identity.Id);
                         var node = await response.Content.ReadFromJsonAsync<NodeResponse>(stoppingToken);
@@ -68,6 +71,26 @@ public sealed class NodeHeartbeatService(
             }
 
             await Task.Delay(options.HeartbeatInterval, stoppingToken);
+        }
+    }
+
+    private async Task BeatPreviousAsync(WorkerIdentityState previous, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var capabilities = await capabilityProbe.DiscoverAsync(cancellationToken);
+            var memoryMb = Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
+            var inventory = new NodeInventory(RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(), Environment.ProcessorCount, memoryMb);
+            using var request = new HttpRequestMessage(HttpMethod.Put, new Uri(new Uri(previous.ApiBaseUrl!), $"api/v1/nodes/{previous.Id:D}/heartbeat"))
+            {
+                Content = JsonContent.Create(new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory))
+            };
+            request.Headers.Add("X-Node-Token", previous.NodeToken);
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogDebug(exception, "L'ancien cluster ne répond pas pendant le changement de cluster.");
         }
     }
 

@@ -54,10 +54,35 @@
           }
         </dl>
 
+        @if (worker.switching; as switching) {
+          <div class="pairing-code" role="status">
+            <div>
+              <strong>Changement de cluster en cours</strong>
+              <p>
+                Ce nœud reste rattaché à {{ switching.previousClusterName ?? 'son cluster actuel' }} jusqu’à ce que
+                {{ worker.clusterName ?? 'le cluster d’accueil' }} approuve son arrivée. Sans réponse
+                @if (switching.deadline) { avant {{ pairingExpiryLabel(switching.deadline) }}, }
+                le changement est annulé et rien n’est perdu.
+              </p>
+            </div>
+          </div>
+        }
+        @if (worker.switchFailure) {
+          <p class="feedback feedback--error" role="alert">Changement de cluster annulé : {{ worker.switchFailure }}.</p>
+        }
+        @if (worker.clusterId && !worker.isEnrolled && worker.verificationCode) {
+          <div class="pairing-code" role="status">
+            <div>
+              <strong>Code de vérification</strong>
+              <p>L’administrateur du cluster d’accueil doit voir le même code avant d’approuver ce nœud.</p>
+            </div>
+            <code>{{ worker.verificationCode }}</code>
+          </div>
+        }
         @if (worker.clusterId) {
           <div class="cluster-actions">
             <button matButton="outlined" type="button" [disabled]="leaving()" (click)="leaveCluster()">
-              {{ leaving() ? 'Départ…' : 'Quitter ce cluster' }}
+              {{ leaving() ? 'Départ…' : worker.switching ? 'Annuler le changement' : 'Quitter ce cluster' }}
             </button>
           </div>
         }

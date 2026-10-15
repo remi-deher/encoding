@@ -23,3 +23,6 @@ public sealed record ResetPasswordRequest(string NewPassword);
 public sealed record EnrollmentWindowResponse(bool IsOpen, DateTimeOffset? OpenUntil);
 
 public sealed record OpenEnrollmentWindowRequest(int Minutes);
+
+/// <summary>Mode « accepter la première liaison » (0040) : actif jusqu'à la première liaison acceptée ou jusqu'à son expiration.</summary>
+public sealed record FirstLinkResponse(bool IsActive, DateTimeOffset? ExpiresAt);

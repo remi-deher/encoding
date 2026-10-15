@@ -72,7 +72,12 @@ app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, Worker
         pairingKey = identity.IsPairingPending && identity.PairingExpiresAt > DateTimeOffset.UtcNow ? identity.PairingKey : null,
         pairingExpiresAt = identity.IsPairingPending ? identity.PairingExpiresAt : null,
         clusterId = identity.ClusterId,
-        clusterName = identity.ClusterName
+        clusterName = identity.ClusterName,
+        verificationCode = identity.HasCredentials ? NodeVerificationCode.FromToken(identity.Id, identity.NodeToken!) : null,
+        switching = identity.IsSwitching
+            ? new { previousClusterName = identity.Previous!.ClusterName, deadline = identity.SwitchDeadline }
+            : null,
+        switchFailure = identity.SwitchFailure
     });
 });
 app.MapPost("/api/v1/worker/enroll", async (

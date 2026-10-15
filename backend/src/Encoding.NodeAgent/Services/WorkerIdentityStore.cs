@@ -12,8 +12,14 @@ public sealed record WorkerIdentityState(
     bool Enrolled,
     string? PairingKey = null,
     DateTimeOffset? PairingExpiresAt = null,
-    bool PairingPublished = false)
+    bool PairingPublished = false,
+    WorkerIdentityState? Previous = null,
+    DateTimeOffset? SwitchDeadline = null,
+    string? SwitchFailure = null)
 {
+    /// <summary>Vrai tant qu'un changement de cluster attend la confirmation du cluster d'accueil : l'ancien rattachement reste intact (0040).</summary>
+    public bool IsSwitching => Previous is not null;
+
     public bool HasCredentials =>
         !string.IsNullOrWhiteSpace(ClusterId)
         && Uri.TryCreate(ApiBaseUrl, UriKind.Absolute, out _)
@@ -70,7 +76,8 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
                 state = await JsonSerializer.DeserializeAsync<WorkerIdentityState>(stream, JsonOptions, cancellationToken);
             }
             var token = state?.NodeToken ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-            state = new WorkerIdentityState(state?.Id ?? Guid.NewGuid(), clusterId, clusterName, apiBaseUrl, token, false);
+            state = new WorkerIdentityState(state?.Id ?? Guid.NewGuid(), clusterId, clusterName, apiBaseUrl, token, false,
+                Previous: state?.Previous, SwitchDeadline: state?.SwitchDeadline);
             await SaveAsync(state, cancellationToken);
             return state;
         }
@@ -104,7 +111,8 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
                 && !string.IsNullOrWhiteSpace(state.PairingKey);
             var pairingKey = canReuseKey ? state!.PairingKey : Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
             var expiresAt = DateTimeOffset.UtcNow.AddMinutes(10);
-            state = new WorkerIdentityState(state?.Id ?? Guid.NewGuid(), clusterId, clusterName, apiBaseUrl, token, false, pairingKey, expiresAt);
+            state = new WorkerIdentityState(state?.Id ?? Guid.NewGuid(), clusterId, clusterName, apiBaseUrl, token, false, pairingKey, expiresAt,
+                Previous: state?.Previous, SwitchDeadline: state?.SwitchDeadline);
             await SaveAsync(state, cancellationToken);
             return state;
         }
@@ -146,13 +154,84 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
         }
     }
 
+    /// <summary>
+    /// Première phase d'un changement de cluster (0040) : l'identité actuelle est mise de côté, intacte, et une identité neuve attend
+    /// l'accueil du nouveau cluster. Sans confirmation avant l'échéance, <see cref="RollbackSwitchAsync"/> rétablit l'ancienne.
+    /// </summary>
+    public async Task BeginSwitchAsync(TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await LoadAsync(cancellationToken);
+            if (!current.IsEnrolled) throw new InvalidOperationException("Ce worker n'est rattaché à aucun cluster.");
+            if (current.IsSwitching) throw new InvalidOperationException("Un changement de cluster est déjà en cours.");
+            state = new WorkerIdentityState(Guid.NewGuid(), null, null, null, null, false,
+                Previous: current with { Previous = null, SwitchDeadline = null, SwitchFailure = null },
+                SwitchDeadline: DateTimeOffset.UtcNow.Add(timeout));
+            await SaveAsync(state, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>Rétablit l'ancien rattachement, conservé tel quel, et retient la raison pour l'afficher.</summary>
+    public async Task<bool> RollbackSwitchAsync(string reason, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await LoadAsync(cancellationToken);
+            if (current.Previous is null) return false;
+            state = current.Previous with { SwitchFailure = reason };
+            await SaveAsync(state, cancellationToken);
+            return true;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>Seconde phase : le nouveau cluster a répondu. Retourne l'ancien rattachement pour que l'appelant prévienne son cluster, puis l'oublie.</summary>
+    public async Task<WorkerIdentityState?> CommitSwitchAsync(CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await LoadAsync(cancellationToken);
+            var previous = current.Previous;
+            state = current with { Previous = null, SwitchDeadline = null, SwitchFailure = null };
+            await SaveAsync(state, cancellationToken);
+            return previous;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<WorkerIdentityState> LoadAsync(CancellationToken cancellationToken)
+    {
+        if (state is not null) return state;
+        Directory.CreateDirectory(options.DataDirectory);
+        if (File.Exists(filePath))
+        {
+            await using var stream = File.OpenRead(filePath);
+            state = await JsonSerializer.DeserializeAsync<WorkerIdentityState>(stream, JsonOptions, cancellationToken);
+        }
+        return state ??= new WorkerIdentityState(Guid.NewGuid(), null, null, null, null, false);
+    }
+
     public async Task MarkEnrolledAsync(CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
         try
         {
             if (state is null) throw new InvalidOperationException("L’identité locale du worker est absente.");
-            state = state with { Enrolled = true, PairingKey = null, PairingExpiresAt = null, PairingPublished = false };
+            state = state with { Enrolled = true, PairingKey = null, PairingExpiresAt = null, PairingPublished = false, SwitchFailure = null };
             await SaveAsync(state, cancellationToken);
         }
         finally
