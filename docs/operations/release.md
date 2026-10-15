@@ -23,12 +23,21 @@ Calculé par `.github/scripts/next-version.sh` à partir du dernier tag `vX.Y.Z`
 
 ## Utiliser l'image
 
+Sans configuration de base de données, l'image utilise SQLite dans le dossier de données (`/var/lib/encoding-node/cluster.db`), ce qui convient à un cluster à un seul serveur (architecture 0043) :
+
 ```
 docker run -d --name encoding -p 8080:8080 -p 8081:8081 \
-  -e ConnectionStrings__Cluster="Host=...;Database=encoding;Username=...;Password=..." \
   -e Node__Roles=server,worker \
   -v encoding-node:/var/lib/encoding-node \
   <utilisateur>/encoding:latest
 ```
+
+Pour PostgreSQL (obligatoire dès qu'un cluster a plusieurs serveurs), fournir la chaîne de connexion : le fournisseur est alors déduit de la chaîne (`Host=…`), ou imposé par `Database__Provider=postgres|sqlite`.
+
+```
+  -e ConnectionStrings__Cluster="Host=...;Database=encoding;Username=...;Password=..."
+```
+
+Pour passer d'un mode à l'autre, voir `Encoding.Api transfer-database` dans [sauvegarde et restauration](backup-restore.md).
 
 `Node__Roles` (`server`, `worker` ou `server,worker`) donne le mode initial. Ensuite le mode se change depuis la page Nœuds (« Mode de ce nœud ») ou la console du worker (« Mode du nœud »), sans redémarrer le conteneur ; le choix est conservé dans le dossier de données du nœud. Un worker seul doit définir `Cluster__ApiBaseUrl` (ou être découvert sur le réseau) ; le volume de données doit être conservé pour garder l'identité du nœud et son mode.
