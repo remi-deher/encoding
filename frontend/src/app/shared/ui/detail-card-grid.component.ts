@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { Component, input, OnChanges, signal } from '@angular/core';
 import { CdkAccordion, CdkAccordionItem } from '@angular/cdk/accordion';
 
 export type DetailCardTone = 'neutral' | 'accent' | 'success' | 'warning';
@@ -29,6 +29,7 @@ export interface DetailCard {
   readonly status?: DetailCardTag;
   readonly tags: readonly DetailCardTag[];
   readonly sections: readonly DetailCardSection[];
+  readonly initiallyExpanded?: boolean;
 }
 
 @Component({
@@ -46,18 +47,19 @@ export interface DetailCard {
         @for (card of cards(); track card.id; let index = $index) {
           <article
             class="detail-card"
-            [class.detail-card_expanded]="item.expanded"
+            [class.detail-card_expanded]="expandedState(card.id)"
             cdkAccordionItem
             #item="cdkAccordionItem"
+            [expanded]="expandedState(card.id)"
           >
             <h3 class="detail-card-heading">
               <button
                 class="detail-card-toggle"
                 type="button"
                 [id]="'detail-card-heading-' + index"
-                [attr.aria-expanded]="item.expanded"
+                [attr.aria-expanded]="expandedState(card.id)"
                 [attr.aria-controls]="'detail-card-content-' + index"
-                (click)="item.toggle()"
+                (click)="toggle(item, card.id)"
               >
                 <span class="detail-card-icon" aria-hidden="true">
                   @switch (card.icon) {
@@ -131,7 +133,7 @@ export interface DetailCard {
                 }
                 <span
                   class="detail-card-chevron"
-                  [class.detail-card-chevron_open]="item.expanded"
+                  [class.detail-card-chevron_open]="expandedState(card.id)"
                   aria-hidden="true"
                   >⌄</span
                 >
@@ -150,7 +152,7 @@ export interface DetailCard {
               </div>
             }
 
-            @if (item.expanded) {
+            @if (expandedState(card.id)) {
               <div
                 class="detail-card-content"
                 role="region"
@@ -402,8 +404,31 @@ export interface DetailCard {
     }
   `,
 })
-export class DetailCardGridComponent {
+export class DetailCardGridComponent implements OnChanges {
   readonly cards = input.required<readonly DetailCard[]>();
   readonly ariaLabel = input('Détails');
   readonly emptyMessage = input('Aucun élément à afficher.');
+  readonly initiallyExpanded = input(false);
+  private readonly expandedCards = signal<ReadonlyMap<string, boolean>>(new Map());
+
+  ngOnChanges(): void {
+    const current = this.expandedCards();
+    this.expandedCards.set(
+      new Map(
+        this.cards().map((card) => [
+          card.id,
+          current.get(card.id) ?? card.initiallyExpanded ?? this.initiallyExpanded(),
+        ]),
+      ),
+    );
+  }
+
+  protected expandedState(cardId: string): boolean {
+    return this.expandedCards().get(cardId) ?? this.initiallyExpanded();
+  }
+
+  protected toggle(item: CdkAccordionItem, cardId: string): void {
+    item.toggle();
+    this.expandedCards.update((current) => new Map(current).set(cardId, item.expanded));
+  }
 }
