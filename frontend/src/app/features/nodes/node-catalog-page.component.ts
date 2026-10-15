@@ -18,7 +18,7 @@ import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-butto
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../core/auth/auth.service';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -159,7 +159,7 @@ export class NodeCatalogPageComponent {
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
   protected readonly actionType = signal<
-    'enrollment' | 'library-access' | 'create-library' | 'processing' | 'schedule' | 'identity'
+    'enrollment' | 'library-access' | 'create-library' | 'identity'
   >('enrollment');
   protected readonly nodeLibraryLoading = signal(false);
   protected readonly accessFormBusy = signal(false);
@@ -366,88 +366,87 @@ export class NodeCatalogPageComponent {
     ),
     { initialValue: null },
   );
-  protected readonly processingFields = computed<readonly DetailField[]>(() => {
+  protected readonly processingCards = computed<readonly DetailCard[]>(() => {
     const node = this.rawNode();
-    const state = this.nodeProcessingState();
     if (!node) return [];
-    const schedule = state?.schedule;
-    const openShare = schedule?.enabled
+    const settings = this.nodeProcessingState();
+    const maximum = settings?.maxConcurrentTasks ?? null;
+    const effectiveMaximum = settings?.effectiveMaxConcurrentTasks ?? node.maxConcurrentTasks;
+    const schedule = settings?.schedule;
+    const allowedPercent = schedule?.enabled
       ? Math.round(((schedule.slots.split('1').length - 1) * 100) / schedule.slots.length)
       : null;
     return [
       {
-        label: 'Limite globale',
-        value: state
-          ? state.effectiveMaxConcurrentTasks +
-            (state.maxConcurrentTasks == null ? ' (annoncée par le worker)' : ' (définie)')
-          : node.maxConcurrentTasks + ' (annoncée par le worker)',
+        id: 'node-processing-limit',
+        title: 'Limite globale',
+        subtitle: 'Traitements simultanés, toutes bibliothèques',
+        icon: 'activity',
+        status: {
+          label: maximum == null ? `${effectiveMaximum} · annoncée` : `${maximum} · définie`,
+          tone: maximum == null ? 'neutral' : 'accent',
+        },
+        tags: [],
+        initiallyExpanded: true,
+        sections: [],
       },
       {
-        label: 'Calendrier',
-        value: !state
-          ? '—'
-          : openShare == null
-            ? 'Désactivé : démarrage possible à toute heure'
-            : 'Actif : ' + openShare + ' % de la semaine autorisée (' + schedule!.timeZone + ')',
+        id: 'node-processing-calendar',
+        title: 'Calendrier',
+        subtitle: 'Plages autorisées de démarrage',
+        icon: 'system',
+        status: {
+          label: !schedule ? 'Chargement' : schedule.enabled ? 'Actif' : 'Désactivé',
+          tone: schedule?.enabled ? 'success' : 'neutral',
+        },
+        tags: allowedPercent == null ? [] : [{ label: `${allowedPercent} % autorisé` }],
+        sections: [],
       },
     ];
   });
   protected readonly processingForm = signal<RecordFormData | null>(null);
-  private processingRevision = 0;
+  protected readonly processingBusy = signal(false);
   private processingSettings: NodeProcessingSettings | null = null;
+  private processingFormNodeId: string | null = null;
   protected readonly scheduleBusy = signal(false);
-  protected readonly scheduleValue = signal<NodeSchedule | null>(null);
-  protected async configureNodeProcessing(): Promise<void> {
-    const node = this.rawNode();
-    if (!node || this.removalBusy()) return;
-    try {
-      const settings = await firstValueFrom(this.clusterApi.nodeProcessing(node.id));
-      if (this.rawNode()?.id !== node.id) return;
-      this.processingRevision = settings.revision;
+  private installProcessingSettingsEffect(): void {
+    effect(() => {
+      const node = this.rawNode();
+      const settings = this.nodeProcessingState();
+      if (!node || !settings) return;
       this.processingSettings = settings;
-      this.processingForm.set({
-        title: 'Limite globale du nœud',
-        description:
-          'Ce plafond concerne toutes ses bibliothèques. Les limites de bibliothèque et les limites par nœud/bibliothèque s’appliquent aussi.',
-        submitLabel: 'Enregistrer',
-        fields: [
-          {
-            id: 'maximum',
-            label: 'Fichiers traités simultanément, toutes bibliothèques',
-            type: 'number',
-            min: 1,
-            max: 1000,
-            step: 1,
-            hint:
-              'Vide : utiliser la limite locale annoncée par le worker (' +
-              node.maxConcurrentTasks +
-              ').',
-          },
-        ],
-        initialValues: {
-          maximum: settings.maxConcurrentTasks == null ? '' : String(settings.maxConcurrentTasks),
-        },
-      });
-      this.actionType.set('processing');
-      this.actionOpen.set(true);
-    } catch {
-      this.notifications.show('Impossible de charger la limite du nœud.');
-    }
+      if (this.processingFormNodeId === node.id) return;
+      this.processingFormNodeId = node.id;
+      this.processingForm.set(this.processingLimitForm(node, settings));
+    });
   }
-  protected async configureNodeSchedule(): Promise<void> {
-    const node = this.rawNode();
-    if (!node || this.removalBusy()) return;
-    try {
-      const settings = await firstValueFrom(this.clusterApi.nodeProcessing(node.id));
-      if (this.rawNode()?.id !== node.id) return;
-      this.processingRevision = settings.revision;
-      this.processingSettings = settings;
-      this.scheduleValue.set(settings.schedule);
-      this.actionType.set('schedule');
-      this.actionOpen.set(true);
-    } catch {
-      this.notifications.show('Impossible de charger le calendrier du nœud.');
-    }
+
+  private processingLimitForm(node: NodeResponse, settings: NodeProcessingSettings): RecordFormData {
+    return {
+      title: 'Limite globale du nœud',
+      description:
+        'Ce plafond concerne toutes ses bibliothèques. Les limites de bibliothèque et les limites par nœud/bibliothèque s’appliquent aussi.',
+      submitLabel: 'Enregistrer',
+      review: false,
+      cancellable: false,
+      fields: [
+        {
+          id: 'maximum',
+          label: 'Fichiers traités simultanément, toutes bibliothèques',
+          type: 'number',
+          min: 1,
+          max: 1000,
+          step: 1,
+          hint:
+            'Vide : utiliser la limite locale annoncée par le worker (' +
+            node.maxConcurrentTasks +
+            ').',
+        },
+      ],
+      initialValues: {
+        maximum: settings.maxConcurrentTasks == null ? '' : String(settings.maxConcurrentTasks),
+      },
+    };
   }
   protected async saveNodeSchedule(schedule: NodeSchedule): Promise<void> {
     const node = this.rawNode();
@@ -459,11 +458,15 @@ export class NodeCatalogPageComponent {
         this.clusterApi.saveNodeProcessing(
           node.id,
           settings.maxConcurrentTasks,
-          this.processingRevision,
+          settings.revision,
           schedule,
         ),
       );
-      this.actionOpen.set(false);
+      this.processingSettings = {
+        ...settings,
+        schedule,
+        revision: settings.revision + 1,
+      };
       this.notifications.show('Calendrier du nœud enregistré.');
     } catch {
       this.notifications.show('Calendrier invalide ou configuration modifiée ailleurs.');
@@ -473,20 +476,32 @@ export class NodeCatalogPageComponent {
   }
   protected async saveNodeProcessing(values: Record<string, string>): Promise<void> {
     const node = this.rawNode();
-    if (!node) return;
+    const settings = this.processingSettings;
+    if (!node || !settings || this.processingBusy()) return;
+    this.processingBusy.set(true);
     try {
       await firstValueFrom(
         this.clusterApi.saveNodeProcessing(
           node.id,
           values['maximum'] ? Number(values['maximum']) : null,
-          this.processingRevision,
-          this.processingSettings!.schedule,
+          settings.revision,
+          settings.schedule,
         ),
       );
-      this.actionOpen.set(false);
+      const maximum = values['maximum'] ? Number(values['maximum']) : null;
+      const updated: NodeProcessingSettings = {
+        ...settings,
+        maxConcurrentTasks: maximum,
+        effectiveMaxConcurrentTasks: maximum ?? node.maxConcurrentTasks,
+        revision: settings.revision + 1,
+      };
+      this.processingSettings = updated;
+      this.processingForm.set(this.processingLimitForm(node, updated));
       this.notifications.show('Limite globale du nœud enregistrée.');
     } catch {
       this.notifications.show('Limite invalide ou configuration modifiée ailleurs.');
+    } finally {
+      this.processingBusy.set(false);
     }
   }
 
@@ -675,7 +690,6 @@ export class NodeCatalogPageComponent {
         status: { label: isPlugin ? 'Déclaré' : 'Détecté', tone: isPlugin ? 'accent' : 'neutral' },
         tags,
         sections,
-        initiallyExpanded: tool.toolId === 'ffmpeg',
       };
     }),
   );
@@ -761,30 +775,22 @@ export class NodeCatalogPageComponent {
       });
   }
   protected readonly actionTitle = computed(() =>
-    this.actionType() === 'schedule'
-      ? 'Calendrier du nœud'
-      : this.actionType() === 'identity'
-        ? 'Nom et étiquettes du nœud'
-        : this.actionType() === 'processing'
-          ? 'Limite globale du nœud'
-          : this.actionType() === 'library-access'
-            ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
-            : this.actionType() === 'create-library'
-              ? 'Déclarer une bibliothèque'
-              : this.createFormData.title,
+    this.actionType() === 'identity'
+      ? 'Nom et étiquettes du nœud'
+      : this.actionType() === 'library-access'
+        ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
+        : this.actionType() === 'create-library'
+          ? 'Déclarer une bibliothèque'
+          : this.createFormData.title,
   );
   protected readonly actionDescription = computed(() =>
-    this.actionType() === 'schedule'
-      ? 'Plages horaires pendant lesquelles ce nœud peut démarrer de nouveaux traitements.'
-      : this.actionType() === 'identity'
-        ? 'Le nom affiché est distinct du nom envoyé par heartbeat. Les étiquettes locales remplacent celles des groupes.'
-        : this.actionType() === 'processing'
-          ? 'Plafond simultané, toutes bibliothèques confondues.'
-          : this.actionType() === 'library-access'
-            ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
-            : this.actionType() === 'create-library'
-              ? 'Le serveur crée la définition partagée. Vous pourrez ensuite autoriser les nœuds et configurer leurs chemins.'
-              : this.createFormData.description,
+    this.actionType() === 'identity'
+      ? 'Le nom affiché est distinct du nom envoyé par heartbeat. Les étiquettes locales remplacent celles des groupes.'
+      : this.actionType() === 'library-access'
+        ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
+        : this.actionType() === 'create-library'
+          ? 'Le serveur crée la définition partagée. Vous pourrez ensuite autoriser les nœuds et configurer leurs chemins.'
+          : this.createFormData.description,
   );
   protected readonly createLibraryFormData: RecordFormData = {
     title: 'Déclarer une bibliothèque',
@@ -927,6 +933,7 @@ export class NodeCatalogPageComponent {
   );
 
   constructor() {
+    this.installProcessingSettingsEffect();
     this.loadLibraryAccessSummary();
     timer(0, 10_000)
       .pipe(
@@ -1108,6 +1115,8 @@ export class NodeCatalogPageComponent {
   protected onDetailClosed(): void {
     this.selectedNode.set(null);
     this.selectedNodeTabIndex.set(0);
+    this.processingFormNodeId = null;
+    this.processingForm.set(null);
   }
 
   protected nodeAccessOption(node: NodeRecord): LibraryNodeAccessOption {
