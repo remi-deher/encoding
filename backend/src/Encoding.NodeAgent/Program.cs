@@ -71,6 +71,10 @@ app.MapPost("/api/v1/worker/clusters", async (WorkerClusterAddress request, Work
         return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: exception.Message);
     }
 }).WithName("AddWorkerClusterByAddress");
+app.MapDelete("/api/v1/worker/clusters/{clusterId:guid}", (Guid clusterId, WorkerClusterDiscovery discovery) =>
+    discovery.Forget(clusterId)
+        ? Results.NoContent()
+        : Results.NotFound(new { title = "Seule une adresse ajoutée à la main peut être oubliée ; ce cluster est détecté automatiquement." })).WithName("ForgetWorkerCluster");
 app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe, CancellationToken cancellationToken) =>
 {
     var identity = await identityStore.GetAsync(cancellationToken);

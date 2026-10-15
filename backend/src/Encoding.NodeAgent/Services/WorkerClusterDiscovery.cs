@@ -4,7 +4,11 @@ using Haukcode.Mdns;
 
 namespace Encoding.NodeAgent.Services;
 
-public sealed record DiscoveredCluster(Guid Id, string Name, string ApiBaseUrl, DateTimeOffset DiscoveredAt);
+/// <summary>
+/// Cluster connu de ce nœud. <paramref name="Source"/> : <c>network</c> (DNS-SD), <c>manual</c> (adresse saisie, mémorisée) ou <c>configured</c> (serveur du conteneur).
+/// <paramref name="Reachable"/> passe à faux quand la dernière sonde d'une adresse mémorisée a échoué : la ligne reste visible plutôt que de disparaître sans explication.
+/// </summary>
+public sealed record DiscoveredCluster(Guid Id, string Name, string ApiBaseUrl, DateTimeOffset DiscoveredAt, string Source = "network", bool Reachable = true);
 
 public sealed class WorkerClusterDiscovery(
     NodeAgentOptions options,
@@ -39,7 +43,7 @@ public sealed class WorkerClusterDiscovery(
         { throw new HttpRequestException($"Aucun cluster Encoding ne répond à {baseUrl} : {exception.Message}", exception); }
         if (identity is null || identity.Id == Guid.Empty)
             throw new HttpRequestException($"{baseUrl} ne répond pas comme un cluster Encoding.");
-        var cluster = new DiscoveredCluster(identity.Id, identity.Name, baseUrl.AbsoluteUri, DateTimeOffset.UtcNow);
+        var cluster = new DiscoveredCluster(identity.Id, identity.Name, baseUrl.AbsoluteUri, DateTimeOffset.UtcNow, "manual");
         clusters[identity.Id] = cluster;
         logger.LogInformation("Cluster ajouté par adresse : {ClusterName} ({ClusterId}) à {ApiBaseUrl}.", cluster.Name, cluster.Id, cluster.ApiBaseUrl);
         return cluster;
@@ -90,8 +94,42 @@ public sealed class WorkerClusterDiscovery(
         {
             if (!Uri.TryCreate(address, UriKind.Absolute, out var baseUrl)) continue;
             try { await ProbeAsync(baseUrl, cancellationToken); }
-            catch (HttpRequestException) { logger.LogDebug("Le cluster mémorisé {ApiBaseUrl} ne répond pas.", address); }
+            catch (HttpRequestException)
+            {
+                logger.LogDebug("Le cluster mémorisé {ApiBaseUrl} ne répond pas.", address);
+                MarkUnreachable(baseUrl.AbsoluteUri);
+            }
         }
+    }
+
+    private void MarkUnreachable(string baseUrl)
+    {
+        foreach (var (id, cluster) in clusters)
+            if (cluster.Source == "manual" && string.Equals(cluster.ApiBaseUrl, baseUrl, StringComparison.OrdinalIgnoreCase))
+                clusters[id] = cluster with { Reachable = false };
+    }
+
+    /// <summary>
+    /// Oublie un cluster ajouté par adresse : il disparaît de la liste et n'est plus sondé. Retourne faux si aucune adresse mémorisée ne correspond
+    /// (un cluster détecté sur le réseau ou le serveur du conteneur ne s'oublie pas : ils reviendraient aussitôt).
+    /// </summary>
+    public bool Forget(Guid clusterId)
+    {
+        if (!clusters.TryGetValue(clusterId, out var cluster)) return false;
+        lock (knownAddressesLock)
+        {
+            var known = LoadKnownAddresses();
+            var remaining = known.Where(address => !string.Equals(address, cluster.ApiBaseUrl, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (remaining.Length == known.Length) return false;
+            try { File.WriteAllText(KnownAddressesPath, System.Text.Json.JsonSerializer.Serialize(remaining)); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(exception, "L'adresse du cluster {ApiBaseUrl} n'a pas pu être oubliée.", cluster.ApiBaseUrl);
+                return false;
+            }
+        }
+        clusters.TryRemove(clusterId, out _);
+        return true;
     }
 
     public IReadOnlyList<DiscoveredCluster> List() => clusters.Values.OrderBy(cluster => cluster.Name).ToArray();
@@ -137,7 +175,7 @@ public sealed class WorkerClusterDiscovery(
             var identity = await client.GetFromJsonAsync<ClusterIdentity>(
                 new Uri(new Uri(options.ClusterApiBaseUrl), "api/v1/cluster"), cancellationToken);
             if (identity is null || identity.Id == Guid.Empty) return;
-            clusters[identity.Id] = new DiscoveredCluster(identity.Id, identity.Name, options.ClusterApiBaseUrl, DateTimeOffset.UtcNow);
+            clusters[identity.Id] = new DiscoveredCluster(identity.Id, identity.Name, options.ClusterApiBaseUrl, DateTimeOffset.UtcNow, "configured");
             logger.LogInformation("Cluster configuré découvert : {ClusterName} ({ClusterId}).", identity.Name, identity.Id);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)

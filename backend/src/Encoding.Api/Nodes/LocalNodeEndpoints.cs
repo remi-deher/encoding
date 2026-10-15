@@ -28,6 +28,8 @@ public static class LocalNodeEndpoints
             RelayAsync(http, clients, HttpMethod.Get, "clusters", ct)).WithName("ListLocalNodeClusters");
         local.MapPost("/clusters", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
             RelayAsync(http, clients, HttpMethod.Post, "clusters", ct)).WithName("AddLocalNodeCluster");
+        local.MapDelete("/clusters/{clusterId:guid}", (Guid clusterId, HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
+            RelayAsync(http, clients, HttpMethod.Delete, "clusters/" + clusterId.ToString("D"), ct)).WithName("ForgetLocalNodeCluster");
         local.MapPost("/enroll", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
             RelayAsync(http, clients, HttpMethod.Post, "enroll", ct)).WithName("EnrollLocalNode");
         local.MapPost("/pairing-key", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
