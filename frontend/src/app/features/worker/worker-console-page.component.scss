@@ -153,39 +153,6 @@
   font-size: 14px;
 }
 
-.join-button {
-  min-height: 36px;
-  padding: 0 13px;
-  border: 0;
-  border-radius: 7px;
-  color: white;
-  background: var(--accent);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 650;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.pairing-button {
-  min-height: 36px;
-  padding: 0 13px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 7px;
-  color: var(--text-primary);
-  background: var(--surface);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 650;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.join-button:disabled,
-.pairing-button:disabled {
-  opacity: 0.55;
-  cursor: wait;
-}
 
 .pairing-code {
   margin-top: 18px;
