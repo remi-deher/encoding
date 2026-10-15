@@ -45,6 +45,11 @@ import { MatSidenavModule } from '@angular/material/sidenav';
           <div class="drawer-body">
             <ng-container [ngTemplateOutlet]="content() ?? null" />
           </div>
+          @if (footer(); as footerTemplate) {
+            <footer class="drawer-footer">
+              <ng-container [ngTemplateOutlet]="footerTemplate" />
+            </footer>
+          }
         </section>
       </mat-drawer>
     </mat-drawer-container>
@@ -110,7 +115,21 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       overflow: auto;
     }
 
+    .drawer-footer {
+      padding: var(--space-3) var(--space-5);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--space-2);
+      border-top: 1px solid var(--border-subtle);
+      background: var(--surface);
+    }
+
     @media (max-width: 700px) {
+      .drawer-footer {
+        padding-inline: var(--space-4);
+      }
+
       .drawer-header {
         min-height: 64px;
         padding-inline: var(--space-4);
@@ -137,6 +156,8 @@ export class DetailDrawerComponent {
   readonly title = input('Détails');
   readonly description = input('');
   readonly content = input<TemplateRef<unknown> | undefined>(undefined);
+  /** Pied collant : à fournir seulement quand le contenu est modifiable (Annuler / Enregistrer). */
+  readonly footer = input<TemplateRef<unknown> | undefined>(undefined);
   readonly headerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly closed = output<void>();
 }
