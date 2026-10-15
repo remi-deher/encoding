@@ -65,6 +65,7 @@
           </div>
         </ng-template>
         @if (selectedLibrary()) {
+          <h3>Fichiers détectés</h3>
           <app-data-table
             [columns]="mediaColumns"
             [rows]="mediaRows()"
