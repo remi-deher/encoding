@@ -49,6 +49,8 @@ import {
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { LocalNodePanelComponent } from '../../shared/ui/local-node-panel.component';
+import { ResourceCardAction, ResourceCardComponent, ResourceCardFact, ResourceCardTag } from '../../shared/ui/resource-card.component';
+import type { StatusTone } from '../../shared/ui/status-badge.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { NodeModeController } from '../../shared/services/node-mode-controller';
@@ -110,6 +112,19 @@ interface NodeRecord extends DataTableRow {
   readonly lastSignal: string;
 }
 
+interface NodeCard {
+  readonly id: string;
+  readonly title: string;
+  readonly statusLabel: string;
+  readonly statusTone: StatusTone;
+  readonly badges: readonly string[];
+  readonly tags: readonly ResourceCardTag[];
+  readonly facts: readonly ResourceCardFact[];
+  readonly note: string;
+  readonly actions: readonly ResourceCardAction[];
+  readonly order: number;
+}
+
 const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: string }[] = [
   { value: 'server', label: 'Serveur' },
   { value: 'worker', label: 'Worker' },
@@ -131,6 +146,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     LibraryNodeAccessFormComponent,
     DrawerActionButtonComponent,
     LocalNodePanelComponent,
+    ResourceCardComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
     RouterLink,
@@ -990,6 +1006,77 @@ export class NodeCatalogPageComponent {
       .filter((node) => role === 'all' || node.roles.includes(role as NodeRole))
       .map((node) => this.toRecord(node));
   });
+
+  /** Cartes de nœuds : ce qui demande une action d'abord, puis par nom (architecture 0046). */
+  protected readonly nodeCards = computed<readonly NodeCard[]>(() => {
+    const role = this.selectedRole();
+    const actions: readonly ResourceCardAction[] = this.nodeActions
+      .filter((action) => action.visibleWhen?.({} as DataTableRow) ?? true)
+      .map((action) => ({ id: action.id, label: action.label, tone: action.tone }));
+    return this.nodes()
+      .filter((node) => role === 'all' || node.roles.includes(role as NodeRole))
+      .map((node): NodeCard => {
+        const lifecycle = node.lifecycle ?? node.status;
+        const tone: StatusTone =
+          lifecycle === 'online' ? 'success'
+          : lifecycle === 'draining' ? 'warning'
+          : lifecycle === 'incompatible' || lifecycle === 'quarantined' ? 'danger'
+          : 'neutral';
+        const label =
+          lifecycle === 'online' ? 'En ligne'
+          : lifecycle === 'draining' ? 'Vidange en cours'
+          : lifecycle === 'incompatible' ? 'Incompatible'
+          : lifecycle === 'quarantined' ? 'Quarantaine'
+          : 'Hors ligne';
+        const tags: ResourceCardTag[] = node.capabilities.map((capability) => {
+          const acceleration = capability.accelerationTypes.filter((type) => type !== 'cpu');
+          return {
+            label: `${capability.toolId} ${capability.version}`,
+            highlighted: acceleration.length > 0,
+          };
+        });
+        const facts: ResourceCardFact[] = [
+          { label: 'Accès aux bibliothèques', value: this.libraryAccessSummary(node.id) },
+          { label: 'Dernier signal', value: this.formatLastSeen(node.lastSeenAt) },
+        ];
+        if (node.roles.includes('worker')) {
+          facts.unshift({ label: 'Capacité', value: `${node.maxConcurrentTasks} tâche(s) simultanée(s)` });
+        }
+        return {
+          id: node.id,
+          title: node.displayName?.trim() || node.name,
+          statusLabel: label,
+          statusTone: tone,
+          badges: node.roles.map((nodeRole) => NODE_ROLE_LABELS[nodeRole]),
+          tags,
+          facts,
+          note: node.lifecycleReason ?? (node.desiredRoles ? 'Changement de mode en attente' : ''),
+          actions,
+          order: tone === 'success' ? 2 : tone === 'neutral' ? 1 : 0,
+        };
+      })
+      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, 'fr', { numeric: true }));
+  });
+
+  protected openNodeCard(id: string): void {
+    this.selectedNode.set(this.filteredNodes().find((node) => node.id === id) ?? null);
+  }
+
+  protected onNodeCardAction(id: string, actionId: string): void {
+    const row = this.filteredNodes().find((node) => node.id === id);
+    if (!row) return;
+    const confirmation = this.nodeActions.find((action) => action.id === actionId)?.confirmation;
+    if (!confirmation) {
+      this.onNodeAction({ actionId, row });
+      return;
+    }
+    this.dialog
+      .open(ConfirmationDialogComponent, { data: confirmation(row) })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (confirmed) this.onNodeAction({ actionId, row });
+      });
+  }
 
   protected readonly enrollmentColumns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nœud détecté', sortable: true },
