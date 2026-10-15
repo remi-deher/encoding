@@ -40,7 +40,7 @@ public sealed class NodeHeartbeatService(
                     using var request = new HttpRequestMessage(HttpMethod.Put,
                         new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/nodes/{identity.Id:D}/heartbeat"))
                     {
-                        Content = JsonContent.Create(heartbeat)
+                        Content = JsonContent.Create(heartbeat, options: AgentJson.Options)
                     };
                     request.Headers.Add("X-Node-Token", identity.NodeToken);
                     using var response = await httpClient.SendAsync(request, stoppingToken);
@@ -55,7 +55,7 @@ public sealed class NodeHeartbeatService(
                             await enrollment.CompleteSwitchAsync(identity.ApiBaseUrl!, stoppingToken);
                         }
                         logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", identity.Id);
-                        var node = await response.Content.ReadFromJsonAsync<NodeResponse>(stoppingToken);
+                        var node = await response.Content.ReadFromJsonAsync<NodeResponse>(AgentJson.Options, stoppingToken);
                         ReportLifecycle(node);
                         await ApplyDesiredModeAsync(node?.DesiredRoles, stoppingToken);
                     }
@@ -98,7 +98,7 @@ public sealed class NodeHeartbeatService(
             var inventory = new NodeInventory(RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(), Environment.ProcessorCount, memoryMb);
             using var request = new HttpRequestMessage(HttpMethod.Put, new Uri(new Uri(previous.ApiBaseUrl!), $"api/v1/nodes/{previous.Id:D}/heartbeat"))
             {
-                Content = JsonContent.Create(new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory))
+                Content = JsonContent.Create(new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory), options: AgentJson.Options)
             };
             request.Headers.Add("X-Node-Token", previous.NodeToken);
             using var response = await httpClient.SendAsync(request, cancellationToken);
