@@ -13,28 +13,33 @@
       <app-primary-navigation />
     }
 
-    @if (!workerMode() && !authMode()) {
-      <div class="header-status">
-        @if (activeExecutionCount() > 0) {
-          <a
-            class="processing-indicator"
-            routerLink="/tasks"
-            [queryParams]="{ view: 'active' }"
-            [attr.aria-label]="
-              activeExecutionCount() + ' en traitement, ouvrir les tâches en cours'
-            "
+    <div class="header-actions">
+      @if (!workerMode() && !authMode()) {
+        <div class="header-status">
+          @if (activeExecutionCount() > 0) {
+            <a
+              class="processing-indicator"
+              routerLink="/tasks"
+              [queryParams]="{ view: 'active' }"
+              [attr.aria-label]="
+                activeExecutionCount() + ' en traitement, ouvrir les tâches en cours'
+              "
+            >
+              {{ activeExecutionCount() }} en traitement
+            </a>
+          }
+          <div
+            class="cluster-indicator"
+            [attr.aria-label]="'Présence des nœuds : ' + clusterLabel()"
           >
-            {{ activeExecutionCount() }} en traitement
-          </a>
-        }
-        <div class="cluster-indicator" [attr.aria-label]="'Présence des nœuds : ' + clusterLabel()">
-          <span class="cluster-label">Nœuds</span>
-          <span class="cluster-state">{{ clusterLabel() }}</span>
+            <span class="cluster-label">Nœuds</span>
+            <span class="cluster-state">{{ clusterLabel() }}</span>
+          </div>
+          <app-user-menu />
         </div>
-        <app-user-menu />
-      </div>
-    }
-    <app-theme-toggle class="theme-toggle" />
+      }
+      <app-theme-toggle class="theme-toggle" />
+    </div>
   </mat-toolbar>
 
   <div class="page-transition-region">

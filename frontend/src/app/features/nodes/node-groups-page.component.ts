@@ -49,7 +49,7 @@ interface GroupRow extends DataTableRow {
           <button matButton="filled" type="button" (click)="create()">Créer un groupe</button>
         }
       </ng-template>
-      <app-data-table
+      <app-data-table layout="cards"
         catalogue-table
         [columns]="columns"
         [rows]="rows()"

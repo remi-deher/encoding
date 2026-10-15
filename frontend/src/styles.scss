@@ -2,11 +2,52 @@
 
 @include mat.core();
 
+// Palette tonale de la marque (teal), à la place du vert Material trop saturé.
+$brand-palette: (
+  0: #000000,
+  10: #00201a,
+  20: #0e3a2e,
+  25: #17463a,
+  30: #1d5242,
+  35: #26604f,
+  40: #326b5b,
+  50: #4a8472,
+  60: #659e8b,
+  70: #80b9a5,
+  80: #9bd6c1,
+  90: #b7f2dd,
+  95: #d4fbec,
+  98: #edfff6,
+  99: #f6fffa,
+  100: #ffffff,
+  secondary: (
+    0: #000000, 10: #0b1f19, 20: #20352e, 25: #2b4039, 30: #364b44, 35: #42574f, 40: #4e635b,
+    50: #667c73, 60: #80968d, 70: #9bb1a7, 80: #b6ccc2, 90: #d2e8de, 95: #e0f6ec, 98: #edfff6,
+    99: #f6fffa, 100: #ffffff,
+  ),
+  neutral: (
+    0: #000000, 4: #0a0f0d, 6: #0f1513, 10: #191d1b, 12: #1d2220, 17: #282c2a, 20: #2d312f,
+    22: #313634, 24: #363b38, 25: #373b39, 30: #424744, 35: #4e524f, 40: #5a5e5b, 50: #727773,
+    60: #8c918d, 70: #a6aba7, 80: #c2c7c3, 87: #d9dcd8, 90: #e0e3df, 92: #e6e9e5, 94: #ebeeea,
+    95: #eef2ed, 96: #f1f4f0, 98: #f6faf5, 99: #fafdf8, 100: #ffffff,
+  ),
+  neutral-variant: (
+    0: #000000, 10: #151d1a, 20: #2a322f, 25: #353d3a, 30: #404946, 35: #4c5551, 40: #58615d,
+    50: #707975, 60: #8a938e, 70: #a4ada8, 80: #bfc9c4, 90: #dbe5e0, 95: #e9f3ee, 98: #f2fcf7,
+    99: #f6fffa, 100: #ffffff,
+  ),
+  error: (
+    0: #000000, 10: #410002, 20: #690005, 25: #7e0007, 30: #93000a, 35: #a80710, 40: #ba1a1a,
+    50: #de3730, 60: #ff5449, 70: #ff897d, 80: #ffb4ab, 90: #ffdad6, 95: #ffedea, 98: #fff8f7,
+    99: #fffbff, 100: #ffffff,
+  ),
+);
+
 $app-theme: mat.define-theme(
   (
     color: (
       theme-type: light,
-      primary: mat.$green-palette,
+      primary: $brand-palette,
       tertiary: mat.$azure-palette,
     ),
     density: (
@@ -19,7 +60,7 @@ $app-dark-theme: mat.define-theme(
   (
     color: (
       theme-type: dark,
-      primary: mat.$green-palette,
+      primary: $brand-palette,
       tertiary: mat.$azure-palette,
     ),
     density: (
