@@ -2,15 +2,19 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { CdkListbox, CdkOption } from '@angular/cdk/listbox';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatListModule } from '@angular/material/list';
+import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { CodeEditorComponent } from '../../shared/ui/code-editor.component';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import {
+  CatalogEmptyState,
+  ManagementCatalogTemplateComponent,
+} from '../../shared/templates/management-catalog-template.component';
 import { NotificationService } from '../../shared/services/notification.service';
 import { FlowScripts } from '../../shared/services/flow-scripts';
 import {
@@ -25,10 +29,12 @@ import {
   imports: [
     CategoryTabsComponent,
     CodeEditorComponent,
+    CdkListbox,
+    CdkOption,
     ManagementCatalogTemplateComponent,
     MatButtonModule,
     MatFormFieldModule,
-    MatListModule,
+    MatInputModule,
     MatSelectModule,
     ReactiveFormsModule,
   ],
@@ -37,14 +43,19 @@ import {
       [title]="title()"
       filterLabel="Scripts"
       searchLabel="Rechercher un script"
+      [showToolbar]="summaries().length > 0"
+      [emptyState]="summaries().length === 0 && !formOpen() ? emptyState : null"
+      (emptyStateAction)="newScript()"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
-      note="Les flows publiés conservent le code et la version de script choisis. Modifier un script crée un brouillon; seule sa publication crée une nouvelle version."
+      [note]="summaries().length ? 'Les flows publiés conservent le code et la version de script choisis. Modifier un script crée un brouillon; seule sa publication crée une nouvelle version.' : ''"
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
     >
       <ng-template #pageActions>
-        <button matButton="filled" type="button" (click)="newScript()">Nouveau script</button>
+        @if (summaries().length > 0 || formOpen()) {
+          <button matButton="filled" type="button" (click)="newScript()">Nouveau script</button>
+        }
       </ng-template>
 
       <app-category-tabs
@@ -55,25 +66,44 @@ import {
         (selectedChange)="onSectionChanged($event)"
       />
 
-      <div catalogue-table class="script-workspace">
+      <div
+        catalogue-table
+        class="script-workspace"
+        [class.script-workspace_single]="summaries().length === 0"
+      >
+        <header class="workspace-heading">
+          <button matButton="outlined" type="button" [disabled]="busy()" (click)="showScriptList()">
+            <span aria-hidden="true">←</span> Scripts
+          </button>
+          <div class="workspace-title">
+            <h2>{{ workspaceTitle() }}</h2>
+            <p>{{ workspaceStatus() }}</p>
+          </div>
+        </header>
+
+        @if (summaries().length > 0) {
         <aside class="script-rail" aria-label="Scripts enregistrés">
           <div class="rail-heading">
             <h2>Scripts</h2>
             <span>{{ filteredScripts().length }}</span>
           </div>
           @if (filteredScripts().length) {
-            <mat-selection-list
+            <div
+              cdkListbox
               class="script-list"
               aria-label="Choisir un script à modifier"
-              [multiple]="false"
-              [disabled]="busy()"
-              (selectionChange)="selectScript($event.options[0]?.value)"
+              [cdkListboxMultiple]="false"
+              [cdkListboxValue]="selectedScriptValues()"
+              [cdkListboxDisabled]="busy()"
+              (cdkListboxValueChange)="selectScript($event.value[0])"
             >
               @for (script of filteredScripts(); track script.id) {
-                <mat-list-option
+                <div
+                  cdkOption
                   class="script-option"
-                  [value]="script.id"
-                  [selected]="script.id === editingId()"
+                  [cdkOption]="script.id"
+                  [cdkOptionDisabled]="busy()"
+                  [cdkOptionTypeaheadLabel]="script.draftName"
                 >
                   <span class="script-option-name">{{ script.draftName }}</span>
                   <span class="script-option-language">{{
@@ -87,9 +117,9 @@ import {
                     }
                     · brouillon r{{ script.draftRevision }}
                   </span>
-                </mat-list-option>
+                </div>
               }
-            </mat-selection-list>
+            </div>
           } @else {
             <p class="script-list-empty">
               @if (query().trim()) {
@@ -100,35 +130,11 @@ import {
             </p>
           }
         </aside>
+        }
 
         <section class="script-editor" aria-label="Éditeur de script">
           @if (formOpen()) {
             <form [formGroup]="form" (ngSubmit)="saveDraft()">
-              <header class="editor-heading">
-                <div class="editor-title">
-                  <h2>
-                    {{
-                      editingId() ? form.controls.name.value || 'Script sans nom' : 'Nouveau script'
-                    }}
-                  </h2>
-                  @if (details(); as current) {
-                    <p class="editor-version">
-                      Brouillon r{{ current.script.draftRevision }}
-                      @if (current.script.publishedVersion > 0) {
-                        · {{ current.script.publishedVersion }} version(s) publiée(s)
-                      } @else {
-                        · aucune version publiée
-                      }
-                    </p>
-                  } @else {
-                    <p class="editor-version">Nouveau brouillon · non publié</p>
-                  }
-                </div>
-                <span class="script-language-badge">{{
-                  form.controls.language.value === 'python' ? 'Python' : 'JavaScript'
-                }}</span>
-              </header>
-
               <div class="script-fields">
                 <mat-form-field appearance="outline" subscriptSizing="dynamic">
                   <mat-label>Nom du script</mat-label>
@@ -166,15 +172,36 @@ import {
                 >
                 <span>Durée maximale réglée dans chaque bloc de flow</span>
               </div>
-              <app-code-editor
-                [value]="form.controls.code.value"
-                [language]="form.controls.language.value"
-                [disabled]="busy()"
-                [roomy]="true"
-                [label]="'Code de ' + (form.controls.name.value || 'script')"
-                (valueChange)="setCode($event)"
-              />
-              <details class="script-contract">
+              <div #codeEditorViewport class="code-editor-slot">
+                @defer (on viewport(codeEditorViewport); prefetch on idle) {
+                  <app-code-editor
+                    [value]="form.controls.code.value"
+                    [language]="form.controls.language.value"
+                    [disabled]="busy()"
+                    [roomy]="true"
+                    [label]="'Code de ' + (form.controls.name.value || 'script')"
+                    (valueChange)="setCode($event)"
+                  />
+                } @placeholder {
+                  <mat-form-field
+                    appearance="outline"
+                    subscriptSizing="dynamic"
+                    class="code-editor-fallback-field"
+                  >
+                    <mat-label>Code source</mat-label>
+                    <textarea
+                      matInput
+                      class="code-editor-fallback"
+                      rows="16"
+                      spellcheck="false"
+                      [value]="form.controls.code.value"
+                      [disabled]="busy()"
+                      (input)="setCode($any($event.target).value)"
+                    ></textarea>
+                  </mat-form-field>
+                }
+              </div>
+              <details class="script-contract" open>
                 <summary>Contexte remis au script</summary>
                 <div class="contract-content">
                   <p>
@@ -242,6 +269,40 @@ import {
         display: grid;
         grid-template-columns: minmax(210px, 0.27fr) minmax(0, 1fr);
         min-height: 530px;
+        overflow: hidden;
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        background: var(--surface);
+      }
+      .script-workspace_single {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .workspace-heading {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 14px;
+        min-height: 82px;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .workspace-title {
+        min-width: 0;
+      }
+      .workspace-title h2 {
+        overflow: hidden;
+        margin: 0;
+        color: var(--text-primary);
+        font-size: 17px;
+        font-weight: 650;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .workspace-title p {
+        margin: 5px 0 0;
+        color: var(--text-secondary);
+        font-size: 12px;
       }
       .script-rail {
         min-width: 0;
@@ -272,10 +333,17 @@ import {
         padding: 0;
       }
       .script-option {
-        min-height: 78px;
-        height: auto !important;
-        margin: 3px 0;
+        display: block;
+        padding: 12px;
         border-radius: 8px;
+        cursor: pointer;
+      }
+      .script-option[aria-selected='true'] {
+        background: var(--accent-soft);
+      }
+      .script-option:focus-visible {
+        outline: 2px solid var(--focus-ring, var(--primary));
+        outline-offset: 1px;
       }
       .script-option-name,
       .script-option-language,
@@ -309,21 +377,6 @@ import {
       .script-editor {
         min-width: 0;
         padding: 20px 24px;
-      }
-      .editor-heading {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        margin: 0 0 20px;
-        padding-bottom: 14px;
-        border-bottom: 1px solid var(--border-subtle);
-      }
-      .editor-title {
-        min-width: 0;
-      }
-      .editor-title h2 {
-        font-size: 18px;
       }
       h2 {
         margin: 0;
@@ -367,6 +420,8 @@ import {
         color: var(--text-secondary);
         font-size: 14px;
       }
+      .code-editor-fallback-field { width: 100%; }
+      .code-editor-fallback { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
       .script-contract {
         margin-top: 12px;
         border-bottom: 1px solid var(--border-subtle);
@@ -448,8 +503,15 @@ import {
         }
       }
       @media (max-width: 600px) {
+        .workspace-heading {
+          grid-template-columns: auto minmax(0, 1fr);
+          padding: 12px;
+        }
         .script-workspace {
           grid-template-columns: 1fr;
+        }
+        .workspace-heading {
+          grid-column: 1;
         }
         .script-rail {
           padding: 12px 10px;
@@ -508,6 +570,16 @@ export class ScriptLibraryPageComponent {
     { value: 'packs', label: 'Packs de composants' },
     { value: 'encoding', label: 'Profils d’encodage' },
   ];
+  protected readonly emptyState: CatalogEmptyState = {
+    icon: '</>',
+    eyebrow: 'BIBLIOTHÈQUE DE SCRIPTS',
+    title: 'Créez votre premier script',
+    description:
+      'Préparez un script réutilisable dans vos flows. Enregistrez-le en brouillon, puis publiez une version lorsque vous êtes prêt.',
+    chips: ['JavaScript', 'Python'],
+    actionLabel: 'Créer le premier script',
+    footnote: 'Les flows existants conservent le code choisi au moment de leur publication.',
+  };
   protected readonly catalogState = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly catalogMessage = signal('Chargement des scripts…');
   protected readonly summaries = signal<readonly FlowScriptSummary[]>([]);
@@ -539,9 +611,30 @@ export class ScriptLibraryPageComponent {
         )
       : this.summaries();
   });
+  protected workspaceTitle(): string {
+    if (!this.formOpen()) return 'Scripts';
+    return (
+      this.form.controls.name.value ||
+      (this.editingId() ? 'Script sans nom' : 'Nouveau script')
+    );
+  }
+  protected readonly workspaceStatus = computed(() => {
+    const current = this.details();
+    if (!this.formOpen()) return `${this.summaries().length} scripts dans la bibliothèque`;
+    if (!current) return 'Nouveau brouillon · non publié';
+    const publishedStatus =
+      current.script.publishedVersion > 0
+        ? `${current.script.publishedVersion} version(s) publiée(s)`
+        : 'aucune version publiée';
+    return `Brouillon r${current.script.draftRevision} · ${publishedStatus}`;
+  });
   protected readonly versionSummary = computed(() =>
     (this.details()?.script.versions ?? []).map((version) => `v${version.version}`).join(' · '),
   );
+  protected readonly selectedScriptValues = computed(() => {
+    const id = this.editingId();
+    return id ? [id] : [];
+  });
 
   constructor() {
     void this.loadList(true);
@@ -575,6 +668,14 @@ export class ScriptLibraryPageComponent {
     this.formOpen.set(true);
     this.message.set('');
     this.form.reset({ name: '', language: 'javascript', description: '', code: '' });
+  }
+
+  protected showScriptList(): void {
+    if (this.busy()) return;
+    this.formOpen.set(false);
+    this.editingId.set(null);
+    this.details.set(null);
+    this.message.set('');
   }
 
   protected cancelEdit(): void {
