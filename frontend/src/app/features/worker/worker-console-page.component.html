@@ -54,7 +54,15 @@
           }
         </dl>
 
-        @if (!worker.isEnrolled) {
+        @if (worker.clusterId) {
+          <div class="cluster-actions">
+            <button matButton="outlined" type="button" [disabled]="leaving()" (click)="leaveCluster()">
+              {{ leaving() ? 'Départ…' : 'Quitter ce cluster' }}
+            </button>
+          </div>
+        }
+
+        @if (!worker.isEnrolled || joinableClusters().length) {
           @if (pairingKey()) {
             <div class="pairing-code" role="status">
               <div>
@@ -68,9 +76,9 @@
             </div>
           }
           <div class="cluster-list">
-            <h3>Clusters détectés sur le réseau</h3>
-            @if (clusters().length) {
-              @for (cluster of clusters(); track cluster.id) {
+            <h3>{{ worker.isEnrolled ? 'Changer de cluster' : 'Clusters détectés sur le réseau' }}</h3>
+            @if (joinableClusters().length) {
+              @for (cluster of joinableClusters(); track cluster.id) {
                 <article class="cluster-card">
                   <div class="cluster-copy">
                     <strong>{{ cluster.name }}</strong>

@@ -1,10 +1,12 @@
 import { MatButtonModule } from '@angular/material/button';
 import { HttpClient } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { catchError, EMPTY, forkJoin, switchMap, timer } from 'rxjs';
+import { catchError, EMPTY, filter, forkJoin, switchMap, timer } from 'rxjs';
 import { NodeModeController } from '../../shared/services/node-mode-controller';
 import { NotificationService } from '../../shared/services/notification.service';
+import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 
@@ -46,6 +48,8 @@ export class WorkerConsolePageComponent {
   private readonly http = inject(HttpClient);
   private readonly notifications = inject(NotificationService);
   private readonly nodeMode = inject(NodeModeController);
+  private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly status = signal<WorkerStatus | null>(null);
   protected readonly clusters = signal<readonly WorkerCluster[]>([]);
   protected readonly selectedTab = signal('tasks');
@@ -54,12 +58,18 @@ export class WorkerConsolePageComponent {
   protected readonly generatingPairingClusterId = signal<string | null>(null);
   protected readonly pairingKey = signal<string | null>(null);
   protected readonly pairingExpiresAt = signal<string | null>(null);
+  protected readonly leaving = signal(false);
   protected readonly refreshError = signal(false);
   protected readonly tabOptions: readonly CategoryTabOption[] = [
     { value: 'tasks', label: 'Tâches' },
     { value: 'node', label: 'Nœud' },
   ];
   protected readonly workerStatus = computed(() => this.status());
+  /** Clusters proposés : tous ceux détectés, sauf celui auquel ce nœud est déjà rattaché. */
+  protected readonly joinableClusters = computed(() => {
+    const current = this.status()?.clusterId?.toLowerCase();
+    return this.clusters().filter((cluster) => cluster.id.toLowerCase() !== current);
+  });
 
   constructor() {
     timer(0, 5_000).pipe(
@@ -101,9 +111,59 @@ export class WorkerConsolePageComponent {
   }
 
   protected joinCluster(cluster: WorkerCluster): void {
+    this.confirmSwitch(cluster, () => this.enroll(cluster));
+  }
+
+  protected generatePairingKey(cluster: WorkerCluster): void {
+    this.confirmSwitch(cluster, () => this.createPairingKey(cluster));
+  }
+
+  protected leaveCluster(): void {
+    const worker = this.status();
+    if (!worker?.clusterId || this.leaving()) return;
+    this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Quitter ce cluster ?',
+        message: `${worker.clusterName ?? 'Ce cluster'} retirera ce nœud. Le nœud redevient autonome et retrouve son serveur local ; ses bibliothèques locales restent intactes.`,
+        confirmLabel: 'Quitter le cluster',
+      },
+    }).afterClosed().pipe(filter(Boolean), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.leaving.set(true);
+      this.http.post(`${WORKER_AGENT_API}/leave`, {}).pipe(
+        catchError((error: unknown) => {
+          this.leaving.set(false);
+          this.notifications.show(this.getErrorMessage(error));
+          return EMPTY;
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe(() => {
+        this.leaving.set(false);
+        this.notifications.show('Ce nœud a quitté le cluster.');
+        this.refreshStatus();
+      });
+    });
+  }
+
+  /** Un nœud déjà rattaché (ou en attente d'approbation) ne change de cluster qu'après confirmation explicite. */
+  private confirmSwitch(cluster: WorkerCluster, action: () => void): void {
+    const worker = this.status();
+    if (!worker?.clusterId) {
+      action();
+      return;
+    }
+    this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Passer au cluster ${cluster.name} ?`,
+        message: `Ce nœud quitte ${worker.clusterName ?? 'son cluster actuel'}. Le cluster d’accueil doit approuver son arrivée. Si ce nœud héberge un serveur, ce serveur s’arrête une fois l’arrivée approuvée : sa base et ses bibliothèques restent intactes (exportables depuis la page Bibliothèques avant de partir).`,
+        confirmLabel: 'Changer de cluster',
+      },
+    }).afterClosed().pipe(filter(Boolean), takeUntilDestroyed(this.destroyRef)).subscribe(action);
+  }
+
+  private enroll(cluster: WorkerCluster): void {
     if (this.enrollingClusterId()) return;
     this.enrollingClusterId.set(cluster.id);
-    this.http.post(`${WORKER_AGENT_API}/enroll`, { clusterId: cluster.id }).pipe(
+    this.http.post(`${WORKER_AGENT_API}/enroll`, { clusterId: cluster.id, leaveCurrent: !!this.status()?.clusterId }).pipe(
       catchError((error: unknown) => {
         this.enrollingClusterId.set(null);
         this.notifications.show(this.getErrorMessage(error));
@@ -117,10 +177,10 @@ export class WorkerConsolePageComponent {
     });
   }
 
-  protected generatePairingKey(cluster: WorkerCluster): void {
+  private createPairingKey(cluster: WorkerCluster): void {
     if (this.generatingPairingClusterId()) return;
     this.generatingPairingClusterId.set(cluster.id);
-    this.http.post<WorkerPairingResponse>(`${WORKER_AGENT_API}/pairing-key`, { clusterId: cluster.id }).pipe(
+    this.http.post<WorkerPairingResponse>(`${WORKER_AGENT_API}/pairing-key`, { clusterId: cluster.id, leaveCurrent: !!this.status()?.clusterId }).pipe(
       catchError((error: unknown) => {
         this.generatingPairingClusterId.set(null);
         this.notifications.show(this.getErrorMessage(error));

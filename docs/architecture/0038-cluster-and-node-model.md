@@ -2,7 +2,7 @@
 
 Statut : acceptée par Rémi (2026-10-15) pour le modèle cluster/nœud (sections 1 à 7 et décisions ci-dessous), la synchronisation entre clusters (9) et l'évitement des doublons (9.1) ; le stockage (8) reste en discussion. Rien n'est encore implémenté.
 
-Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; un nœud serveur garde son rôle actuel en rejoignant un cluster (3) ; approbation à chaque rattachement et, entre clusters liés, des deux côtés (4). Le stockage (PostgreSQL ou SQLite) et la synchronisation entre clusters sont traités dans les sections 8 et 9.
+Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; un nœud serveur+worker qui rejoint un cluster devient worker seul, son serveur local s’arrête (3, précisé en 0039) ; approbation à chaque rattachement et, entre clusters liés, des deux côtés (4). Le stockage (PostgreSQL ou SQLite) et la synchronisation entre clusters sont traités dans les sections 8 et 9.
 
 ## Plan proposé par Rémi
 

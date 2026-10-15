@@ -7,6 +7,7 @@ if (args.FirstOrDefault() == "--isolated-process") return ProcessSandbox.Run(arg
 
 
 PluginTests.Run();
+await MembershipTests.RunAsync();
 await ProcessTests.RunAsync();
 
 var connection = Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");

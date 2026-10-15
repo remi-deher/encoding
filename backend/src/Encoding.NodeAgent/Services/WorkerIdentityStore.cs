@@ -130,6 +130,22 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
         }
     }
 
+    /// <summary>Oublie le rattachement actuel et repart d'une identité neuve : un nœud retiré ne se réactive jamais (0017), il revient sous un nouvel identifiant.</summary>
+    public async Task ResetAsync(CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            Directory.CreateDirectory(options.DataDirectory);
+            state = new WorkerIdentityState(Guid.NewGuid(), null, null, null, null, false);
+            await SaveAsync(state, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     public async Task MarkEnrolledAsync(CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);
