@@ -46,10 +46,7 @@
       tabsLabel="Sections de la bibliothèque"
     />
     @if (selectedLibrary()) {
-      <h3>Traitement de la bibliothèque</h3>
-      <p>{{ workflowLabel() }}</p>
-      <p>{{ processingSummary() }}</p>
-      <p role="status">{{ discoveryStatus() }}</p>
+      <h3>Fichiers détectés</h3>
       <app-data-table
         [columns]="mediaColumns"
         [rows]="mediaRows()"
