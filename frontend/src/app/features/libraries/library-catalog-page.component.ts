@@ -10,6 +10,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 
 import { MatButtonModule } from '@angular/material/button';
+import { MatTabsModule } from '@angular/material/tabs';
 
 import { MatDialog } from '@angular/material/dialog';
 
@@ -129,6 +130,7 @@ interface LibraryAccessRecord extends DataTableRow {
     ManagementCatalogTemplateComponent,
 
     MatButtonModule,
+    MatTabsModule,
 
     RecordFormComponent,
 
@@ -365,6 +367,8 @@ export class LibraryCatalogPageComponent {
   protected readonly initialAccesses = signal<readonly LibraryNodeAccessResponse[]>([]);
 
   protected readonly selectedLibrary = signal<LibraryRecord | null>(null);
+
+  protected readonly selectedLibraryTabIndex = signal(0);
 
   protected readonly selectedProcessingExecutionId = signal<string | null>(null);
 
@@ -1070,6 +1074,7 @@ export class LibraryCatalogPageComponent {
     const library = this.libraries().find((item) => item.id === row['id']) ?? null;
 
     this.selectedLibrary.set(library);
+    this.selectedLibraryTabIndex.set(0);
 
     this.selectedAccesses.set([]);
     this.selectedProcessingExecutionId.set(null);
