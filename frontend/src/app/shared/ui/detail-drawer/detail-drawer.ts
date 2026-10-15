@@ -44,6 +44,11 @@ import { MatSidenavModule } from '@angular/material/sidenav';
           <div class="drawer-body">
             <ng-container [ngTemplateOutlet]="content() ?? null" />
           </div>
+          @if (footerActions(); as footer) {
+            <footer class="drawer-footer">
+              <ng-container [ngTemplateOutlet]="footer" />
+            </footer>
+          }
         </section>
       </mat-drawer>
     </mat-drawer-container>
@@ -102,6 +107,17 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       font-size: var(--font-body);
     }
 
+    .drawer-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-5);
+      border-top: 1px solid var(--border-subtle);
+      background: var(--surface);
+    }
+
     .drawer-body {
       min-height: 0;
       padding: var(--space-5);
@@ -133,5 +149,7 @@ export class DetailDrawerComponent {
   readonly description = input('');
   readonly content = input<TemplateRef<unknown> | undefined>(undefined);
   readonly headerActions = input<TemplateRef<unknown> | undefined>(undefined);
+  /** Actions collées en bas du tiroir : elles ne défilent jamais hors de vue. */
+  readonly footerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly closed = output<void>();
 }

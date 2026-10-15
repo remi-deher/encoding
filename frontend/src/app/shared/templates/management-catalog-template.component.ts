@@ -31,6 +31,7 @@ export interface CatalogEmptyState {
       [description]="actionOpen() ? actionDescription() : detailDescription()"
       [content]="actionOpen() ? actionContent() : detailContent()"
       [headerActions]="actionOpen() ? undefined : detailHeaderActions()"
+      [footerActions]="actionOpen() ? undefined : detailFooterActions()"
       (closed)="onDrawerClosed()"
     >
       <div drawer-main>
@@ -131,6 +132,9 @@ export class ManagementCatalogTemplateComponent {
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
   protected readonly detailContent = contentChild('detailContent', { read: TemplateRef });
   protected readonly detailHeaderActions = contentChild('detailHeaderActions', {
+    read: TemplateRef,
+  });
+  protected readonly detailFooterActions = contentChild('detailFooterActions', {
     read: TemplateRef,
   });
   protected readonly actionContent = contentChild('actionContent', { read: TemplateRef });

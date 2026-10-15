@@ -53,6 +53,17 @@
     }
   </div>
 
+  <ng-template #detailFooterActions>
+    @if (isAdmin() && selectedNode(); as node) {
+      <app-drawer-action-button
+        label="Nom et étiquettes"
+        variant="outlined"
+        (activated)="editSelectedNodeIdentity()"
+      />
+      <app-drawer-action-button label="Changer le mode" (activated)="changeSelectedNodeMode()" />
+    }
+  </ng-template>
+
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group
       class="node-detail-tabs"
