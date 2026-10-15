@@ -36,7 +36,12 @@ public static partial class NodeGroupEndpoints
             catch (Npgsql.PostgresException e) when (e.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
         }).WithName("UpdateNodeGroup");
         groups.MapDelete("/{id:guid}", async (Guid id, NodeGroupRepository repository, CancellationToken ct) =>
-            await repository.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound())
+            await repository.DeleteAsync(id, ct) switch
+            {
+                "deleted" => (IResult)Results.NoContent(),
+                "in-use" => Results.Conflict(new { title = "Ce groupe est ciblé par un flow (version publiée ou brouillon). Retirez-le du flow avant de le supprimer." }),
+                _ => Results.NotFound()
+            })
             .WithName("DeleteNodeGroup");
         app.MapGet("/api/v1/nodes/{id:guid}/identity", async (Guid id, NodeGroupRepository repository, CancellationToken ct) =>
             await repository.GetNodeIdentityAsync(id, ct) is { } identity ? Results.Ok(identity) : Results.NotFound())

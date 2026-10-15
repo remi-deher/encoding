@@ -16,4 +16,4 @@ Le heartbeat et le jumelage transmettent le système, l’architecture du proces
 
 ## Stockage et accès
 
-La migration `0030_node_groups_and_labels` ajoute l’inventaire, les étiquettes et l’identité d’affichage aux nœuds, plus les groupes et leurs membres. Les mutations passent par les routes de gestion protégées par session administrateur et protection CSRF. Les lectures sont accessibles avec une session viewer. La suppression d’un groupe retire ses étiquettes héritées ; elle ne modifie pas les nœuds ni leur historique.
+La migration `0030_node_groups_and_labels` ajoute l’inventaire, les étiquettes et l’identité d’affichage aux nœuds, plus les groupes et leurs membres. Les mutations passent par les routes de gestion protégées par session administrateur et protection CSRF. Les lectures sont accessibles avec une session viewer. La suppression d’un groupe retire ses étiquettes héritées ; elle ne modifie pas les nœuds ni leur historique. Un groupe ciblé par une version publiée ou un brouillon de flow ne peut pas être supprimé (409) : le flow ne trouverait plus aucun worker éligible. Les nœuds retirés ne sont plus listés comme membres d’un groupe manuel.

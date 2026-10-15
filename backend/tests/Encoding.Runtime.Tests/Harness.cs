@@ -198,6 +198,37 @@ internal static partial class Harness
             Check(Encoding.Contracts.Nodes.NodeLabelSelector.Matches("gpu=nvidia,memory=large", identity.EffectiveLabels), "Combined group and label selectors match effective labels.");
             var node = await new NodeRepository(db).GetAsync(a, TimeSpan.FromHours(1), CancellationToken.None);
             Check(node?.DisplayName == "Transcode A", "The friendly name stays separate from the heartbeat name.");
+
+            var production = (await groups.ListAsync(CancellationToken.None)).Single(g => g.Name == "Production");
+            Check(production.NodeIds.Contains(b), "A manual group lists its active members.");
+            await using (var retire = db.CreateCommand("UPDATE cluster_nodes SET deleted_at=clock_timestamp() WHERE id=@id"))
+            { retire.Parameters.AddWithValue("id", b); await retire.ExecuteNonQueryAsync(); }
+            try
+            {
+                production = (await groups.ListAsync(CancellationToken.None)).Single(g => g.Name == "Production");
+                Check(!production.NodeIds.Contains(b) && production.NodeIds.Contains(a), "A removed node no longer appears as a group member.");
+            }
+            finally
+            {
+                await using var restore = db.CreateCommand("UPDATE cluster_nodes SET deleted_at=NULL WHERE id=@id");
+                restore.Parameters.AddWithValue("id", b); await restore.ExecuteNonQueryAsync();
+            }
+
+            var flowId = Guid.NewGuid();
+            await using (var reference = db.CreateCommand("""
+                INSERT INTO flows(id,current_version) VALUES(@flow,1);
+                INSERT INTO flow_versions(flow_id,version,definition) VALUES(@flow,1,@definition)
+                """))
+            {
+                reference.Parameters.AddWithValue("flow", flowId);
+                reference.Parameters.AddWithValue("definition", NpgsqlDbType.Jsonb, "{\"nodes\":[{\"configuration\":{\"targetGroupId\":\"" + production.Id + "\"}}]}");
+                await reference.ExecuteNonQueryAsync();
+            }
+            Check(await groups.DeleteAsync(production.Id, CancellationToken.None) == "in-use", "A group targeted by a flow version cannot be deleted.");
+            Check(await groups.GetAsync(production.Id, CancellationToken.None) is not null, "A refused deletion keeps the group.");
+            var unused = (await groups.ListAsync(CancellationToken.None)).Single(g => g.Name == "Workers RAM");
+            Check(await groups.DeleteAsync(unused.Id, CancellationToken.None) == "deleted", "An unused group is deleted.");
+            Check(await groups.DeleteAsync(unused.Id, CancellationToken.None) == "missing", "Deleting a missing group reports it.");
         }
         private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
         {
