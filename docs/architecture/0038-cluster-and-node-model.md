@@ -4,6 +4,17 @@ Statut : acceptée par Rémi (2026-10-15) pour le modèle cluster/nœud (section
 
 Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; un nœud serveur+worker qui rejoint un cluster devient worker seul, son serveur local s’arrête (3, précisé en 0039) ; approbation à chaque rattachement et, entre clusters liés, des deux côtés (4). Le stockage (PostgreSQL ou SQLite) et la synchronisation entre clusters sont traités dans les sections 8 et 9.
 
+## Correction du 2026-10-15 : nœud autonome, cluster, groupe
+
+Rémi précise le vocabulaire (il remplace la recommandation du point 1 « cluster implicite visible ») :
+
+- **Nœud autonome** : une installation seule, qui n'appartient à aucun cluster. L'interface et l'API l'appellent ainsi tant qu'aucun autre nœud ne dépend de lui. Techniquement l'identité de cluster interne (base, identifiant) peut subsister ; c'est un détail d'implémentation, pas un concept affiché.
+- **Cluster** : unité de gestion qui regroupe des nœuds (état partagé, baux, bibliothèques, administration) ; frontière d'autorité et de cohérence. Créer un cluster, c'est promouvoir un nœud autonome ; y joindre un nœud l'y rattache.
+- **Groupe de nœuds** : classement dans un cluster (0034), sans effet sur la gestion.
+- **Groupe de clusters** : classement entre clusters, **reporté** (hors périmètre pour l'instant).
+
+Mise en œuvre : la page Nœuds affiche « Nœud autonome » quand le cluster ne compte que ce nœud (`clusterNodeCount === 1`) et « Dans un cluster » sinon ; l'action de départ y est libellée « Réinitialiser le rattachement ». Les identifiants internes ne changent pas : pas de migration.
+
 ## Plan proposé par Rémi
 
 1. On peut créer un cluster depuis un nœud qui n'appartient à aucun cluster (nœud **autonome**).

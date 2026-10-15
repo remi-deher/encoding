@@ -149,6 +149,8 @@ export class NodeCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
   private readonly nodes = signal<readonly NodeResponse[]>([]);
+  /** Nœuds actifs du cluster : un seul signifie que ce nœud est autonome. */
+  protected readonly nodeCount = computed(() => this.nodes().length);
   private readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
   private readonly allLibraries = signal<readonly LibraryResponse[]>([]);
   private readonly nodeAccessByLibrary = signal<

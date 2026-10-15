@@ -5,8 +5,10 @@
           <h2 id="worker-node-heading">Ce nœud</h2>
           <p>Identité, rôles et rattachement à un cluster.</p>
         </div>
-        @if (workerStatus()?.isEnrolled) {
-          <span class="state-chip state-chip--connected">Connecté</span>
+        @if (standalone()) {
+          <span class="state-chip state-chip--connected">Nœud autonome</span>
+        } @else if (workerStatus()?.isEnrolled) {
+          <span class="state-chip state-chip--connected">Dans un cluster</span>
         } @else {
           <span class="state-chip">Non rattaché</span>
         }
@@ -24,7 +26,9 @@
           <div><dt>Capacité simultanée</dt><dd>{{ worker.maxConcurrentTasks }} tâche(s)</dd></div>
           <div><dt>Acceptation automatique</dt><dd>{{ worker.automaticEnrollmentEnabled ? 'Activée' : 'Désactivée' }}</dd></div>
           <div><dt>Outils détectés</dt><dd>{{ toolsLabel(worker) }}</dd></div>
-          @if (worker.isEnrolled) {
+          @if (standalone()) {
+            <div><dt>Rattachement</dt><dd>Autonome : aucun autre nœud ne dépend de lui. Rejoindre un cluster ou en inviter d’autres en fait un cluster.</dd></div>
+          } @else if (worker.isEnrolled) {
             <div><dt>Cluster</dt><dd>{{ worker.clusterName }}</dd></div>
             <div><dt>Identifiant du cluster</dt><dd>{{ worker.clusterId }}</dd></div>
           }
@@ -58,7 +62,7 @@
         @if (worker.clusterId) {
           <div class="cluster-actions">
             <button matButton="outlined" type="button" [disabled]="leaving()" (click)="leaveCluster()">
-              {{ leaving() ? 'Départ…' : worker.switching ? 'Annuler le changement' : 'Quitter ce cluster' }}
+              {{ leaving() ? 'Départ…' : worker.switching ? 'Annuler le changement' : standalone() ? 'Réinitialiser le rattachement' : 'Quitter ce cluster' }}
             </button>
           </div>
         }

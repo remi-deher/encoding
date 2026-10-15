@@ -48,6 +48,9 @@ export class LocalNodePanelComponent {
   readonly api = input.required<string>();
   /** Opération de changement de mode du nœud (serveur ou agent, selon l'interface ouverte). */
   readonly modeEndpoint = input.required<string>();
+  /** Nombre de nœuds du cluster, quand la page le connaît : un seul nœud = nœud autonome (architecture 0038, correction du 2026-10-15). */
+  readonly clusterNodeCount = input<number | null>(null);
+  protected readonly standalone = computed(() => !!this.status()?.isEnrolled && this.clusterNodeCount() === 1);
 
   private readonly http = inject(HttpClient);
   private readonly notifications = inject(NotificationService);

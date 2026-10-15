@@ -219,7 +219,7 @@
   </ng-template>
   <ng-template #actionContent>
     @if (actionType() === 'local-node') {
-      <app-local-node-panel api="/api/v1/local-node" modeEndpoint="/api/v1/node/mode" />
+      <app-local-node-panel api="/api/v1/local-node" modeEndpoint="/api/v1/node/mode" [clusterNodeCount]="nodeCount()" />
     } @else if (actionType() === 'identity') {
       @if (identityForm(); as form) {
         <app-record-form
