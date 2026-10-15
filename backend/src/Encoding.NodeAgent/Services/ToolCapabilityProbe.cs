@@ -8,7 +8,8 @@ namespace Encoding.NodeAgent.Services;
 public sealed class ToolCapabilityProbe(
     ProcessToolRunner processes,
     PluginProcessHost plugins,
-    NodeAgentOptions options) : IToolCapabilityProbe
+    NodeAgentOptions options,
+    ILogger<ToolCapabilityProbe> logger) : IToolCapabilityProbe
 {
     private static readonly Regex EncoderLine = new(
         @"^\s*(?<flags>[A-Z\.]{6})\s+(?<name>[A-Za-z0-9_-]+)\b",
@@ -17,6 +18,7 @@ public sealed class ToolCapabilityProbe(
     private readonly SemaphoreSlim gate = new(1, 1);
     private IReadOnlyList<NodeToolCapability>? cached;
     private DateTimeOffset refreshed;
+    private string? lastHardwareSummary;
 
     public async Task<IReadOnlyList<NodeToolCapability>> DiscoverAsync(CancellationToken ct)
     {
@@ -77,6 +79,7 @@ public sealed class ToolCapabilityProbe(
                         }
                     }
 
+                    if (id == "ffmpeg") LogHardwareEncoding(encoders, checks);
                     list.Add(new(id, version, ["video", "audio", "image", "subtitles", "general"],
                         acceleration, encoders, id == "ffmpeg" ? checks : null));
                 }
@@ -100,13 +103,42 @@ public sealed class ToolCapabilityProbe(
         finally { gate.Release(); }
     }
 
+    /// <summary>Journalise au démarrage (et à chaque rafraîchissement du cache) le GPU retenu ou la raison du repli CPU.</summary>
+    private void LogHardwareEncoding(IReadOnlyCollection<string> encoders, IReadOnlyList<NodeEncoderCapability> checks)
+    {
+        var usable = checks.Where(check => check.Status == "usable").Select(check => check.EncoderId).ToList();
+        var hardware = usable.Where(id => !id.StartsWith("lib", StringComparison.Ordinal)).ToList();
+        var device = GpuDeviceSelector.RenderDevice();
+        var devices = GpuDeviceSelector.RenderDevices();
+        var nvidia = GpuDeviceSelector.NvidiaPresent();
+        var summary = string.Join(",", hardware) + "|" + device + "|" + nvidia;
+        if (summary == lastHardwareSummary) return; // le cache se rafraîchit toutes les 5 minutes : ne journaliser que les changements
+        lastHardwareSummary = summary;
+        if (hardware.Count > 0)
+        {
+            logger.LogInformation("Encodage matériel actif : {Encoders} (périphérique de rendu {Device}, NVIDIA {Nvidia}, LIBVA_DRIVER_NAME={Driver}).",
+                string.Join(", ", hardware), device, nvidia ? "présent" : "absent",
+                Environment.GetEnvironmentVariable("LIBVA_DRIVER_NAME") ?? "automatique");
+            return;
+        }
+
+        var reasons = new List<string>();
+        if (!nvidia) reasons.Add("NVIDIA : ni /dev/nvidiactl ni nvidia-smi (NVIDIA Container Toolkit absent ou GPU non réservé)");
+        else if (!encoders.Any(id => id.EndsWith("_nvenc", StringComparison.Ordinal))) reasons.Add("NVIDIA : FFmpeg sans encodeur NVENC");
+        else reasons.Add("NVIDIA : présent mais NVENC inutilisable (pilote hôte sans capability video ?)");
+        if (devices.Count == 0) reasons.Add("Intel/AMD : aucun /dev/dri/renderD* (périphérique non monté dans le conteneur)");
+        else reasons.Add($"Intel/AMD : {string.Join(", ", devices)} présent(s), mais VAAPI/QSV inutilisable sur {device} "
+            + "(pilote VA-API manquant, droits sur le périphérique ou mauvais GPU ; voir `vainfo`, ENCODING_GPU_DEVICE, LIBVA_DRIVER_NAME)");
+        logger.LogWarning("Aucun encodage matériel utilisable, repli sur le CPU. {Reasons}", string.Join(" ; ", reasons));
+    }
+
     private async Task<bool> CheckEncoderAsync(string executable, VideoEncoderDescriptor encoder, CancellationToken ct)
     {
         var args = new List<string> { "-nostdin", "-hide_banner", "-v", "error" };
         if (encoder.Acceleration == "vaapi")
-            args.AddRange(["-vaapi_device", "/dev/dri/renderD128"]);
+            args.AddRange(["-vaapi_device", GpuDeviceSelector.RenderDevice()]);
         else if (encoder.Acceleration == "qsv")
-            args.AddRange(["-init_hw_device", "qsv=hw,child_device=/dev/dri/renderD128", "-filter_hw_device", "hw"]);
+            args.AddRange(["-init_hw_device", $"qsv=hw,child_device={GpuDeviceSelector.RenderDevice()}", "-filter_hw_device", "hw"]);
 
         args.AddRange(["-f", "lavfi", "-i", "color=c=black:s=64x64:r=1", "-frames:v", "1", "-an"]);
         if (encoder.Acceleration == "vaapi") args.AddRange(["-vf", "format=nv12,hwupload"]);
