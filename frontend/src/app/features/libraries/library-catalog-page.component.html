@@ -51,9 +51,22 @@
           [cards]="libraryCards()"
           [initiallyExpanded]="true"
           [collapsible]="false"
+          [cardContentTemplates]="{ 'library-processing': libraryProcessingCardContent }"
           ariaLabel="Accès, traitement et activité de la bibliothèque"
           emptyMessage="Aucune information disponible pour cette bibliothèque."
         />
+        <ng-template #libraryProcessingCardContent>
+          <div class="library-card-actions">
+            <app-drawer-action-button
+              label="Attribuer un flow"
+              (activated)="assignFlow()"
+            />
+            <app-drawer-action-button
+              label="Surveillance et limites"
+              (activated)="configureProcessing()"
+            />
+          </div>
+        </ng-template>
         @if (selectedLibrary()) {
           <app-data-table
             [columns]="mediaColumns"
@@ -76,10 +89,10 @@
             <button
               matButton="outlined"
               type="button"
-              [disabled]="selectedAccessesLoading()"
-              (click)="showLibraryNodes()"
+              [disabled]="selectedAccessesLoading() || accessFormLoading() || accessFormBusy()"
+              (click)="configureAccesses()"
             >
-              {{ selectedAccessesLoading() ? 'Chargement des nœuds…' : 'Voir les nœuds' }}
+              Modifier les accès
             </button>
           </section>
           @if (selectedAccesses().length) {
@@ -128,14 +141,9 @@
   </ng-template>
 
   <ng-template #detailHeaderActions>
-    @if (selectedLibrary(); as library) {
+    @if (selectedLibrary()) {
       <app-drawer-action-button
-        label="Surveillance et limites"
-        (activated)="configureProcessing()"
-      />
-      <app-drawer-action-button label="Attribuer un flow" (activated)="assignFlow()" />
-      <app-drawer-action-button
-        [label]="library.configuredNodeCount ? 'Modifier les accès' : 'Configurer les accès'"
+        label="Attribuer un nœud / groupe"
         (activated)="configureAccesses()"
       />
     }
