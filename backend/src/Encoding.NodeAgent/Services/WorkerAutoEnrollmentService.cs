@@ -1,5 +1,9 @@
 namespace Encoding.NodeAgent.Services;
 
+/// <summary>
+/// Enrôle le worker sans intervention : le nœud local de l'image unique rejoint toujours le serveur de son conteneur
+/// (architecture 0037) ; sinon, l'acceptation automatique optionnelle accepte un cluster unique détecté.
+/// </summary>
 public sealed class WorkerAutoEnrollmentService(
     NodeAgentOptions options,
     WorkerIdentityStore identityStore,
@@ -9,13 +13,15 @@ public sealed class WorkerAutoEnrollmentService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!options.AutomaticEnrollmentEnabled)
+        var localEnabled = options.LocalEnrollmentSecretFile is not null;
+        if (!options.AutomaticEnrollmentEnabled && !localEnabled)
         {
             logger.LogInformation("L’acceptation automatique des enrôlements est désactivée.");
             return;
         }
 
-        logger.LogInformation("L’acceptation automatique est activée ; un seul cluster détecté sera accepté automatiquement.");
+        if (localEnabled) logger.LogInformation("Le nœud local rejoint automatiquement le serveur de ce conteneur.");
+        if (options.AutomaticEnrollmentEnabled) logger.LogInformation("L’acceptation automatique est activée ; un seul cluster détecté sera accepté automatiquement.");
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -24,7 +30,15 @@ public sealed class WorkerAutoEnrollmentService(
                 var hasActivePairing = identity.PairingExpiresAt > DateTimeOffset.UtcNow
                     && !string.IsNullOrWhiteSpace(identity.PairingKey);
                 var clusters = discovery.List();
-                if (!identity.IsEnrolled && !hasActivePairing && clusters.Count == 1)
+                var local = clusters.FirstOrDefault(enrollment.IsLocalCluster);
+                // Un nœud qui a déjà choisi un autre cluster (jumelage en cours ou enrôlé) n'est pas ramené au serveur local.
+                var choseElsewhere = identity.HasCredentials && local is not null && identity.ClusterId != local.Id.ToString("D");
+                if (!identity.IsEnrolled && local is not null && !choseElsewhere)
+                {
+                    await enrollment.EnrollAsync(local.Id, stoppingToken);
+                    logger.LogInformation("Le nœud local a rejoint le cluster {ClusterId}.", local.Id);
+                }
+                else if (options.AutomaticEnrollmentEnabled && !identity.IsEnrolled && !hasActivePairing && clusters.Count == 1)
                 {
                     await enrollment.EnrollAsync(clusters[0].Id, stoppingToken);
                     logger.LogInformation("L’enrôlement automatique auprès du cluster {ClusterId} est terminé.", clusters[0].Id);

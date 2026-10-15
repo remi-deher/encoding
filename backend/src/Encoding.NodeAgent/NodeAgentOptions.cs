@@ -9,7 +9,8 @@ public sealed record NodeAgentOptions(
     bool AutomaticEnrollmentEnabled,
     TimeSpan HeartbeatInterval,
     int LocalApiPort,
-    IReadOnlyList<string> WorkerUiOrigins)
+    IReadOnlyList<string> WorkerUiOrigins,
+    string? LocalEnrollmentSecretFile = null)
 {
     public static NodeAgentOptions FromConfiguration(IConfiguration configuration)
     {
@@ -44,7 +45,8 @@ public sealed record NodeAgentOptions(
             configuration.GetValue("Worker:AutoAcceptEnrollment", false),
             TimeSpan.FromSeconds(intervalSeconds),
             localApiPort,
-            origins);
+            origins,
+            string.IsNullOrWhiteSpace(configuration[Encoding.Core.Nodes.LocalEnrollment.SecretFileSetting]) ? null : configuration[Encoding.Core.Nodes.LocalEnrollment.SecretFileSetting]);
     }
 
     private static string? NormalizeOptionalUrl(string? value)

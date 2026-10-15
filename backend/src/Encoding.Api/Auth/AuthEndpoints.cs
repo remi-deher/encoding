@@ -13,9 +13,11 @@ public static class AuthEndpoints
             Results.Ok(new AuthStatusResponse(await service.SetupRequiredAsync(ct), Current(http.User))))
             .AllowAnonymous().WithName("GetAuthStatus");
 
-        auth.MapPost("/setup", async (SetupRequest request, HttpContext http, AuthService service, AuthOptions options, CancellationToken ct) =>
+        auth.MapPost("/setup", async (SetupRequest request, HttpContext http, AuthService service, AuthOptions options, Encoding.Api.Nodes.LocalNodeRegistry localNode, CancellationToken ct) =>
         {
             var errors = AuthService.ValidateNewUser(request.Username, request.Password);
+            if (!Encoding.Api.Nodes.LocalNodeRegistry.IsValidName(request.NodeDisplayName))
+                errors["nodeDisplayName"] = [$"Le nom du nœud ne peut pas dépasser {Encoding.Api.Nodes.LocalNodeRegistry.MaximumNameLength} caractères."];
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
             var (outcome, _) = await service.SetupAsync(request, ct);
             switch (outcome)
@@ -25,6 +27,7 @@ public static class AuthEndpoints
                 case SetupOutcome.AlreadyConfigured:
                     return Results.Conflict(new { title = "Le cluster possède déjà un administrateur." });
             }
+            await localNode.RequestNameAsync(request.NodeDisplayName, ct);
             var login = await service.LoginAsync(request.Username, request.Password, ct);
             if (login is null) return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "Le compte a été créé mais la session n’a pas pu être ouverte.");
             SetSessionCookie(http, login.SessionToken, options);

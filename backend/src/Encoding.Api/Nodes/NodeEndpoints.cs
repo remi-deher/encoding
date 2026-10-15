@@ -1,6 +1,7 @@
 using Encoding.Api.Auth;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Nodes;
+using Encoding.Core.Nodes;
 
 namespace Encoding.Api.Nodes;
 
@@ -13,12 +14,18 @@ public static class NodeEndpoints
             NodeEnrollmentRequest request,
             NodeRepository repository,
             EnrollmentWindowRepository window,
+            LocalNodeRegistry localNode,
+            IConfiguration configuration,
+            HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
             var errors = NodeHeartbeatValidator.Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            var windowOpen = (await window.GetAsync(cancellationToken)).IsOpen;
+            // Le nœud local de l'image unique prouve son appartenance au conteneur par un secret de fichier : il est enrôlé d'office.
+            var isLocal = LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting], httpContext.Request.Headers[LocalEnrollment.HeaderName].ToString());
+            var windowOpen = isLocal || (await window.GetAsync(cancellationToken)).IsOpen;
             var node = await repository.EnrollAsync(request, windowOpen, cancellationToken);
+            if (node is not null && isLocal) await localNode.RegisterAsync(node.Id, cancellationToken);
             if (node is not null) return Results.Ok(node);
             return windowOpen
                 ? Results.Conflict(new { title = "Cet identifiant appartient déjà à un autre nœud." })
