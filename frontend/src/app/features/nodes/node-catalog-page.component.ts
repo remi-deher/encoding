@@ -387,7 +387,6 @@ export class NodeCatalogPageComponent {
           tone: maximum == null ? 'neutral' : 'accent',
         },
         tags: [],
-        initiallyExpanded: true,
         sections: [],
       },
       {
