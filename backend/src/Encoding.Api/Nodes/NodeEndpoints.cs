@@ -112,7 +112,12 @@ public static class NodeEndpoints
             }
 
             var node = await repository.RecordHeartbeatAsync(nodeId, providedToken, request, cancellationToken);
-            return node is null ? (IResult)Results.Unauthorized() : Results.Ok(node);
+            if (node is not null) return Results.Ok(node);
+            // 410 : l'identité a été retirée du cluster ; le jeton est effacé à ce retrait, donc seul l'identifiant permet de le reconnaître.
+            // Le nœud abandonne alors cette identité au lieu de rester « enrôlé » sans jamais être vu.
+            return await repository.IsRemovedAsync(nodeId, cancellationToken)
+                ? Results.Json(new { title = "Ce nœud a été retiré du cluster." }, statusCode: StatusCodes.Status410Gone)
+                : Results.Unauthorized();
         }).AllowAnonymous().WithName("RecordNodeHeartbeat");
 
         nodes.MapPost("/{nodeId:guid}/leave", async (Guid nodeId, NodeRepository repository, HttpContext httpContext, CancellationToken ct) =>
