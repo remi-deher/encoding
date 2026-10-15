@@ -69,7 +69,7 @@ interface EncoderGroup {
       />
       <div catalogue-table class="profile-layout">
         <section class="profile-list" aria-label="Profils d’encodage enregistrés">
-          <app-data-table
+          <app-data-table layout="cards"
             [columns]="columns"
             [rows]="filteredRows()"
             [rowOpenable]="true"

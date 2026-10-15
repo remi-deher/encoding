@@ -60,7 +60,7 @@ interface PackRow extends DataTableRow {
         selected="packs"
         (selectedChange)="onSectionChanged($event)"
       />
-      <app-data-table
+      <app-data-table layout="cards"
         catalogue-table
         [columns]="columns"
         [rows]="filteredRows()"

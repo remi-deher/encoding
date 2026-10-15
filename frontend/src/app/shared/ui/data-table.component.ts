@@ -13,7 +13,10 @@ import {
   ViewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
@@ -108,8 +111,11 @@ export interface DataTableListActionEvent {
   selector: 'app-data-table',
   imports: [
     BadgeListComponent,
+    MatButtonModule,
     MatCheckboxModule,
     MatDialogModule,
+    MatFormFieldModule,
+    MatSelectModule,
     MatSortModule,
     MatTableModule,
     NgTemplateOutlet,
@@ -142,7 +148,7 @@ export interface DataTableListActionEvent {
           }
         </div>
       }
-      @if (selectable()) {
+      @if (selectable() && layout() === 'table') {
         <button
           class="mobile-select-all"
           type="button"
@@ -187,160 +193,281 @@ export interface DataTableListActionEvent {
         </div>
       }
 
-      <table mat-table matSort [dataSource]="dataSource" class="data-table" multiTemplateDataRows>
-        @if (selectable()) {
-          <ng-container matColumnDef="select">
-            <th mat-header-cell *matHeaderCellDef class="selection-cell">
+      <ng-template #cellTpl let-column="column" let-row="row" let-isFirst="isFirst">
+        @if (column.toggle) {
+          <div>
+            <button
+              class="row-toggle"
+              [class.row-toggle_checked]="!!row[column.key]"
+              type="button"
+              role="switch"
+              [attr.aria-checked]="!!row[column.key]"
+              [attr.aria-label]="column.toggle.ariaLabel(row, !!row[column.key])"
+              [disabled]="column.toggle.disabledWhen?.(row) ?? false"
+              (click)="requestToggle(column, row)"
+            >
+              <span></span>
+            </button>
+            @if (column.toggle.showStatusLabel !== false) {
+              <span class="row-toggle-status">{{
+                row[column.key] ? 'Activée' : 'Désactivée'
+              }}</span>
+            }
+          </div>
+        } @else if (column.badges) {
+          <app-badge-list [badges]="badgesOf(row[column.key])" />
+        } @else if (rowOpenable() && isFirst) {
+          <button
+            class="row-open"
+            type="button"
+            [attr.aria-label]="rowOpenLabel() + ' ' + row[column.key]"
+            (click)="openRow(row, $event)"
+          >
+            {{ row[column.key] }}
+          </button>
+        } @else {
+          {{ row[column.key] }}
+        }
+      </ng-template>
+
+      @if (layout() === 'cards') {
+        @if (selectable() || sortableColumns().length) {
+          <div class="card-toolbar">
+            @if (selectable()) {
               <mat-checkbox
                 [checked]="isAllSelected()"
                 [indeterminate]="selection.hasValue() && !isAllSelected()"
-                aria-label="Sélectionner toutes les lignes"
                 (change)="toggleAll()"
-              />
-            </th>
-            <td mat-cell *matCellDef="let row" class="selection-cell" data-label="Sélection">
-              <mat-checkbox
-                [checked]="selection.isSelected(row)"
-                aria-label="Sélectionner cette ligne"
-                (click)="captureCheckboxClick($event)"
-                (change)="toggleRow(row)"
-              />
-            </td>
-          </ng-container>
-        }
-
-        @for (column of columns(); track column.key; let isFirst = $first) {
-          <ng-container [matColumnDef]="column.key">
-            <th
-              mat-header-cell
-              *matHeaderCellDef
-              [mat-sort-header]="column.key"
-              [disabled]="!column.sortable"
-            >
-              {{ column.label }}
-            </th>
-            <td mat-cell *matCellDef="let row" [attr.data-label]="column.label">
-              @if (column.toggle) {
-                <div>
-                  <button
-                    class="row-toggle"
-                    [class.row-toggle_checked]="!!row[column.key]"
-                    type="button"
-                    role="switch"
-                    [attr.aria-checked]="!!row[column.key]"
-                    [attr.aria-label]="column.toggle.ariaLabel(row, !!row[column.key])"
-                    [disabled]="column.toggle.disabledWhen?.(row) ?? false"
-                    (click)="requestToggle(column, row)"
-                  >
-                    <span></span>
-                  </button>
-                  @if (column.toggle.showStatusLabel !== false) {
-                    <span class="row-toggle-status">{{
-                      row[column.key] ? 'Activée' : 'Désactivée'
-                    }}</span>
-                  }
-                </div>
-              } @else if (column.badges) {
-                <app-badge-list [badges]="badgesOf(row[column.key])" />
-              } @else if (rowOpenable() && isFirst) {
-                <button
-                  class="row-open"
-                  type="button"
-                  [attr.aria-label]="rowOpenLabel() + ' ' + row[column.key]"
-                  (click)="openRow(row, $event)"
-                >
-                  {{ row[column.key] }}
-                </button>
-              } @else {
-                {{ row[column.key] }}
-              }
-            </td>
-          </ng-container>
-        }
-
-        @if (rowActions().length > 0 && separateRowActionColumns()) {
-          @for (action of rowActions(); track action.id) {
-            <ng-container [matColumnDef]="'row-action-' + action.id">
-              <th mat-header-cell *matHeaderCellDef>{{ action.label }}</th>
-              <td
-                mat-cell
-                *matCellDef="let row"
-                class="row-actions-cell"
-                [attr.data-label]="action.label"
+                >Tout sélectionner</mat-checkbox
               >
-                @if (!action.visibleWhen || action.visibleWhen(row)) {
-                  <button
-                    class="row-action"
-                    [class.row-action_danger]="action.tone === 'danger'"
-                    type="button"
-                    [attr.aria-label]="rowActionLabel(action, row) + ' ' + rowActionSubject(row)"
-                    [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
-                    [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
-                    (click)="requestRowAction(action, row)"
+            }
+            @if (sortableColumns().length) {
+              <div class="card-sort">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Trier par</mat-label>
+                  <mat-select
+                    [value]="cardSortKey()"
+                    (selectionChange)="cardSortKey.set($event.value)"
                   >
-                    {{ rowActionLabel(action, row) }}
-                  </button>
+                    @for (column of sortableColumns(); track column.key) {
+                      <mat-option [value]="column.key">{{ column.label }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [attr.aria-label]="cardSortDescending() ? 'Tri décroissant' : 'Tri croissant'"
+                  (click)="cardSortDescending.set(!cardSortDescending())"
+                >
+                  {{ cardSortDescending() ? 'Z → A' : 'A → Z' }}
+                </button>
+              </div>
+            }
+          </div>
+        }
+        @if (cardRows().length === 0) {
+          <p class="card-empty">{{ emptyMessage() }}</p>
+        } @else {
+          <ul class="card-grid">
+            @for (row of cardRows(); track row) {
+              <li
+                class="data-card"
+                [class.data-card_selected]="selection.isSelected(row)"
+                [class.data-card_expanded]="isExpandedRow(row)"
+              >
+                <header class="data-card-header">
+                  @if (selectable()) {
+                    <mat-checkbox
+                      [checked]="selection.isSelected(row)"
+                      aria-label="Sélectionner cette ligne"
+                      (click)="captureCheckboxClick($event)"
+                      (change)="toggleRow(row)"
+                    />
+                  }
+                  <h3 class="data-card-title">
+                    <ng-container
+                      [ngTemplateOutlet]="cellTpl"
+                      [ngTemplateOutletContext]="{
+                        column: columns()[0],
+                        row: row,
+                        isFirst: true,
+                      }"
+                    />
+                  </h3>
+                </header>
+                <dl class="data-card-fields">
+                  @for (column of columns().slice(1); track column.key) {
+                    <div class="data-card-field">
+                      <dt>{{ column.label }}</dt>
+                      <dd>
+                        <ng-container
+                          [ngTemplateOutlet]="cellTpl"
+                          [ngTemplateOutletContext]="{ column: column, row: row, isFirst: false }"
+                        />
+                      </dd>
+                    </div>
+                  }
+                </dl>
+                @if (rowActions().length > 0) {
+                  <footer class="data-card-actions">
+                    @for (action of rowActions(); track action.id) {
+                      @if (!action.visibleWhen || action.visibleWhen(row)) {
+                        <button
+                          [matButton]="action.tone === 'danger' ? 'filled' : 'outlined'"
+                          [class.data-card-action_danger]="action.tone === 'danger'"
+                          type="button"
+                          [attr.aria-label]="
+                            rowActionLabel(action, row) + ' ' + rowActionSubject(row)
+                          "
+                          [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
+                          [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
+                          (click)="requestRowAction(action, row)"
+                        >
+                          {{ rowActionLabel(action, row) }}
+                        </button>
+                      }
+                    }
+                  </footer>
+                }
+                @if (rowDetail() && isExpandedRow(row)) {
+                  <div class="data-card-detail" [id]="rowDetailId(row)">
+                    <ng-container
+                      [ngTemplateOutlet]="rowDetail()!.template"
+                      [ngTemplateOutletContext]="{ $implicit: row }"
+                    />
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        }
+      } @else {
+        <table mat-table matSort [dataSource]="dataSource" class="data-table" multiTemplateDataRows>
+          @if (selectable()) {
+            <ng-container matColumnDef="select">
+              <th mat-header-cell *matHeaderCellDef class="selection-cell">
+                <mat-checkbox
+                  [checked]="isAllSelected()"
+                  [indeterminate]="selection.hasValue() && !isAllSelected()"
+                  aria-label="Sélectionner toutes les lignes"
+                  (change)="toggleAll()"
+                />
+              </th>
+              <td mat-cell *matCellDef="let row" class="selection-cell" data-label="Sélection">
+                <mat-checkbox
+                  [checked]="selection.isSelected(row)"
+                  aria-label="Sélectionner cette ligne"
+                  (click)="captureCheckboxClick($event)"
+                  (change)="toggleRow(row)"
+                />
+              </td>
+            </ng-container>
+          }
+
+          @for (column of columns(); track column.key; let isFirst = $first) {
+            <ng-container [matColumnDef]="column.key">
+              <th
+                mat-header-cell
+                *matHeaderCellDef
+                [mat-sort-header]="column.key"
+                [disabled]="!column.sortable"
+              >
+                {{ column.label }}
+              </th>
+              <td mat-cell *matCellDef="let row" [attr.data-label]="column.label">
+                <ng-container
+                  [ngTemplateOutlet]="cellTpl"
+                  [ngTemplateOutletContext]="{ column: column, row: row, isFirst: isFirst }"
+                />
+              </td>
+            </ng-container>
+          }
+
+          @if (rowActions().length > 0 && separateRowActionColumns()) {
+            @for (action of rowActions(); track action.id) {
+              <ng-container [matColumnDef]="'row-action-' + action.id">
+                <th mat-header-cell *matHeaderCellDef>{{ action.label }}</th>
+                <td
+                  mat-cell
+                  *matCellDef="let row"
+                  class="row-actions-cell"
+                  [attr.data-label]="action.label"
+                >
+                  @if (!action.visibleWhen || action.visibleWhen(row)) {
+                    <button
+                      class="row-action"
+                      [class.row-action_danger]="action.tone === 'danger'"
+                      type="button"
+                      [attr.aria-label]="rowActionLabel(action, row) + ' ' + rowActionSubject(row)"
+                      [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
+                      [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
+                      (click)="requestRowAction(action, row)"
+                    >
+                      {{ rowActionLabel(action, row) }}
+                    </button>
+                  }
+                </td>
+              </ng-container>
+            }
+          }
+
+          @if (rowActions().length > 0 && !separateRowActionColumns()) {
+            <ng-container matColumnDef="row-actions">
+              <th mat-header-cell *matHeaderCellDef>Actions</th>
+              <td mat-cell *matCellDef="let row" class="row-actions-cell" data-label="Actions">
+                @for (action of rowActions(); track action.id) {
+                  @if (!action.visibleWhen || action.visibleWhen(row)) {
+                    <button
+                      class="row-action"
+                      [class.row-action_danger]="action.tone === 'danger'"
+                      type="button"
+                      [attr.aria-label]="rowActionLabel(action, row) + ' ' + rowActionSubject(row)"
+                      [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
+                      [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
+                      (click)="requestRowAction(action, row)"
+                    >
+                      {{ rowActionLabel(action, row) }}
+                    </button>
+                  }
                 }
               </td>
             </ng-container>
           }
-        }
 
-        @if (rowActions().length > 0 && !separateRowActionColumns()) {
-          <ng-container matColumnDef="row-actions">
-            <th mat-header-cell *matHeaderCellDef>Actions</th>
-            <td mat-cell *matCellDef="let row" class="row-actions-cell" data-label="Actions">
-              @for (action of rowActions(); track action.id) {
-                @if (!action.visibleWhen || action.visibleWhen(row)) {
-                  <button
-                    class="row-action"
-                    [class.row-action_danger]="action.tone === 'danger'"
-                    type="button"
-                    [attr.aria-label]="rowActionLabel(action, row) + ' ' + rowActionSubject(row)"
-                    [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
-                    [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
-                    (click)="requestRowAction(action, row)"
-                  >
-                    {{ rowActionLabel(action, row) }}
-                  </button>
+          @if (rowDetail()) {
+            <ng-container matColumnDef="expandedDetail">
+              <td mat-cell *matCellDef="let row" [attr.colspan]="displayedColumnKeys().length">
+                @if (isExpandedRow(row)) {
+                  <ng-container
+                    [ngTemplateOutlet]="rowDetail()!.template"
+                    [ngTemplateOutletContext]="{ $implicit: row }"
+                  />
                 }
-              }
-            </td>
-          </ng-container>
-        }
+              </td>
+            </ng-container>
+          }
 
-        @if (rowDetail()) {
-          <ng-container matColumnDef="expandedDetail">
-            <td mat-cell *matCellDef="let row" [attr.colspan]="displayedColumnKeys().length">
-              @if (isExpandedRow(row)) {
-                <ng-container
-                  [ngTemplateOutlet]="rowDetail()!.template"
-                  [ngTemplateOutletContext]="{ $implicit: row }"
-                />
-              }
-            </td>
-          </ng-container>
-        }
-
-        <tr mat-header-row *matHeaderRowDef="displayedColumnKeys()"></tr>
-        <tr
-          mat-row
-          *matRowDef="let row; columns: displayedColumnKeys()"
-          [attr.aria-selected]="selectable() ? selection.isSelected(row) : null"
-        ></tr>
-        @if (rowDetail()) {
+          <tr mat-header-row *matHeaderRowDef="displayedColumnKeys()"></tr>
           <tr
             mat-row
-            class="detail-row"
-            *matRowDef="let row; columns: ['expandedDetail']; when: isExpandedRowPredicate"
+            *matRowDef="let row; columns: displayedColumnKeys()"
+            [attr.aria-selected]="selectable() ? selection.isSelected(row) : null"
           ></tr>
-        }
-        <tr class="mat-row empty-row" *matNoDataRow>
-          <td class="mat-cell" [attr.colspan]="displayedColumnKeys().length">
-            {{ emptyMessage() }}
-          </td>
-        </tr>
-      </table>
+          @if (rowDetail()) {
+            <tr
+              mat-row
+              class="detail-row"
+              *matRowDef="let row; columns: ['expandedDetail']; when: isExpandedRowPredicate"
+            ></tr>
+          }
+          <tr class="mat-row empty-row" *matNoDataRow>
+            <td class="mat-cell" [attr.colspan]="displayedColumnKeys().length">
+              {{ emptyMessage() }}
+            </td>
+          </tr>
+        </table>
+      }
     </div>
   `,
   styleUrl: './data-table.component.scss',
@@ -349,6 +476,8 @@ export class DataTableComponent {
   private readonly dialog = inject(MatDialog);
   readonly columns = input.required<readonly DataTableColumn[]>();
   readonly rows = input.required<readonly DataTableRow[]>();
+  /** `cards` présente chaque ligne comme une carte : plus d'informations lisibles que le tableau dense. */
+  readonly layout = input<'table' | 'cards'>('table');
   readonly emptyMessage = input('Aucun résultat.');
   readonly selectable = input(false);
   readonly rowOpenable = input(false);
@@ -371,6 +500,25 @@ export class DataTableComponent {
   readonly toggleChange = output<DataTableToggleEvent>();
   readonly rowOpen = output<DataTableRow>();
   readonly selectionAction = output<DataTableSelectionActionEvent>();
+
+  protected readonly cardSortKey = signal<string | null>(null);
+  protected readonly cardSortDescending = signal(false);
+  protected readonly sortableColumns = computed(() =>
+    this.columns().filter((column) => column.sortable),
+  );
+  protected readonly cardRows = computed(() => {
+    const rows = [...this.rows()];
+    const key = this.cardSortKey();
+    if (!key) return rows;
+    const direction = this.cardSortDescending() ? -1 : 1;
+    return rows.sort(
+      (a, b) =>
+        direction *
+        String(this.sortValue(a, key)).localeCompare(String(this.sortValue(b, key)), 'fr', {
+          numeric: true,
+        }),
+    );
+  });
 
   protected readonly dataSource = new MatTableDataSource<DataTableRow>();
   protected readonly selection = new SelectionModel<DataTableRow>(true, []);
@@ -398,11 +546,13 @@ export class DataTableComponent {
       this.dataSource.data = [...this.rows()];
     });
 
-    this.dataSource.sortingDataAccessor = (row, property) => {
-      const sortValueKey = this.columns().find((column) => column.key === property)?.sortValueKey;
-      const value = row[sortValueKey ?? property];
-      return typeof value === 'boolean' ? Number(value) : (value ?? '');
-    };
+    this.dataSource.sortingDataAccessor = (row, property) => this.sortValue(row, property);
+  }
+
+  private sortValue(row: DataTableRow, property: string): string | number {
+    const sortValueKey = this.columns().find((column) => column.key === property)?.sortValueKey;
+    const value = row[sortValueKey ?? property];
+    return typeof value === 'boolean' ? Number(value) : (value ?? '');
   }
 
   protected badgesOf(value: DataTableValue | undefined): string[] {

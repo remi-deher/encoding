@@ -51,6 +51,7 @@ interface UserRow extends DataTableRow {
         <button matButton="filled" type="button" (click)="newUser()">Nouvel utilisateur</button>
       </ng-template>
       <app-data-table
+        layout="cards"
         catalogue-table
         [columns]="columns"
         [rows]="filteredRows()"
