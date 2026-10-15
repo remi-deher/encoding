@@ -8,20 +8,28 @@
   [detailDescription]="detailDescription()"
   [catalogState]="loadState()"
   [catalogMessage]="catalogMessage()"
+  drawerSize="standard"
+  [drawerModal]="true"
   (detailClosed)="onDetailClosed()"
   (actionClosed)="closeCreateNode()"
   filterLabel="Rôle du nœud"
   note="L’état et les capacités proviennent du dernier signal reçu. Le statut en ligne est calculé par le cluster."
 >
   <ng-template #pageActions>
-    <a matButton="outlined" routerLink="/node-groups">Groupes de nœuds</a>
-    @if (isAdmin()) {
-      <button matButton="outlined" type="button" (click)="openLocalNode()">
-        Ce nœud et son cluster
-      </button>
-    }
+    <a matButton="tonal" routerLink="/node-groups">Groupes de nœuds</a>
     <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
   </ng-template>
+
+  <ng-container catalogue-summary>
+    @if (isAdmin()) {
+      <app-context-banner [title]="bannerTitle()" [description]="bannerDescription()">
+        <button banner-actions matButton="outlined" type="button" (click)="openLocalNode()">
+          Ce nœud et son cluster
+        </button>
+      </app-context-banner>
+    }
+    <app-summary-tiles label="Synthèse des nœuds" [tiles]="summaryTiles()" />
+  </ng-container>
 
   <div catalogue-filters>
     <app-category-tabs

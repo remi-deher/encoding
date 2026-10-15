@@ -9,6 +9,10 @@ import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models
 @Injectable({ providedIn: 'root' })
 export class ClusterApi {
   private readonly http = inject(HttpClient);
+  /** Identité du cluster : `standalone` vrai tant qu'aucun cluster n'a été créé et qu'un seul nœud est actif (architecture 0045). */
+  identity() {
+    return this.http.get<{ id: string; name: string; standalone: boolean }>('/api/v1/cluster');
+  }
   listNodes() {
     return this.http.get<readonly NodeResponse[]>('/api/v1/nodes');
   }

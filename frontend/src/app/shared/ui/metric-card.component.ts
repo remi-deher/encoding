@@ -5,7 +5,7 @@ import { MatCardModule } from '@angular/material/card';
   selector: 'app-metric-card',
   imports: [MatCardModule],
   template: `
-    <mat-card appearance="outlined" class="metric-card">
+    <mat-card appearance="outlined" class="metric-card" [class.metric-card_attention]="tone() === 'attention'">
       <mat-card-content>
         <p class="metric-label">{{ label() }}</p>
         <p class="metric-value">{{ value() }}</p>
@@ -19,4 +19,6 @@ export class MetricCardComponent {
   readonly label = input.required<string>();
   readonly value = input.required<string>();
   readonly detail = input.required<string>();
+  /** `attention` teinte la carte quand une décision est attendue. */
+  readonly tone = input<'default' | 'attention'>('default');
 }
