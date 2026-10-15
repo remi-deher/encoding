@@ -45,7 +45,7 @@ public sealed class WorkerEnrollmentService(
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(cluster.ApiBaseUrl), "api/v1/nodes/enroll"))
         {
-            Content = JsonContent.Create(request)
+            Content = JsonContent.Create(request, options: AgentJson.Options)
         };
         // Le secret du conteneur n'est présenté qu'au serveur local : jamais à un cluster distant.
         if (IsLocalCluster(cluster) && LocalEnrollment.Read(options.LocalEnrollmentSecretFile) is { } secret)
@@ -199,7 +199,8 @@ public sealed class WorkerEnrollmentService(
             response = await client.PostAsJsonAsync(
                 new Uri(new Uri(cluster.ApiBaseUrl), "api/v1/nodes/enrollment-requests"),
                 request,
-                cancellationToken: cancellationToken);
+                AgentJson.Options,
+                cancellationToken);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {

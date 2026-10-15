@@ -16,11 +16,11 @@ public sealed class RuntimeClient : IDisposable
     private string Route(string path)=>$"api/v1/runtime/nodes/{identity.Id:D}/{path}";
     public async Task<T?> PostAsync<T>(string path,object body,CancellationToken ct)
     {
-        using var response=await http.PostAsJsonAsync(Route(path),body,ct); response.EnsureSuccessStatusCode();
-        return response.StatusCode==HttpStatusCode.NoContent?default:await response.Content.ReadFromJsonAsync<T>(ct);
+        using var response=await http.PostAsJsonAsync(Route(path),body,AgentJson.Options,ct); response.EnsureSuccessStatusCode();
+        return response.StatusCode==HttpStatusCode.NoContent?default:await response.Content.ReadFromJsonAsync<T>(AgentJson.Options,ct);
     }
-    public async Task<T> GetAsync<T>(string path,CancellationToken ct)=>(await http.GetFromJsonAsync<T>(Route(path),ct))!;
-    public async Task<ExecutionResponse> ExecutionAsync(Guid id,CancellationToken ct)=>(await http.GetFromJsonAsync<ExecutionResponse>($"api/v1/executions/{id:D}",ct))!;
+    public async Task<T> GetAsync<T>(string path,CancellationToken ct)=>(await http.GetFromJsonAsync<T>(Route(path),AgentJson.Options,ct))!;
+    public async Task<ExecutionResponse> ExecutionAsync(Guid id,CancellationToken ct)=>(await http.GetFromJsonAsync<ExecutionResponse>($"api/v1/executions/{id:D}",AgentJson.Options,ct))!;
     public async Task PutAsync(Guid id,long epoch,string file,string sha,bool original,CancellationToken ct,string? inputPath=null)
     {
         await using var stream=File.OpenRead(file); using var content=new StreamContent(stream);
