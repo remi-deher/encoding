@@ -1,0 +1,92 @@
+name: Release
+# Publie les images Docker (api et node-agent) sur Docker Hub quand la CI de main est verte.
+# Secrets requis (Settings > Secrets and variables > Actions) : DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', 'frontend/**', '.github/workflows/release.yml']
+  workflow_dispatch:
+concurrency:
+  group: release
+  cancel-in-progress: false
+permissions:
+  contents: write
+  checks: read
+  pull-requests: read
+jobs:
+  wait-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      green: ${{ steps.wait.outputs.green }}
+    steps:
+      - id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          sleep 60 # laisse les workflows Backend et Frontend s'enregistrer
+          # Les CI Backend et Frontend ont des filtres de chemins : un commit qui ne touche
+          # ni backend/ ni frontend/ n'a pas de check-runs. On se rabat alors sur les derniers
+          # commits de main qui ont modifié ces dossiers.
+          ci_shas="$SHA"
+          for _ in $(seq 1 120); do
+            runs="$(for s in $ci_shas; do gh api "repos/${GITHUB_REPOSITORY}/commits/${s}/check-runs?per_page=100" \
+              --jq '[.check_runs[] | select(.name != "wait-ci" and .name != "publish")]'; done | jq -s 'add')"
+            if [ "$(jq length <<<"$runs")" -eq 0 ] && [ "$ci_shas" = "$SHA" ]; then
+              ci_shas="$(for d in backend frontend; do gh api "repos/${GITHUB_REPOSITORY}/commits?sha=${SHA}&path=${d}&per_page=1" --jq '.[0].sha // empty'; done | sort -u | tr '\n' ' ')"
+              [ -n "$ci_shas" ] || ci_shas="$SHA"
+              continue
+            fi
+            total="$(jq length <<<"$runs")"
+            pending="$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")"
+            failed="$(jq '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not))] | length' <<<"$runs")"
+            if [ "$failed" -gt 0 ]; then echo "CI en échec : pas de publication."; echo green=false >> "$GITHUB_OUTPUT"; exit 0; fi
+            if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ]; then echo green=true >> "$GITHUB_OUTPUT"; exit 0; fi
+            sleep 20
+          done
+          echo "Délai dépassé en attendant la CI."; echo green=false >> "$GITHUB_OUTPUT"
+  publish:
+    needs: wait-ci
+    if: needs.wait-ci.outputs.green == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '[.[].labels[].name] | join(",")' || true)"
+          echo "version=$(PR_LABELS="$labels" .github/scripts/next-version.sh "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/encoding-api:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/encoding-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.Agent
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/encoding-node-agent:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/encoding-node-agent:latest
+          cache-from: type=gha,scope=agent
+          cache-to: type=gha,scope=agent,mode=max
+      - name: Tag git
+        run: |
+          git tag "v${{ steps.version.outputs.version }}" "$GITHUB_SHA"
+          git push origin "v${{ steps.version.outputs.version }}"
