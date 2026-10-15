@@ -5,18 +5,49 @@ const { localNodeSheet, formatLastSignal } = await loadModel('node-management');
 
 const NOW = Date.parse('2026-10-15T12:00:00Z');
 const status = {
-  nodeId: 'n1', name: 'nas', roles: ['server', 'worker'], maxConcurrentTasks: 2,
-  capabilities: [{ toolId: 'ffmpeg', version: '7.1', mediaTypes: [], accelerationTypes: ['vaapi'],
-    encoderChecks: [{ encoderId: 'libx265', status: 'usable' }, { encoderId: 'hevc_vaapi', status: 'detected' }] }],
-  clusterName: 'Maison', switchFailure: null,
+  nodeId: 'n1',
+  name: 'nas',
+  roles: ['server', 'worker'],
+  maxConcurrentTasks: 2,
+  capabilities: [
+    {
+      toolId: 'ffmpeg',
+      version: '7.1',
+      mediaTypes: [],
+      accelerationTypes: ['vaapi'],
+      encoderChecks: [
+        { encoderId: 'libx265', status: 'usable' },
+        { encoderId: 'hevc_vaapi', status: 'detected' },
+      ],
+    },
+  ],
+  clusterName: 'Maison',
+  switchFailure: null,
 };
 const node = {
-  id: 'n1', displayName: 'NAS principal', lastSeenAt: '2026-10-15T11:59:56Z', desiredRoles: null,
-  inventory: { operatingSystem: 'Linux', architecture: 'X64', processorCount: 16, memoryMb: 32768,
-    processorModel: 'AMD Ryzen 7 5700G', gpus: [{ name: 'AMD 0x1638', driver: 'amdgpu', device: 'card0' }] },
+  id: 'n1',
+  displayName: 'NAS principal',
+  lastSeenAt: '2026-10-15T11:59:56Z',
+  desiredRoles: null,
+  inventory: {
+    operatingSystem: 'Linux',
+    architecture: 'X64',
+    processorCount: 16,
+    memoryMb: 32768,
+    processorModel: 'AMD Ryzen 7 5700G',
+    gpus: [{ name: 'AMD 0x1638', driver: 'amdgpu', device: 'card0' }],
+  },
 };
-const base = { status, node, mode: { server: true, worker: true }, standalone: false, clusterName: 'Maison',
-  agentUnavailable: false, activeTasks: 1, now: NOW };
+const base = {
+  status,
+  node,
+  mode: { server: true, worker: true },
+  standalone: false,
+  clusterName: 'Maison',
+  agentUnavailable: false,
+  activeTasks: 1,
+  now: NOW,
+};
 const section = (sheet, id) => sheet.sections.find((s) => s.id === id);
 
 test('a healthy member shows load, hardware, CPU model, GPU and tools', () => {
@@ -33,17 +64,29 @@ test('a healthy member shows load, hardware, CPU model, GPU and tools', () => {
   assert.match(cpu.detail, /32 Go/);
   assert.match(gpu.detail, /pilote amdgpu/);
   const tool = section(sheet, 'capabilities').items[0];
-  assert.deepEqual(tool.badges.map((b) => b.label), ['1 encodeur(s) vérifié(s)', '1 détecté(s), non vérifié(s)', 'VAAPI']);
+  assert.deepEqual(
+    tool.badges.map((b) => b.label),
+    ['1 encodeur(s) vérifié(s)', '1 détecté(s), non vérifié(s)', 'VAAPI'],
+  );
 });
 
 test('a disabled worker has no processing metric and no tools', () => {
-  const sheet = localNodeSheet({ ...base, mode: { server: true, worker: false }, activeTasks: null });
+  const sheet = localNodeSheet({
+    ...base,
+    mode: { server: true, worker: false },
+    activeTasks: null,
+  });
   assert.equal(section(sheet, 'state').metrics[0].value, 'Non applicable');
   assert.equal(section(sheet, 'capabilities').items.length, 0);
 });
 
 test('an unreachable agent keeps last known values and never shows zero', () => {
-  const sheet = localNodeSheet({ ...base, agentUnavailable: true, activeTasks: null, now: NOW + 14 * 60_000 });
+  const sheet = localNodeSheet({
+    ...base,
+    agentUnavailable: true,
+    activeTasks: null,
+    now: NOW + 14 * 60_000,
+  });
   assert.equal(sheet.notices[0].tone, 'danger');
   assert.match(section(sheet, 'state').items[0].badges[0].label, /Dernier état connu/);
   assert.equal(section(sheet, 'state').metrics[0].value, 'Indisponible');
