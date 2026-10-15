@@ -1,6 +1,6 @@
 import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
-import { nodeLifecycle } from '../../shared/models/cluster-health';
+import { nodeLifecycle, NODE_LIFECYCLE_LABELS } from '../../shared/models/cluster-health';
 import { firstValueFrom } from 'rxjs';
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../../shared/models/auth';
@@ -23,6 +23,19 @@ import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../core/auth/auth.service';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { LocalNodeController } from '../../shared/services/local-node-controller';
+import { GuidedSetupComponent } from '../../shared/ui/guided-setup.component';
+import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
+import {
+  AUTONOMOUS_CARDS,
+  CREATE_CLUSTER_FORM,
+  NODE_MANAGEMENT_TABS,
+  clusterAddressForm,
+  clusterJoinSteps,
+  localNodeCards,
+} from '../../shared/models/node-management';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
@@ -50,11 +63,10 @@ import {
   DataTableRow,
   DataTableRowAction,
   DataTableToggleEvent,
+  DataTableSelectionAction,
+  DataTableSelectionActionEvent,
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
-import { LocalNodePanelComponent } from '../../shared/ui/local-node-panel.component';
-import { ResourceCardAction, ResourceCardComponent, ResourceCardFact, ResourceCardMeter, ResourceCardTag } from '../../shared/ui/resource-card.component';
-import type { StatusTone } from '../../shared/ui/status-badge.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { NodeModeController } from '../../shared/services/node-mode-controller';
@@ -116,20 +128,6 @@ interface NodeRecord extends DataTableRow {
   readonly lastSignal: string;
 }
 
-interface NodeCard {
-  readonly id: string;
-  readonly title: string;
-  readonly statusLabel: string;
-  readonly statusTone: StatusTone;
-  readonly badges: readonly string[];
-  readonly tags: readonly ResourceCardTag[];
-  readonly facts: readonly ResourceCardFact[];
-  readonly note: string;
-  readonly meter: ResourceCardMeter | null;
-  readonly actions: readonly ResourceCardAction[];
-  readonly order: number;
-}
-
 const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: string }[] = [
   { value: 'server', label: 'Serveur' },
   { value: 'worker', label: 'Worker' },
@@ -137,6 +135,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
 
 @Component({
   selector: 'app-node-catalog-page',
+  providers: [LocalNodeController],
   imports: [
     DataTableComponent,
     DetailFieldListComponent,
@@ -150,8 +149,9 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     RecordFormComponent,
     LibraryNodeAccessFormComponent,
     DrawerActionButtonComponent,
-    LocalNodePanelComponent,
-    ResourceCardComponent,
+    GuidedSetupComponent,
+    StatusBadgeComponent,
+    MatMenuModule,
     SummaryTilesComponent,
     ContextBannerComponent,
     DatePipe,
@@ -181,20 +181,110 @@ export class NodeCatalogPageComponent {
   private readonly libraryAccessLoadState = signal<'loading' | 'ready' | 'error'>('loading');
 
   protected readonly isAdmin = inject(AuthService).isAdmin;
-  protected readonly clusterIdentity = signal<{ name: string; standalone: boolean } | null>(null);
-  protected readonly bannerTitle = computed(() => {
-    const identity = this.clusterIdentity();
-    if (!identity) return 'Ce nœud et son cluster';
-    return identity.standalone ? 'Nœud autonome' : `Cluster ${identity.name}`;
+  protected readonly local = inject(LocalNodeController);
+  protected readonly clusterIdentity = this.local.identity;
+  protected readonly pageTab = signal('node');
+  protected readonly managementTabs = NODE_MANAGEMENT_TABS;
+  protected readonly createClusterForm = CREATE_CLUSTER_FORM;
+  protected readonly autonomousCards = AUTONOMOUS_CARDS;
+  protected readonly handset = toSignal(
+    inject(BreakpointObserver)
+      .observe('(max-width: 700px)')
+      .pipe(map((result) => result.matches)),
+    { initialValue: false },
+  );
+  protected readonly localNode = computed(
+    () => this.nodes().find((node) => node.id === this.local.status()?.nodeId) ?? null,
+  );
+  protected readonly localName = computed(
+    () => this.localNode()?.displayName?.trim() || this.local.status()?.name || 'Ce nœud',
+  );
+  protected readonly localCards = computed(() =>
+    localNodeCards(
+      this.local.status(),
+      this.localNode(),
+      this.local.modeUnavailable() ? null : this.local.mode(),
+      this.local.standalone(),
+    ),
+  );
+  protected readonly clusterName = computed(() =>
+    this.local.externalCluster()
+      ? (this.local.status()?.clusterName ?? 'Cluster d’accueil')
+      : (this.clusterIdentity()?.name ?? 'Cluster'),
+  );
+  protected readonly clusterAddress = computed(
+    () =>
+      this.local.target()?.apiBaseUrl ??
+      this.local.clusters().find((cluster) => cluster.id === this.local.status()?.clusterId)
+        ?.apiBaseUrl ??
+      null,
+  );
+  private readonly addressForm = computed(() => clusterAddressForm(this.local.address()));
+  protected readonly joinSteps = computed(() =>
+    clusterJoinSteps({
+      addressForm: this.addressForm(),
+      target: this.local.target(),
+      status: this.local.status(),
+      pairing: this.local.pairing(),
+      clusters: this.local.joinableClusters(),
+      localServerActive:
+        this.local.mode()?.server ?? this.local.status()?.roles.includes('server') ?? false,
+      canChoose: this.local.canJoin(),
+    }),
+  );
+  protected readonly pageState = computed(() => {
+    if (this.local.loading()) return 'loading';
+    if (this.pageTab() === 'cluster' && !this.clusterIdentity()) return 'error';
+    return this.pageTab() === 'cluster' && !this.local.standalone() && !this.local.externalCluster()
+      ? this.loadState()
+      : 'ready';
   });
-  protected readonly bannerDescription = computed(() => {
-    const identity = this.clusterIdentity();
-    const count = this.nodes().length;
-    if (!identity) return 'Mode du nœud, rattachement à un cluster et départ.';
-    return identity.standalone
-      ? 'Ce nœud n’appartient à aucun cluster : créez-en un ou rejoignez celui d’une autre installation.'
-      : `${count} nœud(s) · rattachement, changement de cluster et départ depuis ce nœud.`;
-  });
+  protected onManagementTabChange(tab: string): void {
+    if (this.local.busy()) return;
+    this.pageTab.set(tab);
+    this.actionOpen.set(false);
+    this.onDetailClosed();
+  }
+  protected onSetupAction(id: string): void {
+    if (id === 'back') this.local.back();
+    if (id === 'request') void this.local.sendRequest();
+    if (id === 'later') this.local.closeFlow();
+    if (id === 'cancel') void this.local.leave();
+    if (id === 'finish') {
+      this.local.closeFlow();
+      this.pageTab.set('cluster');
+    }
+  }
+  protected readonly memberSelectionActions: readonly DataTableSelectionAction[] = [
+    { id: 'drain', label: 'Vidanger', visibleWhen: () => !this.bulkBusy() },
+    { id: 'resume', label: 'Reprendre le travail', visibleWhen: () => !this.bulkBusy() },
+    {
+      id: 'delete',
+      label: 'Supprimer',
+      visibleWhen: () => !this.bulkBusy(),
+      confirmation: (rows) => ({
+        title: 'Supprimer ' + rows.length + ' nœud(s) ?',
+        message:
+          'Les accès seront révoqués ; les fichiers et l’historique sont conservés. Les nœuds avec des traitements actifs peuvent refuser le retrait.',
+        confirmLabel: 'Supprimer les nœuds',
+      }),
+    },
+  ];
+  protected onMemberSelectionAction(event: DataTableSelectionActionEvent): void {
+    if (!this.isAdmin() || this.bulkBusy()) return;
+    const ids = event.rows.map((row) => String(row['id']));
+    if (event.actionId === 'delete')
+      this.runBulk(ids, (id) => this.http.delete<void>('/api/v1/nodes/' + id), 'suppression');
+    else if (event.actionId === 'drain' || event.actionId === 'resume')
+      this.runBulk(
+        ids,
+        (id) =>
+          this.http.put<void>('/api/v1/nodes/' + id + '/draining', {
+            draining: event.actionId === 'drain',
+          }),
+        event.actionId === 'drain' ? 'vidange' : 'reprise',
+      );
+  }
   protected readonly summaryTiles = computed<readonly SummaryTile[]>(() => {
     const nodes = this.nodes();
     const online = nodes.filter((node) => nodeLifecycle(node) === 'online');
@@ -203,8 +293,16 @@ export class NodeCatalogPageComponent {
       .reduce((total, node) => total + node.maxConcurrentTasks, 0);
     const pending = this.pendingEnrollments().length;
     return [
-      { label: 'Nœuds en ligne', value: `${online.length} / ${nodes.length}`, detail: 'selon le dernier signal reçu' },
-      { label: 'Capacité simultanée', value: String(capacity), detail: 'tâches en parallèle sur les workers en ligne' },
+      {
+        label: 'Nœuds en ligne',
+        value: `${online.length} / ${nodes.length}`,
+        detail: 'selon le dernier signal reçu',
+      },
+      {
+        label: 'Capacité simultanée',
+        value: String(capacity),
+        detail: 'tâches en parallèle sur les workers en ligne',
+      },
       {
         label: 'Hors service',
         value: String(nodes.length - online.length),
@@ -213,7 +311,7 @@ export class NodeCatalogPageComponent {
       {
         label: 'Demandes de rattachement',
         value: String(pending),
-        detail: pending ? 'à examiner avec « Ajouter un nœud »' : 'aucune demande en attente',
+        detail: pending ? 'à examiner dans cet onglet' : 'aucune demande en attente',
         tone: pending ? 'attention' : 'default',
       },
     ];
@@ -227,7 +325,7 @@ export class NodeCatalogPageComponent {
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
   protected readonly actionType = signal<
-    'enrollment' | 'library-access' | 'create-library' | 'identity' | 'local-node'
+    'enrollment' | 'library-access' | 'create-library' | 'identity'
   >('enrollment');
   protected readonly nodeLibraryLoading = signal(false);
   protected readonly accessFormBusy = signal(false);
@@ -241,7 +339,7 @@ export class NodeCatalogPageComponent {
   protected readonly createFormData: RecordFormData = {
     title: 'Ajouter un nœud',
     description:
-      'Examinez les demandes des nœuds avant de les accepter. Si un nœud n’apparaît pas, générez une clé depuis sa page Nœuds (« Ce nœud et son cluster ») et saisissez-la ici ; elle expire au bout de 10 minutes.',
+      'Examinez les demandes des nœuds avant de les accepter. Si un nœud n’apparaît pas, générez une clé depuis sa page Nœuds (« Cluster → Rejoindre un cluster ») et saisissez-la ici ; elle expire au bout de 10 minutes.',
     submitLabel: 'Accepter le nœud',
     reviewTitle: 'Vérifier le jumelage',
     fields: [
@@ -908,9 +1006,7 @@ export class NodeCatalogPageComponent {
       });
   }
   protected readonly actionTitle = computed(() =>
-    this.actionType() === 'local-node'
-      ? 'Ce nœud et son cluster'
-      : this.actionType() === 'identity'
+    this.actionType() === 'identity'
       ? 'Nom et étiquettes du nœud'
       : this.actionType() === 'library-access'
         ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
@@ -919,9 +1015,7 @@ export class NodeCatalogPageComponent {
           : this.createFormData.title,
   );
   protected readonly actionDescription = computed(() =>
-    this.actionType() === 'local-node'
-      ? 'Mode, rattachement à un autre cluster et départ du cluster actuel.'
-      : this.actionType() === 'identity'
+    this.actionType() === 'identity'
       ? 'Le nom affiché est distinct du nom envoyé par heartbeat. Les étiquettes locales remplacent celles des groupes.'
       : this.actionType() === 'library-access'
         ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
@@ -1029,6 +1123,7 @@ export class NodeCatalogPageComponent {
     { key: 'roleLabel', label: 'Rôle', sortable: true },
     { key: 'capabilities', label: 'Capacités observées', sortable: true },
     { key: 'libraryAccess', label: 'Accès aux bibliothèques', sortable: true },
+    { key: 'workerLoad', label: 'Traitements', sortable: true },
     { key: 'state', label: 'État', sortable: true },
     { key: 'lastSignal', label: 'Dernier signal', sortable: true },
   ];
@@ -1048,15 +1143,21 @@ export class NodeCatalogPageComponent {
     const role = this.selectedRole();
     return this.nodes()
       .filter((node) => role === 'all' || node.roles.includes(role as NodeRole))
+      .filter(
+        (node) => this.selectedState() === 'all' || this.stateGroup(node) === this.selectedState(),
+      )
+      .sort(
+        (a, b) =>
+          (this.stateGroup(a) === 'attention' ? -1 : 0) -
+            (this.stateGroup(b) === 'attention' ? -1 : 0) || a.name.localeCompare(b.name, 'fr'),
+      )
       .map((node) => this.toRecord(node));
   });
 
   /** Cartes de nœuds : ce qui demande une action d'abord, puis par nom (architecture 0046). */
   /** Tâches actives par nœud (clé : identifiant), rafraîchies avec la liste. */
   private readonly activeTasks = signal<Readonly<Record<string, number>>>({});
-  protected readonly selectedIds = signal<ReadonlySet<string>>(new Set());
   protected readonly bulkBusy = signal(false);
-  protected readonly selectedCount = computed(() => this.selectedIds().size);
   protected readonly selectedState = signal('all');
   /** Regroupe les états de cycle de vie : en ligne, hors ligne, ou à traiter (vidange, incompatible, quarantaine). */
   private stateGroup(node: NodeResponse): 'online' | 'offline' | 'attention' {
@@ -1074,67 +1175,6 @@ export class NodeCatalogPageComponent {
     ];
   });
 
-  protected readonly nodeCards = computed<readonly NodeCard[]>(() => {
-    const role = this.selectedRole();
-    const state = this.selectedState();
-    const actions: readonly ResourceCardAction[] = this.nodeActions
-      .filter((action) => action.visibleWhen?.({} as DataTableRow) ?? true)
-      .map((action) => ({ id: action.id, label: action.label, tone: action.tone }));
-    return this.nodes()
-      .filter((node) => role === 'all' || node.roles.includes(role as NodeRole))
-      .filter((node) => state === 'all' || this.stateGroup(node) === state)
-      .map((node): NodeCard => {
-        const lifecycle = node.lifecycle ?? node.status;
-        const tone: StatusTone =
-          lifecycle === 'online' ? 'success'
-          : lifecycle === 'draining' ? 'warning'
-          : lifecycle === 'incompatible' || lifecycle === 'quarantined' ? 'danger'
-          : 'neutral';
-        const label =
-          lifecycle === 'online' ? 'En ligne'
-          : lifecycle === 'draining' ? 'Vidange en cours'
-          : lifecycle === 'incompatible' ? 'Incompatible'
-          : lifecycle === 'quarantined' ? 'Quarantaine'
-          : 'Hors ligne';
-        const tags: ResourceCardTag[] = node.capabilities.map((capability) => {
-          const acceleration = capability.accelerationTypes.filter((type) => type !== 'cpu');
-          return {
-            label: `${capability.toolId} ${capability.version}`,
-            highlighted: acceleration.length > 0,
-          };
-        });
-        const facts: ResourceCardFact[] = [
-          { label: 'Accès aux bibliothèques', value: this.libraryAccessSummary(node.id) },
-          { label: 'Dernier signal', value: this.formatLastSeen(node.lastSeenAt) },
-        ];
-        if (node.roles.includes('worker')) {
-          facts.unshift({ label: 'Capacité', value: `${node.maxConcurrentTasks} tâche(s) simultanée(s)` });
-        }
-        return {
-          id: node.id,
-          title: node.displayName?.trim() || node.name,
-          statusLabel: label,
-          statusTone: tone,
-          badges: node.roles.map((nodeRole) => NODE_ROLE_LABELS[nodeRole]),
-          tags,
-          facts,
-          meter:
-            node.roles.includes('worker') && node.maxConcurrentTasks > 0 && this.activityKnown()
-              ? {
-                  value: this.activeTasks()[node.id] ?? 0,
-                  max: node.maxConcurrentTasks,
-                  label: `Tâches ${this.activeTasks()[node.id] ?? 0} / ${node.maxConcurrentTasks}`,
-                  caption: this.formatLastSeen(node.lastSeenAt),
-                }
-              : null,
-          note: node.lifecycleReason ?? (node.desiredRoles ? 'Changement de mode en attente' : ''),
-          actions,
-          order: tone === 'success' ? 2 : tone === 'neutral' ? 1 : 0,
-        };
-      })
-      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, 'fr', { numeric: true }));
-  });
-
   protected editSelectedNodeIdentity(): void {
     const node = this.selectedNode();
     if (node) void this.editNodeIdentity(node);
@@ -1150,45 +1190,11 @@ export class NodeCatalogPageComponent {
     return this.activityLoaded();
   }
 
-  protected toggleNodeSelection(id: string, selected: boolean): void {
-    this.selectedIds.update((current) => {
-      const next = new Set(current);
-      if (selected) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }
-
-  protected clearSelection(): void {
-    this.selectedIds.set(new Set());
-  }
-
-  /** Action groupée : appelle l'API existante pour chaque nœud sélectionné, puis rapporte le bilan. */
-  protected bulkDrain(draining: boolean): void {
-    const ids = [...this.selectedIds()];
-    if (!ids.length || this.bulkBusy()) return;
-    this.runBulk(ids, (id) => this.http.put<void>('/api/v1/nodes/' + id + '/draining', { draining }), draining ? 'vidange' : 'reprise');
-  }
-
-  protected bulkRemove(): void {
-    const ids = [...this.selectedIds()];
-    if (!ids.length || this.bulkBusy()) return;
-    this.dialog
-      .open(ConfirmationDialogComponent, {
-        data: {
-          title: `Supprimer ${ids.length} nœud(s) ?`,
-          message:
-            'Les nœuds sélectionnés seront retirés du cluster et leurs accès révoqués. Les fichiers et l’historique sont conservés. Pour les rattacher de nouveau, leur identité locale devra être renouvelée.',
-          confirmLabel: 'Supprimer les nœuds',
-        },
-      })
-      .afterClosed()
-      .subscribe((confirmed) => {
-        if (confirmed) this.runBulk(ids, (id) => this.http.delete<void>('/api/v1/nodes/' + id), 'suppression');
-      });
-  }
-
-  private runBulk(ids: readonly string[], call: (id: string) => Observable<void>, label: string): void {
+  private runBulk(
+    ids: readonly string[],
+    call: (id: string) => Observable<void>,
+    label: string,
+  ): void {
     this.bulkBusy.set(true);
     forkJoin(
       ids.map((id) =>
@@ -1206,7 +1212,6 @@ export class NodeCatalogPageComponent {
             ? `${label} : ${results.length - failed} nœud(s) traité(s), ${failed} en échec.`
             : `${label} : ${results.length} nœud(s) traité(s).`,
         );
-        this.clearSelection();
         this.clusterApi
           .listNodes()
           .pipe(catchError(() => EMPTY))
@@ -1215,23 +1220,8 @@ export class NodeCatalogPageComponent {
   }
 
   protected openNodeCard(id: string): void {
-    this.selectedNode.set(this.filteredNodes().find((node) => node.id === id) ?? null);
-  }
-
-  protected onNodeCardAction(id: string, actionId: string): void {
-    const row = this.filteredNodes().find((node) => node.id === id);
-    if (!row) return;
-    const confirmation = this.nodeActions.find((action) => action.id === actionId)?.confirmation;
-    if (!confirmation) {
-      this.onNodeAction({ actionId, row });
-      return;
-    }
-    this.dialog
-      .open(ConfirmationDialogComponent, { data: confirmation(row) })
-      .afterClosed()
-      .subscribe((confirmed) => {
-        if (confirmed) this.onNodeAction({ actionId, row });
-      });
+    const node = this.nodes().find((node) => node.id === id);
+    this.selectedNode.set(node ? this.toRecord(node) : null);
   }
 
   protected readonly enrollmentColumns: readonly DataTableColumn[] = [
@@ -1257,10 +1247,6 @@ export class NodeCatalogPageComponent {
   constructor() {
     this.installProcessingSettingsEffect();
     this.loadLibraryAccessSummary();
-    this.clusterApi
-      .identity()
-      .pipe(catchError(() => EMPTY), takeUntilDestroyed())
-      .subscribe((identity) => this.clusterIdentity.set(identity));
     timer(0, 10_000)
       .pipe(
         switchMap(() =>
@@ -1309,11 +1295,6 @@ export class NodeCatalogPageComponent {
       .listNodes()
       .pipe(catchError(() => EMPTY))
       .subscribe((nodes) => this.nodes.set(nodes));
-  }
-
-  protected openLocalNode(): void {
-    this.actionType.set('local-node');
-    this.actionOpen.set(true);
   }
 
   protected addNode(): void {
@@ -1398,6 +1379,10 @@ export class NodeCatalogPageComponent {
   }
 
   protected closeCreateNode(): void {
+    if (this.local.flow()) {
+      this.local.closeFlow();
+      return;
+    }
     this.actionOpen.set(false);
     this.selectedEnrollment.set(null);
     this.selectedNodeLibrary.set(null);
@@ -1415,7 +1400,11 @@ export class NodeCatalogPageComponent {
   protected onEnrollmentOpen(row: DataTableRow): void {
     const request = this.pendingEnrollments().find((item) => item.id === row['id']) ?? null;
     this.selectedEnrollment.set(request);
-    if (request) this.enrollmentView.set('review');
+    if (request) {
+      this.enrollmentView.set('review');
+      this.actionType.set('enrollment');
+      this.actionOpen.set(true);
+    }
   }
 
   protected approveEnrollment(): void {
@@ -1770,9 +1759,13 @@ export class NodeCatalogPageComponent {
         ? capabilityLabels.join(' · ')
         : 'Aucune capacité déclarée',
       libraryAccess: this.libraryAccessSummary(node.id),
-      workerLoad: worker ? `${node.maxConcurrentTasks} tâche(s) max.` : 'Non applicable',
+      workerLoad: worker
+        ? this.activityKnown()
+          ? String(this.activeTasks()[node.id] ?? 0) + ' / ' + node.maxConcurrentTasks + ' tâche(s)'
+          : String(node.maxConcurrentTasks) + ' tâche(s) max. · charge indisponible'
+        : 'Non applicable',
       queueStatus: 'Non disponible',
-      state: node.status === 'online' ? 'En ligne' : 'Hors ligne',
+      state: NODE_LIFECYCLE_LABELS[nodeLifecycle(node)],
       lastSignal: this.formatLastSeen(node.lastSeenAt),
     };
   }

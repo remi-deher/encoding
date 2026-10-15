@@ -5,13 +5,14 @@ import { EnrollmentWindow, FirstLinkAcceptance } from '../models/auth';
 import { LibraryNodeAccessResponse } from '../ui/library-node-access-types';
 import { NodeSchedule } from '../models/node-schedule';
 import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models/cluster';
+import { ClusterIdentity } from '../models/local-node';
 
 @Injectable({ providedIn: 'root' })
 export class ClusterApi {
   private readonly http = inject(HttpClient);
   /** Identité du cluster : `standalone` vrai tant qu'aucun cluster n'a été créé et qu'un seul nœud est actif (architecture 0045). */
   identity() {
-    return this.http.get<{ id: string; name: string; standalone: boolean }>('/api/v1/cluster');
+    return this.http.get<ClusterIdentity>('/api/v1/cluster');
   }
   listNodes() {
     return this.http.get<readonly NodeResponse[]>('/api/v1/nodes');

@@ -30,12 +30,6 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.application-header:has(+ .page-transition-region app-worker-console-page) {
-  grid-template-columns: 1fr auto;
-  grid-template-areas: 'brand status';
-  min-height: 60px;
-}
-
 .brand {
   grid-area: brand;
   display: inline-flex;

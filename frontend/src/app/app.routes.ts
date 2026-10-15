@@ -12,15 +12,8 @@ const applicationRoutes: Routes = [
   },
   {
     path: 'worker',
-    loadComponent: () =>
-      import('./features/worker/worker-console-page.component').then(
-        (module) => module.WorkerConsolePageComponent,
-      ),
-    data: {
-      title: 'Ce nœud',
-      workerMode: true,
-      description: 'Gérez le rattachement de ce nœud à un cluster.',
-    },
+    pathMatch: 'full',
+    redirectTo: 'nodes',
   },
   {
     path: 'tasks',
@@ -200,11 +193,11 @@ const publicRoutes: Routes = [
   },
 ];
 
-/** Toute route de gestion exige une session ; la console worker locale (`workerMode`) reste publique. */
+/** Toute route de gestion exige une session ; l'ancienne console redirige vers la page Nœuds protégée. */
 export const routes: Routes = [
   ...publicRoutes,
   ...applicationRoutes.map((route) =>
-    route.data?.['workerMode']
+    route.redirectTo !== undefined
       ? route
       : { ...route, canActivate: [authGuard, ...(route.canActivate ?? [])] },
   ),

@@ -1,78 +1,259 @@
 <app-management-catalog-template
   [title]="title()"
   [detailOpen]="selectedNode() !== null"
-  [actionOpen]="actionOpen()"
-  [actionTitle]="actionTitle()"
-  [actionDescription]="actionDescription()"
+  [actionOpen]="local.flow() !== null || actionOpen()"
+  [actionTitle]="
+    local.flow() === 'join'
+      ? 'Rejoindre un cluster'
+      : local.flow() === 'create'
+        ? 'Créer un cluster'
+        : actionTitle()
+  "
+  [actionDescription]="
+    local.flow() === 'join'
+      ? 'Rattacher ce nœud à un cluster existant.'
+      : local.flow() === 'create'
+        ? 'Ce nœud devient le premier membre du nouveau cluster.'
+        : actionDescription()
+  "
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
-  [catalogState]="loadState()"
+  [catalogState]="pageState()"
   [catalogMessage]="catalogMessage()"
   drawerSize="standard"
   [drawerModal]="true"
   (detailClosed)="onDetailClosed()"
   (actionClosed)="closeCreateNode()"
-  filterLabel="Rôle du nœud"
-  note="L’état et les capacités proviennent du dernier signal reçu. Le statut en ligne est calculé par le cluster."
+  [showToolbar]="
+    pageTab() === 'cluster' &&
+    !local.standalone() &&
+    !local.externalCluster() &&
+    clusterIdentity() !== null
+  "
+  filterLabel="Membres du cluster actuel"
+  note="Les fonctions et les capacités correspondent au dernier état observé. Une perte de connexion ne confirme pas un changement de cluster."
 >
   <ng-template #pageActions>
-    <a matButton="tonal" routerLink="/node-groups">Groupes de nœuds</a>
-    <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
-  </ng-template>
-
-  <ng-container catalogue-summary>
-    @if (isAdmin()) {
-      <app-context-banner [title]="bannerTitle()" [description]="bannerDescription()">
-        <button banner-actions matButton="outlined" type="button" (click)="openLocalNode()">
-          Ce nœud et son cluster
+    @if (pageTab() === 'node') {
+      @if (isAdmin()) {
+        <button
+          matButton="outlined"
+          type="button"
+          [disabled]="local.busy()"
+          (click)="local.changeMode()"
+        >
+          Modifier les fonctions
         </button>
+      }
+      @if (localNode(); as node) {
+        <button matButton="text" type="button" (click)="openNodeCard(node.id)">
+          Consulter les réglages
+        </button>
+      }
+    } @else if (!local.standalone() && clusterIdentity() && !local.externalCluster()) {
+      <a matButton="text" routerLink="/node-groups">Groupes de nœuds</a>
+      @if (isAdmin()) {
+        <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
+        <button matButton="outlined" type="button" [matMenuTriggerFor]="clusterActions">
+          Actions du cluster
+        </button>
+        <mat-menu #clusterActions="matMenu">
+          <button mat-menu-item [disabled]="!local.canJoin()" (click)="local.openJoin()">
+            Changer de cluster pour ce nœud
+          </button>
+          <button
+            mat-menu-item
+            [disabled]="local.busy() || local.agentUnavailable() || !local.status()?.clusterId"
+            (click)="local.leave()"
+          >
+            {{ local.pending() ? 'Annuler la demande' : 'Quitter le cluster avec ce nœud' }}
+          </button>
+        </mat-menu>
+      }
+    }
+  </ng-template>
+  <app-category-tabs
+    catalogue-navigation
+    label="Gestion des nœuds"
+    [options]="managementTabs"
+    [selected]="pageTab()"
+    (selectedChange)="onManagementTabChange($event)"
+  />
+  <ng-container catalogue-summary>
+    @if (pageTab() === 'node') {
+      <app-context-banner
+        label="Ce nœud"
+        [title]="localName()"
+        [description]="local.standalone() ? 'Installation autonome' : 'Membre de ' + clusterName()"
+      >
+        <app-status-badge
+          banner-actions
+          [label]="
+            local.agentUnavailable()
+              ? local.mode()?.worker === false
+                ? 'Fonctions worker désactivées'
+                : 'Agent injoignable'
+              : 'Agent joignable'
+          "
+          [tone]="local.agentUnavailable() ? 'warning' : 'success'"
+        />
+      </app-context-banner>
+    } @else if (local.pending()) {
+      <app-context-banner
+        label="Rattachement en cours"
+        [title]="'Demande envoyée à ' + local.targetName()"
+        description="En attente d’approbation. Le rattachement précédent est conservé jusqu’à la confirmation du nouveau cluster."
+      >
+        @if (isAdmin()) {
+          <button banner-actions matButton="filled" type="button" (click)="local.openJoin()">
+            Suivre la demande
+          </button>
+        }
+      </app-context-banner>
+    } @else if (local.standalone()) {
+      <app-context-banner
+        label="Aucun cluster"
+        title="Ce nœud est autonome"
+        description="Créez un cluster pour accueillir d’autres nœuds, ou rejoignez un cluster existant."
+      >
+        @if (isAdmin()) {
+          <div banner-actions>
+            <button
+              matButton="outlined"
+              type="button"
+              [disabled]="local.busy() || local.identityUnavailable()"
+              (click)="local.openCreate()"
+            >
+              Créer un cluster
+            </button>
+            <button
+              matButton="filled"
+              type="button"
+              [disabled]="!local.canJoin()"
+              (click)="local.openJoin()"
+            >
+              Rejoindre un cluster
+            </button>
+          </div>
+        }
+      </app-context-banner>
+    } @else if (clusterIdentity()) {
+      <app-context-banner
+        label="Cluster actuel"
+        [title]="clusterName()"
+        [description]="'Vous consultez cette installation depuis ' + localName() + '.'"
+      >
+        <app-status-badge
+          banner-actions
+          [label]="local.identityUnavailable() ? 'État non actualisé' : 'Cluster connu'"
+          [tone]="local.identityUnavailable() ? 'warning' : 'accent'"
+        />
       </app-context-banner>
     }
-    <app-summary-tiles label="Synthèse des nœuds" [tiles]="summaryTiles()" />
-  </ng-container>
-
-  <div catalogue-filters>
-    <app-category-tabs
-      label="Rôle du nœud"
-      [options]="roleOptions()"
-      [selected]="selectedRole()"
-      (selectedChange)="onRoleChange($event)"
-    />
-    <app-category-tabs
-      label="État du nœud"
-      [options]="stateOptions()"
-      [selected]="selectedState()"
-      (selectedChange)="selectedState.set($event)"
-    />
-  </div>
-
-  <div catalogue-table class="node-card-grid">
-    @for (card of nodeCards(); track card.id) {
-      <app-resource-card
-        [title]="card.title"
-        [statusLabel]="card.statusLabel"
-        [statusTone]="card.statusTone"
-        [badges]="card.badges"
-        [tags]="card.tags"
-        [facts]="card.facts"
-        [note]="card.note"
-        [meter]="card.meter"
-        [selectable]="isAdmin()"
-        [selected]="selectedIds().has(card.id)"
-        (selectedChange)="toggleNodeSelection(card.id, $event)"
-        [active]="selectedNode()?.id === card.id"
-        [actions]="card.actions"
-        openLabel="Consulter"
-        (open)="openNodeCard(card.id)"
-        (actionSelected)="onNodeCardAction(card.id, $event)"
+    @if (local.agentUnavailable() && !local.loading()) {
+      <app-context-banner
+        label="État du nœud"
+        [title]="
+          local.mode()?.worker === false
+            ? 'La fonction worker est désactivée'
+            : 'La fonction worker ne répond pas'
+        "
+        description="Les dernières informations disponibles restent affichées. Pour rejoindre un cluster, activez la fonction worker depuis Ce nœud ou rétablissez sa connexion. Le suivi du rattachement reste indisponible tant que l’agent ne répond pas."
       />
-    } @empty {
-      <p class="node-card-empty" role="status">Aucun nœud ne correspond à ces filtres.</p>
+    }
+    @if (local.identityUnavailable() && !local.loading()) {
+      <p role="alert">
+        L’identité du cluster n’a pas pu être actualisée. Réessayez avant de modifier son
+        appartenance.
+      </p>
+    }
+    @if (local.status()?.switchFailure; as failure) {
+      <p role="alert">Rattachement annulé : {{ failure }}</p>
+    }
+    @if (
+      pageTab() === 'cluster' &&
+      !local.standalone() &&
+      !local.externalCluster() &&
+      clusterIdentity()
+    ) {
+      <app-summary-tiles label="Synthèse du cluster" [tiles]="summaryTiles()" />
+    }
+  </ng-container>
+  <div catalogue-filters>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Fonctions</mat-label
+      ><mat-select [value]="selectedRole()" (selectionChange)="onRoleChange($event.value)">
+        @for (option of roleOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }} · {{ option.count }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>État</mat-label
+      ><mat-select [value]="selectedState()" (selectionChange)="selectedState.set($event.value)">
+        @for (option of stateOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }} · {{ option.count }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+  <div catalogue-table>
+    @if (pageTab() === 'node') {
+      <app-detail-card-grid
+        ariaLabel="Fiche du nœud local"
+        [cards]="localCards()"
+        [collapsible]="false"
+      />
+    } @else if (local.standalone()) {
+      <app-detail-card-grid
+        ariaLabel="Fonctionnement autonome"
+        [cards]="autonomousCards"
+        [collapsible]="false"
+      />
+    } @else if (local.externalCluster()) {
+      <app-context-banner
+        label="Cluster d’accueil"
+        title="Ce nœud est rattaché à un autre serveur"
+        description="La fonction serveur locale peut s’arrêter après l’approbation. Consultez le cluster d’accueil pour gérer ses membres et les traitements."
+      >
+        @if (clusterAddress(); as address) {
+          <a banner-actions matButton="filled" [href]="address">Ouvrir le cluster</a>
+        }
+      </app-context-banner>
+    } @else {
+      @if (isAdmin() && enrollmentRows().length) {
+        <app-context-banner
+          label="Approbations"
+          title="Demandes de rattachement"
+          description="Examinez chaque demande et comparez le code affiché sur le nœud demandeur avant de l’approuver."
+        />
+        <app-data-table
+          [columns]="enrollmentColumns"
+          [rows]="enrollmentRows()"
+          [layout]="handset() ? 'cards' : 'table'"
+          [rowOpenable]="true"
+          rowOpenLabel="Examiner la demande"
+          (rowOpen)="onEnrollmentOpen($event)"
+        />
+      }
+      <app-data-table
+        [columns]="columns"
+        [rows]="filteredNodes()"
+        [layout]="handset() ? 'cards' : 'table'"
+        [selectable]="isAdmin() && !bulkBusy()"
+        [rowOpenable]="true"
+        rowOpenLabel="Consulter"
+        (rowOpen)="openNodeCard($event['id'].toString())"
+        [rowActions]="isAdmin() ? nodeActions : []"
+        (rowAction)="onNodeAction($event)"
+        [selectionActions]="isAdmin() ? memberSelectionActions : []"
+        (selectionAction)="onMemberSelectionAction($event)"
+        emptyMessage="Aucun nœud ne correspond à ces filtres."
+      />
     }
   </div>
-
-  <ng-template #detailFooterActions>
-    @if (isAdmin() && selectedNode(); as node) {
+  <ng-template #detailHeaderActions>
+    @if (isAdmin() && selectedNode()) {
       <app-drawer-action-button
         label="Nom et étiquettes"
         variant="outlined"
@@ -81,19 +262,6 @@
       <app-drawer-action-button label="Changer le mode" (activated)="changeSelectedNodeMode()" />
     }
   </ng-template>
-
-  @if (isAdmin() && selectedCount() > 0) {
-    <div catalogue-table class="node-bulk-bar" role="region" aria-label="Actions groupées">
-      <span>{{ selectedCount() }} nœud(s) sélectionné(s)</span>
-      <span class="node-bulk-actions">
-        <button matButton="outlined" type="button" [disabled]="bulkBusy()" (click)="bulkDrain(true)">Vidanger</button>
-        <button matButton="outlined" type="button" [disabled]="bulkBusy()" (click)="bulkDrain(false)">Reprendre le travail</button>
-        <button matButton="outlined" class="node-bulk-danger" type="button" [disabled]="bulkBusy()" (click)="bulkRemove()">Supprimer</button>
-        <button matButton="text" type="button" [disabled]="bulkBusy()" (click)="clearSelection()">Annuler</button>
-      </span>
-    </div>
-  }
-
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group
       class="node-detail-tabs"
@@ -266,8 +434,29 @@
     </mat-tab-group>
   </ng-template>
   <ng-template #actionContent>
-    @if (actionType() === 'local-node') {
-      <app-local-node-panel api="/api/v1/local-node" modeEndpoint="/api/v1/node/mode" createClusterEndpoint="/api/v1/cluster" />
+    @if (local.flow() === 'create') {
+      @if (local.error()) {
+        <p role="alert">{{ local.error() }}</p>
+      }
+      <app-record-form
+        [data]="createClusterForm"
+        [busy]="local.busy()"
+        (submitted)="local.create($event)"
+        (cancelled)="local.closeFlow()"
+      />
+    } @else if (local.flow() === 'join') {
+      <app-guided-setup
+        [steps]="joinSteps()"
+        [index]="local.joinIndex()"
+        [busy]="local.busy()"
+        [error]="local.error()"
+        [disabled]="local.agentUnavailable()"
+        (submitted)="local.verifyAddress($event.values)"
+        (acted)="onSetupAction($event)"
+        (chosen)="local.chooseCluster($event['id'].toString())"
+        (choiceAction)="local.forgetCluster($event.row['id'].toString())"
+        (cancelled)="local.closeFlow()"
+      />
     } @else if (actionType() === 'identity') {
       @if (identityForm(); as form) {
         <app-record-form
@@ -301,7 +490,8 @@
           <span>Étape 1 sur 2</span>
           <h3>Repérer le nœud</h3>
           <p>
-            Sur le nœud à ajouter, ouvrez la page Nœuds puis « Ce nœud et son cluster » : ajoutez l’adresse de ce cluster puis choisissez « Demander à rejoindre ». La demande
+            Sur le nœud à ajouter, ouvrez la page Nœuds puis « Cluster → Rejoindre un cluster » :
+            ajoutez l’adresse de ce cluster puis choisissez « Demander à rejoindre ». La demande
             apparaîtra ici pour vérification.
           </p>
         </div>
@@ -316,8 +506,8 @@
           />
         } @else {
           <p class="enrollment-empty" role="status">
-            Aucune demande en attente. La clé reste valide pendant 10 minutes. Si l’acceptation
-            automatique est activée sur le worker, il rejoindra le cluster sans validation manuelle.
+            Aucune demande en attente. Depuis le nœud à ajouter, ouvrez Nœuds → Cluster → Rejoindre
+            un cluster. Les demandes et leurs clés expirent après 10 minutes.
           </p>
         }
         <button matButton="text" type="button" (click)="showPairingKey()">
@@ -410,7 +600,7 @@
         <div class="form-actions">
           <button matButton="text" type="button" (click)="showPendingRequests()">Annuler</button>
           <button matButton="filled" type="button" (click)="approveEnrollment()">
-            Accepter ce worker
+            Approuver le rattachement
           </button>
         </div>
       </section>
