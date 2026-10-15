@@ -168,6 +168,7 @@ export class NodeCatalogPageComponent {
   protected readonly enrollmentView = signal<'requests' | 'key' | 'review'>('requests');
   protected readonly selectedEnrollment = signal<PendingNodeEnrollmentResponse | null>(null);
   protected readonly selectedNode = signal<NodeRecord | null>(null);
+  protected readonly selectedNodeTabIndex = signal(0);
   protected readonly identityForm = signal<RecordFormData | null>(null);
   protected readonly createFormData: RecordFormData = {
     title: 'Ajouter un nœud worker',
@@ -499,6 +500,7 @@ export class NodeCatalogPageComponent {
           groupIds: readonly string[];
         }>(`/api/v1/nodes/${node.id}/identity`),
       );
+      if (this.selectedNode()?.id !== node.id) this.selectedNodeTabIndex.set(0);
       this.selectedNode.set(node);
       this.identityForm.set({
         title: 'Nom et étiquettes',
@@ -1099,11 +1101,13 @@ export class NodeCatalogPageComponent {
 
   protected onNodeOpen(row: DataTableRow): void {
     this.selectedNode.set(this.filteredNodes().find((node) => node.id === row['id']) ?? null);
+    this.selectedNodeTabIndex.set(0);
     this.loadNodeLibraries();
   }
 
   protected onDetailClosed(): void {
     this.selectedNode.set(null);
+    this.selectedNodeTabIndex.set(0);
   }
 
   protected nodeAccessOption(node: NodeRecord): LibraryNodeAccessOption {
