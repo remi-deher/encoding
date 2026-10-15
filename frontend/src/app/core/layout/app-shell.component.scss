@@ -22,8 +22,8 @@
   height: auto;
   padding-inline: clamp(20px, 5vw, 72px);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: 'brand navigation status';
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: 'brand navigation status theme';
   align-items: center;
   column-gap: clamp(20px, 3vw, 44px);
   background: var(--surface);
@@ -31,8 +31,8 @@
 }
 
 .application-header:has(+ .page-transition-region app-worker-console-page) {
-  grid-template-columns: 1fr;
-  grid-template-areas: 'brand';
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'brand theme';
   min-height: 60px;
 }
 
@@ -57,7 +57,7 @@
   place-items: center;
   border-radius: var(--radius-md);
   background: var(--accent);
-  color: white;
+  color: var(--page-background);
   font-size: var(--font-title);
   font-weight: 750;
   letter-spacing: -0.06em;
@@ -67,6 +67,11 @@
   font-size: var(--font-body);
   font-weight: 760;
   letter-spacing: 0.12em;
+}
+
+.theme-toggle {
+  grid-area: theme;
+  color: var(--text-secondary);
 }
 
 .header-status {
@@ -142,10 +147,10 @@
 
 @media (max-width: 600px) {
   .application-header {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-areas:
-      'brand status'
-      'navigation navigation';
+      'brand status theme'
+      'navigation navigation navigation';
     column-gap: var(--space-3);
     padding-top: var(--space-2);
     padding-inline: var(--space-4);
