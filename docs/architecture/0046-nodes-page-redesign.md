@@ -18,3 +18,9 @@ Statut : étapes 1, 2 et 3 implémentées (sélection multiple et barre de charg
 ## Limites
 
 L'état de charge (tâches en cours) n'est pas exposé par l'API : la barre de capacité n'est pas affichée sur les nœuds tant qu'il manque. La sélection multiple de l'ancienne liste n'était branchée sur aucune action et n'est pas reprise ; elle reviendra à l'étape 3 avec ses actions.
+
+## Complément : charge, sélection multiple et actions groupées
+
+- `GET /api/v1/nodes/activity` renvoie en une requête les tâches actives (bail valide) par nœud ; la liste la rafraîchit avec les nœuds et les cartes des workers affichent « Tâches n / max » (barre de capacité).
+- Les administrateurs peuvent sélectionner des nœuds ; une barre collante propose Vidanger, Reprendre le travail et Supprimer (avec confirmation). Chaque action appelle l'API unitaire existante pour chaque nœud et rapporte le nombre de réussites et d'échecs : pas d'endpoint groupé, donc pas de transaction globale.
+- Filtre d'état (Tous / En ligne / À traiter / Hors ligne) cumulable avec le rôle.

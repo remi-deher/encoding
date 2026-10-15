@@ -5,6 +5,24 @@ p[role='note'] {
   line-height: 1.5;
 }
 
+.node-bulk-bar {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-strong, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--elevation-2);
+}
+.node-bulk-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
+.node-bulk-danger { color: var(--danger-strong); }
 .node-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
