@@ -1,10 +1,11 @@
+import { MatButtonModule } from '@angular/material/button';
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, TemplateRef, input, output } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
 
 @Component({
   selector: 'app-detail-drawer',
-  imports: [MatSidenavModule, NgTemplateOutlet],
+  imports: [MatButtonModule, MatSidenavModule, NgTemplateOutlet],
   template: `
     <mat-drawer-container class="detail-drawer-container" [hasBackdrop]="false">
       <mat-drawer-content [style.overflow]="mainScroll() === 'parent' ? 'visible' : null">
@@ -30,6 +31,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
             <div class="drawer-header-controls">
               <ng-container [ngTemplateOutlet]="headerActions() ?? null" />
               <button
+                mat-icon-button
                 class="drawer-close"
                 type="button"
                 aria-label="Fermer le panneau"
@@ -98,32 +100,6 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       margin: 5px 0 0;
       color: var(--text-muted);
       font-size: var(--font-body);
-    }
-
-    .drawer-close {
-      width: 36px;
-      height: 36px;
-      flex: 0 0 auto;
-      display: grid;
-      place-items: center;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      background: var(--surface);
-      color: var(--text-secondary);
-      font: inherit;
-      font-size: var(--font-headline);
-      line-height: 1;
-      cursor: pointer;
-    }
-
-    .drawer-close:hover {
-      border-color: var(--accent);
-      color: var(--accent-strong);
-    }
-
-    .drawer-close:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
     }
 
     .drawer-body {

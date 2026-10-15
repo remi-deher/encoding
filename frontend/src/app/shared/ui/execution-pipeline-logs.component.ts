@@ -1,3 +1,4 @@
+import { MatExpansionModule } from '@angular/material/expansion';
 import { Component, input, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { ExecutionPipelineStep, RuntimeCommandLog } from '../models/execution';
@@ -6,7 +7,7 @@ import { NotificationService } from '../services/notification.service';
 
 @Component({
   selector: 'app-execution-pipeline-logs',
-  imports: [MatButtonModule],
+  imports: [MatButtonModule, MatExpansionModule],
   template: `
     <section class="pipeline-logs" aria-label="Pipeline et journaux de commandes">
       <header class="pipeline-logs__header">
@@ -78,16 +79,16 @@ import { NotificationService } from '../services/notification.service';
                               @if (command.truncated) { · Sortie tronquée }
                             </p>
                             @if (command.standardError) {
-                              <details>
-                                <summary>Erreur standard</summary>
-                                <pre>{{ command.standardError }}</pre>
-                              </details>
+                              <mat-expansion-panel class="command-output">
+<mat-expansion-panel-header>Erreur standard</mat-expansion-panel-header>
+<pre>{{ command.standardError }}</pre>
+</mat-expansion-panel>
                             }
                             @if (command.standardOutput) {
-                              <details>
-                                <summary>Sortie standard</summary>
-                                <pre>{{ command.standardOutput }}</pre>
-                              </details>
+                              <mat-expansion-panel class="command-output">
+<mat-expansion-panel-header>Sortie standard</mat-expansion-panel-header>
+<pre>{{ command.standardOutput }}</pre>
+</mat-expansion-panel>
                             }
                           </li>
                         }
@@ -142,8 +143,7 @@ import { NotificationService } from '../services/notification.service';
     .pipeline-link__arrow { color: var(--accent-strong); font-size: var(--font-title-lg); line-height: 1; }
     .pipeline-command { display: grid; gap: var(--space-2); padding: 10px; border-radius: var(--radius-md); background: var(--surface-muted); }
     .pipeline-command__line { display: block; overflow-wrap: anywhere; color: var(--text-primary); font: 14px/1.5 ui-monospace, Consolas, monospace; }
-    .pipeline-command details { min-width: 0; }
-    .pipeline-command summary { color: var(--accent-strong); cursor: pointer; font-size: var(--font-body); font-weight: 600; }
+    .pipeline-command .command-output { min-width: 0; box-shadow: none; border: 1px solid var(--border-subtle); }
     .pipeline-command pre { margin: var(--space-2) 0 0; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--text-secondary); font: 14px/1.5 ui-monospace, Consolas, monospace; }
     @media (max-width: 760px) {
       .pipeline-logs__header, .pipeline-step__header { flex-direction: column; }

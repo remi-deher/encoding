@@ -1,3 +1,4 @@
+import { MatButtonModule } from '@angular/material/button';
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -36,7 +37,7 @@ interface WorkerPairingResponse {
 
 @Component({
   selector: 'app-worker-console-page',
-  imports: [CategoryTabsComponent, PageHeaderComponent],
+  imports: [CategoryTabsComponent, MatButtonModule, PageHeaderComponent],
   templateUrl: './worker-console-page.component.html',
   styleUrl: './worker-console-page.component.scss',
 })

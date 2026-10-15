@@ -77,16 +77,16 @@
                   </div>
                   <div class="cluster-actions">
                     <button
+                      matButton="outlined"
                       type="button"
-                      class="pairing-button"
                       [disabled]="generatingPairingClusterId() !== null || enrollingClusterId() !== null"
                       (click)="generatePairingKey(cluster)"
                     >
                       {{ generatingPairingClusterId() === cluster.id ? 'Génération…' : 'Générer une clé' }}
                     </button>
                     <button
+                      matButton="filled"
                       type="button"
-                      class="join-button"
                       [disabled]="enrollingClusterId() !== null || generatingPairingClusterId() !== null"
                       (click)="joinCluster(cluster)"
                     >

@@ -6,6 +6,7 @@ import {
   MatDialogRef,
   MatDialogTitle,
 } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
 
 export interface ConfirmationDialogData {
   readonly title: string;
@@ -21,7 +22,7 @@ export interface ConfirmationDialogData {
 
 @Component({
   selector: 'app-confirmation-dialog',
-  imports: [MatDialogActions, MatDialogContent, MatDialogTitle],
+  imports: [MatButtonModule, MatDialogActions, MatDialogContent, MatDialogTitle],
   template: `
     <div class="confirmation-dialog">
     <header class="confirmation-header" [class.confirmation-header_colored]="!!data.headerColor" [style.background-color]="data.headerColor ?? 'var(--surface-muted)'">
@@ -44,12 +45,24 @@ export interface ConfirmationDialogData {
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       @if (data.mode === 'information') {
-        <button class="confirm-button" type="button" [style.background-color]="data.confirmColor ?? 'var(--accent-strong)'" [style.border-color]="data.confirmColor ?? 'var(--accent-strong)'" (click)="dialogRef.close(true)">
+        <button
+          matButton="filled"
+          type="button"
+          [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
+          [style.--mat-button-filled-label-text-color]="data.confirmColor ? 'var(--on-danger)' : null"
+          (click)="dialogRef.close(true)"
+        >
           {{ data.closeLabel ?? 'Fermer' }}
         </button>
       } @else {
-        <button class="cancel-button" type="button" (click)="dialogRef.close(false)">Annuler</button>
-        <button class="confirm-button" type="button" [style.background-color]="data.confirmColor ?? 'var(--accent-strong)'" [style.border-color]="data.confirmColor ?? 'var(--accent-strong)'" (click)="dialogRef.close(true)">
+        <button matButton="text" type="button" (click)="dialogRef.close(false)">Annuler</button>
+        <button
+          matButton="filled"
+          type="button"
+          [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
+          [style.--mat-button-filled-label-text-color]="data.confirmColor ? 'var(--on-danger)' : null"
+          (click)="dialogRef.close(true)"
+        >
           {{ data.confirmLabel ?? 'Confirmer' }}
         </button>
       }
@@ -122,26 +135,6 @@ export interface ConfirmationDialogData {
       padding: var(--space-3) var(--space-2) var(--space-1);
     }
 
-    button {
-      min-height: 36px;
-      padding: 0 13px;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-      background: var(--surface);
-      color: var(--text-primary);
-      font: inherit;
-      font-weight: 650;
-      cursor: pointer;
-    }
-
-    .confirm-button {
-      color: #fff;
-    }
-
-    button:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-    }
   `,
 })
 export class ConfirmationDialogComponent {
