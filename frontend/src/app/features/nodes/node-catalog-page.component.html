@@ -50,6 +50,23 @@
           Consulter les réglages
         </button>
       }
+    } @else if (local.pending()) {
+      @if (isAdmin()) {
+        <button matButton="filled" (click)="local.openJoin()">Suivre la demande</button>
+      }
+    } @else if (local.standalone()) {
+      @if (isAdmin()) {
+        <button
+          matButton="outlined"
+          [disabled]="local.busy() || local.identityUnavailable()"
+          (click)="local.openCreate()"
+        >
+          Créer un cluster
+        </button>
+        <button matButton="filled" [disabled]="!local.canJoin()" (click)="local.openJoin()">
+          Rejoindre un cluster
+        </button>
+      }
     } @else if (!local.standalone() && clusterIdentity() && !local.externalCluster()) {
       <a matButton="text" routerLink="/node-groups">Groupes de nœuds</a>
       @if (isAdmin()) {
@@ -72,6 +89,19 @@
       }
     }
   </ng-template>
+  <span catalogue-metadata>
+    @if (pageTab() === 'node') {
+      <app-status-badge
+        [label]="local.standalone() ? 'Autonome' : 'Membre de ' + clusterName()"
+        tone="accent"
+      />
+    } @else {
+      <app-status-badge
+        [label]="local.pending() ? 'Rattachement en cours' : 'Depuis ' + localName()"
+        [tone]="local.pending() ? 'warning' : 'neutral'"
+      />
+    }
+  </span>
   <app-category-tabs
     catalogue-navigation
     label="Gestion des nœuds"
@@ -79,77 +109,25 @@
     [selected]="pageTab()"
     (selectedChange)="onManagementTabChange($event)"
   />
-  <ng-container catalogue-summary>
-    @if (pageTab() === 'node') {
-      <app-context-banner
-        label="Ce nœud"
-        [title]="localName()"
-        [description]="local.standalone() ? 'Installation autonome' : 'Membre de ' + clusterName()"
-      >
-        <app-status-badge
-          banner-actions
-          [label]="
-            local.agentUnavailable()
-              ? local.mode()?.worker === false
-                ? 'Fonctions worker désactivées'
-                : 'Agent injoignable'
-              : 'Agent joignable'
-          "
-          [tone]="local.agentUnavailable() ? 'warning' : 'success'"
-        />
-      </app-context-banner>
-    } @else if (local.pending()) {
-      <app-context-banner
-        label="Rattachement en cours"
-        [title]="'Demande envoyée à ' + local.targetName()"
-        description="En attente d’approbation. Le rattachement précédent est conservé jusqu’à la confirmation du nouveau cluster."
-      >
-        @if (isAdmin()) {
-          <button banner-actions matButton="filled" type="button" (click)="local.openJoin()">
-            Suivre la demande
-          </button>
+  <div catalogue-filters>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Fonctions</mat-label
+      ><mat-select [value]="selectedRole()" (selectionChange)="onRoleChange($event.value)">
+        @for (option of roleOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }} · {{ option.count }}</mat-option>
         }
-      </app-context-banner>
-    } @else if (local.standalone()) {
-      <app-context-banner
-        label="Aucun cluster"
-        title="Ce nœud est autonome"
-        description="Créez un cluster pour accueillir d’autres nœuds, ou rejoignez un cluster existant."
-      >
-        @if (isAdmin()) {
-          <div banner-actions>
-            <button
-              matButton="outlined"
-              type="button"
-              [disabled]="local.busy() || local.identityUnavailable()"
-              (click)="local.openCreate()"
-            >
-              Créer un cluster
-            </button>
-            <button
-              matButton="filled"
-              type="button"
-              [disabled]="!local.canJoin()"
-              (click)="local.openJoin()"
-            >
-              Rejoindre un cluster
-            </button>
-          </div>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>État</mat-label
+      ><mat-select [value]="selectedState()" (selectionChange)="selectedState.set($event.value)">
+        @for (option of stateOptions(); track option.value) {
+          <mat-option [value]="option.value">{{ option.label }} · {{ option.count }}</mat-option>
         }
-      </app-context-banner>
-    } @else if (clusterIdentity()) {
-      <app-context-banner
-        label="Cluster actuel"
-        [title]="clusterName()"
-        [description]="'Vous consultez cette installation depuis ' + localName() + '.'"
-      >
-        <app-status-badge
-          banner-actions
-          [label]="local.identityUnavailable() ? 'État non actualisé' : 'Cluster connu'"
-          [tone]="local.identityUnavailable() ? 'warning' : 'accent'"
-        />
-      </app-context-banner>
-    }
+      </mat-select>
+    </mat-form-field>
+  </div>
+  <div catalogue-table>
     @if (local.agentUnavailable() && !local.loading()) {
       <app-context-banner
         label="État du nœud"
@@ -170,34 +148,7 @@
     @if (local.status()?.switchFailure; as failure) {
       <p role="alert">Rattachement annulé : {{ failure }}</p>
     }
-    @if (
-      pageTab() === 'cluster' &&
-      !local.standalone() &&
-      !local.externalCluster() &&
-      clusterIdentity()
-    ) {
-      <app-summary-tiles label="Synthèse du cluster" [tiles]="summaryTiles()" />
-    }
-  </ng-container>
-  <div catalogue-filters>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Fonctions</mat-label
-      ><mat-select [value]="selectedRole()" (selectionChange)="onRoleChange($event.value)">
-        @for (option of roleOptions(); track option.value) {
-          <mat-option [value]="option.value">{{ option.label }} · {{ option.count }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>État</mat-label
-      ><mat-select [value]="selectedState()" (selectionChange)="selectedState.set($event.value)">
-        @for (option of stateOptions(); track option.value) {
-          <mat-option [value]="option.value">{{ option.label }} · {{ option.count }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </div>
-  <div catalogue-table>
+
     @if (pageTab() === 'node') {
       <app-detail-card-grid
         ariaLabel="Fiche du nœud local"
@@ -222,24 +173,26 @@
       </app-context-banner>
     } @else {
       @if (isAdmin() && enrollmentRows().length) {
-        <app-context-banner
-          label="Approbations"
-          title="Demandes de rattachement"
-          description="Examinez chaque demande et comparez le code affiché sur le nœud demandeur avant de l’approuver."
-        />
+        <h2 class="resource-section-title">
+          Demandes de rattachement
+          <app-status-badge [label]="enrollmentRows().length + ' à examiner'" tone="warning" />
+        </h2>
         <app-data-table
           [columns]="enrollmentColumns"
           [rows]="enrollmentRows()"
-          [layout]="handset() ? 'cards' : 'table'"
+          layout="cards"
+          [resourceCards]="enrollmentResources()"
           [rowOpenable]="true"
           rowOpenLabel="Examiner la demande"
           (rowOpen)="onEnrollmentOpen($event)"
         />
       }
+      <h2 class="resource-section-title">Membres du cluster actuel</h2>
       <app-data-table
         [columns]="columns"
         [rows]="filteredNodes()"
-        [layout]="handset() ? 'cards' : 'table'"
+        layout="cards"
+        [resourceCards]="memberResources()"
         [selectable]="isAdmin() && !bulkBusy()"
         [rowOpenable]="true"
         rowOpenLabel="Consulter"

@@ -108,7 +108,7 @@ Toute route de gestion exige une session ; les rôles sont `admin` et `viewer` (
 
 ## Règles absolues de programmation de l’interface
 
-La page Nœuds distingue **Ce nœud** et **Cluster** ; la création et le rattachement guidé réutilisent les composants communs Angular Material/CDK et les API authentifiées existantes. Voir [0048](docs/architecture/0048-local-node-and-guided-cluster-management.md).
+La page Nœuds distingue **Ce nœud** et **Cluster** ; la création et le rattachement guidé réutilisent les composants communs Angular Material/CDK et les API authentifiées existantes. Voir [0048](docs/architecture/0048-local-node-and-guided-cluster-management.md) et [0049](docs/architecture/0049-cluster-resource-cards.md) (cartes horizontales, titre contextuel et métriques observées).
 
 Les règles de [UI_RULES.md](UI_RULES.md) sont obligatoires pour toute conception ou modification de l’interface. Jetons de design, thème sombre, cartes de données et éditeur de scripts : [0035](docs/architecture/0035-ui-design-tokens-theme-and-cards.md). Les lire avant de travailler sur l’interface et les appliquer sans contournement propre à une page. En cas de doute sur un besoin métier, demander plutôt qu’inventer. Toute évolution d’un socle ou composant commun doit examiner ses usages et signaler son impact.
 

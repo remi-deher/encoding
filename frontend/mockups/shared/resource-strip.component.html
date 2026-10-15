@@ -1,0 +1,60 @@
+<mat-card
+  appearance="outlined"
+  [class.attention]="data().tone === 'warning'"
+  [attr.aria-label]="data().title"
+  ><mat-card-content>
+    <header>
+      <div class="identity">
+        <div class="eyebrow">
+          <app-status-badge [label]="data().state" [tone]="data().tone" />
+          @for (badge of data().badges; track badge) {
+            <span class="role">{{ badge }}</span>
+          }
+        </div>
+        <h3>{{ data().title }}</h3>
+        <p>{{ data().subtitle }}</p>
+      </div>
+      <button
+        matIconButton
+        [matMenuTriggerFor]="menu"
+        [attr.aria-label]="'Actions pour ' + data().title"
+      >
+        <span aria-hidden="true">⋮</span></button
+      ><mat-menu #menu="matMenu"
+        ><button mat-menu-item (click)="opened.emit()">{{ data().actionLabel }}</button></mat-menu
+      >
+    </header>
+    <dl class="metrics">
+      @for (metric of data().metrics; track metric.label) {
+        <div class="metric" [class.emphasis]="metric.emphasis">
+          <dt>{{ metric.label }}</dt>
+          <dd>{{ metric.value }}</dd>
+          @if (metric.progress !== undefined) {
+            <mat-progress-bar
+              mode="determinate"
+              [value]="metric.progress"
+              [attr.aria-label]="metric.label"
+            />
+          }
+          <p>{{ metric.detail }}</p>
+        </div>
+      }
+    </dl>
+    <footer>
+      <div class="capabilities">
+        <mat-chip-set aria-label="Capacités déclarées">
+          @for (tag of data().tags; track tag) {
+            <mat-chip>{{ tag }}</mat-chip>
+          }
+        </mat-chip-set>
+        <p class="note">{{ data().note }}</p>
+      </div>
+      <button
+        [matButton]="data().tone === 'warning' ? 'filled' : 'outlined'"
+        (click)="opened.emit()"
+      >
+        {{ data().actionLabel }} <span aria-hidden="true">→</span>
+      </button>
+    </footer>
+  </mat-card-content></mat-card
+>

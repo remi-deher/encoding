@@ -1,3 +1,6 @@
+import { ResourceStripData } from '../ui/resource-strip.component';
+import { nodeLifecycle, NODE_LIFECYCLE_LABELS, NODE_LIFECYCLE_TONES } from './cluster-health';
+import { NODE_ROLE_LABELS, NodeRole, NodeToolCapability } from './cluster';
 import { DetailCard } from '../ui/detail-card-grid.component';
 import { RecordFormData } from '../ui/record-form.component';
 import { GuidedStep } from '../ui/guided-setup.component';
@@ -262,4 +265,125 @@ export function clusterJoinSteps(data: JoinPresentation): readonly GuidedStep[] 
       actions: [{ id: 'finish', label: 'Voir le cluster', primary: true }],
     },
   ];
+}
+
+/** Les données absentes restent inconnues ; un worker hors ligne n'a pas de charge réputée actuelle. */
+export function memberResource(
+  node: NodeResponse,
+  active: number | null,
+  lastSignal: string,
+  libraryAccess: string,
+  localId?: string,
+): ResourceStripData {
+  const state = nodeLifecycle(node),
+    worker = node.roles.includes('worker');
+  const current = active !== null && node.status === 'online';
+  const max = node.maxConcurrentTasks;
+  const tags = node.capabilities.map((tool) => `${tool.toolId} ${tool.version}`);
+  const usable = node.capabilities.flatMap(
+    (tool) =>
+      tool.encoderChecks
+        ?.filter((check) => check.status === 'usable')
+        .map((check) => check.encoderId + ' utilisable') ?? [],
+  );
+  return {
+    id: node.id,
+    title: (node.displayName?.trim() || node.name) + (node.id === localId ? ' · Ce nœud' : ''),
+    subtitle: node.name,
+    state: NODE_LIFECYCLE_LABELS[state],
+    tone: NODE_LIFECYCLE_TONES[state],
+    badges: node.roles.map((role) => NODE_ROLE_LABELS[role]),
+    metrics: [
+      {
+        label: worker ? 'Traitements actifs' : 'Fonction serveur',
+        value: worker ? (current ? `${active} / ${max}` : 'Charge indisponible') : 'Orchestration',
+        detail: worker
+          ? `${max} traitement(s) simultané(s) au maximum`
+          : 'Interface et configuration partagée',
+        ...(worker && current && max > 0 ? { progress: Math.min(100, (active / max) * 100) } : {}),
+      },
+      {
+        label: 'Matériel déclaré',
+        value: node.inventory
+          ? `${node.inventory.processorCount} cœurs · ${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(node.inventory.memoryMb / 1024)} Go`
+          : 'Non renseigné',
+        detail: node.inventory
+          ? `${node.inventory.operatingSystem} · ${node.inventory.architecture}`
+          : 'En attente des informations du nœud',
+      },
+      {
+        label: 'Dernier signal',
+        value: lastSignal,
+        detail: node.lifecycleReason || NODE_LIFECYCLE_LABELS[state],
+      },
+    ],
+    tags: [...usable.slice(0, 2), ...tags],
+    note: [
+      node.desiredRoles ? 'Changement de fonctions en attente d’application' : null,
+      libraryAccess,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+    actionLabel: 'Consulter le nœud',
+  };
+}
+
+export function enrollmentResource(
+  request: {
+    id: string;
+    name: string;
+    roles: readonly NodeRole[];
+    capabilities: readonly NodeToolCapability[];
+    maxConcurrentTasks: number;
+    createdAt: string;
+    expiresAt: string;
+    verificationCode?: string | null;
+  },
+  now: number,
+): ResourceStripData {
+  const start = Date.parse(request.createdAt),
+    end = Date.parse(request.expiresAt),
+    remaining = Math.max(0, end - now);
+  const valid = Number.isFinite(end) && Number.isFinite(start),
+    expired = valid && remaining === 0;
+  return {
+    id: request.id,
+    title: request.name,
+    subtitle: 'Demande de rattachement au cluster',
+    state: expired ? 'Demande expirée' : 'Approbation requise',
+    tone: 'warning',
+    badges: request.roles.map((role) => NODE_ROLE_LABELS[role]),
+    metrics: [
+      {
+        label: 'Code à comparer',
+        value: request.verificationCode || 'Indisponible',
+        detail: 'À vérifier sur le nœud demandeur',
+        emphasis: true,
+      },
+      {
+        label: 'Capacité demandée',
+        value: `${request.maxConcurrentTasks} traitement(s)`,
+        detail: 'Simultanés au maximum',
+      },
+      {
+        label: 'Expiration',
+        value: valid
+          ? expired
+            ? 'Expirée'
+            : `Dans ${Math.max(1, Math.ceil(remaining / 60000))} min`
+          : 'Indisponible',
+        detail: valid
+          ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(
+              new Date(end),
+            )
+          : 'Échéance non renseignée',
+        ...(valid && end > start
+          ? { progress: Math.min(100, (remaining / (end - start)) * 100) }
+          : {}),
+      },
+    ],
+    tags: request.capabilities.map((tool) => `${tool.toolId} ${tool.version}`),
+    note: 'Capacités déclarées par le demandeur · identité à confirmer avant approbation',
+    actionLabel: 'Examiner la demande',
+  };
 }

@@ -1,3 +1,4 @@
+import { ResourceStripComponent, ResourceStripData } from './resource-strip.component';
 import { SelectionModel } from '@angular/cdk/collections';
 import {
   Component,
@@ -111,6 +112,7 @@ export interface DataTableListActionEvent {
   selector: 'app-data-table',
   imports: [
     BadgeListComponent,
+    ResourceStripComponent,
     MatButtonModule,
     MatCheckboxModule,
     MatDialogModule,
@@ -269,76 +271,91 @@ export interface DataTableListActionEvent {
         @if (cardRows().length === 0) {
           <p class="card-empty">{{ emptyMessage() }}</p>
         } @else {
-          <ul class="card-grid">
+          <ul class="card-grid" [class.resource-list]="resourceCards() !== null">
             @for (row of cardRows(); track row) {
-              <li
-                class="data-card"
-                [class.data-card_selected]="selection.isSelected(row)"
-                [class.data-card_expanded]="isExpandedRow(row)"
-              >
-                <header class="data-card-header">
-                  @if (selectable()) {
-                    <mat-checkbox
-                      [checked]="selection.isSelected(row)"
-                      aria-label="Sélectionner cette ligne"
-                      (click)="captureCheckboxClick($event)"
-                      (change)="toggleRow(row)"
-                    />
+              @if (resourceCards()?.[row['id'].toString()]; as resource) {
+                <li>
+                  <app-resource-strip
+                    [data]="resource"
+                    [selectable]="selectable()"
+                    [selected]="selection.isSelected(row)"
+                    [openable]="rowOpenable()"
+                    [actions]="visibleActions(row)"
+                    (selectionChanged)="toggleRow(row)"
+                    (opened)="rowOpen.emit(row)"
+                    (actionSelected)="resourceAction($event, row)"
+                  />
+                </li>
+              } @else {
+                <li
+                  class="data-card"
+                  [class.data-card_selected]="selection.isSelected(row)"
+                  [class.data-card_expanded]="isExpandedRow(row)"
+                >
+                  <header class="data-card-header">
+                    @if (selectable()) {
+                      <mat-checkbox
+                        [checked]="selection.isSelected(row)"
+                        aria-label="Sélectionner cette ligne"
+                        (click)="captureCheckboxClick($event)"
+                        (change)="toggleRow(row)"
+                      />
+                    }
+                    <h3 class="data-card-title">
+                      <ng-container
+                        [ngTemplateOutlet]="cellTpl"
+                        [ngTemplateOutletContext]="{
+                          column: columns()[0],
+                          row: row,
+                          isFirst: true,
+                        }"
+                      />
+                    </h3>
+                  </header>
+                  <dl class="data-card-fields">
+                    @for (column of columns().slice(1); track column.key) {
+                      <div class="data-card-field">
+                        <dt>{{ column.label }}</dt>
+                        <dd>
+                          <ng-container
+                            [ngTemplateOutlet]="cellTpl"
+                            [ngTemplateOutletContext]="{ column: column, row: row, isFirst: false }"
+                          />
+                        </dd>
+                      </div>
+                    }
+                  </dl>
+                  @if (rowActions().length > 0) {
+                    <footer class="data-card-actions">
+                      @for (action of rowActions(); track action.id) {
+                        @if (!action.visibleWhen || action.visibleWhen(row)) {
+                          <button
+                            [matButton]="action.tone === 'danger' ? 'filled' : 'outlined'"
+                            [class.data-card-action_danger]="action.tone === 'danger'"
+                            type="button"
+                            [attr.aria-label]="
+                              rowActionLabel(action, row) + ' ' + rowActionSubject(row)
+                            "
+                            [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
+                            [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
+                            (click)="requestRowAction(action, row)"
+                          >
+                            {{ rowActionLabel(action, row) }}
+                          </button>
+                        }
+                      }
+                    </footer>
                   }
-                  <h3 class="data-card-title">
-                    <ng-container
-                      [ngTemplateOutlet]="cellTpl"
-                      [ngTemplateOutletContext]="{
-                        column: columns()[0],
-                        row: row,
-                        isFirst: true,
-                      }"
-                    />
-                  </h3>
-                </header>
-                <dl class="data-card-fields">
-                  @for (column of columns().slice(1); track column.key) {
-                    <div class="data-card-field">
-                      <dt>{{ column.label }}</dt>
-                      <dd>
-                        <ng-container
-                          [ngTemplateOutlet]="cellTpl"
-                          [ngTemplateOutletContext]="{ column: column, row: row, isFirst: false }"
-                        />
-                      </dd>
+                  @if (rowDetail() && isExpandedRow(row)) {
+                    <div class="data-card-detail" [id]="rowDetailId(row)">
+                      <ng-container
+                        [ngTemplateOutlet]="rowDetail()!.template"
+                        [ngTemplateOutletContext]="{ $implicit: row }"
+                      />
                     </div>
                   }
-                </dl>
-                @if (rowActions().length > 0) {
-                  <footer class="data-card-actions">
-                    @for (action of rowActions(); track action.id) {
-                      @if (!action.visibleWhen || action.visibleWhen(row)) {
-                        <button
-                          [matButton]="action.tone === 'danger' ? 'filled' : 'outlined'"
-                          [class.data-card-action_danger]="action.tone === 'danger'"
-                          type="button"
-                          [attr.aria-label]="
-                            rowActionLabel(action, row) + ' ' + rowActionSubject(row)
-                          "
-                          [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
-                          [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
-                          (click)="requestRowAction(action, row)"
-                        >
-                          {{ rowActionLabel(action, row) }}
-                        </button>
-                      }
-                    }
-                  </footer>
-                }
-                @if (rowDetail() && isExpandedRow(row)) {
-                  <div class="data-card-detail" [id]="rowDetailId(row)">
-                    <ng-container
-                      [ngTemplateOutlet]="rowDetail()!.template"
-                      [ngTemplateOutletContext]="{ $implicit: row }"
-                    />
-                  </div>
-                }
-              </li>
+                </li>
+              }
             }
           </ul>
         }
@@ -478,6 +495,8 @@ export class DataTableComponent {
   readonly rows = input.required<readonly DataTableRow[]>();
   /** `cards` présente chaque ligne comme une carte : plus d'informations lisibles que le tableau dense. */
   readonly layout = input<'table' | 'cards'>('table');
+  /** Présentation riche facultative, toujours gérée par la sélection et les actions communes. */
+  readonly resourceCards = input<Readonly<Record<string, ResourceStripData>> | null>(null);
   readonly emptyMessage = input('Aucun résultat.');
   readonly selectable = input(false);
   readonly rowOpenable = input(false);
@@ -543,7 +562,14 @@ export class DataTableComponent {
   constructor() {
     effect(() => {
       this.expandedRowId();
-      this.dataSource.data = [...this.rows()];
+      const rows = this.rows();
+      this.dataSource.data = [...rows];
+      if (this.resourceCards()) {
+        const selectedIds = new Set(this.selection.selected.map((row) => String(row['id'])));
+        this.selection.clear();
+        this.selection.select(...rows.filter((row) => selectedIds.has(String(row['id']))));
+        this.selectedRows.set([...this.selection.selected]);
+      }
     });
 
     this.dataSource.sortingDataAccessor = (row, property) => this.sortValue(row, property);
@@ -591,6 +617,14 @@ export class DataTableComponent {
       .subscribe((confirmed: boolean | undefined) => {
         if (confirmed) this.toggleChange.emit({ key: column.key, row, checked });
       });
+  }
+
+  protected visibleActions(row: DataTableRow): readonly DataTableRowAction[] {
+    return this.rowActions().filter((action) => !action.visibleWhen || action.visibleWhen(row));
+  }
+  protected resourceAction(id: string, row: DataTableRow): void {
+    const action = this.visibleActions(row).find((action) => action.id === id);
+    if (action) this.requestRowAction(action, row);
   }
 
   protected rowActionSubject(row: DataTableRow): string {

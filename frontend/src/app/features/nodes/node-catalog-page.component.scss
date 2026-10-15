@@ -173,3 +173,13 @@ p[role='note'] {
   z-index: 2;
   background: var(--surface);
 }
+
+.resource-section-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin: 0;
+  font-size: var(--font-title);
+}

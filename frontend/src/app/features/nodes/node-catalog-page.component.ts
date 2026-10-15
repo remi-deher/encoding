@@ -1,4 +1,3 @@
-import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
 import { nodeLifecycle, NODE_LIFECYCLE_LABELS } from '../../shared/models/cluster-health';
 import { firstValueFrom } from 'rxjs';
@@ -24,7 +23,6 @@ import { AuthService } from '../../core/auth/auth.service';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
-import { BreakpointObserver } from '@angular/cdk/layout';
 import { LocalNodeController } from '../../shared/services/local-node-controller';
 import { GuidedSetupComponent } from '../../shared/ui/guided-setup.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
@@ -35,12 +33,13 @@ import {
   clusterAddressForm,
   clusterJoinSteps,
   localNodeCards,
+  memberResource,
+  enrollmentResource,
 } from '../../shared/models/node-management';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { takeUntilDestroyed, toSignal, toObservable } from '@angular/core/rxjs-interop';
-import { ActivatedRoute } from '@angular/router';
 import { RouterLink } from '@angular/router';
 import {
   catchError,
@@ -152,7 +151,6 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     GuidedSetupComponent,
     StatusBadgeComponent,
     MatMenuModule,
-    SummaryTilesComponent,
     ContextBannerComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
@@ -162,15 +160,11 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
   styleUrl: './node-catalog-page.component.scss',
 })
 export class NodeCatalogPageComponent {
-  private readonly route = inject(ActivatedRoute);
   private readonly http = inject(HttpClient);
   private readonly clusterApi = inject(ClusterApi);
   private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
   private readonly nodeMode = inject(NodeModeController);
-  private readonly routeData = toSignal(this.route.data, {
-    initialValue: this.route.snapshot.data,
-  });
   private readonly nodes = signal<readonly NodeResponse[]>([]);
   private readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
   private readonly allLibraries = signal<readonly LibraryResponse[]>([]);
@@ -187,12 +181,6 @@ export class NodeCatalogPageComponent {
   protected readonly managementTabs = NODE_MANAGEMENT_TABS;
   protected readonly createClusterForm = CREATE_CLUSTER_FORM;
   protected readonly autonomousCards = AUTONOMOUS_CARDS;
-  protected readonly handset = toSignal(
-    inject(BreakpointObserver)
-      .observe('(max-width: 700px)')
-      .pipe(map((result) => result.matches)),
-    { initialValue: false },
-  );
   protected readonly localNode = computed(
     () => this.nodes().find((node) => node.id === this.local.status()?.nodeId) ?? null,
   );
@@ -285,37 +273,6 @@ export class NodeCatalogPageComponent {
         event.actionId === 'drain' ? 'vidange' : 'reprise',
       );
   }
-  protected readonly summaryTiles = computed<readonly SummaryTile[]>(() => {
-    const nodes = this.nodes();
-    const online = nodes.filter((node) => nodeLifecycle(node) === 'online');
-    const capacity = online
-      .filter((node) => node.roles.includes('worker'))
-      .reduce((total, node) => total + node.maxConcurrentTasks, 0);
-    const pending = this.pendingEnrollments().length;
-    return [
-      {
-        label: 'Nœuds en ligne',
-        value: `${online.length} / ${nodes.length}`,
-        detail: 'selon le dernier signal reçu',
-      },
-      {
-        label: 'Capacité simultanée',
-        value: String(capacity),
-        detail: 'tâches en parallèle sur les workers en ligne',
-      },
-      {
-        label: 'Hors service',
-        value: String(nodes.length - online.length),
-        detail: 'hors ligne, en vidange, incompatibles ou en quarantaine',
-      },
-      {
-        label: 'Demandes de rattachement',
-        value: String(pending),
-        detail: pending ? 'à examiner dans cet onglet' : 'aucune demande en attente',
-        tone: pending ? 'attention' : 'default',
-      },
-    ];
-  });
   protected readonly enrollmentWindow = signal<EnrollmentWindow>({
     isOpen: false,
     openUntil: null,
@@ -352,7 +309,13 @@ export class NodeCatalogPageComponent {
       },
     ],
   };
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Nœuds');
+  protected readonly title = computed(() =>
+    this.pageTab() === 'node'
+      ? this.localName()
+      : this.local.standalone()
+        ? 'Aucun cluster'
+        : this.clusterName(),
+  );
   protected readonly catalogMessage = computed(() =>
     this.loadState() === 'error'
       ? 'Impossible de joindre l’API du cluster. Vérifiez que le backend et PostgreSQL sont démarrés.'
@@ -1224,6 +1187,30 @@ export class NodeCatalogPageComponent {
     this.selectedNode.set(node ? this.toRecord(node) : null);
   }
 
+  private readonly observedAt = signal(Date.now());
+  protected readonly memberResources = computed(() =>
+    Object.fromEntries(
+      this.nodes().map((node) => [
+        node.id,
+        memberResource(
+          node,
+          this.activityLoaded() ? (this.activeTasks()[node.id] ?? 0) : null,
+          this.formatLastSeen(node.lastSeenAt),
+          this.libraryAccessSummary(node.id),
+          this.local.status()?.nodeId,
+        ),
+      ]),
+    ),
+  );
+  protected readonly enrollmentResources = computed(() =>
+    Object.fromEntries(
+      this.pendingEnrollments().map((request) => [
+        request.id,
+        enrollmentResource(request, this.observedAt()),
+      ]),
+    ),
+  );
+
   protected readonly enrollmentColumns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nœud détecté', sortable: true },
     { key: 'verificationCode', label: 'Code à comparer', sortable: false },
@@ -1268,6 +1255,8 @@ export class NodeCatalogPageComponent {
         takeUntilDestroyed(),
       )
       .subscribe(({ nodes, pending, activity }) => {
+        this.activityLoaded.set(activity !== null);
+        this.observedAt.set(Date.now());
         if (activity) {
           this.activeTasks.set(activity);
           this.activityLoaded.set(true);

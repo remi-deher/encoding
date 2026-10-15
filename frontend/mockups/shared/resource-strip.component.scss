@@ -1,0 +1,133 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+mat-card {
+  background: var(--surface);
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-1);
+  overflow: hidden;
+}
+mat-card:hover {
+  border-color: var(--accent);
+}
+mat-card.attention {
+  border-inline-start: 4px solid var(--warning);
+}
+mat-card-content {
+  padding: var(--space-5) var(--space-6) !important;
+}
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.identity {
+  min-width: 0;
+}
+.eyebrow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.role {
+  color: var(--text-secondary);
+  font-size: 12px;
+  border-inline-start: 1px solid var(--border-subtle);
+  padding-inline-start: var(--space-2);
+}
+h3 {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: 1.05fr 1.2fr 1fr;
+  margin: var(--space-5) 0;
+  padding: var(--space-4) 0;
+  border-block: 1px solid var(--border-subtle);
+  gap: var(--space-5);
+}
+.metric + .metric {
+  border-inline-start: 1px solid var(--border-subtle);
+  padding-inline-start: var(--space-5);
+}
+dt {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+dd {
+  margin: var(--space-2) 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.metric p {
+  margin-top: var(--space-2);
+  font-size: 12px;
+}
+.emphasis dd {
+  letter-spacing: 0.14em;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+mat-progress-bar {
+  max-width: 230px;
+  border-radius: var(--radius-pill);
+}
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.capabilities {
+  min-width: 0;
+}
+.note {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+footer button {
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  mat-card-content {
+    padding: var(--space-4) !important;
+  }
+  .metrics {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+  .metric + .metric {
+    border-inline-start: 0;
+    padding-inline-start: 0;
+    border-block-start: 1px solid var(--border-subtle);
+    padding-block-start: var(--space-4);
+  }
+  dd {
+    font-size: 22px;
+  }
+  footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  footer button {
+    align-self: flex-start;
+  }
+}

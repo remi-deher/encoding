@@ -37,7 +37,9 @@ export interface CatalogEmptyState {
       (closed)="onDrawerClosed()"
     >
       <div drawer-main>
-        <app-page-header [title]="title()" [actions]="pageActions()" />
+        <app-page-header [title]="title()" [actions]="pageActions()"
+          ><ng-content page-metadata select="[catalogue-metadata]"
+        /></app-page-header>
         <ng-content select="[catalogue-navigation]" />
         <div class="catalog-summary"><ng-content select="[catalogue-summary]" /></div>
 
@@ -138,7 +140,9 @@ export class ManagementCatalogTemplateComponent {
   readonly actionClosed = output<void>();
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
   protected readonly detailContent = contentChild('detailContent', { read: TemplateRef });
-  protected readonly detailFooterActions = contentChild('detailFooterActions', { read: TemplateRef });
+  protected readonly detailFooterActions = contentChild('detailFooterActions', {
+    read: TemplateRef,
+  });
   protected readonly detailHeaderActions = contentChild('detailHeaderActions', {
     read: TemplateRef,
   });

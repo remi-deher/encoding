@@ -1,0 +1,118 @@
+<mat-toolbar class="mock-toolbar">
+  <span class="brand">ENCODING <span class="brand-detail">/ Nœuds</span></span>
+  <span class="toolbar-space"></span>
+  <app-status-badge label="Maquette interactive" tone="accent" />
+  <app-theme-toggle />
+  <button matButton="outlined" [matMenuTriggerFor]="scenarios">Scénarios</button>
+  <mat-menu #scenarios="matMenu">
+    <button mat-menu-item (click)="vm.preview('standalone')">Nœud autonome · .50</button>
+    <button mat-menu-item (click)="vm.preview('member')">Membre de Maison · .50</button>
+    <button mat-menu-item (click)="vm.preview('administrator')">
+      Administrateur de Maison · .51
+    </button>
+    <button mat-menu-item (click)="vm.preview('standalone'); vm.failNext.set(true); vm.openJoin()">
+      Simuler un échec de connexion
+    </button>
+  </mat-menu>
+  @if (vm.waiting()) {
+    <button matButton="filled" (click)="vm.simulateApproval()">Simuler l’approbation</button>
+  }
+</mat-toolbar>
+<main class="mock-workspace">
+  <app-management-catalog-template
+    [title]="vm.tab() === 'node' ? vm.name() : vm.standalone() ? 'Aucun cluster' : vm.clusterName()"
+    [showToolbar]="false"
+    [actionOpen]="vm.drawer() !== null"
+    [actionTitle]="vm.drawer() === 'join' ? 'Rejoindre un cluster' : 'Créer un cluster'"
+    [actionDescription]="
+      vm.drawer() === 'join'
+        ? 'Rattacher ce nœud à un cluster existant.'
+        : 'Ce nœud devient le premier membre du nouveau cluster.'
+    "
+    [drawerModal]="true"
+    drawerSize="standard"
+    (actionClosed)="vm.close()"
+    note="Maquette — toutes les données et opérations sont fictives. Le menu Scénarios permet de changer de point de vue."
+  >
+    <ng-template #pageActions>
+      @if (vm.tab() === 'node') {
+        <app-status-badge
+          [label]="vm.standalone() ? 'Autonome' : 'Membre de ' + vm.clusterName()"
+          tone="accent"
+        />
+        <button matButton="outlined" (click)="vm.changeMode()">Modifier les fonctions</button>
+      } @else if (vm.standalone()) {
+        @if (vm.waiting()) {
+          <button matButton="filled" (click)="vm.openJoin()">Suivre la demande</button>
+        } @else {
+          <button matButton="outlined" (click)="vm.drawer.set('create')">Créer un cluster</button>
+          <button matButton="filled" (click)="vm.openJoin()">Rejoindre un cluster</button>
+        }
+      } @else {
+        <app-status-badge [label]="'Depuis ' + vm.name()" tone="neutral" />
+        <button matButton="outlined" (click)="vm.preview('standalone'); vm.openJoin()">
+          Voir le parcours d’ajout
+        </button>
+      }
+    </ng-template>
+    <app-category-tabs
+      catalogue-navigation
+      label="Gestion des nœuds"
+      [options]="vm.tabs"
+      [selected]="vm.tab()"
+      (selectedChange)="vm.tab.set($event)"
+    />
+    <div catalogue-table>
+      @if (vm.tab() === 'node') {
+        <app-detail-card-grid
+          ariaLabel="Fiche du nœud local"
+          [cards]="vm.nodeCards()"
+          [collapsible]="false"
+        />
+      } @else if (vm.standalone()) {
+        <app-detail-card-grid
+          ariaLabel="Fonctionnement autonome"
+          [cards]="vm.standaloneCards"
+          [collapsible]="false"
+        />
+      } @else {
+        @if (vm.scene() === 'administrator' && vm.pendingRequest()) {
+          <h2 class="section-title">
+            Demandes de rattachement <app-status-badge label="1 à examiner" tone="warning" />
+          </h2>
+          <div class="resource-list">
+            <mock-resource-strip [data]="vm.requestCard" (opened)="vm.approveRequest()" />
+          </div>
+        }
+        <h2 class="section-title">
+          Membres du cluster actuel
+          <app-status-badge [label]="vm.members().length + ' en ligne'" tone="success" />
+        </h2>
+        <div class="resource-list">
+          @for (member of vm.memberCards(); track member.id) {
+            <mock-resource-strip [data]="member" (opened)="vm.openMember(member.id)" />
+          }
+        </div>
+      }
+    </div>
+    <ng-template #actionContent>
+      @if (vm.drawer() === 'create') {
+        <app-record-form
+          [data]="vm.createForm"
+          (submitted)="vm.create($event)"
+          (cancelled)="vm.close()"
+        />
+      } @else {
+        <mock-guided-setup
+          [steps]="vm.steps()"
+          [index]="vm.joinIndex()"
+          [busy]="vm.busy()"
+          [error]="vm.error()"
+          (submitted)="vm.verify($event.values)"
+          (acted)="vm.act($event)"
+          (cancelled)="vm.close()"
+        />
+      }
+    </ng-template>
+  </app-management-catalog-template>
+</main>
