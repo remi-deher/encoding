@@ -143,6 +143,14 @@ public static class NodeEndpoints
             };
         }).WithName("RequestNodeMode");
 
+        nodes.MapPut("/{nodeId:guid}/draining", async (Guid nodeId, DrainNodeRequest request, NodeRepository repository, CancellationToken ct) =>
+            await repository.SetDrainingAsync(nodeId, request.Draining, ct) ? Results.Accepted() : Results.NotFound())
+            .WithName("SetNodeDraining");
+
+        nodes.MapPost("/{nodeId:guid}/quarantine/clear", async (Guid nodeId, NodeRepository repository, CancellationToken ct) =>
+            await repository.ClearQuarantineAsync(nodeId, ct) ? Results.Accepted() : Results.NotFound(new { title = "Ce nœud n'est pas en quarantaine." }))
+            .WithName("ClearNodeQuarantine");
+
         nodes.MapGet("/{nodeId:guid}/processing",async(Guid nodeId,LibraryProcessingRepository repository,CancellationToken ct)=>
             await repository.NodeAsync(nodeId,ct) is {} settings?(IResult)Results.Ok(settings):Results.NotFound());
         nodes.MapPut("/{nodeId:guid}/processing",async(Guid nodeId,SaveNodeProcessingSettings request,LibraryProcessingRepository repository,CancellationToken ct)=>

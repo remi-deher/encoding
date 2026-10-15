@@ -36,6 +36,7 @@ import {
   timer,
   startWith,
   exhaustMap,
+  Observable,
 } from 'rxjs';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import {
@@ -205,6 +206,24 @@ export class NodeCatalogPageComponent {
   );
 
   protected readonly removalBusy = signal(false);
+  protected readonly lifecycleBusy = signal(false);
+  protected readonly lifecycleText = computed(() => {
+    const node = this.rawNode();
+    switch (node?.lifecycle) {
+      case 'draining':
+        return 'Vidange en cours : le nœud termine ses tâches et n’en reçoit plus de nouvelles.';
+      case 'incompatible':
+        return 'Version incompatible avec le cluster : ' + (node.lifecycleReason ?? '');
+      case 'quarantined':
+        return (
+          'Quarantaine : ' +
+          (node.lifecycleReason ?? 'identité probablement dupliquée') +
+          ' Aucune tâche n’est attribuée tant qu’elle n’est pas levée.'
+        );
+      default:
+        return '';
+    }
+  });
   protected readonly rawNode = computed(
     () => this.nodes().find((node) => node.id === this.selectedNode()?.id) ?? null,
   );
@@ -781,6 +800,37 @@ export class NodeCatalogPageComponent {
         if (this.selectedNode()?.id === id) this.onDetailClosed();
         this.loadLibraryAccessSummary();
         this.notifications.show('Nœud supprimé du cluster.');
+      });
+  }
+  protected toggleDraining(): void {
+    const node = this.rawNode();
+    if (!node || this.lifecycleBusy()) return;
+    this.sendLifecycle(
+      this.http.put<void>('/api/v1/nodes/' + node.id + '/draining', {
+        draining: node.lifecycle !== 'draining',
+      }),
+    );
+  }
+  protected clearQuarantine(): void {
+    const node = this.rawNode();
+    if (!node || this.lifecycleBusy()) return;
+    this.sendLifecycle(this.http.post<void>('/api/v1/nodes/' + node.id + '/quarantine/clear', {}));
+  }
+  private sendLifecycle(request: Observable<void>): void {
+    this.lifecycleBusy.set(true);
+    request
+      .pipe(
+        catchError(() => {
+          this.notifications.show('Impossible de modifier l’état du nœud.');
+          return EMPTY;
+        }),
+        finalize(() => this.lifecycleBusy.set(false)),
+      )
+      .subscribe(() => {
+        this.clusterApi
+          .listNodes()
+          .pipe(catchError(() => EMPTY))
+          .subscribe((nodes) => this.nodes.set(nodes));
       });
   }
   protected confirmNodeRemoval(): void {

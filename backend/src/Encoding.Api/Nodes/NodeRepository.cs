@@ -218,8 +218,78 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         await using var command = new NpgsqlCommand(sql, connection);
         AddNodeParameters(command, nodeId, request);
         command.Parameters.AddWithValue("node_token_hash", NpgsqlDbType.Bytea, tokenHash);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, true) : null;
+        NodeResponse? node;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            node = await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, true) : null;
+        if (node is null) return null;
+        await TrackSessionAsync(connection, nodeId, request, cancellationToken);
+        return (await WithLifecycleAsync([node], cancellationToken))[0];
+    }
+
+    /// <summary>
+    /// Version de protocole et détection d'une identité utilisée par deux processus (0041). Un redémarrage change le nonce une fois ;
+    /// deux processus qui partagent l'identité se relaient (a, b, a…) : le retour d'un nonce précédent récent met le nœud en quarantaine.
+    /// </summary>
+    private static async Task TrackSessionAsync(NpgsqlConnection connection, Guid nodeId, NodeHeartbeatRequest request, CancellationToken ct)
+    {
+        const string sql = """
+            UPDATE cluster_nodes SET
+                protocol_version = @protocol,
+                incompatible_reason = @reason,
+                quarantined = quarantined OR COALESCE(@nonce IS NOT NULL AND session_nonce IS NOT NULL AND session_nonce <> @nonce
+                    AND previous_nonce = @nonce AND nonce_changed_at > clock_timestamp() - interval '10 minutes', false),
+                previous_nonce = CASE WHEN @nonce IS NULL OR session_nonce IS NOT DISTINCT FROM @nonce THEN previous_nonce ELSE session_nonce END,
+                nonce_changed_at = CASE WHEN @nonce IS NULL OR session_nonce IS NOT DISTINCT FROM @nonce THEN nonce_changed_at ELSE clock_timestamp() END,
+                session_nonce = COALESCE(@nonce, session_nonce)
+            WHERE id = @id
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", nodeId);
+        command.Parameters.AddWithValue("protocol", NpgsqlDbType.Integer, (object?)request.ProtocolVersion ?? DBNull.Value);
+        command.Parameters.AddWithValue("reason", NpgsqlDbType.Text, (object?)ClusterProtocol.IncompatibilityReason(request.ProtocolVersion) ?? DBNull.Value);
+        command.Parameters.AddWithValue("nonce", NpgsqlDbType.Text, (object?)request.SessionNonce ?? DBNull.Value);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Ajoute l'état de cycle de vie (0041) aux nœuds lus : le plus restrictif l'emporte sur la présence.</summary>
+    private async Task<IReadOnlyList<NodeResponse>> WithLifecycleAsync(IReadOnlyList<NodeResponse> nodes, CancellationToken ct)
+    {
+        if (nodes.Count == 0) return nodes;
+        await using var command = dataSource.CreateCommand("SELECT id, draining, quarantined, incompatible_reason FROM cluster_nodes WHERE id = ANY(@ids)");
+        command.Parameters.AddWithValue("ids", nodes.Select(node => node.Id).ToArray());
+        var states = new Dictionary<Guid, (bool Draining, bool Quarantined, string? Incompatible)>();
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+            while (await reader.ReadAsync(ct))
+                states[reader.GetGuid(0)] = (reader.GetBoolean(1), reader.GetBoolean(2), reader.IsDBNull(3) ? null : reader.GetString(3));
+        return nodes.Select(node =>
+        {
+            if (!states.TryGetValue(node.Id, out var state)) return node;
+            var (lifecycle, reason) =
+                state.Quarantined ? (NodeLifecycle.Quarantined, "Identité utilisée par deux processus à la fois : réinitialisez l'un des deux nœuds puis levez la quarantaine.")
+                : state.Incompatible is not null ? (NodeLifecycle.Incompatible, state.Incompatible)
+                : state.Draining ? (NodeLifecycle.Draining, "Vidange demandée : aucune nouvelle tâche, les tâches en cours se terminent.")
+                : node.Status == NodePresenceStatus.Online ? (NodeLifecycle.Online, (string?)null)
+                : (NodeLifecycle.Offline, "Aucun signal de présence récent.");
+            return node with { Lifecycle = lifecycle, LifecycleReason = reason };
+        }).ToArray();
+    }
+
+    /// <summary>Vidange : aucune nouvelle tâche pour ce nœud, les baux en cours se terminent normalement.</summary>
+    public async Task<bool> SetDrainingAsync(Guid nodeId, bool draining, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand("UPDATE cluster_nodes SET draining = @draining WHERE id = @id AND deleted_at IS NULL");
+        command.Parameters.AddWithValue("id", nodeId);
+        command.Parameters.AddWithValue("draining", draining);
+        return await command.ExecuteNonQueryAsync(ct) == 1;
+    }
+
+    /// <summary>Lève la quarantaine après que l'administrateur a tranché ; la détection repart de zéro.</summary>
+    public async Task<bool> ClearQuarantineAsync(Guid nodeId, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand(
+            "UPDATE cluster_nodes SET quarantined = false, session_nonce = NULL, previous_nonce = NULL, nonce_changed_at = NULL WHERE id = @id AND deleted_at IS NULL AND quarantined");
+        command.Parameters.AddWithValue("id", nodeId);
+        return await command.ExecuteNonQueryAsync(ct) == 1;
     }
 
     public async Task<IReadOnlyList<NodeResponse>> ListAsync(TimeSpan offlineAfter, CancellationToken cancellationToken)
@@ -236,7 +306,8 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var nodes = new List<NodeResponse>();
         while (await reader.ReadAsync(cancellationToken)) nodes.Add(ReadResponse(reader, reader.GetBoolean(6)));
-        return nodes;
+        await reader.DisposeAsync();
+        return await WithLifecycleAsync(nodes, cancellationToken);
     }
 
     public async Task<NodeResponse?> GetAsync(Guid nodeId, TimeSpan offlineAfter, CancellationToken cancellationToken)
@@ -250,8 +321,10 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("id", nodeId);
         command.Parameters.AddWithValue("offline_after", offlineAfter);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, reader.GetBoolean(6)) : null;
+        NodeResponse? node;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            node = await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, reader.GetBoolean(6)) : null;
+        return node is null ? null : (await WithLifecycleAsync([node], cancellationToken))[0];
     }
 
 

@@ -159,6 +159,13 @@ internal static partial class Harness
             await using(var offline=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@id")){ offline.Parameters.AddWithValue("id",a); await offline.ExecuteNonQueryAsync(); }
             Check(await runtime.ClaimAsync(b,CancellationToken.None) is null && await runtime.ClaimAsync(c,CancellationToken.None) is null,"No transfer worker takes over while the library access node is offline.");
             await using(var back=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp() WHERE id=@id")){ back.Parameters.AddWithValue("id",a); await back.ExecuteNonQueryAsync(); }
+            // Vidange, quarantaine et incompatibilité de version (0041) : aucun de ces nœuds ne reprend l'exécution abandonnée.
+            foreach(var restriction in new[]{"draining=true","quarantined=true","incompatible_reason='protocole trop ancien'"})
+            {
+                await using(var set=db.CreateCommand($"UPDATE cluster_nodes SET {restriction} WHERE id=ANY(@ids)")){ set.Parameters.AddWithValue("ids",new[]{b,c}); await set.ExecuteNonQueryAsync(); }
+                Check(await runtime.ClaimAsync(b,CancellationToken.None) is null && await runtime.ClaimAsync(c,CancellationToken.None) is null,$"A node that is not accepting work ({restriction}) takes nothing.");
+                await using(var clear=db.CreateCommand("UPDATE cluster_nodes SET draining=false,quarantined=false,incompatible_reason=NULL WHERE id=ANY(@ids)")){ clear.Parameters.AddWithValue("ids",new[]{b,c}); await clear.ExecuteNonQueryAsync(); }
+            }
             var claims=await Task.WhenAll(runtime.ClaimAsync(b,CancellationToken.None),runtime.ClaimAsync(c,CancellationToken.None));
             Check(claims.Count(claim=>claim?.ExecutionId==id)==1,"Exactly one surviving worker takes over the abandoned execution.");
             var taker=claims.Single(claim=>claim?.ExecutionId==id)!; var takerNode=claims[0]?.ExecutionId==id?b:c; var other=takerNode==b?c:b;
