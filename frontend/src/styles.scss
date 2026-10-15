@@ -15,9 +15,27 @@ $app-theme: mat.define-theme(
   )
 );
 
+$app-dark-theme: mat.define-theme(
+  (
+    color: (
+      theme-type: dark,
+      primary: mat.$green-palette,
+      tertiary: mat.$azure-palette,
+    ),
+    density: (
+      scale: -1,
+    ),
+  )
+);
+
 html {
   @include mat.all-component-themes($app-theme);
   color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  @include mat.all-component-colors($app-dark-theme);
+  color-scheme: dark;
 }
 
 :root {
@@ -73,6 +91,30 @@ html {
   font-family: Inter, 'Segoe UI', sans-serif;
   color: var(--text-primary);
   background: var(--page-background);
+}
+
+:root[data-theme='dark'] {
+  --surface: #1b2220;
+  --surface-muted: #232b28;
+  --page-background: #131816;
+  --border-subtle: #34403b;
+  --border-strong: #4a5851;
+  --text-primary: #e6ece9;
+  --text-secondary: #b4c0ba;
+  --text-muted: #94a39c;
+  --accent: #7fc5ad;
+  --accent-strong: #9bd6c1;
+  --accent-soft: #24382f;
+  --success: #6fcf9f;
+  --success-soft: #1f3a2b;
+  --warning: #e0b15c;
+  --warning-soft: #3d3220;
+  --danger: #f0928f;
+  --danger-soft: #402625;
+  --danger-strong: #c5382b;
+  --danger-stronger: #a52a1e;
+  --elevation-1: 0 2px 8px rgb(0 0 0 / 30%);
+  --elevation-2: 0 8px 24px rgb(0 0 0 / 55%);
 }
 
 * {
@@ -176,7 +218,7 @@ a {
   max-height: 100dvh;
   border-radius: 0;
   background: var(--surface);
-  box-shadow: -12px 0 36px rgb(24 40 33 / 12%);
+  box-shadow: -12px 0 36px rgb(0 0 0 / 25%);
 }
 
 ::view-transition-old(root),

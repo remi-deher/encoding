@@ -12,6 +12,7 @@ import { filter, map, of, switchMap } from 'rxjs';
 import { PrimaryNavigationComponent } from '../navigation/primary-navigation.component';
 import { AuthService } from '../auth/auth.service';
 import { UserMenuComponent } from '../auth/user-menu.component';
+import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 
 @Component({
   selector: 'app-shell',
@@ -20,6 +21,7 @@ import { UserMenuComponent } from '../auth/user-menu.component';
     PrimaryNavigationComponent,
     RouterLink,
     RouterOutlet,
+    ThemeToggleComponent,
     UserMenuComponent,
   ],
   templateUrl: './app-shell.component.html',
