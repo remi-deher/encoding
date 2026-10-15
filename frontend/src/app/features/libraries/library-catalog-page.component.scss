@@ -28,3 +28,9 @@
 .library-access-empty {
   padding: 12px 0;
 }
+
+.library-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

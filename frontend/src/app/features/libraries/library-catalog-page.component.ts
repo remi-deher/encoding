@@ -12,8 +12,6 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
 
-import { MatDialog } from '@angular/material/dialog';
-
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 
 import { ActivatedRoute, Router } from '@angular/router';
@@ -65,7 +63,6 @@ import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-butto
 
 import { NotificationService } from '../../shared/services/notification.service';
 
-import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { formatFileSize } from '../../shared/models/file-size';
 import {
@@ -164,8 +161,6 @@ export class LibraryCatalogPageComponent {
   protected readonly executionTrackingState = toSignal(this.executionTracking.state$, {
     initialValue: INITIAL_EXECUTION_TRACKING,
   });
-
-  private readonly dialog = inject(MatDialog);
 
   private readonly notifications = inject(NotificationService);
 
@@ -352,8 +347,6 @@ export class LibraryCatalogPageComponent {
 
   protected readonly accessFormBusy = signal(false);
 
-  protected readonly selectedAccessesLoading = signal(false);
-
   private readonly activationBusy = signal<ReadonlySet<string>>(new Set());
 
   private readonly accessActivationBusy = signal<ReadonlySet<string>>(new Set());
@@ -371,6 +364,8 @@ export class LibraryCatalogPageComponent {
   protected readonly selectedLibraryTabIndex = signal(0);
 
   protected readonly selectedProcessingExecutionId = signal<string | null>(null);
+
+  protected readonly selectedAccessesLoading = signal(false);
 
   protected readonly processingPipelineState = toSignal(
     toObservable(this.selectedProcessingExecutionId).pipe(
@@ -1090,41 +1085,6 @@ export class LibraryCatalogPageComponent {
     );
   }
 
-  protected showLibraryNodes(): void {
-    const library = this.selectedLibrary();
-
-    if (!library) return;
-
-    const items = this.selectedAccesses()
-
-      .filter((access) => access.isEnabled && access.mode !== 'unsupported')
-
-      .map((access) => ({
-        label: access.nodeName,
-
-        detail:
-          access.mode === 'direct'
-            ? `Accès direct${access.localPath ? ` · ${access.localPath}` : ''}`
-            : `Transfert depuis ${access.transferSourceNodeName ?? 'un nœud source'}`,
-      }));
-
-    this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        mode: 'information',
-
-        title: `Nœuds utilisant « ${library.name} »`,
-
-        message: 'Nœuds autorisés et mode d’accès configuré.',
-
-        items,
-
-        emptyMessage: 'Aucun nœud n’a accès à cette bibliothèque.',
-
-        headerColor: 'var(--accent-strong)',
-      },
-    });
-  }
-
   protected onDetailClosed(): void {
     this.selectedLibrary.set(null);
   }
@@ -1533,7 +1493,6 @@ export class LibraryCatalogPageComponent {
 
           return of([]);
         }),
-
         finalize(() => this.selectedAccessesLoading.set(false)),
       )
 
