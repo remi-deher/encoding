@@ -52,7 +52,7 @@ import {
   styles: `
     .schedule-scroll {
       overflow-x: auto;
-      padding-bottom: 4px;
+      padding-bottom: var(--space-1);
     }
     .schedule-grid {
       --cell-width: clamp(14px, 3.2vw, 28px);
@@ -65,14 +65,14 @@ import {
     }
     .hour {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--font-body);
       text-align: center;
       grid-row: 1;
     }
     .day {
       align-self: center;
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
     .cell {
       height: 26px;

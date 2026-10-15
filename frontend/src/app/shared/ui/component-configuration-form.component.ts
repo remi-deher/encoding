@@ -346,45 +346,45 @@ type ConfigurationFormGroup = FormGroup<
     }
     .configuration-fields {
       display: grid;
-      gap: 8px;
+      gap: var(--space-2);
     }
     mat-form-field {
       width: 100%;
     }
     .boolean-field {
-      padding: 8px 0;
+      padding: var(--space-2) 0;
     }
     .field-description {
-      margin: 4px 0 0 32px;
+      margin: var(--space-1) 0 0 var(--space-6);
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
     .profile-target-preview {
       display: grid;
-      gap: 8px;
-      padding: 12px;
+      gap: var(--space-2);
+      padding: var(--space-3);
       border: 1px solid var(--border-subtle);
-      border-radius: 9px;
+      border-radius: var(--radius-md);
       background: var(--surface-muted);
     }
     .profile-target-preview h3 {
       margin: 0;
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
     .profile-target-preview p {
       margin: 0;
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.45;
     }
     .profile-target-row {
       display: grid;
       gap: 3px;
-      padding: 8px 10px;
-      border-radius: 7px;
+      padding: var(--space-2) 10px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
     .profile-target-row strong {
       color: var(--text-primary);
@@ -399,11 +399,11 @@ type ConfigurationFormGroup = FormGroup<
     .form-actions {
       display: flex;
       justify-content: flex-end;
-      gap: 8px;
-      padding-top: 16px;
+      gap: var(--space-2);
+      padding-top: var(--space-4);
     }
     .connection-test-result {
-      margin: 8px 0 0;
+      margin: var(--space-2) 0 0;
       color: var(--color-success, #237a45);
     }
     .connection-test-failed {
@@ -414,7 +414,7 @@ type ConfigurationFormGroup = FormGroup<
         position: sticky;
         bottom: 0;
         margin-inline: -16px;
-        padding: 12px 16px;
+        padding: var(--space-3) var(--space-4);
         background: var(--surface);
         border-top: 1px solid var(--border-subtle);
       }

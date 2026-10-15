@@ -73,7 +73,7 @@
 
 .preview-node__kind {
   padding: 0.125rem 0.375rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--node-background);
 }
 

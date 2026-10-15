@@ -27,20 +27,20 @@ import { AuthService } from './auth.service';
     .user-trigger {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      font-size: 14px;
+      gap: var(--space-2);
+      font-size: var(--font-body);
     }
     .user-name {
       font-weight: 650;
       color: var(--text-primary);
     }
     .user-role {
-      padding: 3px 8px;
+      padding: 3px var(--space-2);
       border: 1px solid var(--border-subtle);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       color: var(--text-muted);
       background: var(--surface-muted);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
   `,
 })

@@ -4,8 +4,8 @@
   align-items: center;
   gap: 7px;
   padding: 5px 9px;
-  border-radius: 999px;
-  font-size: 14px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-body);
   font-weight: 660;
   line-height: 1;
   white-space: nowrap;

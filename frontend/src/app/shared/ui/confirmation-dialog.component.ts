@@ -62,15 +62,15 @@ export interface ConfirmationDialogData {
     .confirmation-dialog { width: max-content; max-width: 100%; }
 
     .confirmation-header {
-      margin: 0 0 16px;
-      padding: 16px 20px;
-      border-radius: 12px;
+      margin: 0 0 var(--space-4);
+      padding: var(--space-4) 20px;
+      border-radius: var(--radius-lg);
       background: var(--surface-muted);
     }
 
     h2 {
       color: var(--text-primary);
-      font-size: 17px;
+      font-size: var(--font-title);
       font-weight: 700;
       line-height: 1.35;
       margin: 0;
@@ -86,29 +86,29 @@ export interface ConfirmationDialogData {
     mat-dialog-content {
       max-height: none;
       margin: 0;
-      padding: 0 8px;
+      padding: 0 var(--space-2);
       overflow: visible;
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.6;
     }
 
     .dialog-message { margin: 0; }
 
     .information-list {
-      margin: 12px 0 0;
+      margin: var(--space-3) 0 0;
       padding: 0;
       display: grid;
-      gap: 8px;
+      gap: var(--space-2);
       list-style: none;
     }
 
     .information-list li {
-      padding: 10px 12px;
+      padding: 10px var(--space-3);
       display: grid;
       gap: 3px;
       border: 1px solid var(--border-subtle);
-      border-radius: 8px;
+      border-radius: var(--radius-md);
       background: var(--surface-muted);
     }
 
@@ -118,15 +118,15 @@ export interface ConfirmationDialogData {
     .empty-message { margin: 0; }
 
     mat-dialog-actions {
-      gap: 8px;
-      padding: 12px 8px 4px;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-2) var(--space-1);
     }
 
     button {
       min-height: 36px;
       padding: 0 13px;
       border: 1px solid var(--border-subtle);
-      border-radius: 7px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       color: var(--text-primary);
       font: inherit;

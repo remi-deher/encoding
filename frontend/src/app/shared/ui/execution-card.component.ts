@@ -59,59 +59,59 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
     :host { display: block; }
     .execution-card {
       min-width: 0;
-      padding: 16px;
+      padding: var(--space-4);
       display: grid;
       gap: 14px;
       border: 1px solid var(--border-subtle);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       background: var(--surface);
     }
     .execution-card__header {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
+      gap: var(--space-3);
     }
     .execution-card__title { min-width: 0; }
     .execution-card h3 {
       margin: 0;
       overflow-wrap: anywhere;
       color: var(--text-primary);
-      font-size: 16px;
+      font-size: var(--font-title);
       font-weight: 700;
     }
     .execution-card__title p {
       margin: 5px 0 0;
       overflow-wrap: anywhere;
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.45;
     }
     .execution-card__detail {
       margin: 0;
       overflow-wrap: anywhere;
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.5;
     }
     .execution-card__facts {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
-      gap: 12px;
+      gap: var(--space-3);
     }
-    .execution-card__facts div { min-width: 0; display: grid; gap: 4px; }
+    .execution-card__facts div { min-width: 0; display: grid; gap: var(--space-1); }
     .execution-card__facts span { color: var(--text-muted); font-size: 13px; }
     .execution-card__facts strong {
       overflow-wrap: anywhere;
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--font-body);
       font-weight: 600;
     }
-    mat-progress-bar { display: block; border-radius: 99px; }
+    mat-progress-bar { display: block; border-radius: var(--radius-pill); }
     .execution-card__footer {
       display: flex;
       justify-content: flex-end;
-      padding-top: 12px;
+      padding-top: var(--space-3);
       border-top: 1px solid var(--border-subtle);
     }
     @media (max-width: 480px) {

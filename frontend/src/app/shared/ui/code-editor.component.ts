@@ -29,7 +29,7 @@ import { python } from '@codemirror/lang-python';
       .code-editor {
         overflow: hidden;
         border: 1px solid var(--border-subtle);
-        border-radius: 8px;
+        border-radius: var(--radius-md);
       }
       .code-editor:focus-within {
         outline: 2px solid var(--focus-ring, var(--primary));
@@ -40,7 +40,7 @@ import { python } from '@codemirror/lang-python';
         max-height: 560px;
         color: var(--text-primary);
         background: var(--surface);
-        font-size: 14px;
+        font-size: var(--font-body);
       }
       .code-editor_roomy ::ng-deep .cm-editor {
         min-height: 420px;
@@ -61,7 +61,7 @@ import { python } from '@codemirror/lang-python';
       @media (max-width: 600px) {
         :host ::ng-deep .cm-editor {
           min-height: 220px;
-          font-size: 14px;
+          font-size: var(--font-body);
         }
       }
     `,

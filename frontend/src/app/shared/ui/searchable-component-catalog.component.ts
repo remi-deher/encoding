@@ -96,7 +96,7 @@ import {
     }
     .component-catalog {
       display: grid;
-      gap: 12px;
+      gap: var(--space-3);
     }
     .search-field {
       width: 100%;
@@ -104,23 +104,23 @@ import {
     .catalog-filters {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
+      gap: var(--space-3);
     }
     .catalog-filters mat-form-field {
       min-width: 0;
     }
     .component-list {
       display: grid;
-      gap: 8px;
+      gap: var(--space-2);
     }
     .component-option {
       width: 100%;
-      padding: 14px 16px;
+      padding: 14px var(--space-4);
       display: grid;
       gap: 7px;
       text-align: left;
       border: 1px solid var(--border-subtle);
-      border-radius: 8px;
+      border-radius: var(--radius-md);
       background: var(--surface);
       color: var(--text-primary);
       font: inherit;
@@ -136,7 +136,7 @@ import {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: var(--space-3);
     }
     .component-name {
       font-weight: 700;
@@ -144,7 +144,7 @@ import {
     .component-plugin,
     .component-meta {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
     .component-description {
       color: var(--text-secondary);
@@ -152,7 +152,7 @@ import {
     }
     .empty-state {
       margin: 0;
-      padding: 24px 12px;
+      padding: var(--space-5) var(--space-3);
       color: var(--text-muted);
       text-align: center;
     }

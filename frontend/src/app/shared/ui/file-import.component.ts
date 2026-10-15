@@ -23,7 +23,7 @@ import { MatButtonModule } from '@angular/material/button';
   styles: `
     p {
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.5;
     }
   `,

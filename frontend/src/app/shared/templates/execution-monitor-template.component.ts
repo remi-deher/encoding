@@ -240,9 +240,9 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     .monitor-panel {
       overflow: hidden;
       border: 1px solid var(--border-subtle);
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       background: var(--surface);
-      box-shadow: 0 2px 8px rgb(24 40 33 / 3%);
+      box-shadow: var(--elevation-1);
     }
 
     .monitor-panel-heading {
@@ -258,20 +258,20 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     .monitor-panel-heading h2 {
       margin: 0;
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--font-body);
       font-weight: 700;
     }
 
     .monitor-panel-heading p {
       margin: 5px 0 0;
       color: var(--text-secondary);
-      font-size: 14px;
+      font-size: var(--font-body);
     }
 
     .execution-count,
     .tab-count {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--font-body);
       font-variant-numeric: tabular-nums;
     }
 
@@ -285,12 +285,12 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
 
     .execution-feedback {
       margin: 14px 20px 0;
-      padding: 10px 12px;
+      padding: 10px var(--space-3);
       border: 1px solid var(--accent-soft);
-      border-radius: 8px;
+      border-radius: var(--radius-md);
       background: var(--accent-soft);
       color: var(--accent-strong);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.5;
     }
 
@@ -299,14 +299,14 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     }
 
     .execution-detail-tabs { display: block; }
-    .execution-detail-tab { display: grid; gap: 18px; padding: 18px 2px 4px; }
-    .execution-detail-tab h3 { margin: 0; color: var(--text-primary); font-size: 14px; }
-    .execution-detail-empty { margin: 0; color: var(--text-secondary); font-size: 14px; }
+    .execution-detail-tab { display: grid; gap: 18px; padding: 18px 2px var(--space-1); }
+    .execution-detail-tab h3 { margin: 0; color: var(--text-primary); font-size: var(--font-body); }
+    .execution-detail-empty { margin: 0; color: var(--text-secondary); font-size: var(--font-body); }
 
     .monitor-note {
       margin: 14px 2px 0;
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--font-body);
       line-height: 1.5;
     }
 
@@ -321,7 +321,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
 
       .monitor-panel-heading {
         align-items: flex-start;
-        padding: 16px;
+        padding: var(--space-4);
       }
     }
   `,

@@ -24,12 +24,12 @@ export interface GuideDialogData {
     <mat-dialog-actions align="end"><button matButton="filled" type="button" (click)="dialogRef.close()">Compris</button></mat-dialog-actions>
   `,
   styles: `
-    h2 { color: var(--text-primary); font-size: 18px; font-weight: 700; }
+    h2 { color: var(--text-primary); font-size: var(--font-title-md); font-weight: 700; }
     mat-dialog-content { color: var(--text-secondary); line-height: 1.55; }
     .description { margin-top: 0; }
     ol { display: grid; gap: 10px; padding-left: 22px; }
-    li { padding-left: 4px; }
-    .note { padding: 12px; border-radius: 8px; background: var(--surface-muted); }
+    li { padding-left: var(--space-1); }
+    .note { padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-muted); }
   `,
 })
 export class GuideDialogComponent {
