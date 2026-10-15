@@ -32,19 +32,26 @@
     />
   </div>
 
-  <app-data-table
-    layout="cards"
-    catalogue-table
-    [columns]="columns"
-    [rows]="filteredNodes()"
-    [selectable]="true"
-    [rowOpenable]="true"
-    rowOpenLabel="Consulter"
-    [rowActions]="nodeActions"
-    (rowAction)="onNodeAction($event)"
-    (rowOpen)="onNodeOpen($event)"
-    emptyMessage="Aucun nœud ne correspond à ce rôle."
-  />
+  <div catalogue-table class="node-card-grid">
+    @for (card of nodeCards(); track card.id) {
+      <app-resource-card
+        [title]="card.title"
+        [statusLabel]="card.statusLabel"
+        [statusTone]="card.statusTone"
+        [badges]="card.badges"
+        [tags]="card.tags"
+        [facts]="card.facts"
+        [note]="card.note"
+        [active]="selectedNode()?.id === card.id"
+        [actions]="card.actions"
+        openLabel="Consulter"
+        (open)="openNodeCard(card.id)"
+        (actionSelected)="onNodeCardAction(card.id, $event)"
+      />
+    } @empty {
+      <p class="node-card-empty" role="status">Aucun nœud ne correspond à ce rôle.</p>
+    }
+  </div>
 
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group
