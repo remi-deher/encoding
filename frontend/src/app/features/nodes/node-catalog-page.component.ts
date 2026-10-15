@@ -1100,6 +1100,16 @@ export class NodeCatalogPageComponent {
       .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, 'fr', { numeric: true }));
   });
 
+  protected editSelectedNodeIdentity(): void {
+    const node = this.selectedNode();
+    if (node) void this.editNodeIdentity(node);
+  }
+
+  protected changeSelectedNodeMode(): void {
+    const node = this.rawNode();
+    if (node) void this.requestNodeMode(node);
+  }
+
   protected openNodeCard(id: string): void {
     this.selectedNode.set(this.filteredNodes().find((node) => node.id === id) ?? null);
   }

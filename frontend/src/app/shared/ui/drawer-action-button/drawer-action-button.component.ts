@@ -19,7 +19,7 @@ export type DrawerActionRoute = string | readonly string[];
       >
     } @else {
       <button
-        matButton="filled"
+        [matButton]="variant()"
         class="drawer-action-button"
         [class.drawer-action-button_danger]="tone() === 'danger'"
         type="button"
@@ -34,6 +34,8 @@ export type DrawerActionRoute = string | readonly string[];
 })
 export class DrawerActionButtonComponent {
   readonly tone = input<'default' | 'danger'>('default');
+  /** `filled` : action principale du tiroir ; `outlined` : action secondaire. */
+  readonly variant = input<'filled' | 'outlined'>('filled');
   readonly disabled = input(false);
   readonly label = input.required<string>();
   readonly routerLink = input<DrawerActionRoute | null>(null);
