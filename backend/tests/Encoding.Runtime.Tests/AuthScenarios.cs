@@ -284,6 +284,15 @@ internal static class AuthScenarios
         Check(listed.Single(node => node.Id == localNode.Id).DisplayName == "Serveur du salon", "The friendly name chosen at setup is applied to the local node.");
         Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", NewNode(Guid.NewGuid(), NodeToken()), csrf: false) == HttpStatusCode.Forbidden, "Other nodes still need the window or a pairing key.");
 
+        // Un nœud retiré apprend que son identité est révoquée (410) au lieu de rester « enrôlé » sans jamais être vu ; il ne revient que sous un nouvel identifiant (0017).
+        var localBeat = new NodeHeartbeatRequest(localNode.Name, localNode.Roles, 1, localNode.Capabilities);
+        Check(await anonymous.StatusAsync(post, $"/api/v1/nodes/{localNode.Id}/leave", csrf: false, nodeToken: localNode.NodeToken) == HttpStatusCode.NoContent, "A node leaves with its own token.");
+        Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{localNode.Id}/heartbeat", localBeat, csrf: false, nodeToken: localNode.NodeToken) == HttpStatusCode.Gone, "A removed node is told its identity was revoked.");
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", localNode, csrf: false, localSecret: LocalSecret) == HttpStatusCode.Conflict, "A removed identity is never re-enrolled, even by the container secret.");
+        var reborn = NewNode(Guid.NewGuid(), NodeToken());
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", reborn, csrf: false, localSecret: LocalSecret) == HttpStatusCode.OK, "The same node re-enrolls under a fresh identity.");
+        Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{Guid.NewGuid()}/heartbeat", localBeat, csrf: false, nodeToken: NodeToken()) == HttpStatusCode.Unauthorized, "An unknown identity is still a plain 401.");
+
         // Les workers gardent leur propre authentification, sans session.
         var token = first.NodeToken;
         var heartbeat = new NodeHeartbeatRequest(first.Name, first.Roles, 1, first.Capabilities);

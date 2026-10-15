@@ -65,6 +65,9 @@ public sealed class WorkerEnrollmentService(
         {
             logger.LogWarning("L’enrôlement auprès du cluster {ClusterId} a échoué avec HTTP {StatusCode}.", clusterId, (int)response.StatusCode);
             await identityStore.AbandonPendingAsync($"le cluster {cluster.Name} a refusé l'enrôlement (HTTP {(int)response.StatusCode})", cancellationToken);
+            // 409 : l'identifiant appartient à un nœud retiré ou à un autre nœud ; réessayer avec lui échouerait indéfiniment (0017).
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict && !(await identityStore.GetAsync(cancellationToken)).IsSwitching)
+                await identityStore.ResetAsync(cancellationToken);
             throw new HttpRequestException(response.StatusCode == System.Net.HttpStatusCode.Forbidden
                 ? "L’enrôlement direct est fermé sur ce cluster. Demandez à un administrateur de l’ouvrir depuis la page Nœuds, ou générez une clé de jumelage."
                 : $"Le serveur du cluster a refusé l’enrôlement (HTTP {(int)response.StatusCode}).");
@@ -95,6 +98,19 @@ public sealed class WorkerEnrollmentService(
         var current = await launcher.GetAsync(cancellationToken);
         if (current is { Server: false })
             await launcher.SetAsync(new NodeMode(true, current.Worker || options.Roles.Contains(NodeRole.Worker)), cancellationToken);
+    }
+
+    /// <summary>Le cluster a retiré cette identité : repart d'une identité neuve, sans prévenir un cluster qui ne la connaît plus. Ignoré si l'identité a déjà changé.</summary>
+    public async Task ForgetRemovedIdentityAsync(Guid removedId, CancellationToken cancellationToken)
+    {
+        var identity = await identityStore.GetAsync(cancellationToken);
+        if (identity.Id != removedId) return;
+        if (identity.Previous is { } previous)
+        {
+            // Changement en cours : seule l'identité de rattachement précédente peut avoir été retirée ; l'attente du nouveau cluster est conservée.
+            return;
+        }
+        await identityStore.ResetAsync(cancellationToken);
     }
 
     /// <summary>Prévient le cluster actuel puis efface l'identité locale. Un cluster injoignable n'empêche pas de partir : l'administrateur retirera la ligne hors ligne.</summary>

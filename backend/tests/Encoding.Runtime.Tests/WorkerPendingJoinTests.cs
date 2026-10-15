@@ -76,6 +76,36 @@ public sealed class WorkerPendingJoinTests
     }
 
     [Fact]
+    public async Task ConflictingIdentityIsReplacedSoTheNodeCanEnrollAgain()
+    {
+        var (enrollment, store, discovery) = Build(NewDirectory());
+        var (listener, url, id, _) = Cluster(HttpStatusCode.Conflict);
+        using var _ = listener;
+        await discovery.AddByAddressAsync(url, CancellationToken.None);
+        var before = (await store.GetAsync(CancellationToken.None)).Id;
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => enrollment.EnrollAsync(id, CancellationToken.None));
+
+        Assert.NotEqual(before, (await store.GetAsync(CancellationToken.None)).Id);
+    }
+
+    [Fact]
+    public async Task RemovedIdentityIsForgottenOnlyWhenItIsStillTheCurrentOne()
+    {
+        var (enrollment, store, _) = Build(NewDirectory());
+        var current = await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Maison", "http://127.0.0.1:1/", CancellationToken.None);
+        await store.MarkEnrolledAsync(CancellationToken.None);
+
+        await enrollment.ForgetRemovedIdentityAsync(Guid.NewGuid(), CancellationToken.None);
+        Assert.True((await store.GetAsync(CancellationToken.None)).IsEnrolled);
+
+        await enrollment.ForgetRemovedIdentityAsync(current.Id, CancellationToken.None);
+        var after = await store.GetAsync(CancellationToken.None);
+        Assert.False(after.HasCredentials);
+        Assert.NotEqual(current.Id, after.Id);
+    }
+
+    [Fact]
     public async Task UnreachableClusterLeavesTheNodeStandaloneInsteadOfPending()
     {
         var (enrollment, store, discovery) = Build(NewDirectory());
