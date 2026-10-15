@@ -28,7 +28,7 @@ import { AuthService } from './auth.service';
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      font-size: 12px;
+      font-size: 14px;
     }
     .user-name {
       font-weight: 650;
@@ -40,7 +40,7 @@ import { AuthService } from './auth.service';
       border-radius: 999px;
       color: var(--text-muted);
       background: var(--surface-muted);
-      font-size: 11px;
+      font-size: 14px;
     }
   `,
 })

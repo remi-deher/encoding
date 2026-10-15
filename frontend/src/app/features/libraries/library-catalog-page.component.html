@@ -57,10 +57,7 @@
         />
         <ng-template #libraryProcessingCardContent>
           <div class="library-card-actions">
-            <app-drawer-action-button
-              label="Attribuer un flow"
-              (activated)="assignFlow()"
-            />
+            <app-drawer-action-button label="Attribuer un flow" (activated)="assignFlow()" />
             <app-drawer-action-button
               label="Surveillance et limites"
               (activated)="configureProcessing()"
@@ -119,22 +116,24 @@
           @if (executionTrackingState().status === 'error') {
             <p role="status">Actualisation des exécutions impossible.</p>
           }
-          <app-data-table
-            [columns]="libraryExecutionColumns"
-            [rows]="libraryExecutionRows()"
-            [rowActions]="libraryExecutionActions"
-            [expandedRowId]="selectedProcessingExecutionId()"
-            (rowAction)="onProcessingExecutionAction($event)"
-            emptyMessage="Aucune exécution récente pour cette bibliothèque."
-          >
-            <ng-template dataTableRowDetail let-execution>
-              <app-execution-pipeline-logs
-                [executionId]="execution['id'].toString()"
-                [steps]="processingPipelineState().steps"
-                [feedback]="processingPipelineState().message"
+          <div class="library-execution-cards">
+            @for (execution of libraryExecutions(); track execution.id) {
+              <app-execution-card
+                [execution]="execution"
+                [showPipelineAction]="true"
+                (pipelineRequested)="onProcessingExecutionAction(execution.id)"
               />
-            </ng-template>
-          </app-data-table>
+            } @empty {
+              <p>Aucune exécution récente pour cette bibliothèque.</p>
+            }
+          </div>
+          @if (selectedProcessingExecutionId(); as executionId) {
+            <app-execution-pipeline-logs
+              [executionId]="executionId"
+              [steps]="processingPipelineState().steps"
+              [feedback]="processingPipelineState().message"
+            />
+          }
         }
       </mat-tab>
     </mat-tab-group>

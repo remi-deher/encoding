@@ -23,7 +23,7 @@ import { Component, input } from '@angular/core';
       border-radius: 999px;
       background: var(--surface-muted);
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: 14px;
       font-weight: 600;
       white-space: nowrap;
     }

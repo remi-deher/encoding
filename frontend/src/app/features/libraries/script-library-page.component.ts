@@ -259,14 +259,14 @@ import {
       .rail-heading h2 {
         margin: 0;
         color: var(--text-secondary);
-        font-size: 11px;
+        font-size: 14px;
         font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
       .rail-heading > span {
         color: var(--text-muted);
-        font-size: 11px;
+        font-size: 14px;
       }
       .script-list {
         padding: 0;
@@ -285,25 +285,25 @@ import {
       }
       .script-option-name {
         color: var(--text-primary);
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 600;
         line-height: 1.4;
       }
       .script-option-language {
         margin-top: 4px;
         color: var(--accent-strong);
-        font-size: 10px;
+        font-size: 14px;
       }
       .script-option-version {
         margin-top: 3px;
         color: var(--text-muted);
-        font-size: 10px;
+        font-size: 14px;
       }
       .script-list-empty {
         margin: 0;
         padding: 10px;
         color: var(--text-muted);
-        font-size: 12px;
+        font-size: 14px;
         line-height: 1.5;
       }
       .script-editor {
@@ -332,13 +332,13 @@ import {
       }
       h3 {
         margin: 0 0 6px;
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 600;
       }
       .editor-version {
         margin: 4px 0 0;
         color: var(--text-secondary);
-        font-size: 12px;
+        font-size: 14px;
       }
       .script-language-badge {
         flex: 0 0 auto;
@@ -346,7 +346,7 @@ import {
         border-radius: 16px;
         background: var(--accent-soft);
         color: var(--accent-strong);
-        font-size: 12px;
+        font-size: 14px;
       }
       .script-fields {
         display: grid;
@@ -365,13 +365,13 @@ import {
         align-items: center;
         margin: 4px 0 10px;
         color: var(--text-secondary);
-        font-size: 12px;
+        font-size: 14px;
       }
       .script-contract {
         margin-top: 12px;
         border-bottom: 1px solid var(--border-subtle);
         color: var(--text-secondary);
-        font-size: 12px;
+        font-size: 14px;
       }
       .script-contract summary {
         min-height: 42px;
@@ -392,7 +392,7 @@ import {
       .published-versions {
         margin-top: 12px;
         color: var(--text-secondary);
-        font-size: 12px;
+        font-size: 14px;
       }
       .published-versions h3 {
         display: inline;
@@ -402,7 +402,7 @@ import {
       .save-message {
         margin: 10px 0 0;
         color: var(--color-success);
-        font-size: 12px;
+        font-size: 14px;
       }
       .editor-actions {
         display: flex;
@@ -417,7 +417,7 @@ import {
       }
       .published-version {
         color: var(--text-muted);
-        font-size: 11px;
+        font-size: 14px;
       }
       .editor-action-buttons {
         display: flex;

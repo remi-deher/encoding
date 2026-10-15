@@ -89,7 +89,7 @@ export interface ConfirmationDialogData {
       padding: 0 8px;
       overflow: visible;
       color: var(--text-secondary);
-      font-size: 13px;
+      font-size: 14px;
       line-height: 1.6;
     }
 

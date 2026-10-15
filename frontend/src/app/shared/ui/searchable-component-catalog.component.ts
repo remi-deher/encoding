@@ -144,7 +144,7 @@ import {
     .component-plugin,
     .component-meta {
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: 14px;
     }
     .component-description {
       color: var(--text-secondary);

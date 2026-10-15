@@ -14,14 +14,14 @@
 .library-access-summary h3 {
   margin: 0 0 4px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .library-access-summary p,
 .library-access-empty {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -33,4 +33,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.library-execution-cards {
+  display: grid;
+  gap: 10px;
 }

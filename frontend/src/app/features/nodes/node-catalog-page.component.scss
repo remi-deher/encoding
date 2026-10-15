@@ -1,7 +1,7 @@
 p[role='note'] {
   margin-top: 24px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -37,7 +37,7 @@ p[role='note'] {
 
 .enrollment-step > span {
   color: var(--accent);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -76,7 +76,7 @@ p[role='note'] {
 }
 
 .enrollment-facts div { display: grid; gap: 4px; }
-.enrollment-facts dt { color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.enrollment-facts dt { color: var(--text-muted); font-size: 14px; font-weight: 700; text-transform: uppercase; }
 .enrollment-facts dd { margin: 0; color: var(--text-primary); line-height: 1.45; overflow-wrap: anywhere; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
 
@@ -85,5 +85,5 @@ p[role='note'] {
 }
 
 .node-processing-tab { display: grid; gap: 16px; padding-top: 14px; }
-.node-tab-note { margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.node-tab-note { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
 .node-tab-actions { display: flex; flex-wrap: wrap; gap: 8px; }

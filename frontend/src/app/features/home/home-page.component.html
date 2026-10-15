@@ -132,28 +132,22 @@
   <section class="activity-panel surface-panel" aria-labelledby="activity-heading">
     <div class="panel-heading">
       <div>
-        <h2 id="activity-heading">Activité récente</h2>
-        <p>Les derniers événements de traitement.</p>
+        <h2 id="activity-heading">Exécutions récentes</h2>
+        <p>Les cinq derniers traitements terminés ou suspendus.</p>
       </div>
       <a class="subtle-link" routerLink="/tasks"
         >Ouvrir l’historique <span aria-hidden="true">→</span></a
       >
     </div>
-    @for (event of activity(); track event.id) {
-      <article class="node-row">
-        <div class="node-info">
-          <h3>{{ event.media }} · {{ executionLabels[event.state] }}</h3>
-          <p>{{ event.detail }}</p>
-          <time [attr.datetime]="event.createdAt">{{
-            event.createdAt | date: 'dd/MM/yyyy HH:mm:ss'
-          }}</time>
-        </div>
-      </article>
-    } @empty {
-      @if (executionState().status === 'ready') {
-        <p>Aucun événement enregistré.</p>
+    <div class="execution-card-list">
+      @for (execution of recentExecutions(); track execution.id) {
+        <app-execution-card [execution]="execution" />
+      } @empty {
+        @if (executionState().status === 'ready') {
+          <p>Aucune exécution récente.</p>
+        }
       }
-    }
+    </div>
   </section>
 </ng-template>
 

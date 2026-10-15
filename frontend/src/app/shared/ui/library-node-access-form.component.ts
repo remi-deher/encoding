@@ -180,16 +180,16 @@ interface NodeAccessControls {
     .node-selection h3 { margin: 0; color: var(--text-primary); font-size: 13px; }
     .access-context { display: grid; gap: 7px; }
     .access-context p { margin: 0; color: var(--text-secondary); line-height: 1.5; }
-    .step-label { color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .step-label { color: var(--accent); font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
     .access-safety-note { padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--surface-muted); }
     form, .access-review { display: grid; gap: 16px; }
     .node-access-list { display: grid; gap: 12px; }
     .node-access-card { padding: 16px; display: grid; gap: 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface); }
     .node-heading { display: grid; gap: 7px; }
     .node-heading div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-    .node-heading strong { color: var(--text-primary); font-size: 13px; }
-    .node-heading div span { color: var(--text-muted); font-size: 11px; text-transform: capitalize; }
-    .current-access { color: var(--text-secondary); font-size: 11px; }
+    .node-heading strong { color: var(--text-primary); font-size: 14px; }
+    .node-heading div span { color: var(--text-muted); font-size: 14px; text-transform: capitalize; }
+    .current-access { color: var(--text-secondary); font-size: 14px; }
     mat-form-field { width: 100%; }
     .permissions { display: flex; flex-wrap: wrap; gap: 16px; }
     .mode-help { margin: 0; color: var(--text-secondary); line-height: 1.5; }
@@ -202,9 +202,9 @@ interface NodeAccessControls {
     .review-heading p { margin: 0; color: var(--text-secondary); line-height: 1.5; }
     .review-list { display: grid; gap: 8px; }
     .review-row { padding: 12px; display: grid; gap: 10px; border: 1px solid var(--border-subtle); border-radius: 9px; background: var(--surface); }
-    .review-row > strong { color: var(--text-primary); font-size: 13px; }
+    .review-row > strong { color: var(--text-primary); font-size: 14px; }
     .review-row div { display: grid; gap: 3px; }
-    .review-row div span { color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .review-row div span { color: var(--text-muted); font-size: 14px; font-weight: 700; text-transform: uppercase; }
     .review-row p { margin: 0; color: var(--text-secondary); line-height: 1.45; overflow-wrap: anywhere; }
   `,
 })
