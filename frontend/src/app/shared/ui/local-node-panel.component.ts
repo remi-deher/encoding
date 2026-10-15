@@ -23,6 +23,8 @@ interface WorkerStatus {
   readonly automaticEnrollmentEnabled: boolean;
   readonly capabilities: readonly { readonly toolId: string; readonly version: string }[];
   readonly isEnrolled: boolean;
+  /** Fourni par le relais du serveur : ce nœud est seul dans son cluster implicite et aucun cluster n'a été créé (architecture 0045). */
+  readonly standalone?: boolean;
   readonly pairingKey: string | null;
   readonly pairingExpiresAt: string | null;
   readonly clusterId: string | null;
@@ -48,6 +50,11 @@ export class LocalNodePanelComponent {
   readonly api = input.required<string>();
   /** Opération de changement de mode du nœud (serveur ou agent, selon l'interface ouverte). */
   readonly modeEndpoint = input.required<string>();
+  /** Création d'un cluster depuis un nœud autonome (serveur uniquement) ; absent, l'action n'est pas proposée. */
+  readonly createClusterEndpoint = input<string | null>(null);
+  protected readonly standalone = computed(() => this.status()?.standalone === true);
+  protected readonly newClusterName = signal('');
+  protected readonly creatingCluster = signal(false);
 
   private readonly http = inject(HttpClient);
   private readonly notifications = inject(NotificationService);
@@ -205,6 +212,31 @@ export class LocalNodePanelComponent {
       this.pairingKey.set(pairing.pairingKey);
       this.pairingExpiresAt.set(pairing.expiresAt);
       this.notifications.show('Clé créée. Saisissez-la dans « Ajouter un nœud » du cluster d’accueil.');
+    });
+  }
+
+  protected setNewClusterName(event: Event): void {
+    this.newClusterName.set((event.target as HTMLInputElement).value);
+  }
+
+  /** Nomme le nœud autonome : cela en fait un cluster, auquel d'autres nœuds peuvent ensuite se rattacher. */
+  protected createCluster(): void {
+    const endpoint = this.createClusterEndpoint();
+    const name = this.newClusterName().trim();
+    if (!endpoint || !name || this.creatingCluster()) return;
+    this.creatingCluster.set(true);
+    this.http.post(endpoint, { name }).pipe(
+      catchError((error: unknown) => {
+        this.creatingCluster.set(false);
+        this.notifications.show(this.getErrorMessage(error));
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(() => {
+      this.creatingCluster.set(false);
+      this.newClusterName.set('');
+      this.notifications.show(`Le cluster ${name} est créé.`);
+      this.refreshStatus();
     });
   }
 

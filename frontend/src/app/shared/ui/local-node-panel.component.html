@@ -5,8 +5,10 @@
           <h2 id="worker-node-heading">Ce nœud</h2>
           <p>Identité, rôles et rattachement à un cluster.</p>
         </div>
-        @if (workerStatus()?.isEnrolled) {
-          <span class="state-chip state-chip--connected">Connecté</span>
+        @if (standalone()) {
+          <span class="state-chip state-chip--connected">Nœud autonome</span>
+        } @else if (workerStatus()?.isEnrolled) {
+          <span class="state-chip state-chip--connected">Dans un cluster</span>
         } @else {
           <span class="state-chip">Non rattaché</span>
         }
@@ -24,7 +26,9 @@
           <div><dt>Capacité simultanée</dt><dd>{{ worker.maxConcurrentTasks }} tâche(s)</dd></div>
           <div><dt>Acceptation automatique</dt><dd>{{ worker.automaticEnrollmentEnabled ? 'Activée' : 'Désactivée' }}</dd></div>
           <div><dt>Outils détectés</dt><dd>{{ toolsLabel(worker) }}</dd></div>
-          @if (worker.isEnrolled) {
+          @if (standalone()) {
+            <div><dt>Rattachement</dt><dd>Autonome : ce nœud n’appartient à aucun cluster. Créez-en un ou rejoignez-en un.</dd></div>
+          } @else if (worker.isEnrolled) {
             <div><dt>Cluster</dt><dd>{{ worker.clusterName }}</dd></div>
             <div><dt>Identifiant du cluster</dt><dd>{{ worker.clusterId }}</dd></div>
           }
@@ -55,7 +59,16 @@
             <code>{{ worker.verificationCode }}</code>
           </div>
         }
-        @if (worker.clusterId) {
+        @if (standalone() && createClusterEndpoint()) {
+          <form class="cluster-address" (submit)="$event.preventDefault(); createCluster()">
+            <label for="new-cluster-name">Nom du nouveau cluster</label>
+            <input id="new-cluster-name" type="text" maxlength="128" autocomplete="off" placeholder="Maison" [value]="newClusterName()" (input)="setNewClusterName($event)" />
+            <button matButton="filled" type="submit" [disabled]="!newClusterName().trim() || creatingCluster()">
+              {{ creatingCluster() ? 'Création…' : 'Créer un cluster' }}
+            </button>
+          </form>
+        }
+        @if (worker.clusterId && !standalone()) {
           <div class="cluster-actions">
             <button matButton="outlined" type="button" [disabled]="leaving()" (click)="leaveCluster()">
               {{ leaving() ? 'Départ…' : worker.switching ? 'Annuler le changement' : 'Quitter ce cluster' }}
@@ -77,7 +90,7 @@
             </div>
           }
           <div class="cluster-list">
-            <h3>{{ worker.isEnrolled ? 'Changer de cluster' : 'Clusters détectés sur le réseau' }}</h3>
+            <h3>{{ worker.isEnrolled && !standalone() ? 'Changer de cluster' : 'Rejoindre un cluster' }}</h3>
             @if (joinableClusters().length) {
               @for (cluster of joinableClusters(); track cluster.id) {
                 <article class="cluster-card">
