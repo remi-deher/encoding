@@ -60,7 +60,7 @@ import { NodeMode, NodeModeDialogData } from '../models/node-mode';
       @if (data.managed && !data.remoteNodeName && data.server && !server()) {
         <p class="note" role="note">
           Le serveur de ce nœud s’arrêtera : cette interface cessera de répondre. Rétablissez-le
-          depuis la console du worker.
+          depuis la page de ce nœud.
         </p>
       }
     </mat-dialog-content>

@@ -16,8 +16,8 @@
   <ng-template #pageActions>
     <a matButton="outlined" routerLink="/node-groups">Groupes de nœuds</a>
     @if (isAdmin()) {
-      <button matButton="outlined" type="button" (click)="changeLocalMode()">
-        Mode de ce nœud
+      <button matButton="outlined" type="button" (click)="openLocalNode()">
+        Ce nœud et son cluster
       </button>
     }
     <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
@@ -218,7 +218,9 @@
     </mat-tab-group>
   </ng-template>
   <ng-template #actionContent>
-    @if (actionType() === 'identity') {
+    @if (actionType() === 'local-node') {
+      <app-local-node-panel api="/api/v1/local-node" modeEndpoint="/api/v1/node/mode" />
+    } @else if (actionType() === 'identity') {
       @if (identityForm(); as form) {
         <app-record-form
           [data]="form"
@@ -249,9 +251,9 @@
       <section class="enrollment-guide" aria-label="Demandes de jumelage">
         <div class="enrollment-step">
           <span>Étape 1 sur 2</span>
-          <h3>Repérer le worker</h3>
+          <h3>Repérer le nœud</h3>
           <p>
-            Depuis la console du worker, sélectionnez ce cluster puis générez une clé. La demande
+            Sur le nœud à ajouter, ouvrez la page Nœuds puis « Ce nœud et son cluster » : ajoutez l’adresse de ce cluster et générez une clé. La demande
             apparaîtra ici pour vérification.
           </p>
         </div>
@@ -319,7 +321,7 @@
         }
       </section>
     } @else if (enrollmentView() === 'review' && selectedEnrollment(); as request) {
-      <section class="enrollment-review" aria-label="Vérification du worker">
+      <section class="enrollment-review" aria-label="Vérification du nœud">
         <button matButton="text" type="button" (click)="showPendingRequests()">
           ← Retour aux demandes
         </button>

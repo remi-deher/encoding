@@ -17,9 +17,9 @@ const applicationRoutes: Routes = [
         (module) => module.WorkerConsolePageComponent,
       ),
     data: {
-      title: 'Console worker',
+      title: 'Ce nœud',
       workerMode: true,
-      description: 'Suivez les tâches et l’état de cette installation.',
+      description: 'Gérez le rattachement de ce nœud à un cluster.',
     },
   },
   {

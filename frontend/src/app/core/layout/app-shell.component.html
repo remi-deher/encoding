@@ -3,7 +3,7 @@
     <a
       class="brand"
       [routerLink]="workerMode() ? '/worker' : '/'"
-      [attr.aria-label]="workerMode() ? 'Console worker' : 'Accueil'"
+      [attr.aria-label]="workerMode() ? 'Ce nœud' : 'Accueil'"
     >
       <span class="brand-mark" aria-hidden="true">E</span>
       <span class="brand-name">{{ pageTitle() }}</span>
