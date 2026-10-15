@@ -16,13 +16,14 @@ services:
       retries: 10
     restart: unless-stopped
 
-  api:
+  # Image unique : le mode (serveur, worker ou les deux) se règle ici au premier démarrage, puis depuis l'interface
+  # (page Nœuds ou console du worker) sans redémarrer le conteneur. Le mode enregistré prévaut ensuite sur Node__Roles.
+  encoding:
     build:
       context: ..
       dockerfile: backend/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Cluster: Host=postgres;Port=5432;Database=encoding;Username=encoding;Password=encoding
       NodePresence__OfflineAfterSeconds: 30
       FlowBackups__Directory: /var/lib/encoding/flow-backups
@@ -30,28 +31,9 @@ services:
       PluginSettings__KeyDirectory: /var/lib/encoding/plugin-keys
       Cluster__DiscoveryPort: 8080
       Auth__SetupToken: ${AUTH_SETUP_TOKEN:-}
-      Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://api:8080/}
-    ports:
-      - "127.0.0.1:5080:8080"
-      - "127.0.0.1:4201:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - encoding-flow-backups:/var/lib/encoding/flow-backups
-      - encoding-runtime-artifacts:/var/lib/encoding/runtime-artifacts
-      - encoding-plugin-keys:/var/lib/encoding/plugin-keys
-    restart: unless-stopped
-
-  node-agent:
-    build:
-      context: .
-      dockerfile: Dockerfile.Agent
-    environment:
-      Cluster__ApiBaseUrl: http://api:8080
-      Node__DataDirectory: /var/lib/encoding-node
+      Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://encoding:8080/}
       Node__Name: ${NODE_NAME:-encoding-dev-node}
-      Node__Roles: ${NODE_ROLES:-worker}
+      Node__Roles: ${NODE_ROLES:-server,worker}
       Node__MaxConcurrentTasks: ${NODE_MAX_CONCURRENT_TASKS:-1}
       Node__HeartbeatIntervalSeconds: 10
       Worker__AutoAcceptEnrollment: ${WORKER_AUTO_ACCEPT_ENROLLMENT:-false}
@@ -85,13 +67,18 @@ services:
       Runtime__Plugins__3__ReadOnlyPaths__0: /opt/encoding/plugins/jellyfin
       WorkerUi__Origins: ${WORKER_UI_ORIGINS:-http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201,http://localhost:5080,http://127.0.0.1:5080}
     ports:
+      - "127.0.0.1:5080:8080"
+      - "127.0.0.1:4201:8080"
       - "127.0.0.1:5081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
+      - encoding-flow-backups:/var/lib/encoding/flow-backups
+      - encoding-runtime-artifacts:/var/lib/encoding/runtime-artifacts
+      - encoding-plugin-keys:/var/lib/encoding/plugin-keys
       - encoding-node-data:/var/lib/encoding-node
       - ../media-test:/media/test
-    depends_on:
-      api:
-        condition: service_started
     restart: unless-stopped
 
 volumes:

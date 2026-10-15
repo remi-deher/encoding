@@ -49,6 +49,7 @@ import {
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
+import { NodeModeController } from '../../shared/services/node-mode-controller';
 import { NotificationService } from '../../shared/services/notification.service';
 import {
   DetailCard,
@@ -138,6 +139,7 @@ export class NodeCatalogPageComponent {
   private readonly clusterApi = inject(ClusterApi);
   private readonly dialog = inject(MatDialog);
   private readonly notifications = inject(NotificationService);
+  private readonly nodeMode = inject(NodeModeController);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
@@ -960,6 +962,10 @@ export class NodeCatalogPageComponent {
 
   protected onRoleChange(role: string): void {
     this.selectedRole.set(role);
+  }
+
+  protected changeLocalMode(): void {
+    void this.nodeMode.change('/api/v1/node/mode');
   }
 
   protected addNode(): void {

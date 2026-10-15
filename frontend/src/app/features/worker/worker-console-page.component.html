@@ -34,6 +34,7 @@
         } @else {
           <span class="state-chip">Non rattaché</span>
         }
+        <button matButton="outlined" type="button" (click)="changeMode()">Mode du nœud</button>
       </div>
 
       @if (loading()) {

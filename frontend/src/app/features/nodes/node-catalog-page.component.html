@@ -15,6 +15,9 @@
 >
   <ng-template #pageActions>
     <a matButton="outlined" routerLink="/node-groups">Groupes de nœuds</a>
+    @if (isAdmin()) {
+      <button matButton="outlined" type="button" (click)="changeLocalMode()">Mode de ce nœud</button>
+    }
     <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
   </ng-template>
 

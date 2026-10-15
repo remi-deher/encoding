@@ -1,5 +1,5 @@
 name: Release
-# Publie les images Docker (api et node-agent) sur Docker Hub quand la CI de main est verte.
+# Publie l'image Docker unique (serveur, worker et lanceur) sur Docker Hub quand la CI de main est verte.
 # Secrets requis (Settings > Secrets and variables > Actions) : DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
 on:
   push:
@@ -72,20 +72,10 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/encoding-api:${{ steps.version.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/encoding-api:latest
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,scope=api,mode=max
-      - uses: docker/build-push-action@v6
-        with:
-          context: backend
-          file: backend/Dockerfile.Agent
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/encoding-node-agent:${{ steps.version.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/encoding-node-agent:latest
-          cache-from: type=gha,scope=agent
-          cache-to: type=gha,scope=agent,mode=max
+            ${{ secrets.DOCKERHUB_USERNAME }}/encoding:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/encoding:latest
+          cache-from: type=gha,scope=encoding
+          cache-to: type=gha,scope=encoding,mode=max
       - name: Tag git
         run: |
           git tag "v${{ steps.version.outputs.version }}" "$GITHUB_SHA"
