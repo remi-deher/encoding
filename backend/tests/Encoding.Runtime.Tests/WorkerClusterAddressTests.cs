@@ -10,8 +10,10 @@ namespace Encoding.Runtime.Tests;
 /// <summary>Ajout d'un cluster par son adresse dans la console worker (découverte DNS-SD indisponible entre conteneurs).</summary>
 public sealed class WorkerClusterAddressTests
 {
-    private static WorkerClusterDiscovery Discovery() =>
-        new(NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection().Build()), NullLogger<WorkerClusterDiscovery>.Instance);
+    private static WorkerClusterDiscovery Discovery(string? dataDirectory = null) =>
+        new(NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(
+            [new("Node:DataDirectory", dataDirectory ?? Path.Combine(Path.GetTempPath(), "encoding-cluster-address-" + Guid.NewGuid().ToString("N")))]).Build()),
+            NullLogger<WorkerClusterDiscovery>.Instance);
 
     [Theory]
     [InlineData("")]
@@ -45,6 +47,45 @@ public sealed class WorkerClusterAddressTests
         Assert.Equal(id, cluster.Id);
         Assert.Equal($"http://127.0.0.1:{port}/", cluster.ApiBaseUrl);
         Assert.Contains(discovery.List(), found => found.Id == id && found.Name == "Maison");
+    }
+
+    [Fact]
+    public async Task AddedAddressSurvivesARestart()
+    {
+        var port = FreePort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var id = Guid.NewGuid();
+        var serving = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync();
+            var body = System.Text.Encoding.UTF8.GetBytes($"{{\"id\":\"{id}\",\"name\":\"Maison\"}}");
+            context.Response.ContentType = "application/json";
+            await context.Response.OutputStream.WriteAsync(body);
+            context.Response.Close();
+        });
+        var directory = Path.Combine(Path.GetTempPath(), "encoding-cluster-address-" + Guid.NewGuid().ToString("N"));
+        await Discovery(directory).AddByAddressAsync($"http://127.0.0.1:{port}/", CancellationToken.None);
+        await serving;
+
+        var restarted = Discovery(directory);
+        Assert.Empty(restarted.List());
+        var serving2 = Task.Run(async () =>
+        {
+            var context = await listener.GetContextAsync();
+            var body = System.Text.Encoding.UTF8.GetBytes($"{{\"id\":\"{id}\",\"name\":\"Maison\"}}");
+            context.Response.ContentType = "application/json";
+            await context.Response.OutputStream.WriteAsync(body);
+            context.Response.Close();
+        });
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await restarted.StartAsync(cancellation.Token);
+        while (restarted.List().Count == 0 && !cancellation.IsCancellationRequested) await Task.Delay(50);
+        await restarted.StopAsync(CancellationToken.None);
+        await serving2;
+
+        Assert.Contains(restarted.List(), found => found.Id == id);
     }
 
     [Fact]

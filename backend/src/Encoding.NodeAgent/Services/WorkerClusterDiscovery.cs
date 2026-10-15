@@ -11,6 +11,7 @@ public sealed class WorkerClusterDiscovery(
     ILogger<WorkerClusterDiscovery> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, DiscoveredCluster> clusters = new();
+    private readonly object knownAddressesLock = new();
     private MdnsBrowser? browser;
 
     /// <summary>
@@ -24,6 +25,13 @@ public sealed class WorkerClusterDiscovery(
             || !string.IsNullOrEmpty(uri.UserInfo))
             throw new ArgumentException("L'adresse doit être une URL HTTP ou HTTPS absolue, par exemple http://192.168.1.51:8090.");
         var baseUrl = new Uri(uri.GetLeftPart(UriPartial.Authority) + "/");
+        var cluster = await ProbeAsync(baseUrl, cancellationToken);
+        RememberAddress(baseUrl.AbsoluteUri);
+        return cluster;
+    }
+
+    private async Task<DiscoveredCluster> ProbeAsync(Uri baseUrl, CancellationToken cancellationToken)
+    {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         ClusterIdentity? identity;
         try { identity = await client.GetFromJsonAsync<ClusterIdentity>(new Uri(baseUrl, "api/v1/cluster"), cancellationToken); }
@@ -35,6 +43,55 @@ public sealed class WorkerClusterDiscovery(
         clusters[identity.Id] = cluster;
         logger.LogInformation("Cluster ajouté par adresse : {ClusterName} ({ClusterId}) à {ApiBaseUrl}.", cluster.Name, cluster.Id, cluster.ApiBaseUrl);
         return cluster;
+    }
+
+    private string KnownAddressesPath => Path.Combine(options.DataDirectory, "known-clusters.json");
+
+    private string[] LoadKnownAddresses()
+    {
+        try
+        {
+            return File.Exists(KnownAddressesPath)
+                ? System.Text.Json.JsonSerializer.Deserialize<string[]>(File.ReadAllText(KnownAddressesPath)) ?? []
+                : [];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            logger.LogWarning(exception, "La liste des adresses de clusters mémorisées est illisible ; elle est ignorée.");
+            return [];
+        }
+    }
+
+    /// <summary>Mémorise l'adresse dans le dossier de données de l'agent pour la retrouver après un redémarrage ou un redéploiement.</summary>
+    private void RememberAddress(string baseUrl)
+    {
+        lock (knownAddressesLock)
+        {
+            var known = LoadKnownAddresses();
+            if (known.Contains(baseUrl, StringComparer.OrdinalIgnoreCase)) return;
+            try
+            {
+                Directory.CreateDirectory(options.DataDirectory);
+                File.WriteAllText(KnownAddressesPath, System.Text.Json.JsonSerializer.Serialize(known.Append(baseUrl).ToArray()));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(exception, "L'adresse du cluster {ApiBaseUrl} n'a pas pu être mémorisée.", baseUrl);
+            }
+        }
+    }
+
+    /// <summary>Relit chaque adresse mémorisée : un cluster injoignable au démarrage réapparaît dès qu'il répond.</summary>
+    private async Task RefreshKnownAddressesAsync(CancellationToken cancellationToken)
+    {
+        string[] known;
+        lock (knownAddressesLock) known = LoadKnownAddresses();
+        foreach (var address in known)
+        {
+            if (!Uri.TryCreate(address, UriKind.Absolute, out var baseUrl)) continue;
+            try { await ProbeAsync(baseUrl, cancellationToken); }
+            catch (HttpRequestException) { logger.LogDebug("Le cluster mémorisé {ApiBaseUrl} ne répond pas.", address); }
+        }
     }
 
     public IReadOnlyList<DiscoveredCluster> List() => clusters.Values.OrderBy(cluster => cluster.Name).ToArray();
@@ -59,6 +116,7 @@ public sealed class WorkerClusterDiscovery(
             while (!stoppingToken.IsCancellationRequested)
             {
                 await AddConfiguredClusterAsync(client, stoppingToken);
+                await RefreshKnownAddressesAsync(stoppingToken);
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
         }
