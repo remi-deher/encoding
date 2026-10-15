@@ -57,3 +57,13 @@ Principe proposé : **la cohérence forte reste à l'intérieur d'un cluster, la
 - Transport : HTTPS authentifié par la relation approuvée entre les deux clusters (4) ; indépendant du moteur de base de données, donc compatible avec PostgreSQL comme avec SQLite.
 
 Limite à assumer : sans quorum, aucun mécanisme ne peut garantir à la fois la bascule automatique et l'absence de traitement en double après une coupure entre deux clusters. Deux traitements simultanés d'un même média restent sans danger pour les données tant que la source est préservée et que chaque exécution publie dans son propre dossier (0015, 0030) : ils coûtent du calcul, pas de l'intégrité. Recommandation : propriété d'une bibliothèque à un seul cluster à la fois, reprise par l'autre cluster sur action explicite ou sur délai configuré, avec le remplacement de la source désactivé dans les deux cas.
+
+### 9.1 Éviter le traitement en double sans quorum
+
+Sans quorum, l'exclusion stricte entre deux clusters coupés l'un de l'autre est impossible (compromis disponibilité / cohérence). On la remplace par trois garde-fous cumulables qui ramènent le risque à une fenêtre étroite, sans danger pour les données :
+
+1. **Propriété par bibliothèque avec époque.** Une bibliothèque a un seul cluster propriétaire, qui seul planifie ses traitements. Un transfert ou une reprise incrémente une époque (numéro de génération) répliquée avec l'historique ; un cluster dont l'époque est dépassée cesse de planifier dès qu'il l'apprend. La reprise est explicite (administrateur) ou automatique après un silence configurable du propriétaire.
+2. **Arbitre commun optionnel : le stockage des médias.** Si les deux clusters voient le même stockage (cas d'un NAS partagé), un marqueur atomique à côté du média (création exclusive, renouvelé comme un bail, contenant cluster, époque et expiration) fait office de témoin sans quorum : un seul cluster le détient. À valider sur NFS (création exclusive et renommage atomiques).
+3. **Clé de travail idempotente.** Chaque traitement a une clé déterministe (empreinte de la source, version du flow, profil). Elle est répliquée dans l'historique ; avant de démarrer, un cluster vérifie qu'aucun résultat validé ni traitement en cours n'existe pour cette clé. Elle couvre tous les doublons non simultanés. Un doublon simultané ne peut subsister que pendant une coupure réelle entre clusters sans stockage commun ; il coûte du calcul, la source étant préservée et chaque exécution publiant dans son propre dossier.
+
+Le remplacement de la source reste désactivé par défaut et ne doit jamais être activé sur une bibliothèque partagée entre clusters sans l'arbitre du point 2.
