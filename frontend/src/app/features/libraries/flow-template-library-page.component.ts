@@ -84,6 +84,8 @@ interface FlowTemplateRow extends DataTableRow {
       <ng-template #detailContent catalogue-detail>
         <app-detail-card-grid
           [cards]="templateCards()"
+          [initiallyExpanded]="true"
+          [collapsible]="false"
           ariaLabel="Résumé et origine du modèle"
           emptyMessage="Aucune information disponible pour ce modèle."
         />

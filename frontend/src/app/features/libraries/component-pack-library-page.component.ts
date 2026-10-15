@@ -72,6 +72,8 @@ interface PackRow extends DataTableRow {
       <ng-template #detailContent catalogue-detail>
         <app-detail-card-grid
           [cards]="packCards()"
+          [initiallyExpanded]="true"
+          [collapsible]="false"
           ariaLabel="Résumé, origine et interface du pack"
           emptyMessage="Aucune information disponible pour ce pack."
         />
