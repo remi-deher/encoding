@@ -13,6 +13,30 @@ public sealed class WorkerClusterDiscovery(
     private readonly ConcurrentDictionary<Guid, DiscoveredCluster> clusters = new();
     private MdnsBrowser? browser;
 
+    /// <summary>
+    /// Ajoute un cluster par son adresse quand la découverte DNS-SD ne traverse pas le réseau (conteneurs, sous-réseaux distincts).
+    /// L'adresse doit répondre sur <c>api/v1/cluster</c> avec l'identité d'un cluster Encoding.
+    /// </summary>
+    public async Task<DiscoveredCluster> AddByAddressAsync(string address, CancellationToken cancellationToken)
+    {
+        if (!Uri.TryCreate(address?.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(uri.UserInfo))
+            throw new ArgumentException("L'adresse doit être une URL HTTP ou HTTPS absolue, par exemple http://192.168.1.51:8090.");
+        var baseUrl = new Uri(uri.GetLeftPart(UriPartial.Authority) + "/");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        ClusterIdentity? identity;
+        try { identity = await client.GetFromJsonAsync<ClusterIdentity>(new Uri(baseUrl, "api/v1/cluster"), cancellationToken); }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        { throw new HttpRequestException($"Aucun cluster Encoding ne répond à {baseUrl} : {exception.Message}", exception); }
+        if (identity is null || identity.Id == Guid.Empty)
+            throw new HttpRequestException($"{baseUrl} ne répond pas comme un cluster Encoding.");
+        var cluster = new DiscoveredCluster(identity.Id, identity.Name, baseUrl.AbsoluteUri, DateTimeOffset.UtcNow);
+        clusters[identity.Id] = cluster;
+        logger.LogInformation("Cluster ajouté par adresse : {ClusterName} ({ClusterId}) à {ApiBaseUrl}.", cluster.Name, cluster.Id, cluster.ApiBaseUrl);
+        return cluster;
+    }
+
     public IReadOnlyList<DiscoveredCluster> List() => clusters.Values.OrderBy(cluster => cluster.Name).ToArray();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

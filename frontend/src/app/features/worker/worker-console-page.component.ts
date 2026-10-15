@@ -10,7 +10,22 @@ import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 
-const WORKER_AGENT_API = 'http://localhost:5081/api/v1/worker';
+/**
+ * Console ouverte sur le poste du worker : l'agent est en localhost:5081 (développement et docker-compose).
+ * Ouverte depuis un autre poste (image unique sur un serveur distant) : même hôte, port 8081 ; le port publié peut être
+ * redéfini par `localStorage['encoding.workerAgentUrl']`.
+ */
+function resolveWorkerAgentApi(): string {
+  try {
+    const configured = localStorage.getItem('encoding.workerAgentUrl');
+    if (configured && /^https?:\/\//i.test(configured)) return `${configured.replace(/\/+$/, '')}/api/v1/worker`;
+  } catch { /* stockage indisponible */ }
+  const host = globalThis.location?.hostname ?? 'localhost';
+  const local = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+  return local ? 'http://localhost:5081/api/v1/worker' : `${globalThis.location.protocol}//${host}:8081/api/v1/worker`;
+}
+
+const WORKER_AGENT_API = resolveWorkerAgentApi();
 
 interface WorkerCluster {
   readonly id: string;
@@ -62,6 +77,8 @@ export class WorkerConsolePageComponent {
   protected readonly pairingKey = signal<string | null>(null);
   protected readonly pairingExpiresAt = signal<string | null>(null);
   protected readonly leaving = signal(false);
+  protected readonly addingCluster = signal(false);
+  protected readonly clusterAddress = signal('');
   protected readonly refreshError = signal(false);
   protected readonly tabOptions: readonly CategoryTabOption[] = [
     { value: 'tasks', label: 'Tâches' },
@@ -211,6 +228,31 @@ export class WorkerConsolePageComponent {
       this.pairingKey.set(pairing.pairingKey);
       this.pairingExpiresAt.set(pairing.expiresAt);
       this.notifications.show('Clé créée. Saisissez-la dans le catalogue des nœuds du serveur.');
+    });
+  }
+
+  protected setClusterAddress(event: Event): void {
+    this.clusterAddress.set((event.target as HTMLInputElement).value);
+  }
+
+  /** Ajoute un cluster par son adresse (la découverte réseau ne traverse pas toujours les conteneurs) ; option : génère aussitôt une clé. */
+  protected addClusterByAddress(generateKey: boolean): void {
+    const address = this.clusterAddress().trim();
+    if (!address || this.addingCluster()) return;
+    this.addingCluster.set(true);
+    this.http.post<WorkerCluster>(`${WORKER_AGENT_API}/clusters`, { apiBaseUrl: address }).pipe(
+      catchError((error: unknown) => {
+        this.addingCluster.set(false);
+        this.notifications.show(this.getErrorMessage(error));
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((cluster) => {
+      this.addingCluster.set(false);
+      this.clusterAddress.set('');
+      this.notifications.show(`Cluster ${cluster.name} ajouté.`);
+      this.refreshStatus();
+      if (generateKey) this.generatePairingKey(cluster);
     });
   }
 

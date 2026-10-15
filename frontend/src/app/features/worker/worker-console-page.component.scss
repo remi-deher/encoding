@@ -229,3 +229,18 @@
     grid-column: auto;
   }
 }
+
+.cluster-address {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+
+  input {
+    padding: 10px 12px;
+    border: 1px solid var(--mat-sys-outline, #888);
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+}
