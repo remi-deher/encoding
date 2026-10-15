@@ -76,7 +76,7 @@
           </div>
         }
 
-        @if (!worker.isEnrolled || joinableClusters().length) {
+        @if (!worker.isEnrolled || standalone() || joinableClusters().length) {
           @if (pairingKey()) {
             <div class="pairing-code" role="status">
               <div>
