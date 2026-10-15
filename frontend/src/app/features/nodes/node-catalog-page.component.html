@@ -16,7 +16,9 @@
   <ng-template #pageActions>
     <a matButton="outlined" routerLink="/node-groups">Groupes de nœuds</a>
     @if (isAdmin()) {
-      <button matButton="outlined" type="button" (click)="changeLocalMode()">Mode de ce nœud</button>
+      <button matButton="outlined" type="button" (click)="changeLocalMode()">
+        Mode de ce nœud
+      </button>
     }
     <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
   </ng-template>
@@ -30,7 +32,8 @@
     />
   </div>
 
-  <app-data-table layout="cards"
+  <app-data-table
+    layout="cards"
     catalogue-table
     [columns]="columns"
     [rows]="filteredNodes()"
@@ -178,6 +181,26 @@
       </mat-tab>
       <mat-tab label="Avancé">
         <div class="node-processing-tab">
+          @if (lifecycleText(); as text) {
+            <p class="node-tab-note" role="status">{{ text }}</p>
+          }
+          <div class="node-tab-actions">
+            @if (rawNode()?.lifecycle === 'quarantined') {
+              <app-drawer-action-button
+                label="Lever la quarantaine"
+                [disabled]="lifecycleBusy()"
+                (activated)="clearQuarantine()"
+              />
+            } @else {
+              <app-drawer-action-button
+                [label]="
+                  rawNode()?.lifecycle === 'draining' ? 'Reprendre le travail' : 'Vidanger le nœud'
+                "
+                [disabled]="lifecycleBusy()"
+                (activated)="toggleDraining()"
+              />
+            }
+          </div>
           <p class="node-tab-note">
             Retirer le nœud révoque son identité et refuse ses baux actifs, sans supprimer
             l’historique. Il ne peut pas être réactivé par un simple signal de présence.
@@ -276,9 +299,9 @@
             <h3>Première liaison</h3>
             @if (firstLink().isActive) {
               <p role="status">
-                La prochaine demande de rattachement sera acceptée <strong>sans vérification</strong>
-                jusqu’à {{ firstLink().expiresAt | date: 'HH:mm' }}, puis ce mode s’éteindra
-                seul.
+                La prochaine demande de rattachement sera acceptée
+                <strong>sans vérification</strong> jusqu’à
+                {{ firstLink().expiresAt | date: 'HH:mm' }}, puis ce mode s’éteindra seul.
               </p>
               <button matButton="outlined" type="button" (click)="disableFirstLink()">
                 Désactiver maintenant

@@ -11,7 +11,27 @@ public sealed record NodeHeartbeatRequest(
     IReadOnlyList<NodeRole> Roles,
     int MaxConcurrentTasks,
     IReadOnlyList<NodeToolCapability> Capabilities,
-    NodeInventory? Inventory = null);
+    NodeInventory? Inventory = null,
+    int? ProtocolVersion = null,
+    string? SessionNonce = null);
+
+/// <summary>
+/// Version du protocole entre serveur et worker (heartbeat, invocation, contrats partagés), architecture 0041. Un nœud hors de la plage
+/// [<see cref="Minimum"/>, <see cref="Current"/>] est signalé incompatible et ne reçoit plus de tâche. Un agent qui n'envoie rien compte pour 0.
+/// </summary>
+public static class ClusterProtocol
+{
+    public const int Current = 1;
+    public const int Minimum = 0;
+
+    public static string? IncompatibilityReason(int? version)
+    {
+        var value = version ?? 0;
+        if (value < Minimum) return $"protocole {value} inférieur au minimum {Minimum} de ce cluster : mise à jour du nœud requise";
+        if (value > Current) return $"protocole {value} plus récent que celui de ce cluster ({Current}) : mettez d'abord à jour les serveurs";
+        return null;
+    }
+}
 
 public sealed record NodeInventory(string OperatingSystem, string Architecture, int ProcessorCount, long MemoryMb);
 
@@ -32,6 +52,18 @@ public enum NodePresenceStatus
     Offline
 }
 
+/// <summary>État de cycle de vie affiché d'un nœud (architecture 0041). Le plus restrictif l'emporte : quarantaine, incompatible, vidange, puis présence.</summary>
+public enum NodeLifecycle
+{
+    Online,
+    Offline,
+    Draining,
+    Incompatible,
+    Quarantined
+}
+
+public sealed record DrainNodeRequest(bool Draining);
+
 public sealed record NodeResponse(
     Guid Id,
     string Name,
@@ -43,7 +75,9 @@ public sealed record NodeResponse(
     NodeInventory? Inventory = null,
     string? DisplayName = null,
     IReadOnlyDictionary<string, string?>? Labels = null,
-    IReadOnlyList<NodeRole>? DesiredRoles = null);
+    IReadOnlyList<NodeRole>? DesiredRoles = null,
+    NodeLifecycle? Lifecycle = null,
+    string? LifecycleReason = null);
 
 /// <summary>Demande d'un administrateur : mode de fonctionnement voulu pour un nœud, appliqué par le nœud à son prochain signal de présence (architecture 0036).</summary>
 public sealed record ChangeNodeModeRequest(bool Server, bool Worker);

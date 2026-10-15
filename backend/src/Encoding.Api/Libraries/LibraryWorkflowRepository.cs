@@ -85,7 +85,7 @@ public sealed class LibraryWorkflowRepository(NpgsqlDataSource dataSource,FlowDe
           SELECT s.id,s.library_id,s.epoch,a.local_path,s.media_type FROM library_scans s
           JOIN libraries l ON l.id=s.library_id AND l.is_active
           JOIN library_node_accesses a ON a.library_id=s.library_id AND a.node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
-          JOIN cluster_nodes n ON n.id=a.node_id AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
+          JOIN cluster_nodes n ON n.id=a.node_id AND n.deleted_at IS NULL AND n.accepts_work AND n.last_seen_at>clock_timestamp()-@offline
           WHERE s.state IN ('queued','running') AND (s.lease_until IS NULL OR s.lease_until<=clock_timestamp())
           ORDER BY s.created_at LIMIT 1 FOR UPDATE OF s SKIP LOCKED
           """,c,tx);

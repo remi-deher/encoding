@@ -331,6 +331,28 @@ internal static class AuthScenarios
         var after = (await (await admin.SendAsync(get, "/api/v1/nodes")).Content.ReadFromJsonAsync<List<NodeResponse>>(Json))!;
         Check(after.All(node => node.Id != leaving.Id), "A node that left no longer appears in the cluster.");
 
+        // Cycle de vie des nœuds et compatibilité (0041).
+        NodeHeartbeatRequest Signal(int? protocol, string? nonce) => new(first.Name, applied.Roles, 1, first.Capabilities, null, protocol, nonce);
+        async Task<NodeResponse?> SendBeat(NodeHeartbeatRequest request) =>
+            await (await anonymous.SendAsync(put, $"/api/v1/nodes/{first.Id}/heartbeat", request, csrf: false, nodeToken: token)).Content.ReadFromJsonAsync<NodeResponse>(Json);
+        async Task<NodeResponse> Listed() => (await (await admin.SendAsync(get, "/api/v1/nodes")).Content.ReadFromJsonAsync<List<NodeResponse>>(Json))!.Single(node => node.Id == first.Id);
+        Check((await SendBeat(Signal(ClusterProtocol.Current, "aaaa")))?.Lifecycle == NodeLifecycle.Online, "A compatible node is online.");
+        Check((await SendBeat(Signal(ClusterProtocol.Current + 1, "aaaa")))?.Lifecycle == NodeLifecycle.Incompatible && (await Listed()).LifecycleReason!.Contains("serveurs"), "A node with a newer protocol is incompatible and told to update the servers first.");
+        Check((await SendBeat(Signal(ClusterProtocol.Current, "aaaa")))?.Lifecycle == NodeLifecycle.Online, "The node is compatible again as soon as it speaks the right protocol.");
+        Check(await viewer.StatusAsync(put, $"/api/v1/nodes/{first.Id}/draining", new DrainNodeRequest(true)) == HttpStatusCode.Forbidden, "Viewers cannot drain a node.");
+        Check(await admin.StatusAsync(put, $"/api/v1/nodes/{first.Id}/draining", new DrainNodeRequest(true)) == HttpStatusCode.Accepted && (await Listed()).Lifecycle == NodeLifecycle.Draining, "An administrator drains a node.");
+        Check(await admin.StatusAsync(put, $"/api/v1/nodes/{first.Id}/draining", new DrainNodeRequest(false)) == HttpStatusCode.Accepted && (await Listed()).Lifecycle == NodeLifecycle.Online, "Resuming a drained node puts it back online.");
+        Check(await admin.StatusAsync(put, $"/api/v1/nodes/{Guid.NewGuid()}/draining", new DrainNodeRequest(true)) == HttpStatusCode.NotFound, "Draining an unknown node is reported.");
+        // Un redémarrage change le nonce une fois ; deux processus qui se relaient (a, b, a) partagent la même identité.
+        Check((await SendBeat(Signal(ClusterProtocol.Current, "bbbb")))?.Lifecycle == NodeLifecycle.Online, "A restart (new session nonce) is not an incident.");
+        Check((await SendBeat(Signal(ClusterProtocol.Current, "cccc")))?.Lifecycle == NodeLifecycle.Online, "Another restart is not an incident either.");
+        Check((await SendBeat(Signal(ClusterProtocol.Current, "bbbb")))?.Lifecycle == NodeLifecycle.Quarantined, "Two processes alternating on one identity put the node in quarantine.");
+        Check((await Listed()).Lifecycle == NodeLifecycle.Quarantined, "The quarantine is visible in the node list.");
+        Check(await viewer.StatusAsync(post, $"/api/v1/nodes/{first.Id}/quarantine/clear") == HttpStatusCode.Forbidden, "Viewers cannot lift a quarantine.");
+        Check(await admin.StatusAsync(post, $"/api/v1/nodes/{first.Id}/quarantine/clear") == HttpStatusCode.Accepted, "An administrator lifts the quarantine.");
+        Check(await admin.StatusAsync(post, $"/api/v1/nodes/{first.Id}/quarantine/clear") == HttpStatusCode.NotFound, "Lifting a quarantine twice is reported.");
+        Check((await SendBeat(Signal(ClusterProtocol.Current, "dddd")))?.Lifecycle == NodeLifecycle.Online, "After the quarantine the node works again.");
+
         // Première liaison implicite (0040) : réservée aux administrateurs, à usage unique, désactivée par défaut.
         Check(!(await (await admin.SendAsync(get, "/api/v1/nodes/first-link")).Content.ReadFromJsonAsync<FirstLinkResponse>(Json))!.IsActive, "First-link acceptance is off by default.");
         Check(await anonymous.StatusAsync(put, "/api/v1/nodes/first-link", new OpenEnrollmentWindowRequest(5), csrf: false) == HttpStatusCode.Unauthorized, "Anonymous callers cannot enable first-link acceptance.");

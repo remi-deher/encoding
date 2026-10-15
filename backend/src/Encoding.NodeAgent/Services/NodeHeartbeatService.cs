@@ -14,6 +14,9 @@ public sealed class NodeHeartbeatService(
     LauncherControlClient? launcher = null) : BackgroundService
 {
     private readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
+    // Propre à ce processus : deux processus qui partagent la même identité sont reconnus par leurs nonces qui se relaient (0041).
+    private readonly string sessionNonce = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8));
+    private NodeLifecycle? lastLifecycle;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -33,7 +36,7 @@ public sealed class NodeHeartbeatService(
                     var capabilities = await capabilityProbe.DiscoverAsync(stoppingToken);
                     var memoryMb = Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
                     var inventory = new NodeInventory(RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(), Environment.ProcessorCount, memoryMb);
-                    var heartbeat = new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory);
+                    var heartbeat = new NodeHeartbeatRequest(options.Name, options.Roles, options.MaxConcurrentTasks, capabilities, inventory, ClusterProtocol.Current, sessionNonce);
                     using var request = new HttpRequestMessage(HttpMethod.Put,
                         new Uri(new Uri(identity.ApiBaseUrl!), $"api/v1/nodes/{identity.Id:D}/heartbeat"))
                     {
@@ -53,6 +56,7 @@ public sealed class NodeHeartbeatService(
                         }
                         logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", identity.Id);
                         var node = await response.Content.ReadFromJsonAsync<NodeResponse>(stoppingToken);
+                        ReportLifecycle(node);
                         await ApplyDesiredModeAsync(node?.DesiredRoles, stoppingToken);
                     }
                 }
@@ -72,6 +76,17 @@ public sealed class NodeHeartbeatService(
 
             await Task.Delay(options.HeartbeatInterval, stoppingToken);
         }
+    }
+
+    // Le cluster décide de l'éligibilité ; le nœud se contente de le dire clairement dans ses journaux, une fois par changement.
+    private void ReportLifecycle(NodeResponse? node)
+    {
+        if (node?.Lifecycle is not { } lifecycle || lifecycle == lastLifecycle) return;
+        lastLifecycle = lifecycle;
+        if (lifecycle is NodeLifecycle.Online or NodeLifecycle.Offline)
+            logger.LogInformation("Le cluster considère ce nœud comme {Lifecycle}.", lifecycle);
+        else
+            logger.LogWarning("Le cluster ne confie plus de tâche à ce nœud ({Lifecycle}) : {Reason}", lifecycle, node.LifecycleReason);
     }
 
     private async Task BeatPreviousAsync(WorkerIdentityState previous, CancellationToken cancellationToken)
