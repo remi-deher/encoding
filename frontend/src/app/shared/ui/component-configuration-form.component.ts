@@ -357,7 +357,7 @@ type ConfigurationFormGroup = FormGroup<
     .field-description {
       margin: 4px 0 0 32px;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 14px;
     }
     .profile-target-preview {
       display: grid;
@@ -370,12 +370,12 @@ type ConfigurationFormGroup = FormGroup<
     .profile-target-preview h3 {
       margin: 0;
       color: var(--text-primary);
-      font-size: 12px;
+      font-size: 14px;
     }
     .profile-target-preview p {
       margin: 0;
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: 14px;
       line-height: 1.45;
     }
     .profile-target-row {
@@ -384,7 +384,7 @@ type ConfigurationFormGroup = FormGroup<
       padding: 8px 10px;
       border-radius: 7px;
       background: var(--surface);
-      font-size: 11px;
+      font-size: 14px;
     }
     .profile-target-row strong {
       color: var(--text-primary);

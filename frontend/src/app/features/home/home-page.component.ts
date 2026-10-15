@@ -78,7 +78,9 @@ export class HomePageComponent {
         (e) => e.state === 'running' || e.state === 'cancelling',
       ) ?? [],
   );
-  protected readonly activity = computed(() => this.executionState().data?.activity ?? []);
+  protected readonly activity = computed(
+    () => this.executionState().data?.activity.slice(0, 5) ?? [],
+  );
   private readonly executionMetrics = computed(() => {
     const data = this.executionState().data;
     return [
@@ -91,6 +93,21 @@ export class HomePageComponent {
         label: 'Dans la file',
         value: data ? String(data.queuedCount) : '—',
         detail: 'Exécutions en attente',
+      },
+      {
+        label: 'Terminées avec succès',
+        value: data ? String(data.succeededCount) : '—',
+        detail: 'Exécutions publiées',
+      },
+      {
+        label: 'En échec',
+        value: data ? String(data.failedCount) : '—',
+        detail: 'Exécutions à examiner',
+      },
+      {
+        label: 'En attente de reprise',
+        value: data?.deferredCount === undefined ? '—' : String(data.deferredCount),
+        detail: 'Exécutions suspendues',
       },
     ];
   });

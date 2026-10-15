@@ -97,7 +97,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     .drawer-heading p {
       margin: 5px 0 0;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 14px;
     }
 
     .drawer-close {

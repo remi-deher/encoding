@@ -113,12 +113,12 @@ interface FlowComponentGroup {
     }
     .block-kind {
       color: var(--component-color);
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 600;
     }
     .block-provider {
       color: var(--component-color);
-      font-size: 11px;
+      font-size: 14px;
       text-align: right;
       overflow-wrap: anywhere;
     }
@@ -143,7 +143,7 @@ interface FlowComponentGroup {
       margin: 0 0 12px;
       padding: 0 20px;
       color: var(--text-secondary);
-      font-size: 13px;
+      font-size: 14px;
       line-height: 1.5;
       text-align: center;
       overflow-wrap: anywhere;
@@ -164,7 +164,7 @@ interface FlowComponentGroup {
       align-items: center;
       gap: 7px;
       color: var(--component-color);
-      font-size: 12px;
+      font-size: 14px;
     }
     .output-port {
       display: block;

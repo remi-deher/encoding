@@ -4,7 +4,7 @@
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 14px;
 }
 
@@ -42,14 +42,14 @@
 .panel-heading p {
   margin: 5px 0 0;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
 .subtle-link {
   padding-top: 2px;
   color: var(--accent-strong);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 660;
   text-decoration: none;
   white-space: nowrap;
@@ -63,7 +63,7 @@
 .node-info h3 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 660;
 }
 
@@ -100,7 +100,7 @@ mat-progress-bar {
   border-radius: 9px;
   background: #f4f7f6;
   color: var(--accent-strong);
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 750;
 }
 
@@ -118,7 +118,7 @@ mat-progress-bar {
 .node-info p {
   margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 14px;
 }
 
 .node-state {
@@ -129,7 +129,7 @@ mat-progress-bar {
 
 .node-workload {
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 14px;
 }
 
 .activity-panel {

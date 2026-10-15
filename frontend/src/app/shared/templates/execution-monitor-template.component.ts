@@ -265,13 +265,13 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     .monitor-panel-heading p {
       margin: 5px 0 0;
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: 14px;
     }
 
     .execution-count,
     .tab-count {
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: 14px;
       font-variant-numeric: tabular-nums;
     }
 
@@ -290,7 +290,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       border-radius: 8px;
       background: var(--accent-soft);
       color: var(--accent-strong);
-      font-size: 11px;
+      font-size: 14px;
       line-height: 1.5;
     }
 
@@ -301,12 +301,12 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     .execution-detail-tabs { display: block; }
     .execution-detail-tab { display: grid; gap: 18px; padding: 18px 2px 4px; }
     .execution-detail-tab h3 { margin: 0; color: var(--text-primary); font-size: 14px; }
-    .execution-detail-empty { margin: 0; color: var(--text-secondary); font-size: 13px; }
+    .execution-detail-empty { margin: 0; color: var(--text-secondary); font-size: 14px; }
 
     .monitor-note {
       margin: 14px 2px 0;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: 14px;
       line-height: 1.5;
     }
 
