@@ -7,7 +7,15 @@ import { DatePipe } from '@angular/common';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
-import { NodeRole, NODE_ROLE_LABELS } from '../../shared/models/cluster';
+import {
+  assessClusterHealth,
+  NODE_LIFECYCLE_LABELS,
+  NODE_LIFECYCLE_TONES,
+  nodeLifecycle,
+} from '../../shared/models/cluster-health';
+import { HealthBannerComponent } from '../../shared/ui/health-banner.component';
+import { MatrixCell, MatrixTableComponent } from '../../shared/ui/matrix-table.component';
+import { NodeResponse, NodeRole, NODE_ROLE_LABELS } from '../../shared/models/cluster';
 import { Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
@@ -27,6 +35,8 @@ import { ExecutionCardComponent } from '../../shared/ui/execution-card.component
     DatePipe,
     DetailDrawerComponent,
     ExecutionCardComponent,
+    HealthBannerComponent,
+    MatrixTableComponent,
     MetricCardComponent,
     NgTemplateOutlet,
     PageHeaderComponent,
@@ -156,6 +166,40 @@ export class HomePageComponent {
     ];
   });
   protected readonly nodes = computed(() => this.state().snapshot?.nodes ?? []);
+  protected readonly health = computed(() => {
+    const snapshot = this.state().snapshot;
+    return snapshot
+      ? assessClusterHealth(snapshot.nodes, snapshot.libraries, snapshot.accesses)
+      : null;
+  });
+  protected readonly matrixRows = computed(() =>
+    this.nodes().map((node) => ({ id: node.id, label: node.displayName?.trim() || node.name })),
+  );
+  protected readonly matrixColumns = computed(() =>
+    (this.state().snapshot?.libraries ?? []).map((library) => ({
+      id: library.id,
+      label: library.name,
+    })),
+  );
+  protected readonly matrixCells = computed(() => {
+    const cells: Record<string, MatrixCell> = {};
+    for (const access of this.state().snapshot?.accesses ?? []) {
+      cells[access.nodeId + '|' + access.libraryId] = !access.isEnabled
+        ? { label: 'Désactivé', tone: 'neutral' }
+        : access.mode === 'direct'
+          ? { label: 'Accès direct', tone: 'success' }
+          : access.mode === 'transfer'
+            ? { label: 'Transfert', tone: 'accent' }
+            : { label: 'Non pris en charge', tone: 'neutral' };
+    }
+    return cells;
+  });
+  protected lifecycleLabel(node: NodeResponse): string {
+    return NODE_LIFECYCLE_LABELS[nodeLifecycle(node)];
+  }
+  protected lifecycleTone(node: NodeResponse) {
+    return NODE_LIFECYCLE_TONES[nodeLifecycle(node)];
+  }
   protected roleLabel(roles: readonly NodeRole[]): string {
     return roles.map((r) => NODE_ROLE_LABELS[r]).join(' · ');
   }

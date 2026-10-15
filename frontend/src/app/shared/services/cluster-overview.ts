@@ -8,16 +8,20 @@ import {
   of,
   scan,
   shareReplay,
+  switchMap,
   Subject,
   timeout,
   timer,
 } from 'rxjs';
 import { ClusterApi } from './cluster-api';
 import { LibraryResponse, NodeResponse } from '../models/cluster';
+import { LibraryNodeAccessResponse } from '../ui/library-node-access-types';
 
 export interface ClusterSnapshot {
   readonly nodes: readonly NodeResponse[];
   readonly libraries: readonly LibraryResponse[];
+  /** Accès de chaque nœud à chaque bibliothèque (liste vide si indisponible). */
+  readonly accesses: readonly LibraryNodeAccessResponse[];
   readonly observedAt: Date;
 }
 export interface ClusterOverviewState {
@@ -33,6 +37,18 @@ export class ClusterOverview {
   readonly state$ = merge(timer(0, 10000), this.refreshRequested).pipe(
     exhaustMap(() =>
       forkJoin({ nodes: this.api.listNodes(), libraries: this.api.listLibraries() }).pipe(
+        switchMap((data) =>
+          (data.libraries.length
+            ? forkJoin(
+                data.libraries.map((library) =>
+                  this.api
+                    .libraryNodeAccess(library.id)
+                    .pipe(catchError(() => of([] as readonly LibraryNodeAccessResponse[]))),
+                ),
+              )
+            : of([] as (readonly LibraryNodeAccessResponse[])[])
+          ).pipe(map((lists) => ({ ...data, accesses: lists.flat() }))),
+        ),
         timeout(8000),
         map(
           (data) =>

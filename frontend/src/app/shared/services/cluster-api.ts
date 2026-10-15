@@ -2,6 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { LibraryWorkflow, LibraryProcessingSettings } from '../models/library-workflow';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../models/auth';
+import { LibraryNodeAccessResponse } from '../ui/library-node-access-types';
 import { NodeSchedule } from '../models/node-schedule';
 import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models/cluster';
 
@@ -65,6 +66,11 @@ export class ClusterApi {
   }
   listLibraries() {
     return this.http.get<readonly LibraryResponse[]>('/api/v1/libraries');
+  }
+  libraryNodeAccess(id: string) {
+    return this.http.get<readonly LibraryNodeAccessResponse[]>(
+      '/api/v1/libraries/' + id + '/node-access',
+    );
   }
   enrollmentWindow() {
     return this.http.get<EnrollmentWindow>('/api/v1/nodes/enrollment-window');
