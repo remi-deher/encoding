@@ -164,7 +164,7 @@ internal static class OperationsScenarios
             ["Operations:Metrics:Token"] = "scrape-token",
             ["Operations:Health:MinFreeDiskBytes"] = "1",
         });
-        builder.Services.AddSingleton(db);
+        builder.Services.AddSingleton<System.Data.Common.DbDataSource>(db);
         builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(30)));
         builder.Services.AddSingleton<RuntimeArtifactStore>();
         builder.AddOperations();

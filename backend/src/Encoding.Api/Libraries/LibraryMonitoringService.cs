@@ -1,7 +1,7 @@
+using System.Data.Common;
 
-using Npgsql;
 namespace Encoding.Api.Libraries;
-public sealed class LibraryMonitoringService(NpgsqlDataSource dataSource,LibraryWorkflowRepository workflow,ILogger<LibraryMonitoringService> logger):BackgroundService
+public sealed class LibraryMonitoringService(DbDataSource dataSource,LibraryWorkflowRepository workflow,ILogger<LibraryMonitoringService> logger):BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {

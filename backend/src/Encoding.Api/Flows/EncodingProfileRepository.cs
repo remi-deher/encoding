@@ -1,17 +1,17 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace Encoding.Api.Flows;
 
-public sealed class EncodingProfileRepository(NpgsqlDataSource dataSource)
+public sealed class EncodingProfileRepository(DbDataSource dataSource)
 {
     public async Task<IReadOnlyList<EncodingProfileSummary>> ListAsync(CancellationToken ct)
     {
         var profiles = new List<EncodingProfileSummary> { BuiltInSummary };
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using (var command = new NpgsqlCommand("""
+        await using (var command = Sql.Command("""
             SELECT id,draft_revision,draft_name,draft_description,published_version,jsonb_array_length(draft_targets),updated_at
             FROM encoding_profiles ORDER BY lower(draft_name),id
             """, connection))
@@ -21,7 +21,7 @@ public sealed class EncodingProfileRepository(NpgsqlDataSource dataSource)
         }
         if (profiles.Count == 1) return profiles;
         var versions = new Dictionary<Guid, List<EncodingProfileVersionSummary>>();
-        await using (var command = new NpgsqlCommand("""
+        await using (var command = Sql.Command("""
             SELECT profile_id,version,name,description,created_at FROM encoding_profile_versions
             WHERE profile_id=ANY(@ids) ORDER BY version DESC
             """, connection))
@@ -46,7 +46,7 @@ public sealed class EncodingProfileRepository(NpgsqlDataSource dataSource)
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         EncodingProfileSummary summary;
         EncodingProfileDraft draft;
-        await using (var command = new NpgsqlCommand("""
+        await using (var command = Sql.Command("""
             SELECT id,draft_revision,draft_name,draft_description,published_version,jsonb_array_length(draft_targets),updated_at,draft_targets::text
             FROM encoding_profiles WHERE id=@id
             """, connection))
@@ -110,7 +110,7 @@ public sealed class EncodingProfileRepository(NpgsqlDataSource dataSource)
         string name, description;
         IReadOnlyList<EncodingProfileTarget> targets;
         int version;
-        await using (var read = new NpgsqlCommand("""
+        await using (var read = Sql.Command("""
             SELECT draft_name,draft_description,draft_targets::text,published_version
             FROM encoding_profiles WHERE id=@id AND draft_revision=@revision FOR UPDATE
             """, connection, transaction))
@@ -124,7 +124,7 @@ public sealed class EncodingProfileRepository(NpgsqlDataSource dataSource)
             targets = DeserializeTargets(reader.GetString(2));
             version = reader.GetInt32(3) + 1;
         }
-        await using (var insert = new NpgsqlCommand("""
+        await using (var insert = Sql.Command("""
             INSERT INTO encoding_profile_versions(profile_id,version,name,description,targets)
             VALUES(@id,@version,@name,@description,@targets)
             """, connection, transaction))
@@ -133,10 +133,10 @@ public sealed class EncodingProfileRepository(NpgsqlDataSource dataSource)
             insert.Parameters.AddWithValue("version", version);
             insert.Parameters.AddWithValue("name", name);
             insert.Parameters.AddWithValue("description", description);
-            insert.Parameters.AddWithValue("targets", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(targets, FlowRepository.JsonOptions));
+            insert.Parameters.AddWithValue("targets", SqlKind.Json, JsonSerializer.Serialize(targets, FlowRepository.JsonOptions));
             await insert.ExecuteNonQueryAsync(ct);
         }
-        await using (var update = new NpgsqlCommand("UPDATE encoding_profiles SET published_version=@version,updated_at=now() WHERE id=@id", connection, transaction))
+        await using (var update = Sql.Command("UPDATE encoding_profiles SET published_version=@version,updated_at=now() WHERE id=@id", connection, transaction))
         {
             update.Parameters.AddWithValue("id", id);
             update.Parameters.AddWithValue("version", version);
@@ -153,10 +153,10 @@ public sealed class EncodingProfileRepository(NpgsqlDataSource dataSource)
         [new(BuiltInEncodingProfiles.BalancedId, 1, BuiltInEncodingProfiles.Balanced.Name,
             BuiltInEncodingProfiles.Balanced.Description, DateTimeOffset.UnixEpoch)]);
 
-    private static async Task<IReadOnlyList<EncodingProfileVersionSummary>> ListVersionsAsync(Guid id, NpgsqlConnection connection, CancellationToken ct)
+    private static async Task<IReadOnlyList<EncodingProfileVersionSummary>> ListVersionsAsync(Guid id, DbConnection connection, CancellationToken ct)
     {
         var versions = new List<EncodingProfileVersionSummary>();
-        await using var command = new NpgsqlCommand("""
+        await using var command = Sql.Command("""
             SELECT profile_id,version,name,description,created_at FROM encoding_profile_versions
             WHERE profile_id=@id ORDER BY version DESC
             """, connection);
@@ -166,22 +166,22 @@ public sealed class EncodingProfileRepository(NpgsqlDataSource dataSource)
         return versions;
     }
 
-    private static EncodingProfileSummary ReadSummary(NpgsqlDataReader reader, IReadOnlyList<EncodingProfileVersionSummary> versions) =>
+    private static EncodingProfileSummary ReadSummary(DbDataReader reader, IReadOnlyList<EncodingProfileVersionSummary> versions) =>
         new(reader.GetGuid(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetFieldValue<DateTimeOffset>(6), false, versions);
 
-    private static EncodingProfileVersionSummary ReadVersionSummary(NpgsqlDataReader reader) =>
+    private static EncodingProfileVersionSummary ReadVersionSummary(DbDataReader reader) =>
         new(reader.GetGuid(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3), reader.GetFieldValue<DateTimeOffset>(4));
 
-    private static EncodingProfileVersion ReadVersion(NpgsqlDataReader reader) =>
+    private static EncodingProfileVersion ReadVersion(DbDataReader reader) =>
         new(reader.GetGuid(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3), DeserializeTargets(reader.GetString(4)), reader.GetFieldValue<DateTimeOffset>(5));
 
     private static IReadOnlyList<EncodingProfileTarget> DeserializeTargets(string json) =>
         JsonSerializer.Deserialize<IReadOnlyList<EncodingProfileTarget>>(json, FlowRepository.JsonOptions) ?? [];
 
-    private static void AddDraft(NpgsqlCommand command, EncodingProfileDraft draft)
+    private static void AddDraft(DbCommand command, EncodingProfileDraft draft)
     {
         command.Parameters.AddWithValue("name", draft.Name.Trim());
         command.Parameters.AddWithValue("description", draft.Description.Trim());
-        command.Parameters.AddWithValue("targets", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(draft.Targets, FlowRepository.JsonOptions));
+        command.Parameters.AddWithValue("targets", SqlKind.Json, JsonSerializer.Serialize(draft.Targets, FlowRepository.JsonOptions));
     }
 }

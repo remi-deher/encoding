@@ -1,5 +1,6 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Flows;
-using Npgsql;
 
 namespace Encoding.Api.Flows;
 
@@ -20,7 +21,7 @@ public static class FlowScriptEndpoints
                 var script = await repository.CreateAsync(id, request.Draft, ct);
                 return Results.Created($"/api/v1/scripts/{id:D}", script);
             }
-            catch (PostgresException exception) when (exception.SqlState == "23505")
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
             {
                 return Results.Conflict(new { title = "Un script porte déjà ce nom." });
             }
@@ -40,7 +41,7 @@ public static class FlowScriptEndpoints
                     ? Results.NotFound()
                     : Results.Conflict(new { title = "Le brouillon a été modifié ailleurs. Rechargez-le avant de continuer." });
             }
-            catch (PostgresException exception) when (exception.SqlState == "23505")
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
             {
                 return Results.Conflict(new { title = "Un script porte déjà ce nom." });
             }

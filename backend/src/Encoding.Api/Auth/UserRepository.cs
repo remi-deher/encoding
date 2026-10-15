@@ -1,6 +1,6 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Auth;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace Encoding.Api.Auth;
 
@@ -10,7 +10,7 @@ public sealed record SessionUser(Guid Id, string Username, UserRole Role);
 
 public enum UserChangeResult { Updated, NotFound, LastAdministrator }
 
-public sealed class UserRepository(NpgsqlDataSource dataSource)
+public sealed class UserRepository(DbDataSource dataSource)
 {
     private const string Columns = "id, username, role, is_active, created_at";
     private const string SetupLock = "SELECT pg_advisory_xact_lock(hashtext('encoding.users'))";
@@ -29,8 +29,8 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var @lock = new NpgsqlCommand(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
-        await using (var exists = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM users)", connection, transaction))
+        await using (var @lock = Sql.Command(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
+        await using (var exists = Sql.Command("SELECT EXISTS(SELECT 1 FROM users)", connection, transaction))
             if ((bool)(await exists.ExecuteScalarAsync(ct))!) return null;
         var user = await InsertAsync(connection, transaction, username, passwordHash, UserRole.Admin, ct);
         await transaction.CommitAsync(ct);
@@ -41,12 +41,12 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         try { return await InsertAsync(connection, null, username, passwordHash, role, ct); }
-        catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation) { return null; }
+        catch (DbException exception) when (Sql.IsUniqueViolation(exception)) { return null; }
     }
 
-    private static async Task<UserResponse> InsertAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, string username, string passwordHash, UserRole role, CancellationToken ct)
+    private static async Task<UserResponse> InsertAsync(DbConnection connection, DbTransaction? transaction, string username, string passwordHash, UserRole role, CancellationToken ct)
     {
-        await using var command = new NpgsqlCommand($"INSERT INTO users(id, username, password_hash, role) VALUES (@id, @username, @hash, @role) RETURNING {Columns}", connection, transaction);
+        await using var command = Sql.Command($"INSERT INTO users(id, username, password_hash, role) VALUES (@id, @username, @hash, @role) RETURNING {Columns}", connection, transaction);
         command.Parameters.AddWithValue("id", Guid.NewGuid());
         command.Parameters.AddWithValue("username", username);
         command.Parameters.AddWithValue("hash", passwordHash);
@@ -79,7 +79,7 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
         return await ReadCredentialsAsync(command, ct);
     }
 
-    private static async Task<UserCredentials?> ReadCredentialsAsync(NpgsqlCommand command, CancellationToken ct)
+    private static async Task<UserCredentials?> ReadCredentialsAsync(DbCommand command, CancellationToken ct)
     {
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
@@ -106,7 +106,7 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
     {
         await using var command = dataSource.CreateCommand("UPDATE users SET failed_attempts = 0, locked_until = NULL, password_hash = COALESCE(@hash, password_hash) WHERE id = @id");
         command.Parameters.AddWithValue("id", id);
-        command.Parameters.Add(new NpgsqlParameter("hash", NpgsqlDbType.Text) { Value = (object?)upgradedHash ?? DBNull.Value });
+        command.Parameters.AddWithValue("hash", SqlKind.Text, (object?)upgradedHash ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(ct);
     }
 
@@ -115,7 +115,7 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using var update = new NpgsqlCommand("UPDATE users SET password_hash = @hash, failed_attempts = 0, locked_until = NULL, updated_at = clock_timestamp() WHERE id = @id", connection, transaction);
+        await using var update = Sql.Command("UPDATE users SET password_hash = @hash, failed_attempts = 0, locked_until = NULL, updated_at = clock_timestamp() WHERE id = @id", connection, transaction);
         update.Parameters.AddWithValue("id", id);
         update.Parameters.AddWithValue("hash", passwordHash);
         if (await update.ExecuteNonQueryAsync(ct) == 0) return false;
@@ -128,10 +128,10 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var @lock = new NpgsqlCommand(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
+        await using (var @lock = Sql.Command(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
         if (!await ExistsAsync(connection, transaction, id, ct)) return UserChangeResult.NotFound;
         if ((role != UserRole.Admin || !isActive) && await IsLastActiveAdministratorAsync(connection, transaction, id, ct)) return UserChangeResult.LastAdministrator;
-        await using var update = new NpgsqlCommand("UPDATE users SET role = @role, is_active = @active, updated_at = clock_timestamp() WHERE id = @id", connection, transaction);
+        await using var update = Sql.Command("UPDATE users SET role = @role, is_active = @active, updated_at = clock_timestamp() WHERE id = @id", connection, transaction);
         update.Parameters.AddWithValue("id", id);
         update.Parameters.AddWithValue("role", RoleName(role));
         update.Parameters.AddWithValue("active", isActive);
@@ -145,26 +145,26 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var @lock = new NpgsqlCommand(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
+        await using (var @lock = Sql.Command(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
         if (!await ExistsAsync(connection, transaction, id, ct)) return UserChangeResult.NotFound;
         if (await IsLastActiveAdministratorAsync(connection, transaction, id, ct)) return UserChangeResult.LastAdministrator;
-        await using var delete = new NpgsqlCommand("DELETE FROM users WHERE id = @id", connection, transaction);
+        await using var delete = Sql.Command("DELETE FROM users WHERE id = @id", connection, transaction);
         delete.Parameters.AddWithValue("id", id);
         await delete.ExecuteNonQueryAsync(ct);
         await transaction.CommitAsync(ct);
         return UserChangeResult.Updated;
     }
 
-    private static async Task<bool> ExistsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid id, CancellationToken ct)
+    private static async Task<bool> ExistsAsync(DbConnection connection, DbTransaction transaction, Guid id, CancellationToken ct)
     {
-        await using var command = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM users WHERE id = @id)", connection, transaction);
+        await using var command = Sql.Command("SELECT EXISTS(SELECT 1 FROM users WHERE id = @id)", connection, transaction);
         command.Parameters.AddWithValue("id", id);
         return (bool)(await command.ExecuteScalarAsync(ct))!;
     }
 
-    private static async Task<bool> IsLastActiveAdministratorAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid id, CancellationToken ct)
+    private static async Task<bool> IsLastActiveAdministratorAsync(DbConnection connection, DbTransaction transaction, Guid id, CancellationToken ct)
     {
-        await using var command = new NpgsqlCommand("""
+        await using var command = Sql.Command("""
             SELECT EXISTS(SELECT 1 FROM users WHERE id = @id AND role = 'admin' AND is_active)
                AND NOT EXISTS(SELECT 1 FROM users WHERE id <> @id AND role = 'admin' AND is_active)
             """, connection, transaction);
@@ -179,7 +179,7 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
             INSERT INTO user_sessions(token_hash, user_id, expires_at)
             VALUES (@hash, @user, clock_timestamp() + LEAST(@idle, @absolute))
             """);
-        command.Parameters.AddWithValue("hash", NpgsqlDbType.Bytea, tokenHash);
+        command.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
         command.Parameters.AddWithValue("user", userId);
         command.Parameters.AddWithValue("idle", options.SessionIdleTimeout);
         command.Parameters.AddWithValue("absolute", options.SessionAbsoluteLifetime);
@@ -203,7 +203,7 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
             )
             SELECT id, username, role FROM current
             """);
-        command.Parameters.AddWithValue("hash", NpgsqlDbType.Bytea, tokenHash);
+        command.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
         command.Parameters.AddWithValue("idle", options.SessionIdleTimeout);
         command.Parameters.AddWithValue("absolute", options.SessionAbsoluteLifetime);
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -213,18 +213,18 @@ public sealed class UserRepository(NpgsqlDataSource dataSource)
     public async Task DeleteSessionAsync(byte[] tokenHash, CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("DELETE FROM user_sessions WHERE token_hash = @hash");
-        command.Parameters.AddWithValue("hash", NpgsqlDbType.Bytea, tokenHash);
+        command.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task RevokeSessionsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid userId, byte[]? keep, CancellationToken ct)
+    private static async Task RevokeSessionsAsync(DbConnection connection, DbTransaction transaction, Guid userId, byte[]? keep, CancellationToken ct)
     {
-        await using var command = new NpgsqlCommand("DELETE FROM user_sessions WHERE user_id = @user AND (@keep::bytea IS NULL OR token_hash <> @keep)", connection, transaction);
+        await using var command = Sql.Command("DELETE FROM user_sessions WHERE user_id = @user AND (@keep::bytea IS NULL OR token_hash <> @keep)", connection, transaction);
         command.Parameters.AddWithValue("user", userId);
-        command.Parameters.Add(new NpgsqlParameter("keep", NpgsqlDbType.Bytea) { Value = (object?)keep ?? DBNull.Value });
+        command.Parameters.AddWithValue("keep", SqlKind.Bytes, (object?)keep ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    private static UserResponse Read(NpgsqlDataReader reader) =>
+    private static UserResponse Read(DbDataReader reader) =>
         new(reader.GetGuid(0), reader.GetString(1), ParseRole(reader.GetString(2)), reader.GetBoolean(3), reader.GetFieldValue<DateTimeOffset>(4));
 }

@@ -1,9 +1,10 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Executions;
-using Npgsql;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRecoveryService(NpgsqlDataSource dataSource,ILogger<RuntimeRecoveryService> logger) : BackgroundService
+public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<RuntimeRecoveryService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -13,7 +14,7 @@ public sealed class RuntimeRecoveryService(NpgsqlDataSource dataSource,ILogger<R
             {
                 await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
                 var expired=new List<(Guid Id,Guid? Worker,int Revision)>();
-                await using(var cmd=new NpgsqlCommand("SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id WHERE e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()) LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED",c,tx))
+                await using(var cmd=Sql.Command("SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id WHERE e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()) LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED",c,tx))
                 await using(var r=await cmd.ExecuteReaderAsync(ct))
                 { while(await r.ReadAsync(ct)) expired.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2))); }
                 foreach(var item in expired)

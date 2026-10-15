@@ -1,11 +1,12 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using Encoding.Api.Nodes;
-using Npgsql;
 
 namespace Encoding.Api.Infrastructure.Operations;
 
 /// <summary>Construit la page <c>/metrics</c> : état du cluster lu dans PostgreSQL (identique sur chaque serveur) et mesures du processus local.</summary>
-public sealed class ClusterMetricsCollector(NpgsqlDataSource dataSource, NodePresenceOptions presence, IHostEnvironment environment)
+public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenceOptions presence, IHostEnvironment environment)
 {
     private static readonly string[] ExecutionStates = ["queued", "running", "cancelling", "succeeded", "failed", "cancelled", "deferred"];
     private static readonly string[] BackupStatuses = ["pending", "ready", "failed"];
@@ -15,7 +16,7 @@ public sealed class ClusterMetricsCollector(NpgsqlDataSource dataSource, NodePre
         var writer = new PrometheusWriter();
         writer.Gauge("encoding_up", "1 si ce serveur répond.", 1);
         try { await WriteClusterAsync(writer, cancellationToken); }
-        catch (NpgsqlException)
+        catch (DbException)
         {
             writer.Gauge("encoding_database_up", "1 si PostgreSQL répond.", 0);
         }
@@ -94,9 +95,9 @@ public sealed class ClusterMetricsCollector(NpgsqlDataSource dataSource, NodePre
         }
     }
 
-    private static async Task<Dictionary<string, long>> Rows(NpgsqlConnection connection, string sql, CancellationToken ct, params (string Name, object Value)[] parameters)
+    private static async Task<Dictionary<string, long>> Rows(DbConnection connection, string sql, CancellationToken ct, params (string Name, object Value)[] parameters)
     {
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value);
         var result = new Dictionary<string, long>(StringComparer.Ordinal);
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -104,9 +105,9 @@ public sealed class ClusterMetricsCollector(NpgsqlDataSource dataSource, NodePre
         return result;
     }
 
-    private static async Task<double> Scalar(NpgsqlConnection connection, string sql, CancellationToken ct)
+    private static async Task<double> Scalar(DbConnection connection, string sql, CancellationToken ct)
     {
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         return Convert.ToDouble(await command.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 }

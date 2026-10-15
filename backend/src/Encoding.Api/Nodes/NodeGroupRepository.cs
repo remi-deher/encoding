@@ -1,11 +1,11 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Text.Json;
 using Encoding.Contracts.Nodes;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace Encoding.Api.Nodes;
 
-public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
+public sealed class NodeGroupRepository(DbDataSource dataSource)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -13,11 +13,11 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
     {
         var groups = new List<GroupRow>();
         await using var c = await dataSource.OpenConnectionAsync(ct);
-        await using (var cmd = new NpgsqlCommand("SELECT id,name,description,mode,criteria,labels,created_at,updated_at FROM node_groups ORDER BY name,id", c))
+        await using (var cmd = Sql.Command("SELECT id,name,description,mode,criteria,labels,created_at,updated_at FROM node_groups ORDER BY name,id", c))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct)) groups.Add(ReadGroup(r));
         var manualMembers = new Dictionary<Guid, List<Guid>>();
-        await using (var cmd = new NpgsqlCommand("SELECT m.group_id,m.node_id FROM node_group_members m JOIN cluster_nodes n ON n.id=m.node_id WHERE n.deleted_at IS NULL ORDER BY m.node_id", c))
+        await using (var cmd = Sql.Command("SELECT m.group_id,m.node_id FROM node_group_members m JOIN cluster_nodes n ON n.id=m.node_id WHERE n.deleted_at IS NULL ORDER BY m.node_id", c))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct))
             {
@@ -26,7 +26,7 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
             }
         var nodes = new List<NodeResponse>();
         const string nodeSql = "SELECT id,name,roles,max_concurrent_tasks,capabilities,last_seen_at,true,inventory,display_name,labels FROM cluster_nodes WHERE deleted_at IS NULL";
-        await using (var cmd = new NpgsqlCommand(nodeSql, c))
+        await using (var cmd = Sql.Command(nodeSql, c))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct)) nodes.Add(NodeRepository.ReadResponse(r, true));
         return groups.Select(g => new NodeGroupResponse(g.Id, g.Name, g.Description, g.Mode, g.Criteria, g.Labels,
@@ -51,30 +51,30 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
             VALUES(@id,@name,@description,@mode,@criteria,@labels)
             RETURNING id
             """;
-        await using (var cmd = new NpgsqlCommand(upsert, c, tx))
+        await using (var cmd = Sql.Command(upsert, c, tx))
         {
             cmd.Parameters.AddWithValue("id", groupId);
             cmd.Parameters.AddWithValue("name", request.Name.Trim());
             cmd.Parameters.AddWithValue("description", request.Description.Trim());
             cmd.Parameters.AddWithValue("mode", request.Mode.ToString().ToLowerInvariant());
-            cmd.Parameters.Add(new("criteria", NpgsqlDbType.Jsonb) { Value = JsonSerializer.Serialize(request.Criteria, Json) });
-            cmd.Parameters.Add(new("labels", NpgsqlDbType.Jsonb) { Value = JsonSerializer.Serialize(request.Labels, Json) });
+            cmd.Parameters.AddWithValue("criteria", SqlKind.Json, JsonSerializer.Serialize(request.Criteria, Json));
+            cmd.Parameters.AddWithValue("labels", SqlKind.Json, JsonSerializer.Serialize(request.Labels, Json));
             if (await cmd.ExecuteScalarAsync(ct) is null) return false;
         }
         if (request.Mode == NodeGroupMode.Manual)
         {
-            await using (var clear = new NpgsqlCommand("DELETE FROM node_group_members WHERE group_id=@id", c, tx))
+            await using (var clear = Sql.Command("DELETE FROM node_group_members WHERE group_id=@id", c, tx))
             { clear.Parameters.AddWithValue("id", groupId); await clear.ExecuteNonQueryAsync(ct); }
             foreach (var nodeId in request.NodeIds.Distinct())
             {
-                await using var add = new NpgsqlCommand("INSERT INTO node_group_members(group_id,node_id) SELECT @group,@node WHERE EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL)", c, tx);
+                await using var add = Sql.Command("INSERT INTO node_group_members(group_id,node_id) SELECT @group,@node WHERE EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL)", c, tx);
                 add.Parameters.AddWithValue("group", groupId); add.Parameters.AddWithValue("node", nodeId);
                 if (await add.ExecuteNonQueryAsync(ct) == 0) return false;
             }
         }
         else
         {
-            await using var clear = new NpgsqlCommand("DELETE FROM node_group_members WHERE group_id=@id", c, tx);
+            await using var clear = Sql.Command("DELETE FROM node_group_members WHERE group_id=@id", c, tx);
             clear.Parameters.AddWithValue("id", groupId); await clear.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
@@ -86,7 +86,7 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(ct);
-        await using (var exists = new NpgsqlCommand("SELECT 1 FROM node_groups WHERE id=@id FOR UPDATE", c, tx))
+        await using (var exists = Sql.Command("SELECT 1 FROM node_groups WHERE id=@id FOR UPDATE", c, tx))
         {
             exists.Parameters.AddWithValue("id", id);
             if (await exists.ExecuteScalarAsync(ct) is null) return "missing";
@@ -95,12 +95,12 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
             SELECT EXISTS(SELECT 1 FROM flow_versions WHERE definition::text LIKE '%' || @id || '%')
                 OR EXISTS(SELECT 1 FROM flow_drafts WHERE definition::text LIKE '%' || @id || '%')
             """;
-        await using (var used = new NpgsqlCommand(usage, c, tx))
+        await using (var used = Sql.Command(usage, c, tx))
         {
             used.Parameters.AddWithValue("id", id.ToString());
             if ((bool)(await used.ExecuteScalarAsync(ct))!) return "in-use";
         }
-        await using var cmd = new NpgsqlCommand("DELETE FROM node_groups WHERE id=@id", c, tx);
+        await using var cmd = Sql.Command("DELETE FROM node_groups WHERE id=@id", c, tx);
         cmd.Parameters.AddWithValue("id", id);
         await cmd.ExecuteNonQueryAsync(ct);
         await tx.CommitAsync(ct);
@@ -111,7 +111,7 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
         string? displayName; IReadOnlyDictionary<string, string?> local;
-        await using (var cmd = new NpgsqlCommand("SELECT display_name,labels FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL", c))
+        await using (var cmd = Sql.Command("SELECT display_name,labels FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL", c))
         {
             cmd.Parameters.AddWithValue("id", id); await using var r = await cmd.ExecuteReaderAsync(ct);
             if (!await r.ReadAsync(ct)) return null;
@@ -124,7 +124,7 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
             SELECT g.id,g.labels FROM node_groups g LEFT JOIN node_group_members m ON m.group_id=g.id
             WHERE m.node_id=@node ORDER BY g.name,g.id
             """;
-        await using (var cmd = new NpgsqlCommand(sql, c))
+        await using (var cmd = Sql.Command(sql, c))
         {
             cmd.Parameters.AddWithValue("node", id); await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
@@ -149,7 +149,7 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
         await using var cmd = dataSource.CreateCommand("UPDATE cluster_nodes SET display_name=@name,labels=@labels WHERE id=@id AND deleted_at IS NULL");
         cmd.Parameters.AddWithValue("id", id);
         cmd.Parameters.AddWithValue("name", string.IsNullOrWhiteSpace(request.DisplayName) ? DBNull.Value : request.DisplayName.Trim());
-        cmd.Parameters.Add(new("labels", NpgsqlDbType.Jsonb) { Value = JsonSerializer.Serialize(request.Labels, Json) });
+        cmd.Parameters.AddWithValue("labels", SqlKind.Json, JsonSerializer.Serialize(request.Labels, Json));
         return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
@@ -165,7 +165,7 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
             && (c.RequiredToolIds is null || c.RequiredToolIds.All(tool => n.Capabilities.Any(x => string.Equals(x.ToolId, tool, StringComparison.OrdinalIgnoreCase))));
     }
 
-    private static GroupRow ReadGroup(NpgsqlDataReader r) => new(r.GetGuid(0), r.GetString(1), r.GetString(2),
+    private static GroupRow ReadGroup(DbDataReader r) => new(r.GetGuid(0), r.GetString(1), r.GetString(2),
         Enum.Parse<NodeGroupMode>(r.GetString(3), true), JsonSerializer.Deserialize<NodeGroupCriteria>(r.GetString(4), Json) ?? new(),
         JsonSerializer.Deserialize<Dictionary<string, string?>>(r.GetString(5), Json) ?? [],
         new DateTimeOffset(DateTime.SpecifyKind(r.GetDateTime(6), DateTimeKind.Utc)), new DateTimeOffset(DateTime.SpecifyKind(r.GetDateTime(7), DateTimeKind.Utc)));

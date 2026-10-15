@@ -1,5 +1,6 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Api.Executions;
-using Npgsql;
 
 namespace Encoding.Api.Infrastructure.Operations;
 
@@ -10,7 +11,7 @@ public sealed record RetentionResult(int Candidates, int Purged, long BytesFreed
 /// Les lignes PostgreSQL (historique, empreintes) sont conservées ; seule la marque <c>artifacts_purged_at</c> est ajoutée.
 /// Les fichiers publiés dans les bibliothèques ne sont jamais concernés.
 /// </summary>
-public sealed class ArtifactRetention(NpgsqlDataSource dataSource, RuntimeArtifactStore store, OperationsOptions options, ILogger<ArtifactRetention> logger)
+public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactStore store, OperationsOptions options, ILogger<ArtifactRetention> logger)
 {
     private const string CandidateSql = """
         SELECT e.id
@@ -35,7 +36,7 @@ public sealed class ArtifactRetention(NpgsqlDataSource dataSource, RuntimeArtifa
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await using (var select = new NpgsqlCommand(CandidateSql, connection, transaction))
+        await using (var select = Sql.Command(CandidateSql, connection, transaction))
         {
             select.Parameters.AddWithValue("days", settings.Days);
             select.Parameters.AddWithValue("failedDays", settings.FailedDays);
@@ -51,7 +52,7 @@ public sealed class ArtifactRetention(NpgsqlDataSource dataSource, RuntimeArtifa
             if (!settings.DryRun)
             {
                 if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
-                await using var mark = new NpgsqlCommand("UPDATE execution_work SET artifacts_purged_at = clock_timestamp() WHERE execution_id = @id", connection, transaction);
+                await using var mark = Sql.Command("UPDATE execution_work SET artifacts_purged_at = clock_timestamp() WHERE execution_id = @id", connection, transaction);
                 mark.Parameters.AddWithValue("id", id);
                 await mark.ExecuteNonQueryAsync(cancellationToken);
             }

@@ -1,11 +1,12 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Libraries;
-using Npgsql;
 
 namespace Encoding.Api.Executions;
 
 /// <summary>Politique de remplacement des sources et registre durable des remplacements (voir l'architecture 0029).</summary>
-public sealed class SourceReplacementRepository(NpgsqlDataSource dataSource)
+public sealed class SourceReplacementRepository(DbDataSource dataSource)
 {
     public static readonly TimeSpan RollbackReservation=TimeSpan.FromMinutes(15);
     public async Task<LibraryReplacementPolicy?> GetPolicyAsync(Guid library,CancellationToken ct)
@@ -20,11 +21,11 @@ public sealed class SourceReplacementRepository(NpgsqlDataSource dataSource)
     {
         if(request.GracePeriodHours is <1 or >8760 || request.ExpectedRevision is <0 or int.MaxValue) throw new ArgumentException("La période de grâce doit être comprise entre 1 heure et 8 760 heures.");
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
-        await using var locked=new NpgsqlCommand("SELECT id FROM libraries WHERE id=@id FOR UPDATE",c,tx); locked.Parameters.AddWithValue("id",library);
+        await using var locked=Sql.Command("SELECT id FROM libraries WHERE id=@id FOR UPDATE",c,tx); locked.Parameters.AddWithValue("id",library);
         if(await locked.ExecuteScalarAsync(ct) is null) return false;
-        await using var current=new NpgsqlCommand("SELECT revision FROM library_replacement_policies WHERE library_id=@id",c,tx); current.Parameters.AddWithValue("id",library);
+        await using var current=Sql.Command("SELECT revision FROM library_replacement_policies WHERE library_id=@id",c,tx); current.Parameters.AddWithValue("id",library);
         if((await current.ExecuteScalarAsync(ct) as int? ?? 0)!=request.ExpectedRevision) return false;
-        await using var save=new NpgsqlCommand("""
+        await using var save=Sql.Command("""
           INSERT INTO library_replacement_policies(library_id,enabled,grace_period_hours,revision) VALUES(@id,@enabled,@hours,@revision)
           ON CONFLICT(library_id) DO UPDATE SET enabled=@enabled,grace_period_hours=@hours,revision=@revision
           """,c,tx);
@@ -47,26 +48,26 @@ public sealed class SourceReplacementRepository(NpgsqlDataSource dataSource)
         catch(ArgumentException) { return false; }
     }
     internal static async Task RecordInTransactionAsync(Guid execution,Guid library,Guid sourceNode,string original,string sourceSha,string resultSha,int graceHours,
-        SourceReplacementReport report,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
+        SourceReplacementReport report,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
         var replaced=report.Status=="replaced";
-        await using var insert=new NpgsqlCommand("""
+        await using var insert=Sql.Command("""
           INSERT INTO source_replacements(execution_id,library_id,source_node_id,original_path,final_path,backup_path,source_sha,result_sha,state,detail,grace_until)
           VALUES(@execution,@library,@node,@original,@final,@backup,@source,@result,@state,@detail,CASE WHEN @replaced THEN clock_timestamp()+@grace END)
           ON CONFLICT(execution_id) DO NOTHING
           """,c,tx);
         insert.Parameters.AddWithValue("execution",execution); insert.Parameters.AddWithValue("library",library); insert.Parameters.AddWithValue("node",sourceNode);
-        insert.Parameters.AddWithValue("original",original); insert.Parameters.AddWithValue("final",NpgsqlTypes.NpgsqlDbType.Text,(object?)report.FinalPath??DBNull.Value);
-        insert.Parameters.AddWithValue("backup",NpgsqlTypes.NpgsqlDbType.Text,(object?)report.BackupPath??DBNull.Value);
+        insert.Parameters.AddWithValue("original",original); insert.Parameters.AddWithValue("final",SqlKind.Text,(object?)report.FinalPath??DBNull.Value);
+        insert.Parameters.AddWithValue("backup",SqlKind.Text,(object?)report.BackupPath??DBNull.Value);
         insert.Parameters.AddWithValue("source",sourceSha); insert.Parameters.AddWithValue("result",resultSha); insert.Parameters.AddWithValue("state",replaced?"replaced":"failed");
-        insert.Parameters.AddWithValue("detail",NpgsqlTypes.NpgsqlDbType.Text,(object?)report.Detail??DBNull.Value); insert.Parameters.AddWithValue("replaced",replaced);
+        insert.Parameters.AddWithValue("detail",SqlKind.Text,(object?)report.Detail??DBNull.Value); insert.Parameters.AddWithValue("replaced",replaced);
         insert.Parameters.AddWithValue("grace",TimeSpan.FromHours(graceHours));
         if(await insert.ExecuteNonQueryAsync(ct)==1 && replaced) await MarkAsync(library,report.FinalPath!,report.ByteLength,report.ModifiedAt,execution,c,tx,ct);
     }
     /// <summary>Le fichier produit par le système ne doit pas être remis automatiquement en file par la surveillance.</summary>
-    private static async Task MarkAsync(Guid library,string path,long bytes,DateTimeOffset modified,Guid execution,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
+    private static async Task MarkAsync(Guid library,string path,long bytes,DateTimeOffset modified,Guid execution,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var mark=new NpgsqlCommand("INSERT INTO media_replacement_marks(library_id,relative_path,byte_length,modified_at,execution_id) VALUES(@library,@path,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",c,tx);
+        await using var mark=Sql.Command("INSERT INTO media_replacement_marks(library_id,relative_path,byte_length,modified_at,execution_id) VALUES(@library,@path,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",c,tx);
         mark.Parameters.AddWithValue("library",library); mark.Parameters.AddWithValue("path",path); mark.Parameters.AddWithValue("bytes",bytes);
         mark.Parameters.AddWithValue("modified",modified.ToUniversalTime()); mark.Parameters.AddWithValue("execution",execution); await mark.ExecuteNonQueryAsync(ct);
     }
@@ -84,7 +85,7 @@ public sealed class SourceReplacementRepository(NpgsqlDataSource dataSource)
     public async Task<string> RequestRollbackAsync(Guid execution,CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
-        await using var read=new NpgsqlCommand("""
+        await using var read=Sql.Command("""
           SELECT r.state,r.grace_until>clock_timestamp(),r.library_id,w.media_key FROM source_replacements r JOIN execution_work w ON w.execution_id=r.execution_id
           WHERE r.execution_id=@id FOR UPDATE OF r
           """,c,tx);
@@ -95,7 +96,7 @@ public sealed class SourceReplacementRepository(NpgsqlDataSource dataSource)
             if(r.GetString(0)!="replaced" || r.IsDBNull(1) || !r.GetBoolean(1)) return "not-restorable";
             library=r.GetGuid(2); key=r.GetString(3);
         }
-        await using(var reserve=new NpgsqlCommand("""
+        await using(var reserve=Sql.Command("""
           DELETE FROM media_reservations WHERE library_id=@library AND media_key=@key AND lease_until<=clock_timestamp();
           INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until) VALUES(@library,@key,@id,-1,clock_timestamp()+@lease) ON CONFLICT DO NOTHING
           """,c,tx))
@@ -103,7 +104,7 @@ public sealed class SourceReplacementRepository(NpgsqlDataSource dataSource)
             reserve.Parameters.AddWithValue("library",library); reserve.Parameters.AddWithValue("key",key); reserve.Parameters.AddWithValue("id",execution); reserve.Parameters.AddWithValue("lease",RollbackReservation);
             if(await reserve.ExecuteNonQueryAsync(ct)<1) return "busy";
         }
-        await using var update=new NpgsqlCommand("UPDATE source_replacements SET state='rollback_requested',detail=NULL WHERE execution_id=@id",c,tx);
+        await using var update=Sql.Command("UPDATE source_replacements SET state='rollback_requested',detail=NULL WHERE execution_id=@id",c,tx);
         update.Parameters.AddWithValue("id",execution); await update.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return "ok";
     }
 
@@ -126,7 +127,7 @@ public sealed class SourceReplacementRepository(NpgsqlDataSource dataSource)
     {
         if(request.Outcome is not("rolled_back" or "finalized" or "failed") || request.Detail?.Length>2000) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
-        await using var read=new NpgsqlCommand("""
+        await using var read=Sql.Command("""
           SELECT r.state,r.grace_until<=clock_timestamp(),r.library_id,r.original_path,w.media_key FROM source_replacements r JOIN execution_work w ON w.execution_id=r.execution_id
           WHERE r.execution_id=@id AND r.source_node_id=@node FOR UPDATE OF r
           """,c,tx);
@@ -146,13 +147,13 @@ public sealed class SourceReplacementRepository(NpgsqlDataSource dataSource)
             if(request.ByteLength is not>0 || request.ModifiedAt is null) return false;
             await MarkAsync(library,original,request.ByteLength.Value,request.ModifiedAt.Value,execution,c,tx,ct);
         }
-        await using(var update=new NpgsqlCommand("UPDATE source_replacements SET state=@state,detail=@detail,finished_at=CASE WHEN @state IN ('rolled_back','finalized','retained') THEN clock_timestamp() END WHERE execution_id=@id",c,tx))
+        await using(var update=Sql.Command("UPDATE source_replacements SET state=@state,detail=@detail,finished_at=CASE WHEN @state IN ('rolled_back','finalized','retained') THEN clock_timestamp() END WHERE execution_id=@id",c,tx))
         {
-            update.Parameters.AddWithValue("id",execution); update.Parameters.AddWithValue("state",next); update.Parameters.AddWithValue("detail",NpgsqlTypes.NpgsqlDbType.Text,(object?)request.Detail??DBNull.Value); await update.ExecuteNonQueryAsync(ct);
+            update.Parameters.AddWithValue("id",execution); update.Parameters.AddWithValue("state",next); update.Parameters.AddWithValue("detail",SqlKind.Text,(object?)request.Detail??DBNull.Value); await update.ExecuteNonQueryAsync(ct);
         }
         if(state=="rollback_requested")
         {
-            await using var release=new NpgsqlCommand("DELETE FROM media_reservations WHERE library_id=@library AND media_key=@key AND execution_id=@id AND lease_epoch=-1",c,tx);
+            await using var release=Sql.Command("DELETE FROM media_reservations WHERE library_id=@library AND media_key=@key AND execution_id=@id AND lease_epoch=-1",c,tx);
             release.Parameters.AddWithValue("library",library); release.Parameters.AddWithValue("key",key); release.Parameters.AddWithValue("id",execution); await release.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct); return true;

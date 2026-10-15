@@ -1,29 +1,30 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Api.Executions;
 using Encoding.Api.Nodes;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Npgsql;
 
 namespace Encoding.Api.Infrastructure.Operations;
 
-public sealed class DatabaseHealthCheck(NpgsqlDataSource dataSource) : IHealthCheck
+public sealed class DatabaseHealthCheck(DbDataSource dataSource) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         try
         {
             await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-            await using var command = new NpgsqlCommand("SELECT 1", connection);
+            await using var command = Sql.Command("SELECT 1", connection);
             await command.ExecuteScalarAsync(cancellationToken);
             return HealthCheckResult.Healthy("PostgreSQL répond.");
         }
-        catch (NpgsqlException)
+        catch (DbException)
         {
             return HealthCheckResult.Unhealthy("Base de données indisponible.");
         }
     }
 }
 
-public sealed class MigrationsHealthCheck(NpgsqlDataSource dataSource, IHostEnvironment environment) : IHealthCheck
+public sealed class MigrationsHealthCheck(DbDataSource dataSource, IHostEnvironment environment) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
@@ -35,7 +36,7 @@ public sealed class MigrationsHealthCheck(NpgsqlDataSource dataSource, IHostEnvi
             if (status.Unknown.Count > 0) return HealthCheckResult.Degraded("La base contient des migrations inconnues de ce binaire (nœud plus ancien que le schéma).", data: data);
             return HealthCheckResult.Healthy("Schéma à jour.", data);
         }
-        catch (NpgsqlException)
+        catch (DbException)
         {
             return HealthCheckResult.Unhealthy("État des migrations illisible.");
         }
@@ -66,7 +67,7 @@ public sealed class StorageHealthCheck(string directory, long minFreeBytes) : IH
     }
 }
 
-public sealed class ClusterHealthCheck(NpgsqlDataSource dataSource, NodePresenceOptions presence) : IHealthCheck
+public sealed class ClusterHealthCheck(DbDataSource dataSource, NodePresenceOptions presence) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
@@ -87,14 +88,14 @@ public sealed class ClusterHealthCheck(NpgsqlDataSource dataSource, NodePresence
             if (workers == 0) return HealthCheckResult.Degraded("Aucun worker en ligne.", data: data);
             return HealthCheckResult.Healthy("Cluster opérationnel.", data);
         }
-        catch (NpgsqlException)
+        catch (DbException)
         {
             return HealthCheckResult.Unhealthy("État du cluster illisible.");
         }
     }
 }
 
-public sealed class FlowBackupHealthCheck(NpgsqlDataSource dataSource, OperationsOptions options) : IHealthCheck
+public sealed class FlowBackupHealthCheck(DbDataSource dataSource, OperationsOptions options) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
@@ -114,7 +115,7 @@ public sealed class FlowBackupHealthCheck(NpgsqlDataSource dataSource, Operation
                 ? HealthCheckResult.Degraded("Des sauvegardes de flows sont en échec ou en retard.", data: data)
                 : HealthCheckResult.Healthy("Sauvegardes de flows à jour.", data);
         }
-        catch (NpgsqlException)
+        catch (DbException)
         {
             return HealthCheckResult.Unhealthy("File de sauvegardes illisible.");
         }

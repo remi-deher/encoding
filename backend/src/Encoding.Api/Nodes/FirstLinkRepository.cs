@@ -1,5 +1,6 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Auth;
-using Npgsql;
 
 namespace Encoding.Api.Nodes;
 
@@ -7,7 +8,7 @@ namespace Encoding.Api.Nodes;
 /// Mode « accepter la première liaison » (architecture 0040) : désactivé par défaut, activé explicitement par un administrateur,
 /// à usage unique (consommé par la première demande de rattachement) et à durée limitée. Partagé par tous les serveurs du cluster.
 /// </summary>
-public sealed class FirstLinkRepository(NpgsqlDataSource dataSource)
+public sealed class FirstLinkRepository(DbDataSource dataSource)
 {
     public const int MaximumMinutes = 60;
 

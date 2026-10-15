@@ -1,6 +1,6 @@
 # 0043 — SQLite derrière une abstraction d'accès aux données
 
-Statut : proposée. Décision de Rémi du 2026-10-15 : « mets SQLite avec une abstraction de donnée ». Cela lève l'interdit de AGENTS.md de ne pas remplacer PostgreSQL sans décision explicite ; PostgreSQL reste pris en charge. Le point 9 de 0038-0041 (stockage) est donc rouvert.
+Statut : étape 1 implémentée (accès génériques, PostgreSQL inchangé) ; étapes 2 et 3 à venir. Portée validée par Rémi le 2026-10-15 : SQLite pour les clusters à un seul serveur. Décision de Rémi du 2026-10-15 : « mets SQLite avec une abstraction de donnée ». Cela lève l'interdit de AGENTS.md de ne pas remplacer PostgreSQL sans décision explicite ; PostgreSQL reste pris en charge. Le point 9 de 0038-0041 (stockage) est donc rouvert.
 
 ## État des lieux (mesuré dans le code)
 
@@ -25,7 +25,7 @@ SQLite est un fichier à un seul écrivain. Deux serveurs sur deux hôtes ne peu
 
 ## Plan par étapes (une PR chacune)
 
-1. Interface, dialecte et fournisseur PostgreSQL ; portage mécanique des 38 fichiers, sans changement de comportement (tests existants inchangés).
+1. **Fait.** Les dépôts et services utilisent les types ADO.NET génériques (`DbDataSource`, `DbConnection`, `DbCommand`…). `Infrastructure/Data/Sql.cs` est le seul fichier (avec `Program.cs` pour l'enregistrement) qui connaît Npgsql : fabrique de commandes, paramètres typés (`SqlKind` : texte, JSON, binaire, entier, décimal, uuid, tableau de textes) et détection d'une violation d'unicité. Un test (`DataAccessBoundaryTests`) interdit toute nouvelle référence à Npgsql ailleurs. Le SQL des dépôts reste celui de PostgreSQL : le dialecte (horloge, upsert, verrous, JSON) est l'objet de l'étape 2.
 2. Fournisseur SQLite, jeu de migrations SQLite, sélection par configuration ; le mode se choisit à l'installation.
 3. Tests de garanties sur les deux fournisseurs, export/import entre modes, image Docker sans PostgreSQL embarqué par défaut.
 

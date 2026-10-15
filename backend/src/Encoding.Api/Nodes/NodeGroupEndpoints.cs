@@ -1,3 +1,5 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Text.RegularExpressions;
 using Encoding.Contracts.Nodes;
 
@@ -26,14 +28,14 @@ public static partial class NodeGroupEndpoints
                 var created = (await repository.ListAsync(ct)).FirstOrDefault(g => g.Name == request.Name.Trim());
                 return Results.Created("/api/v1/node-groups/" + created?.Id, created);
             }
-            catch (Npgsql.PostgresException e) when (e.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
+            catch (DbException e) when (Sql.IsUniqueViolation(e)) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
         }).WithName("CreateNodeGroup");
         groups.MapPut("/{id:guid}", async (Guid id, SaveNodeGroupRequest request, NodeGroupRepository repository, CancellationToken ct) =>
         {
             var errors = Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
             try { return await repository.SaveAsync(id, request, ct) ? Results.Ok(await repository.GetAsync(id, ct)) : Results.NotFound(); }
-            catch (Npgsql.PostgresException e) when (e.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
+            catch (DbException e) when (Sql.IsUniqueViolation(e)) { return Results.Conflict(new { title = "Un groupe porte déjà ce nom." }); }
         }).WithName("UpdateNodeGroup");
         groups.MapDelete("/{id:guid}", async (Guid id, NodeGroupRepository repository, CancellationToken ct) =>
             await repository.DeleteAsync(id, ct) switch

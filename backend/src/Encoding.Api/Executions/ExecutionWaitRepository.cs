@@ -1,14 +1,14 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Text.Json;
 using Encoding.Api.Nodes;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace Encoding.Api.Executions;
 
 /// <summary>Attentes durables des blocs Attendre (architecture 0033) : mise en attente, décision unique, sondes de conditions de plugin.</summary>
-public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePresenceOptions presence)
+public sealed class ExecutionWaitRepository(DbDataSource dataSource,NodePresenceOptions presence)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
 
@@ -23,9 +23,9 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
     };
 
     /// <summary>Même transaction que le checkpoint : crée l'attente et libère worker, bail et plafonds en gardant la réservation du média.</summary>
-    internal static async Task BeginAsync(Guid id,string nodeId,RuntimeWait wait,long epoch,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
+    internal static async Task BeginAsync(Guid id,string nodeId,RuntimeWait wait,long epoch,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var cmd=new NpgsqlCommand("""
+        await using var cmd=Sql.Command("""
           INSERT INTO execution_waits(execution_id,node_id,spec,state,started_at,deadline,due_at,next_check_at,resolved_at,probe_count,last_probe_at,last_probe_output)
           VALUES(@id,@node,@spec,'waiting',clock_timestamp(),
             CASE WHEN @max::integer IS NULL THEN NULL ELSE clock_timestamp()+make_interval(mins=>@max) END,
@@ -40,9 +40,9 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
           """,c,tx);
         cmd.Parameters.AddWithValue("media",wait.MediaPolicy);
         cmd.Parameters.AddWithValue("id",id); cmd.Parameters.AddWithValue("node",nodeId); cmd.Parameters.AddWithValue("epoch",epoch);
-        cmd.Parameters.AddWithValue("spec",NpgsqlDbType.Jsonb,JsonSerializer.Serialize(wait,Json));
-        cmd.Parameters.AddWithValue("max",NpgsqlDbType.Integer,(object?)wait.MaxWaitMinutes??DBNull.Value);
-        cmd.Parameters.AddWithValue("delay",NpgsqlDbType.Integer,(object?)wait.DelayMinutes??DBNull.Value);
+        cmd.Parameters.AddWithValue("spec",SqlKind.Json,JsonSerializer.Serialize(wait,Json));
+        cmd.Parameters.AddWithValue("max",SqlKind.Integer,(object?)wait.MaxWaitMinutes??DBNull.Value);
+        cmd.Parameters.AddWithValue("delay",SqlKind.Integer,(object?)wait.DelayMinutes??DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -53,7 +53,7 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await RuntimeRepository.FenceAsync(id,worker,request.Epoch,c,tx,ct)) return false;
         RuntimeWait spec; int revision; Guid? actor;
-        await using(var read=new NpgsqlCommand("""
+        await using(var read=Sql.Command("""
           SELECT x.spec::text,e.revision,e.node_id FROM execution_waits x JOIN execution_work k ON k.execution_id=x.execution_id
           JOIN executions e ON e.id=x.execution_id
           WHERE x.execution_id=@id AND x.state='waiting' AND k.wait_probe_due FOR UPDATE OF x
@@ -64,7 +64,7 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
             spec=JsonSerializer.Deserialize<RuntimeWait>(r.GetString(0),Json)!; revision=r.GetInt32(1); actor=r.IsDBNull(2)?null:r.GetGuid(2);
         }
         var met=request.OutputId is not null && ProbeOf(spec).Met.Contains(request.OutputId);
-        await using(var update=new NpgsqlCommand("""
+        await using(var update=Sql.Command("""
           UPDATE execution_waits SET probe_count=probe_count+1,last_probe_at=clock_timestamp(),last_probe_output=@output,
             state=CASE WHEN @met THEN 'met' ELSE state END,resolved_at=CASE WHEN @met THEN clock_timestamp() ELSE NULL END,
             next_check_at=CASE WHEN @met THEN next_check_at ELSE LEAST(clock_timestamp()+make_interval(secs=>@poll),COALESCE(deadline,'infinity'::timestamptz)) END
@@ -75,7 +75,7 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
           """,c,tx))
         {
             update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("met",met); update.Parameters.AddWithValue("epoch",request.Epoch);
-            update.Parameters.AddWithValue("poll",(double)spec.PollSeconds); update.Parameters.AddWithValue("output",NpgsqlDbType.Text,(object?)request.OutputId??DBNull.Value);
+            update.Parameters.AddWithValue("poll",(double)spec.PollSeconds); update.Parameters.AddWithValue("output",SqlKind.Text,(object?)request.OutputId??DBNull.Value);
             await update.ExecuteNonQueryAsync(ct);
         }
         if(met && actor is not null)
@@ -87,12 +87,12 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
     public async Task<int> ProcessDueAsync(CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
-        await using(var closed=new NpgsqlCommand("""
+        await using(var closed=Sql.Command("""
           UPDATE execution_waits SET state='cancelled',resolved_at=clock_timestamp()
           WHERE state='waiting' AND execution_id IN(SELECT id FROM executions WHERE state IN('cancelled','failed','succeeded','deferred'))
           """,c,tx)) await closed.ExecuteNonQueryAsync(ct);
         var due=new List<(Guid Id,string Node,RuntimeWait Spec,bool Expired,bool TimerDue,int Revision,Guid? Actor,FlowDefinition Flow,Guid Library,bool ProbePending)>();
-        await using(var read=new NpgsqlCommand("""
+        await using(var read=Sql.Command("""
           SELECT x.execution_id,x.node_id,x.spec::text,COALESCE(x.deadline<=clock_timestamp(),false),COALESCE(x.due_at<=clock_timestamp(),false),
             e.revision,e.node_id,e.flow_definition::text,k.library_id,k.wait_probe_due
           FROM execution_waits x JOIN executions e ON e.id=x.execution_id JOIN execution_work k ON k.execution_id=x.execution_id
@@ -117,7 +117,7 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
             if(met) { await ResolveAsync(item,"met",c,tx,ct); continue; }
             // Une condition de plugin est évaluée par un worker : la sonde rend l'exécution réclamable ; un bail expiré la rend à nouveau réclamable.
             var probe=item.Spec.Mode=="block";
-            await using var next=new NpgsqlCommand("""
+            await using var next=Sql.Command("""
               UPDATE execution_waits SET next_check_at=LEAST(clock_timestamp()+make_interval(secs=>@poll),COALESCE(deadline,'infinity'::timestamptz)) WHERE execution_id=@id;
               UPDATE execution_work SET wait_probe_due=true,available_at=clock_timestamp() WHERE execution_id=@id AND @probe AND lease_until IS NULL;
               """,c,tx);
@@ -128,7 +128,7 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
     }
 
     private async Task ResolveAsync((Guid Id,string Node,RuntimeWait Spec,bool Expired,bool TimerDue,int Revision,Guid? Actor,FlowDefinition Flow,Guid Library,bool ProbePending) item,
-        string outcome,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
+        string outcome,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
         var detail="Attente terminée : condition remplie.";
         if(outcome=="timeout")
@@ -136,18 +136,18 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
             // Le contexte ne change pas pendant l'attente : seule la sortie du dernier checkpoint est remplacée, par une connexion validée du flow publié.
             var (output,nextNode)=RuntimeWaitPolicy.TimeoutRoute(item.Flow,item.Node);
             string? json;
-            await using(var read=new NpgsqlCommand("SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND node_id=@node AND completed_at IS NOT NULL",c,tx))
+            await using(var read=Sql.Command("SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND node_id=@node AND completed_at IS NOT NULL",c,tx))
             { read.Parameters.AddWithValue("id",item.Id); read.Parameters.AddWithValue("node",item.Node); json=await read.ExecuteScalarAsync(ct) as string; }
             if(json is null) return;
             var checkpoint=JsonSerializer.Deserialize<RuntimeCheckpoint>(json,Json)! with { OutputId=output,NextNodeId=nextNode,Wait=null };
-            await using(var write=new NpgsqlCommand("UPDATE execution_steps SET checkpoint=@checkpoint WHERE execution_id=@id AND node_id=@node",c,tx))
+            await using(var write=Sql.Command("UPDATE execution_steps SET checkpoint=@checkpoint WHERE execution_id=@id AND node_id=@node",c,tx))
             {
                 write.Parameters.AddWithValue("id",item.Id); write.Parameters.AddWithValue("node",item.Node);
-                write.Parameters.AddWithValue("checkpoint",NpgsqlDbType.Jsonb,JsonSerializer.Serialize(checkpoint,Json)); await write.ExecuteNonQueryAsync(ct);
+                write.Parameters.AddWithValue("checkpoint",SqlKind.Json,JsonSerializer.Serialize(checkpoint,Json)); await write.ExecuteNonQueryAsync(ct);
             }
             detail=nextNode is null?"Délai maximal atteint ; la sortie « Délai dépassé » n'est pas reliée : l'exécution échoue.":"Délai maximal atteint ; le flow continue par la sortie « Délai dépassé ».";
         }
-        await using(var update=new NpgsqlCommand("""
+        await using(var update=Sql.Command("""
           UPDATE execution_waits SET state=@state,resolved_at=clock_timestamp() WHERE execution_id=@id;
           UPDATE execution_work SET available_at=clock_timestamp(),wait_probe_due=false WHERE execution_id=@id;
           """,c,tx))
@@ -156,9 +156,9 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
             await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"running",item.Actor,null,detail),c,tx,ct);
     }
 
-    private async Task<bool> NodeStateAsync(RuntimeWait spec,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
+    private async Task<bool> NodeStateAsync(RuntimeWait spec,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var cmd=new NpgsqlCommand("""
+        await using var cmd=Sql.Command("""
           SELECT EXISTS(
             SELECT 1 FROM cluster_nodes n
             WHERE n.deleted_at IS NULL AND 'worker'=ANY(n.roles) AND (@node::uuid IS NULL OR n.id=@node)
@@ -169,14 +169,14 @@ public sealed class ExecutionWaitRepository(NpgsqlDataSource dataSource,NodePres
           OR (@status='offline' AND NOT EXISTS(
             SELECT 1 FROM cluster_nodes n WHERE n.id=@node AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline))
           """,c,tx);
-        cmd.Parameters.AddWithValue("node",NpgsqlDbType.Uuid,(object?)spec.NodeId??DBNull.Value); cmd.Parameters.AddWithValue("status",spec.NodeStatus!);
+        cmd.Parameters.AddWithValue("node",SqlKind.Uuid,(object?)spec.NodeId??DBNull.Value); cmd.Parameters.AddWithValue("status",spec.NodeStatus!);
         cmd.Parameters.AddWithValue("offline",presence.OfflineAfter);
         return (bool)(await cmd.ExecuteScalarAsync(ct))!;
     }
 
-    private static async Task<bool> WorkloadAsync(RuntimeWait spec,Guid library,NpgsqlConnection c,NpgsqlTransaction tx,CancellationToken ct)
+    private static async Task<bool> WorkloadAsync(RuntimeWait spec,Guid library,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var cmd=new NpgsqlCommand("""
+        await using var cmd=Sql.Command("""
           SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id
           WHERE (@scope='cluster' OR w.library_id=@library)
             AND CASE WHEN @metric='running' THEN e.state IN('running','cancelling') AND w.lease_until>clock_timestamp() ELSE e.state='queued' END

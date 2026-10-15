@@ -30,7 +30,7 @@ if (offlineAfterSeconds <= 0)
 {
     throw new InvalidOperationException("NodePresence:OfflineAfterSeconds doit être supérieur à zéro.");
 }
-builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
+builder.Services.AddSingleton<System.Data.Common.DbDataSource>(NpgsqlDataSource.Create(connectionString));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
 builder.Services.AddSingleton<NodeGroupRepository>();
@@ -82,7 +82,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 // Fail startup if the bundled installed catalog is invalid or missing.
 app.Services.GetRequiredService<FlowComponentRegistry>();
-await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<NpgsqlDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
+await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<System.Data.Common.DbDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
 
 app.UseRequestObservability();
 

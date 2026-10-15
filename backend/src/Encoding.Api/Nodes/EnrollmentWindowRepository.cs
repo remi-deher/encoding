@@ -1,10 +1,11 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Auth;
-using Npgsql;
 
 namespace Encoding.Api.Nodes;
 
 /// <summary>Fenêtre d’enrôlement direct ouverte par un administrateur ; fermée par défaut et partagée par tous les serveurs.</summary>
-public sealed class EnrollmentWindowRepository(NpgsqlDataSource dataSource)
+public sealed class EnrollmentWindowRepository(DbDataSource dataSource)
 {
     public const int MaximumMinutes = 60;
 

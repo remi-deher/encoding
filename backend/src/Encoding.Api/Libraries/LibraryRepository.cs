@@ -1,9 +1,10 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using Encoding.Contracts.Libraries;
-using Npgsql;
 
 namespace Encoding.Api.Libraries;
 
-public sealed class LibraryRepository(NpgsqlDataSource dataSource)
+public sealed class LibraryRepository(DbDataSource dataSource)
 {
     public async Task<IReadOnlyList<LibraryResponse>> ListAsync(CancellationToken cancellationToken)
     {
@@ -21,7 +22,7 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
             ORDER BY l.name, l.id
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var result = new List<LibraryResponse>();
         while (await reader.ReadAsync(cancellationToken)) result.Add(Read(reader));
@@ -36,7 +37,7 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
             RETURNING id, name, created_at, 0::integer, 0::integer, 0::integer, is_active
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         command.Parameters.AddWithValue("name", request.Name.Trim());
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? Read(reader) : null;
@@ -50,7 +51,7 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
             RETURNING id, name, created_at, 0::integer, 0::integer, 0::integer, is_active
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("name", request.Name.Trim());
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -63,7 +64,7 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
     {
         const string sql = "UPDATE libraries SET is_active = @active WHERE id = @id";
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("active", isActive);
         if (await command.ExecuteNonQueryAsync(cancellationToken) == 0) return null;
@@ -74,7 +75,7 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
     {
         const string sql = "DELETE FROM libraries WHERE id = @id";
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         command.Parameters.AddWithValue("id", id);
         return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
     }
@@ -93,13 +94,13 @@ public sealed class LibraryRepository(NpgsqlDataSource dataSource)
             WHERE l.id = @id GROUP BY l.id
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = Sql.Command(sql, connection);
         command.Parameters.AddWithValue("id", id);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? Read(reader) : null;
     }
 
-    private static LibraryResponse Read(NpgsqlDataReader reader) => new(
+    private static LibraryResponse Read(DbDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1),
         new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(2), DateTimeKind.Utc)),
         reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetBoolean(6), reader.FieldCount>7 && !reader.IsDBNull(7)?reader.GetString(7):null, reader.FieldCount>8 && !reader.IsDBNull(8)?reader.GetInt32(8):null);

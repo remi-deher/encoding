@@ -3,7 +3,6 @@ using Encoding.Api.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
-using Npgsql;
 
 namespace Encoding.Api.Auth;
 

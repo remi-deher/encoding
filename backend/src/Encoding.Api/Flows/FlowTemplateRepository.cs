@@ -1,10 +1,11 @@
+using Encoding.Api.Infrastructure.Data;
+using System.Data.Common;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
-using Npgsql;
 
 namespace Encoding.Api.Flows;
 
-public sealed class FlowTemplateRepository(NpgsqlDataSource dataSource)
+public sealed class FlowTemplateRepository(DbDataSource dataSource)
 {
     public async Task<IReadOnlyList<FlowTemplateSummary>> ListAsync(CancellationToken ct)
     {
@@ -42,7 +43,7 @@ public sealed class FlowTemplateRepository(NpgsqlDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using var insert = new NpgsqlCommand("""
+        await using var insert = Sql.Command("""
             INSERT INTO flow_templates(
                 id,name,description,source_flow_id,source_version,source_flow_name,media_type,definition)
             SELECT @templateId,@name,@description,@sourceFlowId,@sourceVersion,
@@ -61,7 +62,7 @@ public sealed class FlowTemplateRepository(NpgsqlDataSource dataSource)
         return await GetAsync(templateId, ct);
     }
 
-    private static FlowTemplateSummary ReadSummary(NpgsqlDataReader reader) => new(
+    private static FlowTemplateSummary ReadSummary(DbDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
         reader.GetGuid(4), reader.GetInt32(5), reader.GetString(6), reader.GetInt32(7),
         reader.GetFieldValue<DateTimeOffset>(8));
