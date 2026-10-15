@@ -13,6 +13,10 @@ interface WorkerCluster {
   readonly name: string;
   readonly apiBaseUrl: string;
   readonly discoveredAt: string;
+  /** `network` (détecté), `manual` (adresse ajoutée à la main) ou `configured` (serveur de ce conteneur). */
+  readonly source?: 'network' | 'manual' | 'configured';
+  /** Faux quand la dernière sonde d'une adresse mémorisée a échoué. */
+  readonly reachable?: boolean;
 }
 
 interface WorkerStatus {
@@ -70,6 +74,7 @@ export class LocalNodePanelComponent {
   protected readonly pairingExpiresAt = signal<string | null>(null);
   protected readonly leaving = signal(false);
   protected readonly addingCluster = signal(false);
+  protected readonly forgettingClusterId = signal<string | null>(null);
   protected readonly clusterAddress = signal('');
   protected readonly refreshError = signal(false);
   protected readonly workerStatus = computed(() => this.status());
@@ -110,6 +115,30 @@ export class LocalNodePanelComponent {
       : 'Aucun outil détecté';
   }
 
+  protected clusterOrigin(cluster: WorkerCluster): string {
+    if (cluster.source === 'manual') return 'Ajouté par adresse';
+    if (cluster.source === 'configured') return 'Serveur de ce conteneur';
+    return 'Détecté sur le réseau local';
+  }
+
+  /** Retire une adresse ajoutée à la main : elle n'est plus mémorisée ni sondée. */
+  protected forgetCluster(cluster: WorkerCluster): void {
+    if (this.forgettingClusterId()) return;
+    this.forgettingClusterId.set(cluster.id);
+    this.http.delete(`${this.api()}/clusters/${cluster.id}`).pipe(
+      catchError((error: unknown) => {
+        this.forgettingClusterId.set(null);
+        this.notifications.show(this.getErrorMessage(error));
+        return EMPTY;
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(() => {
+      this.forgettingClusterId.set(null);
+      this.notifications.show(`L’adresse de ${cluster.name} est oubliée.`);
+      this.refreshStatus();
+    });
+  }
+
   protected pairingExpiryLabel(value: string): string {
     return new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short' }).format(new Date(value));
   }
@@ -137,6 +166,22 @@ export class LocalNodePanelComponent {
       ).subscribe(() => {
         this.leaving.set(false);
         this.notifications.show('Changement de cluster annulé.');
+        this.refreshStatus();
+      });
+      return;
+    }
+    if (!worker.isEnrolled) {
+      this.leaving.set(true);
+      this.http.post(`${this.api()}/leave`, {}).pipe(
+        catchError((error: unknown) => {
+          this.leaving.set(false);
+          this.notifications.show(this.getErrorMessage(error));
+          return EMPTY;
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe(() => {
+        this.leaving.set(false);
+        this.notifications.show('Demande de rattachement annulée.');
         this.refreshStatus();
       });
       return;

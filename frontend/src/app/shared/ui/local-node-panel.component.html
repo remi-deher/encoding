@@ -48,7 +48,7 @@
           </div>
         }
         @if (worker.switchFailure) {
-          <p class="feedback feedback--error" role="alert">Changement de cluster annulé : {{ worker.switchFailure }}.</p>
+          <p class="feedback feedback--error" role="alert">Rattachement annulé : {{ worker.switchFailure }}.</p>
         }
         @if (worker.clusterId && !worker.isEnrolled && worker.verificationCode) {
           <div class="pairing-code" role="status">
@@ -71,7 +71,7 @@
         @if (worker.clusterId && !standalone()) {
           <div class="cluster-actions">
             <button matButton="outlined" type="button" [disabled]="leaving()" (click)="leaveCluster()">
-              {{ leaving() ? 'Départ…' : worker.switching ? 'Annuler le changement' : 'Quitter ce cluster' }}
+              {{ leaving() ? 'Départ…' : worker.switching ? 'Annuler le changement' : !worker.isEnrolled ? 'Annuler la demande' : 'Quitter ce cluster' }}
             </button>
           </div>
         }
@@ -95,9 +95,17 @@
               <article class="cluster-card">
                 <div class="cluster-copy">
                   <strong>{{ cluster.name }}</strong>
-                  <span>Détecté sur le réseau local</span>
+                  <span>{{ clusterOrigin(cluster) }}</span>
+                  @if (cluster.reachable === false) {
+                    <span class="state-chip">Ne répond plus</span>
+                  }
                 </div>
                 <div class="cluster-actions">
+                  @if (cluster.source === 'manual') {
+                    <button matButton="text" type="button" [disabled]="forgettingClusterId() !== null" (click)="forgetCluster(cluster)">
+                      {{ forgettingClusterId() === cluster.id ? 'Suppression…' : 'Oublier' }}
+                    </button>
+                  }
                   <button
                     matButton="outlined"
                     type="button"

@@ -195,6 +195,29 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
         }
     }
 
+    /// <summary>
+    /// Abandonne un rattachement qui n'a pas abouti (refus, cluster injoignable, clé expirée). Pendant un changement de cluster, l'ancien rattachement est rétabli
+    /// (<see cref="RollbackSwitchAsync"/>) ; pour un nœud autonome, l'identité en attente est effacée pour qu'il redevienne autonome au lieu de rester bloqué
+    /// sur un cluster qui ne l'a jamais accepté. L'identifiant du nœud est conservé : le cluster ne l'a jamais enregistré.
+    /// </summary>
+    public async Task<bool> AbandonPendingAsync(string reason, CancellationToken cancellationToken)
+    {
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await LoadAsync(cancellationToken);
+            if (current.Previous is not null) state = current.Previous with { SwitchFailure = reason };
+            else if (current.IsEnrolled || !current.HasCredentials) return false;
+            else state = new WorkerIdentityState(current.Id, null, null, null, null, false, SwitchFailure: reason);
+            await SaveAsync(state, cancellationToken);
+            return true;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     /// <summary>Seconde phase : le nouveau cluster a répondu. Retourne l'ancien rattachement pour que l'appelant prévienne son cluster, puis l'oublie.</summary>
     public async Task<WorkerIdentityState?> CommitSwitchAsync(CancellationToken cancellationToken)
     {
