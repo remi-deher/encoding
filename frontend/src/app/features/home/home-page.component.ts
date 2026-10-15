@@ -83,12 +83,6 @@ export class HomePageComponent {
   protected readonly recentExecutions = computed(() => {
     const executions = this.executionState().data?.executions ?? [];
     return executions
-      .filter(
-        (execution) =>
-          execution.state !== 'queued' &&
-          execution.state !== 'running' &&
-          execution.state !== 'cancelling',
-      )
       .slice()
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, 5);

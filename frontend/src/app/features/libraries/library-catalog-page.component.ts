@@ -28,7 +28,6 @@ import {
   switchMap,
   exhaustMap,
   firstValueFrom,
-  tap,
   startWith,
 } from 'rxjs';
 
@@ -172,36 +171,6 @@ export class LibraryCatalogPageComponent {
   protected readonly processingForm = signal<RecordFormData | null>(null);
   private processingRevision = 0;
   private processingNodeIds: readonly string[] = [];
-  protected readonly processingState = toSignal(
-    toObservable(
-      computed(() => ({ library: this.selectedLibrary(), refresh: this.workflowRefresh() })),
-    ).pipe(
-      switchMap(({ library }) =>
-        library
-          ? timer(0, 5000).pipe(
-              exhaustMap(() =>
-                this.clusterApi.libraryProcessing(library.id).pipe(catchError(() => of(null))),
-              ),
-              startWith(null),
-            )
-          : of(null),
-      ),
-    ),
-    { initialValue: null },
-  );
-  protected readonly processingSummary = computed(() => {
-    const settings = this.processingState();
-    if (!settings) return 'Chargement des règles de traitement…';
-    return (
-      (settings.watchEnabled
-        ? 'Surveillance automatique · toutes les ' + settings.scanIntervalSeconds + ' s'
-        : 'Surveillance automatique arrêtée') +
-      ' · ' +
-      (settings.maxConcurrentTasks
-        ? settings.maxConcurrentTasks + ' traitements simultanés pour toute la bibliothèque'
-        : 'Pas de plafond global de bibliothèque')
-    );
-  });
   protected async configureProcessing(): Promise<void> {
     const library = this.selectedLibrary();
     if (!library || this.workflowBusy()) return;
@@ -500,8 +469,6 @@ export class LibraryCatalogPageComponent {
 
   protected readonly assignmentForm = signal<RecordFormData | null>(null);
 
-  protected readonly workflowError = signal('');
-
   protected readonly workflowState = toSignal(
     toObservable(
       computed(() => ({ library: this.selectedLibrary(), refresh: this.workflowRefresh() })),
@@ -512,15 +479,7 @@ export class LibraryCatalogPageComponent {
               .pipe(
                 exhaustMap(() =>
                   this.clusterApi.libraryWorkflow(library.id).pipe(
-                    tap(() => this.workflowError.set('')),
-
-                    catchError(() => {
-                      this.workflowError.set(
-                        'Impossible de charger les fichiers et le flow attribué.',
-                      );
-
-                      return of(null);
-                    }),
+                    catchError(() => of(null)),
                   ),
                 ),
               )
@@ -537,19 +496,6 @@ export class LibraryCatalogPageComponent {
     const assignment = this.workflowState()?.assignment;
 
     return assignment ? assignment.name + ' · v' + assignment.version : 'Aucun flow attribué';
-  });
-
-  protected readonly discoveryStatus = computed(() => {
-    const scan = this.workflowState()?.scan;
-
-    return (
-      this.workflowError() ||
-      (!scan
-        ? 'Aucune découverte effectuée.'
-        : scan.state === 'queued'
-          ? 'En attente d’un nœud ayant un accès direct en lecture.'
-          : scan.detail)
-    );
   });
 
   protected readonly mediaRows = computed<readonly DataTableRow[]>(() =>
