@@ -1,3 +1,6 @@
+import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
+import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
+import { nodeLifecycle } from '../../shared/models/cluster-health';
 import { firstValueFrom } from 'rxjs';
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../../shared/models/auth';
@@ -147,6 +150,8 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     DrawerActionButtonComponent,
     LocalNodePanelComponent,
     ResourceCardComponent,
+    SummaryTilesComponent,
+    ContextBannerComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
     RouterLink,
@@ -174,6 +179,43 @@ export class NodeCatalogPageComponent {
   private readonly libraryAccessLoadState = signal<'loading' | 'ready' | 'error'>('loading');
 
   protected readonly isAdmin = inject(AuthService).isAdmin;
+  protected readonly clusterIdentity = signal<{ name: string; standalone: boolean } | null>(null);
+  protected readonly bannerTitle = computed(() => {
+    const identity = this.clusterIdentity();
+    if (!identity) return 'Ce nœud et son cluster';
+    return identity.standalone ? 'Nœud autonome' : `Cluster ${identity.name}`;
+  });
+  protected readonly bannerDescription = computed(() => {
+    const identity = this.clusterIdentity();
+    const count = this.nodes().length;
+    if (!identity) return 'Mode du nœud, rattachement à un cluster et départ.';
+    return identity.standalone
+      ? 'Ce nœud n’appartient à aucun cluster : créez-en un ou rejoignez celui d’une autre installation.'
+      : `${count} nœud(s) · rattachement, changement de cluster et départ depuis ce nœud.`;
+  });
+  protected readonly summaryTiles = computed<readonly SummaryTile[]>(() => {
+    const nodes = this.nodes();
+    const online = nodes.filter((node) => nodeLifecycle(node) === 'online');
+    const capacity = online
+      .filter((node) => node.roles.includes('worker'))
+      .reduce((total, node) => total + node.maxConcurrentTasks, 0);
+    const pending = this.pendingEnrollments().length;
+    return [
+      { label: 'Nœuds en ligne', value: `${online.length} / ${nodes.length}`, detail: 'selon le dernier signal reçu' },
+      { label: 'Capacité simultanée', value: String(capacity), detail: 'tâches en parallèle sur les workers en ligne' },
+      {
+        label: 'Hors service',
+        value: String(nodes.length - online.length),
+        detail: 'hors ligne, en vidange, incompatibles ou en quarantaine',
+      },
+      {
+        label: 'Demandes de rattachement',
+        value: String(pending),
+        detail: pending ? 'à examiner avec « Ajouter un nœud »' : 'aucune demande en attente',
+        tone: pending ? 'attention' : 'default',
+      },
+    ];
+  });
   protected readonly enrollmentWindow = signal<EnrollmentWindow>({
     isOpen: false,
     openUntil: null,
@@ -1101,6 +1143,10 @@ export class NodeCatalogPageComponent {
   constructor() {
     this.installProcessingSettingsEffect();
     this.loadLibraryAccessSummary();
+    this.clusterApi
+      .identity()
+      .pipe(catchError(() => EMPTY), takeUntilDestroyed())
+      .subscribe((identity) => this.clusterIdentity.set(identity));
     timer(0, 10_000)
       .pipe(
         switchMap(() =>
