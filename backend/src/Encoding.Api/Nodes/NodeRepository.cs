@@ -253,6 +253,15 @@ public sealed class NodeRepository(NpgsqlDataSource dataSource)
     }
 
 
+    /// <summary>Donne un nom convivial à un nœud qui n'en a pas encore ; ne remplace jamais un nom choisi par un administrateur.</summary>
+    public async Task SetDisplayNameIfUnsetAsync(Guid nodeId, string displayName, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand("UPDATE cluster_nodes SET display_name = @name WHERE id = @id AND deleted_at IS NULL AND display_name IS NULL");
+        command.Parameters.AddWithValue("id", nodeId);
+        command.Parameters.AddWithValue("name", displayName);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public enum ModeRequestResult { Accepted, NotFound, LastServer }
 
     /// <summary>

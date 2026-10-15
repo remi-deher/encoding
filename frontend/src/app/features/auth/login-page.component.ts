@@ -77,6 +77,13 @@ export class LoginPageComponent {
               hint: `Au moins ${MINIMUM_PASSWORD_LENGTH} caractères.`,
             },
             {
+              id: 'nodeDisplayName',
+              label: 'Nom de ce nœud',
+              type: 'text',
+              maxLength: 128,
+              hint: 'Nom convivial du nœud qui accompagne ce serveur ; modifiable ensuite depuis la page Nœuds.',
+            },
+            {
               id: 'setupToken',
               label: 'Jeton d’initialisation',
               type: 'password',
@@ -119,6 +126,7 @@ export class LoginPageComponent {
           value['username'].trim(),
           value['password'],
           value['setupToken'] ?? '',
+          value['nodeDisplayName'] ?? '',
         );
       else await this.auth.login(value['username'].trim(), value['password']);
       await this.router.navigateByUrl(

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using Encoding.Contracts.Nodes;
+using Encoding.Core.Nodes;
 using System.Runtime.InteropServices;
 
 namespace Encoding.NodeAgent.Services;
@@ -32,10 +33,14 @@ public sealed class WorkerEnrollmentService(
             CreateInventory());
 
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        using var response = await client.PostAsJsonAsync(
-            new Uri(new Uri(cluster.ApiBaseUrl), "api/v1/nodes/enroll"),
-            request,
-            cancellationToken: cancellationToken);
+        using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(cluster.ApiBaseUrl), "api/v1/nodes/enroll"))
+        {
+            Content = JsonContent.Create(request)
+        };
+        // Le secret du conteneur n'est présenté qu'au serveur local : jamais à un cluster distant.
+        if (IsLocalCluster(cluster) && LocalEnrollment.Read(options.LocalEnrollmentSecretFile) is { } secret)
+            message.Headers.Add(LocalEnrollment.HeaderName, secret);
+        using var response = await client.SendAsync(message, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("L’enrôlement auprès du cluster {ClusterId} a échoué avec HTTP {StatusCode}.", clusterId, (int)response.StatusCode);
@@ -50,6 +55,13 @@ public sealed class WorkerEnrollmentService(
         logger.LogInformation("Le worker {NodeId} a rejoint le cluster {ClusterId}.", node.Id, cluster.Id);
         return node;
     }
+
+    /// <summary>Vrai pour le serveur du même conteneur : l'agent est configuré avec un secret local et le cluster est joignable en boucle locale.</summary>
+    public bool IsLocalCluster(DiscoveredCluster cluster) =>
+        options.LocalEnrollmentSecretFile is not null
+        && options.ClusterApiBaseUrl is not null
+        && string.Equals(cluster.ApiBaseUrl, options.ClusterApiBaseUrl, StringComparison.OrdinalIgnoreCase)
+        && LocalEnrollment.IsLoopback(cluster.ApiBaseUrl);
 
     public async Task<WorkerPairingResponse> CreatePairingKeyAsync(Guid clusterId, CancellationToken cancellationToken)
     {

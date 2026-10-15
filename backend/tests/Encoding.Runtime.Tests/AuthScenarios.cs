@@ -54,7 +54,10 @@ internal static class AuthScenarios
         try
         {
             var cluster = new NpgsqlConnectionStringBuilder(connection) { SearchPath = schema }.ConnectionString;
-            await using (var factory = CreateFactory(cluster, directory, new() { ["Auth:AnonymousRequestsPerMinute"] = "1000", ["Auth:MaxPendingPairingRequests"] = "2" }))
+            var secretFile = Path.Combine(directory, Encoding.Core.Nodes.LocalEnrollment.FileName);
+            Encoding.Core.Nodes.LocalEnrollment.Create(secretFile);
+            LocalSecret = File.ReadAllText(secretFile).Trim();
+            await using (var factory = CreateFactory(cluster, directory, new() { ["Auth:AnonymousRequestsPerMinute"] = "1000", ["Auth:MaxPendingPairingRequests"] = "2", [Encoding.Core.Nodes.LocalEnrollment.SecretFileSetting] = secretFile }))
             {
                 await ScenarioAsync(factory);
                 await EndpointCatalogueAsync(factory);
@@ -102,18 +105,19 @@ internal static class AuthScenarios
     private sealed class Client(HttpClient http)
     {
         public string? Cookie { get; set; }
-        public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? body = null, bool csrf = true, string? nodeToken = null)
+        public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? body = null, bool csrf = true, string? nodeToken = null, string? localSecret = null)
         {
             using var request = new HttpRequestMessage(method, url);
             if (body is not null) request.Content = JsonContent.Create(body, options: Json);
             if (Cookie is not null) request.Headers.Add("Cookie", $"{SessionAuthentication.CookieName}={Cookie}");
             if (csrf && method != HttpMethod.Get) request.Headers.Add(ManagementAccessHandler.CsrfHeader, "1");
             if (nodeToken is not null) request.Headers.Add("X-Node-Token", nodeToken);
+            if (localSecret is not null) request.Headers.Add(Encoding.Core.Nodes.LocalEnrollment.HeaderName, localSecret);
             return await http.SendAsync(request);
         }
-        public async Task<HttpStatusCode> StatusAsync(HttpMethod method, string url, object? body = null, bool csrf = true, string? nodeToken = null)
+        public async Task<HttpStatusCode> StatusAsync(HttpMethod method, string url, object? body = null, bool csrf = true, string? nodeToken = null, string? localSecret = null)
         {
-            using var response = await SendAsync(method, url, body, csrf, nodeToken);
+            using var response = await SendAsync(method, url, body, csrf, nodeToken, localSecret);
             return response.StatusCode;
         }
         public async Task<HttpStatusCode> LoginAsync(string username, string password)
@@ -134,6 +138,8 @@ internal static class AuthScenarios
 
     private static NodeEnrollmentRequest NewNode(Guid id, string token) =>
         new(id, "worker-" + id.ToString("N")[..6], [NodeRole.Worker], 1, [new("ffprobe", "7.0", ["video"], [])], token);
+
+    private static string LocalSecret = string.Empty;
 
     private static string NodeToken() => Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
 
@@ -159,7 +165,7 @@ internal static class AuthScenarios
         // Initialisation du premier administrateur.
         Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("root", AdminPassword, "mauvais jeton"), csrf: false) == HttpStatusCode.Forbidden, "Setup refuses a wrong setup token.");
         Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("root", "court", SetupToken), csrf: false) == HttpStatusCode.BadRequest, "Setup enforces the password policy.");
-        using (var setup = await anonymous.SendAsync(post, "/api/v1/auth/setup", new SetupRequest("root", AdminPassword, SetupToken), csrf: false))
+        using (var setup = await anonymous.SendAsync(post, "/api/v1/auth/setup", new SetupRequest("root", AdminPassword, SetupToken, "  Serveur du salon  "), csrf: false))
         {
             Check(setup.StatusCode == HttpStatusCode.Created, "Setup creates the first administrator.");
             admin.Cookie = ReadCookie(setup);
@@ -252,6 +258,15 @@ internal static class AuthScenarios
         Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", NewNode(Guid.NewGuid(), NodeToken()), csrf: false) == HttpStatusCode.Forbidden, "Another new identity is refused once the window is closed.");
         var window = (await (await admin.SendAsync(get, "/api/v1/nodes/enrollment-window")).Content.ReadFromJsonAsync<EnrollmentWindowResponse>(Json))!;
         Check(!window.IsOpen, "The window reports closed.");
+
+        // Nœud local de l'image unique : enrôlé d'office, sans fenêtre, par le secret du conteneur ; nom choisi à l'installation.
+        var localNode = NewNode(Guid.NewGuid(), NodeToken());
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", localNode, csrf: false, localSecret: "mauvais-secret") == HttpStatusCode.Forbidden, "A wrong local secret does not bypass the closed window.");
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", localNode, csrf: false, localSecret: "") == HttpStatusCode.Forbidden, "An empty local secret does not bypass the closed window.");
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", localNode, csrf: false, localSecret: LocalSecret) == HttpStatusCode.OK, "The local node enrolls by itself with the container secret while the window is closed.");
+        var listed = (await (await admin.SendAsync(get, "/api/v1/nodes")).Content.ReadFromJsonAsync<List<NodeResponse>>(Json))!;
+        Check(listed.Single(node => node.Id == localNode.Id).DisplayName == "Serveur du salon", "The friendly name chosen at setup is applied to the local node.");
+        Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", NewNode(Guid.NewGuid(), NodeToken()), csrf: false) == HttpStatusCode.Forbidden, "Other nodes still need the window or a pairing key.");
 
         // Les workers gardent leur propre authentification, sans session.
         var token = first.NodeToken;

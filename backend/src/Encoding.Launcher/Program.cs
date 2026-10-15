@@ -11,12 +11,15 @@ var store = new NodeModeStore(dataDirectory, configuration["Node:Roles"]);
 var controlUrl = $"http://127.0.0.1:{controlPort}/";
 var apiPort = configuration.GetValue("Launcher:ApiPort", 8080);
 var agentPort = configuration.GetValue("WorkerUi:Port", 8081);
+var localEnrollmentSecretFile = Path.Combine(dataDirectory, LocalEnrollment.FileName);
+LocalEnrollment.Create(localEnrollmentSecretFile);
 var home = configuration["Launcher:Home"] ?? "/app";
 
 IReadOnlyDictionary<string, string> ServerEnvironment(NodeMode _) => new Dictionary<string, string>
 {
     ["ASPNETCORE_URLS"] = $"http://+:{apiPort}",
     ["Launcher__ControlUrl"] = controlUrl,
+    ["Node__LocalEnrollmentSecretFile"] = localEnrollmentSecretFile,
 };
 
 IReadOnlyDictionary<string, string> AgentEnvironment(NodeMode mode)
@@ -27,6 +30,7 @@ IReadOnlyDictionary<string, string> AgentEnvironment(NodeMode mode)
         ["Node__Roles"] = mode.ToRoles(),
         ["Node__DataDirectory"] = dataDirectory,
         ["Launcher__ControlUrl"] = controlUrl,
+        ["Node__LocalEnrollmentSecretFile"] = localEnrollmentSecretFile,
     };
     // Avec la fonction serveur locale, l’agent rejoint son propre serveur sauf si l’opérateur a désigné un autre cluster.
     if (mode.Server && string.IsNullOrWhiteSpace(configuration["Cluster:ApiBaseUrl"]))

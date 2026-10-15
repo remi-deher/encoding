@@ -34,12 +34,18 @@ export class AuthService {
     this.state.set({ setupRequired: false, user });
   }
 
-  async setup(username: string, password: string, setupToken: string): Promise<void> {
+  async setup(
+    username: string,
+    password: string,
+    setupToken: string,
+    nodeDisplayName = '',
+  ): Promise<void> {
     const user = await firstValueFrom(
       this.http.post<CurrentUser>('/api/v1/auth/setup', {
         username,
         password,
         setupToken: setupToken || null,
+        nodeDisplayName: nodeDisplayName.trim() || null,
       }),
     );
     this.state.set({ setupRequired: false, user });
