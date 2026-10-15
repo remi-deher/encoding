@@ -12,7 +12,7 @@ public sealed class EnrollmentWindowRepository(DbDataSource dataSource)
     public async Task<EnrollmentWindowResponse> GetAsync(CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("SELECT open_until FROM enrollment_window WHERE open_until > clock_timestamp()");
-        return await command.ExecuteScalarAsync(ct) is DateTime openUntil
+        return await command.ScalarInstantAsync(ct) is {} openUntil
             ? new EnrollmentWindowResponse(true, new DateTimeOffset(DateTime.SpecifyKind(openUntil, DateTimeKind.Utc)))
             : new EnrollmentWindowResponse(false, null);
     }
@@ -25,7 +25,7 @@ public sealed class EnrollmentWindowRepository(DbDataSource dataSource)
             RETURNING open_until
             """);
         command.Parameters.AddWithValue("minutes", minutes);
-        var openUntil = (DateTime)(await command.ExecuteScalarAsync(ct))!;
+        var openUntil = (await command.ScalarInstantAsync(ct))!.Value;
         return new EnrollmentWindowResponse(true, new DateTimeOffset(DateTime.SpecifyKind(openUntil, DateTimeKind.Utc)));
     }
 

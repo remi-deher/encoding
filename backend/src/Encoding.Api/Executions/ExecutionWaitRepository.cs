@@ -171,7 +171,7 @@ public sealed class ExecutionWaitRepository(DbDataSource dataSource,NodePresence
           """,c,tx);
         cmd.Parameters.AddWithValue("node",SqlKind.Uuid,(object?)spec.NodeId??DBNull.Value); cmd.Parameters.AddWithValue("status",spec.NodeStatus!);
         cmd.Parameters.AddWithValue("offline",presence.OfflineAfter);
-        return (bool)(await cmd.ExecuteScalarAsync(ct))!;
+        return (await cmd.ScalarBoolAsync(ct));
     }
 
     private static async Task<bool> WorkloadAsync(RuntimeWait spec,Guid library,DbConnection c,DbTransaction tx,CancellationToken ct)

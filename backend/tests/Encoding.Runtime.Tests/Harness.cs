@@ -1,3 +1,4 @@
+using Encoding.Api.Infrastructure.Data;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Net.Http.Json;
@@ -24,7 +25,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
-using NpgsqlTypes;
 
 namespace Encoding.Runtime.Tests;
 
@@ -97,13 +97,13 @@ internal static partial class Harness
 
     internal sealed partial class Fixture : IAsyncDisposable
     {
-        private readonly string schema = "handoff_" + Guid.NewGuid().ToString("N");
         private readonly string directory = Path.Combine(Path.GetTempPath(), "encoding-handoff-" + Guid.NewGuid().ToString("N"));
         private readonly string connection;
         private readonly FlowComponentRegistry registry;
         private readonly FlowDefinitionValidator validator;
         private readonly RuntimeEligibility eligibility;
-        private NpgsqlDataSource db = null!;
+        private TestDatabase testDb = null!;
+        private System.Data.Common.DbDataSource db = null!;
         private WebApplication app = null!;
         private RuntimeRepository runtime = null!;
         private RuntimeArtifactStore artifacts = null!;
@@ -123,8 +123,7 @@ internal static partial class Harness
         private async Task InitializeAsync()
         {
             Directory.CreateDirectory(directory);
-            await using(var admin=NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"CREATE SCHEMA {schema}").ExecuteNonQueryAsync();
-            db=NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(connection) { SearchPath=schema }.ConnectionString);
+            testDb=await TestDatabase.CreateAsync(connection,"handoff"); db=testDb.Db;
             await DatabaseMigrator.ApplyAsync(db,RepositoryRoot(),CancellationToken.None);
             var config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Runtime:ArtifactDirectory"]=Path.Combine(directory,"durable") }).Build();
             configurations=new(db,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
@@ -134,7 +133,7 @@ internal static partial class Harness
             {
                 await using var command=db.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at,node_token_hash) VALUES(@id,@name,ARRAY['worker'],10,@caps,clock_timestamp(),@token)");
                 command.Parameters.AddWithValue("id",id); command.Parameters.AddWithValue("name",id.ToString());
-                command.Parameters.AddWithValue("caps",NpgsqlDbType.Jsonb,JsonSerializer.Serialize(Capabilities(true),Json));
+                command.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(Capabilities(true),Json));
                 command.Parameters.AddWithValue("token",SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Token))); await command.ExecuteNonQueryAsync();
             }
             var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0"); builder.Logging.ClearProviders();
@@ -181,7 +180,7 @@ internal static partial class Harness
             await using (var inventory = db.CreateCommand("UPDATE cluster_nodes SET inventory=@inventory WHERE id=@id"))
             {
                 inventory.Parameters.AddWithValue("id", a);
-                inventory.Parameters.AddWithValue("inventory", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(new NodeInventory("Linux", "X64", 8, 32768), Json));
+                inventory.Parameters.AddWithValue("inventory", SqlKind.Json, JsonSerializer.Serialize(new NodeInventory("Linux", "X64", 8, 32768), Json));
                 await inventory.ExecuteNonQueryAsync();
             }
             var manual = new SaveNodeGroupRequest("Production", "Workers média", NodeGroupMode.Manual, new(),
@@ -221,7 +220,7 @@ internal static partial class Harness
                 """))
             {
                 reference.Parameters.AddWithValue("flow", flowId);
-                reference.Parameters.AddWithValue("definition", NpgsqlDbType.Jsonb, "{\"nodes\":[{\"configuration\":{\"targetGroupId\":\"" + production.Id + "\"}}]}");
+                reference.Parameters.AddWithValue("definition", SqlKind.Json, "{\"nodes\":[{\"configuration\":{\"targetGroupId\":\"" + production.Id + "\"}}]}");
                 await reference.ExecuteNonQueryAsync();
             }
             Check(await groups.DeleteAsync(production.Id, CancellationToken.None) == "in-use", "A group targeted by a flow version cannot be deleted.");
@@ -305,7 +304,7 @@ internal static partial class Harness
                 direct.Parameters.AddWithValue("id",id);direct.Parameters.AddWithValue("node",b);await direct.ExecuteNonQueryAsync();
             }
             await using(var pending=db.CreateCommand("SELECT lease_until='infinity'::timestamptz FROM media_reservations WHERE execution_id=@id"))
-            { pending.Parameters.AddWithValue("id",id);Check((bool)(await pending.ExecuteScalarAsync())!,"The media reservation survives waiting."); }
+            { pending.Parameters.AddWithValue("id",id);Check((await pending.ScalarBoolAsync()),"The media reservation survives waiting."); }
             var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The receiver must claim.");
             Check(received.ExecutionId==id && received.Attempt==lease.Attempt && received.Epoch>lease.Epoch,"The same execution resumes with a new epoch.");
             Check(received.SourceNodeId==a,"The source node is preserved.");
@@ -509,8 +508,7 @@ internal static partial class Harness
         public async ValueTask DisposeAsync()
         {
             if(app is not null) await app.DisposeAsync();
-            if(db is not null) await db.DisposeAsync();
-            await using(var admin=NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE").ExecuteNonQueryAsync();
+            if(testDb is not null) await testDb.DisposeAsync();
             if(Directory.Exists(directory)) Directory.Delete(directory,true);
         }
     }

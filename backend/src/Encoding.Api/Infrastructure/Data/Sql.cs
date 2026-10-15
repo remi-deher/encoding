@@ -1,4 +1,6 @@
 using System.Data.Common;
+using Encoding.Api.Infrastructure.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -21,8 +23,12 @@ public static class Sql
         return command;
     }
 
-    public static DbParameter Parameter(string name, SqlKind kind, object? value)
+    public static bool IsSqlite(DbConnection connection) => connection is SqliteConnectionWrapper;
+    public static bool IsSqlite(DbDataSource dataSource) => dataSource is SqliteDataSource;
+
+    public static DbParameter Parameter(string name, SqlKind kind, object? value, bool sqlite = false)
     {
+        if (sqlite) return new SqliteParameter(name, value ?? DBNull.Value);
         var parameter = new NpgsqlParameter { ParameterName = name, Value = value ?? DBNull.Value };
         switch (kind)
         {
@@ -39,19 +45,69 @@ public static class Sql
 
     public static DbParameter AddWithValue(this DbParameterCollection parameters, string name, object? value)
     {
-        var parameter = new NpgsqlParameter { ParameterName = name, Value = value ?? DBNull.Value };
+        DbParameter parameter = parameters is SqliteParameterCollection
+            ? new SqliteParameter(name, value ?? DBNull.Value)
+            : new NpgsqlParameter { ParameterName = name, Value = value ?? DBNull.Value };
         parameters.Add(parameter);
         return parameter;
     }
 
     public static DbParameter AddWithValue(this DbParameterCollection parameters, string name, SqlKind kind, object? value)
     {
-        var parameter = Parameter(name, kind, value);
+        var parameter = Parameter(name, kind, value, parameters is SqliteParameterCollection);
         parameters.Add(parameter);
         return parameter;
     }
 
     /// <summary>Violation d'unicité signalée par le fournisseur.</summary>
-    public static bool IsUniqueViolation(Exception exception) =>
-        exception is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+    public static string[] GetStringArray(this DbDataReader reader, int ordinal) => ToStringArray(reader.GetValue(ordinal)) ?? [];
+
+    public static string[]? ToStringArray(object? value) => value switch
+    {
+        string[] array => array,
+        string json => System.Text.Json.JsonSerializer.Deserialize<string[]>(json),
+        _ => null
+    };
+
+    public static async Task<int?> ScalarInt32Async(this DbCommand command, CancellationToken cancellationToken = default)
+    {
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is null or DBNull ? null : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public static async Task<Guid?> ScalarGuidAsync(this DbCommand command, CancellationToken cancellationToken = default)
+    {
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value switch { Guid id => id, string text when Guid.TryParse(text, out var id) => id, _ => null };
+    }
+
+    public static async Task<bool?> ScalarNullableBoolAsync(this DbCommand command, CancellationToken cancellationToken = default)
+    {
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is null or DBNull ? null : Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public static async Task<DateTime?> ScalarInstantAsync(this DbCommand command, CancellationToken cancellationToken = default)
+    {
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value switch
+        {
+            DateTime instant => DateTime.SpecifyKind(instant, DateTimeKind.Utc),
+            string text => DateTimeOffset.Parse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal).UtcDateTime,
+            _ => null
+        };
+    }
+
+    public static async Task<bool> ScalarBoolAsync(this DbCommand command, CancellationToken cancellationToken = default)
+    {
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is not null and not DBNull && Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public static bool IsUniqueViolation(Exception exception) => exception switch
+    {
+        PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } => true,
+        SqliteException { SqliteErrorCode: 19, SqliteExtendedErrorCode: 2067 or 1555 } => true,
+        _ => false
+    };
 }

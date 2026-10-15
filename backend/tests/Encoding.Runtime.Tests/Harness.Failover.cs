@@ -1,3 +1,4 @@
+using Encoding.Api.Infrastructure.Data;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Api.Flows;
@@ -23,7 +24,10 @@ internal static partial class Harness
             await using var command=db.CreateCommand(sql);
             foreach(var (name,value) in parameters) command.Parameters.AddWithValue(name,value);
             var result=await command.ExecuteScalarAsync();
-            return result is null or DBNull?default:(T)result;
+            if(result is null or DBNull) return default;
+            var target=Nullable.GetUnderlyingType(typeof(T))??typeof(T);
+            if(result is string text && target==typeof(Guid)) return (T)(object)Guid.Parse(text);
+            return target.IsInstanceOfType(result)?(T)result:(T)System.Convert.ChangeType(result,target,System.Globalization.CultureInfo.InvariantCulture);
         }
         private async Task ResetNodesAsync()
         {
@@ -207,21 +211,25 @@ internal static partial class Harness
         public async Task ServerLossFailoverAsync()
         {
             await ResetNodesAsync();
-            await using var secondDb=NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(connection) { SearchPath=schema }.ConnectionString);
+            var secondDb=testDb.OpenAnother();
             var secondConfigurations=new PluginConfigurationRepository(secondDb,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
             var second=new RuntimeRepository(secondDb,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),secondConfigurations,new NodeGroupRepository(secondDb));
             var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
             var ids=new List<Guid>(); for(var index=0;index<8;index++) ids.Add(await QueueAsync(flow));
 
             // A server dies while it holds the row locks of a claim in progress.
-            int pid; NpgsqlConnection holder=await secondDb.OpenConnectionAsync(); NpgsqlTransaction hold=await holder.BeginTransactionAsync();
-            await using(var backend=new NpgsqlCommand("SELECT pg_backend_pid()",holder,hold)) pid=(int)(await backend.ExecuteScalarAsync())!;
-            await using(var lockRow=new NpgsqlCommand("SELECT execution_id FROM execution_work WHERE execution_id=@id FOR UPDATE",holder,hold)){ lockRow.Parameters.AddWithValue("id",ids[0]); await lockRow.ExecuteScalarAsync(); }
+            // SQLite n'a ni verrous de lignes ni session serveur à tuer : un seul écrivain, voir l'architecture 0043.
             var duringCrash=new List<Guid>();
-            for(var attempt=0;attempt<ids.Count+2;attempt++) if(await runtime.ClaimAsync(b,CancellationToken.None) is { } leased && ids.Contains(leased.ExecutionId)) duringCrash.Add(leased.ExecutionId);
-            Check(!duringCrash.Contains(ids[0]) && duringCrash.Distinct().Count()==duringCrash.Count,"Work locked by a server in the middle of a claim is skipped, never duplicated.");
-            await using(var kill=db.CreateCommand("SELECT pg_terminate_backend(@pid)")){ kill.Parameters.AddWithValue("pid",pid); Check((bool)(await kill.ExecuteScalarAsync())!,"Terminate the crashed server's connection."); }
-            try{ await holder.DisposeAsync(); }catch(Exception){ }
+            if(!TestDatabase.IsSqlite)
+            {
+                int pid; NpgsqlConnection holder=(NpgsqlConnection)await secondDb.OpenConnectionAsync(); NpgsqlTransaction hold=await holder.BeginTransactionAsync();
+                await using(var backend=new NpgsqlCommand("SELECT pg_backend_pid()",holder,hold)) pid=(int)(await backend.ExecuteScalarAsync())!;
+                await using(var lockRow=new NpgsqlCommand("SELECT execution_id FROM execution_work WHERE execution_id=@id FOR UPDATE",holder,hold)){ lockRow.Parameters.AddWithValue("id",ids[0]); await lockRow.ExecuteScalarAsync(); }
+                for(var attempt=0;attempt<ids.Count+2;attempt++) if(await runtime.ClaimAsync(b,CancellationToken.None) is { } leased && ids.Contains(leased.ExecutionId)) duringCrash.Add(leased.ExecutionId);
+                Check(!duringCrash.Contains(ids[0]) && duringCrash.Distinct().Count()==duringCrash.Count,"Work locked by a server in the middle of a claim is skipped, never duplicated.");
+                await using(var kill=db.CreateCommand("SELECT pg_terminate_backend(@pid)")){ kill.Parameters.AddWithValue("pid",pid); Check((bool)(await kill.ExecuteScalarAsync())!,"Terminate the crashed server's connection."); }
+                try{ await holder.DisposeAsync(); }catch(Exception){ }
+            }
             var recovered=await runtime.ClaimAsync(c,CancellationToken.None);
             Check(recovered is not null && ids.Contains(recovered.ExecutionId),"After the crash the surviving server hands out the work that was locked.");
 

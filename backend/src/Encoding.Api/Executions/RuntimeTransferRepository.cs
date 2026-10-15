@@ -71,12 +71,12 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource)
         if(request.State=="cancelled")
         {
             await using var cancellation=Sql.Command("SELECT state='cancelling' FROM executions WHERE id=@id",c,tx); cancellation.Parameters.AddWithValue("id",id);
-            if(!(bool)(await cancellation.ExecuteScalarAsync(ct))!) return false;
+            if(!(await cancellation.ScalarBoolAsync(ct))) return false;
         }
         if(sourceFailure)
         {
             if(request.State!="failed") return false;
-            await using var read=Sql.Command("SELECT worker_node_id FROM execution_work WHERE execution_id=@id",c,tx); read.Parameters.AddWithValue("id",id); worker=(Guid)(await read.ExecuteScalarAsync(ct))!;
+            await using var read=Sql.Command("SELECT worker_node_id FROM execution_work WHERE execution_id=@id",c,tx); read.Parameters.AddWithValue("id",id); worker=(await read.ScalarGuidAsync(ct))!.Value;
         }
         if(request.State is "succeeded" or "deferred")
         {

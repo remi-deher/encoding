@@ -47,13 +47,12 @@ internal static class AuthScenarios
 
     public static async Task RunAsync(string connection)
     {
-        var schema = "auth_" + Guid.NewGuid().ToString("N");
-        var directory = Path.Combine(Path.GetTempPath(), schema);
+        await using var database = await TestDatabase.CreateAsync(connection, "auth");
+        var directory = Path.Combine(Path.GetTempPath(), "auth_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
-        await using (var admin = NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"CREATE SCHEMA {schema}").ExecuteNonQueryAsync();
         try
         {
-            var cluster = new NpgsqlConnectionStringBuilder(connection) { SearchPath = schema }.ConnectionString;
+            var cluster = database;
             var secretFile = Path.Combine(directory, Encoding.Core.Nodes.LocalEnrollment.FileName);
             Encoding.Core.Nodes.LocalEnrollment.Create(secretFile);
             LocalSecret = File.ReadAllText(secretFile).Trim();
@@ -78,17 +77,15 @@ internal static class AuthScenarios
         }
         finally
         {
-            await using var admin = NpgsqlDataSource.Create(connection);
-            await admin.CreateCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE").ExecuteNonQueryAsync();
             if (Directory.Exists(directory)) Directory.Delete(directory, true);
         }
     }
 
-    private static WebApplicationFactory<ApiAssembly> CreateFactory(string cluster, string directory, Dictionary<string, string> settings) =>
+    private static WebApplicationFactory<ApiAssembly> CreateFactory(TestDatabase cluster, string directory, Dictionary<string, string> settings) =>
         new WebApplicationFactory<ApiAssembly>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
-            builder.UseSetting("ConnectionStrings:Cluster", cluster);
+            foreach (var (key, value) in cluster.Settings()) builder.UseSetting(key, value);
             builder.UseSetting("Logging:LogLevel:Default", "Error");
             builder.UseSetting("Auth:SetupToken", SetupToken);
             builder.UseSetting("FlowBackups:Directory", Path.Combine(directory, "backups"));

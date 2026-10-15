@@ -12,17 +12,26 @@ public static class DatabaseMigrator
 
     public static async Task ApplyAsync(DbDataSource dataSource, string contentRoot, CancellationToken cancellationToken, ILogger? logger = null)
     {
-        var files = MigrationCatalog.Load(MigrationCatalog.ResolveDirectory(contentRoot));
+        var sqlite = Sql.IsSqlite(dataSource);
+        var files = MigrationCatalog.Load(MigrationCatalog.ResolveDirectory(contentRoot, sqlite));
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using (var lockCommand = Sql.Command(LockSql, connection))
             await lockCommand.ExecuteNonQueryAsync(cancellationToken);
         try
         {
-            await using (var command = Sql.Command("CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())", connection))
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            await using (var command = Sql.Command("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum text", connection))
-                await command.ExecuteNonQueryAsync(cancellationToken);
+            if (sqlite)
+            {
+                await using var create = Sql.Command("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT ((strftime('%Y-%m-%d %H:%M:%f','now') || '000Z')), checksum TEXT)", connection);
+                await create.ExecuteNonQueryAsync(cancellationToken);
+            }
+            else
+            {
+                await using (var command = Sql.Command("CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())", connection))
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                await using (var command = Sql.Command("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum text", connection))
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+            }
 
             var applied = await ReadAppliedAsync(connection, cancellationToken);
             foreach (var file in files)
@@ -61,11 +70,11 @@ public static class DatabaseMigrator
     /// <summary>Lecture seule : ne crée ni ne modifie rien, pour le health check et les métriques.</summary>
     public static async Task<MigrationStatus> StatusAsync(DbDataSource dataSource, string contentRoot, CancellationToken cancellationToken)
     {
-        var files = MigrationCatalog.Load(MigrationCatalog.ResolveDirectory(contentRoot));
+        var files = MigrationCatalog.Load(MigrationCatalog.ResolveDirectory(contentRoot, Sql.IsSqlite(dataSource)));
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         Dictionary<string, string?> applied;
         await using (var exists = Sql.Command("SELECT to_regclass('schema_migrations') IS NOT NULL", connection))
-            applied = (bool)(await exists.ExecuteScalarAsync(cancellationToken))!
+            applied = Convert.ToBoolean(await exists.ExecuteScalarAsync(cancellationToken))
                 ? await ReadAppliedAsync(connection, cancellationToken)
                 : [];
         var known = files.Select(file => file.Version).ToHashSet(StringComparer.Ordinal);

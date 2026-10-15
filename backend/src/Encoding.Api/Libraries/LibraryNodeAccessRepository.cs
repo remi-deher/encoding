@@ -40,7 +40,7 @@ public sealed class LibraryNodeAccessRepository(DbDataSource dataSource)
         await using (var exists = Sql.Command("SELECT EXISTS (SELECT 1 FROM libraries WHERE id = @id)", connection))
         {
             exists.Parameters.AddWithValue("id", libraryId);
-            if ((bool)(await exists.ExecuteScalarAsync(cancellationToken) ?? false) is false) return null;
+            if ((await exists.ScalarBoolAsync(cancellationToken)) is false) return null;
         }
 
         const string sql = """
@@ -72,7 +72,7 @@ public sealed class LibraryNodeAccessRepository(DbDataSource dataSource)
         await using (var exists = Sql.Command("SELECT EXISTS (SELECT 1 FROM libraries WHERE id = @id)", connection, transaction))
         {
             exists.Parameters.AddWithValue("id", libraryId);
-            if ((bool)(await exists.ExecuteScalarAsync(cancellationToken) ?? false) is false)
+            if ((await exists.ScalarBoolAsync(cancellationToken)) is false)
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return null;
@@ -85,7 +85,7 @@ public sealed class LibraryNodeAccessRepository(DbDataSource dataSource)
             await using var nodeCommand = Sql.Command("SELECT id, roles FROM cluster_nodes WHERE id = ANY(@ids) AND deleted_at IS NULL", connection, transaction);
             nodeCommand.Parameters.AddWithValue("ids", nodes.Select(item => item.NodeId).Distinct().ToArray());
             await using var nodeReader = await nodeCommand.ExecuteReaderAsync(cancellationToken);
-            while (await nodeReader.ReadAsync(cancellationToken)) nodeRoles[nodeReader.GetGuid(0)] = nodeReader.GetFieldValue<string[]>(1);
+            while (await nodeReader.ReadAsync(cancellationToken)) nodeRoles[nodeReader.GetGuid(0)] = nodeReader.GetStringArray(1);
         }
 
         var errors = Validate(nodes, nodeRoles);

@@ -41,7 +41,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         if(!await LockLibraryAsync(library,c,tx,ct)) return false;
         await using var current=Sql.Command("SELECT flow_assignment_revision FROM libraries WHERE id=@id",c,tx);
         current.Parameters.AddWithValue("id",library);
-        if((await current.ExecuteScalarAsync(ct) as int? ?? 0)!=request.ExpectedRevision) return false;
+        if((await current.ScalarInt32Async(ct) ?? 0)!=request.ExpectedRevision) return false;
         if(request.FlowId is {} flow)
         {
             await using var version=Sql.Command("SELECT definition::text FROM flow_versions WHERE flow_id=@flow AND version=@version",c,tx);
@@ -63,7 +63,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     private static async Task<bool> LockLibraryAsync(Guid id,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
         await using var cmd=Sql.Command("SELECT id FROM libraries WHERE id=@id FOR UPDATE",c,tx);
-        cmd.Parameters.AddWithValue("id",id); return await cmd.ExecuteScalarAsync(ct) is Guid;
+        cmd.Parameters.AddWithValue("id",id); return await cmd.ScalarGuidAsync(ct) is not null;
     }
     public async Task<Guid?> RequestScanAsync(Guid library,CancellationToken ct)
     {
@@ -73,7 +73,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         type.Parameters.AddWithValue("id",library); if(await type.ExecuteScalarAsync(ct) is not string mediaType) return null;
         await using var active=Sql.Command("SELECT id FROM library_scans WHERE library_id=@id AND state IN ('queued','running')",c,tx);
         active.Parameters.AddWithValue("id",library);
-        if(await active.ExecuteScalarAsync(ct) is Guid existing) return existing;
+        if(await active.ScalarGuidAsync(ct) is {} existing) return existing;
         var id=Guid.NewGuid();
         await using var cmd=Sql.Command("INSERT INTO library_scans(id,library_id,media_type) VALUES(@id,@library,@type)",c,tx);
         cmd.Parameters.AddWithValue("id",id); cmd.Parameters.AddWithValue("library",library); cmd.Parameters.AddWithValue("type",mediaType);
@@ -159,7 +159,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         if(automatic)
         {
             await using var enabled=Sql.Command("SELECT COALESCE((SELECT watch_enabled FROM library_processing_settings WHERE library_id=@id),true)",c,tx);
-            enabled.Parameters.AddWithValue("id",library);if(!(bool)(await enabled.ExecuteScalarAsync(ct))!)return null;
+            enabled.Parameters.AddWithValue("id",library);if(!(await enabled.ScalarBoolAsync(ct)))return null;
         }
         var files=new List<(Guid Id,string Path,long Bytes,DateTimeOffset Modified)>();
         await using(var select=Sql.Command("SELECT m.id,m.relative_path,m.byte_length,m.modified_at FROM library_media m WHERE m.library_id=@library           AND (NOT @automatic AND m.id=ANY(@ids) AND (NOT @skipReceipted OR NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at)) OR @automatic AND m.stable_since<=clock_timestamp()-interval '30 seconds' AND m.modified_at<=clock_timestamp()-interval '30 seconds'           AND NOT EXISTS(SELECT 1 FROM library_processing_receipts r WHERE r.library_id=m.library_id AND r.file_id=m.id AND r.flow_id=@flow AND r.flow_version=@version AND r.byte_length=m.byte_length AND r.modified_at=m.modified_at) AND NOT EXISTS(SELECT 1 FROM media_replacement_marks k WHERE k.library_id=m.library_id AND k.relative_path=m.relative_path AND k.byte_length=m.byte_length AND k.modified_at=m.modified_at))           ORDER BY m.relative_path LIMIT 10000",c,tx))

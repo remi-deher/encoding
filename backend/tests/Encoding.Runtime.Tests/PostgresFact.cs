@@ -35,7 +35,7 @@ public sealed class MediaToolsFactAttribute : FactAttribute
 /// <summary>One isolated schema shared by the PostgreSQL scenarios; they run sequentially in the same collection.</summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    public static string? ConnectionString => Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");
+    public static string? ConnectionString => TestDatabase.ConfiguredConnection;
     internal Harness.Fixture? Scenarios { get; private set; }
 
     public async Task InitializeAsync()

@@ -1,3 +1,4 @@
+using Encoding.Api.Infrastructure.Data;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -25,6 +26,8 @@ internal static class OperationsScenarios
     {
         if (!condition) throw new InvalidOperationException(message);
     }
+
+    private static string First => TestDatabase.IsSqlite ? "0033_baseline" : "0001_cluster_nodes";
 
     public static void Run()
     {
@@ -68,22 +71,23 @@ internal static class OperationsScenarios
 
     public static async Task RunDatabaseAsync(string connection)
     {
-        var schema = "ops_" + Guid.NewGuid().ToString("N");
+        await using var database = await TestDatabase.CreateAsync(connection, "ops");
         var directory = Directory.CreateTempSubdirectory("encoding-ops-").FullName;
         var contentRoot = Harness.RepositoryRoot();
         try
         {
-            await using (var admin = NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"CREATE SCHEMA {schema}").ExecuteNonQueryAsync();
-            await using var db = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(connection) { SearchPath = schema }.ConnectionString);
+            var db = database.Db;
 
             var before = await DatabaseMigrator.StatusAsync(db, contentRoot, CancellationToken.None);
-            Check(before.Applied == 0 && before.Pending.Count > 20, "Une base vide a toutes les migrations en attente.");
+            Check(before.Applied == 0 && before.Pending.Count > (TestDatabase.IsSqlite ? 0 : 20), "Une base vide a toutes les migrations en attente.");
             await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None);
             await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None);
             var status = await DatabaseMigrator.StatusAsync(db, contentRoot, CancellationToken.None);
             Check(status.Pending.Count == 0 && status.Unknown.Count == 0, "Les migrations appliquées deux fois restent cohérentes.");
             Check(await Scalar(db, "SELECT count(*) FROM schema_migrations WHERE checksum IS NULL") == 0, "Chaque migration enregistre son empreinte.");
 
+            if (!TestDatabase.IsSqlite)
+            {
             // Base déjà en production : elle a enregistré l’ancien nom, la migration renommée ne doit pas rejouer son SQL.
             await Exec(db, "DELETE FROM schema_migrations WHERE version = '0023_library_node_access_activation'");
             await Exec(db, "INSERT INTO schema_migrations(version) VALUES ('0006_library_node_access_activation')");
@@ -91,15 +95,16 @@ internal static class OperationsScenarios
             Check(legacyStatus.Pending.Count == 0 && legacyStatus.Unknown.Count == 0, "L’ancien nom d’une migration renommée vaut application.");
             await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None);
             Check(await Scalar(db, "SELECT count(*) FROM schema_migrations WHERE version = '0023_library_node_access_activation'") == 1, "La migration renommée est enregistrée sans être rejouée.");
+            }
 
             await Exec(db, "INSERT INTO schema_migrations(version, checksum) VALUES ('9999_from_a_newer_node', 'x')");
             Check((await DatabaseMigrator.StatusAsync(db, contentRoot, CancellationToken.None)).Unknown.SequenceEqual(["9999_from_a_newer_node"]), "Une migration d’un nœud plus récent est signalée sans bloquer.");
             await Exec(db, "DELETE FROM schema_migrations WHERE version = '9999_from_a_newer_node'");
-            await Exec(db, "UPDATE schema_migrations SET checksum = 'tampered' WHERE version = '0001_cluster_nodes'");
+            await Exec(db, $"UPDATE schema_migrations SET checksum = 'tampered' WHERE version = '{First}'");
             var rejected = false;
-            try { await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None); } catch (InvalidOperationException exception) when (exception.Message.Contains("0001_cluster_nodes", StringComparison.Ordinal)) { rejected = true; }
+            try { await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None); } catch (InvalidOperationException exception) when (exception.Message.Contains(First, StringComparison.Ordinal)) { rejected = true; }
             Check(rejected, "Une migration publiée modifiée bloque le démarrage.");
-            await Exec(db, "UPDATE schema_migrations SET checksum = NULL WHERE version = '0001_cluster_nodes'");
+            await Exec(db, $"UPDATE schema_migrations SET checksum = NULL WHERE version = '{First}'");
             await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None);
             Check(await Scalar(db, "SELECT count(*) FROM schema_migrations WHERE checksum IS NULL AND version <> '0006_library_node_access_activation'") == 0, "Les empreintes absentes sont complétées sans échec.");
 
@@ -109,12 +114,11 @@ internal static class OperationsScenarios
         }
         finally
         {
-            await using (var admin = NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE").ExecuteNonQueryAsync();
             Directory.Delete(directory, true);
         }
     }
 
-    private static async Task RetentionAsync(NpgsqlDataSource db, string directory)
+    private static async Task RetentionAsync(System.Data.Common.DbDataSource db, string directory)
     {
         var root = Path.Combine(directory, "artifacts");
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Runtime:ArtifactDirectory"] = root }).Build();
@@ -152,7 +156,7 @@ internal static class OperationsScenarios
         Check((await withFailed.RunOnceAsync(CancellationToken.None)).Purged == 1 && !Directory.Exists(store.DirectoryFor(failed)), "FailedDays étend la rétention aux échecs.");
     }
 
-    private static async Task EndpointsAsync(NpgsqlDataSource db, string directory, string contentRoot)
+    private static async Task EndpointsAsync(System.Data.Common.DbDataSource db, string directory, string contentRoot)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { ContentRootPath = contentRoot });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -201,7 +205,7 @@ internal static class OperationsScenarios
         finally { await app.StopAsync(); }
     }
 
-    private static async Task<Guid> Execution(NpgsqlDataSource db, RuntimeArtifactStore store, Guid library, string state, int ageDays, string? published, bool publicationRequested = false)
+    private static async Task<Guid> Execution(System.Data.Common.DbDataSource db, RuntimeArtifactStore store, Guid library, string state, int ageDays, string? published, bool publicationRequested = false)
     {
         var id = Guid.NewGuid();
         await Exec(db, $$"""
@@ -215,8 +219,8 @@ internal static class OperationsScenarios
         return id;
     }
 
-    private static async Task Exec(NpgsqlDataSource db, string sql) { await using var command = db.CreateCommand(sql); await command.ExecuteNonQueryAsync(); }
-    private static async Task<long> Scalar(NpgsqlDataSource db, string sql) { await using var command = db.CreateCommand(sql); return Convert.ToInt64(await command.ExecuteScalarAsync()); }
+    private static async Task Exec(System.Data.Common.DbDataSource db, string sql) { await using var command = db.CreateCommand(sql); await command.ExecuteNonQueryAsync(); }
+    private static async Task<long> Scalar(System.Data.Common.DbDataSource db, string sql) { await using var command = db.CreateCommand(sql); return Convert.ToInt64(await command.ExecuteScalarAsync()); }
     private static bool Throws(Action action, string messagePart)
     {
         try { action(); return false; }

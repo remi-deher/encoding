@@ -98,7 +98,7 @@ public sealed class NodeGroupRepository(DbDataSource dataSource)
         await using (var used = Sql.Command(usage, c, tx))
         {
             used.Parameters.AddWithValue("id", id.ToString());
-            if ((bool)(await used.ExecuteScalarAsync(ct))!) return "in-use";
+            if ((await used.ScalarBoolAsync(ct))) return "in-use";
         }
         await using var cmd = Sql.Command("DELETE FROM node_groups WHERE id=@id", c, tx);
         cmd.Parameters.AddWithValue("id", id);

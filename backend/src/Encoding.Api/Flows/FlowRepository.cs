@@ -53,7 +53,7 @@ public sealed class FlowRepository(DbDataSource dataSource)
         await using var command=Sql.Command(
           "INSERT INTO flows(id) VALUES(@id) ON CONFLICT DO NOTHING; SELECT current_version FROM flows WHERE id=@id FOR UPDATE",connection,tx);
         command.Parameters.AddWithValue("id",request.Definition.Id);
-        var published=(int)(await command.ExecuteScalarAsync(ct))!;
+        var published=(await command.ScalarInt32Async(ct))!.Value;
         await using var save=Sql.Command(
           "INSERT INTO flow_drafts(flow_id,revision,definition) SELECT @id,1,@document WHERE @expected=0 ON CONFLICT(flow_id) DO UPDATE SET definition=EXCLUDED.definition,revision=flow_drafts.revision+1,updated_at=clock_timestamp() WHERE flow_drafts.revision=@expected RETURNING revision",connection,tx);
         save.Parameters.AddWithValue("id",request.Definition.Id); save.Parameters.AddWithValue("expected",request.ExpectedRevision);
@@ -62,10 +62,10 @@ public sealed class FlowRepository(DbDataSource dataSource)
         await using var existing=Sql.Command("SELECT revision FROM flow_drafts WHERE flow_id=@id",connection,tx);
         existing.Parameters.AddWithValue("id",request.Definition.Id);
         var revision=await existing.ExecuteScalarAsync(ct);
-        if((revision is null && request.ExpectedRevision!=0) || (revision is int current && current!=request.ExpectedRevision)) return null;
+        if((revision is null && request.ExpectedRevision!=0) || (revision is not null and not DBNull && Convert.ToInt32(revision)!=request.ExpectedRevision)) return null;
         await using var highest=Sql.Command("SELECT COALESCE(max(revision),0)+1 FROM flow_draft_backups WHERE flow_id=@id",connection,tx);
         highest.Parameters.AddWithValue("id",request.Definition.Id);
-        var nextRevision=(int)(await highest.ExecuteScalarAsync(ct))!;
+        var nextRevision=(await highest.ScalarInt32Async(ct))!.Value;
         save.Parameters.AddWithValue("next",nextRevision);
         save.CommandText="INSERT INTO flow_drafts(flow_id,revision,definition) VALUES(@id,@next,@document) ON CONFLICT(flow_id) DO UPDATE SET definition=EXCLUDED.definition,revision=EXCLUDED.revision,updated_at=clock_timestamp() RETURNING revision,updated_at";
         await using var written=await save.ExecuteReaderAsync(ct); await written.ReadAsync(ct); var result=new FlowDraftResponse(request.Definition,written.GetInt32(0),published,"draft",written.GetFieldValue<DateTimeOffset>(1)); await written.DisposeAsync();
@@ -112,10 +112,10 @@ public sealed class FlowRepository(DbDataSource dataSource)
             var draft=imported.Definition;
             await using var existing=Sql.Command("SELECT definition=@document FROM flow_drafts WHERE flow_id=@id",connection,tx);
             existing.Parameters.AddWithValue("id",draft.Id); existing.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(draft,JsonOptions));
-            if(await existing.ExecuteScalarAsync(ct) is bool same) { if(!same) return false; continue; }
+            if(await existing.ScalarNullableBoolAsync(ct) is {} same) { if(!same) return false; continue; }
             await using var historical=Sql.Command("SELECT definition=@document FROM flow_draft_backups WHERE flow_id=@id AND revision=@revision",connection,tx);
             historical.Parameters.AddWithValue("id",draft.Id); historical.Parameters.AddWithValue("revision",imported.Revision); historical.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(draft,JsonOptions));
-            if(await historical.ExecuteScalarAsync(ct) is bool sameHistory && !sameHistory) return false;
+            if(await historical.ScalarNullableBoolAsync(ct) is {} sameHistory && !sameHistory) return false;
             await using var save=Sql.Command("INSERT INTO flow_drafts(flow_id,revision,definition) VALUES(@id,@revision,@document); INSERT INTO flow_draft_backups(flow_id,revision,definition) VALUES(@id,@revision,@document) ON CONFLICT DO NOTHING",connection,tx);
             save.Parameters.AddWithValue("id",draft.Id); save.Parameters.AddWithValue("revision",imported.Revision); save.Parameters.AddWithValue("document",SqlKind.Json,JsonSerializer.Serialize(draft,JsonOptions));
             await save.ExecuteNonQueryAsync(ct);
@@ -130,7 +130,7 @@ public sealed class FlowRepository(DbDataSource dataSource)
         { insert.Parameters.AddWithValue("id",definition.Id); await insert.ExecuteNonQueryAsync(ct); }
         int current;
         await using (var read = Sql.Command("SELECT current_version FROM flows WHERE id=@id FOR UPDATE",connection,tx))
-        { read.Parameters.AddWithValue("id",definition.Id); current = (int)(await read.ExecuteScalarAsync(ct))!; }
+        { read.Parameters.AddWithValue("id",definition.Id); current = (await read.ScalarInt32Async(ct))!.Value; }
         var json = JsonSerializer.Serialize(definition,JsonOptions);
         // An identical retry is acknowledged even after a newer publication. It never changes the head.
         await using (var repeat = Sql.Command("SELECT definition = @document FROM flow_versions WHERE flow_id=@id AND version=@version",connection,tx))
@@ -138,13 +138,13 @@ public sealed class FlowRepository(DbDataSource dataSource)
             repeat.Parameters.AddWithValue("id",definition.Id); repeat.Parameters.AddWithValue("version",definition.Version);
             repeat.Parameters.AddWithValue("document",SqlKind.Json,json);
             var same = await repeat.ExecuteScalarAsync(ct);
-            if (same is bool identical) return identical ? definition.Version : null;
+            if (same is not null and not DBNull) return Convert.ToBoolean(same) ? definition.Version : null;
         }
         if(request.ExpectedDraftRevision is { } expectedDraft)
         {
             await using var draft=Sql.Command("SELECT revision FROM flow_drafts WHERE flow_id=@id",connection,tx);
             draft.Parameters.AddWithValue("id",definition.Id);
-            if(await draft.ExecuteScalarAsync(ct) is not int revision || revision!=expectedDraft) return null;
+            if(await draft.ScalarInt32Async(ct) is not {} revision || revision!=expectedDraft) return null;
         }
         if (!restore && (current != request.ExpectedVersion || definition.Version != current + 1)) return null;
         if (skipUnchanged && current > 0)
@@ -152,7 +152,7 @@ public sealed class FlowRepository(DbDataSource dataSource)
             await using var unchanged = Sql.Command("SELECT (definition - 'version') = (@document::jsonb - 'version') FROM flow_versions WHERE flow_id=@id AND version=@version", connection, tx);
             unchanged.Parameters.AddWithValue("id", definition.Id); unchanged.Parameters.AddWithValue("version", current);
             unchanged.Parameters.AddWithValue("document", SqlKind.Json, json);
-            if (await unchanged.ExecuteScalarAsync(ct) is true)
+            if (await unchanged.ScalarNullableBoolAsync(ct) is true)
             {
                 await ClearDraftAsync(request, connection, tx, ct);
                 return current;

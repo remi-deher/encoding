@@ -19,7 +19,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         if(string.IsNullOrWhiteSpace(token) || token.Length>256) return false;
         await using var cmd=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL AND node_token_hash=@hash)");
         cmd.Parameters.AddWithValue("node",node); cmd.Parameters.AddWithValue("hash",SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)));
-        return (bool)(await cmd.ExecuteScalarAsync(ct))!;
+        return (await cmd.ScalarBoolAsync(ct));
     }
 
     public async Task<bool> EnqueueAsync(EnqueueMediaRequest request,FlowDefinition flow,CancellationToken ct)
@@ -37,7 +37,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         if(await library.ExecuteScalarAsync(ct) is not string name) return false;
         await using var duplicate=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.library_id=@library AND w.media_key=@key AND e.state IN ('queued','running','cancelling'))",c,tx);
         duplicate.Parameters.AddWithValue("library",request.LibraryId); duplicate.Parameters.AddWithValue("key",path.ToUpperInvariant());
-        if((bool)(await duplicate.ExecuteScalarAsync(ct))!) return false;
+        if((await duplicate.ScalarBoolAsync(ct))) return false;
         var creation=new CreateExecutionRequest(request.Id,path,name,flow.Name,flow.Version,JsonSerializer.SerializeToElement(flow,Json));
         if(!await ExecutionRepository.CreateInTransactionAsync(creation,c,tx,ct)) return false;
         await using var work=Sql.Command("INSERT INTO execution_work(execution_id,library_id,media_path,media_key) VALUES(@id,@library,@path,@key)",c,tx);
@@ -147,7 +147,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                       """,c,tx);
                     originalAccess.Parameters.AddWithValue("library",item.Library); originalAccess.Parameters.AddWithValue("source",originalSource);
                     originalAccess.Parameters.AddWithValue("write",needsWrite); originalAccess.Parameters.AddWithValue("offline",presence.OfflineAfter);
-                    if(!(bool)(await originalAccess.ExecuteScalarAsync(ct))!) continue;
+                    if(!(await originalAccess.ScalarBoolAsync(ct))) continue;
                     source=originalSource; if(source!=worker) root=null;
                 }
             }
@@ -195,7 +195,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             await using(var uncertain=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_steps WHERE execution_id=@id AND completed_at IS NULL AND NOT idempotent)",c,tx))
             {
                 uncertain.Parameters.AddWithValue("id",item.Id);
-                if((bool)(await uncertain.ExecuteScalarAsync(ct))!)
+                if((await uncertain.ScalarBoolAsync(ct)))
                 {
                     await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,"Une étape externe a un effet incertain après interruption. Une relance explicite est nécessaire."),c,tx,ct);
                     await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return null;
@@ -300,7 +300,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             duplicate.Parameters.AddWithValue("invocation",cp.InvocationId); duplicate.Parameters.AddWithValue("epoch",request.Epoch);
             duplicate.Parameters.AddWithValue("worker",worker); duplicate.Parameters.AddWithValue("checkpoint",SqlKind.Json,serialized);
             duplicate.Parameters.AddWithValue("commands",SqlKind.Json,serializedCommands);
-            if(await duplicate.ExecuteScalarAsync(ct) is bool same) return same;
+            if(await duplicate.ScalarNullableBoolAsync(ct) is {} same) return same;
         }
         if(!await FenceAsync(id,worker,request.Epoch,c,tx,ct)) return false;
         FlowDefinition flow;
@@ -310,7 +310,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         await using(var artifact=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx))
         {
             artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",cp.Context.CurrentSha256);
-            if(!(bool)(await artifact.ExecuteScalarAsync(ct))!) return false;
+            if(!(await artifact.ScalarBoolAsync(ct))) return false;
         }
         // Additional files produced by a prior step must remain available after the workspace changes.
         foreach(var variable in cp.Context.Variables.Where(pair=>pair.Key.StartsWith("artifact.",StringComparison.Ordinal)))
@@ -322,7 +322,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 || name.GetString()!.Contains('/') || name.GetString()!.Contains('\\')) return false;
             await using var artifact=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx);
             artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",digest.GetString()!);
-            if(!(bool)(await artifact.ExecuteScalarAsync(ct))!) return false;
+            if(!(await artifact.ScalarBoolAsync(ct))) return false;
         }
         var node=flow.Nodes.SingleOrDefault(n=>n.Id==cp.NodeId); if(node is null) return false;
         RuntimeHandoffSelector? handoff=null;
@@ -352,7 +352,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         {
             existing.Parameters.AddWithValue("id",id); existing.Parameters.AddWithValue("node",cp.NodeId); existing.Parameters.AddWithValue("invocation",cp.InvocationId); existing.Parameters.AddWithValue("checkpoint",SqlKind.Json,serialized);
             existing.Parameters.AddWithValue("commands",SqlKind.Json,serializedCommands);
-            if(await existing.ExecuteScalarAsync(ct) is bool same) return same;
+            if(await existing.ScalarNullableBoolAsync(ct) is {} same) return same;
         }
         await using var update=Sql.Command("""
           UPDATE execution_steps SET completed_at=clock_timestamp(),completed_revision=@completed_revision,checkpoint=@checkpoint,command_logs=@commands,
@@ -418,12 +418,14 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             {
                 await using var owner=Sql.Command("SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND node_id=@node AND completed_at IS NOT NULL",c,tx);
                 owner.Parameters.AddWithValue("id",executionId); owner.Parameters.AddWithValue("node",resolution.FlowNodeId);
-                executionWorker=await owner.ExecuteScalarAsync(ct) is Guid nodeId?nodeId:null;
+                executionWorker=await owner.ScalarGuidAsync(ct) is {} nodeId?nodeId:null;
                 if(executionWorker!=resolution.WorkerId)
                 {
-                    await using var plannedOwner=Sql.Command("SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL AND checkpoint->'context'->'videoEncodings' @> @resolution ORDER BY completed_revision DESC LIMIT 1",c,tx);
+                    await using var plannedOwner=Sql.Command(Sql.IsSqlite(c)
+                        ? "SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL AND EXISTS(SELECT 1 FROM json_each(checkpoint->'context'->'videoEncodings') stored, json_each(@resolution) wanted WHERE json(stored.value)=json(wanted.value)) ORDER BY completed_revision DESC LIMIT 1"
+                        : "SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL AND checkpoint->'context'->'videoEncodings' @> @resolution ORDER BY completed_revision DESC LIMIT 1",c,tx);
                     plannedOwner.Parameters.AddWithValue("id",executionId); plannedOwner.Parameters.AddWithValue("resolution",SqlKind.Json,JsonSerializer.Serialize(new[]{resolution},Json));
-                    executionWorker=await plannedOwner.ExecuteScalarAsync(ct) is Guid plannedNodeId?plannedNodeId:null;
+                    executionWorker=await plannedOwner.ScalarGuidAsync(ct) is {} plannedNodeId?plannedNodeId:null;
                 }
             }
             if(executionWorker!=resolution.WorkerId || string.IsNullOrWhiteSpace(resolution.FfmpegVersion)
