@@ -1,3 +1,13 @@
+.catalog-summary {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.catalog-summary:empty {
+  display: none;
+}
+
 .catalog-panel {
   overflow: hidden;
   border: 1px solid var(--border-subtle);

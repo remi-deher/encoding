@@ -322,9 +322,15 @@
   flex-direction: column;
   gap: var(--space-3);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   background: var(--surface);
   box-shadow: var(--elevation-1);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.data-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--elevation-2);
 }
 
 .data-card_selected {

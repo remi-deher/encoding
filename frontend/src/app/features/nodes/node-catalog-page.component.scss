@@ -93,3 +93,11 @@ p[role='note'] {
 .node-processing-tab { display: grid; gap: 16px; padding-top: 14px; }
 .node-tab-note { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
 .node-tab-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* En-tête des onglets collé en haut du tiroir pendant le défilement. */
+.node-detail-tabs ::ng-deep .mat-mdc-tab-header {
+  position: sticky;
+  top: calc(-1 * var(--space-5));
+  z-index: 2;
+  background: var(--surface);
+}

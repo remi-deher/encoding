@@ -27,6 +27,8 @@ export interface CatalogEmptyState {
   template: `
     <app-detail-drawer
       [opened]="actionOpen() || detailOpen()"
+      [size]="drawerSize()"
+      [modal]="drawerModal()"
       [title]="actionOpen() ? actionTitle() : detailTitle()"
       [description]="actionOpen() ? actionDescription() : detailDescription()"
       [content]="actionOpen() ? actionContent() : detailContent()"
@@ -36,6 +38,7 @@ export interface CatalogEmptyState {
       <div drawer-main>
         <app-page-header [title]="title()" [actions]="pageActions()" />
         <ng-content select="[catalogue-navigation]" />
+        <div class="catalog-summary"><ng-content select="[catalogue-summary]" /></div>
 
         <section class="catalog-panel" [attr.aria-label]="title()">
           @if (showToolbar()) {
@@ -126,6 +129,10 @@ export class ManagementCatalogTemplateComponent {
   readonly actionOpen = input(false);
   readonly actionTitle = input('Ajouter');
   readonly actionDescription = input('');
+  /** Largeur du tiroir : `standard` (560 px) pour une fiche, `wide` pour un éditeur. */
+  readonly drawerSize = input<'standard' | 'wide'>('wide');
+  /** Voile derrière le tiroir ; un clic dessus le ferme. */
+  readonly drawerModal = input(false);
   readonly detailClosed = output<void>();
   readonly actionClosed = output<void>();
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });

@@ -7,13 +7,14 @@ import { MatSidenavModule } from '@angular/material/sidenav';
   selector: 'app-detail-drawer',
   imports: [MatButtonModule, MatSidenavModule, NgTemplateOutlet],
   template: `
-    <mat-drawer-container class="detail-drawer-container" [hasBackdrop]="false">
+    <mat-drawer-container class="detail-drawer-container" [hasBackdrop]="modal()">
       <mat-drawer-content [style.overflow]="mainScroll() === 'parent' ? 'visible' : null">
         <ng-content select="[drawer-main]" />
       </mat-drawer-content>
       <mat-drawer
         #drawer
         class="detail-drawer-panel"
+        [class.detail-drawer-panel_standard]="size() === 'standard'"
         position="end"
         mode="over"
         [opened]="opened()"
@@ -127,6 +128,10 @@ import { MatSidenavModule } from '@angular/material/sidenav';
   `,
 })
 export class DetailDrawerComponent {
+  /** `standard` : tiroir de 560 px pour une fiche ; `wide` : jusqu'à 1 000 px pour un éditeur. */
+  readonly size = input<'standard' | 'wide'>('wide');
+  /** Avec un voile : un clic à l'extérieur ferme le tiroir. À réserver aux fiches sans brouillon à perdre. */
+  readonly modal = input(false);
   readonly mainScroll = input<'auto' | 'parent'>('auto');
   readonly opened = input(false);
   readonly title = input('Détails');

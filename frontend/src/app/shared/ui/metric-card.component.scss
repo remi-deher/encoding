@@ -38,3 +38,14 @@
   font-size: var(--font-body);
   line-height: 1.45;
 }
+
+.metric-card_attention {
+  border-color: transparent;
+  background: var(--warning-soft);
+}
+
+.metric-card_attention .metric-label,
+.metric-card_attention .metric-value,
+.metric-card_attention .metric-detail {
+  color: var(--warning);
+}
