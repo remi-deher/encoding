@@ -48,6 +48,7 @@ import {
   DataTableToggleEvent,
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { LocalNodePanelComponent } from '../../shared/ui/local-node-panel.component';
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { NodeModeController } from '../../shared/services/node-mode-controller';
@@ -129,6 +130,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     RecordFormComponent,
     LibraryNodeAccessFormComponent,
     DrawerActionButtonComponent,
+    LocalNodePanelComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
     RouterLink,
@@ -165,7 +167,7 @@ export class NodeCatalogPageComponent {
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
   protected readonly actionType = signal<
-    'enrollment' | 'library-access' | 'create-library' | 'identity'
+    'enrollment' | 'library-access' | 'create-library' | 'identity' | 'local-node'
   >('enrollment');
   protected readonly nodeLibraryLoading = signal(false);
   protected readonly accessFormBusy = signal(false);
@@ -177,15 +179,15 @@ export class NodeCatalogPageComponent {
   protected readonly selectedNodeTabIndex = signal(0);
   protected readonly identityForm = signal<RecordFormData | null>(null);
   protected readonly createFormData: RecordFormData = {
-    title: 'Ajouter un nœud worker',
+    title: 'Ajouter un nœud',
     description:
-      'Examinez les demandes des workers avant de les accepter. Si un worker n’apparaît pas, générez une clé depuis sa console locale et saisissez-la ici ; elle expire au bout de 10 minutes.',
+      'Examinez les demandes des nœuds avant de les accepter. Si un nœud n’apparaît pas, générez une clé depuis sa page Nœuds (« Ce nœud et son cluster ») et saisissez-la ici ; elle expire au bout de 10 minutes.',
     submitLabel: 'Accepter le nœud',
     reviewTitle: 'Vérifier le jumelage',
     fields: [
       {
         id: 'pairingKey',
-        label: 'Clé générée sur le worker',
+        label: 'Clé générée sur le nœud',
         type: 'text',
         required: true,
         maxLength: 16,
@@ -846,7 +848,9 @@ export class NodeCatalogPageComponent {
       });
   }
   protected readonly actionTitle = computed(() =>
-    this.actionType() === 'identity'
+    this.actionType() === 'local-node'
+      ? 'Ce nœud et son cluster'
+      : this.actionType() === 'identity'
       ? 'Nom et étiquettes du nœud'
       : this.actionType() === 'library-access'
         ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
@@ -855,7 +859,9 @@ export class NodeCatalogPageComponent {
           : this.createFormData.title,
   );
   protected readonly actionDescription = computed(() =>
-    this.actionType() === 'identity'
+    this.actionType() === 'local-node'
+      ? 'Mode, rattachement à un autre cluster et départ du cluster actuel.'
+      : this.actionType() === 'identity'
       ? 'Le nom affiché est distinct du nom envoyé par heartbeat. Les étiquettes locales remplacent celles des groupes.'
       : this.actionType() === 'library-access'
         ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
@@ -986,7 +992,7 @@ export class NodeCatalogPageComponent {
   });
 
   protected readonly enrollmentColumns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Worker détecté', sortable: true },
+    { key: 'name', label: 'Nœud détecté', sortable: true },
     { key: 'verificationCode', label: 'Code à comparer', sortable: false },
     { key: 'rolesLabel', label: 'Rôle annoncé', sortable: true },
     { key: 'capabilitiesLabel', label: 'Capacités', sortable: true },
@@ -1051,8 +1057,9 @@ export class NodeCatalogPageComponent {
       .subscribe((nodes) => this.nodes.set(nodes));
   }
 
-  protected changeLocalMode(): void {
-    void this.nodeMode.change('/api/v1/node/mode');
+  protected openLocalNode(): void {
+    this.actionType.set('local-node');
+    this.actionOpen.set(true);
   }
 
   protected addNode(): void {
@@ -1167,7 +1174,7 @@ export class NodeCatalogPageComponent {
           this.notifications.show(
             error.status === 404
               ? 'Cette demande a expiré ou a déjà été traitée. Actualisez la liste.'
-              : 'Le worker n’a pas pu être accepté. Vérifiez que le serveur est disponible.',
+              : 'Le nœud n’a pas pu être accepté. Vérifiez que le serveur est disponible.',
           );
           return EMPTY;
         }),
@@ -1195,7 +1202,7 @@ export class NodeCatalogPageComponent {
         catchError((error: { status?: number }) => {
           this.notifications.show(
             error.status === 404
-              ? 'Cette clé est invalide, expirée ou déjà utilisée. Générez-en une nouvelle depuis le worker.'
+              ? 'Cette clé est invalide, expirée ou déjà utilisée. Générez-en une nouvelle depuis le nœud.'
               : 'Le nœud n’a pas pu être accepté. Vérifiez que le serveur est disponible.',
           );
           return EMPTY;

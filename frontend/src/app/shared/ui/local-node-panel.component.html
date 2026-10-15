@@ -1,33 +1,9 @@
-<app-page-header
-  [title]="workerStatus()?.name ?? 'Console worker'"
-/>
-
-<section class="worker-panel" aria-label="Console worker">
-  <app-category-tabs
-    label="Sections de la console worker"
-    [options]="tabOptions"
-    [selected]="selectedTab()"
-    (selectedChange)="selectTab($event)"
-  />
-
-  @if (selectedTab() === 'tasks') {
-    <section class="worker-content" aria-labelledby="worker-tasks-heading">
-      <div class="section-heading">
-        <h2 id="worker-tasks-heading">Tâches attribuées</h2>
-        <span class="state-chip">En attente du moteur</span>
-      </div>
-      <div class="empty-state" role="status">
-        <span class="empty-mark" aria-hidden="true">↗</span>
-        <h3>La file de tâches n’est pas encore connectée</h3>
-        <p>Les tâches apparaîtront ici lorsque le répartiteur du cluster sera disponible.</p>
-      </div>
-    </section>
-  } @else {
+<section class="worker-panel" aria-label="Ce nœud">
     <section class="worker-content" aria-labelledby="worker-node-heading">
       <div class="section-heading">
         <div>
-          <h2 id="worker-node-heading">Cette installation</h2>
-          <p>Identité et rattachement de l’agent worker.</p>
+          <h2 id="worker-node-heading">Ce nœud</h2>
+          <p>Identité, rôles et rattachement à un cluster.</p>
         </div>
         @if (workerStatus()?.isEnrolled) {
           <span class="state-chip state-chip--connected">Connecté</span>
@@ -38,9 +14,9 @@
       </div>
 
       @if (loading()) {
-        <p class="feedback" role="status">Connexion à l’agent local…</p>
+        <p class="feedback" role="status">Lecture de l’état de ce nœud…</p>
       } @else if (refreshError()) {
-        <p class="feedback feedback--error" role="alert">L’agent local est inaccessible. Vérifiez qu’il est démarré sur ce poste.</p>
+        <p class="feedback feedback--error" role="alert">La fonction worker de ce nœud est inaccessible. Activez-la depuis « Mode du nœud ».</p>
       } @else if (workerStatus(); as worker) {
         <dl class="node-details">
           <div><dt>Identifiant local</dt><dd>{{ worker.nodeId }}</dd></div>
@@ -157,5 +133,4 @@
         }
       }
     </section>
-  }
 </section>

@@ -23,7 +23,7 @@ Le worker découvre les clusters annoncés en DNS-SD/mDNS (`_encoding._tcp`). Le
 2. Ouvrir `/worker` depuis le navigateur de cette même machine.
 3. Dans l’onglet **Nœud**, sélectionner le cluster détecté puis confirmer **Rejoindre**.
 
-Ce parcours (confirmation locale) n’est accepté que si un administrateur a ouvert la **fenêtre d’enrôlement direct** depuis **Nœuds → Ajouter un nœud** (10 minutes). Autre parcours, sans fenêtre : cliquer sur **Générer une clé** dans la console worker, puis ouvrir **Ajouter un nœud** dans le catalogue du serveur et saisir la clé ; l’approbation exige un administrateur. Elle expire après 10 minutes et ne peut servir qu’une fois. Le worker attend la confirmation sur son heartbeat avant de se déclarer enrôlé.
+Ce parcours (confirmation locale) n’est accepté que si un administrateur a ouvert la **fenêtre d’enrôlement direct** depuis **Nœuds → Ajouter un nœud** (10 minutes). Autre parcours, sans fenêtre : cliquer sur **Générer une clé** dans **Nœuds → Ce nœud et son cluster** du nœud à ajouter, puis ouvrir **Ajouter un nœud** dans le catalogue du serveur et saisir la clé ; l’approbation exige un administrateur. Elle expire après 10 minutes et ne peut servir qu’une fois. Le worker attend la confirmation sur son heartbeat avant de se déclarer enrôlé.
 
 L’acceptation automatique se règle sur le worker avec `Worker__AutoAcceptEnrollment` (Compose : `WORKER_AUTO_ACCEPT_ENROLLMENT`). Elle est désactivée par défaut. Lorsqu’elle est activée, le worker accepte automatiquement le seul cluster détecté ; s’il en voit plusieurs, il attend un choix explicite.
 
@@ -31,7 +31,7 @@ L’identité et le jeton aléatoire sont créés par l’agent, puis conservés
 
 La découverte mDNS facilite la sélection, mais ne prouve pas l’identité du serveur. La confirmation locale est une action utilisateur, pas une attestation cryptographique auprès du serveur. Utiliser HTTPS et ne rendre l’API accessible qu’aux réseaux de confiance.
 
-La page **Tâches** est prête pour la console worker, mais la file et le répartiteur ne sont pas encore implémentés : elle affiche explicitement cet état.
+La page **Tâches** est prête, mais la file et le répartiteur ne sont pas encore implémentés : elle affiche explicitement cet état.
 
 ## Authentification
 
