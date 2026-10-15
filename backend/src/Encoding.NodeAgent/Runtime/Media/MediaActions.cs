@@ -129,7 +129,7 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                         var encoder=resolved.Encoder;
                         var target=resolved.Target;
                         hardwareMode=encoder.Acceleration;
-                        if(hardwareMode=="vaapi") input.AddRange(["-vaapi_device","/dev/dri/renderD128"]);
+                        if(hardwareMode=="vaapi") input.AddRange(["-vaapi_device",GpuDeviceSelector.RenderDevice()]);
                         args.AddRange(["-c:v",encoder.Id,encoder.QualityOption,target.Quality.ToString(CultureInfo.InvariantCulture)]);
                         var preset=encoder.Presets.FirstOrDefault(candidate=>candidate.Id==target.Preset)?.Value;
                         if(!string.IsNullOrEmpty(encoder.PresetOption) && !string.IsNullOrEmpty(preset))
@@ -147,7 +147,7 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                         var hardware=Text(c,"hardwareAcceleration","cpu"); hardwareMode=hardware;
                         var available=ffmpeg.Encoders??[];
                         var encoder=MediaCodecPolicy.VideoEncoder(codec,hardware,available)??throw new MediaToolException("encodeur vidéo",1);
-                        if(hardware=="vaapi") input.AddRange(["-vaapi_device","/dev/dri/renderD128"]);
+                        if(hardware=="vaapi") input.AddRange(["-vaapi_device",GpuDeviceSelector.RenderDevice()]);
                         args.AddRange(["-c:v",encoder,hardware=="cpu"?"-crf":hardware=="nvenc"?"-cq":hardware=="qsv"?"-global_quality":"-qp",Number(c,"quality",23)]);
                         var preset=Text(c,"preset","medium");
                         if(encoder=="libsvtav1") preset=preset=="slow"?"4":preset=="fast"?"10":"8";

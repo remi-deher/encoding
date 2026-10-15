@@ -13,6 +13,28 @@ docker compose up --build
 
 L’interface Angular et l’API sont servies par le même conteneur : ouvrir `http://localhost:4201` pour l’application ou `http://localhost:5080` pour l’API. PostgreSQL est disponible sur `localhost:5432`. La gestion du nœud passe par **Nœuds → Ce nœud et son cluster**, avec la session du serveur. L’agent écoute uniquement en boucle locale dans le conteneur ; le relais utilise le secret créé automatiquement par le lanceur, sans réglage CORS ni `WORKER_UI_ORIGINS` et sans port 8081 à publier. Les données d’identité du worker sont persistées dans le volume `encoding-node-data`. Hors lanceur, configurer le même fichier `Node__LocalEnrollmentSecretFile` pour le serveur et l’agent du même hôte ; sans secret, les routes de l’agent restent fermées.
 
+## Encodage matériel (Intel, AMD, NVIDIA)
+
+L’image embarque les pilotes VA-API Intel (`iHD`, QSV) et AMD (Mesa) ; le pilote NVIDIA vient de l’hôte (NVIDIA Container Toolkit). Sans GPU utilisable, le nœud encode sur CPU et le journal de l’agent en donne la raison. Voir [0051](../docs/architecture/0051-hardware-encoding-in-image.md).
+
+- Intel/AMD : monter `/dev/dri` (`devices: ["/dev/dri:/dev/dri"]`). Le conteneur est root ; pour un usage non-root, `group_add` avec le GID de `renderD128` (`stat -c %g /dev/dri/renderD128`, 107 sur TrueNAS SCALE).
+- NVIDIA : réservation de device `nvidia` (capabilities `gpu, video, compute, utility`) ou `--gpus all`.
+- Exemple prêt à l’emploi : `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d` (retirer le bloc inutile selon l’hôte).
+- Plusieurs GPU : `ENCODING_GPU_DEVICE=/dev/dri/renderD129`. Pilote VA-API imposé : `LIBVA_DRIVER_NAME=iHD` (Intel) ou `radeonsi` (AMD).
+- La version de l’image est attribuée par le workflow Release (tag `vX.Y.Z`), pas dans le dépôt.
+
+Vérification sur l’hôte :
+
+```bash
+docker exec encoding vainfo --display drm --device /dev/dri/renderD128
+docker exec encoding ffmpeg -hide_banner -init_hw_device vaapi=va:/dev/dri/renderD128 \
+  -f lavfi -i nullsrc=s=256x256:d=1 -vf format=nv12,hwupload -c:v h264_vaapi -f null -
+docker exec encoding ffmpeg -hide_banner -encoders | grep -E "nvenc|vaapi|qsv"
+docker logs encoding 2>&1 | grep -i "encodage matériel"
+```
+
+Attendu : `vainfo` liste `VAProfileH264Main` et `VAProfileHEVCMain` avec `VAEntrypointEncSlice`, FFmpeg termine sans erreur.
+
 Les migrations SQL versionnées (`NNNN_nom.sql`, numéro unique, empreinte enregistrée) s’appliquent au démarrage, sous verrou PostgreSQL ; ne jamais modifier une migration publiée, en ajouter une. Pour ne lancer que la base : `docker compose up -d postgres`. Les identifiants PostgreSQL Compose sont réservés au développement local.
 
 Le worker découvre les clusters annoncés en DNS-SD/mDNS (`_encoding._tcp`). Le service prend aussi en charge une adresse bootstrap `Cluster:ApiBaseUrl`, utilisée ici pour la découverte dans le réseau Compose où le multicast peut être indisponible. Pour un worker sur un autre hôte, définissez `CLUSTER_ADVERTISED_API_BASE_URL` avec une URL HTTPS joignable depuis ces machines, puis publiez le port API sur l’interface réseau prévue. Le réglage de développement lie volontairement l’API à la boucle locale.
