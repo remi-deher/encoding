@@ -3,8 +3,8 @@ import {
   INITIAL_EXECUTION_TRACKING,
 } from '../../shared/services/execution-tracking';
 import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { DatePipe } from '@angular/common';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
 import { NodeRole, NODE_ROLE_LABELS } from '../../shared/models/cluster';
@@ -17,6 +17,7 @@ import { MetricCardComponent } from '../../shared/ui/metric-card.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
+import { ExecutionCardComponent } from '../../shared/ui/execution-card.component';
 
 @Component({
   selector: 'app-home-page',
@@ -25,6 +26,7 @@ import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
     MatProgressBarModule,
     DatePipe,
     DetailDrawerComponent,
+    ExecutionCardComponent,
     MetricCardComponent,
     NgTemplateOutlet,
     PageHeaderComponent,
@@ -78,9 +80,19 @@ export class HomePageComponent {
         (e) => e.state === 'running' || e.state === 'cancelling',
       ) ?? [],
   );
-  protected readonly activity = computed(
-    () => this.executionState().data?.activity.slice(0, 5) ?? [],
-  );
+  protected readonly recentExecutions = computed(() => {
+    const executions = this.executionState().data?.executions ?? [];
+    return executions
+      .filter(
+        (execution) =>
+          execution.state !== 'queued' &&
+          execution.state !== 'running' &&
+          execution.state !== 'cancelling',
+      )
+      .slice()
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, 5);
+  });
   private readonly executionMetrics = computed(() => {
     const data = this.executionState().data;
     return [

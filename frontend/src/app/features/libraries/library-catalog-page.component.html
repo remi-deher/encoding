@@ -67,13 +67,17 @@
       @if (executionTrackingState().status === 'error') {
         <p role="status">Actualisation des exécutions impossible.</p>
       }
-      <app-data-table
-        [columns]="libraryExecutionColumns"
-        [rows]="libraryExecutionRows()"
-        [rowActions]="libraryExecutionActions"
-        (rowAction)="onProcessingExecutionAction($event)"
-        emptyMessage="Aucune exécution récente pour cette bibliothèque."
-      />
+      <div class="library-execution-cards">
+        @for (execution of libraryExecutions(); track execution.id) {
+          <app-execution-card
+            [execution]="execution"
+            [showPipelineAction]="true"
+            (pipelineRequested)="onProcessingExecutionAction(execution.id)"
+          />
+        } @empty {
+          <p>Aucune exécution récente pour cette bibliothèque.</p>
+        }
+      </div>
       @if (selectedProcessingExecutionId(); as executionId) {
         <app-execution-pipeline-logs
           [executionId]="executionId"

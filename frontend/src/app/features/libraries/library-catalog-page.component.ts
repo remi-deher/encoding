@@ -68,6 +68,8 @@ import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/catego
 import { formatFileSize } from '../../shared/models/file-size';
 import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../../shared/services/execution-tracking';
 import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeline-logs.component';
+import { ExecutionCardComponent } from '../../shared/ui/execution-card.component';
+import { ExecutionResponse } from '../../shared/models/execution';
 
 interface LibraryRecord extends DataTableRow {
   readonly id: string;
@@ -132,6 +134,7 @@ interface LibraryAccessRecord extends DataTableRow {
     DrawerActionButtonComponent,
     CategoryTabsComponent,
     ExecutionPipelineLogsComponent,
+    ExecutionCardComponent,
   ],
 
   templateUrl: './library-catalog-page.component.html',
@@ -380,32 +383,12 @@ export class LibraryCatalogPageComponent {
     { initialValue: { message: '', steps: [] } },
   );
 
-  protected readonly libraryExecutionRows = computed<readonly DataTableRow[]>(() => {
+  protected readonly libraryExecutions = computed<readonly ExecutionResponse[]>(() => {
     const libraryId = this.selectedLibrary()?.id;
     return (this.executionTrackingState().data?.executions ?? [])
       .filter((execution) => execution.libraryId === libraryId)
-      .slice(0, 25)
-      .map((execution) => ({
-        id: execution.id,
-        media: execution.media,
-        flow: execution.flow + ' · v' + execution.flowVersion,
-        state: execution.state,
-        worker: execution.node ?? '—',
-        updatedAt: new Date(execution.updatedAt).toLocaleString('fr-FR'),
-      }));
+      .slice(0, 25);
   });
-
-  protected readonly libraryExecutionColumns: readonly DataTableColumn[] = [
-    { key: 'media', label: 'Média', sortable: true },
-    { key: 'flow', label: 'Flow', sortable: true },
-    { key: 'state', label: 'État', sortable: true },
-    { key: 'worker', label: 'Worker', sortable: true },
-    { key: 'updatedAt', label: 'Actualisé le', sortable: true },
-  ];
-
-  protected readonly libraryExecutionActions: readonly DataTableRowAction[] = [
-    { id: 'pipeline', label: 'Voir le pipeline' },
-  ];
 
   protected readonly actionTitle = computed(() => {
     switch (this.actionType()) {
@@ -951,9 +934,8 @@ export class LibraryCatalogPageComponent {
     if (library) this.loadSelectedAccesses(library.id);
   }
 
-  protected onProcessingExecutionAction(event: DataTableActionEvent): void {
-    if (event.actionId === 'pipeline')
-      this.selectedProcessingExecutionId.set(String(event.row['id']));
+  protected onProcessingExecutionAction(executionId: string): void {
+    this.selectedProcessingExecutionId.set(executionId);
   }
 
   protected showLibraryNodes(): void {
