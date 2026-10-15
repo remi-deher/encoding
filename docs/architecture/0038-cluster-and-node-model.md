@@ -2,6 +2,8 @@
 
 Statut : proposition (plan de Rémi, 2026-10-15). Aucune implémentation tant que les points ouverts ne sont pas tranchés.
 
+Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; un nœud serveur garde son rôle actuel en rejoignant un cluster (3) ; approbation à chaque rattachement et, entre clusters liés, des deux côtés (4). Le stockage (PostgreSQL ou SQLite) et la synchronisation entre clusters sont traités dans les sections 8 et 9.
+
 ## Plan proposé par Rémi
 
 1. On peut créer un cluster depuis un nœud qui n'appartient à aucun cluster (nœud **autonome**).
@@ -37,3 +39,21 @@ Statut : proposition (plan de Rémi, 2026-10-15). Aucune implémentation tant qu
 ## Garanties à conserver
 
 Une seule tâche à la fois sur un média, baux et reprise après perte d'un nœud, sortie temporaire validée avant publication, routes fermées par défaut, retrait d'un nœud sans réactivation implicite (0017, 0031), secrets jamais envoyés à un autre cluster que celui qu'un administrateur a choisi.
+
+## 8. Stockage (en discussion)
+
+Rémi souhaite à terme retirer la dépendance à PostgreSQL. Le code actuel en dépend fortement (37 fichiers, 281 commandes SQL, 31 migrations ; verrous `FOR UPDATE`, `SKIP LOCKED`, verrous consultatifs, `jsonb`, horloge du serveur). Galera (MariaDB) a été évalué : quorum de 3 nœuds, conflits de certification sur les baux, même réécriture que SQLite avec un serveur externe en plus. Direction recommandée : une couche de stockage commune, SQLite embarqué pour le nœud autonome et le cluster d'un seul serveur, une base externe interchangeable pour plusieurs serveurs. La décision reste à confirmer.
+
+## 9. Synchronisation entre clusters (demande de Rémi)
+
+Besoin : synchroniser les états et l'historique entre clusters, même à deux, sans quorum.
+
+Principe proposé : **la cohérence forte reste à l'intérieur d'un cluster, la cohérence éventuelle entre clusters.**
+
+- Les baux, réservations de médias et attributions de tâches ne sont jamais répliqués : ils n'ont de sens qu'au sein d'un cluster qui a un seul registre.
+- Les **états et l'historique** (exécutions terminées, journaux, instantanés avant/après, définitions de bibliothèques et de flows publiés) sont répliqués de façon asynchrone, sans consensus.
+- **Chaque enregistrement a un cluster propriétaire** (celui qui l'a produit) et n'est modifiable que là ; les autres clusters en tiennent une copie en lecture. Les conflits d'écriture disparaissent par construction. Les modifications partagées (par exemple une bibliothèque commune) ont un propriétaire unique à un instant donné, transférable avec approbation.
+- Mécanisme : journal de changements append-only par cluster (identifiant d'origine, numéro de séquence), tiré par les clusters liés avec un curseur, application idempotente, reprise après coupure. Aucun quorum : chaque cluster fonctionne seul et rattrape son retard au retour du lien.
+- Transport : HTTPS authentifié par la relation approuvée entre les deux clusters (4) ; indépendant du moteur de base de données, donc compatible avec PostgreSQL comme avec SQLite.
+
+Limite à assumer : sans quorum, aucun mécanisme ne peut garantir à la fois la bascule automatique et l'absence de traitement en double après une coupure entre deux clusters. Deux traitements simultanés d'un même média restent sans danger pour les données tant que la source est préservée et que chaque exécution publie dans son propre dossier (0015, 0030) : ils coûtent du calcul, pas de l'intégrité. Recommandation : propriété d'une bibliothèque à un seul cluster à la fois, reprise par l'autre cluster sur action explicite ou sur délai configuré, avec le remplacement de la source désactivé dans les deux cas.
