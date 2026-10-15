@@ -17,7 +17,7 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct)) groups.Add(ReadGroup(r));
         var manualMembers = new Dictionary<Guid, List<Guid>>();
-        await using (var cmd = new NpgsqlCommand("SELECT group_id,node_id FROM node_group_members ORDER BY node_id", c))
+        await using (var cmd = new NpgsqlCommand("SELECT m.group_id,m.node_id FROM node_group_members m JOIN cluster_nodes n ON n.id=m.node_id WHERE n.deleted_at IS NULL ORDER BY m.node_id", c))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct))
             {
@@ -81,11 +81,30 @@ public sealed class NodeGroupRepository(NpgsqlDataSource dataSource)
         return true;
     }
 
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
+    /// <summary>Deletes a group unless a flow version or draft still targets it: such a flow would never find an eligible worker.</summary>
+    public async Task<string> DeleteAsync(Guid id, CancellationToken ct)
     {
-        await using var cmd = dataSource.CreateCommand("DELETE FROM node_groups WHERE id=@id");
+        await using var c = await dataSource.OpenConnectionAsync(ct);
+        await using var tx = await c.BeginTransactionAsync(ct);
+        await using (var exists = new NpgsqlCommand("SELECT 1 FROM node_groups WHERE id=@id FOR UPDATE", c, tx))
+        {
+            exists.Parameters.AddWithValue("id", id);
+            if (await exists.ExecuteScalarAsync(ct) is null) return "missing";
+        }
+        const string usage = """
+            SELECT EXISTS(SELECT 1 FROM flow_versions WHERE definition::text LIKE '%' || @id || '%')
+                OR EXISTS(SELECT 1 FROM flow_drafts WHERE definition::text LIKE '%' || @id || '%')
+            """;
+        await using (var used = new NpgsqlCommand(usage, c, tx))
+        {
+            used.Parameters.AddWithValue("id", id.ToString());
+            if ((bool)(await used.ExecuteScalarAsync(ct))!) return "in-use";
+        }
+        await using var cmd = new NpgsqlCommand("DELETE FROM node_groups WHERE id=@id", c, tx);
         cmd.Parameters.AddWithValue("id", id);
-        return await cmd.ExecuteNonQueryAsync(ct) > 0;
+        await cmd.ExecuteNonQueryAsync(ct);
+        await tx.CommitAsync(ct);
+        return "deleted";
     }
 
     public async Task<NodeIdentityResponse?> GetNodeIdentityAsync(Guid id, CancellationToken ct)

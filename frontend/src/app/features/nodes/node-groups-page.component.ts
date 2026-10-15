@@ -207,8 +207,11 @@ export class NodeGroupsPageComponent {
       await firstValueFrom(this.http.delete(`/api/v1/node-groups/${group.id}`));
       await this.load();
       this.notifications.show('Groupe supprimé.');
-    } catch {
-      this.notifications.show('Le groupe n’a pas pu être supprimé.');
+    } catch (error) {
+      const title = (error as { error?: { title?: unknown } }).error?.title;
+      this.notifications.show(
+        typeof title === 'string' ? title : 'Le groupe n’a pas pu être supprimé.',
+      );
     }
   }
   private async load(): Promise<void> {
