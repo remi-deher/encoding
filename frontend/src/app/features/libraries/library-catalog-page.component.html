@@ -40,77 +40,91 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-card-grid
-      [cards]="libraryCards()"
-      ariaLabel="Accès, traitement et activité de la bibliothèque"
-      emptyMessage="Aucune information disponible pour cette bibliothèque."
-    />
-    @if (selectedLibrary()) {
-      <app-data-table
-        [columns]="mediaColumns"
-        [rows]="mediaRows()"
-        [selectable]="true"
-        [listActions]="mediaListActions"
-        [rowActions]="mediaRowActions"
-        [selectionActions]="mediaSelectionActions"
-        (listAction)="discoverFiles()"
-        (rowAction)="processFiles([$event.row['id'].toString()])"
-        (selectionAction)="onMediaSelection($event)"
-        emptyMessage="Aucun fichier détecté. Attribuez un flow puis lancez la découverte."
-      />
-
-      <h3>Historique des exécutions</h3>
-      @if (executionTrackingState().status === 'error') {
-        <p role="status">Actualisation des exécutions impossible.</p>
-      }
-      <app-data-table
-        [columns]="libraryExecutionColumns"
-        [rows]="libraryExecutionRows()"
-        [rowActions]="libraryExecutionActions"
-        [expandedRowId]="selectedProcessingExecutionId()"
-        (rowAction)="onProcessingExecutionAction($event)"
-        emptyMessage="Aucune exécution récente pour cette bibliothèque."
-      >
-        <ng-template dataTableRowDetail let-execution>
-          <app-execution-pipeline-logs
-            [executionId]="execution['id'].toString()"
-            [steps]="processingPipelineState().steps"
-            [feedback]="processingPipelineState().message"
-          />
-        </ng-template>
-      </app-data-table>
-
-      <section class="library-access-summary" aria-labelledby="library-access-heading">
-        <div>
-          <h3 id="library-access-heading">Nœuds autorisés par le serveur</h3>
-          <p>{{ accessStatus() }}</p>
-        </div>
-        <button
-          matButton="outlined"
-          type="button"
-          [disabled]="selectedAccessesLoading()"
-          (click)="showLibraryNodes()"
-        >
-          {{ selectedAccessesLoading() ? 'Chargement des nœuds…' : 'Voir les nœuds' }}
-        </button>
-      </section>
-      @if (selectedAccesses().length) {
-        <app-data-table
-          [columns]="accessColumns"
-          [rows]="accessRows()"
-          [rowActions]="accessRowActions"
-          [separateRowActionColumns]="true"
-          (rowAction)="onAccessRowAction($event)"
-          (toggleChange)="onAccessToggle($event)"
-          emptyMessage="Aucun accès configuré."
+    <mat-tab-group
+      class="library-detail-tabs"
+      aria-label="Sections de la bibliothèque"
+      [selectedIndex]="selectedLibraryTabIndex()"
+      (selectedIndexChange)="selectedLibraryTabIndex.set($event)"
+    >
+      <mat-tab label="Général">
+        <app-detail-card-grid
+          [cards]="libraryCards()"
+          [initiallyExpanded]="true"
+          [collapsible]="false"
+          ariaLabel="Accès, traitement et activité de la bibliothèque"
+          emptyMessage="Aucune information disponible pour cette bibliothèque."
         />
-      } @else {
-        <p class="library-access-empty">
-          Aucun nœud n’a encore accès à cette bibliothèque. Elle ne sera pas traitée tant qu’un
-          accès n’est pas configuré.
-        </p>
-      }
-    }
+        @if (selectedLibrary()) {
+          <app-data-table
+            [columns]="mediaColumns"
+            [rows]="mediaRows()"
+            [selectable]="true"
+            [listActions]="mediaListActions"
+            [rowActions]="mediaRowActions"
+            [selectionActions]="mediaSelectionActions"
+            (listAction)="discoverFiles()"
+            (rowAction)="processFiles([$event.row['id'].toString()])"
+            (selectionAction)="onMediaSelection($event)"
+            emptyMessage="Aucun fichier détecté. Attribuez un flow puis lancez la découverte."
+          />
+
+          <section class="library-access-summary" aria-labelledby="library-access-heading">
+            <div>
+              <h3 id="library-access-heading">Nœuds autorisés par le serveur</h3>
+              <p>{{ accessStatus() }}</p>
+            </div>
+            <button
+              matButton="outlined"
+              type="button"
+              [disabled]="selectedAccessesLoading()"
+              (click)="showLibraryNodes()"
+            >
+              {{ selectedAccessesLoading() ? 'Chargement des nœuds…' : 'Voir les nœuds' }}
+            </button>
+          </section>
+          @if (selectedAccesses().length) {
+            <app-data-table
+              [columns]="accessColumns"
+              [rows]="accessRows()"
+              [rowActions]="accessRowActions"
+              [separateRowActionColumns]="true"
+              (rowAction)="onAccessRowAction($event)"
+              (toggleChange)="onAccessToggle($event)"
+              emptyMessage="Aucun accès configuré."
+            />
+          } @else {
+            <p class="library-access-empty">
+              Aucun nœud n’a encore accès à cette bibliothèque. Elle ne sera pas traitée tant qu’un
+              accès n’est pas configuré.
+            </p>
+          }
+        }
+      </mat-tab>
+      <mat-tab label="Historique">
+        @if (selectedLibrary()) {
+          <h3>Historique des exécutions</h3>
+          @if (executionTrackingState().status === 'error') {
+            <p role="status">Actualisation des exécutions impossible.</p>
+          }
+          <app-data-table
+            [columns]="libraryExecutionColumns"
+            [rows]="libraryExecutionRows()"
+            [rowActions]="libraryExecutionActions"
+            [expandedRowId]="selectedProcessingExecutionId()"
+            (rowAction)="onProcessingExecutionAction($event)"
+            emptyMessage="Aucune exécution récente pour cette bibliothèque."
+          >
+            <ng-template dataTableRowDetail let-execution>
+              <app-execution-pipeline-logs
+                [executionId]="execution['id'].toString()"
+                [steps]="processingPipelineState().steps"
+                [feedback]="processingPipelineState().message"
+              />
+            </ng-template>
+          </app-data-table>
+        }
+      </mat-tab>
+    </mat-tab-group>
   </ng-template>
 
   <ng-template #detailHeaderActions>
