@@ -41,7 +41,12 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <mat-tab-group class="node-detail-tabs" aria-label="Sections du nœud">
+    <mat-tab-group
+      class="node-detail-tabs"
+      aria-label="Sections du nœud"
+      [selectedIndex]="selectedNodeTabIndex()"
+      (selectedIndexChange)="selectedNodeTabIndex.set($event)"
+    >
       <mat-tab label="Général">
         <app-detail-card-grid
           [cards]="generalCards()"
