@@ -38,6 +38,12 @@
       [selected]="selectedRole()"
       (selectedChange)="onRoleChange($event)"
     />
+    <app-category-tabs
+      label="État du nœud"
+      [options]="stateOptions()"
+      [selected]="selectedState()"
+      (selectedChange)="selectedState.set($event)"
+    />
   </div>
 
   <div catalogue-table class="node-card-grid">
@@ -57,7 +63,7 @@
         (actionSelected)="onNodeCardAction(card.id, $event)"
       />
     } @empty {
-      <p class="node-card-empty" role="status">Aucun nœud ne correspond à ce rôle.</p>
+      <p class="node-card-empty" role="status">Aucun nœud ne correspond à ces filtres.</p>
     }
   </div>
 

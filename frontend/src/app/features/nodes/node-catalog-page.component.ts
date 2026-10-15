@@ -1050,13 +1050,32 @@ export class NodeCatalogPageComponent {
   });
 
   /** Cartes de nœuds : ce qui demande une action d'abord, puis par nom (architecture 0046). */
+  protected readonly selectedState = signal('all');
+  /** Regroupe les états de cycle de vie : en ligne, hors ligne, ou à traiter (vidange, incompatible, quarantaine). */
+  private stateGroup(node: NodeResponse): 'online' | 'offline' | 'attention' {
+    const lifecycle = node.lifecycle ?? node.status;
+    return lifecycle === 'online' ? 'online' : lifecycle === 'offline' ? 'offline' : 'attention';
+  }
+  protected readonly stateOptions = computed<readonly CategoryTabOption[]>(() => {
+    const nodes = this.nodes();
+    const count = (group: string) => nodes.filter((node) => this.stateGroup(node) === group).length;
+    return [
+      { value: 'all', label: 'Tous', count: nodes.length },
+      { value: 'online', label: 'En ligne', count: count('online') },
+      { value: 'attention', label: 'À traiter', count: count('attention') },
+      { value: 'offline', label: 'Hors ligne', count: count('offline') },
+    ];
+  });
+
   protected readonly nodeCards = computed<readonly NodeCard[]>(() => {
     const role = this.selectedRole();
+    const state = this.selectedState();
     const actions: readonly ResourceCardAction[] = this.nodeActions
       .filter((action) => action.visibleWhen?.({} as DataTableRow) ?? true)
       .map((action) => ({ id: action.id, label: action.label, tone: action.tone }));
     return this.nodes()
       .filter((node) => role === 'all' || node.roles.includes(role as NodeRole))
+      .filter((node) => state === 'all' || this.stateGroup(node) === state)
       .map((node): NodeCard => {
         const lifecycle = node.lifecycle ?? node.status;
         const tone: StatusTone =
