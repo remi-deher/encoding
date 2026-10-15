@@ -9,7 +9,11 @@ import {
   DataTableComponent,
   DataTableRow,
 } from '../../shared/ui/data-table.component';
-import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
+import {
+  DetailCard,
+  DetailCardGridComponent,
+  DetailCardIcon,
+} from '../../shared/ui/detail-card-grid.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import { FlowComponentPackSummary } from '../../shared/models/flow-component-packs';
@@ -31,7 +35,7 @@ interface PackRow extends DataTableRow {
   imports: [
     CategoryTabsComponent,
     DataTableComponent,
-    DetailFieldListComponent,
+    DetailCardGridComponent,
     ManagementCatalogTemplateComponent,
   ],
   template: `
@@ -66,10 +70,12 @@ interface PackRow extends DataTableRow {
         emptyMessage="Aucun pack. Créez-en un depuis une version publiée dans Flows."
       />
       <ng-template #detailContent catalogue-detail>
-        <app-detail-field-list
-          [fields]="detailFields()"
-          [tabbed]="true"
-          tabsLabel="Sections du pack"
+        <app-detail-card-grid
+          [cards]="packCards()"
+          [initiallyExpanded]="true"
+          [collapsible]="false"
+          ariaLabel="Résumé, origine et interface du pack"
+          emptyMessage="Aucune information disponible pour ce pack."
         />
       </ng-template>
     </app-management-catalog-template>
@@ -95,6 +101,9 @@ export class ComponentPackLibraryPageComponent {
   protected readonly packs = signal<readonly FlowComponentPackSummary[]>([]);
   protected readonly selectedPack = signal<FlowComponentPackSummary | null>(null);
   private readonly selectedDetails = signal<FlowComponentPackDetails | null>(null);
+  private readonly selectedDetailsLoadState = signal<'idle' | 'loading' | 'ready' | 'error'>(
+    'idle',
+  );
   protected readonly query = signal('');
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Pack', sortable: true },
@@ -125,50 +134,109 @@ export class ComponentPackLibraryPageComponent {
         )
       : this.rows();
   });
-  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+  protected readonly packCards = computed<readonly DetailCard[]>(() => {
     const pack = this.selectedPack();
-    return pack
-      ? [
-          { section: 'Pack', label: 'Nom', value: pack.name },
-          { section: 'Pack', label: 'Description', value: pack.description || '—' },
+    if (!pack) return [];
+
+    const details = this.selectedDetails();
+    const inputNode = details?.definition.nodes.find((node) => node.id === details.inputNodeId);
+    const inputLabel = inputNode?.name || inputNode?.component.componentId || 'Premier composant';
+    const loadState = this.selectedDetailsLoadState();
+    const interfaceStatus =
+      loadState === 'ready'
+        ? { label: 'Détails chargés', tone: 'success' as const }
+        : loadState === 'error'
+          ? { label: 'Indisponible', tone: 'warning' as const }
+          : { label: 'Chargement', tone: 'neutral' as const };
+    const mediaType =
+      MEDIA_TYPE_OPTIONS.find((item) => item.value === pack.mediaType)?.label ?? pack.mediaType;
+
+    return [
+      {
+        id: 'pack-summary',
+        title: 'Pack de composants',
+        subtitle: mediaType,
+        icon: this.mediaIcon(pack.mediaType),
+        status: { label: 'Disponible', tone: 'success' },
+        tags: [
+          { label: `${pack.componentCount} composant(s)` },
+          { label: new Date(pack.createdAt).toLocaleDateString('fr-FR'), tone: 'neutral' },
+        ],
+        sections: [
           {
-            section: 'Pack',
-            label: 'Type de média',
-            value:
-              MEDIA_TYPE_OPTIONS.find((item) => item.value === pack.mediaType)?.label ??
-              pack.mediaType,
+            title: 'Description',
+            items: [{ label: pack.name, description: pack.description || 'Aucune description.' }],
           },
-          { section: 'Pack', label: 'Composants', value: String(pack.componentCount) },
+        ],
+      },
+      {
+        id: 'pack-source',
+        title: 'Flow source',
+        subtitle: pack.sourceFlowName,
+        icon: 'tool',
+        status: { label: `Version publiée v${pack.sourceVersion}`, tone: 'accent' },
+        tags: [],
+        sections: [
           {
-            section: 'Interface',
-            label: 'Entrée',
-            value:
-              this.selectedDetails()?.definition.nodes.find(
-                (node) => node.id === this.selectedDetails()?.inputNodeId,
-              )?.name ||
-              this.selectedDetails()?.definition.nodes.find(
-                (node) => node.id === this.selectedDetails()?.inputNodeId,
-              )?.component.componentId ||
-              'Premier composant',
+            title: 'Référence conservée',
+            items: [
+              { label: 'Flow', description: pack.sourceFlowName },
+              { label: 'Identifiant', description: pack.sourceFlowId },
+              { label: 'Version', description: `v${pack.sourceVersion}` },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'pack-interface',
+        title: 'Interface du pack',
+        subtitle: 'Entrée et sorties exposées',
+        icon: 'plugin',
+        status: interfaceStatus,
+        tags: [],
+        sections: [
+          {
+            title: 'Entrée',
+            items: [
+              {
+                label: details ? inputLabel : 'Entrée du pack',
+                description: details
+                  ? 'Point d’entrée public du fragment'
+                  : loadState === 'error'
+                    ? 'Impossible de charger la définition du pack.'
+                    : 'Chargement de la définition…',
+                tone: details ? 'accent' : 'neutral',
+              },
+            ],
           },
           {
-            section: 'Interface',
-            label: 'Sorties',
-            value:
-              this.selectedDetails()
-                ?.outputs.map((output) => output.label)
-                .join(', ') || 'Aucune sortie exposée',
+            title: 'Sorties',
+            items: details?.outputs.length
+              ? details.outputs.map((output) => ({
+                  label: output.label,
+                  description: 'Sortie exposée',
+                }))
+              : [
+                  {
+                    label: 'Interface',
+                    description: details
+                      ? 'Aucune sortie exposée'
+                      : loadState === 'error'
+                        ? 'Détail indisponible'
+                        : 'Chargement…',
+                  },
+                ],
           },
-          { section: 'Origine', label: 'Flow', value: pack.sourceFlowName },
-          { section: 'Origine', label: 'Version publiée', value: `v${pack.sourceVersion}` },
-          {
-            section: 'Pack',
-            label: 'Créé le',
-            value: new Date(pack.createdAt).toLocaleString('fr-FR'),
-          },
-        ]
-      : [];
+        ],
+      },
+    ];
   });
+
+  private mediaIcon(mediaType: string): DetailCardIcon {
+    if (mediaType === 'music' || mediaType === 'audio') return 'audio';
+    if (mediaType === 'image') return 'image';
+    return 'video';
+  }
 
   constructor() {
     void this.loadPacks();
@@ -185,18 +253,26 @@ export class ComponentPackLibraryPageComponent {
     const pack = this.packs().find((candidate) => candidate.id === row['id']) ?? null;
     this.selectedPack.set(pack);
     this.selectedDetails.set(null);
+    this.selectedDetailsLoadState.set(pack ? 'loading' : 'idle');
     if (!pack) return;
     try {
       const details = await this.api.get(pack.id);
-      if (this.selectedPack()?.id === pack.id) this.selectedDetails.set(details);
+      if (this.selectedPack()?.id === pack.id) {
+        this.selectedDetails.set(details);
+        this.selectedDetailsLoadState.set('ready');
+      }
     } catch {
-      if (this.selectedPack()?.id === pack.id) this.selectedDetails.set(null);
+      if (this.selectedPack()?.id === pack.id) {
+        this.selectedDetails.set(null);
+        this.selectedDetailsLoadState.set('error');
+      }
     }
   }
 
   protected closeDetail(): void {
     this.selectedPack.set(null);
     this.selectedDetails.set(null);
+    this.selectedDetailsLoadState.set('idle');
   }
 
   private async loadPacks(): Promise<void> {

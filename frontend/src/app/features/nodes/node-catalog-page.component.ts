@@ -18,13 +18,14 @@ import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-butto
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../core/auth/auth.service';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { takeUntilDestroyed, toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import {
   catchError,
   EMPTY,
@@ -49,6 +50,11 @@ import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/catego
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { NotificationService } from '../../shared/services/notification.service';
+import {
+  DetailCard,
+  DetailCardGridComponent,
+  DetailCardIcon,
+} from '../../shared/ui/detail-card-grid.component';
 import {
   LibraryNodeAccessFormComponent,
   LibraryNodeAccessOption,
@@ -109,6 +115,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
   imports: [
     DataTableComponent,
     DetailFieldListComponent,
+    DetailCardGridComponent,
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     MatButtonModule,
@@ -120,6 +127,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     DrawerActionButtonComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
+    RouterLink,
   ],
   templateUrl: './node-catalog-page.component.html',
   styleUrl: './node-catalog-page.component.scss',
@@ -143,12 +151,15 @@ export class NodeCatalogPageComponent {
   private readonly libraryAccessLoadState = signal<'loading' | 'ready' | 'error'>('loading');
 
   protected readonly isAdmin = inject(AuthService).isAdmin;
-  protected readonly enrollmentWindow = signal<EnrollmentWindow>({ isOpen: false, openUntil: null });
+  protected readonly enrollmentWindow = signal<EnrollmentWindow>({
+    isOpen: false,
+    openUntil: null,
+  });
   protected readonly loadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly selectedRole = signal('all');
   protected readonly actionOpen = signal(false);
   protected readonly actionType = signal<
-    'enrollment' | 'library-access' | 'create-library' | 'processing' | 'schedule'
+    'enrollment' | 'library-access' | 'create-library' | 'identity'
   >('enrollment');
   protected readonly nodeLibraryLoading = signal(false);
   protected readonly accessFormBusy = signal(false);
@@ -157,6 +168,8 @@ export class NodeCatalogPageComponent {
   protected readonly enrollmentView = signal<'requests' | 'key' | 'review'>('requests');
   protected readonly selectedEnrollment = signal<PendingNodeEnrollmentResponse | null>(null);
   protected readonly selectedNode = signal<NodeRecord | null>(null);
+  protected readonly selectedNodeTabIndex = signal(0);
+  protected readonly identityForm = signal<RecordFormData | null>(null);
   protected readonly createFormData: RecordFormData = {
     title: 'Ajouter un nœud worker',
     description:
@@ -179,7 +192,9 @@ export class NodeCatalogPageComponent {
       ? 'Impossible de joindre l’API du cluster. Vérifiez que le backend et PostgreSQL sont démarrés.'
       : 'Chargement des nœuds du cluster…',
   );
-  protected readonly detailTitle = computed(() => this.rawNode()?.name ?? 'Détails du nœud');
+  protected readonly detailTitle = computed(
+    () => this.rawNode()?.displayName?.trim() || this.rawNode()?.name || 'Détails du nœud',
+  );
   protected readonly detailDescription = computed(
     () => this.selectedNode()?.roleLabel ?? 'État observé par le cluster',
   );
@@ -205,27 +220,136 @@ export class NodeCatalogPageComponent {
     ),
     { initialValue: null },
   );
-  protected readonly summaryFields = computed<readonly DetailField[]>(() => {
+  protected readonly generalCards = computed<readonly DetailCard[]>(() => {
     const node = this.rawNode();
-    const activity = this.nodeActivity();
     if (!node) return [];
+
+    const activity = this.nodeActivity();
+    const inventory = node.inventory;
+    const libraries = this.nodeLibraries().filter(
+      (library) => library.isEnabled && library.mode !== 'unsupported',
+    );
+    const directLibraries = libraries.filter((library) => library.mode === 'direct').length;
+    const transferLibraries = libraries.filter((library) => library.mode === 'transfer').length;
+    const isWorker = node.roles.includes('worker');
+    const roleTags = node.roles.map((role) => ({
+      label: NODE_ROLE_LABELS[role],
+      tone: 'accent' as const,
+    }));
+    const labelTags = Object.entries(node.labels ?? {})
+      .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      .map(([key, value]) => ({ label: `${key}: ${value}` }));
+
     return [
-      { label: 'Identifiant du nœud', value: node.id },
-      { label: 'Présence', value: node.status === 'online' ? 'En ligne' : 'Hors ligne' },
-      { label: 'Rôles', value: node.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · ') },
       {
-        label: 'Traitements actifs / limite',
-        value: node.roles.includes('worker')
-          ? (activity ? activity.active : '—') +
-            ' / ' +
-            (this.nodeProcessingState()?.effectiveMaxConcurrentTasks ?? node.maxConcurrentTasks)
-          : 'Fonctions serveur',
+        id: 'node-general-identity',
+        title: 'Identité et rôles',
+        subtitle: 'Membre du cluster',
+        icon: 'server',
+        status: {
+          label: node.status === 'online' ? 'En ligne' : 'Hors ligne',
+          tone: node.status === 'online' ? 'success' : 'warning',
+        },
+        tags: [...roleTags, ...labelTags],
+        sections: [
+          {
+            title: 'Identité',
+            items: [
+              { label: 'Nom affiché', description: node.displayName?.trim() || node.name },
+              { label: 'Identifiant', description: node.id },
+            ],
+          },
+        ],
       },
       {
-        label: 'Bibliothèques accessibles',
-        value: this.nodeLibraries().filter(
-          (library) => library.isEnabled && library.mode !== 'unsupported',
-        ).length,
+        id: 'node-general-activity',
+        title: 'Disponibilité et activité',
+        subtitle: `Dernier signal · ${new Date(node.lastSeenAt).toLocaleString('fr-FR')}`,
+        icon: 'activity',
+        status: {
+          label: node.status === 'online' ? 'Connecté' : 'Signal absent',
+          tone: node.status === 'online' ? 'success' : 'warning',
+        },
+        tags: [],
+        sections: [
+          {
+            title: 'Traitement',
+            items: [
+              {
+                label: 'Tâches actives / limite',
+                description: isWorker
+                  ? `${activity?.active ?? '—'} / ${this.nodeProcessingState()?.effectiveMaxConcurrentTasks ?? node.maxConcurrentTasks}`
+                  : 'Fonctions serveur',
+              },
+              { label: 'Réussies', description: activity?.succeeded.toString() ?? 'Indisponible' },
+              { label: 'Échecs', description: activity?.failed.toString() ?? 'Indisponible' },
+              {
+                label: 'Annulations',
+                description: activity?.cancelled.toString() ?? 'Indisponible',
+              },
+              {
+                label: 'Tâches alimentées par ce nœud',
+                description: activity?.sourceTasks.toString() ?? 'Indisponible',
+              },
+              {
+                label: 'Dernière activité',
+                description: activity
+                  ? activity.lastActivity
+                    ? new Date(activity.lastActivity).toLocaleString('fr-FR')
+                    : 'Aucune activité enregistrée'
+                  : 'Indisponible',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'node-general-system',
+        title: 'Système et ressources',
+        subtitle: 'Inventaire déclaré par le worker',
+        icon: 'system',
+        status: {
+          label: inventory ? 'Inventaire disponible' : 'Non déclaré',
+          tone: inventory ? 'neutral' : 'warning',
+        },
+        tags: [],
+        sections: [
+          {
+            title: 'Configuration détectée',
+            items: [
+              { label: 'Système', description: inventory?.operatingSystem ?? 'Non déclaré' },
+              { label: 'Architecture', description: inventory?.architecture ?? 'Non déclarée' },
+              {
+                label: 'Processeurs disponibles',
+                description: inventory?.processorCount.toString() ?? 'Non déclarés',
+              },
+              {
+                label: 'Mémoire totale disponible',
+                description: inventory ? `${inventory.memoryMb} Mo` : 'Non déclarée',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'node-general-libraries',
+        title: 'Accès aux bibliothèques',
+        subtitle: 'Droits configurés pour ce nœud',
+        icon: 'library',
+        status: {
+          label: `${libraries.length} autorisée(s)`,
+          tone: libraries.length ? 'success' : 'warning',
+        },
+        tags: [],
+        sections: [
+          {
+            title: 'Modes d’accès',
+            items: [
+              { label: 'Accès direct', description: `${directLibraries} bibliothèque(s)` },
+              { label: 'Transfert WebDAV', description: `${transferLibraries} bibliothèque(s)` },
+            ],
+          },
+        ],
       },
     ];
   });
@@ -242,88 +366,86 @@ export class NodeCatalogPageComponent {
     ),
     { initialValue: null },
   );
-  protected readonly processingFields = computed<readonly DetailField[]>(() => {
+  protected readonly processingCards = computed<readonly DetailCard[]>(() => {
     const node = this.rawNode();
-    const state = this.nodeProcessingState();
     if (!node) return [];
-    const schedule = state?.schedule;
-    const openShare = schedule?.enabled
-      ? Math.round((schedule.slots.split('1').length - 1) * 100 / schedule.slots.length)
+    const settings = this.nodeProcessingState();
+    const maximum = settings?.maxConcurrentTasks ?? null;
+    const effectiveMaximum = settings?.effectiveMaxConcurrentTasks ?? node.maxConcurrentTasks;
+    const schedule = settings?.schedule;
+    const allowedPercent = schedule?.enabled
+      ? Math.round(((schedule.slots.split('1').length - 1) * 100) / schedule.slots.length)
       : null;
     return [
       {
-        label: 'Limite globale',
-        value: state
-          ? state.effectiveMaxConcurrentTasks +
-            (state.maxConcurrentTasks == null ? ' (annoncée par le worker)' : ' (définie)')
-          : node.maxConcurrentTasks + ' (annoncée par le worker)',
+        id: 'node-processing-limit',
+        title: 'Limite globale',
+        subtitle: 'Traitements simultanés, toutes bibliothèques',
+        icon: 'activity',
+        status: {
+          label: maximum == null ? `${effectiveMaximum} · annoncée` : `${maximum} · définie`,
+          tone: maximum == null ? 'neutral' : 'accent',
+        },
+        tags: [],
+        sections: [],
       },
       {
-        label: 'Calendrier',
-        value: !state
-          ? '—'
-          : openShare == null
-            ? 'Désactivé : démarrage possible à toute heure'
-            : 'Actif : ' + openShare + ' % de la semaine autorisée (' + schedule!.timeZone + ')',
+        id: 'node-processing-calendar',
+        title: 'Calendrier',
+        subtitle: 'Plages autorisées de démarrage',
+        icon: 'system',
+        status: {
+          label: !schedule ? 'Chargement' : schedule.enabled ? 'Actif' : 'Désactivé',
+          tone: schedule?.enabled ? 'success' : 'neutral',
+        },
+        tags: allowedPercent == null ? [] : [{ label: `${allowedPercent} % autorisé` }],
+        sections: [],
       },
     ];
   });
   protected readonly processingForm = signal<RecordFormData | null>(null);
-  private processingRevision = 0;
+  protected readonly processingBusy = signal(false);
   private processingSettings: NodeProcessingSettings | null = null;
+  private processingFormNodeId: string | null = null;
   protected readonly scheduleBusy = signal(false);
-  protected readonly scheduleValue = signal<NodeSchedule | null>(null);
-  protected async configureNodeProcessing(): Promise<void> {
-    const node = this.rawNode();
-    if (!node || this.removalBusy()) return;
-    try {
-      const settings = await firstValueFrom(this.clusterApi.nodeProcessing(node.id));
-      if (this.rawNode()?.id !== node.id) return;
-      this.processingRevision = settings.revision;
+  private installProcessingSettingsEffect(): void {
+    effect(() => {
+      const node = this.rawNode();
+      const settings = this.nodeProcessingState();
+      if (!node || !settings) return;
       this.processingSettings = settings;
-      this.processingForm.set({
-        title: 'Limite globale du nœud',
-        description:
-          'Ce plafond concerne toutes ses bibliothèques. Les limites de bibliothèque et les limites par nœud/bibliothèque s’appliquent aussi.',
-        submitLabel: 'Enregistrer',
-        fields: [
-          {
-            id: 'maximum',
-            label: 'Fichiers traités simultanément, toutes bibliothèques',
-            type: 'number',
-            min: 1,
-            max: 1000,
-            step: 1,
-            hint:
-              'Vide : utiliser la limite locale annoncée par le worker (' +
-              node.maxConcurrentTasks +
-              ').',
-          },
-        ],
-        initialValues: {
-          maximum: settings.maxConcurrentTasks == null ? '' : String(settings.maxConcurrentTasks),
-        },
-      });
-      this.actionType.set('processing');
-      this.actionOpen.set(true);
-    } catch {
-      this.notifications.show('Impossible de charger la limite du nœud.');
-    }
+      if (this.processingFormNodeId === node.id) return;
+      this.processingFormNodeId = node.id;
+      this.processingForm.set(this.processingLimitForm(node, settings));
+    });
   }
-  protected async configureNodeSchedule(): Promise<void> {
-    const node = this.rawNode();
-    if (!node || this.removalBusy()) return;
-    try {
-      const settings = await firstValueFrom(this.clusterApi.nodeProcessing(node.id));
-      if (this.rawNode()?.id !== node.id) return;
-      this.processingRevision = settings.revision;
-      this.processingSettings = settings;
-      this.scheduleValue.set(settings.schedule);
-      this.actionType.set('schedule');
-      this.actionOpen.set(true);
-    } catch {
-      this.notifications.show('Impossible de charger le calendrier du nœud.');
-    }
+
+  private processingLimitForm(node: NodeResponse, settings: NodeProcessingSettings): RecordFormData {
+    return {
+      title: 'Limite globale du nœud',
+      description:
+        'Ce plafond concerne toutes ses bibliothèques. Les limites de bibliothèque et les limites par nœud/bibliothèque s’appliquent aussi.',
+      submitLabel: 'Enregistrer',
+      review: false,
+      cancellable: false,
+      fields: [
+        {
+          id: 'maximum',
+          label: 'Fichiers traités simultanément, toutes bibliothèques',
+          type: 'number',
+          min: 1,
+          max: 1000,
+          step: 1,
+          hint:
+            'Vide : utiliser la limite locale annoncée par le worker (' +
+            node.maxConcurrentTasks +
+            ').',
+        },
+      ],
+      initialValues: {
+        maximum: settings.maxConcurrentTasks == null ? '' : String(settings.maxConcurrentTasks),
+      },
+    };
   }
   protected async saveNodeSchedule(schedule: NodeSchedule): Promise<void> {
     const node = this.rawNode();
@@ -335,11 +457,15 @@ export class NodeCatalogPageComponent {
         this.clusterApi.saveNodeProcessing(
           node.id,
           settings.maxConcurrentTasks,
-          this.processingRevision,
+          settings.revision,
           schedule,
         ),
       );
-      this.actionOpen.set(false);
+      this.processingSettings = {
+        ...settings,
+        schedule,
+        revision: settings.revision + 1,
+      };
       this.notifications.show('Calendrier du nœud enregistré.');
     } catch {
       this.notifications.show('Calendrier invalide ou configuration modifiée ailleurs.');
@@ -349,60 +475,114 @@ export class NodeCatalogPageComponent {
   }
   protected async saveNodeProcessing(values: Record<string, string>): Promise<void> {
     const node = this.rawNode();
-    if (!node) return;
+    const settings = this.processingSettings;
+    if (!node || !settings || this.processingBusy()) return;
+    this.processingBusy.set(true);
     try {
       await firstValueFrom(
         this.clusterApi.saveNodeProcessing(
           node.id,
           values['maximum'] ? Number(values['maximum']) : null,
-          this.processingRevision,
-          this.processingSettings!.schedule,
+          settings.revision,
+          settings.schedule,
         ),
       );
-      this.actionOpen.set(false);
+      const maximum = values['maximum'] ? Number(values['maximum']) : null;
+      const updated: NodeProcessingSettings = {
+        ...settings,
+        maxConcurrentTasks: maximum,
+        effectiveMaxConcurrentTasks: maximum ?? node.maxConcurrentTasks,
+        revision: settings.revision + 1,
+      };
+      this.processingSettings = updated;
+      this.processingForm.set(this.processingLimitForm(node, updated));
       this.notifications.show('Limite globale du nœud enregistrée.');
     } catch {
       this.notifications.show('Limite invalide ou configuration modifiée ailleurs.');
+    } finally {
+      this.processingBusy.set(false);
     }
   }
-  protected readonly overviewFields = computed<readonly DetailField[]>(() => {
-    const node = this.rawNode();
-    const activity = this.nodeActivity();
-    if (!node) return [];
-    return [
-      { section: 'Identité et connexion', label: 'Identifiant', value: node.id },
-      {
-        section: 'Identité et connexion',
-        label: 'Dernier signal reçu',
-        value: new Date(node.lastSeenAt).toLocaleString('fr-FR'),
-      },
-      {
-        section: 'Activité du nœud',
-        label: 'Traitements réussis',
-        value: activity?.succeeded ?? 'Indisponible',
-      },
-      { section: 'Activité du nœud', label: 'Échecs', value: activity?.failed ?? 'Indisponible' },
-      {
-        section: 'Activité du nœud',
-        label: 'Annulations',
-        value: activity?.cancelled ?? 'Indisponible',
-      },
-      {
-        section: 'Activité du nœud',
-        label: 'Tâches alimentées par ce nœud',
-        value: activity?.sourceTasks ?? 'Indisponible',
-      },
-      {
-        section: 'Activité du nœud',
-        label: 'Dernière activité',
-        value: activity?.lastActivity
-          ? new Date(activity.lastActivity).toLocaleString('fr-FR')
-          : activity
-            ? 'Aucune activité enregistrée'
-            : 'Indisponible',
-      },
-    ];
-  });
+
+  private async editNodeIdentity(node: NodeRecord): Promise<void> {
+    try {
+      const identity = await firstValueFrom(
+        this.http.get<{
+          displayName: string | null;
+          labels: Readonly<Record<string, string | null>>;
+          effectiveLabels: Readonly<Record<string, string | null>>;
+          groupIds: readonly string[];
+        }>(`/api/v1/nodes/${node.id}/identity`),
+      );
+      if (this.selectedNode()?.id !== node.id) this.selectedNodeTabIndex.set(0);
+      this.selectedNode.set(node);
+      this.identityForm.set({
+        title: 'Nom et étiquettes',
+        description: `Groupes actuels : ${identity.groupIds.length}. Étiquettes effectives : ${
+          Object.entries(identity.effectiveLabels)
+            .map(([key, value]) => (value == null ? key : `${key}=${value}`))
+            .join(', ') || 'aucune'
+        }.`,
+        submitLabel: 'Enregistrer',
+        fields: [
+          { id: 'displayName', label: 'Nom d’affichage', type: 'text', maxLength: 128 },
+          {
+            id: 'labels',
+            label: 'Étiquettes locales',
+            type: 'textarea',
+            hint: 'Une par ligne : gpu=nvidia ou production.',
+          },
+        ],
+        initialValues: {
+          displayName: identity.displayName ?? '',
+          labels: Object.entries(identity.labels)
+            .map(([key, value]) => (value == null ? key : `${key}=${value}`))
+            .join('\n'),
+        },
+      });
+      this.actionType.set('identity');
+      this.actionOpen.set(true);
+    } catch {
+      this.notifications.show('Impossible de charger l’identité du nœud.');
+    }
+  }
+
+  protected async saveNodeIdentity(values: Record<string, string>): Promise<void> {
+    const node = this.selectedNode();
+    if (!node) return;
+    const labels: Record<string, string | null> = {};
+    for (const line of values['labels']
+      .split(/[\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)) {
+      const equals = line.indexOf('=');
+      const key = (equals < 0 ? line : line.slice(0, equals)).trim();
+      if (!/^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/.test(key)) {
+        this.notifications.show('Clé d’étiquette invalide.');
+        return;
+      }
+      labels[key] = equals < 0 ? null : line.slice(equals + 1).trim();
+    }
+    try {
+      await firstValueFrom(
+        this.http.put(`/api/v1/nodes/${node.id}/identity`, {
+          displayName: values['displayName'] || null,
+          labels,
+        }),
+      );
+      this.nodes.update((nodes) =>
+        nodes.map((item) =>
+          item.id === node.id
+            ? { ...item, displayName: values['displayName'] || null, labels }
+            : item,
+        ),
+      );
+      this.actionOpen.set(false);
+      this.notifications.show('Identité du nœud enregistrée.');
+    } catch {
+      this.notifications.show('Les étiquettes ou le nom du nœud sont invalides.');
+    }
+  }
   protected readonly capabilityFields = computed<readonly DetailField[]>(() => {
     const capabilities = this.rawNode()?.capabilities ?? [];
     const tools = capabilities.filter((capability) => !capability.toolId.startsWith('plugin/'));
@@ -421,69 +601,126 @@ export class NodeCatalogPageComponent {
       {
         label: 'Encodeurs vérifiés utilisables',
         value: [
-          ...new Set(tools.flatMap((tool) => tool.encoderChecks ?? [])
-            .filter((check) => check.status === 'usable').map((check) => check.encoderId)),
+          ...new Set(
+            tools
+              .flatMap((tool) => tool.encoderChecks ?? [])
+              .filter((check) => check.status === 'usable')
+              .map((check) => check.encoderId),
+          ),
         ].length,
       },
     ];
   });
-  protected readonly capabilityRows = computed<readonly DataTableRow[]>(() =>
-    (this.rawNode()?.capabilities ?? []).map((tool) => ({
-      id: tool.toolId,
-      name: tool.toolId,
-      version: tool.version,
-      category: tool.toolId.startsWith('plugin/') ? 'Plugin' : 'Outil',
-      media: tool.mediaTypes.join(' · ') || 'Non déclaré',
-      acceleration: tool.accelerationTypes.join(' · ') || 'Aucune déclarée',
-      encoders: tool.encoders
-        ? [...new Set(tool.encoders)].filter((name) => name !== '=').length
-        : 'Non déclarés',
-      verifiedEncoders: tool.encoderChecks
-        ? `${tool.encoderChecks.filter((check) => check.status === 'usable').length} utilisable(s) · ${tool.encoderChecks.filter((check) => check.status === 'detected').length} détecté(s)`
-        : 'Vérification non déclarée',
-    })),
-  );
-  protected readonly capabilityColumns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Outil / Plugin' },
-    { key: 'version', label: 'Version' },
-    { key: 'media', label: 'Médias' },
-    { key: 'acceleration', label: 'Accélération vérifiée' },
-    { key: 'encoders', label: 'Encodeurs' },
-    { key: 'verifiedEncoders', label: 'Encodeurs vérifiés' },
-  ];
-  protected readonly capabilityActions: readonly DataTableRowAction[] = [
-    {
-      id: 'encoders',
-      label: 'Voir les encodeurs',
-      visibleWhen: (row) => Number(row['encoders']) > 0,
-    },
-  ];
-  protected showEncoders(event: DataTableActionEvent): void {
-    const tool = this.rawNode()?.capabilities.find((tool) => tool.toolId === event.row['id']);
-    if (!tool) return;
-    this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: tool.toolId + ' · État des encodeurs',
-        mode: 'information',
-        items: [...new Set(tool.encoders ?? [])]
-          .filter((name) => name !== '=')
-          .sort()
-          .map((name) => {
-            const check = tool.encoderChecks?.find((item) => item.encoderId === name);
+  protected readonly capabilityCards = computed<readonly DetailCard[]>(() =>
+    (this.rawNode()?.capabilities ?? []).map((tool) => {
+      const isPlugin = tool.toolId.startsWith('plugin/');
+      const accelerationTypes = isPlugin
+        ? []
+        : tool.accelerationTypes.filter((value) => value !== 'process');
+      const encoders = [...new Set(tool.encoders ?? [])]
+        .filter((name) => name !== '=')
+        .sort((left, right) => left.localeCompare(right));
+      const checks = new Map((tool.encoderChecks ?? []).map((check) => [check.encoderId, check]));
+      const usableCount =
+        tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
+      const detectedCount =
+        tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
+      const sections: DetailCard['sections'][number][] = [];
+
+      if (accelerationTypes.length) {
+        sections.push({
+          title: 'Accélérations vérifiées',
+          items: accelerationTypes.map((name) => ({
+            label: this.capabilityLabel(name),
+            description: 'Test synthétique réussi',
+            tone: 'success',
+          })),
+        });
+      }
+
+      if (encoders.length) {
+        sections.push({
+          title: 'Encodeurs vidéo détectés',
+          items: encoders.map((name) => {
+            const check = checks.get(name);
             return {
               label: name,
-              detail: check?.status === 'usable'
-                ? 'Vérifié utilisable par un encodage synthétique'
-                : check?.status === 'detected'
-                  ? 'Détecté, mais le test d’encodage n’a pas réussi'
-                  : 'Déclaré par FFmpeg · capacité non vérifiée',
+              description:
+                check?.status === 'usable'
+                  ? 'Utilisable · test réussi'
+                  : check?.status === 'detected'
+                    ? 'Test non concluant'
+                    : 'Détecté · non vérifié',
+              tone: check?.status === 'usable' ? 'success' : check ? 'warning' : 'neutral',
             };
           }),
-        message: 'Les vérifications utilisent une image synthétique et ne lisent aucun média de la bibliothèque.',
-      },
-    });
+        });
+      }
+
+      if (isPlugin) {
+        sections.push({
+          title: 'Plugin',
+          items: [
+            {
+              label: this.capabilityTitle(tool.toolId),
+              description: 'Manifeste lu par le worker',
+              tone: 'accent',
+            },
+          ],
+        });
+      }
+
+      const tags: DetailCard['tags'][number][] = accelerationTypes.map((name) => ({
+        label: `${this.capabilityLabel(name)} utilisable`,
+        tone: 'success',
+      }));
+      if (usableCount)
+        tags.push({ label: `${usableCount} encodeur(s) utilisable(s)`, tone: 'success' });
+      if (detectedCount)
+        tags.push({ label: `${detectedCount} test(s) non concluant(s)`, tone: 'warning' });
+      if (!tags.length)
+        tags.push({ label: isPlugin ? 'Plugin déclaré' : 'Outil détecté', tone: 'neutral' });
+
+      return {
+        id: tool.toolId,
+        title: this.capabilityTitle(tool.toolId),
+        subtitle: `Version ${tool.version} · ${isPlugin ? 'Plugin' : 'Outil'}`,
+        icon: this.capabilityIcon(tool.toolId),
+        status: { label: isPlugin ? 'Déclaré' : 'Détecté', tone: isPlugin ? 'accent' : 'neutral' },
+        tags,
+        sections,
+      };
+    }),
+  );
+
+  private capabilityTitle(toolId: string): string {
+    const pluginName = toolId.startsWith('plugin/') ? toolId.slice('plugin/'.length) : toolId;
+    const labels: Readonly<Record<string, string>> = {
+      ffmpeg: 'FFmpeg',
+      ffprobe: 'FFprobe',
+      mkvtoolnix: 'MKVToolNix',
+      mediainfo: 'MediaInfo',
+      imagemagick: 'ImageMagick',
+      javascript: 'JavaScript',
+      python: 'Python',
+    };
+    return (
+      labels[pluginName] ?? pluginName.charAt(0).toLocaleUpperCase('fr-FR') + pluginName.slice(1)
+    );
+  }
+
+  private capabilityIcon(toolId: string): DetailCardIcon {
+    if (toolId.startsWith('plugin/')) return 'plugin';
+    if (toolId === 'imagemagick') return 'image';
+    if (toolId === 'ffmpeg') return 'video';
+    return 'tool';
+  }
+
+  private capabilityLabel(value: string): string {
+    return value.toLocaleUpperCase('fr-FR');
   }
   protected readonly nodeActions: readonly DataTableRowAction[] = [
+    { id: 'identity', label: 'Nom et étiquettes', visibleWhen: () => this.isAdmin() },
     {
       id: 'delete',
       label: 'Supprimer',
@@ -500,6 +737,11 @@ export class NodeCatalogPageComponent {
     },
   ];
   protected onNodeAction(event: DataTableActionEvent): void {
+    if (event.actionId === 'identity') {
+      const node = this.filteredNodes().find((item) => item.id === event.row['id']);
+      if (node) void this.editNodeIdentity(node);
+      return;
+    }
     if (event.actionId !== 'delete' || this.removalBusy()) return;
     const id = String(event.row['id']);
     this.removalBusy.set(true);
@@ -523,17 +765,17 @@ export class NodeCatalogPageComponent {
     const row = this.selectedNode();
     if (!row || this.removalBusy()) return;
     this.dialog
-      .open(ConfirmationDialogComponent, { data: this.nodeActions[0].confirmation!(row) })
+      .open(ConfirmationDialogComponent, {
+        data: this.nodeActions.find((action) => action.id === 'delete')!.confirmation!(row),
+      })
       .afterClosed()
       .subscribe((confirmed) => {
         if (confirmed) this.onNodeAction({ actionId: 'delete', row });
       });
   }
   protected readonly actionTitle = computed(() =>
-    this.actionType() === 'schedule'
-      ? 'Calendrier du nœud'
-      : this.actionType() === 'processing'
-      ? 'Limite globale du nœud'
+    this.actionType() === 'identity'
+      ? 'Nom et étiquettes du nœud'
       : this.actionType() === 'library-access'
         ? `Accès à ${this.selectedNodeLibrary()?.name ?? 'la bibliothèque'}`
         : this.actionType() === 'create-library'
@@ -541,10 +783,8 @@ export class NodeCatalogPageComponent {
           : this.createFormData.title,
   );
   protected readonly actionDescription = computed(() =>
-    this.actionType() === 'schedule'
-      ? 'Plages horaires pendant lesquelles ce nœud peut démarrer de nouveaux traitements.'
-      : this.actionType() === 'processing'
-      ? 'Plafond simultané, toutes bibliothèques confondues.'
+    this.actionType() === 'identity'
+      ? 'Le nom affiché est distinct du nom envoyé par heartbeat. Les étiquettes locales remplacent celles des groupes.'
       : this.actionType() === 'library-access'
         ? 'Renseignez le chemin local de cette bibliothèque pour ce nœud.'
         : this.actionType() === 'create-library'
@@ -692,6 +932,7 @@ export class NodeCatalogPageComponent {
   );
 
   constructor() {
+    this.installProcessingSettingsEffect();
     this.loadLibraryAccessSummary();
     timer(0, 10_000)
       .pipe(
@@ -866,11 +1107,15 @@ export class NodeCatalogPageComponent {
 
   protected onNodeOpen(row: DataTableRow): void {
     this.selectedNode.set(this.filteredNodes().find((node) => node.id === row['id']) ?? null);
+    this.selectedNodeTabIndex.set(0);
     this.loadNodeLibraries();
   }
 
   protected onDetailClosed(): void {
     this.selectedNode.set(null);
+    this.selectedNodeTabIndex.set(0);
+    this.processingFormNodeId = null;
+    this.processingForm.set(null);
   }
 
   protected nodeAccessOption(node: NodeRecord): LibraryNodeAccessOption {
@@ -1128,7 +1373,7 @@ export class NodeCatalogPageComponent {
     const worker = node.roles.includes('worker');
     return {
       id: node.id,
-      name: node.name,
+      name: node.displayName?.trim() || node.name,
       roleFilter: `|${node.roles.join('|')}|`,
       roleLabel,
       capabilities: capabilityLabels.length

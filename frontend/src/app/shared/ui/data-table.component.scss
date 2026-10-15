@@ -112,6 +112,10 @@
   border-bottom: 0;
 }
 
+.data-table .detail-row .mat-mdc-cell {
+  border-bottom: 0;
+}
+
 .selection-cell {
   width: 48px;
 }
@@ -226,6 +230,15 @@
     content: attr(data-label);
     font-size: 14px;
     font-weight: 650;
+  }
+
+  .data-table .detail-row {
+    margin: -12px 12px 12px;
+  }
+
+  .data-table .detail-row .mat-mdc-cell {
+    grid-column: 1 / -1;
+    min-height: 0;
   }
 
   .data-table .selection-cell {

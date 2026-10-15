@@ -27,39 +27,40 @@
     emptyMessage="Aucun plugin ne correspond à cette famille."
   />
 
-  <ng-template #integrationSection>
-    <app-flow-component-list [components]="selectedComponents()" />
-  </ng-template>
-  <ng-template #configurationSection>
-    @if (configurationSchema(); as schema) {
-      <div class="plugin-configuration-section">
-        <h3>Configuration globale par défaut</h3>
-        <p>
-          Ces valeurs sont partagées par le cluster. Un flow peut définir ses propres dérogations.
-        </p>
-      </div>
-      <app-component-configuration-form
-        [schema]="schema"
-        [values]="configurationValues()"
-        [configuredSecrets]="configuredSecrets()"
-        [showConnectionTest]="selectedPlugin()?.id !== 'nodes'"
-        [connectionTestBusy]="connectionTestBusy()"
-        [connectionTestMessage]="connectionTestMessage()"
-        [connectionTestSuccess]="connectionTestSuccess()"
-        [submitLabel]="configurationBusy() ? 'Enregistrement…' : 'Enregistrer'"
-        (savedWithSecrets)="saveConfiguration($event.values, $event.clearSecrets)"
-        (connectionTestRequested)="testConnection($event)"
-        (cancelled)="onConfigurationCancelled()"
-      />
-    }
-  </ng-template>
-
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list
-      [fields]="detailFields()"
-      [tabbed]="true"
-      tabsLabel="Sections du plugin"
-      [sectionTemplates]="sectionTemplates()"
+    <app-detail-card-grid
+      [cards]="pluginCards()"
+      ariaLabel="Résumé du plugin"
+      emptyMessage="Aucune information disponible pour ce plugin."
     />
+    <mat-tab-group class="plugin-detail-tabs" aria-label="Détails du plugin">
+      <mat-tab label="Composants">
+        <app-flow-component-list [components]="selectedComponents()" />
+      </mat-tab>
+      @if (configurationSchema(); as schema) {
+        <mat-tab label="Configuration">
+          <div class="plugin-configuration-section">
+            <h3>Configuration globale par défaut</h3>
+            <p>
+              Ces valeurs sont partagées par le cluster. Un flow peut définir ses propres
+              dérogations.
+            </p>
+          </div>
+          <app-component-configuration-form
+            [schema]="schema"
+            [values]="configurationValues()"
+            [configuredSecrets]="configuredSecrets()"
+            [showConnectionTest]="selectedPlugin()?.id !== 'nodes'"
+            [connectionTestBusy]="connectionTestBusy()"
+            [connectionTestMessage]="connectionTestMessage()"
+            [connectionTestSuccess]="connectionTestSuccess()"
+            [submitLabel]="configurationBusy() ? 'Enregistrement…' : 'Enregistrer'"
+            (savedWithSecrets)="saveConfiguration($event.values, $event.clearSecrets)"
+            (connectionTestRequested)="testConnection($event)"
+            (cancelled)="onConfigurationCancelled()"
+          />
+        </mat-tab>
+      }
+    </mat-tab-group>
   </ng-template>
 </app-management-catalog-template>

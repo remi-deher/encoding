@@ -103,10 +103,25 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                         Issue("field.invalid", path + "/configuration/encoderId", "L’encodeur précis doit posséder un réglage dans le profil et produire le codec choisi.");
                 }
             }
-            if (node.Component!.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node"
-                && (!node.Configuration.TryGetValue("targetNodeId", out var targetNode)
-                    || targetNode.ValueKind != JsonValueKind.String || !Guid.TryParse(targetNode.GetString(), out _)))
-                Issue("field.invalid", path + "/configuration/targetNodeId", "Un identifiant de nœud valide est obligatoire.");
+            if (node.Component!.PluginId == "nodes" && node.Component.ComponentId == "nodes-run-on-node")
+            {
+                var exact = node.Configuration.TryGetValue("targetNodeId", out var targetNode)
+                    && targetNode.ValueKind == JsonValueKind.String && Guid.TryParse(targetNode.GetString(), out _);
+                var group = node.Configuration.TryGetValue("targetGroupId", out var targetGroup)
+                    && targetGroup.ValueKind == JsonValueKind.String && Guid.TryParse(targetGroup.GetString(), out _);
+                var labels = node.Configuration.TryGetValue("requiredLabels", out var labelSelector)
+                    && labelSelector.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(labelSelector.GetString());
+                if (!exact && !group && !labels)
+                    Issue("field.invalid", path + "/configuration", "Définissez un nœud, un groupe ou au moins une étiquette requise.");
+                if (node.Configuration.ContainsKey("targetNodeId") && !exact)
+                    Issue("field.invalid", path + "/configuration/targetNodeId", "L’identifiant du nœud doit être un UUID valide.");
+                if (node.Configuration.ContainsKey("targetGroupId") && !group)
+                    Issue("field.invalid", path + "/configuration/targetGroupId", "L’identifiant du groupe doit être un UUID valide.");
+                if (node.Configuration.TryGetValue("requiredLabels", out labelSelector)
+                    && (labelSelector.ValueKind != JsonValueKind.String
+                        || !string.IsNullOrWhiteSpace(labelSelector.GetString()) && !Encoding.Contracts.Nodes.NodeLabelSelector.IsValid(labelSelector.GetString())))
+                    Issue("field.invalid", path + "/configuration/requiredLabels", "Utilisez au plus 64 étiquettes sous la forme clé ou clé=valeur.");
+            }
             if (node.Component.PluginId == "nodes" && node.Component.ComponentId == "nodes-require-capability"
                 && node.Configuration.TryGetValue("minimumVersion", out var minimumVersion)
                 && minimumVersion.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(minimumVersion.GetString())
@@ -204,7 +219,8 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             {
                 var targets=RuntimeHandoffPolicy.Segment(flow,entry)
                     .Where(node=>node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node")
-                    .Select(node=>node.Configuration["targetNodeId"].GetString()).Distinct().ToArray();
+                    .Select(node=>string.Join('|', new[] { "targetNodeId", "targetGroupId", "requiredLabels" }
+                        .Where(key=>node.Configuration.ContainsKey(key)).Select(key=>key+"="+node.Configuration[key].GetRawText()))).Distinct().ToArray();
                 if(targets.Length>1) Issue("node.constraint.conflict","/nodes","Les contraintes d'un segment entre deux relais doivent cibler le même worker.");
             }
         }
@@ -215,6 +231,16 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             if(node.Configuration?.TryGetValue("targetNodeId",out var target)==true && target.ValueKind==JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(target.GetString()) && (!Guid.TryParse(target.GetString(),out var targetId) || targetId==Guid.Empty))
                 Issue("field.invalid","/nodes/"+node.Id+"/configuration/targetNodeId","Utilisez un identifiant de worker valide.");
+            if(node.Configuration is not null && node.Configuration.TryGetValue("mode",out var relayMode)
+                && relayMode.ValueKind==JsonValueKind.String && relayMode.GetString()=="selector")
+            {
+                if(node.Configuration.TryGetValue("targetGroupId",out var targetGroup)
+                    && (targetGroup.ValueKind!=JsonValueKind.String || !string.IsNullOrWhiteSpace(targetGroup.GetString())
+                        && (!Guid.TryParse(targetGroup.GetString(),out var targetGroupId) || targetGroupId==Guid.Empty)))
+                    Issue("field.invalid","/nodes/"+node.Id+"/configuration/targetGroupId","Utilisez un identifiant de groupe valide.");
+                try { _=RuntimeHandoffPolicy.Resolve(node,null); }
+                catch(ArgumentException exception) { Issue("field.invalid","/nodes/"+node.Id+"/configuration",exception.Message); }
+            }
         }
         foreach(var node in flow.Nodes.Where(node=>node?.Component is not null && node.Configuration is not null && RuntimeWaitPolicy.IsWait(node)))
         {

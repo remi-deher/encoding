@@ -5,6 +5,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { NodeGroupResponse } from '../models/cluster';
 import { LibraryNodeAccessMode, LibraryNodeAccessResponse } from './library-node-access-types';
 
 export interface LibraryNodeAccessOption {
@@ -52,8 +53,45 @@ interface NodeAccessControls {
 
         @if (!reviewing()) {
           <form [formGroup]="form" (ngSubmit)="review()">
+            @if (setupMode()) {
+              <section class="node-selection" aria-labelledby="node-selection-title">
+                <h3 id="node-selection-title">Nœuds qui ont accès aux fichiers</h3>
+                <mat-form-field appearance="outline">
+                  <mat-label>Mode de sélection</mat-label>
+                  <mat-select [value]="selectionMode()" (selectionChange)="selectionMode.set($event.value)">
+                    <mat-option value="automatic">Automatique</mat-option>
+                    <mat-option value="nodes">Sélectionner des nœuds</mat-option>
+                    <mat-option value="groups">Sélectionner des groupes de nœuds</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                @if (selectionMode() === 'automatic') {
+                  <p class="mode-help">Les nœuds déjà configurés en accès direct à une autre bibliothèque sont sélectionnés automatiquement ({{ selectedNodes().length }}).</p>
+                } @else if (selectionMode() === 'nodes') {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Nœuds sélectionnés</mat-label>
+                    <mat-select multiple [value]="selectedNodeIds()" (selectionChange)="selectedNodeIds.set($event.value)">
+                      @for (node of nodes(); track node.id) {
+                        <mat-option [value]="node.id">{{ node.name }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                } @else {
+                  <mat-form-field appearance="outline">
+                    <mat-label>Groupes sélectionnés</mat-label>
+                    <mat-select multiple [value]="selectedGroupIds()" (selectionChange)="selectedGroupIds.set($event.value)">
+                      @for (group of groups(); track group.id) {
+                        <mat-option [value]="group.id">{{ group.name }} ({{ group.nodeIds.length }} nœud(s))</mat-option>
+                      }
+                    </mat-select>
+                    @if (!groups().length) {
+                      <mat-hint>Aucun groupe n’est encore créé. Créez-en dans la section « Groupes de nœuds ».</mat-hint>
+                    }
+                  </mat-form-field>
+                }
+              </section>
+            }
             <div class="node-access-list">
-              @for (node of nodes(); track node.id) {
+              @for (node of selectedNodes(); track node.id) {
                 @let controls = form.controls[node.id];
                 <section class="node-access-card" [formGroup]="controls" [attr.aria-label]="'Accès de ' + node.name">
                   <header class="node-heading">
@@ -61,14 +99,18 @@ interface NodeAccessControls {
                     <span class="current-access">{{ currentSummary(node.id) }}</span>
                   </header>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Comment ce nœud accède-t-il aux fichiers ?</mat-label>
-                    <mat-select formControlName="mode" (selectionChange)="onModeChange(node.id, $event.value)">
-                      <mat-option value="direct">Il lit les fichiers sur son stockage</mat-option>
-                      <mat-option value="transfer" [disabled]="!node.roles.includes('worker')">Un autre nœud lui transfère une copie</mat-option>
-                      <mat-option value="unsupported">Ne pas utiliser ce nœud</mat-option>
-                    </mat-select>
-                  </mat-form-field>
+                  @if (controls.controls.mode.value === 'unsupported') {
+                    <p class="mode-help">Aucun accès n’est configuré pour ce nœud.</p>
+                    <button matButton="outlined" type="button" (click)="onModeChange(node.id, 'direct')">Configurer l’accès</button>
+                  } @else {
+                    <mat-form-field appearance="outline">
+                      <mat-label>Comment ce nœud accède-t-il aux fichiers ?</mat-label>
+                      <mat-select formControlName="mode" (selectionChange)="onModeChange(node.id, $event.value)">
+                        <mat-option value="direct">Le nœud a accès au fichier</mat-option>
+                        <mat-option value="transfer" [disabled]="!node.roles.includes('worker')">Un autre nœud ou groupe lui transfère les copies</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                  }
 
                   @if (controls.controls.mode.value !== 'unsupported') {
                     <mat-checkbox formControlName="isEnabled">Autoriser ce nœud à recevoir des tâches</mat-checkbox>
@@ -115,7 +157,7 @@ interface NodeAccessControls {
               <p>Comparez la configuration actuelle avec les choix proposés. Les modifications s’appliqueront à tous les nœuds listés.</p>
             </div>
             <div class="review-list">
-              @for (node of nodes(); track node.id) {
+              @for (node of selectedNodes(); track node.id) {
                 <article class="review-row">
                   <strong>{{ node.name }}</strong>
                   <div><span>Actuellement</span><p>{{ currentSummary(node.id) }}</p></div>
@@ -134,6 +176,8 @@ interface NodeAccessControls {
   `,
   styles: `
     .access-form { display: grid; gap: 18px; }
+    .node-selection { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-muted); }
+    .node-selection h3 { margin: 0; color: var(--text-primary); font-size: 13px; }
     .access-context { display: grid; gap: 7px; }
     .access-context p { margin: 0; color: var(--text-secondary); line-height: 1.5; }
     .step-label { color: var(--accent); font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
@@ -168,15 +212,21 @@ export class LibraryNodeAccessFormComponent implements OnInit {
   readonly libraryName = input.required<string>();
   readonly setupMode = input(false);
   readonly nodes = input.required<readonly LibraryNodeAccessOption[]>();
+  readonly groups = input<readonly NodeGroupResponse[]>([]);
+  readonly automaticallySelectedNodeIds = input<readonly string[]>([]);
   readonly initialAccesses = input<readonly LibraryNodeAccessResponse[]>([]);
   readonly busy = input(false);
   readonly saved = output<readonly LibraryNodeAccessValue[]>();
   readonly cancelled = output<void>();
   protected readonly form = new FormRecord<FormGroup<NodeAccessControls>>({});
   protected readonly reviewing = signal(false);
+  protected readonly selectionMode = signal<'automatic' | 'nodes' | 'groups'>('automatic');
+  protected readonly selectedNodeIds = signal<readonly string[]>([]);
+  protected readonly selectedGroupIds = signal<readonly string[]>([]);
   private readonly currentAccesses = new Map<string, LibraryNodeAccessResponse>();
   protected canSave(): boolean {
-    return this.nodes().length > 0 && this.nodes().every((node) => {
+    const selectedNodes = this.selectedNodes();
+    return selectedNodes.length > 0 && selectedNodes.every((node) => {
     const controls = this.form.controls[node.id]?.controls;
     if (!controls) return false;
       const mode = controls.mode.value;
@@ -188,12 +238,27 @@ export class LibraryNodeAccessFormComponent implements OnInit {
     });
   }
 
+  protected selectedNodes(): readonly LibraryNodeAccessOption[] {
+    const nodeIds = this.setupMode()
+      ? this.selectionMode() === 'automatic'
+        ? new Set(this.automaticallySelectedNodeIds())
+        : this.selectionMode() === 'nodes'
+          ? new Set(this.selectedNodeIds())
+          : new Set(
+              this.groups()
+                .filter((group) => this.selectedGroupIds().includes(group.id))
+                .flatMap((group) => group.nodeIds),
+            )
+      : new Set(this.nodes().map((node) => node.id));
+    return this.nodes().filter((node) => nodeIds.has(node.id));
+  }
+
   ngOnInit(): void {
     for (const access of this.initialAccesses()) this.currentAccesses.set(access.nodeId, access);
     for (const node of this.nodes()) {
       const access = this.currentAccesses.get(node.id);
       this.form.addControl(node.id, new FormGroup<NodeAccessControls>({
-        mode: new FormControl(access?.mode ?? 'unsupported', { nonNullable: true }),
+        mode: new FormControl(access?.mode ?? (this.setupMode() ? 'direct' : 'unsupported'), { nonNullable: true }),
         isEnabled: new FormControl(access?.isEnabled ?? access?.mode !== 'unsupported', { nonNullable: true }),
         localPath: new FormControl(access?.localPath ?? '', { nonNullable: true }),
         canRead: new FormControl(access?.mode === 'direct' ? access.canRead : false, { nonNullable: true }),
@@ -204,7 +269,7 @@ export class LibraryNodeAccessFormComponent implements OnInit {
   }
 
   protected transferSources(targetNodeId: string): readonly LibraryNodeAccessOption[] {
-    return this.nodes().filter((node) => {
+    return this.selectedNodes().filter((node) => {
       if (node.id === targetNodeId) return false;
       const source = this.form.controls[node.id]?.controls;
       return !!source && source.mode.value === 'direct' && !!source.localPath.value.trim() && source.canRead.value && source.canWrite.value;
@@ -249,7 +314,7 @@ export class LibraryNodeAccessFormComponent implements OnInit {
 
   protected save(): void {
     if (!this.canSave()) return;
-    const values = this.nodes().map((node): LibraryNodeAccessValue => {
+    const values = this.selectedNodes().map((node): LibraryNodeAccessValue => {
       const controls = this.form.controls[node.id].controls;
       const mode = controls.mode.value;
       return {

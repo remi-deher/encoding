@@ -29,6 +29,12 @@
   padding: 12px 0;
 }
 
+.library-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .library-execution-cards {
   display: grid;
   gap: 10px;

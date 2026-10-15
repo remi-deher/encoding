@@ -16,7 +16,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             && (c.Version==node.Component.PluginVersion || c.Version==registry.RuntimePluginVersion(node.Component)));
     }
 
-    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null)
+    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null)
     {
         if(!validator.Validate(flow).IsValid) return false;
         var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
@@ -27,9 +27,15 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
         {
             if(!capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId && (c.Version==node.Component.PluginVersion
                 || c.Version==registry.RuntimePluginVersion(node.Component)))) return false;
-            if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node"
-                && (!node.Configuration.TryGetValue("targetNodeId",out var target) || target.ValueKind!=System.Text.Json.JsonValueKind.String
-                    || !Guid.TryParse(target.GetString(),out var targetId) || targetId!=workerId)) return false;
+            if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node")
+            {
+                if(node.Configuration.TryGetValue("targetNodeId",out var target) && target.ValueKind==System.Text.Json.JsonValueKind.String
+                    && Guid.TryParse(target.GetString(),out var targetId) && targetId!=workerId) return false;
+                if(node.Configuration.TryGetValue("targetGroupId",out var group) && group.ValueKind==System.Text.Json.JsonValueKind.String
+                    && (!Guid.TryParse(group.GetString(),out var groupId) || identity is null || !identity.GroupIds.Contains(groupId))) return false;
+                if(node.Configuration.TryGetValue("requiredLabels",out var labels) && labels.ValueKind==System.Text.Json.JsonValueKind.String
+                    && !Encoding.Contracts.Nodes.NodeLabelSelector.Matches(labels.GetString(),identity?.EffectiveLabels)) return false;
+            }
             if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-require-capability")
             {
                 var toolId=node.Configuration.TryGetValue("toolId",out var requestedTool)?requestedTool.GetString():null;
@@ -75,4 +81,5 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
         // Every media execution records a source scan before completion, even if no transformation is selected.
         return capabilities.Any(c=>c.ToolId=="ffprobe");
     }
+
 }

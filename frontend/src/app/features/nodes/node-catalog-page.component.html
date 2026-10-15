@@ -14,6 +14,7 @@
   note="L’état et les capacités proviennent du dernier signal reçu. Le statut en ligne est calculé par le cluster."
 >
   <ng-template #pageActions>
+    <a matButton="outlined" routerLink="/node-groups">Groupes de nœuds</a>
     <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
   </ng-template>
 
@@ -40,42 +41,76 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <mat-tab-group class="node-detail-tabs" aria-label="Sections du nœud">
+    <mat-tab-group
+      class="node-detail-tabs"
+      aria-label="Sections du nœud"
+      [selectedIndex]="selectedNodeTabIndex()"
+      (selectedIndexChange)="selectedNodeTabIndex.set($event)"
+    >
       <mat-tab label="Général">
-        <app-detail-field-list [fields]="summaryFields()" layout="cards" />
-        <app-detail-field-list [fields]="overviewFields()" />
+        <app-detail-card-grid
+          [cards]="generalCards()"
+          [initiallyExpanded]="true"
+          [collapsible]="false"
+          ariaLabel="Informations générales du nœud"
+          emptyMessage="Aucune information générale disponible pour ce nœud."
+        />
       </mat-tab>
       @if (rawNode()?.roles?.includes('worker')) {
         <mat-tab label="Traitement">
           <div class="node-processing-tab">
-            <app-detail-field-list [fields]="processingFields()" layout="cards" />
+            <app-detail-card-grid
+              [cards]="processingCards()"
+              [initiallyExpanded]="true"
+              [collapsible]="false"
+              [cardContentTemplates]="{
+                'node-processing-limit': processingLimitContent,
+                'node-processing-calendar': processingCalendarContent,
+              }"
+              ariaLabel="Réglages de traitement du nœud"
+            />
             <p class="node-tab-note">
               Les plafonds de bibliothèque et de couple nœud et bibliothèque s’appliquent aussi.
               Hors des plages du calendrier, aucun nouveau traitement ne démarre ; ceux en cours ne
               sont pas interrompus.
             </p>
-            <div class="node-tab-actions">
-              <app-drawer-action-button
-                label="Modifier la limite globale"
-                (activated)="configureNodeProcessing()"
-              />
-              <app-drawer-action-button
-                label="Modifier le calendrier"
-                (activated)="configureNodeSchedule()"
-              />
-            </div>
           </div>
+          <ng-template #processingLimitContent>
+            @if (processingForm(); as form) {
+              <app-record-form
+                [data]="form"
+                [busy]="processingBusy()"
+                (submitted)="saveNodeProcessing($event)"
+              />
+            } @else {
+              <p role="status">Chargement de la limite du nœud…</p>
+            }
+          </ng-template>
+          <ng-template #processingCalendarContent>
+            @if (nodeProcessingState(); as settings) {
+              <app-weekly-schedule-form
+                [schedule]="settings.schedule"
+                [busy]="scheduleBusy()"
+                (saved)="saveNodeSchedule($event)"
+              />
+            } @else {
+              <p role="status">Chargement du calendrier…</p>
+            }
+          </ng-template>
         </mat-tab>
       }
       <mat-tab label="Capacités">
         <app-detail-field-list [fields]="capabilityFields()" layout="cards" />
-        <app-data-table
-          [columns]="capabilityColumns"
-          [rows]="capabilityRows()"
-          [rowActions]="capabilityActions"
-          (rowAction)="showEncoders($event)"
+        <app-detail-card-grid
+          [cards]="capabilityCards()"
+          [initiallyExpanded]="false"
+          ariaLabel="Outils et capacités de traitement"
           emptyMessage="Aucune capacité déclarée par ce nœud."
         />
+        <p class="node-tab-note capability-note">
+          Les encodeurs « utilisables » ont réussi un test synthétique ; les bibliothèques, limites
+          et règles d’attribution déterminent aussi l’éligibilité à une tâche.
+        </p>
       </mat-tab>
       <mat-tab label="Bibliothèques">
         @if (selectedNode(); as node) {
@@ -157,20 +192,11 @@
     </mat-tab-group>
   </ng-template>
   <ng-template #actionContent>
-    @if (actionType() === 'schedule') {
-      @if (scheduleValue(); as schedule) {
-        <app-weekly-schedule-form
-          [schedule]="schedule"
-          [busy]="scheduleBusy()"
-          (saved)="saveNodeSchedule($event)"
-          (cancelled)="closeCreateNode()"
-        />
-      }
-    } @else if (actionType() === 'processing') {
-      @if (processingForm(); as form) {
+    @if (actionType() === 'identity') {
+      @if (identityForm(); as form) {
         <app-record-form
           [data]="form"
-          (submitted)="saveNodeProcessing($event)"
+          (submitted)="saveNodeIdentity($event)"
           (cancelled)="closeCreateNode()"
         />
       }

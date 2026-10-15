@@ -32,7 +32,11 @@ export interface DetailField {
         }
       </mat-tab-group>
     } @else {
-      <dl class="detail-field-list" [class.detail-field-list_cards]="layout() === 'cards'">
+      <dl
+        class="detail-field-list"
+        [class.detail-field-list_cards]="layout() === 'cards' || layout() === 'horizontal-cards'"
+        [class.detail-field-list_horizontal-cards]="layout() === 'horizontal-cards'"
+      >
         @for (section of sections(); track section.title) {
           <section class="detail-section">
             @if (section.title) {
@@ -55,6 +59,25 @@ export interface DetailField {
     }
     .detail-field-list.detail-field-list_cards {
       margin-bottom: 24px;
+    }
+    .detail-field-list_horizontal-cards {
+      display: flex;
+      align-items: stretch;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 2px 2px 12px;
+      scrollbar-gutter: stable;
+      overscroll-behavior-inline: contain;
+    }
+    .detail-field-list_horizontal-cards .detail-section {
+      display: contents;
+    }
+    .detail-field-list_horizontal-cards .detail-section h3 {
+      flex: 0 0 100%;
+    }
+    .detail-field-list_horizontal-cards .detail-section > div {
+      min-width: 260px;
+      flex: 0 0 min(360px, 78vw);
     }
     .detail-field-list_cards .detail-section {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -140,7 +163,7 @@ export interface DetailField {
 })
 export class DetailFieldListComponent {
   readonly fields = input.required<readonly DetailField[]>();
-  readonly layout = input<'list' | 'cards'>('list');
+  readonly layout = input<'list' | 'cards' | 'horizontal-cards'>('list');
   readonly tabbed = input(false);
   readonly tabsLabel = input('Sections du détail');
   readonly sectionTemplates = input<Readonly<Record<string, TemplateRef<unknown>>>>({});

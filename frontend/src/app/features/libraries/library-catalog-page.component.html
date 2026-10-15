@@ -40,91 +40,110 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list
-      [fields]="detailFields()"
-      [tabbed]="true"
-      tabsLabel="Sections de la bibliothèque"
-    />
-    @if (selectedLibrary()) {
-      <h3>Fichiers détectés</h3>
-      <app-data-table
-        [columns]="mediaColumns"
-        [rows]="mediaRows()"
-        [selectable]="true"
-        [listActions]="mediaListActions"
-        [rowActions]="mediaRowActions"
-        [selectionActions]="mediaSelectionActions"
-        (listAction)="discoverFiles()"
-        (rowAction)="processFiles([$event.row['id'].toString()])"
-        (selectionAction)="onMediaSelection($event)"
-        emptyMessage="Aucun fichier détecté. Attribuez un flow puis lancez la découverte."
-      />
-
-      <h3>Exécutions récentes</h3>
-      @if (executionTrackingState().status === 'error') {
-        <p role="status">Actualisation des exécutions impossible.</p>
-      }
-      <div class="library-execution-cards">
-        @for (execution of libraryExecutions(); track execution.id) {
-          <app-execution-card
-            [execution]="execution"
-            [showPipelineAction]="true"
-            (pipelineRequested)="onProcessingExecutionAction(execution.id)"
+    <mat-tab-group
+      class="library-detail-tabs"
+      aria-label="Sections de la bibliothèque"
+      [selectedIndex]="selectedLibraryTabIndex()"
+      (selectedIndexChange)="selectedLibraryTabIndex.set($event)"
+    >
+      <mat-tab label="Général">
+        <app-detail-card-grid
+          [cards]="libraryCards()"
+          [initiallyExpanded]="true"
+          [collapsible]="false"
+          [cardContentTemplates]="{ 'library-processing': libraryProcessingCardContent }"
+          ariaLabel="Accès, traitement et activité de la bibliothèque"
+          emptyMessage="Aucune information disponible pour cette bibliothèque."
+        />
+        <ng-template #libraryProcessingCardContent>
+          <div class="library-card-actions">
+            <app-drawer-action-button label="Attribuer un flow" (activated)="assignFlow()" />
+            <app-drawer-action-button
+              label="Surveillance et limites"
+              (activated)="configureProcessing()"
+            />
+          </div>
+        </ng-template>
+        @if (selectedLibrary()) {
+          <h3>Fichiers détectés</h3>
+          <app-data-table
+            [columns]="mediaColumns"
+            [rows]="mediaRows()"
+            [selectable]="true"
+            [listActions]="mediaListActions"
+            [rowActions]="mediaRowActions"
+            [selectionActions]="mediaSelectionActions"
+            (listAction)="discoverFiles()"
+            (rowAction)="processFiles([$event.row['id'].toString()])"
+            (selectionAction)="onMediaSelection($event)"
+            emptyMessage="Aucun fichier détecté. Attribuez un flow puis lancez la découverte."
           />
-        } @empty {
-          <p>Aucune exécution récente pour cette bibliothèque.</p>
-        }
-      </div>
-      @if (selectedProcessingExecutionId(); as executionId) {
-        <app-execution-pipeline-logs
-          [executionId]="executionId"
-          [steps]="processingPipelineState().steps"
-          [feedback]="processingPipelineState().message"
-        />
-      }
 
-      <section class="library-access-summary" aria-labelledby="library-access-heading">
-        <div>
-          <h3 id="library-access-heading">Nœuds autorisés par le serveur</h3>
-          <p>{{ accessStatus() }}</p>
-        </div>
-        <button
-          matButton="outlined"
-          type="button"
-          [disabled]="selectedAccessesLoading()"
-          (click)="showLibraryNodes()"
-        >
-          {{ selectedAccessesLoading() ? 'Chargement des nœuds…' : 'Voir les nœuds' }}
-        </button>
-      </section>
-      @if (selectedAccesses().length) {
-        <app-data-table
-          [columns]="accessColumns"
-          [rows]="accessRows()"
-          [rowActions]="accessRowActions"
-          [separateRowActionColumns]="true"
-          (rowAction)="onAccessRowAction($event)"
-          (toggleChange)="onAccessToggle($event)"
-          emptyMessage="Aucun accès configuré."
-        />
-      } @else {
-        <p class="library-access-empty">
-          Aucun nœud n’a encore accès à cette bibliothèque. Elle ne sera pas traitée tant qu’un
-          accès n’est pas configuré.
-        </p>
-      }
-    }
+          <section class="library-access-summary" aria-labelledby="library-access-heading">
+            <div>
+              <h3 id="library-access-heading">Nœuds autorisés par le serveur</h3>
+              <p>{{ accessStatus() }}</p>
+            </div>
+            <button
+              matButton="outlined"
+              type="button"
+              [disabled]="selectedAccessesLoading() || accessFormLoading() || accessFormBusy()"
+              (click)="configureAccesses()"
+            >
+              Modifier les accès
+            </button>
+          </section>
+          @if (selectedAccesses().length) {
+            <app-data-table
+              [columns]="accessColumns"
+              [rows]="accessRows()"
+              [rowActions]="accessRowActions"
+              [separateRowActionColumns]="true"
+              (rowAction)="onAccessRowAction($event)"
+              (toggleChange)="onAccessToggle($event)"
+              emptyMessage="Aucun accès configuré."
+            />
+          } @else {
+            <p class="library-access-empty">
+              Aucun nœud n’a encore accès à cette bibliothèque. Elle ne sera pas traitée tant qu’un
+              accès n’est pas configuré.
+            </p>
+          }
+        }
+      </mat-tab>
+      <mat-tab label="Historique">
+        @if (selectedLibrary()) {
+          <h3>Historique des exécutions</h3>
+          @if (executionTrackingState().status === 'error') {
+            <p role="status">Actualisation des exécutions impossible.</p>
+          }
+          <div class="library-execution-cards">
+            @for (execution of libraryExecutions(); track execution.id) {
+              <app-execution-card
+                [execution]="execution"
+                [showPipelineAction]="true"
+                (pipelineRequested)="onProcessingExecutionAction(execution.id)"
+              />
+            } @empty {
+              <p>Aucune exécution récente pour cette bibliothèque.</p>
+            }
+          </div>
+          @if (selectedProcessingExecutionId(); as executionId) {
+            <app-execution-pipeline-logs
+              [executionId]="executionId"
+              [steps]="processingPipelineState().steps"
+              [feedback]="processingPipelineState().message"
+            />
+          }
+        }
+      </mat-tab>
+    </mat-tab-group>
   </ng-template>
 
   <ng-template #detailHeaderActions>
-    @if (selectedLibrary(); as library) {
+    @if (selectedLibrary()) {
       <app-drawer-action-button
-        label="Surveillance et limites"
-        (activated)="configureProcessing()"
-      />
-      <app-drawer-action-button label="Attribuer un flow" (activated)="assignFlow()" />
-      <app-drawer-action-button
-        [label]="library.configuredNodeCount ? 'Modifier les accès' : 'Configurer les accès'"
+        label="Attribuer un nœud / groupe"
         (activated)="configureAccesses()"
       />
     }
@@ -168,6 +187,8 @@
         [libraryName]="selectedLibrary()?.name ?? ''"
         [setupMode]="accessSetupMode()"
         [nodes]="accessNodes()"
+        [groups]="accessNodeGroups()"
+        [automaticallySelectedNodeIds]="automaticallySelectedAccessNodeIds()"
         [initialAccesses]="initialAccesses()"
         [busy]="accessFormBusy()"
         (saved)="configureLibraryAccess($event)"

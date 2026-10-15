@@ -128,7 +128,7 @@ internal static partial class Harness
             await DatabaseMigrator.ApplyAsync(db,RepositoryRoot(),CancellationToken.None);
             var config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Runtime:ArtifactDirectory"]=Path.Combine(directory,"durable") }).Build();
             configurations=new(db,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
-            runtime=new(db,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),configurations);
+            runtime=new(db,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),configurations,new NodeGroupRepository(db));
             artifacts=new(db,config); executions=new(db);
             foreach(var id in new[]{a,b,c})
             {
@@ -173,6 +173,31 @@ internal static partial class Harness
             var importId=Guid.NewGuid(); var imported=flow with { Id=importId };
             Check(await repository.SaveManyAsync([new(0,imported),new(1,imported with {Version=2})],false,CancellationToken.None)
                 && (await repository.VersionsAsync(importId,CancellationToken.None)).Count==2,"Archive imports preserve historical versions even with identical contents.");
+        }
+
+        public async Task NodeGroupsAndLabelsAsync()
+        {
+            var groups = new NodeGroupRepository(db);
+            await using (var inventory = db.CreateCommand("UPDATE cluster_nodes SET inventory=@inventory WHERE id=@id"))
+            {
+                inventory.Parameters.AddWithValue("id", a);
+                inventory.Parameters.AddWithValue("inventory", NpgsqlDbType.Jsonb, JsonSerializer.Serialize(new NodeInventory("Linux", "X64", 8, 32768), Json));
+                await inventory.ExecuteNonQueryAsync();
+            }
+            var manual = new SaveNodeGroupRequest("Production", "Workers média", NodeGroupMode.Manual, new(),
+                new Dictionary<string,string?> { ["zone"]="group", ["gpu"]="nvidia" }, [a,b]);
+            Check(await groups.SaveAsync(null, manual, CancellationToken.None), "A manual group is saved.");
+            var automatic = new SaveNodeGroupRequest("Workers RAM", "Au moins 8 Go", NodeGroupMode.Automatic,
+                new NodeGroupCriteria([NodeRole.Worker], MinimumMemoryMb: 8192), new Dictionary<string,string?> { ["zone"]="auto", ["memory"]="large" }, []);
+            Check(await groups.SaveAsync(null, automatic, CancellationToken.None), "An automatic group is saved.");
+            var identityRepository = new NodeGroupRepository(db);
+            Check(await identityRepository.SaveNodeIdentityAsync(a, new("Transcode A", new Dictionary<string,string?> { ["zone"]="local" }), CancellationToken.None), "Node labels are saved.");
+            var identity = await identityRepository.GetNodeIdentityAsync(a, CancellationToken.None);
+            Check(identity is not null && identity.GroupIds.Count == 2, "Manual and automatic membership are both resolved.");
+            Check(identity!.EffectiveLabels["zone"] == "local" && identity.EffectiveLabels["gpu"] == "nvidia" && identity.EffectiveLabels["memory"] == "large", "Node labels override group labels and inherit the remaining group labels.");
+            Check(Encoding.Contracts.Nodes.NodeLabelSelector.Matches("gpu=nvidia,memory=large", identity.EffectiveLabels), "Combined group and label selectors match effective labels.");
+            var node = await new NodeRepository(db).GetAsync(a, TimeSpan.FromHours(1), CancellationToken.None);
+            Check(node?.DisplayName == "Transcode A", "The friendly name stays separate from the heartbeat name.");
         }
         private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
         {

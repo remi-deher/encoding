@@ -1,9 +1,9 @@
-import { Component, computed, inject, signal, TemplateRef, viewChild } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
+import { MatTabsModule } from '@angular/material/tabs';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
-import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import {
   DataTableColumn,
   DataTableComponent,
@@ -21,6 +21,7 @@ import {
 import { FlowPluginCatalog } from '../../shared/models/flow-validation';
 import { FlowComponentDefinition } from '../../shared/models/flow-component';
 import { FlowComponentListComponent } from '../../shared/ui/flow-component-list.component';
+import { DetailCard, DetailCardGridComponent } from '../../shared/ui/detail-card-grid.component';
 
 type PluginFamily = 'base' | 'cluster' | 'media' | 'automation';
 
@@ -45,7 +46,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     familyLabel: 'Noyau',
     category: 'Composants de flow',
     version: 'Intégré',
-    components: 'Composants généraux, attente durable (délai, état d’un worker, charge, condition de plugin)',
+    components:
+      'Composants généraux, attente durable (délai, état d’un worker, charge, condition de plugin)',
     runtime: 'Fourni par le serveur',
     configuration: 'Aucune connexion externe requise',
     state: 'Actif',
@@ -107,7 +109,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     version: '1.0.0',
     components: 'Actualisation, vérification et recherche d’épisodes',
     runtime: 'Processus plugin livré avec l’image worker (déclaré dans Runtime:Plugins)',
-    configuration: 'Connexion, correspondance des chemins, déclencheur d’import (webhook) et test de connexion',
+    configuration:
+      'Connexion, correspondance des chemins, déclencheur d’import (webhook) et test de connexion',
     state: 'Catalogue intégré',
   },
   {
@@ -119,7 +122,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     version: '1.0.0',
     components: 'Actualisation, vérification et recherche de films',
     runtime: 'Processus plugin livré avec l’image worker (déclaré dans Runtime:Plugins)',
-    configuration: 'Connexion, correspondance des chemins, déclencheur d’import (webhook) et test de connexion',
+    configuration:
+      'Connexion, correspondance des chemins, déclencheur d’import (webhook) et test de connexion',
     state: 'Catalogue intégré',
   },
 ];
@@ -135,11 +139,12 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
   selector: 'app-plugin-catalog-page',
   imports: [
     DataTableComponent,
-    DetailFieldListComponent,
+    DetailCardGridComponent,
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     ComponentConfigurationFormComponent,
     FlowComponentListComponent,
+    MatTabsModule,
   ],
   templateUrl: './plugin-catalog-page.component.html',
 })
@@ -155,8 +160,6 @@ export class PluginCatalogPageComponent {
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Plugins');
   protected readonly selectedFamily = signal('all');
   protected readonly selectedPlugin = signal<PluginRecord | null>(null);
-  protected readonly integrationSection = viewChild<TemplateRef<unknown>>('integrationSection');
-  protected readonly configurationSection = viewChild<TemplateRef<unknown>>('configurationSection');
   private readonly pluginCatalog = signal<readonly FlowPluginCatalog[]>([]);
   protected readonly configurationValues = signal<FlowComponentConfiguration>({});
   protected readonly configuredSecrets = signal<readonly string[]>([]);
@@ -198,33 +201,80 @@ export class PluginCatalogPageComponent {
       pluginName: plugin.name,
     }));
   });
-  protected readonly sectionTemplates = computed(() => {
-    const templates: Record<string, TemplateRef<unknown>> = {};
-    const integration = this.integrationSection();
-    const configuration = this.configurationSection();
-    if (integration) templates['Intégration'] = integration;
-    if (configuration) templates['Configuration'] = configuration;
-    return templates;
-  });
-  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+  protected readonly pluginCards = computed<readonly DetailCard[]>(() => {
     const plugin = this.selectedPlugin();
-    return plugin
-      ? [
-          { section: 'Plugin', label: 'Famille', value: plugin.familyLabel },
-          { section: 'Plugin', label: 'Type', value: plugin.category },
-          { section: 'Plugin', label: 'Version', value: plugin.version },
-          { section: 'Plugin', label: 'État', value: plugin.state },
-          { section: 'Plugin', label: 'Exécution', value: plugin.runtime },
+    if (!plugin) return [];
+
+    const components = this.pluginComponents(plugin.id);
+    const schema = this.configurationSchema();
+    const active = plugin.state.toLocaleLowerCase('fr-FR').includes('actif');
+    const mediaTypes = [...new Set(components.map((component) => component.mediaType))];
+
+    return [
+      {
+        id: 'plugin-identity',
+        title: 'Identité du plugin',
+        subtitle: plugin.category,
+        icon: 'plugin',
+        status: { label: plugin.state, tone: active ? 'success' : 'accent' },
+        tags: [
+          { label: plugin.familyLabel, tone: 'accent' },
+          { label: `Version ${plugin.version}` },
+        ],
+        sections: [
           {
-            section: 'Intégration',
-            label: 'Blocs',
-            value: `${this.pluginComponents(plugin.id).length}`,
+            title: 'Catalogue',
+            items: [
+              { label: 'Famille', description: plugin.familyLabel },
+              { label: 'Type', description: plugin.category },
+            ],
           },
-          ...(this.configurationSchema()
-            ? [{ section: 'Configuration', label: 'Portée', value: plugin.configuration }]
-            : []),
-        ]
-      : [];
+        ],
+      },
+      {
+        id: 'plugin-runtime',
+        title: 'Exécution et configuration',
+        subtitle: 'Contrat du plugin',
+        icon: 'tool',
+        status: {
+          label: schema ? `${schema.fields.length} champ(s)` : 'Sans schéma',
+          tone: 'neutral',
+        },
+        tags: [
+          { label: plugin.runtime, tone: 'neutral' },
+          { label: plugin.configuration, tone: 'neutral' },
+        ],
+        sections: [
+          {
+            title: 'Informations déclarées',
+            items: [
+              { label: 'Mode d’exécution', description: plugin.runtime },
+              { label: 'Configuration', description: plugin.configuration },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'plugin-components',
+        title: 'Catalogue des composants',
+        subtitle: `${components.length} composant(s) dans le catalogue`,
+        icon: 'video',
+        status: {
+          label: components.length ? 'Catalogue chargé' : 'Aucun bloc',
+          tone: components.length ? 'success' : 'warning',
+        },
+        tags: mediaTypes.map((mediaType) => ({ label: mediaType, tone: 'accent' })),
+        sections: [
+          {
+            title: 'Résumé',
+            items: [
+              { label: 'Blocs déclarés', description: `${components.length} composant(s)` },
+              { label: 'Liste détaillée', description: 'Consulter l’onglet Composants' },
+            ],
+          },
+        ],
+      },
+    ];
   });
 
   protected readonly columns: readonly DataTableColumn[] = [

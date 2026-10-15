@@ -9,7 +9,11 @@ import {
   DataTableComponent,
   DataTableRow,
 } from '../../shared/ui/data-table.component';
-import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
+import {
+  DetailCard,
+  DetailCardGridComponent,
+  DetailCardIcon,
+} from '../../shared/ui/detail-card-grid.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
@@ -32,7 +36,7 @@ interface FlowTemplateRow extends DataTableRow {
   imports: [
     CategoryTabsComponent,
     DataTableComponent,
-    DetailFieldListComponent,
+    DetailCardGridComponent,
     DrawerActionButtonComponent,
     ManagementCatalogTemplateComponent,
     RecordFormComponent,
@@ -78,10 +82,12 @@ interface FlowTemplateRow extends DataTableRow {
       />
 
       <ng-template #detailContent catalogue-detail>
-        <app-detail-field-list
-          [fields]="detailFields()"
-          [tabbed]="true"
-          tabsLabel="Sections du modèle"
+        <app-detail-card-grid
+          [cards]="templateCards()"
+          [initiallyExpanded]="true"
+          [collapsible]="false"
+          ariaLabel="Résumé et origine du modèle"
+          emptyMessage="Aucune information disponible pour ce modèle."
         />
       </ng-template>
 
@@ -170,31 +176,60 @@ export class FlowTemplateLibraryPageComponent {
         )
       : this.rows();
   });
-  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+  protected readonly templateCards = computed<readonly DetailCard[]>(() => {
     const template = this.selectedTemplate();
-    return template
-      ? [
-          { section: 'Modèle', label: 'Nom', value: template.name },
-          { section: 'Modèle', label: 'Description', value: template.description || '—' },
+    if (!template) return [];
+    const mediaType =
+      MEDIA_TYPE_OPTIONS.find((media) => media.value === template.mediaType)?.label ??
+      template.mediaType;
+    const createdAt = new Date(template.createdAt).toLocaleString('fr-FR');
+
+    return [
+      {
+        id: 'template-summary',
+        title: 'Modèle',
+        subtitle: mediaType,
+        icon: this.mediaIcon(template.mediaType),
+        status: { label: 'Copie immuable', tone: 'accent' },
+        tags: [
+          { label: `${template.nodeCount} composant(s)` },
+          { label: `Créé le ${createdAt}`, tone: 'neutral' },
+        ],
+        sections: [
           {
-            section: 'Modèle',
-            label: 'Type de média',
-            value:
-              MEDIA_TYPE_OPTIONS.find((media) => media.value === template.mediaType)?.label ??
-              template.mediaType,
+            title: 'Description',
+            items: [
+              { label: template.name, description: template.description || 'Aucune description.' },
+            ],
           },
-          { section: 'Modèle', label: 'Composants', value: String(template.nodeCount) },
-          { section: 'Origine', label: 'Flow', value: template.sourceFlowName },
-          { section: 'Origine', label: 'Version publiée', value: `v${template.sourceVersion}` },
-          { section: 'Origine', label: 'Identifiant du flow', value: template.sourceFlowId },
+        ],
+      },
+      {
+        id: 'template-origin',
+        title: 'Flow source',
+        subtitle: template.sourceFlowName,
+        icon: 'tool',
+        status: { label: `Version publiée v${template.sourceVersion}`, tone: 'success' },
+        tags: [],
+        sections: [
           {
-            section: 'Modèle',
-            label: 'Créé le',
-            value: new Date(template.createdAt).toLocaleString('fr-FR'),
+            title: 'Référence conservée',
+            items: [
+              { label: 'Flow', description: template.sourceFlowName },
+              { label: 'Identifiant', description: template.sourceFlowId },
+              { label: 'Version', description: `v${template.sourceVersion}` },
+            ],
           },
-        ]
-      : [];
+        ],
+      },
+    ];
   });
+
+  private mediaIcon(mediaType: string): DetailCardIcon {
+    if (mediaType === 'music' || mediaType === 'audio') return 'audio';
+    if (mediaType === 'image') return 'image';
+    return 'video';
+  }
 
   constructor() {
     void this.loadTemplates();

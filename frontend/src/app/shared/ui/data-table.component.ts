@@ -1,14 +1,18 @@
 import { SelectionModel } from '@angular/cdk/collections';
 import {
   Component,
+  contentChild,
+  Directive,
   computed,
   effect,
   inject,
   input,
   output,
   signal,
+  TemplateRef,
   ViewChild,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSort, MatSortModule } from '@angular/material/sort';
@@ -46,9 +50,26 @@ export interface DataTableColumn {
 export interface DataTableRowAction {
   readonly id: string;
   readonly label: string;
+  readonly expandedLabel?: string;
   readonly tone?: 'default' | 'danger';
   readonly visibleWhen?: (row: DataTableRow) => boolean;
   readonly confirmation?: (row: DataTableRow) => ConfirmationDialogData;
+}
+
+export interface DataTableRowDetailContext {
+  readonly $implicit: DataTableRow;
+}
+
+@Directive({ selector: 'ng-template[dataTableRowDetail]', standalone: true })
+export class DataTableRowDetailDirective {
+  readonly template = inject(TemplateRef<DataTableRowDetailContext>);
+
+  static ngTemplateContextGuard(
+    _: DataTableRowDetailDirective,
+    _context: unknown,
+  ): _context is DataTableRowDetailContext {
+    return true;
+  }
 }
 
 export interface DataTableActionEvent {
@@ -85,7 +106,14 @@ export interface DataTableListActionEvent {
 
 @Component({
   selector: 'app-data-table',
-  imports: [BadgeListComponent, MatCheckboxModule, MatDialogModule, MatSortModule, MatTableModule],
+  imports: [
+    BadgeListComponent,
+    MatCheckboxModule,
+    MatDialogModule,
+    MatSortModule,
+    MatTableModule,
+    NgTemplateOutlet,
+  ],
   template: `
     <div class="table-scroll-region">
       @if (listActions().length) {
@@ -159,7 +187,7 @@ export interface DataTableListActionEvent {
         </div>
       }
 
-      <table mat-table matSort [dataSource]="dataSource" class="data-table">
+      <table mat-table matSort [dataSource]="dataSource" class="data-table" multiTemplateDataRows>
         @if (selectable()) {
           <ng-container matColumnDef="select">
             <th mat-header-cell *matHeaderCellDef class="selection-cell">
@@ -245,10 +273,12 @@ export interface DataTableListActionEvent {
                     class="row-action"
                     [class.row-action_danger]="action.tone === 'danger'"
                     type="button"
-                    [attr.aria-label]="action.label + ' ' + rowActionSubject(row)"
+                    [attr.aria-label]="rowActionLabel(action, row) + ' ' + rowActionSubject(row)"
+                    [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
+                    [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
                     (click)="requestRowAction(action, row)"
                   >
-                    {{ action.label }}
+                    {{ rowActionLabel(action, row) }}
                   </button>
                 }
               </td>
@@ -266,12 +296,27 @@ export interface DataTableListActionEvent {
                     class="row-action"
                     [class.row-action_danger]="action.tone === 'danger'"
                     type="button"
-                    [attr.aria-label]="action.label + ' ' + rowActionSubject(row)"
+                    [attr.aria-label]="rowActionLabel(action, row) + ' ' + rowActionSubject(row)"
+                    [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
+                    [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
                     (click)="requestRowAction(action, row)"
                   >
-                    {{ action.label }}
+                    {{ rowActionLabel(action, row) }}
                   </button>
                 }
+              }
+            </td>
+          </ng-container>
+        }
+
+        @if (rowDetail()) {
+          <ng-container matColumnDef="expandedDetail">
+            <td mat-cell *matCellDef="let row" [attr.colspan]="displayedColumnKeys().length">
+              @if (isExpandedRow(row)) {
+                <ng-container
+                  [ngTemplateOutlet]="rowDetail()!.template"
+                  [ngTemplateOutletContext]="{ $implicit: row }"
+                />
               }
             </td>
           </ng-container>
@@ -283,6 +328,13 @@ export interface DataTableListActionEvent {
           *matRowDef="let row; columns: displayedColumnKeys()"
           [attr.aria-selected]="selectable() ? selection.isSelected(row) : null"
         ></tr>
+        @if (rowDetail()) {
+          <tr
+            mat-row
+            class="detail-row"
+            *matRowDef="let row; columns: ['expandedDetail']; when: isExpandedRowPredicate"
+          ></tr>
+        }
         <tr class="mat-row empty-row" *matNoDataRow>
           <td class="mat-cell" [attr.colspan]="displayedColumnKeys().length">
             {{ emptyMessage() }}
@@ -302,6 +354,8 @@ export class DataTableComponent {
   readonly rowOpenable = input(false);
   readonly rowOpenLabel = input('Ouvrir');
   readonly rowActions = input<readonly DataTableRowAction[]>([]);
+  readonly expandedRowId = input<string | null>(null);
+  readonly rowDetail = contentChild(DataTableRowDetailDirective);
   readonly listActions = input<readonly DataTableListAction[]>([]);
   readonly listAction = output<DataTableListActionEvent>();
   protected pickFile(actionId: string, event: Event): void {
@@ -340,6 +394,7 @@ export class DataTableComponent {
 
   constructor() {
     effect(() => {
+      this.expandedRowId();
       this.dataSource.data = [...this.rows()];
     });
 
@@ -391,6 +446,22 @@ export class DataTableComponent {
   protected rowActionSubject(row: DataTableRow): string {
     return String(row['name'] ?? row['nodeName'] ?? row['id'] ?? 'cet élément');
   }
+
+  protected rowActionLabel(action: DataTableRowAction, row: DataTableRow): string {
+    return this.isExpandedRow(row) && action.expandedLabel ? action.expandedLabel : action.label;
+  }
+
+  protected isExpandedRow(row: DataTableRow): boolean {
+    const expandedRowId = this.expandedRowId();
+    return expandedRowId !== null && String(row['id']) === expandedRowId;
+  }
+
+  protected rowDetailId(row: DataTableRow): string {
+    return 'data-table-row-detail-' + String(row['id']);
+  }
+
+  protected readonly isExpandedRowPredicate = (_: number, row: DataTableRow): boolean =>
+    this.isExpandedRow(row);
 
   protected openRow(row: DataTableRow, event: MouseEvent): void {
     if (this.hasSelectionModifier(event)) {
