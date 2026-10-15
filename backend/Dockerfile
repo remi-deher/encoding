@@ -42,7 +42,10 @@ COPY --from=build /app/agent ./agent
 COPY --from=build /app/launcher ./launcher
 COPY --from=frontend-build /frontend/dist/frontend/browser ./api/wwwroot
 # Mode initial du nœud : serveur et worker. Un mode enregistré dans le dossier de données le remplace.
+# Base par défaut : SQLite dans le dossier de données (cluster à un seul serveur, architecture 0043). Une chaîne PostgreSQL
+# fournie par ConnectionStrings__Cluster la remplace ; le fournisseur est alors déduit (ou imposé par Database__Provider).
 ENV Node__Roles=server,worker \
+    ConnectionStrings__Cluster="Data Source=/var/lib/encoding-node/cluster.db" \
     Node__DataDirectory=/var/lib/encoding-node \
     Logging__Console__FormatterName=json \
     Logging__Console__FormatterOptions__UseUtcTimestamp=true \

@@ -337,7 +337,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    public enum ModeRequestResult { Accepted, NotFound, LastServer }
+    public enum ModeRequestResult { Accepted, NotFound, LastServer, SingleServerStorage }
 
     /// <summary>
     /// Enregistre le mode voulu d'un nœud ; le nœud l'applique à son prochain signal de présence. Refuse de retirer la fonction
@@ -355,6 +355,13 @@ public sealed class NodeRepository(DbDataSource dataSource)
             select.Parameters.AddWithValue("id", nodeId);
             if (Sql.ToStringArray(await select.ExecuteScalarAsync(ct)) is not { } current) return ModeRequestResult.NotFound;
             roles = current;
+        }
+        // 0043 : SQLite n'est pas partagé entre hôtes, un second serveur exigerait PostgreSQL (migration explicite, jamais silencieuse).
+        if (server && !roles.Contains("server") && Sql.IsSqlite(dataSource))
+        {
+            await using var existing = Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id <> @id AND deleted_at IS NULL AND 'server' = ANY(roles))", c, tx);
+            existing.Parameters.AddWithValue("id", nodeId);
+            if (await existing.ScalarBoolAsync(ct)) return ModeRequestResult.SingleServerStorage;
         }
         if (roles.Contains("server") && !server)
         {
