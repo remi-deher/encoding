@@ -14,9 +14,18 @@ namespace Encoding.Api.Infrastructure.Data.Sqlite;
 /// Les connexions traduisent le SQL PostgreSQL à l'exécution et ouvrent leurs transactions en écriture immédiate,
 /// ce qui remplace les verrous de lignes et les verrous consultatifs (un seul écrivain à la fois).
 /// </summary>
-public sealed class SqliteDataSource(string connectionString) : DbDataSource
+public sealed class SqliteDataSource : DbDataSource
 {
-    public override string ConnectionString { get; } = connectionString;
+    public SqliteDataSource(string connectionString)
+    {
+        ConnectionString = connectionString;
+        // Le dossier de la base est créé au premier usage (volume vide d'un conteneur neuf).
+        var file = new SqliteConnectionStringBuilder(connectionString).DataSource;
+        var directory = string.IsNullOrEmpty(file) || file.StartsWith(':') ? null : Path.GetDirectoryName(Path.GetFullPath(file));
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+    }
+
+    public override string ConnectionString { get; }
 
     protected override DbConnection CreateDbConnection() => new SqliteConnectionWrapper(new SqliteConnection(ConnectionString));
 }

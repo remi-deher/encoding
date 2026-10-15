@@ -16,6 +16,9 @@ using Encoding.Contracts.Libraries;
 using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
 
+if (args.FirstOrDefault() == DatabaseTransferCommand.Name)
+    Environment.Exit(await DatabaseTransferCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
+
 var builder = WebApplication.CreateBuilder(args);
 builder.AddOperations();
 var pluginKeyDirectory = builder.Configuration["PluginSettings:KeyDirectory"]
