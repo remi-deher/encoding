@@ -1,5 +1,10 @@
 # Règles de programmation de l’interface
 
+La référence de présentation des ressources et fiches est décrite dans
+[Ressources et sections pleine largeur](docs/design/interface-resource-layout.md).
+Les prochaines refontes reprennent cette hiérarchie souple, issue de l’onglet
+Cluster, en conservant les gabarits adaptés au besoin et les règles ci-dessous.
+
 ## 1. Partir du besoin utilisateur
 
 Avant de coder une page, identifier la question à laquelle elle répond.
