@@ -165,7 +165,7 @@ export class NodeCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
   private readonly nodes = signal<readonly NodeResponse[]>([]);
-  private readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
+  protected readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
   private readonly allLibraries = signal<readonly LibraryResponse[]>([]);
   private readonly nodeAccessByLibrary = signal<
     ReadonlyMap<string, readonly LibraryNodeAccessResponse[]>
@@ -1008,13 +1008,43 @@ export class NodeCatalogPageComponent {
   });
 
   /** Cartes de nœuds : ce qui demande une action d'abord, puis par nom (architecture 0046). */
+  protected readonly selectedState = signal('all');
+  protected readonly nodeSummary = computed(() => {
+    const nodes = this.nodes();
+    const lifecycleOf = (node: NodeResponse) => node.lifecycle ?? node.status;
+    return {
+      total: nodes.length,
+      online: nodes.filter((node) => lifecycleOf(node) === 'online').length,
+      attention: nodes.filter((node) => ['draining', 'incompatible', 'quarantined'].includes(lifecycleOf(node))).length,
+      accelerated: nodes.filter((node) =>
+        node.capabilities.some((capability) => capability.accelerationTypes.some((type) => type !== 'cpu')),
+      ).length,
+    };
+  });
+  protected readonly stateOptions = computed<readonly CategoryTabOption[]>(() => {
+    const summary = this.nodeSummary();
+    return [
+      { value: 'all', label: 'Tous', count: summary.total },
+      { value: 'online', label: 'En ligne', count: summary.online },
+      { value: 'attention', label: 'À traiter', count: summary.attention },
+      { value: 'offline', label: 'Hors ligne', count: summary.total - summary.online - summary.attention },
+    ];
+  });
+
   protected readonly nodeCards = computed<readonly NodeCard[]>(() => {
     const role = this.selectedRole();
+    const state = this.selectedState();
     const actions: readonly ResourceCardAction[] = this.nodeActions
       .filter((action) => action.visibleWhen?.({} as DataTableRow) ?? true)
       .map((action) => ({ id: action.id, label: action.label, tone: action.tone }));
     return this.nodes()
       .filter((node) => role === 'all' || node.roles.includes(role as NodeRole))
+      .filter((node) => {
+        if (state === 'all') return true;
+        const lifecycle = node.lifecycle ?? node.status;
+        const group = lifecycle === 'online' ? 'online' : lifecycle === 'offline' ? 'offline' : 'attention';
+        return group === state;
+      })
       .map((node): NodeCard => {
         const lifecycle = node.lifecycle ?? node.status;
         const tone: StatusTone =

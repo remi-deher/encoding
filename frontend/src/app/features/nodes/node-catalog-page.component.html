@@ -30,7 +30,36 @@
       [selected]="selectedRole()"
       (selectedChange)="onRoleChange($event)"
     />
+    <app-category-tabs
+      label="État du nœud"
+      [options]="stateOptions()"
+      [selected]="selectedState()"
+      (selectedChange)="selectedState.set($event)"
+    />
   </div>
+
+  <section catalogue-table class="node-overview" aria-label="Résumé des nœuds">
+    <ul class="node-summary">
+      <li><strong>{{ nodeSummary().total }}</strong><span>nœud(s)</span></li>
+      <li class="is-ok"><strong>{{ nodeSummary().online }}</strong><span>en ligne</span></li>
+      <li [class.is-warn]="nodeSummary().attention > 0">
+        <strong>{{ nodeSummary().attention }}</strong><span>à traiter</span>
+      </li>
+      <li [class.is-warn]="pendingEnrollments().length > 0">
+        <strong>{{ pendingEnrollments().length }}</strong><span>demande(s) en attente</span>
+      </li>
+      <li><strong>{{ nodeSummary().accelerated }}</strong><span>avec accélération matérielle</span></li>
+    </ul>
+    @if (isAdmin() && pendingEnrollments().length) {
+      <div class="node-alert" role="status">
+        <span>
+          <strong>{{ pendingEnrollments().length }} nœud(s) attendent votre approbation.</strong>
+          Comparez le code de vérification avant d’accepter.
+        </span>
+        <button matButton="outlined" type="button" (click)="addNode()">Examiner les demandes</button>
+      </div>
+    }
+  </section>
 
   <div catalogue-table class="node-card-grid">
     @for (card of nodeCards(); track card.id) {
