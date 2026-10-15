@@ -41,3 +41,7 @@ Pour PostgreSQL (obligatoire dès qu'un cluster a plusieurs serveurs), fournir l
 Pour passer d'un mode à l'autre, voir `Encoding.Api transfer-database` dans [sauvegarde et restauration](backup-restore.md).
 
 `Node__Roles` (`server`, `worker` ou `server,worker`) donne le mode initial. Ensuite le mode se change depuis la page Nœuds (« Mode de ce nœud ») ou la console du worker (« Mode du nœud »), sans redémarrer le conteneur ; le choix est conservé dans le dossier de données du nœud. Un worker seul doit définir `Cluster__ApiBaseUrl` (ou être découvert sur le réseau) ; le volume de données doit être conservé pour garder l'identité du nœud et son mode.
+
+## Console worker depuis un autre poste
+
+La console worker (`/worker`) parle à l'agent du nœud, par défaut sur `localhost:5081` ; ouverte depuis un autre poste, elle utilise le même hôte sur le port 8081 (ou l'URL enregistrée dans `localStorage['encoding.workerAgentUrl']`). Publiez donc `8081` et autorisez l'origine de l'interface : `WorkerUi__Origins=http://<hôte>:8080`. Quand la découverte DNS-SD ne traverse pas le réseau (conteneurs en bridge, sous-réseaux distincts), la console propose « Adresse d'un cluster » : saisir `http://<serveur>:8080`, puis « Rejoindre » ou « Générer une clé ».

@@ -56,6 +56,21 @@ app.UseCors();
 app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));
 app.MapNodeMode("/api/v1/worker/mode");
 app.MapGet("/api/v1/worker/clusters", (WorkerClusterDiscovery discovery) => Results.Ok(discovery.List()));
+app.MapPost("/api/v1/worker/clusters", async (WorkerClusterAddress request, WorkerClusterDiscovery discovery, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return (IResult)Results.Ok(await discovery.AddByAddressAsync(request.ApiBaseUrl, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { title = exception.Message });
+    }
+    catch (HttpRequestException exception)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: exception.Message);
+    }
+}).WithName("AddWorkerClusterByAddress");
 app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe, CancellationToken cancellationToken) =>
 {
     var identity = await identityStore.GetAsync(cancellationToken);
@@ -136,5 +151,7 @@ app.MapPost("/api/v1/worker/leave", async (WorkerEnrollmentService enrollment, C
 }).WithName("LeaveWorkerCluster");
 
 await app.RunAsync();
+
+public sealed record WorkerClusterAddress(string ApiBaseUrl);
 
 public sealed record WorkerEnrollmentRequest(Guid ClusterId, bool LeaveCurrent = false);

@@ -133,6 +133,26 @@
               <p class="feedback">Aucun cluster détecté. Vérifiez que le serveur est démarré et que les deux installations partagent le même réseau local.</p>
             }
           </div>
+          <form class="cluster-address" (submit)="$event.preventDefault(); addClusterByAddress(false)">
+            <label for="cluster-address">Adresse d’un cluster</label>
+            <input
+              id="cluster-address"
+              type="url"
+              placeholder="http://192.168.1.51:8090"
+              autocomplete="off"
+              [value]="clusterAddress()"
+              (input)="setClusterAddress($event)"
+            />
+            <div class="cluster-actions">
+              <button matButton="outlined" type="submit" [disabled]="!clusterAddress().trim() || addingCluster()">
+                {{ addingCluster() ? 'Vérification…' : 'Ajouter' }}
+              </button>
+              <button matButton="filled" type="button" [disabled]="!clusterAddress().trim() || addingCluster()" (click)="addClusterByAddress(true)">
+                Ajouter et générer une clé
+              </button>
+            </div>
+            <p class="feedback">À utiliser quand le cluster n’est pas détecté automatiquement. La clé de jumelage est temporaire (10 minutes).</p>
+          </form>
           <p class="security-note">La confirmation crée une identité propre à cette installation. Son jeton reste stocké localement et n’est jamais affiché.</p>
         }
       }
