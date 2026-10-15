@@ -189,6 +189,19 @@ internal static class AuthScenarios
         Check(await viewer.StatusAsync(get, "/api/v1/users") == HttpStatusCode.Forbidden, "A viewer cannot list users.");
         Check(await viewer.StatusAsync(get, "/api/v1/node/mode") == HttpStatusCode.OK, "A viewer reads the node mode.");
         Check(await viewer.StatusAsync(put, "/api/v1/node/mode", new { server = false, worker = true }) == HttpStatusCode.Forbidden, "A viewer cannot change the node mode.");
+        // Nœud autonome (0045) : seul et sans cluster créé, il n'est pas dans un cluster ; le nommer en crée un.
+        using (var identity = await anonymous.SendAsync(get, "/api/v1/cluster"))
+            Check((await identity.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("standalone").GetBoolean(), "A node alone and without a created cluster is standalone.");
+        Check(await viewer.StatusAsync(post, "/api/v1/cluster", new { name = "Maison" }) == HttpStatusCode.Forbidden, "A viewer cannot create a cluster.");
+        Check(await admin.StatusAsync(put, "/api/v1/cluster", new { name = "Maison" }) == HttpStatusCode.Conflict, "A standalone node has no cluster to rename.");
+        Check(await admin.StatusAsync(post, "/api/v1/cluster", new { name = "  " }) == HttpStatusCode.BadRequest, "A cluster needs a name.");
+        using (var created = await admin.SendAsync(post, "/api/v1/cluster", new { name = "Maison" }))
+        {
+            var body = await created.Content.ReadFromJsonAsync<JsonElement>(Json);
+            Check(created.StatusCode == HttpStatusCode.OK && !body.GetProperty("standalone").GetBoolean() && body.GetProperty("name").GetString() == "Maison", "Naming a standalone node creates its cluster.");
+        }
+        Check(await admin.StatusAsync(post, "/api/v1/cluster", new { name = "Autre" }) == HttpStatusCode.Conflict, "A cluster cannot be created twice.");
+        Check(await admin.StatusAsync(put, "/api/v1/cluster", new { name = "Atelier" }) == HttpStatusCode.OK, "A cluster can be renamed.");
         Check(await viewer.StatusAsync(post, "/api/v1/local-node/leave") == HttpStatusCode.Forbidden, "A viewer cannot make this node leave its cluster.");
         Check(await viewer.StatusAsync(post, "/api/v1/local-node/enroll", new { clusterId = Guid.NewGuid() }) == HttpStatusCode.Forbidden, "A viewer cannot enroll this node elsewhere.");
         Check(await admin.StatusAsync(post, "/api/v1/local-node/leave") == HttpStatusCode.ServiceUnavailable, "Without a local worker function, the relay answers with a clear refusal.");
