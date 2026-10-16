@@ -76,7 +76,7 @@ internal static partial class Harness
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
-        new("plugin/base", "1.2.0", ["general"], []), new("plugin/nodes", "1.1.0", ["general"], []),new("plugin/conditions","1.0.0",["general"],[]),
+        new("plugin/base", "1.3.0", ["general"], []), new("plugin/nodes", "1.1.0", ["general"], []),new("plugin/conditions","1.0.0",["general"],[]),
         new("plugin/plex","1.0.0",["general"],["process"]),new("ffprobe", "7.0", ["video"], []), .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
 
     private static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)
