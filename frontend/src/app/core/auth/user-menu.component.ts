@@ -11,7 +11,13 @@ import { AuthService } from './auth.service';
   imports: [MatButtonModule, MatMenuModule],
   template: `
     @if (user(); as current) {
-      <button matButton="text" type="button" class="user-trigger" [matMenuTriggerFor]="menu">
+      <button
+        matButton="text"
+        type="button"
+        class="user-trigger"
+        [matMenuTriggerFor]="menu"
+        [attr.aria-label]="'Compte de ' + current.username + ', ' + roleLabel()"
+      >
         <span class="user-avatar" aria-hidden="true">{{
           current.username.slice(0, 1).toUpperCase()
         }}</span>
