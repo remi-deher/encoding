@@ -98,51 +98,11 @@ p[role='note'] {
 
 .enrollment-step p,
 .enrollment-empty,
-.enrollment-review p {
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
 .enrollment-empty {
   padding: 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 9px;
   background: var(--surface-muted);
-}
-
-.enrollment-review {
-  display: grid;
-  gap: 16px;
-}
-
-.enrollment-facts {
-  margin: 0;
-  display: grid;
-  gap: 12px;
-}
-
-.enrollment-facts div {
-  display: grid;
-  gap: 4px;
-}
-.enrollment-facts dt {
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.enrollment-facts dd {
-  margin: 0;
-  color: var(--text-primary);
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 4px;
 }
 
 .pairing-key-header {

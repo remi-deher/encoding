@@ -9,15 +9,23 @@ import { AuthService } from './auth.service';
   selector: 'app-password-change-dialog',
   imports: [MatDialogContent, MatDialogTitle, RecordFormComponent],
   template: `
-    <h2 mat-dialog-title>Changer le mot de passe</h2>
-    <mat-dialog-content>
-      <app-record-form
-        [data]="form"
-        [busy]="busy()"
-        (submitted)="save($event)"
-        (cancelled)="dialogRef.close()"
-      />
-    </mat-dialog-content>
+    <section class="app-dialog">
+      <header class="app-dialog-header">
+        <span class="app-dialog-icon" aria-hidden="true">◆</span>
+        <div class="app-dialog-heading">
+          <p class="app-dialog-eyebrow">Sécurité du compte</p>
+          <h2 mat-dialog-title>Changer le mot de passe</h2>
+        </div>
+      </header>
+      <mat-dialog-content class="app-dialog-body">
+        <app-record-form
+          [data]="form"
+          [busy]="busy()"
+          (submitted)="save($event)"
+          (cancelled)="dialogRef.close()"
+        />
+      </mat-dialog-content>
+    </section>
   `,
 })
 export class PasswordChangeDialogComponent {
@@ -48,6 +56,11 @@ export class PasswordChangeDialogComponent {
       },
     ],
   };
+
+  constructor() {
+    this.dialogRef.addPanelClass('app-dialog-panel');
+    this.dialogRef.updateSize('480px');
+  }
 
   protected async save(value: Record<string, string>): Promise<void> {
     this.busy.set(true);

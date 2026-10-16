@@ -143,14 +143,22 @@ Les graphiques et mesures supplémentaires nécessitent une source réelle, une 
 
 ## 7. Mise en œuvre dans le socle
 
-La présentation Cluster repose sur `DataTable` avec `resourceCards`, et sur le composant commun `ResourceStrip`. Les évolutions de cette présentation doivent enrichir ce socle par des données et des options génériques.
+La présentation des membres du cluster utilise `DataTable` en mode `resources`. `ResourceCard` sert aux fiches souples d’une liste de ressources ; `ResourceSheet` compose la fiche pleine largeur d’une ressource déjà ouverte. Ces composants de présentation reçoivent des données et n’effectuent aucun chargement.
 
 Pour une fiche unique comme **Ce nœud**, rechercher d’abord les capacités du gabarit de fiche et des blocs partagés. Si une composition souple manque, la fournir dans le socle avec des emplacements ou des définitions réutilisables. Ne pas ajouter de structure spécifique au nœud dans `ResourceStrip`, ni lui faire charger des API.
+
+Les composants de détail ont des rôles distincts :
+
+- **`ResourceCard`** : identité, état, métriques et actions d’une ressource dans une liste.
+- **`ResourceSheet`** : synthèse et sections ouvertes d’une ressource sélectionnée.
+- **`DetailCardGrid`** : groupes indépendants de détails catégorisés, repliables au besoin ; ne pas l’utiliser pour donner une bordure à chaque propriété.
+- **`DetailFieldList`** : champs de lecture compacts, chronologie ou contenu découpé en onglets.
+- **`DataTable`** : comparaison de lignes, tri, sélection et actions ; ses modes `cards` et `resources` changent la présentation de la liste sans changer son rôle de contrôle.
 
 Répartition des responsabilités :
 
 - **Gabarit** : en-tête, navigation, emplacements, états et adaptation générale.
-- **Composants communs** : ressource, métriques, sections, sélection et actions.
+- **Composants communs** : présentation des ressources, métriques, sections, sélection et actions.
 - **Définitions métier** : ordre, libellés, champs, métriques et actions disponibles.
 - **Contrôleur** : chargement, actualisation, orchestration et erreurs.
 - **Serveur** : état de référence et autorisations.

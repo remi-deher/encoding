@@ -7,6 +7,7 @@ import {
   effect,
   inject,
   input,
+  model,
   output,
   signal,
   TemplateRef,
@@ -14,6 +15,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
@@ -28,7 +30,13 @@ import {
 } from './confirmation-dialog.component';
 
 export type DataTableValue = string | number | boolean;
-export type DataTableRow = Readonly<Record<string, DataTableValue>>;
+export type DataTableRow = Readonly<Record<string, DataTableValue> & { id: string | number }>;
+export type DataTableLayout = 'table' | 'cards' | 'resources';
+
+export interface DataTableLayoutOption {
+  readonly value: DataTableLayout;
+  readonly label: string;
+}
 
 export interface DataTableToggle {
   readonly showStatusLabel?: boolean;
@@ -112,6 +120,7 @@ export interface DataTableListActionEvent {
   imports: [
     BadgeListComponent,
     MatButtonModule,
+    MatButtonToggleModule,
     MatCheckboxModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -122,6 +131,20 @@ export interface DataTableListActionEvent {
   ],
   template: `
     <div class="table-scroll-region">
+      @if (layoutOptions().length > 1) {
+        <div class="layout-toolbar">
+          <span class="layout-label">{{ layoutLabel() }}</span>
+          <mat-button-toggle-group
+            [value]="layout()"
+            [attr.aria-label]="layoutLabel()"
+            (change)="layout.set($event.value)"
+          >
+            @for (option of layoutOptions(); track option.value) {
+              <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+        </div>
+      }
       @if (listActions().length) {
         <div class="selection-toolbar" role="toolbar" aria-label="Actions du tableau">
           @for (action of listActions(); track action.id) {
@@ -230,7 +253,109 @@ export interface DataTableListActionEvent {
         }
       </ng-template>
 
-      @if (layout() === 'cards') {
+      @if (layout() === 'resources') {
+        @if (selectable()) {
+          <div class="card-toolbar">
+            <mat-checkbox
+              [checked]="isAllSelected()"
+              [indeterminate]="selection.hasValue() && !isAllSelected()"
+              (change)="toggleAll()"
+              >Tout sélectionner</mat-checkbox
+            >
+          </div>
+        }
+        @if (cardRows().length === 0) {
+          <p class="card-empty">{{ emptyMessage() }}</p>
+        } @else {
+          <ul class="resource-list">
+            @for (row of cardRows(); track rowKey(row)) {
+              <li
+                class="data-card resource-row"
+                [class.data-card_selected]="selection.isSelected(rowKey(row))"
+                [class.data-card_expanded]="isExpandedRow(row)"
+              >
+                <header class="data-card-header">
+                  @if (selectable()) {
+                    <mat-checkbox
+                      [checked]="selection.isSelected(rowKey(row))"
+                      [attr.aria-label]="'Sélectionner ' + rowSubject(row)"
+                      (click)="captureCheckboxClick($event)"
+                      (change)="toggleRow(row)"
+                    />
+                  }
+                  <h3 class="data-card-title">
+                    @if (columns().length) {
+                      <ng-container
+                        [ngTemplateOutlet]="cellTpl"
+                        [ngTemplateOutletContext]="{
+                          column: columns()[0],
+                          row: row,
+                          isFirst: false,
+                        }"
+                      />
+                    }
+                  </h3>
+                  @if (rowOpenable()) {
+                    <button
+                      matButton="text"
+                      type="button"
+                      class="resource-open"
+                      (click)="openRow(row, $event)"
+                    >
+                      {{ rowOpenLabel() }} <span aria-hidden="true">→</span>
+                    </button>
+                  }
+                </header>
+                <dl class="data-card-fields resource-fields">
+                  @for (column of columns().slice(1); track column.key) {
+                    <div class="data-card-field">
+                      <dt>{{ column.label }}</dt>
+                      <dd>
+                        <ng-container
+                          [ngTemplateOutlet]="cellTpl"
+                          [ngTemplateOutletContext]="{ column: column, row: row, isFirst: false }"
+                        />
+                      </dd>
+                    </div>
+                  }
+                </dl>
+                @if (selectable() && rowActions().length === 0) {
+                  <span class="resource-row-spacer" aria-hidden="true"></span>
+                }
+                @if (rowActions().length > 0) {
+                  <footer class="data-card-actions resource-row-actions">
+                    @for (action of rowActions(); track action.id) {
+                      @if (!action.visibleWhen || action.visibleWhen(row)) {
+                        <button
+                          [matButton]="action.tone === 'danger' ? 'filled' : 'outlined'"
+                          [class.data-card-action_danger]="action.tone === 'danger'"
+                          type="button"
+                          [attr.aria-label]="
+                            rowActionLabel(action, row) + ' ' + rowActionSubject(row)
+                          "
+                          [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
+                          [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
+                          (click)="requestRowAction(action, row)"
+                        >
+                          {{ rowActionLabel(action, row) }}
+                        </button>
+                      }
+                    }
+                  </footer>
+                }
+                @if (rowDetail() && isExpandedRow(row)) {
+                  <div class="data-card-detail" [id]="rowDetailId(row)">
+                    <ng-container
+                      [ngTemplateOutlet]="rowDetail()!.template"
+                      [ngTemplateOutletContext]="{ $implicit: row }"
+                    />
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        }
+      } @else if (layout() === 'cards') {
         @if (selectable() || sortableColumns().length) {
           <div class="card-toolbar">
             @if (selectable()) {
@@ -270,16 +395,16 @@ export interface DataTableListActionEvent {
           <p class="card-empty">{{ emptyMessage() }}</p>
         } @else {
           <ul class="card-grid">
-            @for (row of cardRows(); track row) {
+            @for (row of cardRows(); track rowKey(row)) {
               <li
                 class="data-card"
-                [class.data-card_selected]="selection.isSelected(row)"
+                [class.data-card_selected]="selection.isSelected(rowKey(row))"
                 [class.data-card_expanded]="isExpandedRow(row)"
               >
                 <header class="data-card-header">
                   @if (selectable()) {
                     <mat-checkbox
-                      [checked]="selection.isSelected(row)"
+                      [checked]="selection.isSelected(rowKey(row))"
                       aria-label="Sélectionner cette ligne"
                       (click)="captureCheckboxClick($event)"
                       (change)="toggleRow(row)"
@@ -356,7 +481,7 @@ export interface DataTableListActionEvent {
               </th>
               <td mat-cell *matCellDef="let row" class="selection-cell" data-label="Sélection">
                 <mat-checkbox
-                  [checked]="selection.isSelected(row)"
+                  [checked]="selection.isSelected(rowKey(row))"
                   aria-label="Sélectionner cette ligne"
                   (click)="captureCheckboxClick($event)"
                   (change)="toggleRow(row)"
@@ -452,7 +577,7 @@ export interface DataTableListActionEvent {
           <tr
             mat-row
             *matRowDef="let row; columns: displayedColumnKeys()"
-            [attr.aria-selected]="selectable() ? selection.isSelected(row) : null"
+            [attr.aria-selected]="selectable() ? selection.isSelected(rowKey(row)) : null"
           ></tr>
           @if (rowDetail()) {
             <tr
@@ -477,7 +602,9 @@ export class DataTableComponent {
   readonly columns = input.required<readonly DataTableColumn[]>();
   readonly rows = input.required<readonly DataTableRow[]>();
   /** `cards` présente chaque ligne comme une carte : plus d'informations lisibles que le tableau dense. */
-  readonly layout = input<'table' | 'cards'>('table');
+  readonly layout = model<DataTableLayout>('table');
+  readonly layoutOptions = input<readonly DataTableLayoutOption[]>([]);
+  readonly layoutLabel = input('Présentation des éléments');
   readonly emptyMessage = input('Aucun résultat.');
   readonly selectable = input(false);
   readonly rowOpenable = input(false);
@@ -521,7 +648,7 @@ export class DataTableComponent {
   });
 
   protected readonly dataSource = new MatTableDataSource<DataTableRow>();
-  protected readonly selection = new SelectionModel<DataTableRow>(true, []);
+  protected readonly selection = new SelectionModel<string>(true, []);
   protected readonly selectedRows = signal<readonly DataTableRow[]>([]);
   protected readonly displayedColumnKeys = computed(() => [
     ...(this.selectable() ? ['select'] : []),
@@ -543,7 +670,21 @@ export class DataTableComponent {
   constructor() {
     effect(() => {
       this.expandedRowId();
-      this.dataSource.data = [...this.rows()];
+      this.selectable();
+      const rows = [...this.rows()];
+      this.dataSource.data = rows;
+
+      // Polling replaces row objects; keep selection by stable id and refresh the selected records.
+      const currentKeys = new Set(rows.map((row) => this.rowKey(row)));
+      const retainedKeys = this.selectable()
+        ? this.selection.selected.filter((key) => currentKeys.has(key))
+        : [];
+      this.selection.clear();
+      if (retainedKeys.length) this.selection.select(...retainedKeys);
+      if (this.selectionAnchor && !currentKeys.has(this.selectionAnchor)) {
+        this.selectionAnchor = undefined;
+      }
+      this.emitSelectionChange();
     });
 
     this.dataSource.sortingDataAccessor = (row, property) => this.sortValue(row, property);
@@ -557,6 +698,10 @@ export class DataTableComponent {
 
   protected badgesOf(value: DataTableValue | undefined): string[] {
     return splitBadges(value);
+  }
+
+  protected rowKey(row: DataTableRow): string {
+    return String(row.id);
   }
 
   protected requestRowAction(action: DataTableRowAction, row: DataTableRow): void {
@@ -597,6 +742,10 @@ export class DataTableComponent {
     return String(row['name'] ?? row['nodeName'] ?? row['id'] ?? 'cet élément');
   }
 
+  protected rowSubject(row: DataTableRow): string {
+    return String(row['name'] ?? row['nodeName'] ?? row['id'] ?? 'cet élément');
+  }
+
   protected rowActionLabel(action: DataTableRowAction, row: DataTableRow): string {
     return this.isExpandedRow(row) && action.expandedLabel ? action.expandedLabel : action.label;
   }
@@ -630,14 +779,16 @@ export class DataTableComponent {
   }
 
   protected openSelectedRow(): void {
-    const [row] = this.selection.selected;
+    const [key] = this.selection.selected;
+    const row = this.rows().find((candidate) => this.rowKey(candidate) === key);
     if (!row) return;
     this.rowOpen.emit(row);
     this.clearSelection();
   }
 
   protected requestSelectionAction(action: DataTableSelectionAction): void {
-    const rows = [...this.selection.selected];
+    const selectedKeys = new Set(this.selection.selected);
+    const rows = this.rows().filter((row) => selectedKeys.has(this.rowKey(row)));
     if (!rows.length) return;
     const confirmation = action.confirmation?.(rows);
     if (!confirmation) {
@@ -655,15 +806,15 @@ export class DataTableComponent {
 
   protected isAllSelected(): boolean {
     const rows = this.dataSource.filteredData;
-    return rows.length > 0 && rows.every((row) => this.selection.isSelected(row));
+    return rows.length > 0 && rows.every((row) => this.selection.isSelected(this.rowKey(row)));
   }
 
   protected toggleAll(): void {
     const rows = this.dataSource.filteredData;
     if (this.isAllSelected()) {
-      rows.forEach((row) => this.selection.deselect(row));
+      rows.forEach((row) => this.selection.deselect(this.rowKey(row)));
     } else {
-      rows.forEach((row) => this.selection.select(row));
+      this.selection.select(...rows.map((row) => this.rowKey(row)));
     }
     this.emitSelectionChange();
   }
@@ -675,12 +826,12 @@ export class DataTableComponent {
       this.selectFromRow(row, clickEvent);
       return;
     }
-    this.selection.toggle(row);
-    this.selectionAnchor = row;
+    this.selection.toggle(this.rowKey(row));
+    this.selectionAnchor = this.rowKey(row);
     this.emitSelectionChange();
   }
 
-  private selectionAnchor: DataTableRow | undefined;
+  private selectionAnchor: string | undefined;
   private pendingCheckboxClick: MouseEvent | undefined;
 
   protected captureCheckboxClick(event: MouseEvent): void {
@@ -693,12 +844,14 @@ export class DataTableComponent {
       const rows = this.dataSource.sort
         ? this.dataSource.sortData(this.dataSource.filteredData, this.dataSource.sort)
         : this.dataSource.filteredData;
-      const anchorIndex = rows.indexOf(this.selectionAnchor);
-      const targetIndex = rows.indexOf(row);
+      const anchorIndex = rows.findIndex((candidate) => this.rowKey(candidate) === this.selectionAnchor);
+      const targetIndex = rows.findIndex((candidate) => this.rowKey(candidate) === this.rowKey(row));
       if (anchorIndex >= 0 && targetIndex >= 0) {
         if (!event.ctrlKey && !event.metaKey) this.selection.clear();
         this.selection.select(
-          ...rows.slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1),
+          ...rows
+            .slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1)
+            .map((candidate) => this.rowKey(candidate)),
         );
         this.emitSelectionChange();
         return;
@@ -706,12 +859,12 @@ export class DataTableComponent {
     }
 
     if (event.ctrlKey || event.metaKey) {
-      this.selection.toggle(row);
+      this.selection.toggle(this.rowKey(row));
     } else {
       this.selection.clear();
-      this.selection.select(row);
+      this.selection.select(this.rowKey(row));
     }
-    this.selectionAnchor = row;
+    this.selectionAnchor = this.rowKey(row);
     this.emitSelectionChange();
   }
 
@@ -724,7 +877,8 @@ export class DataTableComponent {
   }
 
   private emitSelectionChange(): void {
-    const selected = [...this.selection.selected];
+    const selectedKeys = new Set(this.selection.selected);
+    const selected = this.rows().filter((row) => selectedKeys.has(this.rowKey(row)));
     this.selectedRows.set(selected);
     if (!selected.length) this.selectionAnchor = undefined;
     this.selectionChange.emit(selected);

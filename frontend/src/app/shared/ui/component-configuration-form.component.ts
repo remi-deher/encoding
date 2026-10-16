@@ -19,6 +19,7 @@ import {
   VideoEncoderDescriptor,
 } from '../models/encoding-profiles';
 import { CodeEditorComponent } from './code-editor.component';
+import { SchemaFormFieldComponent } from './schema-form-field.component';
 import {
   FlowComponentConfiguration,
   FlowComponentConfigurationField,
@@ -41,6 +42,7 @@ type ConfigurationFormGroup = FormGroup<
     ReactiveFormsModule,
     ConditionTreeEditorComponent,
     CodeEditorComponent,
+    SchemaFormFieldComponent,
   ],
   template: `
     <form class="configuration-form" [formGroup]="form" (ngSubmit)="save()">
@@ -83,23 +85,15 @@ type ConfigurationFormGroup = FormGroup<
                   </div>
                 }
                 @case ('select') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>{{ field.label }}</mat-label>
-                    <mat-select
-                      [formControlName]="field.id"
-                      (selectionChange)="onSelectFieldChanged(field.id)"
-                    >
-                      @for (option of field.options; track option.value) {
-                        <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                      }
-                    </mat-select>
-                    @if (field.description) {
-                      <mat-hint>{{ field.description }}</mat-hint>
-                    }
-                    @if (form.controls[field.id].invalid && form.controls[field.id].touched) {
-                      <mat-error>{{ form.controls[field.id].errors?.['configuration'] }}</mat-error>
-                    }
-                  </mat-form-field>
+                  <app-schema-form-field
+                    [label]="field.label"
+                    type="select"
+                    [control]="form.controls[field.id]"
+                    [options]="field.options"
+                    [hint]="field.description ?? ''"
+                    [error]="configurationFieldError(field.id)"
+                    (selectionChanged)="onSelectFieldChanged(field.id)"
+                  />
                 }
                 @case ('script-reference') {
                   <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -205,23 +199,16 @@ type ConfigurationFormGroup = FormGroup<
                   </mat-form-field>
                 }
                 @case ('number') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>{{ field.label }}</mat-label>
-                    <input
-                      matInput
-                      type="number"
-                      [formControlName]="field.id"
-                      [attr.min]="field.min ?? null"
-                      [attr.max]="field.max ?? null"
-                      [attr.step]="field.step ?? null"
-                    />
-                    @if (field.description) {
-                      <mat-hint>{{ field.description }}</mat-hint>
-                    }
-                    @if (form.controls[field.id].invalid && form.controls[field.id].touched) {
-                      <mat-error>{{ form.controls[field.id].errors?.['configuration'] }}</mat-error>
-                    }
-                  </mat-form-field>
+                  <app-schema-form-field
+                    [label]="field.label"
+                    type="number"
+                    [control]="form.controls[field.id]"
+                    [hint]="field.description ?? ''"
+                    [error]="configurationFieldError(field.id)"
+                    [min]="field.min"
+                    [max]="field.max"
+                    [step]="field.step"
+                  />
                 }
                 @case ('text') {
                   @if (field.id === 'code') {
@@ -244,53 +231,31 @@ type ConfigurationFormGroup = FormGroup<
                       }
                     </section>
                   } @else {
-                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                      <mat-label>{{ field.label }}</mat-label>
-                      @if (field.multiline) {
-                        <textarea
-                          matInput
-                          rows="6"
-                          [formControlName]="field.id"
-                          [placeholder]="field.placeholder ?? ''"
-                        ></textarea>
-                      } @else {
-                        <input
-                          matInput
-                          type="text"
-                          [formControlName]="field.id"
-                          [placeholder]="field.placeholder ?? ''"
-                        />
-                      }
-                      @if (field.description) {
-                        <mat-hint>{{ field.description }}</mat-hint>
-                      }
-                      @if (form.controls[field.id].invalid && form.controls[field.id].touched) {
-                        <mat-error>{{
-                          form.controls[field.id].errors?.['configuration']
-                        }}</mat-error>
-                      }
-                    </mat-form-field>
+                    <app-schema-form-field
+                      [label]="field.label"
+                      [type]="field.multiline ? 'textarea' : 'text'"
+                      [control]="form.controls[field.id]"
+                      [hint]="field.description ?? ''"
+                      [error]="configurationFieldError(field.id)"
+                      [placeholder]="field.placeholder ?? ''"
+                      [rows]="6"
+                    />
                   }
                 }
                 @case ('secret') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>{{ field.label }}</mat-label>
-                    <input
-                      matInput
-                      type="password"
-                      autocomplete="new-password"
-                      [formControlName]="field.id"
-                      [placeholder]="field.placeholder ?? ''"
-                    />
-                    @if (configuredSecrets().includes(field.id)) {
-                      <mat-hint>Laissez vide pour conserver le secret enregistré.</mat-hint>
-                    } @else if (field.description) {
-                      <mat-hint>{{ field.description }}</mat-hint>
-                    }
-                    @if (form.controls[field.id].invalid && form.controls[field.id].touched) {
-                      <mat-error>{{ form.controls[field.id].errors?.['configuration'] }}</mat-error>
-                    }
-                  </mat-form-field>
+                  <app-schema-form-field
+                    [label]="field.label"
+                    type="password"
+                    autocomplete="new-password"
+                    [control]="form.controls[field.id]"
+                    [hint]="
+                      configuredSecrets().includes(field.id)
+                        ? 'Laissez vide pour conserver le secret enregistré.'
+                        : (field.description ?? '')
+                    "
+                    [error]="configurationFieldError(field.id)"
+                    [placeholder]="field.placeholder ?? ''"
+                  />
                   @if (configuredSecrets().includes(field.id)) {
                     <mat-checkbox
                       [checked]="secretsToClear.has(field.id)"
@@ -625,6 +590,13 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     control?.setValue(value);
     control?.markAsDirty();
     control?.markAsTouched();
+  }
+
+  protected configurationFieldError(fieldId: string): string {
+    const control = this.form.controls[fieldId];
+    return control.invalid && control.touched
+      ? String(control.errors?.['configuration'] ?? 'Vérifiez cette valeur.')
+      : '';
   }
 
   protected async selectScriptVersion(fieldId: string, reference: string): Promise<void> {

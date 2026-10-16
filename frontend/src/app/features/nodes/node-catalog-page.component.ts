@@ -1,8 +1,16 @@
 import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
 import { nodeMemberSections } from '../../shared/models/node-hardware';
-import { ResourceCardAction, ResourceCardComponent, ResourceCardSection } from '../../shared/ui/resource-card.component';
-import { nodeLifecycle, NODE_LIFECYCLE_LABELS, NODE_LIFECYCLE_TONES } from '../../shared/models/cluster-health';
+import {
+  ResourceCardAction,
+  ResourceCardComponent,
+  ResourceCardSection,
+} from '../../shared/ui/resource-card.component';
+import {
+  nodeLifecycle,
+  NODE_LIFECYCLE_LABELS,
+  NODE_LIFECYCLE_TONES,
+} from '../../shared/models/cluster-health';
 import { firstValueFrom } from 'rxjs';
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../../shared/models/auth';
@@ -26,9 +34,8 @@ import { AuthService } from '../../core/auth/auth.service';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
-import { BreakpointObserver } from '@angular/cdk/layout';
 import { LocalNodeController } from '../../shared/services/local-node-controller';
-import { GuidedSetupComponent } from '../../shared/ui/guided-setup.component';
+import { GuidedSetupComponent, GuidedStep } from '../../shared/ui/guided-setup.component';
 import { ResourceSheetComponent } from '../../shared/ui/resource-sheet.component';
 import { StatusBadgeComponent, StatusTone } from '../../shared/ui/status-badge.component';
 import {
@@ -68,16 +75,17 @@ import {
   DataTableToggleEvent,
   DataTableSelectionAction,
   DataTableSelectionActionEvent,
+  DataTableLayoutOption,
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
-import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
+import { DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
+import { nodeCapabilityCards, nodeCapabilityFields } from '../../shared/models/node-capabilities';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { NodeModeController } from '../../shared/services/node-mode-controller';
 import { NotificationService } from '../../shared/services/notification.service';
 import {
   DetailCard,
   DetailCardGridComponent,
-  DetailCardIcon,
 } from '../../shared/ui/detail-card-grid.component';
 import {
   LibraryNodeAccessFormComponent,
@@ -201,12 +209,6 @@ export class NodeCatalogPageComponent {
   protected readonly managementTabs = NODE_MANAGEMENT_TABS;
   protected readonly createClusterForm = CREATE_CLUSTER_FORM;
   protected readonly autonomousCards = AUTONOMOUS_CARDS;
-  protected readonly handset = toSignal(
-    inject(BreakpointObserver)
-      .observe('(max-width: 700px)')
-      .pipe(map((result) => result.matches)),
-    { initialValue: false },
-  );
   protected readonly localNode = computed(
     () => this.nodes().find((node) => node.id === this.local.status()?.nodeId) ?? null,
   );
@@ -367,6 +369,9 @@ export class NodeCatalogPageComponent {
   protected readonly selectedAvailableLibraryId = signal('');
   protected readonly enrollmentView = signal<'requests' | 'key' | 'review'>('requests');
   protected readonly selectedEnrollment = signal<PendingNodeEnrollmentResponse | null>(null);
+  protected readonly enrollmentStep = signal(0);
+  protected readonly enrollmentCodeConfirmed = signal(false);
+  protected readonly enrollmentApprovalBusy = signal(false);
   protected readonly selectedNode = signal<NodeRecord | null>(null);
   protected readonly selectedNodeTabIndex = signal(0);
   protected readonly identityForm = signal<RecordFormData | null>(null);
@@ -812,142 +817,12 @@ export class NodeCatalogPageComponent {
       this.notifications.show('Les étiquettes ou le nom du nœud sont invalides.');
     }
   }
-  protected readonly capabilityFields = computed<readonly DetailField[]>(() => {
-    const capabilities = this.rawNode()?.capabilities ?? [];
-    const tools = capabilities.filter((capability) => !capability.toolId.startsWith('plugin/'));
-    return [
-      { label: 'Outils détectés', value: tools.length },
-      {
-        label: 'Plugins déclarés',
-        value: capabilities.filter((capability) => capability.toolId.startsWith('plugin/')).length,
-      },
-      {
-        label: 'Accélérations vérifiées',
-        value:
-          [...new Set(tools.flatMap((tool) => tool.accelerationTypes))].join(' · ') ||
-          'Aucune déclarée',
-      },
-      {
-        label: 'Encodeurs vérifiés utilisables',
-        value: [
-          ...new Set(
-            tools
-              .flatMap((tool) => tool.encoderChecks ?? [])
-              .filter((check) => check.status === 'usable')
-              .map((check) => check.encoderId),
-          ),
-        ].length,
-      },
-    ];
-  });
-  protected readonly capabilityCards = computed<readonly DetailCard[]>(() =>
-    (this.rawNode()?.capabilities ?? []).map((tool) => {
-      const isPlugin = tool.toolId.startsWith('plugin/');
-      const accelerationTypes = isPlugin
-        ? []
-        : tool.accelerationTypes.filter((value) => value !== 'process');
-      const encoders = [...new Set(tool.encoders ?? [])]
-        .filter((name) => name !== '=')
-        .sort((left, right) => left.localeCompare(right));
-      const checks = new Map((tool.encoderChecks ?? []).map((check) => [check.encoderId, check]));
-      const usableCount =
-        tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
-      const detectedCount =
-        tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
-      const sections: DetailCard['sections'][number][] = [];
-
-      if (accelerationTypes.length) {
-        sections.push({
-          title: 'Accélérations vérifiées',
-          items: accelerationTypes.map((name) => ({
-            label: this.capabilityLabel(name),
-            description: 'Test synthétique réussi',
-            tone: 'success',
-          })),
-        });
-      }
-
-      if (encoders.length) {
-        sections.push({
-          title: 'Encodeurs vidéo détectés',
-          items: encoders.map((name) => {
-            const check = checks.get(name);
-            return {
-              label: name,
-              description:
-                check?.status === 'usable'
-                  ? 'Utilisable · test réussi'
-                  : check?.status === 'detected'
-                    ? 'Test non concluant'
-                    : 'Détecté · non vérifié',
-              tone: check?.status === 'usable' ? 'success' : check ? 'warning' : 'neutral',
-            };
-          }),
-        });
-      }
-
-      if (isPlugin) {
-        sections.push({
-          title: 'Plugin',
-          items: [
-            {
-              label: this.capabilityTitle(tool.toolId),
-              description: 'Manifeste lu par le worker',
-              tone: 'accent',
-            },
-          ],
-        });
-      }
-
-      const tags: DetailCard['tags'][number][] = accelerationTypes.map((name) => ({
-        label: `${this.capabilityLabel(name)} utilisable`,
-        tone: 'success',
-      }));
-      if (usableCount)
-        tags.push({ label: `${usableCount} encodeur(s) utilisable(s)`, tone: 'success' });
-      if (detectedCount)
-        tags.push({ label: `${detectedCount} test(s) non concluant(s)`, tone: 'warning' });
-      if (!tags.length)
-        tags.push({ label: isPlugin ? 'Plugin déclaré' : 'Outil détecté', tone: 'neutral' });
-
-      return {
-        id: tool.toolId,
-        title: this.capabilityTitle(tool.toolId),
-        subtitle: `Version ${tool.version} · ${isPlugin ? 'Plugin' : 'Outil'}`,
-        icon: this.capabilityIcon(tool.toolId),
-        status: { label: isPlugin ? 'Déclaré' : 'Détecté', tone: isPlugin ? 'accent' : 'neutral' },
-        tags,
-        sections,
-      };
-    }),
+  protected readonly capabilityFields = computed(() =>
+    nodeCapabilityFields(this.rawNode()?.capabilities ?? []),
   );
-
-  private capabilityTitle(toolId: string): string {
-    const pluginName = toolId.startsWith('plugin/') ? toolId.slice('plugin/'.length) : toolId;
-    const labels: Readonly<Record<string, string>> = {
-      ffmpeg: 'FFmpeg',
-      ffprobe: 'FFprobe',
-      mkvtoolnix: 'MKVToolNix',
-      mediainfo: 'MediaInfo',
-      imagemagick: 'ImageMagick',
-      javascript: 'JavaScript',
-      python: 'Python',
-    };
-    return (
-      labels[pluginName] ?? pluginName.charAt(0).toLocaleUpperCase('fr-FR') + pluginName.slice(1)
-    );
-  }
-
-  private capabilityIcon(toolId: string): DetailCardIcon {
-    if (toolId.startsWith('plugin/')) return 'plugin';
-    if (toolId === 'imagemagick') return 'image';
-    if (toolId === 'ffmpeg') return 'video';
-    return 'tool';
-  }
-
-  private capabilityLabel(value: string): string {
-    return value.toLocaleUpperCase('fr-FR');
-  }
+  protected readonly capabilityCards = computed(() =>
+    nodeCapabilityCards(this.rawNode()?.capabilities ?? []),
+  );
   protected readonly nodeActions: readonly DataTableRowAction[] = [
     { id: 'identity', label: 'Nom et étiquettes', visibleWhen: () => this.isAdmin() },
     { id: 'mode', label: 'Changer le mode', visibleWhen: () => this.isAdmin() },
@@ -1213,7 +1088,9 @@ export class NodeCatalogPageComponent {
       ? [
           { id: 'identity', label: 'Nom et étiquettes' },
           { id: 'mode', label: 'Changer le mode' },
-          ...(this.removalBusy() ? [] : [{ id: 'delete', label: 'Supprimer', tone: 'danger' as const }]),
+          ...(this.removalBusy()
+            ? []
+            : [{ id: 'delete', label: 'Supprimer', tone: 'danger' as const }]),
         ]
       : [],
   );
@@ -1337,6 +1214,106 @@ export class NodeCatalogPageComponent {
     { key: 'capabilitiesLabel', label: 'Capacités', sortable: true },
     { key: 'expiresAtLabel', label: 'Expiration', sortable: true },
   ];
+  protected readonly enrollmentLayoutOptions: readonly DataTableLayoutOption[] = [
+    { value: 'resources', label: 'Cartes' },
+    { value: 'table', label: 'Tableau' },
+  ];
+  protected readonly enrollmentSteps = computed<readonly GuidedStep[]>(() => {
+    const request = this.selectedEnrollment();
+    if (!request) return [];
+
+    const card: DetailCard = {
+      id: `enrollment-${request.id}`,
+      title: request.name,
+      subtitle: 'Nœud demandeur',
+      icon: 'server',
+      status: { label: 'En attente', tone: 'warning' },
+      tags: request.roles.map((role) => ({ label: NODE_ROLE_LABELS[role], tone: 'accent' })),
+      sections: [
+        {
+          title: 'Configuration annoncée',
+          items: [
+            {
+              label: 'Capacités',
+              description: this.capabilitiesLabel(request.capabilities),
+            },
+            {
+              label: 'Exécution simultanée',
+              description: `${request.maxConcurrentTasks} tâche(s)`,
+            },
+            {
+              label: 'Demande valable jusqu’au',
+              description: this.formatExpiryTime(request.expiresAt),
+            },
+          ],
+        },
+      ],
+    };
+    const code = request.verificationCode ?? 'Code indisponible';
+    const codeCard: DetailCard = {
+      id: `enrollment-code-${request.id}`,
+      title: code,
+      subtitle: 'Code à comparer avec celui affiché sur le nœud demandeur',
+      icon: 'system',
+      tags: [{ label: 'Vérification requise', tone: 'warning' }],
+      sections: [
+        {
+          title: 'Vérification à deux écrans',
+          items: [
+            {
+              label: 'Adresse du cluster',
+              description: this.clusterAddress() ?? 'Cluster actuel',
+            },
+          ],
+        },
+      ],
+    };
+    return [
+      {
+        id: 'request',
+        label: 'Demande',
+        description: 'Vérifiez le nœud et les fonctions qu’il annonce au cluster.',
+        cards: [card],
+        actions: [
+          { id: 'cancel', label: 'Annuler' },
+          { id: 'continue', label: 'Continuer', primary: true },
+        ],
+      },
+      {
+        id: 'verification',
+        label: 'Vérification',
+        description: 'Le code doit être identique sur les deux écrans.',
+        cards: [codeCard],
+        note: request.verificationCode
+          ? 'Confirmez uniquement si le code correspond exactement sur les deux nœuds.'
+          : 'Aucun code de vérification n’est disponible. Cette demande ne peut pas être approuvée ; actualisez les demandes et réessayez.',
+        acknowledgement: {
+          label: 'J’ai comparé les deux écrans et les codes sont identiques.',
+        },
+        actions: [
+          { id: 'back', label: 'Précédent' },
+          {
+            id: 'continue',
+            label: 'Continuer',
+            primary: true,
+            disabled: !request.verificationCode,
+            requiresAcknowledgement: true,
+          },
+        ],
+      },
+      {
+        id: 'approval',
+        label: 'Approbation',
+        description: `Le nœud rejoindra le cluster ${this.clusterName()} avec les rôles et capacités annoncés.`,
+        cards: [card],
+        note: 'Après approbation, le nœud apparaît parmi les membres dès qu’il confirme sa connexion.',
+        actions: [
+          { id: 'back', label: 'Précédent' },
+          { id: 'approve', label: 'Approuver le rattachement', primary: true },
+        ],
+      },
+    ];
+  });
   protected readonly enrollmentRows = computed<readonly PendingNodeEnrollmentRecord[]>(() =>
     this.pendingEnrollments().map((request) => ({
       id: request.id,
@@ -1407,6 +1384,8 @@ export class NodeCatalogPageComponent {
     this.actionType.set('enrollment');
     this.enrollmentView.set('requests');
     this.selectedEnrollment.set(null);
+    this.enrollmentStep.set(0);
+    this.enrollmentCodeConfirmed.set(false);
     this.actionOpen.set(true);
     this.refreshEnrollmentWindow();
   }
@@ -1491,6 +1470,8 @@ export class NodeCatalogPageComponent {
     }
     this.actionOpen.set(false);
     this.selectedEnrollment.set(null);
+    this.enrollmentStep.set(0);
+    this.enrollmentCodeConfirmed.set(false);
     this.selectedNodeLibrary.set(null);
   }
 
@@ -1501,6 +1482,9 @@ export class NodeCatalogPageComponent {
 
   protected showPendingRequests(): void {
     this.enrollmentView.set('requests');
+    this.selectedEnrollment.set(null);
+    this.enrollmentStep.set(0);
+    this.enrollmentCodeConfirmed.set(false);
   }
 
   protected onEnrollmentOpen(row: DataTableRow): void {
@@ -1508,17 +1492,39 @@ export class NodeCatalogPageComponent {
     this.selectedEnrollment.set(request);
     if (request) {
       this.enrollmentView.set('review');
+      this.enrollmentStep.set(0);
+      this.enrollmentCodeConfirmed.set(false);
       this.actionType.set('enrollment');
       this.actionOpen.set(true);
     }
   }
 
+  protected onEnrollmentSetupAction(id: string): void {
+    if (id === 'cancel') {
+      this.closeCreateNode();
+    } else if (id === 'back') {
+      this.enrollmentStep.update((index) => Math.max(0, index - 1));
+    } else if (id === 'continue') {
+      this.enrollmentStep.update((index) => Math.min(2, index + 1));
+    } else if (id === 'approve') {
+      this.approveEnrollment();
+    }
+  }
+
   protected approveEnrollment(): void {
     const request = this.selectedEnrollment();
-    if (!request) return;
+    if (
+      !request ||
+      !request.verificationCode ||
+      this.enrollmentApprovalBusy() ||
+      !this.enrollmentCodeConfirmed()
+    )
+      return;
+    this.enrollmentApprovalBusy.set(true);
     this.http
       .post<NodeResponse>(`/api/v1/nodes/enrollment-requests/${request.id}/approve`, {})
       .pipe(
+        finalize(() => this.enrollmentApprovalBusy.set(false)),
         catchError((error: { status?: number }) => {
           this.notifications.show(
             error.status === 404
@@ -1578,10 +1584,6 @@ export class NodeCatalogPageComponent {
     return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(
       new Date(value),
     );
-  }
-
-  protected rolesLabel(roles: readonly NodeRole[]): string {
-    return roles.map((role) => NODE_ROLE_LABELS[role]).join(' · ');
   }
 
   protected capabilitiesLabel(capabilities: readonly NodeToolCapability[]): string {

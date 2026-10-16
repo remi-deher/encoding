@@ -20,10 +20,17 @@ import { NodeMode, NodeModeDialogData } from '../models/node-mode';
     MatSlideToggleModule,
   ],
   template: `
-    <h2 mat-dialog-title>
-      {{ data.remoteNodeName ? 'Mode de « ' + data.remoteNodeName + ' »' : 'Mode de ce nœud' }}
-    </h2>
-    <mat-dialog-content>
+    <section class="app-dialog">
+      <header class="app-dialog-header">
+        <span class="app-dialog-icon" aria-hidden="true">◈</span>
+        <div class="app-dialog-heading">
+          <p class="app-dialog-eyebrow">Fonctions du nœud</p>
+          <h2 mat-dialog-title>
+            {{ data.remoteNodeName ? 'Mode de « ' + data.remoteNodeName + ' »' : 'Mode de ce nœud' }}
+          </h2>
+        </div>
+      </header>
+      <mat-dialog-content class="app-dialog-body">
       @if (data.remoteNodeName) {
         <p class="note" role="note">
           Le nœud applique ce mode à son prochain signal de présence, à condition d’être géré par
@@ -63,18 +70,19 @@ import { NodeMode, NodeModeDialogData } from '../models/node-mode';
           depuis la page de ce nœud.
         </p>
       }
-    </mat-dialog-content>
-    <mat-dialog-actions align="end">
-      <button matButton="text" type="button" (click)="dialogRef.close()">Annuler</button>
-      <button
-        matButton="filled"
-        type="button"
-        [disabled]="!data.managed || !valid() || !changed()"
-        (click)="dialogRef.close(selection())"
-      >
-        Appliquer
-      </button>
-    </mat-dialog-actions>
+      </mat-dialog-content>
+      <mat-dialog-actions class="app-dialog-footer" align="end">
+        <button matButton="text" type="button" (click)="dialogRef.close()">Annuler</button>
+        <button
+          matButton="filled"
+          type="button"
+          [disabled]="!data.managed || !valid() || !changed()"
+          (click)="dialogRef.close(selection())"
+        >
+          Appliquer
+        </button>
+      </mat-dialog-actions>
+    </section>
   `,
   styles: `
     h2 {
@@ -117,4 +125,9 @@ export class NodeModeDialogComponent {
   protected readonly changed = computed(
     () => this.server() !== this.data.server || this.worker() !== this.data.worker,
   );
+
+  constructor() {
+    this.dialogRef.addPanelClass('app-dialog-panel');
+    this.dialogRef.updateSize('480px');
+  }
 }

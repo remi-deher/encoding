@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { afterRenderEffect, Component, inject, input, output, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatStepper, MatStepperIntl, MatStepperModule } from '@angular/material/stepper';
 import { DetailCardGridComponent, DetailCard } from './detail-card-grid.component';
@@ -22,12 +23,21 @@ export interface GuidedStep {
   readonly form?: RecordFormData;
   readonly cards?: readonly DetailCard[];
   readonly note?: string;
+  readonly acknowledgement?: {
+    readonly label: string;
+  };
   readonly choices?: {
     readonly columns: readonly DataTableColumn[];
     readonly rows: readonly DataTableRow[];
     readonly actions?: readonly DataTableRowAction[];
   };
-  readonly actions?: readonly { id: string; label: string; primary?: boolean }[];
+  readonly actions?: readonly {
+    id: string;
+    label: string;
+    primary?: boolean;
+    disabled?: boolean;
+    requiresAcknowledgement?: boolean;
+  }[];
 }
 
 /** Gabarit de saisie guidée : étapes déclaratives, formulaires communs et stepper Material/CDK. */
@@ -47,6 +57,7 @@ export interface GuidedStep {
   imports: [
     MatStepperModule,
     MatButtonModule,
+    MatCheckboxModule,
     MatProgressBarModule,
     RecordFormComponent,
     DetailCardGridComponent,
@@ -59,7 +70,11 @@ export interface GuidedStep {
     @if (error()) {
       <p role="alert" class="error">{{ error() }}</p>
     }
-    <mat-stepper orientation="vertical" linear aria-label="Étapes du parcours">
+    <mat-stepper
+      [orientation]="handset() ? 'vertical' : orientation()"
+      linear
+      aria-label="Étapes du parcours"
+    >
       <ng-template matStepperIcon="done">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path d="m5 12 4 4 10-10" fill="none" stroke="currentColor" stroke-width="2" />
@@ -88,10 +103,21 @@ export interface GuidedStep {
             @if (step.note) {
               <p role="note" class="note">{{ step.note }}</p>
             }
+            @if (step.acknowledgement; as acknowledgement) {
+              <mat-checkbox
+                class="acknowledgement"
+                [checked]="acknowledged()"
+                [disabled]="busy() || disabled()"
+                (change)="acknowledgementChange.emit($event.checked)"
+              >
+                {{ acknowledgement.label }}
+              </mat-checkbox>
+            }
             @if (step.form) {
               <app-record-form
                 [data]="step.form!"
                 [busy]="busy() || disabled()"
+                [useStepper]="false"
                 (submitted)="submitted.emit({ stepId: step.id, values: $event })"
                 (cancelled)="cancelled.emit()"
               />
@@ -100,7 +126,12 @@ export interface GuidedStep {
               @for (action of step.actions ?? []; track action.id) {
                 <button
                   [matButton]="action.primary ? 'filled' : 'outlined'"
-                  [disabled]="busy() || disabled()"
+                  [disabled]="
+                    busy() ||
+                    disabled() ||
+                    action.disabled ||
+                    (action.requiresAcknowledgement && !acknowledged())
+                  "
                   (click)="acted.emit(action.id)"
                 >
                   {{ action.label }}
@@ -135,6 +166,10 @@ export interface GuidedStep {
       background: var(--danger-soft);
       color: var(--text-primary);
     }
+    .acknowledgement {
+      display: block;
+      margin-block: var(--space-4);
+    }
   `,
 })
 export class GuidedSetupComponent {
@@ -146,15 +181,18 @@ export class GuidedSetupComponent {
   );
   private readonly stepper = viewChild(MatStepper);
   readonly steps = input.required<readonly GuidedStep[]>();
+  readonly orientation = input<'horizontal' | 'vertical'>('vertical');
   readonly index = input(0);
   readonly busy = input(false);
   readonly disabled = input(false);
   readonly error = input('');
+  readonly acknowledged = input(false);
   readonly submitted = output<{ stepId: string; values: Record<string, string> }>();
   readonly acted = output<string>();
   readonly cancelled = output<void>();
   readonly chosen = output<DataTableRow>();
   readonly choiceAction = output<DataTableActionEvent>();
+  readonly acknowledgementChange = output<boolean>();
   constructor() {
     // Appliquer l'index après les indicateurs completed des étapes ; le stepper linéaire
     // vérifie ces indicateurs avant d'autoriser le passage à l'étape suivante.

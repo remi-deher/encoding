@@ -176,7 +176,12 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       (closed)="selectedId.set(null); executionOpened.emit(null)"
     >
       <ng-template #executionDetail>
-        <mat-tab-group class="execution-detail-tabs" aria-label="Informations de l’exécution">
+        <mat-tab-group
+          class="execution-detail-tabs"
+          aria-label="Informations de l’exécution"
+          [selectedIndex]="detailTabIndex()"
+          (selectedIndexChange)="detailTabChange.emit($event)"
+        >
           <mat-tab label="Synthèse">
             <div class="execution-detail-tab">
               <app-detail-field-list [fields]="executionDetailFields()" />
@@ -394,6 +399,8 @@ export class ExecutionMonitorTemplateComponent {
       ].find((row) => row['id'] === this.selectedId()) ?? null,
   );
   readonly executionOpened = output<string | null>();
+  readonly detailTabIndex = input(0);
+  readonly detailTabChange = output<number>();
   readonly eventRows = input<readonly DataTableRow[]>([]);
   readonly eventFeedback = input('');
   readonly pipelineSteps = input<readonly ExecutionPipelineStep[]>([]);
@@ -470,6 +477,7 @@ export class ExecutionMonitorTemplateComponent {
   });
 
   protected openExecution(execution: DataTableRow): void {
+    this.detailTabChange.emit(0);
     this.selectedId.set(String(execution['id']));
     this.executionOpened.emit(String(execution['id']));
   }

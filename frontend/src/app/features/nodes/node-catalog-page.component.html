@@ -215,7 +215,8 @@
         <app-data-table
           [columns]="enrollmentColumns"
           [rows]="enrollmentRows()"
-          [layout]="handset() ? 'cards' : 'table'"
+          layout="resources"
+          [layoutOptions]="enrollmentLayoutOptions"
           [rowOpenable]="true"
           rowOpenLabel="Examiner la demande"
           (rowOpen)="onEnrollmentOpen($event)"
@@ -525,6 +526,8 @@
           <app-data-table
             [columns]="enrollmentColumns"
             [rows]="enrollmentRows()"
+            layout="resources"
+            [layoutOptions]="enrollmentLayoutOptions"
             [rowOpenable]="true"
             rowOpenLabel="Examiner"
             (rowOpen)="onEnrollmentOpen($event)"
@@ -584,52 +587,16 @@
           </div>
         }
       </section>
-    } @else if (enrollmentView() === 'review' && selectedEnrollment(); as request) {
-      <section class="enrollment-review" aria-label="Vérification du nœud">
-        <button matButton="text" type="button" (click)="showPendingRequests()">
-          ← Retour aux demandes
-        </button>
-        <div class="enrollment-step">
-          <span>Étape 2 sur 2</span>
-          <h3>Vérifier avant d’accepter</h3>
-          <p>Ce worker rejoindra le cluster avec les rôles et capacités annoncés ci-dessous.</p>
-        </div>
-        <dl class="enrollment-facts">
-          <div>
-            <dt>Code de vérification</dt>
-            <dd>
-              <code>{{ request.verificationCode ?? '—' }}</code> — doit être identique à celui
-              affiché sur le worker
-            </dd>
-          </div>
-          <div>
-            <dt>Nom</dt>
-            <dd>{{ request.name }}</dd>
-          </div>
-          <div>
-            <dt>Rôles</dt>
-            <dd>{{ rolesLabel(request.roles) }}</dd>
-          </div>
-          <div>
-            <dt>Capacités</dt>
-            <dd>{{ capabilitiesLabel(request.capabilities) }}</dd>
-          </div>
-          <div>
-            <dt>Exécution simultanée</dt>
-            <dd>{{ request.maxConcurrentTasks }} tâche(s)</dd>
-          </div>
-          <div>
-            <dt>Demande valable jusqu’à</dt>
-            <dd>{{ formatExpiryTime(request.expiresAt) }}</dd>
-          </div>
-        </dl>
-        <div class="form-actions">
-          <button matButton="text" type="button" (click)="showPendingRequests()">Annuler</button>
-          <button matButton="filled" type="button" (click)="approveEnrollment()">
-            Approuver le rattachement
-          </button>
-        </div>
-      </section>
+    } @else if (enrollmentView() === 'review' && selectedEnrollment()) {
+      <app-guided-setup
+        [steps]="enrollmentSteps()"
+        [index]="enrollmentStep()"
+        [orientation]="'horizontal'"
+        [busy]="enrollmentApprovalBusy()"
+        [acknowledged]="enrollmentCodeConfirmed()"
+        (acknowledgementChange)="enrollmentCodeConfirmed.set($event)"
+        (acted)="onEnrollmentSetupAction($event)"
+      />
     } @else if (enrollmentView() === 'key') {
       <div class="pairing-key-header">
         <button matButton="text" type="button" (click)="showPendingRequests()">
