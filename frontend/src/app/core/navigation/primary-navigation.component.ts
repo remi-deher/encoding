@@ -37,15 +37,6 @@ const NAVIGATION_GROUPS: readonly NavigationGroup[] = [
         glyph: '◇',
         keywords: ['médias', 'bibliothèques'],
       },
-      {
-        label: 'Profils d’encodage',
-        path: '/libraries/encoding-profiles',
-        glyph: '◫',
-        keywords: ['qualité', 'encodeur'],
-      },
-      { label: 'Modèles', path: '/libraries/templates', glyph: '▤', keywords: ['templates'] },
-      { label: 'Scripts', path: '/libraries/scripts', glyph: '≋', keywords: ['code'] },
-      { label: 'Packs de composants', path: '/libraries/packs', glyph: '⊞', keywords: ['plugins'] },
     ],
   },
   {
