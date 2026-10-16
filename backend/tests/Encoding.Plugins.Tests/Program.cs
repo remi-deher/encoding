@@ -13,6 +13,7 @@ await MembershipTests.RunAsync();
 await ScriptToolsTests.RunAsync();
 await AudioRulesMediaTests.RunAsync();
 await TrackNamesMediaTests.RunAsync();
+await SubtitlesMediaTests.RunAsync();
 await ProcessTests.RunAsync();
 
 var connection = Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");
