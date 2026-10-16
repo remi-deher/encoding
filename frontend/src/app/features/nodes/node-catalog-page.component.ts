@@ -1,7 +1,8 @@
 import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
-import { nodeAcceleratorValue, nodeHardwareLabel } from '../../shared/models/node-hardware';
-import { nodeLifecycle, NODE_LIFECYCLE_LABELS } from '../../shared/models/cluster-health';
+import { nodeMemberSections } from '../../shared/models/node-hardware';
+import { ResourceCardAction, ResourceCardComponent, ResourceCardSection } from '../../shared/ui/resource-card.component';
+import { nodeLifecycle, NODE_LIFECYCLE_LABELS, NODE_LIFECYCLE_TONES } from '../../shared/models/cluster-health';
 import { firstValueFrom } from 'rxjs';
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../../shared/models/auth';
@@ -29,7 +30,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { LocalNodeController } from '../../shared/services/local-node-controller';
 import { GuidedSetupComponent } from '../../shared/ui/guided-setup.component';
 import { ResourceSheetComponent } from '../../shared/ui/resource-sheet.component';
-import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
+import { StatusBadgeComponent, StatusTone } from '../../shared/ui/status-badge.component';
 import {
   AUTONOMOUS_CARDS,
   CREATE_CLUSTER_FORM,
@@ -117,13 +118,21 @@ interface PendingNodeEnrollmentRecord extends DataTableRow {
   readonly expiresAtLabel: string;
 }
 
+interface MemberCard {
+  readonly id: string;
+  readonly title: string;
+  readonly statusLabel: string;
+  readonly statusTone: StatusTone;
+  readonly badges: readonly string[];
+  readonly meta: string;
+  readonly sections: readonly ResourceCardSection[];
+}
+
 interface NodeRecord extends DataTableRow {
   readonly id: string;
   readonly name: string;
   readonly roleFilter: string;
   readonly roleLabel: string;
-  readonly accelerator: string;
-  readonly hardware: string;
   readonly libraryAccess: string;
   readonly workerLoad: string;
   readonly queueStatus: string;
@@ -141,6 +150,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
   providers: [LocalNodeController],
   imports: [
     DataTableComponent,
+    ResourceCardComponent,
     DetailFieldListComponent,
     DetailCardGridComponent,
     ResourceSheetComponent,
@@ -1145,8 +1155,6 @@ export class NodeCatalogPageComponent {
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom du nœud', sortable: true },
     { key: 'roleLabel', label: 'Rôle', sortable: true },
-    { key: 'hardware', label: 'Matériel', sortable: true },
-    { key: 'accelerator', label: 'Accélérateur graphique', sortable: true, badges: true },
     { key: 'libraryAccess', label: 'Accès aux bibliothèques', sortable: true },
     { key: 'workerLoad', label: 'Traitements', sortable: true },
     { key: 'state', label: 'État', sortable: true },
@@ -1164,7 +1172,7 @@ export class NodeCatalogPageComponent {
     ];
   });
 
-  protected readonly filteredNodes = computed(() => {
+  private readonly filteredRawNodes = computed(() => {
     const role = this.selectedRole();
     return this.nodes()
       .filter((node) => role === 'all' || node.roles.includes(role as NodeRole))
@@ -1175,9 +1183,82 @@ export class NodeCatalogPageComponent {
         (a, b) =>
           (this.stateGroup(a) === 'attention' ? -1 : 0) -
             (this.stateGroup(b) === 'attention' ? -1 : 0) || a.name.localeCompare(b.name, 'fr'),
-      )
-      .map((node) => this.toRecord(node));
+      );
   });
+  protected readonly filteredNodes = computed(() =>
+    this.filteredRawNodes().map((node) => this.toRecord(node)),
+  );
+
+  /** Cartes des membres du cluster : une ressource par ligne, actions dans le menu (0049). */
+  protected readonly memberCards = computed<readonly MemberCard[]>(() =>
+    this.filteredRawNodes().map((node) => {
+      const lifecycle = nodeLifecycle(node);
+      const record = this.toRecord(node);
+      return {
+        id: node.id,
+        title: node.displayName?.trim() || node.name,
+        statusLabel: NODE_LIFECYCLE_LABELS[lifecycle],
+        statusTone: NODE_LIFECYCLE_TONES[lifecycle],
+        badges: node.roles.map((role) => NODE_ROLE_LABELS[role]),
+        meta: `Dernier signal : ${record.lastSignal}`,
+        sections: nodeMemberSections(node, {
+          activeTasks: this.activityKnown() ? (this.activeTasks()[node.id] ?? 0) : null,
+          libraryAccess: record.libraryAccess,
+        }),
+      };
+    }),
+  );
+  protected readonly memberActions = computed<readonly ResourceCardAction[]>(() =>
+    this.isAdmin()
+      ? [
+          { id: 'identity', label: 'Nom et étiquettes' },
+          { id: 'mode', label: 'Changer le mode' },
+          ...(this.removalBusy() ? [] : [{ id: 'delete', label: 'Supprimer', tone: 'danger' as const }]),
+        ]
+      : [],
+  );
+  protected readonly emptySelection: ReadonlySet<string> = new Set();
+  protected readonly selectedMemberIds = signal<ReadonlySet<string>>(new Set());
+  protected toggleMember(id: string, checked: boolean): void {
+    this.selectedMemberIds.update((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+  protected onMemberCardAction(id: string, actionId: string): void {
+    const row = this.filteredNodes().find((item) => item.id === id);
+    if (!row) return;
+    if (actionId !== 'delete') {
+      this.onNodeAction({ actionId, row });
+      return;
+    }
+    this.dialog
+      .open(ConfirmationDialogComponent, {
+        data: this.nodeActions.find((action) => action.id === 'delete')!.confirmation!(row),
+      })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (confirmed) this.onNodeAction({ actionId: 'delete', row });
+      });
+  }
+  protected runMemberBulk(actionId: 'drain' | 'resume' | 'delete'): void {
+    const rows = this.filteredNodes().filter((row) => this.selectedMemberIds().has(row.id));
+    if (!rows.length) return;
+    const action = this.memberSelectionActions.find((item) => item.id === actionId)!;
+    const finish = () => {
+      this.onMemberSelectionAction({ actionId, rows });
+      this.selectedMemberIds.set(new Set());
+    };
+    if (!action.confirmation) return finish();
+    this.dialog
+      .open(ConfirmationDialogComponent, { data: action.confirmation(rows) })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (confirmed) finish();
+      });
+  }
 
   /** Cartes de nœuds : ce qui demande une action d'abord, puis par nom (architecture 0046). */
   /** Tâches actives par nœud (clé : identifiant), rafraîchies avec la liste. */
@@ -1774,8 +1855,6 @@ export class NodeCatalogPageComponent {
       name: node.displayName?.trim() || node.name,
       roleFilter: `|${node.roles.join('|')}|`,
       roleLabel,
-      accelerator: nodeAcceleratorValue(node),
-      hardware: nodeHardwareLabel(node),
       libraryAccess: this.libraryAccessSummary(node.id),
       workerLoad: worker
         ? this.activityKnown()

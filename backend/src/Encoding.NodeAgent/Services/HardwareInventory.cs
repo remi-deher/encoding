@@ -17,7 +17,13 @@ public static class HardwareInventory
         ["0x8086"] = "Intel",
     };
 
-    public static NodeInventory Current() => Read("/proc/cpuinfo", "/sys/class/drm");
+    /// <summary>Base d'identifiants PCI (paquet hwdata / pciutils) ; absente, le GPU garde ses identifiants numériques.</summary>
+    private static readonly string[] PciIdsPaths = ["/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids", "/usr/share/pci.ids"];
+
+    /// <summary>Lu une seule fois : le matériel ne change pas pendant la vie du processus et la base PCI est volumineuse.</summary>
+    private static readonly Lazy<NodeInventory> CurrentInventory = new(() => Read("/proc/cpuinfo", "/sys/class/drm"));
+
+    public static NodeInventory Current() => CurrentInventory.Value;
 
     public static NodeInventory Read(string cpuInfoPath, string drmRoot) => new(
         RuntimeInformation.OSDescription,
@@ -47,7 +53,7 @@ public static class HardwareInventory
         return null;
     }
 
-    public static IReadOnlyList<NodeGpu> ReadGpus(string drmRoot)
+    public static IReadOnlyList<NodeGpu> ReadGpus(string drmRoot, IReadOnlyList<string>? pciIdsPaths = null)
     {
         var gpus = new List<NodeGpu>();
         try
@@ -62,7 +68,8 @@ public static class HardwareInventory
                 if (vendorId is null) continue;
                 var vendor = Vendors.GetValueOrDefault(vendorId) ?? vendorId;
                 var driver = ReadUeventValue(Path.Combine(device, "uevent"), "DRIVER");
-                var name = deviceId is null ? vendor : $"{vendor} {deviceId}";
+                var friendly = deviceId is null ? null : LookupDeviceName(vendorId, deviceId, pciIdsPaths ?? PciIdsPaths);
+                var name = friendly is not null ? $"{vendor} {friendly}" : deviceId is null ? vendor : $"{vendor} {deviceId}";
                 gpus.Add(new NodeGpu(name, vendor, driver, Path.GetFileName(card)));
                 if (gpus.Count == 16) break;
             }
@@ -90,6 +97,43 @@ public static class HardwareInventory
                 if (line.StartsWith(prefix, StringComparison.Ordinal)) return line[prefix.Length..].Trim();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return null;
+    }
+
+    /// <summary>
+    /// Nom d'un périphérique PCI d'après pci.ids ; le nom commercial entre crochets est préféré
+    /// (« CoffeeLake-S GT2 [UHD Graphics 630] » donne « UHD Graphics 630 »). Best-effort : null si introuvable.
+    /// </summary>
+    public static string? LookupDeviceName(string vendorId, string deviceId, IReadOnlyList<string> pciIdsPaths)
+    {
+        var vendorKey = vendorId.Replace("0x", "", StringComparison.OrdinalIgnoreCase).Trim().ToLowerInvariant();
+        var deviceKey = deviceId.Replace("0x", "", StringComparison.OrdinalIgnoreCase).Trim().ToLowerInvariant();
+        foreach (var path in pciIdsPaths)
+        {
+            try
+            {
+                if (!File.Exists(path)) continue;
+                var inVendor = false;
+                foreach (var line in File.ReadLines(path))
+                {
+                    if (line.Length == 0 || line[0] == '#') continue;
+                    if (line[0] != '\t')
+                    {
+                        if (inVendor) return null; // section du fabricant terminée sans le périphérique
+                        inVendor = line.StartsWith(vendorKey + "  ", StringComparison.OrdinalIgnoreCase);
+                        continue;
+                    }
+                    if (!inVendor || line.Length < 2 || line[1] == '\t') continue; // sous-systèmes ignorés
+                    if (!line.StartsWith("\t" + deviceKey + "  ", StringComparison.OrdinalIgnoreCase)) continue;
+                    var name = line[(deviceKey.Length + 3)..].Trim();
+                    var open = name.LastIndexOf('[');
+                    var close = name.LastIndexOf(']');
+                    var friendly = open >= 0 && close > open ? name[(open + 1)..close].Trim() : name;
+                    return friendly.Length == 0 ? null : friendly.Length > 128 ? friendly[..128] : friendly;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
         return null;
     }
 }
