@@ -1,4 +1,4 @@
-import { NodeRole, NodeToolCapability } from './cluster';
+import { NodeInventory, NodeRole, NodeToolCapability } from './cluster';
 
 export interface ClusterIdentity {
   readonly id: string;
@@ -22,6 +22,8 @@ export interface LocalNodeStatus {
   readonly maxConcurrentTasks: number;
   readonly automaticEnrollmentEnabled: boolean;
   readonly capabilities: readonly NodeToolCapability[];
+  /** Matériel déclaré par l'agent local ; disponible même quand la liste du cluster ne contient pas ce nœud. */
+  readonly inventory?: NodeInventory | null;
   readonly isEnrolled: boolean;
   readonly standalone?: boolean;
   readonly pairingKey: string | null;

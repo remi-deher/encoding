@@ -113,3 +113,14 @@ test('a standalone node names no cluster and an invalid date stays unknown', () 
   assert.equal(sheet.subtitle, 'Nœud autonome');
   assert.equal(formatLastSignal('n’importe quoi'), null);
 });
+
+test('a member node missing from the cluster list still shows its hardware from the agent', () => {
+  const sheet = localNodeSheet({
+    ...base,
+    node: null,
+    status: { ...base.status, inventory: node.inventory },
+  });
+  const [cpu] = section(sheet, 'hardware').metrics;
+  assert.notEqual(cpu.unavailable, true);
+  assert.match(cpu.detail, /mémoire installée/);
+});

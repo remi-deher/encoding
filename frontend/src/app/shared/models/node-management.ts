@@ -109,7 +109,7 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
           meter: { value: input.activeTasks, max, label: `${input.activeTasks} places de traitement occupées sur ${max}`, stale: agentUnavailable },
         };
   const signal = formatLastSignal(node?.lastSeenAt, input.now);
-  const inventory = node?.inventory ?? null;
+  const inventory = node?.inventory ?? status?.inventory ?? null;
   const gpus = inventory?.gpus ?? [];
   const tools = status?.capabilities ?? [];
   const notices: ResourceSheetNotice[] = [];
