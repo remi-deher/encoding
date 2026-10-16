@@ -4,12 +4,23 @@ import {
 } from '../../shared/services/execution-tracking';
 import { PageTitle } from '../../shared/services/page-title';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
-import { Component, computed, inject } from '@angular/core';
+import {
+  Component,
+  computed,
+  ElementRef,
+  HostListener,
+  inject,
+  signal,
+  ViewChild,
+} from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter, map, of, switchMap } from 'rxjs';
-import { PrimaryNavigationComponent } from '../navigation/primary-navigation.component';
+import {
+  PRIMARY_NAVIGATION_GROUPS,
+  PrimaryNavigationComponent,
+} from '../navigation/primary-navigation.component';
 import { AuthService } from '../auth/auth.service';
 import { UserMenuComponent } from '../auth/user-menu.component';
 import { ThemeToggleComponent } from '../theme/theme-toggle.component';
@@ -25,7 +36,6 @@ import { ThemeToggleComponent } from '../theme/theme-toggle.component';
     UserMenuComponent,
   ],
   templateUrl: './app-shell.component.html',
-  styleUrl: './app-shell.component.scss',
 })
 export class AppShellComponent {
   private readonly router = inject(Router);
@@ -45,8 +55,13 @@ export class AppShellComponent {
   });
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
+  protected readonly searchQuery = signal('');
+  protected readonly searchOpen = signal(false);
+  @ViewChild('searchInput') private searchInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('firstSearchResult') private firstSearchResult?: ElementRef<HTMLAnchorElement>;
 
   private readonly auth = inject(AuthService);
+  protected readonly currentUser = this.auth.user;
   // Aucun appel à l’API de gestion sans session.
   private readonly pollingDisabled = computed(() => this.authMode() || !this.auth.user());
   private readonly overview = inject(ClusterOverview);
@@ -74,6 +89,85 @@ export class AppShellComponent {
   protected readonly activeExecutionCount = computed(
     () => this.executionState().data?.activeCount ?? 0,
   );
+  protected readonly searchResults = computed(() => {
+    const query = this.normalizeSearch(this.searchQuery().trim());
+    if (!query) return [];
+
+    return PRIMARY_NAVIGATION_GROUPS.flatMap((group) => group.items)
+      .filter((item) => !item.adminOnly || this.auth.isAdmin())
+      .filter((item) =>
+        this.normalizeSearch([item.label, ...(item.keywords ?? [])].join(' ')).includes(query),
+      )
+      .slice(0, 6);
+  });
+
+  protected onSearchInput(event: Event): void {
+    this.searchQuery.set((event.target as HTMLInputElement).value);
+    this.searchOpen.set(true);
+  }
+
+  protected openSearch(): void {
+    this.searchOpen.set(true);
+  }
+
+  protected onSearchKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.searchOpen.set(false);
+      (event.target as HTMLInputElement).blur();
+      return;
+    }
+
+    if (event.key === 'ArrowDown' && this.searchResults().length) {
+      event.preventDefault();
+      queueMicrotask(() => this.firstSearchResult?.nativeElement.focus());
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      const firstResult = this.searchResults()[0];
+      if (firstResult) {
+        event.preventDefault();
+        this.clearSearch();
+        void this.router.navigateByUrl(firstResult.path);
+      }
+    }
+  }
+
+  protected closeSearch(): void {
+    this.searchOpen.set(false);
+  }
+
+  protected onSearchBlur(event: FocusEvent): void {
+    const container = (event.currentTarget as HTMLElement).closest('.global-search');
+    if (event.relatedTarget instanceof Node && container?.contains(event.relatedTarget)) return;
+    this.closeSearch();
+  }
+
+  protected clearSearch(): void {
+    this.searchQuery.set('');
+    this.searchOpen.set(false);
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  protected onGlobalSearchShortcut(event: KeyboardEvent): void {
+    if (
+      event.key.toLocaleLowerCase() === 'k' &&
+      (event.metaKey || event.ctrlKey) &&
+      !this.authMode() &&
+      !this.workspaceMode()
+    ) {
+      event.preventDefault();
+      this.searchOpen.set(true);
+      this.searchInput?.nativeElement.focus();
+    }
+  }
+
+  private normalizeSearch(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('fr');
+  }
 
   private getCurrentPageContext(): {
     title: string;

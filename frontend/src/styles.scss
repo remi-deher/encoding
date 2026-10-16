@@ -1,4 +1,5 @@
 @use '@angular/material' as mat;
+@use './app/core/layout/app-shell.component';
 
 @include mat.core();
 
@@ -104,6 +105,22 @@ html[data-theme='dark'] {
   --danger-stronger: #8f1d14;
   --on-danger: #ffffff;
 
+  /* Surfaces persistantes du shell (la navigation reste sombre dans les deux thèmes). */
+  --sidebar-background: #17212b;
+  --sidebar-surface: #202d38;
+  --sidebar-border: #33414c;
+  --sidebar-hover: #22313a;
+  --sidebar-active: #293a43;
+  --sidebar-text: #c1cbd1;
+  --sidebar-text-muted: #82919c;
+  --sidebar-text-strong: #f3f7f8;
+  --sidebar-accent: #63d1ac;
+  --sidebar-mark-text: #ffffff;
+  --sidebar-status-halo: rgb(67 207 154 / 14%);
+  --sidebar-avatar-background: #d9eee7;
+  --sidebar-avatar-text: #177b60;
+  --on-accent: #ffffff;
+
   /* Échelle d'espacement (grille de 4 px) */
   --space-1: 4px;
   --space-2: 8px;
@@ -164,6 +181,20 @@ html[data-theme='dark'] {
   --danger-soft: #402625;
   --danger-strong: #c5382b;
   --danger-stronger: #a52a1e;
+  --sidebar-background: #101916;
+  --sidebar-surface: #1c2923;
+  --sidebar-border: #2c3b34;
+  --sidebar-hover: #1f3028;
+  --sidebar-active: #263c31;
+  --sidebar-text: #c3d0c9;
+  --sidebar-text-muted: #8fa198;
+  --sidebar-text-strong: #eff6f2;
+  --sidebar-accent: #91dfbf;
+  --sidebar-mark-text: #10231b;
+  --sidebar-status-halo: rgb(111 207 159 / 15%);
+  --sidebar-avatar-background: #294538;
+  --sidebar-avatar-text: #b7f2dd;
+  --on-accent: #13251e;
   --elevation-1: 0 2px 8px rgb(0 0 0 / 30%);
   --elevation-2: 0 8px 24px rgb(0 0 0 / 55%);
 }

@@ -4,23 +4,32 @@
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
 }
 
 .overview-grid {
-  margin-top: 18px;
+  margin-top: 19px;
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.9fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.9fr);
+  align-items: start;
+  gap: 15px;
+}
+
+.overview-secondary {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 15px;
 }
 
 .surface-panel {
   min-width: 0;
-  padding: 20px;
+  padding: 17px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--elevation-1);
 }
 
 .panel-heading {
@@ -96,9 +105,9 @@ mat-progress-bar {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  border: 1px solid #dde8e4;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: #f4f7f6;
+  background: var(--surface-muted);
   color: var(--accent-strong);
   font-size: var(--font-body);
   font-weight: 750;
@@ -133,11 +142,11 @@ mat-progress-bar {
 }
 
 .activity-panel {
-  margin-top: 18px;
+  margin-top: 0;
 }
 
-.activity-panel .panel-heading {
-  margin-bottom: var(--space-1);
+.matrix-panel {
+  margin-top: 15px;
 }
 
 .execution-card-list {
@@ -153,6 +162,17 @@ mat-progress-bar {
 
   .overview-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .overview-grid,
+  .overview-secondary {
+    gap: 12px;
+  }
+
+  .overview-grid {
+    margin-top: 14px;
   }
 }
 

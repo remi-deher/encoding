@@ -12,6 +12,9 @@ import { AuthService } from './auth.service';
   template: `
     @if (user(); as current) {
       <button matButton="text" type="button" class="user-trigger" [matMenuTriggerFor]="menu">
+        <span class="user-avatar" aria-hidden="true">{{
+          current.username.slice(0, 1).toUpperCase()
+        }}</span>
         <span class="user-name">{{ current.username }}</span>
         <span class="user-role">{{ roleLabel() }}</span>
       </button>
@@ -30,6 +33,18 @@ import { AuthService } from './auth.service';
       gap: var(--space-2);
       font-size: var(--font-body);
     }
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-pill);
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-size: var(--font-label);
+      font-weight: 700;
+    }
     .user-name {
       font-weight: 650;
       color: var(--text-primary);
@@ -41,6 +56,22 @@ import { AuthService } from './auth.service';
       color: var(--text-muted);
       background: var(--surface-muted);
       font-size: var(--font-body);
+    }
+    @media (max-width: 760px) {
+      .user-trigger {
+        width: 36px;
+        min-width: 36px;
+        height: 36px;
+        padding: 0;
+        justify-content: center;
+      }
+      .user-avatar {
+        display: inline-flex;
+      }
+      .user-name,
+      .user-role {
+        display: none;
+      }
     }
   `,
 })
