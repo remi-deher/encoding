@@ -18,6 +18,7 @@ Le catalogue des composants et l’exécution initiale des outils média sont im
 
 Le bloc « Audio par règles » (`base-audio-rules`, [0055](0055-audio-rules-block.md)) uniformise toutes les pistes audio avec FFmpeg et s’ajoute au plan commun.
 Le bloc « Noms de pistes » (`base-track-names`, [0056](0056-track-names-block.md)) renomme les pistes MKV avec MKVToolNix (`mkvpropedit`) sur la copie de travail.
+Les blocs « Gestion des sous-titres » (`base-subtitle-manage`) et « Polices » (`base-add-fonts`), [0057](0057-subtitle-management-and-fonts.md), utilisent FFmpeg et MKVToolNix (`mkvextract`, `mkvmerge`).
 
 Les identifiants des outils sont des métadonnées de catalogue. Un plugin fournit le composant ; l’outil indiqué décrit le moteur média que ce composant utilisera. Cette information ne prouve ni l’installation du binaire ni la compatibilité du worker.
 

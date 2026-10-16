@@ -36,6 +36,13 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public void SubtitleProfileConversionDuplicatesForcedTracksAndFonts()
+    {
+        var (registry, validator, eligibility) = Harness.Services();
+        SubtitleScenarios.Run(registry, validator, eligibility);
+    }
+
+    [Fact]
     public async Task FlowSimulationCoversBranchesVariablesAndMediaInfoImport()
     {
         var (registry, validator, _) = Harness.Services();

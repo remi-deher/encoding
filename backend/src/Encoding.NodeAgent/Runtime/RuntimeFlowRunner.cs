@@ -188,6 +188,28 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
+                    else if(id=="base-subtitle-manage")
+                    {
+                        await EnsureScanAsync();
+                        var outcome=await actions.SubtitleManageAsync(c,context.CurrentMetadata!.Value,current,directory,node.Id,job.Token);
+                        if(outcome.Primary is null) output="unchanged";
+                        else
+                        {
+                            if(outcome.Value is { ValueKind: JsonValueKind.Array } notes) foreach(var note in notes.EnumerateArray()) logger.LogInformation("Sous-titres : {Note}",note.GetString());
+                            await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
+                        }
+                    }
+                    else if(id=="base-add-fonts")
+                    {
+                        await EnsureScanAsync();
+                        var outcome=await actions.AddFontsAsync(c,current,directory,node.Id,job.Token);
+                        if(outcome.Primary is null) output="unchanged";
+                        else
+                        {
+                            if(outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach(var font in added.EnumerateArray()) logger.LogInformation("Police ajoutée : {Font}",font.GetString());
+                            await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
+                        }
+                    }
                     else if(id=="base-audio-rules")
                     {
                         await EnsureScanAsync();
@@ -250,6 +272,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 catch(AudioRuleException exception)
                 {
                     logger.LogInformation("Règles audio {Node} non applicables : {Detail}",node.Id,exception.Message);
+                    output="error";
+                }
+                catch(SubtitleException exception)
+                {
+                    logger.LogInformation("Sous-titres ou polices {Node} non applicables : {Detail}",node.Id,exception.Message);
                     output="error";
                 }
                 catch(ConditionEvaluationException exception)
