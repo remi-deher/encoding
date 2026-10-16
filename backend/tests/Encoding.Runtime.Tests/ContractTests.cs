@@ -36,6 +36,13 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public void CrunchyrollFlowIsValidImportableAndEndsExplicitlyOnEveryFailure()
+    {
+        var (registry, validator, eligibility) = Harness.Services();
+        FlowV3Scenarios.Run(registry, validator, eligibility);
+    }
+
+    [Fact]
     public async Task PublicationGuardsWaitAllowAndRefuseSafely()
     {
         var (registry, _, _) = Harness.Services();

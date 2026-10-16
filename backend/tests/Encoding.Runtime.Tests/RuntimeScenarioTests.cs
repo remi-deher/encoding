@@ -80,6 +80,9 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
     public Task PublicationGuardsComeFromTheConfiguredPlugin() => Scenarios.PublicationGuardsAsync();
 
     [PostgresFact]
+    public Task DiskStaysReservedWhenItsWorkerIsLost() => Scenarios.DiskLockSurvivesWorkerLossAsync();
+
+    [PostgresFact]
     public Task DiskLocksSerializeHeavyWorkPerDisk() => Scenarios.DiskLocksAsync();
 
     [PostgresFact]

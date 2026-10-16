@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Encoding.Api.Executions;
 using Encoding.Contracts.Executions;
+using Encoding.Contracts.Flows;
 
 namespace Encoding.Runtime.Tests;
 
@@ -77,6 +78,30 @@ internal static partial class Harness
             Check(await LockHolderAsync("nas-w") is null, "Entering a durable wait frees the disk locks.");
             Check(await ReservationUntilAsync(w) == "unbounded", "The media stays reserved while the disk is free.");
             Check(await executions.CancelAsync(w, token), "Cancel the waiting execution."); await ExpireAsync(w); await RecoverCancellationAsync(w);
+        }
+
+        /// <summary>Perte du worker qui tient le disque : le disque reste réservé à l'exécution (pas de second traitement lourd), son remplaçant le reprend, l'ancien worker est écarté.</summary>
+        public async Task DiskLockSurvivesWorkerLossAsync()
+        {
+            var flow = new FlowDefinition(1, Guid.NewGuid(), 1, "Disk fixture", "video",
+                [Node(registry, "entry", "base-input-file"), Node(registry, "disk", "base-disk-lock", new() { ["disk"] = J("nas-loss") }), Node(registry, "end", "base-complete-flow")],
+                [new("a", "entry", "success", "disk"), new("b", "disk", "acquired", "end")]);
+            var (x, first, context) = await EnqueueAsync(flow);
+            var (y, second, _) = await EnqueueAsync(flow);
+            var token = CancellationToken.None;
+            Check((await Locks.TryAcquireAsync(x, a, new(first.Epoch, "nas-loss"), token)) is { Acquired: true }, "The first execution takes the disk.");
+
+            await ExpireAsync(x);
+            var taker = await runtime.ClaimAsync(b, token) ?? throw new InvalidOperationException("A surviving worker must take over the lost execution.");
+            Check(taker.ExecutionId == x && taker.Epoch > first.Epoch, "The lost execution is taken over under a higher epoch.");
+            var waiting = await Locks.TryAcquireAsync(y, a, new(second.Epoch, "nas-loss"), token);
+            Check(waiting is { Acquired: false } && waiting.HolderExecutionId == x, "The disk stays reserved for the lost execution: no second heavy processing starts meanwhile.");
+            Check(await Locks.TryAcquireAsync(x, a, new(first.Epoch, "nas-loss"), token) is null, "The lost worker is fenced when it comes back.");
+            Check((await Locks.TryAcquireAsync(x, b, new(taker.Epoch, "nas-loss"), token)) is { Acquired: true }, "The replacement worker keeps the disk of its execution under the new epoch.");
+
+            Check(await executions.CancelAsync(x, token), "Cancel the taken over execution."); await ExpireAsync(x); await RecoverCancellationAsync(x);
+            Check((await Locks.TryAcquireAsync(y, a, new(second.Epoch, "nas-loss"), token)) is { Acquired: true }, "Once the execution ends, the next one takes the disk.");
+            Check(await executions.CancelAsync(y, token), "Cancel the second execution."); await ExpireAsync(y); await RecoverCancellationAsync(y);
         }
 
         private static bool Throws(Action action) { try { action(); return false; } catch (ArgumentException) { return true; } }
