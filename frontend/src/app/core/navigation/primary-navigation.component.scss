@@ -23,6 +23,7 @@
   line-height: 1.4;
   text-transform: uppercase;
   user-select: none;
+  white-space: nowrap;
 }
 
 .navigation-group-divider {
@@ -45,16 +46,17 @@
 .navigation-link {
   position: relative;
   min-height: 38px;
-  padding: 0 12px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   border-radius: var(--radius-pill);
   color: var(--sidebar-text);
   font-size: var(--font-body);
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background-color 180ms cubic-bezier(0.2, 0, 0, 1),
     color 180ms cubic-bezier(0.2, 0, 0, 1),
