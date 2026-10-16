@@ -246,32 +246,32 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     }
 
     .monitor-panel-heading {
-      min-height: 76px;
-      padding: 18px 22px;
+      min-height: 68px;
+      padding: 16px 18px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 18px;
+      gap: var(--space-4);
       border-bottom: 1px solid var(--border-subtle);
     }
 
     .monitor-panel-heading h2 {
       margin: 0;
       color: var(--text-primary);
-      font-size: var(--font-body);
+      font-size: var(--font-label);
       font-weight: 700;
     }
 
     .monitor-panel-heading p {
       margin: 5px 0 0;
       color: var(--text-secondary);
-      font-size: var(--font-body);
+      font-size: var(--font-label);
     }
 
     .execution-count,
     .tab-count {
       color: var(--text-muted);
-      font-size: var(--font-body);
+      font-size: var(--font-label);
       font-variant-numeric: tabular-nums;
     }
 
@@ -284,13 +284,13 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     }
 
     .execution-feedback {
-      margin: 14px 20px 0;
+      margin: var(--space-3) var(--space-4) 0;
       padding: 10px var(--space-3);
       border: 1px solid var(--accent-soft);
       border-radius: var(--radius-md);
       background: var(--accent-soft);
       color: var(--accent-strong);
-      font-size: var(--font-body);
+      font-size: var(--font-label);
       line-height: 1.5;
     }
 
@@ -298,10 +298,24 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       padding-top: 14px;
     }
 
-    .execution-detail-tabs { display: block; }
-    .execution-detail-tab { display: grid; gap: 18px; padding: 18px 2px var(--space-1); }
-    .execution-detail-tab h3 { margin: 0; color: var(--text-primary); font-size: var(--font-body); }
-    .execution-detail-empty { margin: 0; color: var(--text-secondary); font-size: var(--font-body); }
+    .execution-detail-tabs {
+      display: block;
+    }
+    .execution-detail-tab {
+      display: grid;
+      gap: 18px;
+      padding: 18px 2px var(--space-1);
+    }
+    .execution-detail-tab h3 {
+      margin: 0;
+      color: var(--text-primary);
+      font-size: var(--font-body);
+    }
+    .execution-detail-empty {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: var(--font-body);
+    }
 
     .monitor-note {
       margin: 14px 2px 0;
@@ -390,7 +404,7 @@ export class ExecutionMonitorTemplateComponent {
     if (typeof serialized !== 'string') return [];
     try {
       const rows: unknown = JSON.parse(serialized);
-      return Array.isArray(rows) ? rows as DataTableRow[] : [];
+      return Array.isArray(rows) ? (rows as DataTableRow[]) : [];
     } catch {
       return [];
     }

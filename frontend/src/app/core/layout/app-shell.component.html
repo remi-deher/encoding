@@ -1,40 +1,142 @@
-<div class="application-shell" [class.workspace-shell]="workspaceMode()">
-  <mat-toolbar class="application-header">
-    <a class="brand" routerLink="/" aria-label="Accueil">
-      <span class="brand-mark" aria-hidden="true">E</span>
-      <span class="brand-name">{{ pageTitle() }}</span>
-    </a>
+<div
+  class="application-shell"
+  [class.workspace-shell]="workspaceMode()"
+  [class.auth-shell]="authMode()"
+>
+  @if (!authMode() && !workspaceMode()) {
+    <aside class="application-sidebar">
+      <a class="brand" routerLink="/" aria-label="Encoding, accueil">
+        <span class="brand-mark" aria-hidden="true">E</span>
+        <span class="brand-name">encoding</span>
+      </a>
 
-    @if (!authMode()) {
-      <app-primary-navigation />
+      <div
+        class="sidebar-cluster"
+        [attr.aria-label]="'État des nœuds : ' + clusterLabel()"
+        role="status"
+      >
+        <span class="cluster-status-dot" aria-hidden="true"></span>
+        <span class="sidebar-cluster-copy">
+          <span class="sidebar-cluster-label">Cluster</span>
+          <span class="sidebar-cluster-value">{{ clusterLabel() }}</span>
+        </span>
+      </div>
+
+      <app-primary-navigation class="sidebar-navigation" />
+
+      <div class="sidebar-user">
+        @if (currentUser(); as user) {
+          <span class="sidebar-avatar" aria-hidden="true">
+            {{ user.username.slice(0, 1).toUpperCase() }}
+          </span>
+          <span class="sidebar-user-copy">
+            <span class="sidebar-user-name">{{ user.username }}</span>
+            <span class="sidebar-user-role">{{
+              user.role === 'admin' ? 'Administrateur' : 'Lecture seule'
+            }}</span>
+          </span>
+        }
+      </div>
+    </aside>
+  }
+
+  <mat-toolbar class="application-header">
+    @if (authMode() || workspaceMode()) {
+      <a class="brand header-brand" routerLink="/" aria-label="Encoding, accueil">
+        <span class="brand-mark" aria-hidden="true">E</span>
+        <span class="brand-name">encoding</span>
+      </a>
+    } @else {
+      <div class="header-context">
+        <span class="header-context-label">Espace de travail</span>
+        <span class="header-context-separator" aria-hidden="true">/</span>
+        <span class="header-context-title">{{ pageTitle() }}</span>
+      </div>
+    }
+
+    @if (!authMode() && !workspaceMode()) {
+      <div class="global-search" [class.is-open]="searchOpen()">
+        <label class="global-search-control">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="10.8" cy="10.8" r="6.8" />
+            <path d="m16 16 5 5" />
+          </svg>
+          <span class="visually-hidden">Rechercher une page</span>
+          <input
+            #searchInput
+            type="search"
+            autocomplete="off"
+            placeholder="Rechercher une page…"
+            [value]="searchQuery()"
+            (input)="onSearchInput($event)"
+            (keydown)="onSearchKeydown($event)"
+            (focus)="openSearch()"
+            (blur)="onSearchBlur($event)"
+            aria-controls="global-search-results"
+            [attr.aria-expanded]="searchOpen() && !!searchQuery()"
+          />
+          @if (searchQuery()) {
+            <button
+              type="button"
+              class="search-clear"
+              aria-label="Effacer la recherche"
+              (mousedown)="$event.preventDefault()"
+              (click)="clearSearch()"
+            >
+              ×
+            </button>
+          } @else {
+            <kbd class="search-shortcut">⌘ K</kbd>
+          }
+        </label>
+
+        @if (searchOpen() && searchQuery()) {
+          <div id="global-search-results" class="search-results" role="listbox" aria-label="Pages">
+            @for (item of searchResults(); track item.path) {
+              <a
+                #firstSearchResult
+                class="search-result"
+                role="option"
+                [routerLink]="item.path"
+                (mousedown)="$event.preventDefault()"
+                (click)="clearSearch()"
+              >
+                <span class="search-result-glyph" aria-hidden="true">{{ item.glyph }}</span>
+                <span>{{ item.label }}</span>
+                <span class="search-result-enter" aria-hidden="true">↵</span>
+              </a>
+            } @empty {
+              <p class="search-empty">Aucune page ne correspond à « {{ searchQuery() }} ».</p>
+            }
+          </div>
+        }
+      </div>
     }
 
     <div class="header-actions">
-      @if (!authMode()) {
-        <div class="header-status">
-          @if (activeExecutionCount() > 0) {
-            <a
-              class="processing-indicator"
-              routerLink="/tasks"
-              [queryParams]="{ view: 'active' }"
-              [attr.aria-label]="
-                activeExecutionCount() + ' en traitement, ouvrir les tâches en cours'
-              "
-            >
-              {{ activeExecutionCount() }} en traitement
-            </a>
-          }
-          <div
-            class="cluster-indicator"
-            [attr.aria-label]="'Présence des nœuds : ' + clusterLabel()"
+      @if (!authMode() && !workspaceMode()) {
+        @if (activeExecutionCount() > 0) {
+          <a
+            class="processing-indicator"
+            routerLink="/tasks"
+            [queryParams]="{ view: 'active' }"
+            [attr.aria-label]="
+              activeExecutionCount() + ' en traitement, ouvrir les tâches en cours'
+            "
           >
-            <span class="cluster-label">Nœuds</span>
-            <span class="cluster-state">{{ clusterLabel() }}</span>
-          </div>
-          <app-user-menu />
-        </div>
+            <span class="processing-dot" aria-hidden="true"></span>
+            {{ activeExecutionCount() }} en cours
+          </a>
+        }
+        <span class="cluster-indicator">
+          <span class="cluster-indicator-dot" aria-hidden="true"></span>
+          {{ clusterLabel() }}
+        </span>
+        <app-theme-toggle class="theme-toggle" />
+        <app-user-menu />
+      } @else if (workspaceMode()) {
+        <app-theme-toggle class="theme-toggle" />
       }
-      <app-theme-toggle class="theme-toggle" />
     </div>
   </mat-toolbar>
 
@@ -48,7 +150,7 @@
         <span
           >Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span
         >
-        <span class="footer-version">Interface en préparation</span>
+        <span class="footer-version">Centre d’opérations</span>
       </footer>
     }
   </div>

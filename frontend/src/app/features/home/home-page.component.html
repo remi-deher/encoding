@@ -93,45 +93,67 @@
       }
     </section>
 
-    <section class="surface-panel nodes-panel" aria-labelledby="nodes-heading">
-      <div class="panel-heading">
-        <div>
-          <h2 id="nodes-heading">Nœuds du cluster</h2>
-          <p>Disponibilité et activité des installations.</p>
+    <div class="overview-secondary">
+      <section class="surface-panel nodes-panel" aria-labelledby="nodes-heading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="nodes-heading">Nœuds du cluster</h2>
+            <p>Disponibilité et activité des installations.</p>
+          </div>
+          <a class="subtle-link" routerLink="/nodes"
+            >Voir les nœuds <span aria-hidden="true">→</span></a
+          >
         </div>
-        <a class="subtle-link" routerLink="/nodes"
-          >Voir les nœuds <span aria-hidden="true">→</span></a
-        >
-      </div>
 
-      <div class="node-list">
-        @for (node of nodes(); track node.id) {
-          <article class="node-row">
-            <div class="node-avatar" aria-hidden="true">
-              {{ node.name.substring(0, 1).toUpperCase() }}
-            </div>
-            <div class="node-info">
-              <h3>{{ node.name }}</h3>
-              <p>{{ roleLabel(node.roles) }}</p>
-            </div>
-            <div class="node-state">
-              <app-status-badge [label]="lifecycleLabel(node)" [tone]="lifecycleTone(node)" />
-              <span class="node-workload"
-                >Dernier signal : {{ node.lastSeenAt | date: 'dd/MM HH:mm:ss' }}</span
-              >
-            </div>
-          </article>
-        } @empty {
-          @if (state().status === 'ready') {
-            <p>Aucun nœud enregistré dans le cluster.</p>
+        <div class="node-list">
+          @for (node of nodes(); track node.id) {
+            <article class="node-row">
+              <div class="node-avatar" aria-hidden="true">
+                {{ node.name.substring(0, 1).toUpperCase() }}
+              </div>
+              <div class="node-info">
+                <h3>{{ node.name }}</h3>
+                <p>{{ roleLabel(node.roles) }}</p>
+              </div>
+              <div class="node-state">
+                <app-status-badge [label]="lifecycleLabel(node)" [tone]="lifecycleTone(node)" />
+                <span class="node-workload"
+                  >Dernier signal : {{ node.lastSeenAt | date: 'dd/MM HH:mm:ss' }}</span
+                >
+              </div>
+            </article>
+          } @empty {
+            @if (state().status === 'ready') {
+              <p>Aucun nœud enregistré dans le cluster.</p>
+            }
           }
-        }
-      </div>
-    </section>
+        </div>
+      </section>
+      <section class="activity-panel surface-panel" aria-labelledby="activity-heading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="activity-heading">Activité récente</h2>
+            <p>Les cinq exécutions récemment actualisées.</p>
+          </div>
+          <a class="subtle-link" routerLink="/tasks"
+            >Historique <span aria-hidden="true">→</span></a
+          >
+        </div>
+        <div class="execution-card-list">
+          @for (execution of recentExecutions(); track execution.id) {
+            <app-execution-card [execution]="execution" />
+          } @empty {
+            @if (executionState().status === 'ready') {
+              <p>Aucune exécution récente.</p>
+            }
+          }
+        </div>
+      </section>
+    </div>
   </div>
 
   @if (matrixColumns().length && matrixRows().length) {
-    <section class="surface-panel" aria-labelledby="matrix-heading">
+    <section class="surface-panel matrix-panel" aria-labelledby="matrix-heading">
       <div class="panel-heading">
         <div>
           <h2 id="matrix-heading">Accès aux bibliothèques</h2>
@@ -147,27 +169,6 @@
       />
     </section>
   }
-
-  <section class="activity-panel surface-panel" aria-labelledby="activity-heading">
-    <div class="panel-heading">
-      <div>
-        <h2 id="activity-heading">Exécutions récentes</h2>
-        <p>Les cinq exécutions les plus récemment actualisées, quel que soit leur état.</p>
-      </div>
-      <a class="subtle-link" routerLink="/tasks"
-        >Ouvrir l’historique <span aria-hidden="true">→</span></a
-      >
-    </div>
-    <div class="execution-card-list">
-      @for (execution of recentExecutions(); track execution.id) {
-        <app-execution-card [execution]="execution" />
-      } @empty {
-        @if (executionState().status === 'ready') {
-          <p>Aucune exécution récente.</p>
-        }
-      }
-    </div>
-  </section>
 </ng-template>
 
 <ng-template #pageActions>

@@ -9,15 +9,15 @@
 
 .data-table th {
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--font-label);
   font-weight: 700;
-  letter-spacing: 0.045em;
+  letter-spacing: 0.025em;
   white-space: nowrap;
 }
 
 .data-table td {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-label);
 }
 
 .selection-toolbar {
@@ -40,7 +40,7 @@
 
 .selection-count {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-label);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -62,7 +62,7 @@
   background: var(--surface);
   color: var(--accent-strong);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--font-label);
   font-weight: 650;
   cursor: pointer;
 }
@@ -325,7 +325,9 @@
   border-radius: var(--radius-xl);
   background: var(--surface);
   box-shadow: var(--elevation-1);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .data-card:hover {
