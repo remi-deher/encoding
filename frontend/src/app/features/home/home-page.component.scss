@@ -2,10 +2,10 @@
   display: block;
 }
 
-.refresh-meta {
-  margin: var(--space-1) 0 var(--space-4);
-  color: var(--text-secondary);
-  font-size: var(--font-body);
+.health-banner-section {
+  margin-block: var(--space-3) var(--space-5);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .metrics-grid {

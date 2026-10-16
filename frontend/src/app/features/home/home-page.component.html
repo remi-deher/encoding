@@ -31,16 +31,10 @@
       }
     </p>
   }
-  @if (observedAt(); as date) {
-    <p class="refresh-meta">
-      Dernière actualisation :
-      <time [attr.datetime]="date.toISOString()">{{ date | date: 'dd/MM/yyyy HH:mm:ss' }}</time> ·
-      Actualisation toutes les 10 secondes.
-    </p>
-  }
-
   @if (health(); as health) {
-    <app-health-banner [title]="health.title" [tone]="health.tone" [issues]="health.issues" />
+    <div class="health-banner-section">
+      <app-health-banner [title]="health.title" [tone]="health.tone" [issues]="health.issues" />
+    </div>
   }
 
   <section class="metrics-grid" aria-label="Indicateurs du cluster">

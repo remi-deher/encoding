@@ -18,12 +18,17 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
     </section>
   `,
   styles: `
+    :host {
+      display: block;
+    }
     .health-banner {
       display: grid;
       gap: var(--space-2, 8px);
       padding: var(--space-3, 12px) var(--space-4, 16px);
       border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md, 8px);
+      border-radius: var(--radius-lg, 16px);
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
     }
     ul {
       margin: 0;
