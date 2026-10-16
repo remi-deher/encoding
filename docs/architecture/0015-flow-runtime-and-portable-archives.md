@@ -26,6 +26,8 @@ Le bail dure 60 secondes, renouvelé toutes les 15 secondes. Une réservation un
 
 Le moteur suit une seule sortie à chaque étape. Les convergences sont séquentielles. Une sortie non raccordée termine le parcours ; une erreur non traitée échoue. Les terminaux supportent réussite, inchangé, échec et report. Un report termine la tentative et en crée une nouvelle, différée de 1 à 1 440 minutes. L’annulation arrête les processus ; une annulation abandonnée est clôturée après expiration.
 
+Reprise après perte d’un worker : tout worker éligible disposant de son propre accès valide (direct, ou transfert depuis un nœud en ligne) reprend l’exécution ; le nœud d’origine n’est exigé que pour un relais explicite (0021). Une erreur d’outil sur un bloc sans sortie « error » reliée, ou un checkpoint refusé alors que le bail est valide, fait passer l’exécution à « failed » au lieu de la rejouer.
+
 Les handlers Base réexécutables reprennent depuis le dernier checkpoint. Un script ou plugin interrompu avant son checkpoint a un effet incertain : échec et relance explicite, sans répétition automatique de l’effet.
 
 ## Outils et intégrité

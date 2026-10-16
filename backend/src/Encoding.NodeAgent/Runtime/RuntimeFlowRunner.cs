@@ -228,7 +228,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 catch(MediaToolException exception)
                 {
                     logger.LogInformation("Échec de l’outil pendant l’étape {Node}: {Detail}",node.Id,exception.Message);
-                    if(node.Component.PluginId is not ("base" or "conditions")) throw;
+                    // Une sortie « error » non reliée n'existe pas pour le serveur : l'échec est terminal (0015) au lieu d'un checkpoint refusé qui rejouerait l'exécution.
+                    if(node.Component.PluginId is not ("base" or "conditions") || FlowPath.NextNodeId(lease.Flow,node.Id,"error") is null) throw;
                     output="error";
                     await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
                 }
@@ -287,8 +288,28 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         catch(HttpRequestException exception) when(exception.StatusCode is null || exception.StatusCode==System.Net.HttpStatusCode.Conflict
             || (int)exception.StatusCode>=500)
         {
-            lost=true;
-            logger.LogWarning(exception,"Exécution {ExecutionId} interrompue pendant un échange HTTP ({StatusCode}) ; reprise après expiration du bail.",lease.ExecutionId,exception.StatusCode);
+            // Un 409 peut aussi être un checkpoint refusé alors que le bail est intact : rejouer ne le rendrait pas valide.
+            var refused=false;
+            if(exception.StatusCode==System.Net.HttpStatusCode.Conflict)
+            {
+                try
+                {
+                    using var probe=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    await client.PostAsync<RuntimeLeaseStatus>($"executions/{lease.ExecutionId:D}/renew",new RuntimeFence(lease.Epoch),probe.Token);
+                    refused=true;
+                }
+                catch(Exception) { }
+            }
+            if(refused)
+            {
+                logger.LogWarning("Exécution {ExecutionId} : le serveur a refusé une étape alors que le bail est valide ; échec.",lease.ExecutionId);
+                await FailureAsync("failed","Le serveur a refusé le résultat d’une étape ; l’exécution est en échec.");
+            }
+            else
+            {
+                lost=true;
+                logger.LogWarning(exception,"Exécution {ExecutionId} interrompue pendant un échange HTTP ({StatusCode}) ; reprise après expiration du bail.",lease.ExecutionId,exception.StatusCode);
+            }
         }
         catch(Exception exception)
         {

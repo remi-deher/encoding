@@ -194,6 +194,36 @@ internal static partial class Harness
             Console.WriteLine("PASS: worker loss — lease expiry, single takeover, checkpoint resume, stale-epoch fencing and successive failures.");
         }
 
+        /// <summary>Accès direct sur plusieurs nœuds : la perte du worker détenteur n'attend pas son retour, et son nœud, resté en ligne, ne fige pas la reprise.</summary>
+        public async Task DirectWorkerLossFailoverAsync()
+        {
+            await ResetNodesAsync();
+            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
+            var library=Guid.NewGuid(); var id=Guid.NewGuid();
+            await using(var command=db.CreateCommand("""
+                INSERT INTO libraries(id,name) VALUES(@library,@name);
+                INSERT INTO library_node_accesses(library_id,node_id,mode,local_path,can_read,can_write) VALUES(@library,@a,'direct',@root,true,true),(@library,@b,'direct',@root,true,true);
+                """))
+            {
+                command.Parameters.AddWithValue("library",library); command.Parameters.AddWithValue("name",library.ToString()); command.Parameters.AddWithValue("root",directory);
+                command.Parameters.AddWithValue("a",a); command.Parameters.AddWithValue("b",b); await command.ExecuteNonQueryAsync();
+            }
+            Check(await runtime.EnqueueAsync(new(id,library,"direct-"+id.ToString("N")+".mkv",flow.Id,flow.Version),flow,CancellationToken.None),"Queue the direct-access fixture.");
+            var first=await runtime.ClaimAsync(a,CancellationToken.None)??throw new InvalidOperationException("The first worker must claim.");
+            Check(first.ExecutionId==id,"The first direct-access worker holds the execution.");
+
+            await ExpireAsync(id); // a is lost for good: it never renews and never comes back during this scenario.
+            await using(var offline=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@id")){ offline.Parameters.AddWithValue("id",a); await offline.ExecuteNonQueryAsync(); }
+            var taken=await runtime.ClaimAsync(b,CancellationToken.None);
+            Check(taken?.ExecutionId==id && taken.Epoch>first.Epoch,"Another worker with its own direct access resumes without waiting for the lost worker to return.");
+            Check(await runtime.RenewAsync(id,a,first.Epoch,CancellationToken.None) is null,"The lost worker is fenced when it comes back.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id AND lease_epoch=@epoch",("id",id),("epoch",taken!.Epoch))==1,"A single reservation follows the new epoch.");
+            Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up the direct-access fixture.");
+            await ExpireAsync(id); await RecoverCancellationAsync(id);
+            Console.WriteLine("PASS: direct-access worker loss — resumed by another worker without the lost node.");
+        }
+
         private async Task<Guid> QueueAsync(FlowDefinition flow)
         {
             var library=Guid.NewGuid(); var id=Guid.NewGuid();

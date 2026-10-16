@@ -17,6 +17,16 @@ internal static class HardwareInventoryTests
             Check(HardwareInventory.ReadProcessorModel(cpuInfo) == "AMD Ryzen 7 5700G", "Le modèle de processeur est lu une fois.");
             Check(HardwareInventory.ReadProcessorModel(Path.Combine(root, "absent")) is null, "Un fichier absent donne un modèle inconnu, sans erreur.");
 
+            var memInfo = Path.Combine(root, "meminfo");
+            File.WriteAllText(memInfo, "MemTotal:       16384000 kB\nMemFree:  1 kB\n");
+            var v2 = Path.Combine(root, "memory.max");
+            File.WriteAllText(v2, "2147483648\n");
+            Check(HardwareInventory.ReadMemoryMb([v2], memInfo) == 2048, "La limite cgroup du conteneur est la mémoire déclarée.");
+            File.WriteAllText(v2, "max\n");
+            Check(HardwareInventory.ReadMemoryMb([v2], memInfo) == 16000, "Sans limite cgroup, la mémoire de l'hôte est utilisée.");
+            File.WriteAllText(v2, "9223372036854771712\n");
+            Check(HardwareInventory.ReadMemoryMb([v2], memInfo) == 16000, "Une limite supérieure à l'hôte est bornée par l'hôte.");
+
             var drm = Path.Combine(root, "drm");
             var device = Path.Combine(drm, "card0", "device");
             Directory.CreateDirectory(device);
