@@ -77,6 +77,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 }
                 else if(MediaCodecPolicy.VideoEncoder(codec,node.Configuration.TryGetValue("hardwareAcceleration",out var hw)?hw.GetString()!:"cpu",encoders) is null) return false;
             }
+            if(node.Component.ComponentId=="base-audio-rules" && (MediaCodecPolicy.AudioEncoder("aac",encoders) is null || MediaCodecPolicy.AudioEncoder("ac3",encoders) is null)) return false;
             if(node.Component.ComponentId=="base-transcode-audio" && node.Configuration.TryGetValue("audioCodec",out var audio)
                 && MediaCodecPolicy.AudioEncoder(audio.GetString()!,encoders) is null) return false;
         }

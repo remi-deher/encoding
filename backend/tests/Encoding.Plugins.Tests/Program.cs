@@ -11,6 +11,7 @@ HardwareInventoryTests.Run();
 GpuDeviceSelectorTests.Run();
 await MembershipTests.RunAsync();
 await ScriptToolsTests.RunAsync();
+await AudioRulesMediaTests.RunAsync();
 await ProcessTests.RunAsync();
 
 var connection = Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");
