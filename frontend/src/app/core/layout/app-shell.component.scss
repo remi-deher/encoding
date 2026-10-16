@@ -24,6 +24,15 @@ app-shell {
   z-index: 10;
 }
 
+.mobile-page-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .auth-header {
   height: 56px;
   min-height: 56px;
@@ -98,18 +107,7 @@ app-shell {
   stroke-width: 1.8;
 }
 
-/* Cluster Status Indicators */
-.cluster-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  color: var(--sidebar-text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
+/* Cluster Status Dot */
 .cluster-indicator-dot {
   width: 7px;
   height: 7px;
@@ -119,10 +117,6 @@ app-shell {
 
   &.is-offline {
     background: var(--warning);
-  }
-
-  &.is-mini {
-    margin: 4px auto 0;
   }
 }
 
@@ -181,7 +175,7 @@ app-shell {
     .sidebar-content {
       width: 58px;
       min-width: 58px;
-      padding: 10px 4px;
+      padding: 8px 4px;
     }
   }
 }
@@ -196,7 +190,7 @@ app-shell {
   background: var(--sidebar-background);
   border: 1px solid var(--sidebar-border);
   box-shadow: 0 2px 10px rgb(0 0 0 / 4%);
-  padding: 10px 8px;
+  padding: 8px 8px;
   display: flex;
   flex-direction: column;
   transition:
@@ -204,50 +198,16 @@ app-shell {
     padding 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Sidebar Header (Brand + Cluster + Search) */
+/* Sidebar Header (Search only) */
 .sidebar-header {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--sidebar-border);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 
   &.is-collapsed {
-    align-items: center;
-    gap: 8px;
-    padding-bottom: 8px;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
   }
-}
-
-.sidebar-brand-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  padding-inline: 4px;
-
-  .is-collapsed & {
-    justify-content: center;
-    padding-inline: 0;
-  }
-}
-
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  text-decoration: none;
-  color: var(--sidebar-text-strong);
-  min-width: 0;
-}
-
-.sidebar-brand-name {
-  font-size: 15px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
 }
 
 .sidebar-search-action {
@@ -289,9 +249,9 @@ app-shell {
   }
 
   &.is-collapsed {
-    width: 40px;
+    width: 38px;
     height: 38px;
-    min-width: 40px;
+    min-width: 38px;
     padding: 0;
     justify-content: center;
     margin-inline: auto;
@@ -328,14 +288,14 @@ app-shell {
   display: none;
 }
 
-/* Sidebar Footer (Theme + Collapse + User Menu) */
+/* Sidebar Footer (Cluster Status + User + Theme + Collapse) */
 .sidebar-footer {
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 
   &.is-collapsed {
     align-items: center;
@@ -344,16 +304,42 @@ app-shell {
   }
 }
 
+.sidebar-cluster-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sidebar-text-muted);
+  user-select: none;
+
+  &.is-collapsed {
+    justify-content: center;
+    padding: 3px 0;
+  }
+}
+
+.cluster-indicator-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-user-block {
+  width: 100%;
+}
+
 .sidebar-footer-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-inline: 4px;
+  padding: 2px 2px 0;
 
   .is-collapsed & {
     flex-direction: column;
     gap: 4px;
-    padding-inline: 0;
+    padding: 2px 0 0;
   }
 }
 
@@ -388,18 +374,14 @@ app-shell {
   }
 
   svg {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
     fill: none;
     stroke: currentColor;
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 2;
   }
-}
-
-.sidebar-user-block {
-  width: 100%;
 }
 
 /* Main Content Area */

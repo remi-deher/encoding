@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -10,11 +9,10 @@ import { AuthService } from './auth.service';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-user-menu',
-  imports: [MatButtonModule, MatMenuModule, MatTooltipModule],
+  imports: [MatMenuModule, MatTooltipModule],
   template: `
     @if (user(); as current) {
       <button
-        matButton="text"
         type="button"
         class="user-trigger"
         [class.is-collapsed]="collapsed()"
@@ -48,68 +46,74 @@ import { AuthService } from './auth.service';
       min-width: 0;
     }
     .user-trigger {
-      display: inline-flex;
+      display: flex;
+      flex-direction: row;
       align-items: center;
-      gap: var(--space-2);
-      font-size: var(--font-body);
+      gap: 9px;
       width: 100%;
       box-sizing: border-box;
-      border-radius: var(--radius-pill);
-      padding: 4px 6px;
-      justify-content: flex-start;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-lg);
+      padding: 5px 6px;
+      cursor: pointer;
       text-align: left;
       color: inherit;
       transition: background-color 160ms ease;
     }
     .user-trigger:hover {
-      background: var(--sidebar-hover, rgba(0, 0, 0, 0.04));
+      background: var(--sidebar-hover);
+    }
+    .user-trigger:focus-visible {
+      outline: 2px solid var(--sidebar-accent);
+      outline-offset: 1px;
     }
     .user-trigger.is-collapsed {
-      width: 40px;
-      height: 40px;
-      min-width: 40px;
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
       padding: 0;
       justify-content: center;
       margin-inline: auto;
+      border-radius: var(--radius-pill);
     }
     .user-avatar {
       width: 30px;
       height: 30px;
       min-width: 30px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      flex: 0 0 30px;
+      display: grid;
+      place-items: center;
       border-radius: var(--radius-pill);
       background: var(--sidebar-avatar-background, var(--accent-soft));
       color: var(--sidebar-avatar-text, var(--accent-strong));
-      font-size: var(--font-label);
+      font-size: 13px;
       font-weight: 750;
+      line-height: 1;
     }
     .user-info {
       min-width: 0;
       flex: 1;
-      display: grid;
+      display: flex;
+      flex-direction: column;
       gap: 1px;
     }
     .user-name {
       font-weight: 650;
-      color: var(--sidebar-text-strong, var(--text-primary));
-      font-size: var(--font-label);
+      color: var(--sidebar-text-strong);
+      font-size: 13px;
+      line-height: 1.25;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .user-role {
-      color: var(--sidebar-text-muted, var(--text-muted));
+      color: var(--sidebar-text-muted);
       font-size: 11px;
+      line-height: 1.2;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    @media (max-width: 760px) {
-      .user-avatar {
-        display: inline-flex;
-      }
     }
   `,
 })

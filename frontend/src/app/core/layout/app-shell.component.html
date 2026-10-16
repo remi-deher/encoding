@@ -25,14 +25,7 @@
         </svg>
       </button>
 
-      <a
-        class="brand mobile-brand"
-        routerLink="/"
-        [attr.aria-label]="(pageTitle() || 'Encoding') + ', accueil'"
-      >
-        <span class="brand-mark" aria-hidden="true">E</span>
-        <span class="brand-name">{{ pageTitle() || 'Encoding' }}</span>
-      </a>
+      <span class="mobile-page-title">{{ pageTitle() || 'Encoding' }}</span>
     </header>
   }
 
@@ -55,33 +48,6 @@
             class="sidebar-header"
             [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
           >
-            <div class="sidebar-brand-row">
-              <a class="brand sidebar-brand" routerLink="/" [attr.aria-label]="'Encoding, accueil'">
-                <span class="brand-mark" aria-hidden="true">E</span>
-                @if (isCompactNavigation() || !navigationCollapsed()) {
-                  <span class="sidebar-brand-name">Encoding</span>
-                }
-              </a>
-
-              @if (isCompactNavigation() || !navigationCollapsed()) {
-                <span class="cluster-indicator" [attr.title]="clusterLabel()">
-                  <span
-                    class="cluster-indicator-dot"
-                    [class.is-offline]="!clusterHealthy()"
-                    aria-hidden="true"
-                  ></span>
-                  <span class="cluster-indicator-label">{{ clusterLabel() }}</span>
-                </span>
-              } @else {
-                <span
-                  class="cluster-indicator-dot is-mini"
-                  [class.is-offline]="!clusterHealthy()"
-                  [attr.title]="clusterLabel()"
-                  aria-hidden="true"
-                ></span>
-              }
-            </div>
-
             <div class="sidebar-search-action">
               @if (isCompactNavigation() || !navigationCollapsed()) {
                 <button
@@ -125,13 +91,33 @@
             class="sidebar-footer"
             [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
           >
+            <div
+              class="sidebar-cluster-status"
+              [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
+            >
+              <span
+                class="cluster-indicator-dot"
+                [class.is-offline]="!clusterHealthy()"
+                [attr.title]="clusterLabel()"
+                aria-hidden="true"
+              ></span>
+              @if (isCompactNavigation() || !navigationCollapsed()) {
+                <span class="cluster-indicator-label" [attr.title]="clusterLabel()">
+                  {{ clusterLabel() }}
+                </span>
+              }
+            </div>
+
+            <div class="sidebar-user-block">
+              <app-user-menu [collapsed]="!isCompactNavigation() && navigationCollapsed()" />
+            </div>
+
             <div class="sidebar-footer-controls">
               <app-theme-toggle class="sidebar-theme-toggle" />
               @if (!isCompactNavigation()) {
                 <button
-                  mat-icon-button
-                  class="sidebar-collapse-btn"
                   type="button"
+                  class="sidebar-collapse-btn"
                   [attr.aria-label]="
                     navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
                   "
@@ -149,10 +135,6 @@
                   </svg>
                 </button>
               }
-            </div>
-
-            <div class="sidebar-user-block">
-              <app-user-menu [collapsed]="!isCompactNavigation() && navigationCollapsed()" />
             </div>
           </div>
         </div>
