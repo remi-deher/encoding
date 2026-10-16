@@ -84,6 +84,7 @@ app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, Worker
         maxConcurrentTasks = agentOptions.MaxConcurrentTasks,
         automaticEnrollmentEnabled = agentOptions.AutomaticEnrollmentEnabled,
         capabilities,
+        inventory = HardwareInventory.Current(),
         identity.IsEnrolled,
         pairingKey = identity.IsPairingPending && identity.PairingExpiresAt > DateTimeOffset.UtcNow ? identity.PairingKey : null,
         pairingExpiresAt = identity.IsPairingPending ? identity.PairingExpiresAt : null,
