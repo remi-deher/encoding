@@ -173,3 +173,24 @@ p[role='note'] {
   z-index: 2;
   background: var(--surface);
 }
+
+.member-cards {
+  display: grid;
+  gap: 12px;
+}
+.member-selection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+.member-empty {
+  margin: 0;
+  color: var(--text-secondary);
+}
