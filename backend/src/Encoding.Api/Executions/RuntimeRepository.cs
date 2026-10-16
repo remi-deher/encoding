@@ -8,10 +8,11 @@ using Encoding.Api.Plugins;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Nodes;
+using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups)
+public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,IPeerAssignmentGate? peerAssignmentGate = null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     public async Task<bool> AuthenticateAsync(Guid node,string token,CancellationToken ct)
@@ -48,7 +49,48 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
 
     public static string NormalizePath(string? path)=>Encoding.Contracts.Libraries.MediaPathRules.Normalize(path);
 
+    internal static async Task<int> FailUnavailableSourcesAsync(DbConnection connection, DbTransaction tx, TimeSpan offlineAfter, CancellationToken ct)
+    {
+        var failures = new List<(Guid Id, Guid? Worker, int Revision)>();
+        await using (var command = Sql.Command("""
+            SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id
+            WHERE e.state IN ('queued','running') AND NOT EXISTS(
+              SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
+              WHERE a.library_id=w.library_id AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
+                AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
+                AND (w.handoff_selector IS NULL OR w.source_node_id IS NULL OR a.node_id=w.source_node_id))
+            LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED
+            """, connection, tx))
+        {
+            command.Parameters.AddWithValue("offline", offlineAfter);
+            await using var rows = await command.ExecuteReaderAsync(ct);
+            while (await rows.ReadAsync(ct)) failures.Add((rows.GetGuid(0), rows.IsDBNull(1) ? null : rows.GetGuid(1), rows.GetInt32(2)));
+        }
+        foreach (var failure in failures)
+        {
+            await ExecutionRepository.RecordInTransactionAsync(failure.Id, new(Guid.NewGuid(), failure.Revision, "failed",
+                failure.Worker, null, "Média inaccessible : aucun nœud source direct disponible. La tâche a échoué ; la source est conservée."), connection, tx, ct);
+            await ReleaseAsync(failure.Id, connection, tx, ct);
+        }
+        return failures.Count;
+    }
+
     public async Task<RuntimeLease?> ClaimAsync(Guid worker,CancellationToken ct)
+    {
+        using var assignmentLease = peerAssignmentGate?.AcquireLease(ct);
+        if (peerAssignmentGate is not null && assignmentLease is null) return null;
+        if (assignmentLease is not null) ct = assignmentLease.Token;
+        // Persist failures independently, so an inaccessible task cannot delay another eligible task.
+        await using (var recovery = await dataSource.OpenConnectionAsync(ct))
+        await using (var recoveryTransaction = await recovery.BeginTransactionAsync(ct))
+        {
+            if (await FailUnavailableSourcesAsync(recovery, recoveryTransaction, presence.OfflineAfter, ct) > 0)
+                await recoveryTransaction.CommitAsync(ct);
+        }
+        return await ClaimAvailableAsync(worker, ct);
+    }
+
+    private async Task<RuntimeLease?> ClaimAvailableAsync(Guid worker, CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         IReadOnlyList<NodeToolCapability> capabilities; int capacity;
@@ -174,7 +216,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 }
                 if(returnsToSelf) continue;
             }
-            var epoch=item.Epoch+1;
+            var epoch=peerAssignmentGate?.NextFencingEpoch(item.Epoch) ?? item.Epoch+1;
             await using(var reserve=Sql.Command("""
               INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until)
               VALUES(@library,@key,@id,@epoch,clock_timestamp()+interval '60 seconds')

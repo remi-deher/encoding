@@ -1,7 +1,8 @@
 using System.Data.Common;
 
 namespace Encoding.Api.Libraries;
-public sealed class LibraryMonitoringService(DbDataSource dataSource,LibraryWorkflowRepository workflow,ILogger<LibraryMonitoringService> logger):BackgroundService
+public sealed class LibraryMonitoringService(DbDataSource dataSource,LibraryWorkflowRepository workflow,ILogger<LibraryMonitoringService> logger,
+    Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null):BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -9,6 +10,8 @@ public sealed class LibraryMonitoringService(DbDataSource dataSource,LibraryWork
         {
             try
             {
+                using var lease = assignment?.AcquireLease(ct);
+                if (assignment is not null && lease is null) { await Task.Delay(TimeSpan.FromSeconds(5), ct); continue; }
                 await using var cmd=dataSource.CreateCommand("""
                   INSERT INTO library_scans(id,library_id,media_type)
                   SELECT gen_random_uuid(),l.id,v.definition->>'mediaType'

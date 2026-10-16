@@ -1,6 +1,7 @@
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Nodes;
+using Encoding.Api.Infrastructure.PeerCluster;
 using Xunit;
 
 namespace Encoding.Runtime.Tests;
@@ -10,15 +11,9 @@ public sealed class SqliteClusterTests
 {
     private static async Task<TestDatabase> NewAsync()
     {
-        var previous = Environment.GetEnvironmentVariable("ENCODING_TEST_PROVIDER");
-        Environment.SetEnvironmentVariable("ENCODING_TEST_PROVIDER", "sqlite");
-        try
-        {
-            var database = await TestDatabase.CreateAsync(null, "sqlcluster");
-            await DatabaseMigrator.ApplyAsync(database.Db, Harness.RepositoryRoot(), CancellationToken.None);
-            return database;
-        }
-        finally { Environment.SetEnvironmentVariable("ENCODING_TEST_PROVIDER", previous); }
+        var database = await TestDatabase.CreateAsync(null, "sqlcluster", "sqlite");
+        await DatabaseMigrator.ApplyAsync(database.Db, Harness.RepositoryRoot(), CancellationToken.None);
+        return database;
     }
 
     private static async Task InsertNodeAsync(TestDatabase database, Guid id, string roles)
@@ -44,5 +39,19 @@ public sealed class SqliteClusterTests
         Assert.Equal(NodeRepository.ModeRequestResult.SingleServerStorage, await repository.RequestModeAsync(worker, true, true, TimeSpan.FromMinutes(5), CancellationToken.None));
         Assert.Equal(NodeRepository.ModeRequestResult.Accepted, await repository.RequestModeAsync(worker, false, true, TimeSpan.FromMinutes(5), CancellationToken.None));
         Assert.Equal(NodeRepository.ModeRequestResult.LastServer, await repository.RequestModeAsync(server, false, true, TimeSpan.FromMinutes(5), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ReplicatedSqliteAllowsMultipleServerRoles()
+    {
+        await using var database = await NewAsync();
+        var server = Guid.NewGuid(); var worker = Guid.NewGuid();
+        await InsertNodeAsync(database, server, "server,worker");
+        await InsertNodeAsync(database, worker, "worker");
+        var peers = new PeerClusterOptions(true, Guid.NewGuid(), new Uri("https://localhost:8443/"), false, 8443,
+            TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(30), new string('x', 32), Path.GetTempPath());
+        var repository = new NodeRepository(database.Db, peers);
+        Assert.Equal(NodeRepository.ModeRequestResult.Accepted,
+            await repository.RequestModeAsync(worker, true, true, TimeSpan.FromMinutes(5), CancellationToken.None));
     }
 }

@@ -21,16 +21,16 @@ public sealed class TestDatabase : IAsyncDisposable
 
     /// <summary>Chaîne de connexion « Cluster » de la base isolée.</summary>
     public string ConnectionString { get; }
-    public string Provider => IsSqlite ? DatabaseProvider.SqliteName : DatabaseProvider.Postgres;
+    public string Provider => Sql.IsSqlite(Db) ? DatabaseProvider.SqliteName : DatabaseProvider.Postgres;
     public DbDataSource Db { get; }
 
     private TestDatabase(string connectionString, DbDataSource db, string? postgresAdmin, string? schema, string? file)
     { ConnectionString = connectionString; Db = db; this.postgresAdmin = postgresAdmin; this.schema = schema; this.file = file; }
 
-    public static async Task<TestDatabase> CreateAsync(string? postgresConnection, string prefix)
+    public static async Task<TestDatabase> CreateAsync(string? postgresConnection, string prefix, string? providerOverride = null)
     {
         var name = prefix + "_" + Guid.NewGuid().ToString("N");
-        if (IsSqlite)
+        if (providerOverride == "sqlite" || providerOverride is null && IsSqlite)
         {
             var path = Path.Combine(Path.GetTempPath(), name + ".db");
             var connection = $"Data Source={path};Pooling=False";
@@ -45,7 +45,7 @@ public sealed class TestDatabase : IAsyncDisposable
     /// <summary>Second accès à la même base, comme un second serveur du cluster.</summary>
     public DbDataSource OpenAnother()
     {
-        DbDataSource source = IsSqlite ? new SqliteDataSource(ConnectionString) : NpgsqlDataSource.Create(ConnectionString);
+        DbDataSource source = Sql.IsSqlite(Db) ? new SqliteDataSource(ConnectionString) : NpgsqlDataSource.Create(ConnectionString);
         opened.Add(source);
         return source;
     }

@@ -15,12 +15,22 @@ using Encoding.Core.Nodes;
 using Encoding.Contracts.Libraries;
 using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http.Features;
+using Encoding.Api.Infrastructure.PeerCluster;
+using DotNext.Net.Cluster.Consensus.Raft.Http;
+using DotNext.Net.Cluster.Consensus.Raft;
+using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 
 if (args.FirstOrDefault() == DatabaseTransferCommand.Name)
     Environment.Exit(await DatabaseTransferCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
+if (args.FirstOrDefault() == PeerAuthorityDatabaseCommand.Name)
+    Environment.Exit(await PeerAuthorityDatabaseCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
+if (args.FirstOrDefault() is { } peerCommand && PeerOperationsCommand.Names.Contains(peerCommand))
+    Environment.Exit(await PeerOperationsCommand.RunAsync(peerCommand, args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddOperations();
+var peerClusterOptions = builder.AddPeerCluster();
 var pluginKeyDirectory = builder.Configuration["PluginSettings:KeyDirectory"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "data", "plugin-keys");
 Directory.CreateDirectory(pluginKeyDirectory);
@@ -34,7 +44,10 @@ if (offlineAfterSeconds <= 0)
 {
     throw new InvalidOperationException("NodePresence:OfflineAfterSeconds doit être supérieur à zéro.");
 }
-builder.Services.AddSingleton<System.Data.Common.DbDataSource>(DatabaseProvider.Create(builder.Configuration, connectionString));
+var localDatabase = DatabaseProvider.Create(builder.Configuration, connectionString);
+builder.Services.AddSingleton(new PeerLocalDatabase(localDatabase));
+builder.Services.AddSingleton<System.Data.Common.DbDataSource>(services => peerClusterOptions.Enabled
+    ? new PeerDataSource(services.GetRequiredService<PeerDatabaseCoordinator>()) : localDatabase);
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
 builder.Services.AddSingleton<NodeGroupRepository>();
@@ -95,13 +108,73 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 // Fail startup if the bundled installed catalog is invalid or missing.
 app.Services.GetRequiredService<FlowComponentRegistry>();
-await DatabaseMigrator.ApplyAsync(app.Services.GetRequiredService<System.Data.Common.DbDataSource>(), app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
+await DatabaseMigrator.ApplyAsync(localDatabase, app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
+if (peerClusterOptions.Enabled)
+{
+    await app.Services.GetRequiredService<PeerDatabaseCoordinator>().InitializeAsync(app.Lifetime.ApplicationStopping);
+    await app.RestoreStateAsync<PeerStateMachine>();
+    app.Services.GetRequiredService<PeerTrustStore>().AttachStateMachine(app.Services.GetRequiredService<PeerStateMachine>());
+}
+
+if (peerClusterOptions.Enabled)
+{
+    var peerTrustStore = app.Services.GetRequiredService<PeerTrustStore>();
+    app.UseWhen(context => context.Request.Path == "/api/v1/peer-cluster/presence"
+        && context.Connection.LocalPort != peerClusterOptions.ListenPort, branch =>
+        branch.Run(context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return Task.CompletedTask;
+        }));
+    app.UseWhen(context => context.Connection.LocalPort == peerClusterOptions.ListenPort, branch =>
+    {
+        branch.Use(async (context, next) =>
+        {
+            var path = context.Request.Path;
+            if (path != "/cluster-consensus/raft" && path != "/api/v1/peer-cluster/presence"
+                && path != PeerRequestRouting.StatusPath && !PeerRequestRouting.IsClusterRoute(path))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+            if (path == "/api/v1/peer-cluster/presence"
+                && context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodySize)
+                bodySize.MaxRequestBodySize = 4 * 1024 * 1024;
+            var certificate = await context.Connection.GetClientCertificateAsync(context.RequestAborted);
+            if (!peerTrustStore.IsTrustedClientCertificate(certificate))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+            var database = app.Services.GetRequiredService<PeerDatabaseCoordinator>();
+            if (!PeerRequestRouting.Compatible(context, database))
+            {
+                context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
+                return;
+            }
+            if (path == PeerRequestRouting.StatusPath)
+            {
+                await context.Response.WriteAsJsonAsync(PeerRequestRouting.Status(database, app.Services.GetRequiredService<PeerIdentityStore>(),
+                    app.Services.GetRequiredService<PeerConsensusService>()));
+                return;
+            }
+            if (PeerRequestRouting.IsClusterRoute(path) && !PeerRequestRouting.ReadPrincipal(context))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+            await next(context);
+        });
+        branch.UseConsensusProtocolHandler();
+    });
+}
 
 app.UseRequestObservability();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseClusterAuthentication();
+app.UsePeerRequestRouting();
 app.MapAuthEndpoints();
 app.MapEnrollmentWindowEndpoints();
 app.MapFlowEndpoints();
@@ -120,6 +193,7 @@ app.MapOperationsEndpoints();
 app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();
 app.MapClusterEndpoints();
+app.MapPeerClusterEndpoints();
 app.MapNodeEndpoints();
 app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();

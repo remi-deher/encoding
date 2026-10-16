@@ -21,6 +21,9 @@ public sealed class SessionAuthenticationHandler(
 {
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Context.Items.TryGetValue(Encoding.Api.Infrastructure.PeerCluster.PeerRequestRouting.PrincipalItem, out var forwarded)
+            && forwarded is ClaimsPrincipal principal)
+            return AuthenticateResult.Success(new AuthenticationTicket(principal, SessionAuthentication.Scheme));
         if (!Request.Cookies.TryGetValue(SessionAuthentication.CookieName, out var token) || string.IsNullOrWhiteSpace(token))
             return AuthenticateResult.NoResult();
         var user = await users.ValidateSessionAsync(AuthService.TokenHash(token), authOptions, Context.RequestAborted);

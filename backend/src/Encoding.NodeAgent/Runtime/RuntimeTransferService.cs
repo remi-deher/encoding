@@ -136,7 +136,6 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
         }
         catch(SafeMediaPaths.MediaLockBusyException) { }
         catch(OperationCanceledException) when(ct.IsCancellationRequested) { }
-        catch(HttpRequestException) { logger.LogWarning("Transfert {ExecutionId} interrompu ; il pourra être retenté.",transfer.ExecutionId); }
         catch(Exception exception)
         {
             logger.LogWarning("Transfert {ExecutionId} refusé : {Type}.",transfer.ExecutionId,exception.GetType().Name);

@@ -24,7 +24,7 @@ public static class DatabaseTransferCommand
         await using var source = Open(options["from-provider"], options["from"]);
         await using var target = Open(options["to-provider"], options["to"]);
         var pending = await DatabaseMigrator.StatusAsync(source, contentRoot, ct);
-        if (pending.Pending.Count > 0)
+        if (pending.Pending.Count > 0 || pending.Unknown.Count > 0)
         {
             await output.WriteLineAsync($"La source a {pending.Pending.Count} migration(s) en attente : démarrez le serveur une fois avec sa version actuelle avant l'export.");
             return 3;

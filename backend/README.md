@@ -2,6 +2,8 @@
 
 Socle API ASP.NET Core sur .NET 10 et PostgreSQL partagé. L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`. Les décisions d’architecture sont décrites dans [`../docs/architecture/`](../docs/architecture/).
 
+Le mode optionnel **pair à pair** permet aussi une base SQLite ou PostgreSQL indépendante par serveur, avec état métier répliqué par Raft. Configuration, jointure, sauvegarde/restauration, rotation et contraintes de version : [guide d’exploitation](../docs/operations/peer-cluster-preview.md).
+
 ## Développement local
 
 Prérequis : Docker Compose. Créer le fichier d’environnement local puis démarrer les services :

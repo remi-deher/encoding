@@ -159,10 +159,6 @@ internal static partial class Harness
             await ExpireAsync(id); // the worker running on node a stops renewing; node a stays reachable as the library access point.
             await using(var lost=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=0 WHERE id=@id")){ lost.Parameters.AddWithValue("id",a); await lost.ExecuteNonQueryAsync(); }
             Check(await runtime.ClaimAsync(a,CancellationToken.None) is null,"The lost worker cannot claim anything.");
-            // The access node itself is unreachable: transfer workers cannot reach the media, so nobody takes it and nothing is lost.
-            await using(var offline=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@id")){ offline.Parameters.AddWithValue("id",a); await offline.ExecuteNonQueryAsync(); }
-            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null && await runtime.ClaimAsync(c,CancellationToken.None) is null,"No transfer worker takes over while the library access node is offline.");
-            await using(var back=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp() WHERE id=@id")){ back.Parameters.AddWithValue("id",a); await back.ExecuteNonQueryAsync(); }
             // Vidange, quarantaine et incompatibilité de version (0041) : aucun de ces nœuds ne reprend l'exécution abandonnée.
             foreach(var restriction in new[]{"draining=true","quarantined=true","incompatible_reason='protocole trop ancien'"})
             {
@@ -191,6 +187,20 @@ internal static partial class Harness
             await CompleteAsync(id,other,third,"end",context);
             Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up the failover fixture.");
             await ExpireAsync(id); await RecoverCancellationAsync(id);
+            // Losing the only direct source is terminal, even if its workers have a checkpoint.
+            await ResetNodesAsync();
+            var (unreachable, sourceLease, _) = await EnqueueAsync(flow);
+            await using (var offline = db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@id"))
+            { offline.Parameters.AddWithValue("id", a); await offline.ExecuteNonQueryAsync(); }
+            Check(await runtime.ClaimAsync(b, CancellationToken.None) is null, "No transfer worker takes over while the only direct source is offline.");
+            var failed = await executions.GetAsync(unreachable, CancellationToken.None);
+            Check(failed?.State == "failed" && failed.Detail?.Contains("source direct", StringComparison.OrdinalIgnoreCase) == true,
+                "An unavailable source immediately fails the execution with an explicit reason.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id", ("id", unreachable)) == 0,
+                "The failed task releases its media reservation.");
+            Check(await runtime.RenewAsync(unreachable, a, sourceLease.Epoch, CancellationToken.None) is null,
+                "The old worker cannot renew the failed task.");
+            await ResetNodesAsync();
             Console.WriteLine("PASS: worker loss — lease expiry, single takeover, checkpoint resume, stale-epoch fencing and successive failures.");
         }
 

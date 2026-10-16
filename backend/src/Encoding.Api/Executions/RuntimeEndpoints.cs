@@ -3,7 +3,9 @@ using Encoding.Api.Flows;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Libraries;
 using Encoding.Contracts.Executions;
+using Encoding.Api.Infrastructure.PeerCluster;
 using Microsoft.AspNetCore.Http.Features;
+using System.Reflection;
 
 namespace Encoding.Api.Executions;
 
@@ -29,6 +31,33 @@ public static class RuntimeEndpoints
             var runtime=context.HttpContext.RequestServices.GetRequiredService<RuntimeRepository>();
             if(!await runtime.AuthenticateAsync(node,context.HttpContext.Request.Headers["X-Node-Token"].ToString(),context.HttpContext.RequestAborted)) return Results.Unauthorized();
             return await next(context);
+        });
+        group.AddEndpointFilter(async (context, next) =>
+        {
+            var request = context.HttpContext.Request;
+            if (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method) || HttpMethods.IsOptions(request.Method))
+                return await next(context);
+            var services = context.HttpContext.RequestServices;
+            if (services.GetService<PeerClusterOptions>() is not { Enabled: true }) return await next(context);
+            if (!services.GetRequiredService<PeerConsensusService>().TryGetLeaderLease(out var leaderLease))
+                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Le pair n’a pas de bail Raft valide; l’opération worker est suspendue.");
+            var assignmentGate = services.GetRequiredService<IPeerAssignmentGate>();
+            if (ReadLeaseEpochs(context.Arguments).Any(epoch => !assignmentGate.IsCurrentFencingEpoch(epoch)))
+                return Results.Conflict(new { title = "Le bail worker appartient à un ancien terme Raft et ne peut plus modifier cette exécution." });
+
+            var originalToken = context.HttpContext.RequestAborted;
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(originalToken, leaderLease);
+            context.HttpContext.RequestAborted = linked.Token;
+            for (var index = 0; index < context.Arguments.Count; index++)
+                if (context.Arguments[index] is CancellationToken) context.Arguments[index] = linked.Token;
+            try { return await next(context); }
+            catch (OperationCanceledException) when (!originalToken.IsCancellationRequested && leaderLease.IsCancellationRequested)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Le bail Raft a expiré pendant l’opération worker.");
+            }
+            finally { context.HttpContext.RequestAborted = originalToken; }
         });
         group.MapGet("/capacity",async(Guid nodeId,LibraryProcessingRepository repository,CancellationToken ct)=>
             await repository.NodeAsync(nodeId,ct) is {} settings?(IResult)Results.Ok(new Encoding.Contracts.Nodes.RuntimeCapacity(settings.EffectiveMaxConcurrentTasks)):Results.NotFound());
@@ -101,5 +130,21 @@ public static class RuntimeEndpoints
             if(!file.Exists) return Results.NotFound();
             return Results.Text($"<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>{digest}</d:href><d:propstat><d:prop><d:getcontentlength>{file.Length}</d:getcontentlength><d:getetag>\"{digest}\"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>","application/xml",statusCode:207);
         });
+    }
+
+    private static IEnumerable<long> ReadLeaseEpochs(IEnumerable<object?> arguments)
+    {
+        foreach (var argument in arguments)
+        {
+            if (argument is long value)
+            {
+                yield return value;
+                continue;
+            }
+
+            if (argument is null) continue;
+            var property = argument.GetType().GetProperty("Epoch", BindingFlags.Instance | BindingFlags.Public);
+            if (property?.PropertyType == typeof(long) && property.GetValue(argument) is long epoch) yield return epoch;
+        }
     }
 }

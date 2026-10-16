@@ -2,10 +2,11 @@ using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
+using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Flows;
 
-public sealed class FlowRepository(DbDataSource dataSource)
+public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService? peerConsensus = null)
 {
     internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -49,6 +50,19 @@ public sealed class FlowRepository(DbDataSource dataSource)
     }
     public async Task<FlowDraftResponse?> SaveDraftAsync(SaveFlowDraftRequest request,CancellationToken ct)
     {
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
+        {
+            var current = peerConsensus.GetFlowDraft(request.Definition.Id);
+            var activeRevision = current is { HasDraft: true } ? current.Revision : 0;
+            if (activeRevision != request.ExpectedRevision) return null;
+            var state = new PeerFlowDraftState(request.Definition.Id, (current?.Revision ?? 0) + 1,
+                peerConsensus.GetLatestFlowVersion(request.Definition.Id)?.Definition.Version ?? 0,
+                request.Definition, DateTimeOffset.UtcNow, true);
+            return await peerConsensus.ReplicateFlowDraftAsync(state, request.ExpectedRevision, ct)
+                ? new FlowDraftResponse(request.Definition, state.Revision, state.PublishedVersion, "pending", state.UpdatedAt)
+                : null;
+        }
+
         await using var connection=await dataSource.OpenConnectionAsync(ct); await using var tx=await connection.BeginTransactionAsync(ct);
         await using var command=Sql.Command(
           "INSERT INTO flows(id) VALUES(@id) ON CONFLICT DO NOTHING; SELECT current_version FROM flows WHERE id=@id FOR UPDATE",connection,tx);
@@ -88,6 +102,39 @@ public sealed class FlowRepository(DbDataSource dataSource)
     /// <summary>CAS publication and backup outbox share one transaction. Versions are append-only.</summary>
     public async Task<FlowVersionResponse?> SaveAsync(SaveFlowRequest request, CancellationToken ct)
     {
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
+        {
+            var definition = request.Definition;
+            if (peerConsensus.GetFlowVersion(definition.Id, definition.Version) is { } repeated)
+                return JsonSerializer.Serialize(repeated.Definition, JsonOptions) == JsonSerializer.Serialize(definition, JsonOptions)
+                    ? await GetAsync(definition.Id, definition.Version, ct) : null;
+
+            var latest = peerConsensus.GetLatestFlowVersion(definition.Id);
+            var currentVersion = latest?.Definition.Version ?? 0;
+            if (currentVersion != request.ExpectedVersion || definition.Version != currentVersion + 1) return null;
+            var draft = peerConsensus.GetFlowDraft(definition.Id);
+            if (request.ExpectedDraftRevision is { } expectedDraft
+                && (draft is not { HasDraft: true } || draft.Revision != expectedDraft)) return null;
+
+            if (latest is not null)
+            {
+                var candidate = definition with { Version = currentVersion };
+                if (JsonSerializer.Serialize(latest.Definition, JsonOptions) == JsonSerializer.Serialize(candidate, JsonOptions))
+                {
+                    if (request.ExpectedDraftRevision is { } clearRevision && draft is not null)
+                    {
+                        var cleared = draft with { HasDraft = false, PublishedVersion = currentVersion, UpdatedAt = DateTimeOffset.UtcNow };
+                        if (!await peerConsensus.ReplicateFlowDraftAsync(cleared, clearRevision, ct)) return null;
+                    }
+                    return await GetAsync(definition.Id, currentVersion, ct);
+                }
+            }
+
+            var state = new PeerFlowVersionState(definition, DateTimeOffset.UtcNow, request.ExpectedDraftRevision);
+            return await peerConsensus.ReplicateFlowVersionAsync(state, ct)
+                ? await GetAsync(definition.Id, definition.Version, ct) : null;
+        }
+
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
         var version = await SaveCoreAsync(request, false, connection, tx, ct, skipUnchanged: true);
@@ -98,6 +145,12 @@ public sealed class FlowRepository(DbDataSource dataSource)
 
     public async Task<bool> SaveManyAsync(IReadOnlyList<SaveFlowRequest> requests, bool restore, CancellationToken ct,IReadOnlyList<FlowDraftImport>? drafts=null)
     {
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
+        {
+            // Archive imports need one atomic multi-aggregate Raft command; do not partially publish an archive.
+            return false;
+        }
+
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
         foreach(var id in requests.Select(r=>r.Definition.Id).Concat((drafts??[]).Select(d=>d.Definition.Id)).Distinct().Order()) {
