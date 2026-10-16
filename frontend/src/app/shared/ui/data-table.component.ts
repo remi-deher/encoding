@@ -7,6 +7,7 @@ import {
   effect,
   inject,
   input,
+  model,
   output,
   signal,
   TemplateRef,
@@ -14,6 +15,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
@@ -29,6 +31,12 @@ import {
 
 export type DataTableValue = string | number | boolean;
 export type DataTableRow = Readonly<Record<string, DataTableValue>>;
+export type DataTableLayout = 'table' | 'cards' | 'resources';
+
+export interface DataTableLayoutOption {
+  readonly value: DataTableLayout;
+  readonly label: string;
+}
 
 export interface DataTableToggle {
   readonly showStatusLabel?: boolean;
@@ -112,6 +120,7 @@ export interface DataTableListActionEvent {
   imports: [
     BadgeListComponent,
     MatButtonModule,
+    MatButtonToggleModule,
     MatCheckboxModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -122,6 +131,20 @@ export interface DataTableListActionEvent {
   ],
   template: `
     <div class="table-scroll-region">
+      @if (layoutOptions().length > 1) {
+        <div class="layout-toolbar">
+          <span class="layout-label">{{ layoutLabel() }}</span>
+          <mat-button-toggle-group
+            [value]="layout()"
+            [attr.aria-label]="layoutLabel()"
+            (change)="layout.set($event.value)"
+          >
+            @for (option of layoutOptions(); track option.value) {
+              <mat-button-toggle [value]="option.value">{{ option.label }}</mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+        </div>
+      }
       @if (listActions().length) {
         <div class="selection-toolbar" role="toolbar" aria-label="Actions du tableau">
           @for (action of listActions(); track action.id) {
@@ -230,7 +253,109 @@ export interface DataTableListActionEvent {
         }
       </ng-template>
 
-      @if (layout() === 'cards') {
+      @if (layout() === 'resources') {
+        @if (selectable()) {
+          <div class="card-toolbar">
+            <mat-checkbox
+              [checked]="isAllSelected()"
+              [indeterminate]="selection.hasValue() && !isAllSelected()"
+              (change)="toggleAll()"
+              >Tout sélectionner</mat-checkbox
+            >
+          </div>
+        }
+        @if (cardRows().length === 0) {
+          <p class="card-empty">{{ emptyMessage() }}</p>
+        } @else {
+          <ul class="resource-list">
+            @for (row of cardRows(); track row) {
+              <li
+                class="data-card resource-row"
+                [class.data-card_selected]="selection.isSelected(row)"
+                [class.data-card_expanded]="isExpandedRow(row)"
+              >
+                <header class="data-card-header">
+                  @if (selectable()) {
+                    <mat-checkbox
+                      [checked]="selection.isSelected(row)"
+                      [attr.aria-label]="'Sélectionner ' + rowSubject(row)"
+                      (click)="captureCheckboxClick($event)"
+                      (change)="toggleRow(row)"
+                    />
+                  }
+                  <h3 class="data-card-title">
+                    @if (columns().length) {
+                      <ng-container
+                        [ngTemplateOutlet]="cellTpl"
+                        [ngTemplateOutletContext]="{
+                          column: columns()[0],
+                          row: row,
+                          isFirst: false,
+                        }"
+                      />
+                    }
+                  </h3>
+                  @if (rowOpenable()) {
+                    <button
+                      matButton="text"
+                      type="button"
+                      class="resource-open"
+                      (click)="openRow(row, $event)"
+                    >
+                      {{ rowOpenLabel() }} <span aria-hidden="true">→</span>
+                    </button>
+                  }
+                </header>
+                <dl class="data-card-fields resource-fields">
+                  @for (column of columns().slice(1); track column.key) {
+                    <div class="data-card-field">
+                      <dt>{{ column.label }}</dt>
+                      <dd>
+                        <ng-container
+                          [ngTemplateOutlet]="cellTpl"
+                          [ngTemplateOutletContext]="{ column: column, row: row, isFirst: false }"
+                        />
+                      </dd>
+                    </div>
+                  }
+                </dl>
+                @if (selectable() && rowActions().length === 0) {
+                  <span class="resource-row-spacer" aria-hidden="true"></span>
+                }
+                @if (rowActions().length > 0) {
+                  <footer class="data-card-actions resource-row-actions">
+                    @for (action of rowActions(); track action.id) {
+                      @if (!action.visibleWhen || action.visibleWhen(row)) {
+                        <button
+                          [matButton]="action.tone === 'danger' ? 'filled' : 'outlined'"
+                          [class.data-card-action_danger]="action.tone === 'danger'"
+                          type="button"
+                          [attr.aria-label]="
+                            rowActionLabel(action, row) + ' ' + rowActionSubject(row)
+                          "
+                          [attr.aria-expanded]="rowDetail() ? isExpandedRow(row) : null"
+                          [attr.aria-controls]="rowDetail() ? rowDetailId(row) : null"
+                          (click)="requestRowAction(action, row)"
+                        >
+                          {{ rowActionLabel(action, row) }}
+                        </button>
+                      }
+                    }
+                  </footer>
+                }
+                @if (rowDetail() && isExpandedRow(row)) {
+                  <div class="data-card-detail" [id]="rowDetailId(row)">
+                    <ng-container
+                      [ngTemplateOutlet]="rowDetail()!.template"
+                      [ngTemplateOutletContext]="{ $implicit: row }"
+                    />
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        }
+      } @else if (layout() === 'cards') {
         @if (selectable() || sortableColumns().length) {
           <div class="card-toolbar">
             @if (selectable()) {
@@ -477,7 +602,9 @@ export class DataTableComponent {
   readonly columns = input.required<readonly DataTableColumn[]>();
   readonly rows = input.required<readonly DataTableRow[]>();
   /** `cards` présente chaque ligne comme une carte : plus d'informations lisibles que le tableau dense. */
-  readonly layout = input<'table' | 'cards'>('table');
+  readonly layout = model<DataTableLayout>('table');
+  readonly layoutOptions = input<readonly DataTableLayoutOption[]>([]);
+  readonly layoutLabel = input('Présentation des éléments');
   readonly emptyMessage = input('Aucun résultat.');
   readonly selectable = input(false);
   readonly rowOpenable = input(false);
@@ -594,6 +721,10 @@ export class DataTableComponent {
   }
 
   protected rowActionSubject(row: DataTableRow): string {
+    return String(row['name'] ?? row['nodeName'] ?? row['id'] ?? 'cet élément');
+  }
+
+  protected rowSubject(row: DataTableRow): string {
     return String(row['name'] ?? row['nodeName'] ?? row['id'] ?? 'cet élément');
   }
 

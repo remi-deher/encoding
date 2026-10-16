@@ -10,6 +10,7 @@ import { MatButtonModule } from '@angular/material/button';
 
 export interface ConfirmationDialogData {
   readonly title: string;
+  readonly eyebrow?: string;
   readonly message?: string;
   readonly confirmLabel?: string;
   readonly headerColor?: string;
@@ -24,89 +25,78 @@ export interface ConfirmationDialogData {
   selector: 'app-confirmation-dialog',
   imports: [MatButtonModule, MatDialogActions, MatDialogContent, MatDialogTitle],
   template: `
-    <div class="confirmation-dialog">
-    <header class="confirmation-header" [class.confirmation-header_colored]="!!data.headerColor" [style.background-color]="data.headerColor ?? 'var(--surface-muted)'">
-      <h2 mat-dialog-title>{{ data.title }}</h2>
-    </header>
-    <mat-dialog-content>
-      @if (data.message) { <p class="dialog-message">{{ data.message }}</p> }
-      @if (data.items?.length) {
-        <ul class="information-list">
-          @for (item of data.items; track item.label) {
-            <li>
-              <strong>{{ item.label }}</strong>
-              @if (item.detail) { <span>{{ item.detail }}</span> }
-            </li>
-          }
-        </ul>
-      } @else if (data.emptyMessage) {
-        <p class="empty-message">{{ data.emptyMessage }}</p>
-      }
-    </mat-dialog-content>
-    <mat-dialog-actions align="end">
-      @if (data.mode === 'information') {
-        <button
-          matButton="filled"
-          type="button"
-          [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
-          [style.--mat-button-filled-label-text-color]="data.confirmColor ? 'var(--on-danger)' : null"
-          (click)="dialogRef.close(true)"
+    <section class="app-dialog confirmation-dialog">
+      <header class="app-dialog-header">
+        <span
+          class="app-dialog-icon"
+          [class.app-dialog-icon_danger]="isDanger"
+          aria-hidden="true"
         >
-          {{ data.closeLabel ?? 'Fermer' }}
-        </button>
-      } @else {
-        <button matButton="text" type="button" (click)="dialogRef.close(false)">Annuler</button>
-        <button
-          matButton="filled"
-          type="button"
-          [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
-          [style.--mat-button-filled-label-text-color]="data.confirmColor ? 'var(--on-danger)' : null"
-          (click)="dialogRef.close(true)"
-        >
-          {{ data.confirmLabel ?? 'Confirmer' }}
-        </button>
-      }
-    </mat-dialog-actions>
-    </div>
+          {{ data.mode === 'information' ? 'i' : isDanger ? '!' : '?' }}
+        </span>
+        <div class="app-dialog-heading">
+          <p class="app-dialog-eyebrow">
+            {{ data.eyebrow ?? (data.mode === 'information' ? 'Information' : 'Confirmation') }}
+          </p>
+          <h2 mat-dialog-title>{{ data.title }}</h2>
+        </div>
+      </header>
+
+      <mat-dialog-content class="app-dialog-body confirmation-dialog-content">
+        @if (data.message) {
+          <p class="dialog-message">{{ data.message }}</p>
+        }
+        @if (data.items?.length) {
+          <ul class="information-list">
+            @for (item of data.items; track $index) {
+              <li>
+                <strong>{{ item.label }}</strong>
+                @if (item.detail) {
+                  <span>{{ item.detail }}</span>
+                }
+              </li>
+            }
+          </ul>
+        } @else if (data.emptyMessage) {
+          <p class="empty-message">{{ data.emptyMessage }}</p>
+        }
+      </mat-dialog-content>
+
+      <mat-dialog-actions class="app-dialog-footer" align="end">
+        @if (data.mode === 'information') {
+          <button
+            matButton="filled"
+            type="button"
+            [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
+            [style.--mat-button-filled-label-text-color]="data.confirmColor ? 'var(--on-danger)' : null"
+            (click)="dialogRef.close(true)"
+          >
+            {{ data.closeLabel ?? 'Fermer' }}
+          </button>
+        } @else {
+          <button matButton="text" type="button" (click)="dialogRef.close(false)">Annuler</button>
+          <button
+            matButton="filled"
+            type="button"
+            [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
+            [style.--mat-button-filled-label-text-color]="data.confirmColor ? 'var(--on-danger)' : null"
+            (click)="dialogRef.close(true)"
+          >
+            {{ data.confirmLabel ?? 'Confirmer' }}
+          </button>
+        }
+      </mat-dialog-actions>
+    </section>
   `,
   styles: `
-    :host { display: block; max-width: 100%; }
-
-    .confirmation-dialog { width: max-content; max-width: 100%; }
-
-    .confirmation-header {
-      margin: 0 0 var(--space-4);
-      padding: var(--space-4) 20px;
-      border-radius: var(--radius-lg);
-      background: var(--surface-muted);
-    }
-
-    h2 {
-      color: var(--text-primary);
-      font-size: var(--font-title);
-      font-weight: 700;
-      line-height: 1.35;
-      margin: 0;
-      padding: 0;
-      text-align: start;
-      overflow-wrap: anywhere;
-    }
-
-    .confirmation-header_colored h2 {
-      color: #fff;
-    }
-
-    mat-dialog-content {
-      max-height: none;
-      margin: 0;
-      padding: 0 var(--space-2);
-      overflow: visible;
-      color: var(--text-secondary);
-      font-size: var(--font-body);
+    .confirmation-dialog-content {
       line-height: 1.6;
     }
 
-    .dialog-message { margin: 0; }
+    .dialog-message {
+      margin: 0;
+      color: var(--text-secondary);
+    }
 
     .information-list {
       margin: var(--space-3) 0 0;
@@ -125,24 +115,31 @@ export interface ConfirmationDialogData {
       background: var(--surface-muted);
     }
 
-    .information-list strong { color: var(--text-primary); }
-    .information-list span, .empty-message { color: var(--text-secondary); }
-    .information-list span { overflow-wrap: anywhere; }
-    .empty-message { margin: 0; }
-
-    mat-dialog-actions {
-      gap: var(--space-2);
-      padding: var(--space-3) var(--space-2) var(--space-1);
+    .information-list strong {
+      color: var(--text-primary);
     }
 
+    .information-list span,
+    .empty-message {
+      color: var(--text-secondary);
+    }
+
+    .information-list span {
+      overflow-wrap: anywhere;
+    }
+
+    .empty-message {
+      margin: 0;
+    }
   `,
 })
 export class ConfirmationDialogComponent {
   protected readonly data = inject<ConfirmationDialogData>(MAT_DIALOG_DATA);
   protected readonly dialogRef = inject(MatDialogRef<ConfirmationDialogComponent, boolean>);
+  protected readonly isDanger = Boolean(this.data.confirmColor || this.data.headerColor);
 
   constructor() {
-    this.dialogRef.addPanelClass('confirmation-dialog-panel');
-    this.dialogRef.updateSize('max-content');
+    this.dialogRef.addPanelClass(['app-dialog-panel', 'confirmation-dialog-panel']);
+    this.dialogRef.updateSize('480px');
   }
 }

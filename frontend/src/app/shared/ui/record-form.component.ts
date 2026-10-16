@@ -4,18 +4,22 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatStepper, MatStepperModule } from '@angular/material/stepper';
 
 export interface RecordFormField {
   readonly id: string;
   readonly label: string;
-  readonly type: 'text' | 'select' | 'number' | 'password' | 'textarea';
+  readonly type: 'text' | 'select' | 'number' | 'password' | 'textarea' | 'email' | 'url' | 'date';
   readonly autocomplete?: string;
+  readonly placeholder?: string;
   readonly min?: number;
   readonly max?: number;
   readonly step?: number;
+  readonly minLength?: number;
+  readonly maxLength?: number;
+  readonly pattern?: string;
   readonly hint?: string;
   readonly required?: boolean;
-  readonly maxLength?: number;
   readonly filterOptionsByFieldId?: string;
   readonly options?: readonly RecordFormOption[];
 }
@@ -24,6 +28,13 @@ export interface RecordFormOption {
   readonly value: string;
   readonly label: string;
   readonly mediaTypes?: readonly string[];
+}
+
+export interface RecordFormStep {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly fieldIds: readonly string[];
 }
 
 export interface RecordFormData {
@@ -35,8 +46,12 @@ export interface RecordFormData {
   readonly review?: boolean;
   readonly cancellable?: boolean;
   readonly fields: readonly RecordFormField[];
+  /** Les formulaires courts conservent une étape unique ; les parcours complexes déclarent leurs étapes ici. */
+  readonly steps?: readonly RecordFormStep[];
   readonly initialValues?: Readonly<Record<string, string>>;
 }
+
+type RecordFormControls = Record<string, FormControl<string>>;
 
 @Component({
   selector: 'app-record-form',
@@ -45,206 +60,468 @@ export interface RecordFormData {
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatStepperModule,
     ReactiveFormsModule,
   ],
   template: `
     <section class="record-form" [attr.aria-label]="data().title">
-      @if (!reviewing) {
-        <form [formGroup]="form" (ngSubmit)="data().review === false ? save() : review()">
-          @for (field of data().fields; track field.id) {
-            @if (field.type === 'select') {
-              <mat-form-field appearance="outline">
-                <mat-label>{{ field.label }}</mat-label>
-                <mat-select [formControlName]="field.id" (selectionChange)="onSelectChange(field)">
-                  @for (option of optionsFor(field); track option.value) {
-                    <mat-option [value]="option.value">{{ option.label }}</mat-option>
+      @if (useStepper()) {
+        <mat-stepper #stepper linear aria-label="Étapes du formulaire">
+          @for (step of steps(); track step.id; let index = $index; let last = $last) {
+            <mat-step [label]="step.label" [stepControl]="formFor(step.id)">
+              <form [formGroup]="formFor(step.id)" (ngSubmit)="advance(stepper, step, last)">
+                @if (step.description) {
+                  <p class="step-description">{{ step.description }}</p>
+                }
+                <div class="field-grid">
+                  @for (field of fieldsFor(step); track field.id) {
+                    @if (field.type === 'select') {
+                      <mat-form-field appearance="outline">
+                        <mat-label>{{ field.label }}</mat-label>
+                        <mat-select
+                          [formControlName]="field.id"
+                          (selectionChange)="onSelectChange(field)"
+                        >
+                          @for (option of optionsFor(field); track option.value) {
+                            <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                          }
+                        </mat-select>
+                        @if (field.hint || field.filterOptionsByFieldId) {
+                          <mat-hint>{{
+                            field.hint ?? 'Les choix proposés dépendent du type de média.'
+                          }}</mat-hint>
+                        }
+                        @if (fieldError(field); as error) {
+                          <mat-error>{{ error }}</mat-error>
+                        }
+                      </mat-form-field>
+                    } @else if (field.type === 'textarea') {
+                      <mat-form-field appearance="outline">
+                        <mat-label>{{ field.label }}</mat-label>
+                        <textarea
+                          matInput
+                          rows="4"
+                          [formControlName]="field.id"
+                          [attr.placeholder]="field.placeholder ?? null"
+                          [attr.maxlength]="field.maxLength ?? null"
+                        ></textarea>
+                        @if (field.hint) {
+                          <mat-hint>{{ field.hint }}</mat-hint>
+                        }
+                        @if (fieldError(field); as error) {
+                          <mat-error>{{ error }}</mat-error>
+                        }
+                      </mat-form-field>
+                    } @else {
+                      <mat-form-field appearance="outline">
+                        <mat-label>{{ field.label }}</mat-label>
+                        <input
+                          matInput
+                          [type]="field.type"
+                          [attr.autocomplete]="field.autocomplete ?? null"
+                          [attr.placeholder]="field.placeholder ?? null"
+                          [attr.min]="field.min ?? null"
+                          [attr.max]="field.max ?? null"
+                          [attr.step]="field.step ?? null"
+                          [attr.minlength]="field.minLength ?? null"
+                          [attr.maxlength]="field.maxLength ?? null"
+                          [formControlName]="field.id"
+                        />
+                        @if (field.hint) {
+                          <mat-hint>{{ field.hint }}</mat-hint>
+                        }
+                        @if (fieldError(field); as error) {
+                          <mat-error>{{ error }}</mat-error>
+                        }
+                      </mat-form-field>
+                    }
                   }
-                </mat-select>
-                @if (field.filterOptionsByFieldId) {
-                  <mat-hint>Les choix proposés dépendent du type de média.</mat-hint>
-                }
-              </mat-form-field>
-            } @else if (field.type === 'textarea') {
-              <mat-form-field appearance="outline">
-                <mat-label>{{ field.label }}</mat-label>
-                <textarea
-                  matInput
-                  rows="4"
-                  [formControlName]="field.id"
-                  [attr.maxlength]="field.maxLength ?? null"
-                ></textarea>
-                @if (field.hint) {
-                  <mat-hint>{{ field.hint }}</mat-hint>
-                }
-              </mat-form-field>
-            } @else {
-              <mat-form-field appearance="outline">
-                <mat-label>{{ field.label }}</mat-label>
-                <input
-                  matInput
-                  [type]="
-                    field.type === 'number' || field.type === 'password' ? field.type : 'text'
-                  "
-                  [attr.autocomplete]="field.autocomplete ?? null"
-                  [attr.min]="field.min ?? null"
-                  [attr.max]="field.max ?? null"
-                  [attr.step]="field.step ?? null"
-                  [formControlName]="field.id"
-                  [attr.maxlength]="field.maxLength ?? null"
-                />
-                @if (field.hint) {
-                  <mat-hint>{{ field.hint }}</mat-hint>
-                }
-              </mat-form-field>
-            }
+                </div>
+                <footer class="form-actions">
+                  @if (index > 0) {
+                    <button matButton="text" type="button" matStepperPrevious [disabled]="busy()">
+                      Retour
+                    </button>
+                  } @else if (data().cancellable !== false) {
+                    <button
+                      matButton="text"
+                      type="button"
+                      [disabled]="busy()"
+                      (click)="cancelled.emit()"
+                    >
+                      Annuler
+                    </button>
+                  }
+                  <button matButton="filled" type="submit" [disabled]="busy()">
+                    {{
+                      last
+                        ? data().review === false
+                          ? data().submitLabel
+                          : 'Vérifier'
+                        : 'Continuer'
+                    }}
+                  </button>
+                </footer>
+              </form>
+            </mat-step>
           }
-          <div class="form-actions">
+          @if (data().review !== false) {
+            <mat-step label="Vérification">
+              <div class="review-step">
+                <h3>{{ data().reviewTitle ?? 'Vérifier la définition' }}</h3>
+                <p class="step-description">
+                  Relisez les paramètres avant de les enregistrer. Vous pouvez revenir à chaque
+                  étape pour les modifier.
+                </p>
+                <dl class="summary">
+                  @for (field of data().fields; track field.id) {
+                    @if (isFieldVisible(field)) {
+                      <div>
+                        <dt>{{ field.label }}</dt>
+                        <dd>{{ displayValue(field.id) }}</dd>
+                      </div>
+                    }
+                  }
+                </dl>
+                <footer class="form-actions">
+                  <button matButton="text" type="button" matStepperPrevious [disabled]="busy()">
+                    Modifier
+                  </button>
+                  <button matButton="filled" type="button" [disabled]="busy()" (click)="save()">
+                    {{ data().submitLabel }}
+                  </button>
+                </footer>
+              </div>
+            </mat-step>
+          }
+        </mat-stepper>
+      } @else if (!reviewing) {
+        <form
+          [formGroup]="formFor(steps()[0].id)"
+          (ngSubmit)="data().review === false ? save() : reviewLegacy()"
+        >
+          <div class="field-grid">
+            @for (field of fieldsFor(steps()[0]); track field.id) {
+              @if (field.type === 'select') {
+                <mat-form-field appearance="outline">
+                  <mat-label>{{ field.label }}</mat-label>
+                  <mat-select
+                    [formControlName]="field.id"
+                    (selectionChange)="onSelectChange(field)"
+                  >
+                    @for (option of optionsFor(field); track option.value) {
+                      <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                    }
+                  </mat-select>
+                  @if (field.hint || field.filterOptionsByFieldId) {
+                    <mat-hint>{{
+                      field.hint ?? 'Les choix proposés dépendent du type de média.'
+                    }}</mat-hint>
+                  }
+                  @if (fieldError(field); as error) {
+                    <mat-error>{{ error }}</mat-error>
+                  }
+                </mat-form-field>
+              } @else if (field.type === 'textarea') {
+                <mat-form-field appearance="outline">
+                  <mat-label>{{ field.label }}</mat-label>
+                  <textarea
+                    matInput
+                    rows="4"
+                    [formControlName]="field.id"
+                    [attr.placeholder]="field.placeholder ?? null"
+                    [attr.maxlength]="field.maxLength ?? null"
+                  ></textarea>
+                  @if (field.hint) {
+                    <mat-hint>{{ field.hint }}</mat-hint>
+                  }
+                  @if (fieldError(field); as error) {
+                    <mat-error>{{ error }}</mat-error>
+                  }
+                </mat-form-field>
+              } @else {
+                <mat-form-field appearance="outline">
+                  <mat-label>{{ field.label }}</mat-label>
+                  <input
+                    matInput
+                    [type]="field.type"
+                    [attr.autocomplete]="field.autocomplete ?? null"
+                    [attr.placeholder]="field.placeholder ?? null"
+                    [attr.min]="field.min ?? null"
+                    [attr.max]="field.max ?? null"
+                    [attr.step]="field.step ?? null"
+                    [attr.minlength]="field.minLength ?? null"
+                    [attr.maxlength]="field.maxLength ?? null"
+                    [formControlName]="field.id"
+                  />
+                  @if (field.hint) {
+                    <mat-hint>{{ field.hint }}</mat-hint>
+                  }
+                  @if (fieldError(field); as error) {
+                    <mat-error>{{ error }}</mat-error>
+                  }
+                </mat-form-field>
+              }
+            }
+          </div>
+          <footer class="form-actions">
             @if (data().cancellable !== false) {
               <button matButton="text" type="button" [disabled]="busy()" (click)="cancelled.emit()">
                 Annuler
               </button>
             }
-            <button matButton="filled" type="submit" [disabled]="!canReview()">
+            <button matButton="filled" type="submit" [disabled]="busy()">
               {{ data().review === false ? data().submitLabel : 'Vérifier' }}
             </button>
-          </div>
+          </footer>
         </form>
       } @else {
-        <h3>{{ data().reviewTitle ?? 'Vérifier la définition' }}</h3>
-        <dl class="summary">
-          @for (field of data().fields; track field.id) {
-            <div>
-              <dt>{{ field.label }}</dt>
-              <dd>{{ displayValue(field.id) }}</dd>
-            </div>
-          }
-        </dl>
-        <div class="form-actions">
-          <button matButton="text" type="button" [disabled]="busy()" (click)="reviewing = false">
-            Modifier
-          </button>
-          <button matButton="filled" type="button" [disabled]="busy()" (click)="save()">
-            {{ data().submitLabel }}
-          </button>
+        <div class="review-step">
+          <h3>{{ data().reviewTitle ?? 'Vérifier la définition' }}</h3>
+          <dl class="summary">
+            @for (field of data().fields; track field.id) {
+              @if (isFieldVisible(field)) {
+                <div>
+                  <dt>{{ field.label }}</dt>
+                  <dd>{{ displayValue(field.id) }}</dd>
+                </div>
+              }
+            }
+          </dl>
+          <footer class="form-actions">
+            <button matButton="text" type="button" [disabled]="busy()" (click)="reviewing = false">
+              Modifier
+            </button>
+            <button matButton="filled" type="button" [disabled]="busy()" (click)="save()">
+              {{ data().submitLabel }}
+            </button>
+          </footer>
         </div>
       }
     </section>
   `,
   styles: `
     .record-form {
-      display: grid;
-      gap: 16px;
+      width: 100%;
+      min-width: 0;
     }
-    form {
+    form,
+    .review-step {
       display: grid;
-      gap: 16px;
-      /* Réserve la place du libellé flottant du premier champ outline, que les conteneurs à défilement (modale) rogneraient. */
-      padding-top: 8px;
+      gap: var(--space-4);
+      padding-top: var(--space-3);
+    }
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3) var(--space-4);
     }
     mat-form-field {
       width: 100%;
+      min-width: 0;
+    }
+    .step-description {
+      margin: 0;
+      color: var(--text-secondary);
+      line-height: 1.55;
     }
     h3 {
       margin: 0;
       color: var(--text-primary);
-      font-size: 14px;
+      font-size: var(--font-title-sm);
     }
     .summary {
       display: grid;
-      gap: 12px;
+      gap: 0;
       margin: 0;
+      border-top: 1px solid var(--border-subtle);
     }
     .summary div {
       display: grid;
-      gap: 4px;
+      grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.2fr);
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--border-subtle);
     }
     dt {
       color: var(--text-muted);
-      font-size: 14px;
-      font-weight: 700;
-      text-transform: uppercase;
     }
     dd {
+      min-width: 0;
       margin: 0;
       color: var(--text-primary);
+      font-weight: 600;
+      overflow-wrap: anywhere;
     }
     .form-actions {
+      position: sticky;
+      bottom: calc(-1 * var(--space-5));
+      z-index: 1;
       display: flex;
       justify-content: flex-end;
-      gap: 8px;
-      padding-top: 8px;
+      gap: var(--space-2);
+      margin: 0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5));
+      padding: var(--space-3) var(--space-5);
+      border-top: 1px solid var(--border-subtle);
+      background: var(--surface);
+    }
+    @media (max-width: 600px) {
+      .field-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .summary div {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+      }
+      .form-actions {
+        bottom: calc(-1 * var(--space-4));
+        margin-inline: calc(-1 * var(--space-4));
+        margin-bottom: calc(-1 * var(--space-4));
+        padding-inline: var(--space-4);
+      }
     }
   `,
 })
 export class RecordFormComponent implements OnChanges {
   readonly data = input.required<RecordFormData>();
   readonly busy = input(false);
+  readonly useStepper = input(true);
   readonly submitted = output<Record<string, string>>();
   readonly cancelled = output<void>();
-  protected form = new FormGroup<Record<string, FormControl<string>>>({});
+  protected stepForms: Record<string, FormGroup<RecordFormControls>> = {};
   protected reviewing = false;
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['data']) {
       this.reviewing = false;
-      this.form = new FormGroup<Record<string, FormControl<string>>>({});
-      for (const field of this.data().fields) {
-        const validators = [];
-        if (field.required) validators.push(Validators.required);
-        if (field.maxLength) validators.push(Validators.maxLength(field.maxLength));
-        if (field.type === 'number') {
-          if (field.min !== undefined) validators.push(Validators.min(field.min));
-          if (field.max !== undefined) validators.push(Validators.max(field.max));
-          if (field.step === 1) validators.push(Validators.pattern(/^[0-9]+$/));
-        }
-        this.form.addControl(
-          field.id,
-          new FormControl(this.data().initialValues?.[field.id] ?? '', {
+      this.stepForms = {};
+      for (const step of this.steps()) {
+        const controls: RecordFormControls = {};
+        for (const field of this.fieldsFor(step)) {
+          const validators = [];
+          if (field.required) validators.push(Validators.required);
+          if (field.minLength) validators.push(Validators.minLength(field.minLength));
+          if (field.maxLength) validators.push(Validators.maxLength(field.maxLength));
+          if (field.pattern) validators.push(Validators.pattern(field.pattern));
+          if (field.type === 'email') validators.push(Validators.email);
+          if (field.type === 'url') validators.push(Validators.pattern(/^https?:\/\/.+\..+/i));
+          if (field.type === 'number') {
+            if (field.min !== undefined) validators.push(Validators.min(field.min));
+            if (field.max !== undefined) validators.push(Validators.max(field.max));
+            if (field.step === 1) validators.push(Validators.pattern(/^-?[0-9]+$/));
+          }
+          controls[field.id] = new FormControl(this.data().initialValues?.[field.id] ?? '', {
             nonNullable: true,
             validators,
-          }),
-        );
+          });
+        }
+        this.stepForms[step.id] = new FormGroup(controls);
       }
     }
-    if (this.busy()) this.form.disable({ emitEvent: false });
-    else this.form.enable({ emitEvent: false });
+    for (const form of Object.values(this.stepForms)) {
+      if (this.busy()) form.disable({ emitEvent: false });
+      else form.enable({ emitEvent: false });
+    }
+  }
+
+  protected steps(): readonly RecordFormStep[] {
+    const configured = this.data().steps;
+    if (!configured?.length)
+      return [
+        {
+          id: 'details',
+          label: 'Informations',
+          description: this.data().description,
+          fieldIds: this.data().fields.map((field) => field.id),
+        },
+      ];
+
+    const knownFields = new Set(this.data().fields.map((field) => field.id));
+    const assignedFields = new Set<string>();
+    const steps = configured.map((step) => ({
+      ...step,
+      fieldIds: step.fieldIds.filter((fieldId) => {
+        if (!knownFields.has(fieldId) || assignedFields.has(fieldId)) return false;
+        assignedFields.add(fieldId);
+        return true;
+      }),
+    }));
+    const unassignedFields = this.data()
+      .fields.map((field) => field.id)
+      .filter((fieldId) => !assignedFields.has(fieldId));
+    if (unassignedFields.length)
+      steps.push({
+        id: 'additional',
+        label: 'Informations complémentaires',
+        fieldIds: unassignedFields,
+      });
+    return steps;
+  }
+
+  protected formFor(stepId: string): FormGroup<RecordFormControls> {
+    return this.stepForms[stepId] ?? new FormGroup<RecordFormControls>({});
+  }
+
+  protected fieldsFor(step: RecordFormStep): readonly RecordFormField[] {
+    return step.fieldIds
+      .map((fieldId) => this.data().fields.find((field) => field.id === fieldId))
+      .filter((field): field is RecordFormField => field !== undefined);
+  }
+
+  protected advance(stepper: MatStepper, step: RecordFormStep, last: boolean): void {
+    const form = this.formFor(step.id);
+    form.markAllAsTouched();
+    if (this.busy() || !form.valid || !this.stepFiltersValid(step)) return;
+    if (!last) {
+      stepper.next();
+      return;
+    }
+    if (this.data().review === false) this.save();
+    else stepper.next();
+  }
+
+  protected reviewLegacy(): void {
+    const step = this.steps()[0];
+    const form = this.formFor(step.id);
+    form.markAllAsTouched();
+    if (form.valid && this.stepFiltersValid(step)) this.reviewing = true;
   }
 
   protected save(): void {
-    if (!this.busy() && this.form.valid)
-      this.submitted.emit(
-        Object.fromEntries(
-          Object.entries(this.form.getRawValue()).map(([key, value]) => [
-            key,
-            value == null ? '' : String(value),
-          ]),
-        ),
-      );
+    if (
+      this.busy() ||
+      Object.values(this.stepForms).some((form) => !form.valid) ||
+      this.steps().some((step) => !this.stepFiltersValid(step))
+    )
+      return;
+    const values: Record<string, string> = {};
+    for (const form of Object.values(this.stepForms))
+      Object.assign(values, form.getRawValue() as Record<string, string>);
+    const visibleValues: Record<string, string> = {};
+    for (const [fieldId, value] of Object.entries(values)) {
+      const field = this.data().fields.find((item) => item.id === fieldId);
+      if (field && this.isFieldVisible(field)) visibleValues[fieldId] = value;
+    }
+    this.submitted.emit(visibleValues);
   }
 
-  protected review(): void {
-    if (this.canReview()) this.reviewing = true;
-  }
-
-  protected canReview(): boolean {
-    if (this.busy() || !this.form.valid) return false;
-    return this.data().fields.every((field) => {
-      if (!field.filterOptionsByFieldId) return true;
-      const option = field.options?.find(
-        (item) => item.value === this.form.controls[field.id]?.value,
-      );
-      if (!option) return false;
-      if (!option.mediaTypes?.length) return true;
-      return option.mediaTypes.includes(
-        this.form.controls[field.filterOptionsByFieldId]?.value ?? '',
-      );
-    });
+  protected fieldError(field: RecordFormField): string {
+    const control = this.controlFor(field.id);
+    if (!control || !control.touched || control.valid) return '';
+    if (control.hasError('required')) return 'Ce champ est obligatoire.';
+    if (control.hasError('email')) return 'Saisissez une adresse e-mail valide.';
+    if (control.hasError('minlength')) return `Saisissez au moins ${field.minLength} caractères.`;
+    if (control.hasError('maxlength')) return `Saisissez au maximum ${field.maxLength} caractères.`;
+    if (control.hasError('min')) return `La valeur minimale est ${field.min}.`;
+    if (control.hasError('max')) return `La valeur maximale est ${field.max}.`;
+    if (control.hasError('pattern')) return 'Le format saisi est invalide.';
+    return 'Vérifiez cette valeur.';
   }
 
   protected optionsFor(field: RecordFormField): readonly RecordFormOption[] {
     const filterFieldId = field.filterOptionsByFieldId;
     if (!filterFieldId) return field.options ?? [];
-    const mediaType = this.form.controls[filterFieldId]?.value;
+    const mediaType = this.controlFor(filterFieldId)?.value;
     return (field.options ?? []).filter(
       (option) => !option.mediaTypes?.length || option.mediaTypes.includes(mediaType ?? ''),
     );
@@ -254,21 +531,47 @@ export class RecordFormComponent implements OnChanges {
     for (const dependent of this.data().fields.filter(
       (item) => item.filterOptionsByFieldId === field.id,
     )) {
-      const value = this.form.controls[dependent.id]?.value;
+      const control = this.controlFor(dependent.id);
+      const value = control?.value;
       const option = dependent.options?.find((item) => item.value === value);
       if (
         !option?.mediaTypes?.length ||
-        option.mediaTypes.includes(this.form.controls[field.id]?.value ?? '')
+        option.mediaTypes.includes(this.controlFor(field.id)?.value ?? '')
       )
         continue;
-      this.form.controls[dependent.id]?.setValue('');
+      control?.setValue('');
     }
+  }
+
+  protected isFieldVisible(field: RecordFormField): boolean {
+    if (!field.filterOptionsByFieldId) return true;
+    return this.optionsFor(field).some(
+      (option) => option.value === this.controlFor(field.id)?.value,
+    );
   }
 
   protected displayValue(fieldId: string): string {
     const field = this.data().fields.find((item) => item.id === fieldId);
-    const value = String(this.form.controls[fieldId]?.value ?? '');
+    const value = String(this.controlFor(fieldId)?.value ?? '');
     if (field?.type === 'password') return '••••••••';
     return field?.options?.find((option) => option.value === value)?.label ?? value;
+  }
+
+  private stepFiltersValid(step: RecordFormStep): boolean {
+    return this.fieldsFor(step).every((field) => {
+      if (!field.filterOptionsByFieldId) return true;
+      const option = field.options?.find((item) => item.value === this.controlFor(field.id)?.value);
+      if (!option) return false;
+      if (!option.mediaTypes?.length) return true;
+      return option.mediaTypes.includes(this.controlFor(field.filterOptionsByFieldId)?.value ?? '');
+    });
+  }
+
+  private controlFor(fieldId: string): FormControl<string> | undefined {
+    for (const form of Object.values(this.stepForms)) {
+      const control = form.controls[fieldId];
+      if (control) return control;
+    }
+    return undefined;
   }
 }

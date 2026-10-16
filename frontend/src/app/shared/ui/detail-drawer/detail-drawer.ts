@@ -18,12 +18,18 @@ import { MatSidenavModule } from '@angular/material/sidenav';
         position="end"
         mode="over"
         [opened]="opened()"
+        [disableClose]="!dismissible()"
+        [attr.role]="modal() ? 'dialog' : 'complementary'"
+        [attr.aria-modal]="modal() ? 'true' : null"
         [attr.aria-label]="title()"
         (closed)="closed.emit()"
       >
         <section class="drawer-panel">
           <header class="drawer-header">
             <div class="drawer-heading">
+              @if (eyebrow()) {
+                <p class="drawer-eyebrow">{{ eyebrow() }}</p>
+              }
               <h2>{{ title() }}</h2>
               @if (description()) {
                 <p>{{ description() }}</p>
@@ -36,6 +42,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
                 class="drawer-close"
                 type="button"
                 aria-label="Fermer le panneau"
+                [disabled]="!dismissible()"
                 (click)="drawer.close()"
               >
                 <span aria-hidden="true">×</span>
@@ -64,6 +71,15 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       width: 100%;
     }
 
+    .detail-drawer-panel {
+      width: min(1000px, 82vw);
+      max-width: 100vw;
+    }
+
+    .detail-drawer-panel_standard {
+      width: min(560px, 100vw);
+    }
+
     .drawer-panel {
       height: 100dvh;
       display: flex;
@@ -72,7 +88,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     }
 
     .drawer-header {
-      min-height: 72px;
+      min-height: 80px;
       padding: var(--space-4) var(--space-5);
       display: flex;
       align-items: center;
@@ -87,14 +103,6 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       overflow-wrap: anywhere;
     }
 
-    .drawer-header-controls {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      flex: 0 0 auto;
-      margin-left: auto;
-    }
-
     .drawer-heading h2 {
       margin: 0;
       color: var(--text-primary);
@@ -106,13 +114,37 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       margin: 5px 0 0;
       color: var(--text-muted);
       font-size: var(--font-body);
+      line-height: 1.45;
+    }
+
+    .drawer-heading .drawer-eyebrow {
+      margin: 0 0 5px;
+      color: var(--accent-strong);
+      font-size: var(--font-label);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .drawer-header-controls {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex: 0 0 auto;
+      margin-inline-start: auto;
+    }
+
+    .drawer-close {
+      flex: 0 0 auto;
+      color: var(--text-secondary);
     }
 
     .drawer-body {
       min-height: 0;
       padding: var(--space-5);
-      flex: 1;
+      flex: 1 1 auto;
       overflow: auto;
+      overscroll-behavior: contain;
     }
 
     .drawer-footer {
@@ -126,22 +158,33 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     }
 
     @media (max-width: 700px) {
-      .drawer-footer {
-        padding-inline: var(--space-4);
+      .detail-drawer-panel,
+      .detail-drawer-panel_standard {
+        width: 100vw;
+        max-width: 100vw;
+      }
+
+      .drawer-panel {
+        height: 100dvh;
       }
 
       .drawer-header {
-        min-height: 64px;
-        padding-inline: var(--space-4);
-        flex-wrap: wrap;
+        min-height: 72px;
+        padding: var(--space-3) var(--space-4);
         gap: var(--space-3);
       }
-      .drawer-heading {
-        flex-basis: 100%;
+
+      .drawer-header-controls {
+        align-self: flex-start;
       }
 
       .drawer-body {
         padding: var(--space-4);
+      }
+
+      .drawer-footer {
+        padding: var(--space-3) var(--space-4);
+        padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
       }
     }
   `,
@@ -149,14 +192,17 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 export class DetailDrawerComponent {
   /** `standard` : tiroir de 560 px pour une fiche ; `wide` : jusqu'à 1 000 px pour un éditeur. */
   readonly size = input<'standard' | 'wide'>('wide');
-  /** Avec un voile : un clic à l'extérieur ferme le tiroir. À réserver aux fiches sans brouillon à perdre. */
+  /** Avec un voile, un clic extérieur ferme le tiroir si celui-ci est dismissible. */
   readonly modal = input(false);
+  /** Désactiver Escape et la fermeture par voile pendant une saisie à protéger. */
+  readonly dismissible = input(true);
   readonly mainScroll = input<'auto' | 'parent'>('auto');
   readonly opened = input(false);
+  readonly eyebrow = input('');
   readonly title = input('Détails');
   readonly description = input('');
   readonly content = input<TemplateRef<unknown> | undefined>(undefined);
-  /** Pied collant : à fournir seulement quand le contenu est modifiable (Annuler / Enregistrer). */
+  /** Pied fixe : à fournir pour les actions d'un formulaire (Annuler / Enregistrer). */
   readonly footerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly headerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly closed = output<void>();
