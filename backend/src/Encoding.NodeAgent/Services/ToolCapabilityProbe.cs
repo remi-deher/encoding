@@ -35,6 +35,8 @@ public sealed class ToolCapabilityProbe(
                 new("plugin/nodes", "1.1.0", ["general"], []),
                 new("plugin/conditions", "1.0.0", ["general"], [])
             };
+            // L'aide tools des scripts (0054) exige le même bac à sable que les scripts eux-mêmes.
+            if (ProcessSandbox.IsAvailable) list.Add(new(ScriptTools.CapabilityId, ScriptTools.CapabilityVersion, ["general"], []));
 
             foreach (var (id, names, args) in new (string, string[], string[])[]
             {

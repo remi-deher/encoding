@@ -18,7 +18,7 @@ Le script choisi dans l’éditeur est copié dans la configuration du bloc. L�
 
 ## Exécution
 
-Cette bibliothèque ne crée pas de nouveau moteur d’exécution. Les blocs de script continuent d’utiliser le runtime existant, ses limites de durée et l’isolation Linux Landlock documentée dans [0015](0015-flow-runtime-and-portable-archives.md). La page permet de stocker et éditer du code ; elle ne l’exécute pas.
+Cette bibliothèque ne crée pas de nouveau moteur d’exécution. Les blocs de script continuent d’utiliser le runtime existant, ses limites de durée et l’isolation Linux Landlock documentée dans [0015](0015-flow-runtime-and-portable-archives.md). La page permet de stocker et éditer du code ; elle ne l’exécute pas. Les scripts qui activent `useTools` disposent de l’aide `tools` pour lancer ffmpeg, mkvmerge et les autres outils média ; voir [0054](0054-script-tools-helper.md).
 
 ## API
 

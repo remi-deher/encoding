@@ -15,6 +15,13 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public void ScriptsThatNeedToolsOnlyRunOnWorkersWithTheHelper()
+    {
+        var (registry, validator, eligibility) = Harness.Services();
+        ScriptToolsScenarios.Run(registry, validator, eligibility);
+    }
+
+    [Fact]
     public async Task FlowSimulationCoversBranchesVariablesAndMediaInfoImport()
     {
         var (registry, validator, _) = Harness.Services();

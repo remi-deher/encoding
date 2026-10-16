@@ -52,7 +52,7 @@ FlowPlugins:ManifestDirectory configure les manifestes supplémentaires sur les 
 
 Chaque appel lance un processus distinct. La description reçoit sur stdin {"type":"describe","contractVersion":1} et retourne PluginManifest. L’exécution reçoit {"type":"execute","contractVersion":1,"invocation":{}} et retourne FlowStepResult avec la même invocation et époque. Les réponses sont bornées et contrôlées. Un candidat est un chemin relatif dans l’espace temporaire ; l’hôte garde l’analyse et la publication.
 
-Scripts et plugins utilisent Linux Landlock : écriture seulement dans leur espace temporaire, lecture des exécutables et dépendances autorisées, sans accès au jeton ni aux montages média. Si Landlock est indisponible, ces capacités ne sont pas annoncées et ces processus ne sont pas exécutés. Aucun repli sans restriction, ni conteneur dédié par plugin. Cette restriction n’isole pas complètement le réseau, les ressources ou tous les appels système ; les plugins restent installés par un administrateur.
+Scripts et plugins utilisent Linux Landlock : écriture seulement dans leur espace temporaire, lecture des exécutables et dépendances autorisées, sans accès au jeton ni aux montages média. Si Landlock est indisponible, ces capacités ne sont pas annoncées et ces processus ne sont pas exécutés. Aucun repli sans restriction, ni conteneur dédié par plugin. Un script peut demander l'aide `tools` (`useTools`) pour lancer les outils média dans ce même bac à sable : voir [0054](0054-script-tools-helper.md). Cette restriction n’isole pas complètement le réseau, les ressources ou tous les appels système ; les plugins restent installés par un administrateur.
 
 ## Socle partagé et validation
 
