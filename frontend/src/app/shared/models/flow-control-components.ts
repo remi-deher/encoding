@@ -133,7 +133,7 @@ export const FLOW_CONTROL_COMPONENTS: readonly FlowComponentDefinition[] = [
           type: 'boolean',
           defaultValue: false,
           description:
-            'Ajoute l’aide tools au script : tools.run(\'ffmpeg\', [...]) lance ffmpeg, ffprobe, mkvmerge, mkvextract, mkvpropedit, mediainfo ou magick dans le dossier de travail isolé du script. Exige un worker qui annonce script-tools.',
+            "Ajoute l’aide tools au script : tools.run('ffmpeg', [...]) lance ffmpeg, ffprobe, mkvmerge, mkvextract, mkvpropedit, mediainfo ou magick dans le dossier de travail isolé du script. Exige un worker qui annonce script-tools.",
         },
       ],
     },
