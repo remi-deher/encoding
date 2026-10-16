@@ -58,6 +58,8 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 && !capabilities.Any(c=>c.ToolId=="ffmpeg" && c.AccelerationTypes.Contains(name))) return false;
             if(node.Component.ComponentId=="base-script" && node.Configuration.TryGetValue("language",out var language)
                 && !capabilities.Any(c=>c.ToolId==(language.GetString()=="python"?"python":"javascript"))) return false;
+            if(node.Component.ComponentId=="base-script" && node.Configuration.TryGetValue("useTools",out var useTools) && useTools.ValueKind==System.Text.Json.JsonValueKind.True
+                && !capabilities.Any(c=>c.ToolId=="script-tools")) return false;
             if(node.Component.ComponentId=="base-condition" && !capabilities.Any(c=>c.ToolId=="javascript")) return false;
             var encoders=capabilities.FirstOrDefault(c=>c.ToolId=="ffmpeg")?.Encoders??[];
             if(node.Component.ComponentId=="base-transcode-video")

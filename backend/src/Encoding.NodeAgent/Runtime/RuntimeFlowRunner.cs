@@ -340,8 +340,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             code="const vm=require('vm'); return {outputId: vm.runInNewContext("+JsonSerializer.Serialize(expression)+",Object.create(null),{timeout:5000,contextCodeGeneration:{strings:false,wasm:false}})?'yes':'no'};";
         }
         var file=Path.Combine(directory,"script-"+Guid.NewGuid().ToString("N")+(python?".py":".js"));
-        var body=python?"import sys,json\ncontext=json.load(sys.stdin)\nvariables=context['variables']\ndef run(context):\n"+string.Join('\n',code.Split('\n').Select(line=>"    "+line))+"\nresult=run(context)\nprint(json.dumps(result if result is not None else {'outputId':'success','variables':variables}))\n"
-            :"const fs=require('fs'); const context=JSON.parse(fs.readFileSync(0,'utf8')); const variables=context.variables; (async()=>{ const result=await (async()=>{\n"+code+"\n})(); process.stdout.write(JSON.stringify(result ?? {outputId:'success',variables})); })().catch(()=>process.exit(1));";
+        var body=ScriptTools.Compose(python,id=="base-script" && MediaActions.Flag(config,"useTools"),code);
         await File.WriteAllTextAsync(file,body,ct);
         try
         {
