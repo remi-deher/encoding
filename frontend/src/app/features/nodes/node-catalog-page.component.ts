@@ -1,5 +1,6 @@
 import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
+import { nodeAcceleratorValue, nodeHardwareLabel } from '../../shared/models/node-hardware';
 import { nodeLifecycle, NODE_LIFECYCLE_LABELS } from '../../shared/models/cluster-health';
 import { firstValueFrom } from 'rxjs';
 import { ClusterApi } from '../../shared/services/cluster-api';
@@ -121,7 +122,8 @@ interface NodeRecord extends DataTableRow {
   readonly name: string;
   readonly roleFilter: string;
   readonly roleLabel: string;
-  readonly capabilities: string;
+  readonly accelerator: string;
+  readonly hardware: string;
   readonly libraryAccess: string;
   readonly workerLoad: string;
   readonly queueStatus: string;
@@ -1143,7 +1145,8 @@ export class NodeCatalogPageComponent {
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom du nœud', sortable: true },
     { key: 'roleLabel', label: 'Rôle', sortable: true },
-    { key: 'capabilities', label: 'Capacités observées', sortable: true },
+    { key: 'hardware', label: 'Matériel', sortable: true },
+    { key: 'accelerator', label: 'Accélérateur graphique', sortable: true, badges: true },
     { key: 'libraryAccess', label: 'Accès aux bibliothèques', sortable: true },
     { key: 'workerLoad', label: 'Traitements', sortable: true },
     { key: 'state', label: 'État', sortable: true },
@@ -1765,21 +1768,14 @@ export class NodeCatalogPageComponent {
 
   private toRecord(node: NodeResponse): NodeRecord {
     const roleLabel = node.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · ');
-    const capabilityLabels = node.capabilities.map((capability) => {
-      const acceleration = capability.accelerationTypes.length
-        ? ` · ${capability.accelerationTypes.join(', ')}`
-        : '';
-      return `${capability.toolId} ${capability.version}${acceleration}`;
-    });
     const worker = node.roles.includes('worker');
     return {
       id: node.id,
       name: node.displayName?.trim() || node.name,
       roleFilter: `|${node.roles.join('|')}|`,
       roleLabel,
-      capabilities: capabilityLabels.length
-        ? capabilityLabels.join(' · ')
-        : 'Aucune capacité déclarée',
+      accelerator: nodeAcceleratorValue(node),
+      hardware: nodeHardwareLabel(node),
       libraryAccess: this.libraryAccessSummary(node.id),
       workerLoad: worker
         ? this.activityKnown()

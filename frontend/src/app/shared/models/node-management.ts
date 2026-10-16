@@ -1,4 +1,5 @@
 import { DetailCard } from '../ui/detail-card-grid.component';
+import { formatMemory } from './node-hardware';
 import {
   ResourceSheetBadge,
   ResourceSheetMetric,
@@ -53,10 +54,6 @@ export function formatLastSignal(value: string | null | undefined, now = Date.no
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `Il y a ${hours} h`;
   return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(time));
-}
-
-function formatMemory(memoryMb: number): string {
-  return memoryMb >= 1024 ? `${Math.round((memoryMb / 1024) * 10) / 10} Go` : `${memoryMb} Mo`;
 }
 
 export interface LocalNodeSheetInput {
