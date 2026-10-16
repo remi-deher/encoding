@@ -143,50 +143,51 @@ html[data-theme='dark'] {
 
 :root {
   --surface: #ffffff;
-  --surface-muted: #f1f5f3;
+  --surface-muted: #f0f4f2;
   --surface-container-lowest: #ffffff;
-  --surface-container-low: #f3f7f5;
-  --surface-container: #edf2ef;
-  --surface-container-high: #e6ece9;
-  --surface-container-highest: #dfe6e3;
-  --page-background: #f6f9f7;
-  --border-subtle: #e1e7e4;
-  --text-primary: #192421;
-  --text-secondary: #4c5a55;
-  --text-muted: #64726d;
-  --accent: #2f7361;
-  --accent-strong: #235e4e;
-  --accent-soft: #dff0ea;
-  --tertiary: #2b6cb0;
-  --tertiary-soft: #e3effb;
-  --success: #2f7a58;
+  --surface-container-low: #f5f8f6;
+  --surface-container: #ebf1ee;
+  --surface-container-high: #e1e9e5;
+  --surface-container-highest: #d6e1dc;
+  --page-background: #f4f7f5;
+  --border-subtle: #d0ded7;
+  --border-strong: #9fb5ab;
+  --text-primary: #0e1815;
+  --text-secondary: #273932;
+  --text-muted: #495e55;
+  --accent: #206c57;
+  --accent-strong: #145644;
+  --accent-soft: #d6eee4;
+  --tertiary: #1f5f9e;
+  --tertiary-soft: #e0eefb;
+  --success: #1f6e4a;
   /* Tons catégoriels neutres (ex. familles d'accélérateurs) : mêmes valeurs dans les deux thèmes, mélangés à la surface. */
-  --tone-lime: #8fbf3f;
-  --tone-blue: #4f8fd6;
-  --tone-purple: #a869bd;
-  --success-soft: #e6f4ec;
-  --warning: #9e6714;
-  --warning-soft: #f9f0df;
-  --danger: #b74e4e;
-  --danger-soft: #fbecec;
+  --tone-lime: #7ba832;
+  --tone-blue: #3d7abd;
+  --tone-purple: #9258a6;
+  --success-soft: #e2f4ea;
+  --warning: #855306;
+  --warning-soft: #fbf2e1;
+  --danger: #a83838;
+  --danger-soft: #fbebeb;
   --danger-strong: #b42318;
   --danger-stronger: #8f1d14;
   --on-danger: #ffffff;
 
-  /* Surfaces persistantes du shell (la navigation reste sombre dans les deux thèmes). */
-  --sidebar-background: #141e26;
-  --sidebar-surface: #1d2a34;
-  --sidebar-border: #2d3c47;
-  --sidebar-hover: #21313b;
-  --sidebar-active: #263d44;
-  --sidebar-text: #c2cdd3;
-  --sidebar-text-muted: #8696a0;
-  --sidebar-text-strong: #f4f8f9;
-  --sidebar-accent: #67d6b0;
+  /* Surfaces persistantes du shell en mode clair */
+  --sidebar-background: #ffffff;
+  --sidebar-surface: #f3f7f5;
+  --sidebar-border: #dbe4e0;
+  --sidebar-hover: #edf4f0;
+  --sidebar-active: #d6eade;
+  --sidebar-text: #1a2a24;
+  --sidebar-text-muted: #4e635b;
+  --sidebar-text-strong: #0a1410;
+  --sidebar-accent: #135e46;
   --sidebar-mark-text: #ffffff;
-  --sidebar-status-halo: rgb(67 207 154 / 16%);
-  --sidebar-avatar-background: #d9eee7;
-  --sidebar-avatar-text: #177b60;
+  --sidebar-status-halo: rgb(19 94 70 / 16%);
+  --sidebar-avatar-background: #d6eade;
+  --sidebar-avatar-text: #135e46;
   --on-accent: #ffffff;
 
   /* Échelle d'espacement (grille de 4 px) */
@@ -232,6 +233,8 @@ html[data-theme='dark'] {
   --mat-button-tonal-container-shape: var(--radius-pill);
   --mat-button-outlined-container-shape: var(--radius-pill);
   --mat-button-text-container-shape: var(--radius-pill);
+  --mat-outlined-button-outline-color: var(--border-strong);
+  --mat-outlined-button-label-text-color: var(--text-primary);
 
   /* Cible tactile minimale recommandée */
   --touch-target: 48px;

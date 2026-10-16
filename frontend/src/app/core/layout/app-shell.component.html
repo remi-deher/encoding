@@ -27,16 +27,14 @@
       </button>
     }
 
-    <a class="brand header-brand" routerLink="/" aria-label="Encoding, accueil">
+    <a
+      class="brand header-brand"
+      routerLink="/"
+      [attr.aria-label]="(pageTitle() || 'Encoding') + ', accueil'"
+    >
       <span class="brand-mark" aria-hidden="true">E</span>
-      <span class="brand-name">Encoding</span>
+      <span class="brand-name">{{ pageTitle() || 'Encoding' }}</span>
     </a>
-
-    @if (!authMode()) {
-      <div class="header-context">
-        <span class="header-context-title">{{ pageTitle() }}</span>
-      </div>
-    }
 
     @if (!authMode() && !workspaceMode()) {
       <div class="global-search" [class.is-open]="searchOpen()">
