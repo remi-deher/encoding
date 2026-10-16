@@ -37,6 +37,7 @@ public sealed class ExecutionWaitRepository(DbDataSource dataSource,NodePresence
           UPDATE execution_work SET worker_node_id=NULL,lease_until=NULL,lease_epoch=lease_epoch+1,available_at='infinity'::timestamptz,wait_probe_due=false,
             handoff_pending=false,handoff_selector=NULL,previous_worker_node_id=NULL,media_policy=@media WHERE execution_id=@id;
           UPDATE media_reservations SET lease_epoch=@epoch+1,lease_until='infinity'::timestamptz WHERE execution_id=@id;
+          DELETE FROM disk_locks WHERE execution_id=@id;
           """,c,tx);
         cmd.Parameters.AddWithValue("media",wait.MediaPolicy);
         cmd.Parameters.AddWithValue("id",id); cmd.Parameters.AddWithValue("node",nodeId); cmd.Parameters.AddWithValue("epoch",epoch);

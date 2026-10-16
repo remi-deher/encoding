@@ -45,6 +45,16 @@ public static class RuntimeEndpoints
             await runtime.ClaimAsync(nodeId,ct) is { } lease ? (IResult)Results.Ok(lease) : Results.NoContent());
         group.MapPost("/executions/{id:guid}/renew",async(Guid nodeId,Guid id,RuntimeFence request,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.RenewAsync(id,nodeId,request.Epoch,ct) is { } status ? (IResult)Results.Ok(status) : Results.Conflict());
+        group.MapPost("/executions/{id:guid}/disk-locks/acquire",async(Guid nodeId,Guid id,DiskLockRequest request,DiskLockRepository locks,CancellationToken ct)=>
+        {
+            try {return await locks.TryAcquireAsync(id,nodeId,request,ct) is { } response?(IResult)Results.Ok(response):Results.Conflict();}
+            catch(ArgumentException) {return Results.BadRequest();}
+        });
+        group.MapPost("/executions/{id:guid}/disk-locks/release",async(Guid nodeId,Guid id,DiskLockRequest request,DiskLockRepository locks,CancellationToken ct)=>
+        {
+            try {return await locks.ReleaseAsync(id,nodeId,request,ct) is not null?(IResult)Results.NoContent():Results.Conflict();}
+            catch(ArgumentException) {return Results.BadRequest();}
+        });
         group.MapPost("/executions/{id:guid}/steps/start",async(Guid nodeId,Guid id,StartRuntimeStep request,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.StartStepAsync(id,nodeId,request,ct) is { } step ? (IResult)Results.Ok(step) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/steps/complete",async(Guid nodeId,Guid id,CompleteRuntimeStep request,RuntimeRepository runtime,CancellationToken ct)=>

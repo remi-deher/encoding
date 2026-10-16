@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "base",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "name": "Base",
   "supportedHostContractVersions": [
     1
@@ -38,7 +38,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -69,7 +70,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -100,7 +102,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -131,7 +134,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -162,7 +166,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -252,7 +257,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -315,7 +321,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -364,7 +371,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -407,7 +415,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -461,7 +470,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -637,7 +647,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -767,7 +778,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -857,7 +869,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -935,7 +948,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1012,7 +1026,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1090,7 +1105,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1160,7 +1176,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1242,7 +1259,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1354,7 +1372,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1441,7 +1460,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1528,7 +1548,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1627,7 +1648,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1679,7 +1701,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1746,7 +1769,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1842,7 +1866,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1908,7 +1933,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -1958,7 +1984,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2025,7 +2052,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2085,7 +2113,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2152,7 +2181,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2202,7 +2232,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2263,7 +2294,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2324,7 +2356,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2391,7 +2424,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2459,7 +2493,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2519,7 +2554,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2586,7 +2622,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2654,7 +2691,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2698,7 +2736,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2776,7 +2815,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2844,7 +2884,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2930,7 +2971,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -2984,7 +3026,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -3036,7 +3079,8 @@
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -3241,7 +3285,8 @@
       "compatiblePluginVersions": [
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -3335,7 +3380,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -3423,7 +3469,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     {
@@ -3530,7 +3577,10 @@
         }
       ],
       "requiresMedia": true,
-      "requiresWriteAccess": true
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": [
+        "1.4.0"
+      ]
     },
     {
       "id": "base-add-fonts",
@@ -3586,7 +3636,99 @@
         }
       ],
       "requiresMedia": true,
-      "requiresWriteAccess": true
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": [
+        "1.4.0"
+      ]
+    },
+    {
+      "id": "base-disk-lock",
+      "version": "1.5.0",
+      "name": "Verrou de disque",
+      "description": "Prend le verrou d’un disque déclaré (nom libre, par exemple « nas-1 »). Une seule exécution à la fois par disque ; si un autre traitement le tient, la sortie « Occupé » est suivie sans attendre ni bloquer le worker (à relier à « Reporter le traitement » ou « Attendre »). Le verrou suit le bail de l’exécution et est libéré à la fin, à l’attente, au relais ou par « Libérer le disque ».",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "acquired",
+          "label": "Verrou pris",
+          "description": "Le disque est réservé pour cette exécution."
+        },
+        {
+          "id": "busy",
+          "label": "Occupé",
+          "description": "Une autre exécution tient ce disque ; aucun verrou n’est pris."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Le nom de disque est invalide."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "disk",
+            "label": "Disque",
+            "type": "text",
+            "defaultValue": "",
+            "description": "Nom du disque : lettres minuscules, chiffres, points, tirets ou espaces (64 caractères au plus).",
+            "required": true
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
+    },
+    {
+      "id": "base-disk-unlock",
+      "version": "1.5.0",
+      "name": "Libérer le disque",
+      "description": "Libère le verrou d’un disque tenu par cette exécution. Sans effet si elle ne le tient pas.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Le disque est libre pour cette exécution."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Le nom de disque est invalide."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "disk",
+            "label": "Disque",
+            "type": "text",
+            "defaultValue": "",
+            "description": "Nom du disque pris plus tôt par « Verrou de disque ».",
+            "required": true
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false
     }
   ]
 }

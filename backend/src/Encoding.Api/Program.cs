@@ -69,6 +69,7 @@ builder.Services.AddHttpClient("PluginConnectionTest", client => client.Timeout 
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<RuntimeEligibility>();
 builder.Services.AddSingleton<RuntimeRepository>();
+builder.Services.AddSingleton<DiskLockRepository>();
 builder.Services.AddSingleton<RuntimeArtifactStore>();
 builder.Services.AddSingleton<RuntimeTransferRepository>();
 builder.Services.AddSingleton<SourceReplacementRepository>();

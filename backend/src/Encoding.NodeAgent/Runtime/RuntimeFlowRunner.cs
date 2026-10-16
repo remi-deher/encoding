@@ -137,6 +137,18 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     }
                     else if(id=="base-complete-flow") { await EnsureScanAsync(); output=null; terminal=MediaActions.Text(c,"result","unchanged"); }
                     else if(id=="base-defer-processing") { await EnsureScanAsync(); output=null; terminal="deferred"; variables["runtime.deferMinutes"]=JsonSerializer.SerializeToElement(int.Parse(MediaActions.Number(c,"delayMinutes",2))); }
+                    else if(id is "base-disk-lock" or "base-disk-unlock")
+                    {
+                        var disk=DiskLockKey.Normalize(MediaActions.Text(c,"disk"));
+                        var request=new DiskLockRequest(lease.Epoch,disk);
+                        if(id=="base-disk-lock")
+                        {
+                            var taken=(await client.PostAsync<DiskLockResponse>($"executions/{lease.ExecutionId:D}/disk-locks/acquire",request,job.Token))!;
+                            output=taken.Acquired?"acquired":"busy";
+                            variables["disk."+disk]=JsonSerializer.SerializeToElement(new { acquired=taken.Acquired,holder=taken.HolderExecutionId });
+                        }
+                        else await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/disk-locks/release",request,job.Token);
+                    }
                     else if(id is "base-script" or "base-condition")
                     {
                         await EnsureFilesAsync();
@@ -277,6 +289,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 catch(SubtitleException exception)
                 {
                     logger.LogInformation("Sous-titres ou polices {Node} non applicables : {Detail}",node.Id,exception.Message);
+                    output="error";
+                }
+                catch(ArgumentException exception) when(node.Component.PluginId=="base" && node.Component.ComponentId is "base-disk-lock" or "base-disk-unlock")
+                {
+                    logger.LogInformation("Verrou de disque {Node} invalide : {Detail}",node.Id,exception.Message);
                     output="error";
                 }
                 catch(ConditionEvaluationException exception)
