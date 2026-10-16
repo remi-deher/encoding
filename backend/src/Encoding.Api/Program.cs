@@ -23,6 +23,8 @@ using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 
 if (args.FirstOrDefault() == DatabaseTransferCommand.Name)
     Environment.Exit(await DatabaseTransferCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
+if (args.FirstOrDefault() == PeerAuthorityDatabaseCommand.Name)
+    Environment.Exit(await PeerAuthorityDatabaseCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddOperations();

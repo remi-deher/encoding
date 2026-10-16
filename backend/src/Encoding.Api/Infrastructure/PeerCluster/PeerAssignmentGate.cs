@@ -5,14 +5,25 @@ namespace Encoding.Api.Infrastructure.PeerCluster;
 public interface IPeerAssignmentGate
 {
     CancellationTokenSource? AcquireLease(CancellationToken requestToken);
+    long CurrentTerm { get; }
+    long NextFencingEpoch(long previousEpoch);
+    bool IsCurrentFencingEpoch(long epoch);
 }
 
 /// <summary>New jobs are assigned only by a peer holding a current quorum-backed Raft leader lease.</summary>
 public sealed class PeerAssignmentGate(IRaftHttpCluster cluster) : IPeerAssignmentGate
 {
+    private DotNext.Net.Cluster.Consensus.Raft.IRaftCluster RaftCluster => (DotNext.Net.Cluster.Consensus.Raft.IRaftCluster)cluster;
+
+    public long CurrentTerm => RaftCluster.AuditTrail.Term;
+
+    public long NextFencingEpoch(long previousEpoch) => PeerLeaseEpoch.Next(CurrentTerm, previousEpoch);
+
+    public bool IsCurrentFencingEpoch(long epoch) => PeerLeaseEpoch.IsForTerm(epoch, CurrentTerm);
+
     public CancellationTokenSource? AcquireLease(CancellationToken requestToken)
     {
-        if (!((DotNext.Net.Cluster.Consensus.Raft.IRaftCluster)cluster).TryGetLeaseToken(out var leaseToken)
+        if (!RaftCluster.TryGetLeaseToken(out var leaseToken)
             || leaseToken.IsCancellationRequested) return null;
         return CancellationTokenSource.CreateLinkedTokenSource(requestToken, leaseToken);
     }

@@ -39,7 +39,7 @@ Chaque serveur membre conserve localement l’état du cluster et peut présente
 
 ## Données médias
 
-Le consensus réplique les métadonnées, pas les fichiers vidéo, audio ou image. Chaque bibliothèque garde ses chemins et capacités d’accès propres à chaque nœud. La réplication des fichiers reste un choix de stockage séparé ; le transfert vers un worker continue d’utiliser les mécanismes déjà définis.
+Le consensus réplique les métadonnées, pas les fichiers vidéo, audio ou image. Pour chaque bibliothèque, l’administrateur choisit les nœuds de traitement et déclare l’accès de chacun : accès direct (disque, NFS, USB ou montage WebDAV) avec un chemin propre à ce nœud, ou accès indirect via un nœud source déclaré. Le mode `transfer` implémenté copie le média vers un espace temporaire du worker puis récupère le résultat ; un service WebDAV fourni par un nœud est une option de transport à spécifier séparément. Cette configuration d’accès fait partie de l’état partagé, tandis que les chemins et fichiers demeurent liés au stockage configuré sur chaque nœud. Si aucune source directe disponible ne peut fournir le média, la tâche échoue immédiatement. Toute réplication physique des fichiers reste un choix de stockage séparé.
 
 ## Déploiement et migration
 
@@ -51,8 +51,8 @@ Le consensus réplique les métadonnées, pas les fichiers vidéo, audio ou imag
 ## Phasage
 
 1. **Présence pair-à-pair — prototype livré** : identité TLS par pair, approbation manuelle, gossip signé des workers, révocation et vue locale convergente. La découverte des pairs reste manuelle.
-2. **État durable — amorcé** : membership persistante et consensus fonctionnent; seul le nom du cluster et les révocations sont des projections métier répliquées. Identités des workers, rôles, bibliothèques, flows et paramètres restent locaux.
-3. **Orchestration — amorcée** : les nouvelles attributions et écritures runtime exigent un bail Raft avec quorum; la perte du bail annule la requête worker. La réplication des tâches et des baux, les epochs et le fencing des effets externes ne sont pas livrés.
+2. **État durable — amorcé** : membership persistante et consensus fonctionnent; le nom du cluster, les révocations, le catalogue de base des bibliothèques, leurs assignations de flow, les versions publiées et les brouillons courants des flows sont des projections métier répliquées. Identités et paramètres propres aux workers, chemins directs de stockage, profils, scripts, paramètres de plugins, files d’exécution et résultats restent locaux. La sélection des nœuds de traitement d’une bibliothèque et leur mode d’accès/source sont une configuration partagée qui reste à répliquer. L’import d’archives de flows est suspendu en mode pair à pair jusqu’à son implémentation atomique.
+3. **Orchestration — amorcée** : les nouvelles attributions et écritures runtime exigent un bail Raft avec quorum; l’époque worker combine maintenant le terme Raft et le compteur local de tentative, et les requêtes d’un ancien terme sont refusées après une élection. La réplication des tâches et des baux entre les projections SQL, ainsi que le fencing d’effets externes déjà lancés, ne sont pas livrés.
 4. **Déploiement — partiellement livré** : configuration Docker, identité protégée, guide manuel et diagnostics API disponibles. Migration automatique, sauvegarde/restauration coordonnée et rattachement guidé restent à faire.
 
 ## Critères d’acceptation

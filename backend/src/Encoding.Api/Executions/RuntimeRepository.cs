@@ -178,7 +178,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 }
                 if(returnsToSelf) continue;
             }
-            var epoch=item.Epoch+1;
+            var epoch=peerAssignmentGate?.NextFencingEpoch(item.Epoch) ?? item.Epoch+1;
             await using(var reserve=Sql.Command("""
               INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until)
               VALUES(@library,@key,@id,@epoch,clock_timestamp()+interval '60 seconds')

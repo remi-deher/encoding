@@ -1,4 +1,5 @@
 using Encoding.Api.Auth;
+using Encoding.Api.Infrastructure.PeerCluster;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 
@@ -36,8 +37,9 @@ public static class FlowEndpoints
             try { var bytes=await archives.ExportAsync(ids,ct); return bytes is null ? (IResult)Results.BadRequest(new { title="Sélection invalide ou flow introuvable." }) : Results.File(bytes,"application/zip","flows.zip"); }
             catch(InvalidDataException e) { return Results.BadRequest(new { title=e.Message }); }
         }).AllowViewer();
-        flows.MapPost("/import",async(HttpRequest request,FlowArchiveService archives,CancellationToken ct)=>
+        flows.MapPost("/import",async(HttpRequest request,FlowArchiveService archives,PeerClusterOptions peerOptions,CancellationToken ct)=>
         {
+            if (peerOptions.Enabled) return Results.Conflict(new { title="L’import groupé des flows sera disponible quand il utilisera une commande Raft atomique." });
             try
             {
                 var (result,conflict,count)=await archives.ImportAsync(request.Body,request.ContentType=="application/zip",ct);

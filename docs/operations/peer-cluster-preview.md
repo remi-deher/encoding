@@ -5,12 +5,13 @@ Le mode `PeerCluster` est une préversion à activer explicitement. Il valide l�
 ## Ce qui est partagé aujourd’hui
 
 - L’identité de cluster et son nom sont communs aux pairs. Le nom est confirmé par Raft.
+- Le catalogue des bibliothèques (identifiant, nom, date de création et activation), le flow assigné à chaque bibliothèque, les versions publiées des flows et leur brouillon courant sont inscrits dans Raft puis appliqués à la base locale de chaque pair. Au premier démarrage, le serveur `Bootstrap` importe ces données avant l’arrivée des autres pairs.
 - Les serveurs votants et leur configuration sont conservés dans le stockage Raft local de chaque serveur.
 - Les nœuds workers publient leur état par gossip signé. `GET /api/v1/nodes`, la page Nœuds et la vue Cluster combinent ces observations; leur présence peut diverger brièvement pendant une partition.
 - Une révocation de pair est inscrite dans Raft après son retrait de la membership et s’applique aux pairs qui restent membres.
-- Les nouvelles tâches et les écritures runtime des workers exigent un bail de leader avec quorum; la perte du bail annule les requêtes worker en cours.
+- Les nouvelles tâches et les écritures runtime des workers exigent un bail de leader avec quorum. L’époque remise à un worker combine le terme Raft et le compteur de tentative de la tâche; après une nouvelle élection, les requêtes portant l’ancien terme sont refusées, même si leur bail SQL local n’a pas encore expiré.
 
-Les bibliothèques, flows, profils, scripts, plugins, accès aux médias, réglages des workers, files d’exécution et résultats restent dans la base locale de chaque serveur. Les baux d’exécution ne portent pas encore d’époque Raft commune et les effets externes déjà lancés par un plugin ne sont pas annulables par le serveur; les tâches en cours ne sont donc pas protégées contre tous les scénarios de bascule. Les opérations d’administration ne sont pas encore répliquées. N’activez pas ce mode sur plusieurs serveurs qui doivent gérer un même état métier.
+Les profils d’encodage, scripts, modèles, packs, configurations de plugins, accès propres à chaque nœud, paramètres des workers, files et résultats d’exécution restent locaux. L’import groupé des flows est désactivé en mode pair à pair tant qu’il ne passe pas par une commande Raft atomique. Le fencing par terme rejette les prochains appels d’un ancien worker après une élection, mais ne peut pas annuler un effet externe déjà lancé par un plugin. N’activez pas ce mode sur plusieurs serveurs qui doivent gérer un même état métier.
 
 ## Préparer chaque serveur
 
@@ -44,8 +45,11 @@ Pour Docker Compose, les variables `PEER_CLUSTER_*` correspondantes sont déjà 
 
 1. Démarrez le premier pair et vérifiez `GET /api/v1/peer-cluster/identity` sur son port API normal. Ce point de terminaison fournit `clusterId`, `peerId`, `endpoint`, le certificat public et `thumbprint` (empreinte SHA-256). Obtenez la même information pour le serveur à ajouter. Comparez les empreintes par un canal d’administration fiable.
 2. Sur chacun des deux serveurs, un administrateur approuve l’autre avec `POST /api/v1/peer-cluster/peers`. Envoyez les champs `peerId`, `clusterId`, `endpoint`, `certificatePem` et `fingerprint`; cette dernière valeur reprend le `thumbprint` SHA-256 de la réponse d’identité. L’approbation est réciproque et doit être répétée pour chaque paire de serveurs. Une découverte ou un GUID identique n’accorde jamais la confiance automatiquement.
-3. Depuis l’API du leader Raft, appelez `POST /api/v1/peer-cluster/peers/{peerId}/membership`. Le pair doit déjà être approuvé sur les deux serveurs. Ajoutez un seul pair à la fois et attendez le résultat avant d’ajouter le suivant.
-4. Sur chaque serveur, vérifiez `GET /api/v1/peer-cluster/consensus` : même membership, index engagé à jour et un leader avec `hasQuorum=true`. Vérifiez ensuite `GET /api/v1/peer-cluster` et `GET /api/v1/nodes` pour la présence des pairs et des workers.
+3. Pour une nouvelle base de pair, initialisez d’abord sa base locale vide depuis la base faisant autorité avec la commande `initialize-peer-database` ci-dessous. Pour un pair qui revient après une panne, conservez et réutilisez son propre volume et sa base restaurés ; ne relancez pas cette copie.
+4. Depuis l’API du leader Raft, appelez `POST /api/v1/peer-cluster/peers/{peerId}/membership`. Le pair doit déjà être approuvé sur les deux serveurs. Ajoutez un seul pair à la fois et attendez la confirmation avant d’ajouter le suivant.
+5. Sur chaque serveur, vérifiez `GET /api/v1/peer-cluster/consensus` : même membership, index engagé à jour et un leader avec `hasQuorum=true`. Comparez `lastCommittedEntryIndex` sur le leader et le nouveau pair avant de lui confier des opérations. Vérifiez ensuite `GET /api/v1/peer-cluster` et `GET /api/v1/nodes` pour la présence des pairs et des workers.
+
+`POST /membership` attend maintenant la confirmation du changement Raft. La réponse ne garantit pas que le nouvel entrant a terminé son rattrapage ; l’index engagé doit être contrôlé séparément. `GET /api/v1/peer-cluster/recovery` indique les fichiers persistants à préserver et l’action conseillée après une panne. Pour retirer un pair, utilisez le leader courant ; l’API refuse l’auto-révocation et la suppression du dernier membre.
 
 Les routes d’administration requièrent la session administrateur et la protection CSRF de l’API. N’exposez pas les jetons de session dans les journaux ni dans un script partagé.
 
@@ -55,7 +59,17 @@ Pour retirer un serveur, appelez `DELETE /api/v1/peer-cluster/peers/{peerId}` su
 
 Sauvegardez ensemble, pour chaque serveur, sa base de données locale, son volume de données, son `PeerCluster:IdentityPassword` et les clés locales de protection des secrets. Le volume pair contient notamment `peer-identity.pfx`, `peer-identity.json`, `peer-incarnation.txt`, `trusted-peers.json`, `raft/membership`, `raft/wal` et les instantanés Raft. Ne restaurez pas les fichiers Raft d’un pair sur un autre pair et ne supprimez pas le WAL pour « réparer » un membre.
 
-La migration automatique de plusieurs bases existantes, la création d’instantanés d’application et la restauration coordonnée entre pairs ne sont pas livrées. Ne fusionnez pas des bases différentes en activant le mode. Pour l’essai, choisissez un serveur comme base faisant autorité et utilisez des bases locales séparées sur les autres; n’utilisez pas ces autres serveurs pour administrer des bibliothèques ou des exécutions tant que la réplication métier n’est pas implémentée.
+Choisissez explicitement une seule base comme source faisant autorité. Pour initialiser la base vide d’un nouveau pair, arrêtez les écritures sur la source puis lancez depuis le conteneur/API :
+
+```sh
+dotnet Encoding.Api.dll initialize-peer-database \
+  --authority-provider postgres --authority "$AUTHORITY_CONNECTION" \
+  --target-provider postgres --target "$NEW_PEER_CONNECTION"
+```
+
+La commande migre le schéma cible à la version de l’application, refuse les tables applicatives déjà peuplées, copie toutes les données en transaction et vérifie les nombres de lignes. La source reste intacte. Les chaînes de connexion contiennent des secrets : ne les inscrivez pas dans les scripts versionnés ni dans les journaux. Utilisez `sqlite` comme fournisseur si les deux bases locales sont SQLite. Cette procédure initialise un nouveau pair, elle ne fusionne pas les bases existantes.
+
+La migration automatique de plusieurs bases existantes, les instantanés complets de l’application et la restauration coordonnée entre pairs ne sont pas livrés. Une copie de départ n’empêche pas la divergence ultérieure des tables qui ne sont pas répliquées. Gardez ces écritures hors des pairs secondaires jusqu’à la livraison du point 1 documenté dans [peer-cluster-production-todo.md](peer-cluster-production-todo.md).
 
 ## Validation disponible
 
@@ -66,4 +80,4 @@ dotnet test backend/tests/Encoding.Runtime.Tests/Encoding.Runtime.Tests.csproj \
   --filter FullyQualifiedName~PeerCluster
 ```
 
-Cette validation ne couvre pas encore la réplication des données métier, le fencing des tâches en cours, la reprise après restauration complète, les partitions réseau prolongées ni la mise à niveau entre versions différentes.
+Cette validation ne couvre pas encore la réplication des autres données métier, le fencing d’un effet externe déjà lancé, la reprise après restauration complète, les partitions réseau prolongées ni la mise à niveau entre versions différentes.

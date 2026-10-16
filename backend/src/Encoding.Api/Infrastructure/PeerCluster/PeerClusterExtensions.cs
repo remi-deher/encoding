@@ -59,6 +59,7 @@ public static class PeerClusterExtensions
             configuration.UpperElectionTimeout = 3_000;
             configuration.IsLeaderLeaseEnabled = true;
         });
+        builder.Services.AddHostedService<PeerBusinessStateSeeder>();
         var apiUrls = builder.Configuration[WebHostDefaults.ServerUrlsKey]?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             ?? ParseHttpPorts(builder.Configuration[WebHostDefaults.HttpPortsKey] ?? builder.Configuration["ASPNETCORE_HTTP_PORTS"]);
         if (apiUrls.Length == 0) apiUrls = ["http://0.0.0.0:8080"];
@@ -114,6 +115,33 @@ public static class PeerClusterExtensions
         group.MapGet("/consensus", () => Results.Ok(consensus.GetStatus()))
             .RequireAuthorization(Encoding.Api.Auth.AuthExtensions.AdministratorPolicy).WithName("GetPeerConsensusStatus");
 
+        group.MapGet("/recovery", () =>
+        {
+            var status = consensus.GetStatus();
+            var raftDirectory = Path.Combine(options.DataDirectory, "raft");
+            var identityFilesPresent = File.Exists(Path.Combine(options.DataDirectory, "peer-identity.pfx"))
+                && File.Exists(Path.Combine(options.DataDirectory, "peer-identity.json"));
+            var membershipPresent = File.Exists(Path.Combine(raftDirectory, "membership"));
+            var walPresent = Directory.Exists(Path.Combine(raftDirectory, "wal"));
+            var snapshotsDirectory = Path.Combine(raftDirectory, "snapshots");
+            var snapshotsPresent = Directory.Exists(snapshotsDirectory)
+                && Directory.EnumerateFiles(snapshotsDirectory).Any();
+            var recommendation = !identityFilesPresent || !membershipPresent || !walPresent
+                ? "Restaurer ensemble la sauvegarde de ce pair (identité, membership, WAL, instantanés et base locale) avant son redémarrage."
+                : status.HasQuorum
+                    ? "Le pair a un quorum. Pour une reprise après arrêt, conserver son volume et vérifier l’index engagé sur chaque membre."
+                    : "Conserver le volume local. Rétablir la connectivité et le quorum des membres existants avant toute modification de membership.";
+            return Results.Ok(new
+            {
+                identityStore.Identity.PeerId,
+                identityStore.Identity.ClusterId,
+                identityStore.Identity.Thumbprint,
+                Persistence = new { identityFilesPresent, membershipPresent, walPresent, snapshotsPresent },
+                Consensus = status,
+                Recommendation = recommendation
+            });
+        }).RequireAuthorization(Encoding.Api.Auth.AuthExtensions.AdministratorPolicy).WithName("GetPeerRecoveryStatus");
+
         group.MapPost("/peers", async (TrustPeerRequest request, CancellationToken cancellationToken) =>
         {
             try
@@ -143,6 +171,8 @@ public static class PeerClusterExtensions
 
         group.MapDelete("/peers/{peerId:guid}", async (Guid peerId, CancellationToken cancellationToken) =>
         {
+            if (peerId == identityStore.Identity.PeerId)
+                return Results.Conflict(new { title = "Un pair ne peut pas révoquer sa propre identité. Retirez un autre membre depuis le leader courant." });
             var peer = trustStore.Find(peerId);
             if (peer is null) return Results.NotFound();
             var status = consensus.GetStatus();
@@ -168,12 +198,21 @@ public static class PeerClusterExtensions
         {
             var peer = trustStore.Find(peerId);
             if (peer is null) return Results.NotFound(new { title = "Le certificat du pair doit être approuvé sur les deux serveurs avant son ajout." });
+            if (peer.PeerId == identityStore.Identity.PeerId)
+                return Results.Conflict(new { title = "Ce serveur est déjà le pair local." });
             var status = consensus.GetStatus();
             if (!status.IsLeader) return Results.Conflict(new { title = "L’ajout doit être demandé au chef Raft courant.", status.LeaderEndpoint });
             try
             {
                 return await consensus.AddMemberAsync(peer.Endpoint, cancellationToken)
-                    ? Results.Accepted(value: new { peer.PeerId, peer.Endpoint })
+                    ? Results.Accepted(value: new
+                    {
+                        peer.PeerId,
+                        peer.Endpoint,
+                        Members = consensus.GetStatus().Members,
+                        LastCommittedEntryIndex = consensus.GetStatus().LastCommittedEntryIndex,
+                        title = "Membership confirmée. Attendez que l’index engagé converge sur le nouveau pair avant de lui confier des opérations."
+                    })
                     : Results.Conflict(new { title = "Le pair n’a pas rejoint la membership Raft." });
             }
             catch (Exception exception) when (exception is not OperationCanceledException)

@@ -5,6 +5,7 @@ using Encoding.Contracts.Libraries;
 using Encoding.Contracts.Executions;
 using Encoding.Api.Infrastructure.PeerCluster;
 using Microsoft.AspNetCore.Http.Features;
+using System.Reflection;
 
 namespace Encoding.Api.Executions;
 
@@ -41,6 +42,9 @@ public static class RuntimeEndpoints
             if (!services.GetRequiredService<PeerConsensusService>().TryGetLeaderLease(out var leaderLease))
                 return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
                     title: "Le pair n’a pas de bail Raft valide; l’opération worker est suspendue.");
+            var assignmentGate = services.GetRequiredService<IPeerAssignmentGate>();
+            if (ReadLeaseEpochs(context.Arguments).Any(epoch => !assignmentGate.IsCurrentFencingEpoch(epoch)))
+                return Results.Conflict(new { title = "Le bail worker appartient à un ancien terme Raft et ne peut plus modifier cette exécution." });
 
             var originalToken = context.HttpContext.RequestAborted;
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(originalToken, leaderLease);
@@ -126,5 +130,21 @@ public static class RuntimeEndpoints
             if(!file.Exists) return Results.NotFound();
             return Results.Text($"<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>{digest}</d:href><d:propstat><d:prop><d:getcontentlength>{file.Length}</d:getcontentlength><d:getetag>\"{digest}\"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>","application/xml",statusCode:207);
         });
+    }
+
+    private static IEnumerable<long> ReadLeaseEpochs(IEnumerable<object?> arguments)
+    {
+        foreach (var argument in arguments)
+        {
+            if (argument is long value)
+            {
+                yield return value;
+                continue;
+            }
+
+            if (argument is null) continue;
+            var property = argument.GetType().GetProperty("Epoch", BindingFlags.Instance | BindingFlags.Public);
+            if (property?.PropertyType == typeof(long) && property.GetValue(argument) is long epoch) yield return epoch;
+        }
     }
 }
