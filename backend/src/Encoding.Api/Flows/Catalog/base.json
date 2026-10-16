@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "base",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "name": "Base",
   "supportedHostContractVersions": [
     1
@@ -36,7 +36,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -65,7 +66,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -94,7 +96,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -123,7 +126,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -152,7 +156,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -240,7 +245,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -301,7 +307,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -348,7 +355,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -389,7 +397,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -441,7 +450,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -615,7 +625,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -743,7 +754,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -831,7 +843,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -907,7 +920,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -982,7 +996,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1058,7 +1073,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1126,7 +1142,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1206,7 +1223,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1316,7 +1334,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1401,7 +1420,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1486,7 +1506,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1583,7 +1604,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1633,7 +1655,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1698,7 +1721,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1792,7 +1816,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1856,7 +1881,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1904,7 +1930,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -1969,7 +1996,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2027,7 +2055,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2092,7 +2121,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2140,7 +2170,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2199,7 +2230,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2258,7 +2290,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2323,7 +2356,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2389,7 +2423,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2447,7 +2482,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2512,7 +2548,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2578,7 +2615,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2620,7 +2658,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2696,7 +2735,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2762,7 +2802,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2846,7 +2887,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2898,7 +2940,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -2948,7 +2991,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -3151,7 +3195,8 @@
       "requiresMedia": false,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     {
@@ -3237,6 +3282,94 @@
       "requiredTools": [
         {
           "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": [
+        "1.2.0"
+      ]
+    },
+    {
+      "id": "base-track-names",
+      "version": "1.3.0",
+      "name": "Noms de pistes",
+      "description": "Nomme les pistes audio et sous-titres d’un MKV avec un modèle (« Français (VFQ) / AC3 / 5.1 », « Anglais / PGS / Malentendant ») et garde une seule piste audio par défaut. Les titres d’origine (VFF, VFQ, Forcé, SDH…) peuvent être relevés avant que d’autres blocs ne renomment les pistes. Utilise mkvpropedit sur la copie de travail : le fichier n’est pas remuxé.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Les noms ont été appliqués, ou les titres d’origine relevés."
+        },
+        {
+          "id": "unchanged",
+          "label": "Déjà conforme",
+          "description": "Aucun nom ne change, ou le fichier n’est pas un MKV."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Les propriétés des pistes n’ont pas pu être lues ou modifiées."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "mode",
+            "label": "Opération",
+            "type": "select",
+            "defaultValue": "apply",
+            "options": [
+              {
+                "value": "apply",
+                "label": "Appliquer les noms"
+              },
+              {
+                "value": "snapshot",
+                "label": "Relever les titres d’origine"
+              }
+            ],
+            "description": "Placez « Relever » avant les blocs qui renomment ou convertissent des pistes ; « Appliquer » s’en sert ensuite pour garder la variante (VFF, VFQ) et les marqueurs."
+          },
+          {
+            "id": "audioTemplate",
+            "label": "Modèle des pistes audio",
+            "type": "text",
+            "defaultValue": "{language} {variant} / {codec} / {layout} / {flags}",
+            "description": "Jetons : {language}, {variant}, {codec}, {layout}, {flags}. Les segments séparés par « / » qui restent vides sont retirés."
+          },
+          {
+            "id": "subtitleTemplate",
+            "label": "Modèle des sous-titres",
+            "type": "text",
+            "defaultValue": "{language} {variant} / {codec} / {flags}",
+            "description": "Mêmes jetons ; {layout} reste vide."
+          },
+          {
+            "id": "singleDefaultAudio",
+            "label": "Une seule piste audio par défaut",
+            "type": "boolean",
+            "defaultValue": true
+          },
+          {
+            "id": "defaultAudioLanguage",
+            "label": "Langue de la piste audio par défaut",
+            "type": "text",
+            "description": "Code de langue (fr, en, ja…). Vide : conserver la piste déjà par défaut, sinon la première hors commentaire."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
           "minimumVersion": null,
           "requiredCapabilities": []
         }

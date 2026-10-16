@@ -176,6 +176,18 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         foreach(var change in response.VariableChanges) variables[change.Key]=change.Value;
                         if(response.CandidateArtifactId is { } candidate) await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate),[]),node.Id);
                     }
+                    else if(id=="base-track-names")
+                    {
+                        await EnsureScanAsync();
+                        var outcome=await actions.TrackNamesAsync(c,context.CurrentMetadata!.Value,variables.TryGetValue("tracks.origin",out var saved)?saved:null,current,directory,node.Id,job.Token);
+                        if(MediaActions.Text(c,"mode","apply")=="snapshot") { if(outcome.Value is { } snapshot) variables["tracks.origin"]=snapshot; }
+                        else if(outcome.Primary is null) output="unchanged";
+                        else
+                        {
+                            if(outcome.Value is { ValueKind: JsonValueKind.Array } notes) foreach(var note in notes.EnumerateArray()) logger.LogInformation("Noms des pistes : {Note}",note.GetString());
+                            await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
+                        }
+                    }
                     else if(id=="base-audio-rules")
                     {
                         await EnsureScanAsync();

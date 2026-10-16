@@ -29,6 +29,13 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public void TrackNamesFollowTheTemplateAndKeepOriginalVariants()
+    {
+        var (registry, validator, eligibility) = Harness.Services();
+        TrackNameScenarios.Run(registry, validator, eligibility);
+    }
+
+    [Fact]
     public async Task FlowSimulationCoversBranchesVariablesAndMediaInfoImport()
     {
         var (registry, validator, _) = Harness.Services();

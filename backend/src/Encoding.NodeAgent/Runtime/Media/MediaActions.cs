@@ -98,6 +98,23 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
         return await MatroskaAsync(id,config,current,directory,node,extra,ct);
     }
 
+    /// <summary>Nomenclature des pistes (0056). Mode « snapshot » : retourne les titres d'origine sans toucher au fichier. Mode « apply » : mkvpropedit sur une copie de travail ; aucun fichier n'est produit quand rien ne change ou que le conteneur n'est pas Matroska.</summary>
+    public async Task<MediaActionOutcome> TrackNamesAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,JsonElement? origin,string current,string directory,string node,CancellationToken ct)
+    {
+        if(Path.GetExtension(current)!=".mkv") return new(null,[]);
+        using var identification=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct));
+        if(Text(c,"mode","apply")=="snapshot") return new(null,[],TrackNaming.Snapshot(identification.RootElement).Clone());
+        var edits=TrackNaming.Plan(identification.RootElement,probe,origin,TrackNameOptions.From(c));
+        if(edits.Count==0) return new(null,[]);
+        var file=Output(directory,node,".mkv"); File.Copy(current,file,true); var args=new List<string> { file };
+        foreach(var edit in edits)
+        {
+            args.AddRange(["--edit","track:="+edit.Uid,"--set","name="+edit.Name]);
+            if(edit.DefaultFlag is { } flag) args.AddRange(["--set","flag-default="+(flag?"1":"0")]);
+        }
+        await tools.CheckedAsync("mkvpropedit",args,directory,ct); return new(file,[],JsonSerializer.SerializeToElement(edits.Select(edit=>edit.Note).ToArray()));
+    }
+
     public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true)
     {
         var output=Output(directory,node,Path.GetExtension(current) is ".mp4" or ".mkv" or ".mka" or ".flac"?Path.GetExtension(current):".mkv");
@@ -204,7 +221,7 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
             {
                 var raw=await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct); using var identification=JsonDocument.Parse(raw);
                 var track=identification.RootElement.GetProperty("tracks").EnumerateArray().Single(t=>t.GetProperty("id").GetInt32()==int.Parse(Number(c,"trackId")));
-                args.AddRange(["--edit","track:@"+track.GetProperty("properties").GetProperty("uid").GetUInt64()]);
+                args.AddRange(["--edit","track:="+track.GetProperty("properties").GetProperty("uid").GetUInt64()]);
                 foreach(var pair in new[]{("language","language"),("trackName","name")}) if(Text(c,pair.Item1)!="") args.AddRange(["--set",pair.Item2+"="+Text(c,pair.Item1)]);
                 args.AddRange(["--set","flag-default="+(Flag(c,"defaultTrack")?"1":"0"),"--set","flag-forced="+(Flag(c,"forcedTrack")?"1":"0")]);
             }
