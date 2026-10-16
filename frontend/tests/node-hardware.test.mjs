@@ -24,7 +24,14 @@ test('l’accélérateur vérifié le plus prioritaire passe en premier, les dé
   const badges = nodeAcceleratorBadges(
     node({
       capabilities: [
-        ffmpeg([['h264_vaapi', 'usable'], ['h264_qsv', 'usable'], ['hevc_nvenc', 'detected']], ['qsv', 'vaapi']),
+        ffmpeg(
+          [
+            ['h264_vaapi', 'usable'],
+            ['h264_qsv', 'usable'],
+            ['hevc_nvenc', 'detected'],
+          ],
+          ['qsv', 'vaapi'],
+        ),
       ],
     }),
   );
@@ -33,7 +40,14 @@ test('l’accélérateur vérifié le plus prioritaire passe en premier, les dé
 
 test('repli CPU quand aucun encodeur matériel n’est vérifié', () => {
   const badges = nodeAcceleratorBadges(
-    node({ capabilities: [ffmpeg([['h264_qsv', 'detected'], ['libx264', 'usable']])] }),
+    node({
+      capabilities: [
+        ffmpeg([
+          ['h264_qsv', 'detected'],
+          ['libx264', 'usable'],
+        ]),
+      ],
+    }),
   );
   assert.deepEqual(badges, ['CPU', 'Quick Sync détecté']);
 });
