@@ -43,7 +43,14 @@ public sealed class NodeHeartbeatService(
                     };
                     request.Headers.Add("X-Node-Token", identity.NodeToken);
                     using var response = await httpClient.SendAsync(request, stoppingToken);
-                    if (!response.IsSuccessStatusCode && !(response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !identity.IsEnrolled))
+                    if (response.StatusCode == System.Net.HttpStatusCode.Gone)
+                    {
+                        // Le cluster a retiré cette identité (0017) et ne la réactivera jamais : sans nouvelle identité, le nœud resterait
+                        // « enrôlé » sans jamais être revu. Le nœud local se réenrôle seul ; un nœud distant redevient autonome.
+                        logger.LogWarning("Le cluster a retiré le nœud {NodeId} ; l'identité locale est abandonnée.", identity.Id);
+                        await enrollment.ForgetRemovedIdentityAsync(identity.Id, stoppingToken);
+                    }
+                    else if (!response.IsSuccessStatusCode && !(response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !identity.IsEnrolled))
                         logger.LogWarning("Le heartbeat du nœud {NodeId} a reçu HTTP {StatusCode}.", identity.Id, (int)response.StatusCode);
                     else if (response.IsSuccessStatusCode)
                     {

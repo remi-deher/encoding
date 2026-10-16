@@ -51,6 +51,14 @@ public sealed class NodeRepository(DbDataSource dataSource)
         return (await command.ScalarBoolAsync(cancellationToken));
     }
 
+    /// <summary>Vrai si cet identifiant a été retiré du cluster (suppression ou départ) : le nœud doit repartir d'une identité neuve (0017).</summary>
+    public async Task<bool> IsRemovedAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id = @id AND deleted_at IS NOT NULL)");
+        command.Parameters.AddWithValue("id", id);
+        return await command.ScalarBoolAsync(cancellationToken);
+    }
+
     public async Task<PairingRequestResult> CreatePairingRequestAsync(CreateNodeEnrollmentRequest request, int maxPending, CancellationToken cancellationToken)
     {
         await using var deleted=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND deleted_at IS NOT NULL)");

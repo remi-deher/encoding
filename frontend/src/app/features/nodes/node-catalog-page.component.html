@@ -31,7 +31,7 @@
     clusterIdentity() !== null
   "
   filterLabel="Membres du cluster actuel"
-  note="Les fonctions et les capacités correspondent au dernier état observé. Une perte de connexion ne confirme pas un changement de cluster."
+  note="Les fonctions, le matériel et l’accélérateur correspondent au dernier état observé. Une perte de connexion ne confirme pas un changement de cluster."
 >
   <ng-template #pageActions>
     @if (pageTab() === 'node') {
@@ -221,20 +221,61 @@
           (rowOpen)="onEnrollmentOpen($event)"
         />
       }
-      <app-data-table
-        [columns]="columns"
-        [rows]="filteredNodes()"
-        [layout]="handset() ? 'cards' : 'table'"
-        [selectable]="isAdmin() && !bulkBusy()"
-        [rowOpenable]="true"
-        rowOpenLabel="Consulter"
-        (rowOpen)="openNodeCard($event['id'].toString())"
-        [rowActions]="isAdmin() ? nodeActions : []"
-        (rowAction)="onNodeAction($event)"
-        [selectionActions]="isAdmin() ? memberSelectionActions : []"
-        (selectionAction)="onMemberSelectionAction($event)"
-        emptyMessage="Aucun nœud ne correspond à ces filtres."
-      />
+      @if (selectedMemberIds().size && isAdmin()) {
+        <div class="member-selection" role="group" aria-label="Actions sur la sélection">
+          <span>{{ selectedMemberIds().size }} nœud(s) sélectionné(s)</span>
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="bulkBusy()"
+            (click)="runMemberBulk('drain')"
+          >
+            Vidanger
+          </button>
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="bulkBusy()"
+            (click)="runMemberBulk('resume')"
+          >
+            Reprendre le travail
+          </button>
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="bulkBusy()"
+            (click)="runMemberBulk('delete')"
+          >
+            Supprimer
+          </button>
+          <button matButton="text" type="button" (click)="selectedMemberIds.set(emptySelection)">
+            Tout désélectionner
+          </button>
+        </div>
+      }
+      @if (memberCards().length) {
+        <div class="member-cards">
+          @for (card of memberCards(); track card.id) {
+            <app-resource-card
+              [title]="card.title"
+              [statusLabel]="card.statusLabel"
+              [statusTone]="card.statusTone"
+              [badges]="card.badges"
+              [meta]="card.meta"
+              [sections]="card.sections"
+              [actions]="memberActions()"
+              [selectable]="isAdmin() && !bulkBusy()"
+              [selected]="selectedMemberIds().has(card.id)"
+              [active]="selectedNode()?.id === card.id"
+              (selectedChange)="toggleMember(card.id, $event)"
+              (actionSelected)="onMemberCardAction(card.id, $event)"
+              (open)="openNodeCard(card.id)"
+            />
+          }
+        </div>
+      } @else {
+        <p class="member-empty">Aucun nœud ne correspond à ces filtres.</p>
+      }
     }
   </div>
   <ng-template #detailHeaderActions>

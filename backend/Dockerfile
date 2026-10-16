@@ -27,7 +27,7 @@ RUN dotnet publish ./src/Encoding.Api/Encoding.Api.csproj --configuration Releas
  && dotnet publish ./src/Encoding.Launcher/Encoding.Launcher.csproj --configuration Release --output /app/launcher --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg mkvtoolnix mediainfo imagemagick nodejs python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg mkvtoolnix mediainfo imagemagick nodejs python3 hwdata && rm -rf /var/lib/apt/lists/*
 # Encodage matériel (docs/architecture/0051-hardware-encoding-in-image.md).
 # Intel : pilote iHD « non-free » (multiverse) pour VAAPI, repli sur la version libre ; libvpl2 + libmfx-gen1.2 (QSV Gen12+),
 # libmfx1 (Media SDK, QSV Gen9.5 comme l'UHD 630) et vainfo pour le diagnostic. AMD : Mesa VA-API (pas d'AMF).
