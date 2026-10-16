@@ -65,6 +65,8 @@
           <input
             #searchInput
             type="search"
+            role="combobox"
+            aria-autocomplete="list"
             autocomplete="off"
             placeholder="Rechercher une page…"
             [value]="searchQuery()"
@@ -72,7 +74,7 @@
             (keydown)="onSearchKeydown($event)"
             (focus)="openSearch()"
             (blur)="onSearchBlur($event)"
-            aria-controls="global-search-results"
+            [attr.aria-controls]="searchOpen() && searchQuery() ? 'global-search-results' : null"
             [attr.aria-expanded]="searchOpen() && !!searchQuery()"
           />
           @if (searchQuery()) {
