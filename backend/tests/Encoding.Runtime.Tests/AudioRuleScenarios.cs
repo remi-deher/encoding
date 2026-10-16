@@ -70,10 +70,10 @@ internal static class AudioRuleScenarios
         var baseManifest = registry.Plugins.Single(item => item.Id == "base");
         var rules = baseManifest.Components.Single(item => item.Id == "base-audio-rules");
         var input = baseManifest.Components.Single(item => item.Id == "base-input-file");
-        Check(baseManifest.Version == "1.4.0" && rules.Version == "1.2.0" && rules.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "The audio rules block is declared in Base 1.2.0 with its three outputs.");
+        Check(baseManifest.Version == "1.5.0" && rules.Version == "1.2.0" && rules.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "The audio rules block is declared in Base 1.2.0 with its three outputs.");
         var wait = baseManifest.Components.Single(item => item.Id == "base-wait");
-        Check(wait.CompatiblePluginVersions!.SequenceEqual(["1.1.0", "1.2.0", "1.3.0"]) && baseManifest.Components.Where(item => item.Id != "base-wait" && item.Version == "1.0.0").All(item => item.CompatiblePluginVersions!.Contains("1.1.0") && item.CompatiblePluginVersions!.Contains("1.2.0") && item.CompatiblePluginVersions!.Contains("1.3.0")),
-            "Flows that reference Base 1.1.0, 1.2.0 or 1.3.0 stay valid after the version bump.");
+        Check(wait.CompatiblePluginVersions!.SequenceEqual(["1.1.0", "1.2.0", "1.3.0", "1.4.0"]) && baseManifest.Components.Where(item => item.Id != "base-wait" && item.Version == "1.0.0").All(item => item.CompatiblePluginVersions!.Contains("1.1.0") && item.CompatiblePluginVersions!.Contains("1.2.0") && item.CompatiblePluginVersions!.Contains("1.3.0") && item.CompatiblePluginVersions!.Contains("1.4.0")),
+            "Flows that reference Base 1.1.0 to 1.4.0 stay valid after the version bump.");
 
         FlowDefinition FlowWith() => new(1, Guid.NewGuid(), 1, "Audio rules", "video", [
             new("input", null, new("base", "1.2.0", input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),
@@ -81,7 +81,7 @@ internal static class AudioRuleScenarios
             [new("edge", "input", "success", "rules")]);
         var worker = Guid.NewGuid();
         NodeToolCapability Ffmpeg(params string[] encoders) => new("ffmpeg", "7.0", ["video"], ["cpu"], encoders);
-        NodeToolCapability[] Node(NodeToolCapability ffmpeg) => [new("plugin/base", "1.4.0", ["general"], []), new("ffprobe", "7.0", ["video"], []), ffmpeg];
+        NodeToolCapability[] Node(NodeToolCapability ffmpeg) => [new("plugin/base", "1.5.0", ["general"], []), new("ffprobe", "7.0", ["video"], []), ffmpeg];
         Check(validator.Validate(FlowWith()).IsValid, "A flow with the audio rules block is valid.");
         Check(eligibility.CanRun(FlowWith(), Node(Ffmpeg("aac", "ac3")), worker), "A worker with AAC and AC-3 encoders can run the rules.");
         Check(!eligibility.CanRun(FlowWith(), Node(Ffmpeg("aac")), worker), "A worker without an AC-3 encoder never receives the rules.");

@@ -231,7 +231,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     }
     internal static async Task ReleaseAsync(Guid id,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var cmd=Sql.Command("DELETE FROM media_reservations WHERE execution_id=@id; UPDATE execution_work SET lease_until=NULL,handoff_pending=false WHERE execution_id=@id",c,tx);
+        await using var cmd=Sql.Command("DELETE FROM media_reservations WHERE execution_id=@id; DELETE FROM disk_locks WHERE execution_id=@id; UPDATE execution_work SET lease_until=NULL,handoff_pending=false WHERE execution_id=@id",c,tx);
         cmd.Parameters.AddWithValue("id",id); await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -242,6 +242,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         await using var update=Sql.Command("""
           UPDATE execution_work SET lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
           UPDATE media_reservations SET lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
+          UPDATE disk_locks SET lease_until=clock_timestamp()+interval '60 seconds' WHERE execution_id=@id;
           SELECT e.state='cancelling',e.revision,w.lease_until FROM executions e JOIN execution_work w ON w.execution_id=e.id WHERE e.id=@id
           """,c,tx);
         update.Parameters.AddWithValue("id",id); await using var r=await update.ExecuteReaderAsync(ct); await r.ReadAsync(ct);
@@ -384,6 +385,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
               UPDATE execution_work SET handoff_pending=true,handoff_selector=@selector,previous_worker_node_id=@worker,
                 worker_node_id=NULL,lease_until=NULL,lease_epoch=lease_epoch+1 WHERE execution_id=@id;
               UPDATE media_reservations SET lease_epoch=@epoch+1,lease_until='infinity'::timestamptz WHERE execution_id=@id;
+              DELETE FROM disk_locks WHERE execution_id=@id;
               """,c,tx);
             yield.Parameters.AddWithValue("id",id); yield.Parameters.AddWithValue("worker",worker); yield.Parameters.AddWithValue("epoch",request.Epoch);
             yield.Parameters.AddWithValue("selector",SqlKind.Json,JsonSerializer.Serialize(handoff,Json));

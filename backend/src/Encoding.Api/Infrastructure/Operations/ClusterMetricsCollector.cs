@@ -48,6 +48,8 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
             await Scalar(connection, "SELECT count(*) FROM execution_work w JOIN executions e ON e.id = w.execution_id WHERE e.state IN ('running','cancelling') AND (w.lease_until IS NULL OR w.lease_until <= clock_timestamp())", ct));
         writer.Gauge("encoding_media_reservations_active", "Médias actuellement réservés par un bail valide.",
             await Scalar(connection, "SELECT count(*) FROM media_reservations WHERE lease_until > clock_timestamp()", ct));
+        writer.Gauge("encoding_disk_locks_active", "Disques actuellement verrouillés par une exécution au bail valide.",
+            await Scalar(connection, "SELECT count(*) FROM disk_locks WHERE lease_until > clock_timestamp()", ct));
         writer.Gauge("encoding_artifacts_pending_purge", "Exécutions terminées dont les artefacts n’ont pas été purgés.",
             await Scalar(connection, "SELECT count(*) FROM execution_work w JOIN executions e ON e.id = w.execution_id WHERE w.artifacts_purged_at IS NULL AND e.state IN ('succeeded','failed','cancelled')", ct));
 

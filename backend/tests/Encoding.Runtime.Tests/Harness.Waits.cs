@@ -31,10 +31,11 @@ internal static partial class Harness
         }
 
         /// <summary>Complète les étapes jusqu'au bloc Attendre puis enregistre son checkpoint avec la demande d'attente.</summary>
-        private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context,RuntimeCheckpoint Checkpoint)> WaitingAsync(FlowDefinition flow,string[]? before=null)
+        private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context,RuntimeCheckpoint Checkpoint)> WaitingAsync(FlowDefinition flow,string[]? before=null,Func<Guid,RuntimeLease,Task>? beforeWait=null)
         {
             var (id,lease,context)=await EnqueueAsync(flow);
             await CompleteAsync(id,a,lease,"entry",context);
+            if(beforeWait is not null) await beforeWait(id,lease);
             foreach(var step in before??[])
             {
                 var started=await runtime.StartStepAsync(id,a,new(lease.Epoch,step),CancellationToken.None)!;
