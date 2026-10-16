@@ -24,6 +24,7 @@ jobs:
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
       - run: dotnet run --project backend/tools/ClusterMeshPrototype --configuration Release -- test
+      - run: dotnet run --project backend/tools/ClusterConsensusPrototype --configuration Release -- test
       - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg mediainfo python3
       - run: python3 -m unittest discover -s backend/plugins/tests -v
       - run: >-
