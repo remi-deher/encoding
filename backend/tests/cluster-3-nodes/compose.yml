@@ -1,0 +1,105 @@
+# Test d'intégration à 3 nœuds (hors production). Réseau isolé (internal), identifiants temporaires, médias synthétiques.
+#   node1 : serveur + worker (premier membre)     node2 : serveur + worker (même base PostgreSQL)     node3 : worker seul
+# Variables : ENCODING_IMAGE (image locale), MEDIA_DIR (dossier hôte de médias synthétiques), SETUP_TOKEN (jeton d'installation temporaire).
+name: encoding-cluster-test
+
+x-node: &node
+  image: ${ENCODING_IMAGE:-encoding:cluster-test}
+  restart: "no"
+  cpus: 1.0
+  mem_limit: 2g
+  pids_limit: 1024
+  networks: [cluster]
+  stop_grace_period: 60s
+
+x-env: &env
+  ASPNETCORE_ENVIRONMENT: Production
+  NodePresence__OfflineAfterSeconds: 30
+  Node__HeartbeatIntervalSeconds: 5
+  Node__MaxConcurrentTasks: 1
+  Cluster__DiscoveryPort: 8080
+  Auth__SetupToken: ${SETUP_TOKEN:?SETUP_TOKEN requis}
+
+x-server-env: &server-env
+  <<: *env
+  ConnectionStrings__Cluster: Host=postgres;Port=5432;Database=encoding;Username=encoding;Password=${PG_PASSWORD:?PG_PASSWORD requis}
+  FlowBackups__Directory: /var/lib/encoding/flow-backups
+  Runtime__ArtifactDirectory: /var/lib/encoding/runtime-artifacts
+  PluginSettings__KeyDirectory: /var/lib/encoding/plugin-keys
+
+services:
+  postgres:
+    image: postgres:17
+    cpus: 0.5
+    mem_limit: 512m
+    networks: [cluster]
+    environment:
+      POSTGRES_DB: encoding
+      POSTGRES_USER: encoding
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?PG_PASSWORD requis}
+    command: ["postgres", "-c", "max_connections=200", "-c", "log_min_messages=warning"]
+    volumes: [pg-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U encoding -d encoding"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  node1:
+    <<: *node
+    hostname: node1
+    environment:
+      <<: *server-env
+      Node__Name: node1
+      Node__Roles: server,worker
+      Cluster__AdvertisedApiBaseUrl: http://node1:8080/
+    depends_on: {postgres: {condition: service_healthy}}
+    volumes:
+      - node1-data:/var/lib/encoding-node
+      - flow-backups:/var/lib/encoding/flow-backups
+      - runtime-artifacts:/var/lib/encoding/runtime-artifacts
+      - plugin-keys:/var/lib/encoding/plugin-keys
+      - ${MEDIA_DIR:?MEDIA_DIR requis}:/media/lib
+
+  node2:
+    <<: *node
+    hostname: node2
+    environment:
+      <<: *server-env
+      Node__Name: node2
+      Node__Roles: server,worker
+      Cluster__AdvertisedApiBaseUrl: http://node2:8080/
+    depends_on: {postgres: {condition: service_healthy}, node1: {condition: service_started}}
+    volumes:
+      - node2-data:/var/lib/encoding-node
+      - flow-backups:/var/lib/encoding/flow-backups
+      - runtime-artifacts:/var/lib/encoding/runtime-artifacts
+      - plugin-keys:/var/lib/encoding/plugin-keys
+      - ${MEDIA_DIR:?MEDIA_DIR requis}:/media/lib
+
+  # Worker seul : pas de base de données ni de serveur ; il rejoint node1 par clé de jumelage approuvée par un administrateur.
+  node3:
+    <<: *node
+    hostname: node3
+    environment:
+      <<: *env
+      Node__Name: node3
+      Node__Roles: worker
+      Cluster__ApiBaseUrl: http://node1:8080/
+    depends_on: {node1: {condition: service_started}}
+    volumes:
+      - node3-data:/var/lib/encoding-node
+      - ${MEDIA_DIR:?MEDIA_DIR requis}:/mnt/shared-media   # chemin local différent des nœuds 1 et 2
+
+networks:
+  cluster:
+    internal: true   # aucun accès sortant
+
+volumes:
+  pg-data:
+  node1-data:
+  node2-data:
+  node3-data:
+  flow-backups:
+  runtime-artifacts:
+  plugin-keys:
