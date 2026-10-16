@@ -79,7 +79,10 @@ app-shell {
 }
 
 .navigation-menu-toggle {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
   min-width: 40px;
   width: 40px;
   height: 40px;
@@ -314,10 +317,40 @@ app-shell {
 
 .application-sidebar {
   box-sizing: border-box;
-  width: 252px;
+  width: 216px;
+  transition: width 240ms cubic-bezier(0.2, 0, 0, 1);
   border-inline-end: 1px solid var(--sidebar-border);
   background: var(--sidebar-background);
   color: var(--sidebar-text);
+  overflow-x: hidden;
+
+  &.is-collapsed {
+    width: 68px;
+
+    .sidebar-content {
+      padding-inline: 8px;
+    }
+
+    .sidebar-user {
+      justify-content: center;
+      padding-inline: 0;
+
+      .sidebar-user-copy {
+        display: none;
+      }
+    }
+  }
+}
+
+.application-shell:has(.detail-drawer-panel.mat-drawer-opened),
+.application-shell:has(.detail-drawer-panel.mat-drawer-animating) {
+  .application-header {
+    z-index: 1;
+  }
+
+  .application-navigation-layout {
+    z-index: 100;
+  }
 }
 
 .sidebar-content {
@@ -470,7 +503,6 @@ app-shell {
   .main-content {
     width: min(100% - 40px, 1440px);
   }
-
 }
 
 @media (max-width: 760px) {

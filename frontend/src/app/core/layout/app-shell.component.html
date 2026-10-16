@@ -5,20 +5,26 @@
 >
   <mat-toolbar class="application-header">
     @if (!authMode() && !workspaceMode()) {
-      @if (isCompactNavigation()) {
-        <button
-          matButton="text"
-          class="navigation-menu-toggle"
-          type="button"
-          aria-label="Ouvrir la navigation"
-          [attr.aria-expanded]="navigationOpened()"
-          (click)="navigationOpened.set(!navigationOpened())"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 7h16M4 12h16M4 17h16" />
-          </svg>
-        </button>
-      }
+      <button
+        matButton="text"
+        class="navigation-menu-toggle"
+        type="button"
+        [attr.aria-label]="
+          isCompactNavigation()
+            ? navigationOpened()
+              ? 'Fermer la navigation'
+              : 'Ouvrir la navigation'
+            : navigationCollapsed()
+              ? 'Déplier la navigation'
+              : 'Replier la navigation'
+        "
+        [attr.aria-expanded]="isCompactNavigation() ? navigationOpened() : !navigationCollapsed()"
+        (click)="toggleNavigationCollapsed()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </button>
     }
 
     <a class="brand header-brand" routerLink="/" aria-label="Encoding, accueil">
@@ -129,25 +135,35 @@
     @if (!authMode() && !workspaceMode()) {
       <mat-sidenav
         class="application-sidebar"
+        [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
         [mode]="navigationMode()"
         [opened]="navigationOpened()"
         (openedChange)="navigationOpened.set($event)"
         aria-label="Navigation principale"
       >
         <div class="sidebar-content">
-          <app-primary-navigation class="sidebar-navigation" (click)="onNavigationClick()" />
+          <app-primary-navigation
+            class="sidebar-navigation"
+            [collapsed]="!isCompactNavigation() && navigationCollapsed()"
+            (click)="onNavigationClick()"
+          />
 
-          <div class="sidebar-user">
+          <div
+            class="sidebar-user"
+            [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
+          >
             @if (currentUser(); as user) {
-              <span class="sidebar-avatar" aria-hidden="true">
+              <span class="sidebar-avatar" [attr.title]="user.username" aria-hidden="true">
                 {{ user.username.slice(0, 1).toUpperCase() }}
               </span>
-              <span class="sidebar-user-copy">
-                <span class="sidebar-user-name">{{ user.username }}</span>
-                <span class="sidebar-user-role">{{
-                  user.role === 'admin' ? 'Administrateur' : 'Lecture seule'
-                }}</span>
-              </span>
+              @if (isCompactNavigation() || !navigationCollapsed()) {
+                <span class="sidebar-user-copy">
+                  <span class="sidebar-user-name">{{ user.username }}</span>
+                  <span class="sidebar-user-role">{{
+                    user.role === 'admin' ? 'Administrateur' : 'Lecture seule'
+                  }}</span>
+                </span>
+              }
             }
           </div>
         </div>

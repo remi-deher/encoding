@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { Route, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 
@@ -85,6 +85,8 @@ export function getPrimaryNavigationGroups(routes: Route[]): readonly Navigation
 export class PrimaryNavigationComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+
+  readonly collapsed = input(false);
 
   protected readonly groups = computed(() =>
     getPrimaryNavigationGroups(this.router.config)

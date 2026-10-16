@@ -22,25 +22,86 @@ $brand-palette: (
   99: #f6fffa,
   100: #ffffff,
   secondary: (
-    0: #000000, 10: #0b1f19, 20: #20352e, 25: #2b4039, 30: #364b44, 35: #42574f, 40: #4e635b,
-    50: #667c73, 60: #80968d, 70: #9bb1a7, 80: #b6ccc2, 90: #d2e8de, 95: #e0f6ec, 98: #edfff6,
-    99: #f6fffa, 100: #ffffff,
+    0: #000000,
+    10: #0b1f19,
+    20: #20352e,
+    25: #2b4039,
+    30: #364b44,
+    35: #42574f,
+    40: #4e635b,
+    50: #667c73,
+    60: #80968d,
+    70: #9bb1a7,
+    80: #b6ccc2,
+    90: #d2e8de,
+    95: #e0f6ec,
+    98: #edfff6,
+    99: #f6fffa,
+    100: #ffffff,
   ),
   neutral: (
-    0: #000000, 4: #0a0f0d, 6: #0f1513, 10: #191d1b, 12: #1d2220, 17: #282c2a, 20: #2d312f,
-    22: #313634, 24: #363b38, 25: #373b39, 30: #424744, 35: #4e524f, 40: #5a5e5b, 50: #727773,
-    60: #8c918d, 70: #a6aba7, 80: #c2c7c3, 87: #d9dcd8, 90: #e0e3df, 92: #e6e9e5, 94: #ebeeea,
-    95: #eef2ed, 96: #f1f4f0, 98: #f6faf5, 99: #fafdf8, 100: #ffffff,
+    0: #000000,
+    4: #0a0f0d,
+    6: #0f1513,
+    10: #191d1b,
+    12: #1d2220,
+    17: #282c2a,
+    20: #2d312f,
+    22: #313634,
+    24: #363b38,
+    25: #373b39,
+    30: #424744,
+    35: #4e524f,
+    40: #5a5e5b,
+    50: #727773,
+    60: #8c918d,
+    70: #a6aba7,
+    80: #c2c7c3,
+    87: #d9dcd8,
+    90: #e0e3df,
+    92: #e6e9e5,
+    94: #ebeeea,
+    95: #eef2ed,
+    96: #f1f4f0,
+    98: #f6faf5,
+    99: #fafdf8,
+    100: #ffffff,
   ),
   neutral-variant: (
-    0: #000000, 10: #151d1a, 20: #2a322f, 25: #353d3a, 30: #404946, 35: #4c5551, 40: #58615d,
-    50: #707975, 60: #8a938e, 70: #a4ada8, 80: #bfc9c4, 90: #dbe5e0, 95: #e9f3ee, 98: #f2fcf7,
-    99: #f6fffa, 100: #ffffff,
+    0: #000000,
+    10: #151d1a,
+    20: #2a322f,
+    25: #353d3a,
+    30: #404946,
+    35: #4c5551,
+    40: #58615d,
+    50: #707975,
+    60: #8a938e,
+    70: #a4ada8,
+    80: #bfc9c4,
+    90: #dbe5e0,
+    95: #e9f3ee,
+    98: #f2fcf7,
+    99: #f6fffa,
+    100: #ffffff,
   ),
   error: (
-    0: #000000, 10: #410002, 20: #690005, 25: #7e0007, 30: #93000a, 35: #a80710, 40: #ba1a1a,
-    50: #de3730, 60: #ff5449, 70: #ff897d, 80: #ffb4ab, 90: #ffdad6, 95: #ffedea, 98: #fff8f7,
-    99: #fffbff, 100: #ffffff,
+    0: #000000,
+    10: #410002,
+    20: #690005,
+    25: #7e0007,
+    30: #93000a,
+    35: #a80710,
+    40: #ba1a1a,
+    50: #de3730,
+    60: #ff5449,
+    70: #ff897d,
+    80: #ffb4ab,
+    90: #ffdad6,
+    95: #ffedea,
+    98: #fff8f7,
+    99: #fffbff,
+    100: #ffffff,
   ),
 );
 
@@ -403,6 +464,7 @@ a {
 .detail-drawer-container.mat-drawer-container {
   width: 100%;
   overflow: visible;
+  z-index: 100;
 }
 
 .pack-expanded {
@@ -438,10 +500,17 @@ a {
   border-radius: var(--radius-xl) 0 0 var(--radius-xl);
   background: var(--surface);
   box-shadow: -12px 0 36px rgb(0 0 0 / 25%);
+  z-index: 1000 !important;
 }
 
 .detail-drawer-panel_standard.mat-drawer {
   width: min(560px, 100vw);
+}
+
+.detail-drawer-container.mat-drawer-container .mat-drawer-backdrop.mat-drawer-shown {
+  position: fixed;
+  inset: 0;
+  z-index: 999 !important;
 }
 
 ::view-transition-old(root),
@@ -449,45 +518,73 @@ a {
   animation: none;
 }
 
-:root:active-view-transition-type(flow-editor-forward)::view-transition-old(page-transition-region) {
+:root:active-view-transition-type(flow-editor-forward)::view-transition-old(
+    page-transition-region
+  ) {
   animation: flow-content-exit-left 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-:root:active-view-transition-type(flow-editor-forward)::view-transition-new(page-transition-region) {
+:root:active-view-transition-type(flow-editor-forward)::view-transition-new(
+    page-transition-region
+  ) {
   animation: flow-content-enter-right 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-:root:active-view-transition-type(flow-editor-backward)::view-transition-old(page-transition-region) {
+:root:active-view-transition-type(flow-editor-backward)::view-transition-old(
+    page-transition-region
+  ) {
   animation: flow-content-exit-right 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-:root:active-view-transition-type(flow-editor-backward)::view-transition-new(page-transition-region) {
+:root:active-view-transition-type(flow-editor-backward)::view-transition-new(
+    page-transition-region
+  ) {
   animation: flow-content-enter-left 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes flow-content-exit-left {
-  to { transform: translateX(-100%); }
+  to {
+    transform: translateX(-100%);
+  }
 }
 
 @keyframes flow-content-enter-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 @keyframes flow-content-exit-right {
-  to { transform: translateX(100%); }
+  to {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes flow-content-enter-left {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root:active-view-transition-type(flow-editor-forward)::view-transition-old(page-transition-region),
-  :root:active-view-transition-type(flow-editor-forward)::view-transition-new(page-transition-region),
-  :root:active-view-transition-type(flow-editor-backward)::view-transition-old(page-transition-region),
-  :root:active-view-transition-type(flow-editor-backward)::view-transition-new(page-transition-region) {
+  :root:active-view-transition-type(flow-editor-forward)::view-transition-old(
+      page-transition-region
+    ),
+  :root:active-view-transition-type(flow-editor-forward)::view-transition-new(
+      page-transition-region
+    ),
+  :root:active-view-transition-type(flow-editor-backward)::view-transition-old(
+      page-transition-region
+    ),
+  :root:active-view-transition-type(flow-editor-backward)::view-transition-new(
+      page-transition-region
+    ) {
     animation-duration: 1ms;
   }
 }
