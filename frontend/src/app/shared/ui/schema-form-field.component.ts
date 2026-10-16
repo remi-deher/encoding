@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -10,17 +10,11 @@ export interface SchemaFormOption {
 }
 
 export type SchemaFormFieldType =
-  | 'text'
-  | 'select'
-  | 'number'
-  | 'password'
-  | 'textarea'
-  | 'email'
-  | 'url'
-  | 'date';
+  'text' | 'select' | 'number' | 'password' | 'textarea' | 'email' | 'url' | 'date';
 
 /** Rendu Material commun d'un champ primitif défini par un schéma. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-schema-form-field',
   imports: [MatFormFieldModule, MatInputModule, MatSelectModule, ReactiveFormsModule],
   template: `
@@ -63,8 +57,13 @@ export type SchemaFormFieldType =
     </mat-form-field>
   `,
   styles: `
-    :host { display: block; min-width: 0; }
-    mat-form-field { width: 100%; }
+    :host {
+      display: block;
+      min-width: 0;
+    }
+    mat-form-field {
+      width: 100%;
+    }
   `,
 })
 export class SchemaFormFieldComponent {

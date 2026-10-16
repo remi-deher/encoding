@@ -163,14 +163,14 @@
 }
 
 .row-action_danger {
-  border-color: #b42318;
-  background: #b42318;
-  color: #fff;
+  border-color: var(--danger-strong);
+  background: var(--danger-strong);
+  color: var(--on-danger);
 }
 
 .row-action_danger:hover {
-  border-color: #8f1d14;
-  background: #8f1d14;
+  border-color: var(--danger-stronger);
+  background: var(--danger-stronger);
 }
 
 .row-toggle {
@@ -327,18 +327,43 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.resource-row-header {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.resource-row-controls {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .resource-open {
   flex: 0 0 auto;
 }
 
+.resource-menu-item_danger {
+  color: var(--danger-strong);
+}
+
 .resource-fields {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-low);
 }
 
-.resource-row-actions {
-  grid-column: 1 / -1;
+.resource-fields .data-card-field {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-container-lowest);
 }
 
+.resource-row-actions,
 .resource-row .data-card-detail {
   grid-column: 1 / -1;
 }
@@ -364,23 +389,23 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
-  background: var(--surface);
-  box-shadow: var(--elevation-1);
+  background: var(--surface-container);
   transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
+    background-color 220ms var(--motion-spring-fast),
+    border-radius 220ms var(--motion-spring-fast),
+    box-shadow 220ms var(--motion-spring-fast);
 }
 
 .data-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--elevation-2);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-container-high);
 }
 
 .data-card_selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-container-high);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .data-card_expanded {
@@ -396,8 +421,9 @@
 .data-card-title {
   margin: 0;
   min-width: 0;
-  font-size: var(--font-title);
+  font-size: var(--font-title-md);
   font-weight: 700;
+  letter-spacing: -0.015em;
   overflow-wrap: anywhere;
 }
 
@@ -414,10 +440,10 @@
 
 .data-card-field dt {
   margin-bottom: var(--space-1);
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: var(--font-label);
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
@@ -435,7 +461,6 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-2);
-  border-top: 1px solid var(--border-subtle);
 }
 
 .data-card-action_danger {
@@ -445,7 +470,6 @@
 
 .data-card-detail {
   padding-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
 }
 
 .card-empty {

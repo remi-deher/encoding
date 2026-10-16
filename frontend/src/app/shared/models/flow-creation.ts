@@ -2,7 +2,8 @@ import type { RecordFormData } from '../ui/record-form.component';
 
 export const FLOW_CREATION_FORM: RecordFormData = {
   title: 'Créer un flow',
-  description: 'Choisissez un nom, un média et un point de départ. Vous pourrez ensuite ajuster chaque composant dans l’éditeur.',
+  description:
+    'Choisissez un nom, un média et un point de départ. Vous pourrez ensuite ajuster chaque composant dans l’éditeur.',
   submitLabel: 'Continuer dans l’éditeur',
   reviewTitle: 'Vérifier le nouveau flow',
   fields: [
@@ -29,10 +30,18 @@ export const FLOW_CREATION_FORM: RecordFormData = {
         { value: 'blank', label: 'Flow vide' },
         { value: 'flow-video-library', label: 'Films — H.265', mediaTypes: ['video'] },
         { value: 'flow-video-series', label: 'Séries — H.265', mediaTypes: ['video'] },
-        { value: 'flow-video-source-check', label: 'Vérification de la source', mediaTypes: ['video'] },
+        {
+          value: 'flow-video-source-check',
+          label: 'Vérification de la source',
+          mediaTypes: ['video'],
+        },
         { value: 'flow-image-webp', label: 'Conversion WebP', mediaTypes: ['image'] },
         { value: 'flow-music-flac', label: 'Vérification FLAC', mediaTypes: ['music'] },
-        { value: 'flow-subtitles-cleanup', label: 'Nettoyage des sous-titres', mediaTypes: ['subtitles'] },
+        {
+          value: 'flow-subtitles-cleanup',
+          label: 'Nettoyage des sous-titres',
+          mediaTypes: ['subtitles'],
+        },
       ],
     },
   ],

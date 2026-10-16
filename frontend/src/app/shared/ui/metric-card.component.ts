@@ -1,11 +1,16 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 
 @Component({
   selector: 'app-metric-card',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatCardModule],
   template: `
-    <mat-card appearance="outlined" class="metric-card" [class.metric-card_attention]="tone() === 'attention'">
+    <mat-card
+      appearance="outlined"
+      class="metric-card"
+      [class.metric-card_attention]="tone() === 'attention'"
+    >
       <mat-card-content>
         <p class="metric-label">{{ label() }}</p>
         <p class="metric-value">{{ value() }}</p>

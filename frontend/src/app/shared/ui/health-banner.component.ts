@@ -1,7 +1,8 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { StatusBadgeComponent, StatusTone } from './status-badge.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-health-banner',
   imports: [StatusBadgeComponent],
   template: `
@@ -21,7 +22,7 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
       display: grid;
       gap: var(--space-2, 8px);
       padding: var(--space-3, 12px) var(--space-4, 16px);
-      border: 1px solid var(--border, currentColor);
+      border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md, 8px);
     }
     ul {

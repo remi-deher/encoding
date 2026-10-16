@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { MetricCardComponent } from './metric-card.component';
 
 export interface SummaryTile {
@@ -11,6 +11,7 @@ export interface SummaryTile {
 /** Rangée de tuiles de synthèse d'une page de gestion : valeur et légende, jamais d'action. */
 @Component({
   selector: 'app-summary-tiles',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MetricCardComponent],
   template: `
     <section class="summary-tiles" [attr.aria-label]="label()">

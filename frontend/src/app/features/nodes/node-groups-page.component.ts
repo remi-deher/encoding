@@ -1,6 +1,7 @@
 import { firstValueFrom } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import {
@@ -25,12 +26,14 @@ interface GroupRow extends DataTableRow {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-node-groups-page',
   imports: [
     ManagementCatalogTemplateComponent,
     DataTableComponent,
     RecordFormComponent,
     MatButtonModule,
+    RouterLink,
   ],
   template: `
     <app-management-catalog-template
@@ -45,11 +48,13 @@ interface GroupRow extends DataTableRow {
       note="Les critères des groupes automatiques sont réévalués à la lecture et à l’attribution. Les étiquettes des nœuds remplacent les étiquettes de groupe portant la même clé."
     >
       <ng-template #pageActions>
+        <a matButton="outlined" routerLink="/nodes">Retour aux nœuds</a>
         @if (isAdmin()) {
           <button matButton="filled" type="button" (click)="create()">Créer un groupe</button>
         }
       </ng-template>
-      <app-data-table layout="cards"
+      <app-data-table
+        layout="resources"
         catalogue-table
         [columns]="columns"
         [rows]="rows()"
@@ -80,7 +85,6 @@ export class NodeGroupsPageComponent {
   protected readonly form = signal<RecordFormData>(this.formData(null));
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom' },
-    { key: 'id', label: 'Identifiant' },
     { key: 'mode', label: 'Type' },
     { key: 'members', label: 'Nœuds' },
     { key: 'labels', label: 'Étiquettes' },

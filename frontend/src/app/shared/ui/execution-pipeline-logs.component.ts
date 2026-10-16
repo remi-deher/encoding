@@ -1,11 +1,12 @@
 import { MatExpansionModule } from '@angular/material/expansion';
-import { Component, input, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { ExecutionPipelineStep, RuntimeCommandLog } from '../models/execution';
 import { FileDownload } from '../services/file-download';
 import { NotificationService } from '../services/notification.service';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-execution-pipeline-logs',
   imports: [MatButtonModule, MatExpansionModule],
   template: `
@@ -22,18 +23,32 @@ import { NotificationService } from '../services/notification.service';
               type="button"
               [attr.aria-pressed]="viewMode() === 'simple'"
               (click)="viewMode.set('simple')"
-            >Vue simplifiée</button>
+            >
+              Vue simplifiée
+            </button>
             <button
               matButton="outlined"
               type="button"
               [attr.aria-pressed]="viewMode() === 'detailed'"
               (click)="viewMode.set('detailed')"
-            >Vue détaillée</button>
+            >
+              Vue détaillée
+            </button>
           </div>
-          <button matButton="outlined" type="button" [disabled]="commandCount() === 0" (click)="copyLogs()">
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="commandCount() === 0"
+            (click)="copyLogs()"
+          >
             Copier les logs
           </button>
-          <button matButton="outlined" type="button" [disabled]="commandCount() === 0" (click)="exportLogs()">
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="commandCount() === 0"
+            (click)="exportLogs()"
+          >
             Exporter
           </button>
         </div>
@@ -57,13 +72,17 @@ import { NotificationService } from '../services/notification.service';
                 </header>
                 @if (step.outputLabel) {
                   <p class="pipeline-step__decision">
-                    <strong>{{ step.componentKind === 'condition' ? 'Décision' : 'Sortie' }} :</strong>
+                    <strong
+                      >{{ step.componentKind === 'condition' ? 'Décision' : 'Sortie' }} :</strong
+                    >
                     {{ step.outputLabel }}
                   </p>
                 }
                 @if (viewMode() === 'detailed') {
                   @if (step.commands.length === 0) {
-                    <p class="pipeline-step__empty">Cette étape n’a lancé aucune commande système.</p>
+                    <p class="pipeline-step__empty">
+                      Cette étape n’a lancé aucune commande système.
+                    </p>
                   } @else {
                     <section class="pipeline-step__commands" aria-label="Commandes de cette étape">
                       <ol class="pipeline-commands">
@@ -76,19 +95,25 @@ import { NotificationService } from '../services/notification.service';
                               } @else {
                                 Code de sortie : {{ command.exitCode }}
                               }
-                              @if (command.truncated) { · Sortie tronquée }
+                              @if (command.truncated) {
+                                · Sortie tronquée
+                              }
                             </p>
                             @if (command.standardError) {
                               <mat-expansion-panel class="command-output">
-<mat-expansion-panel-header>Erreur standard</mat-expansion-panel-header>
-<pre>{{ command.standardError }}</pre>
-</mat-expansion-panel>
+                                <mat-expansion-panel-header
+                                  >Erreur standard</mat-expansion-panel-header
+                                >
+                                <pre>{{ command.standardError }}</pre>
+                              </mat-expansion-panel>
                             }
                             @if (command.standardOutput) {
                               <mat-expansion-panel class="command-output">
-<mat-expansion-panel-header>Sortie standard</mat-expansion-panel-header>
-<pre>{{ command.standardOutput }}</pre>
-</mat-expansion-panel>
+                                <mat-expansion-panel-header
+                                  >Sortie standard</mat-expansion-panel-header
+                                >
+                                <pre>{{ command.standardOutput }}</pre>
+                              </mat-expansion-panel>
                             }
                           </li>
                         }
@@ -112,41 +137,167 @@ import { NotificationService } from '../services/notification.service';
     </section>
   `,
   styles: `
-    :host { display: block; margin-block: 1rem; }
-    .pipeline-logs { display: grid; gap: var(--space-3); }
-    .pipeline-logs__header, .pipeline-step__header {
-      display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3);
+    :host {
+      display: block;
+      margin-block: 1rem;
     }
-    .pipeline-logs__header h3, .pipeline-step__header h4,
-    .pipeline-logs__header p, .pipeline-step__header p,
-    .pipeline-logs__empty, .pipeline-step__empty, .pipeline-command__status { margin: 0; }
-    .pipeline-logs__header h3 { color: var(--text-primary); font-size: var(--font-body); }
-    .pipeline-logs__header p, .pipeline-step__header p,
-    .pipeline-step__header > span, .pipeline-logs__empty,
-    .pipeline-step__empty, .pipeline-command__status {
-      color: var(--text-secondary); font-size: var(--font-body);
+    .pipeline-logs {
+      display: grid;
+      gap: var(--space-3);
     }
-    .pipeline-logs__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
-    .pipeline-logs__view-toggle { display: flex; flex-wrap: wrap; gap: 6px; }
-    .pipeline-logs__view-toggle [aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
-    .pipeline-steps, .pipeline-commands { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-    .pipeline-step { display: grid; justify-items: stretch; gap: 0; margin-inline: auto; width: min(100%, 680px); }
-    .pipeline-step__card { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border-subtle); border-inline-start: 4px solid var(--accent); border-radius: var(--radius-md); background: var(--surface); }
-    .pipeline-step__card[data-kind="condition"] { border-inline-start-color: #b7791f; }
-    .pipeline-step__card[data-kind="input"] { border-inline-start-color: #3182ce; }
-    .pipeline-step__card[data-kind="terminal"] { border-inline-start-color: #319795; }
-    .pipeline-step__header h4 { color: var(--text-primary); font-size: var(--font-body); }
-    .pipeline-step__kind { flex: 0 0 auto; padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--surface-muted); color: var(--text-secondary); font-size: var(--font-body); }
-    .pipeline-step__decision { margin: 0; padding: 9px 11px; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; background: var(--surface-muted); color: var(--text-primary); font-size: var(--font-body); }
-    .pipeline-step__command-count { margin: 0; color: var(--text-secondary); font-size: var(--font-body); }
-    .pipeline-link { display: grid; justify-items: center; gap: 2px; min-height: 42px; color: var(--text-secondary); font-size: var(--font-body); }
-    .pipeline-link__arrow { color: var(--accent-strong); font-size: var(--font-title-lg); line-height: 1; }
-    .pipeline-command { display: grid; gap: var(--space-2); padding: 10px; border-radius: var(--radius-md); background: var(--surface-muted); }
-    .pipeline-command__line { display: block; overflow-wrap: anywhere; color: var(--text-primary); font: 14px/1.5 ui-monospace, Consolas, monospace; }
-    .pipeline-command .command-output { min-width: 0; box-shadow: none; border: 1px solid var(--border-subtle); }
-    .pipeline-command pre { margin: var(--space-2) 0 0; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--text-secondary); font: 14px/1.5 ui-monospace, Consolas, monospace; }
+    .pipeline-logs__header,
+    .pipeline-step__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+    .pipeline-logs__header h3,
+    .pipeline-step__header h4,
+    .pipeline-logs__header p,
+    .pipeline-step__header p,
+    .pipeline-logs__empty,
+    .pipeline-step__empty,
+    .pipeline-command__status {
+      margin: 0;
+    }
+    .pipeline-logs__header h3 {
+      color: var(--text-primary);
+      font-size: var(--font-body);
+    }
+    .pipeline-logs__header p,
+    .pipeline-step__header p,
+    .pipeline-step__header > span,
+    .pipeline-logs__empty,
+    .pipeline-step__empty,
+    .pipeline-command__status {
+      color: var(--text-secondary);
+      font-size: var(--font-body);
+    }
+    .pipeline-logs__actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+    }
+    .pipeline-logs__view-toggle {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .pipeline-logs__view-toggle [aria-pressed='true'] {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+    .pipeline-steps,
+    .pipeline-commands {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .pipeline-step {
+      display: grid;
+      justify-items: stretch;
+      gap: 0;
+      margin-inline: auto;
+      width: min(100%, 680px);
+    }
+    .pipeline-step__card {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--border-subtle);
+      border-inline-start: 4px solid var(--accent);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+    .pipeline-step__card[data-kind='condition'] {
+      border-inline-start-color: var(--warning);
+    }
+    .pipeline-step__card[data-kind='input'] {
+      border-inline-start-color: var(--tone-blue);
+    }
+    .pipeline-step__card[data-kind='terminal'] {
+      border-inline-start-color: var(--accent);
+    }
+    .pipeline-step__header h4 {
+      color: var(--text-primary);
+      font-size: var(--font-body);
+    }
+    .pipeline-step__kind {
+      flex: 0 0 auto;
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-pill);
+      background: var(--surface-muted);
+      color: var(--text-secondary);
+      font-size: var(--font-body);
+    }
+    .pipeline-step__decision {
+      margin: 0;
+      padding: 9px 11px;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+      background: var(--surface-muted);
+      color: var(--text-primary);
+      font-size: var(--font-body);
+    }
+    .pipeline-step__command-count {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: var(--font-body);
+    }
+    .pipeline-link {
+      display: grid;
+      justify-items: center;
+      gap: 2px;
+      min-height: 42px;
+      color: var(--text-secondary);
+      font-size: var(--font-body);
+    }
+    .pipeline-link__arrow {
+      color: var(--accent-strong);
+      font-size: var(--font-title-lg);
+      line-height: 1;
+    }
+    .pipeline-command {
+      display: grid;
+      gap: var(--space-2);
+      padding: 10px;
+      border-radius: var(--radius-md);
+      background: var(--surface-muted);
+    }
+    .pipeline-command__line {
+      display: block;
+      overflow-wrap: anywhere;
+      color: var(--text-primary);
+      font:
+        14px/1.5 ui-monospace,
+        Consolas,
+        monospace;
+    }
+    .pipeline-command .command-output {
+      min-width: 0;
+      box-shadow: none;
+      border: 1px solid var(--border-subtle);
+    }
+    .pipeline-command pre {
+      margin: var(--space-2) 0 0;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      color: var(--text-secondary);
+      font:
+        14px/1.5 ui-monospace,
+        Consolas,
+        monospace;
+    }
     @media (max-width: 760px) {
-      .pipeline-logs__header, .pipeline-step__header { flex-direction: column; }
+      .pipeline-logs__header,
+      .pipeline-step__header {
+        flex-direction: column;
+      }
     }
   `,
 })
@@ -173,17 +324,19 @@ export class ExecutionPipelineLogsComponent {
   }
 
   protected kindLabel(kind: string): string {
-    return {
-      condition: 'Condition',
-      input: 'Entrée',
-      terminal: 'Sortie',
-      execution: 'Traitement',
-      preparation: 'Préparation',
-      action: 'Action',
-      variable: 'Variable',
-      script: 'Script',
-      unknown: 'Bloc',
-    }[kind] ?? kind;
+    return (
+      {
+        condition: 'Condition',
+        input: 'Entrée',
+        terminal: 'Sortie',
+        execution: 'Traitement',
+        preparation: 'Préparation',
+        action: 'Action',
+        variable: 'Variable',
+        script: 'Script',
+        unknown: 'Bloc',
+      }[kind] ?? kind
+    );
   }
 
   protected duration(step: ExecutionPipelineStep): string {
@@ -196,7 +349,10 @@ export class ExecutionPipelineLogsComponent {
       : `${(elapsed / 1000).toFixed(elapsed < 10_000 ? 1 : 0)} s`;
   }
 
-  protected nextExecutedStep(step: ExecutionPipelineStep, index: number): ExecutionPipelineStep | null {
+  protected nextExecutedStep(
+    step: ExecutionPipelineStep,
+    index: number,
+  ): ExecutionPipelineStep | null {
     const next = this.steps()[index + 1];
     return next?.nodeId === step.nextNodeId ? next : null;
   }
@@ -206,27 +362,38 @@ export class ExecutionPipelineLogsComponent {
       await navigator.clipboard.writeText(this.serializeLogs());
       this.notifications.show('Logs copiés dans le presse-papiers.');
     } catch {
-      this.notifications.show('Copie impossible : autorisez l’accès au presse-papiers du navigateur.');
+      this.notifications.show(
+        'Copie impossible : autorisez l’accès au presse-papiers du navigateur.',
+      );
     }
   }
 
   protected exportLogs(): void {
     const name = 'execution-' + this.executionId().replace(/[^a-zA-Z0-9-]/g, '_') + '.log';
-    this.downloads.save(new Blob([this.serializeLogs()], { type: 'text/plain;charset=utf-8' }), name);
+    this.downloads.save(
+      new Blob([this.serializeLogs()], { type: 'text/plain;charset=utf-8' }),
+      name,
+    );
   }
 
   private serializeLogs(): string {
-    return this.steps().map((step) => {
-      const header = [
-        `===== ${step.nodeName} (${step.nodeId}) =====`,
-        `État : ${this.statusLabel(step.status)}`,
-        `Durée : ${this.duration(step)}`,
-        step.outputLabel ? `${step.componentKind === 'condition' ? 'Décision' : 'Sortie'} : ${step.outputLabel}` : '',
-        step.nextNodeId ? `Prochain bloc : ${step.nextNodeId}` : '',
-      ].filter(Boolean).join('\n');
-      const commands = step.commands.map((command) => this.formatCommand(command)).join('\n\n');
-      return commands ? `${header}\n${commands}` : `${header}\nAucune commande système.`;
-    }).join('\n\n');
+    return this.steps()
+      .map((step) => {
+        const header = [
+          `===== ${step.nodeName} (${step.nodeId}) =====`,
+          `État : ${this.statusLabel(step.status)}`,
+          `Durée : ${this.duration(step)}`,
+          step.outputLabel
+            ? `${step.componentKind === 'condition' ? 'Décision' : 'Sortie'} : ${step.outputLabel}`
+            : '',
+          step.nextNodeId ? `Prochain bloc : ${step.nextNodeId}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+        const commands = step.commands.map((command) => this.formatCommand(command)).join('\n\n');
+        return commands ? `${header}\n${commands}` : `${header}\nAucune commande système.`;
+      })
+      .join('\n\n');
   }
 
   private formatCommand(command: RuntimeCommandLog): string {
@@ -238,6 +405,8 @@ export class ExecutionPipelineLogsComponent {
       `Résultat : ${status}${command.truncated ? ' (sortie tronquée)' : ''}`,
       command.standardOutput ? `\n--- Sortie standard ---\n${command.standardOutput}` : '',
       command.standardError ? `\n--- Erreur standard ---\n${command.standardError}` : '',
-    ].filter(Boolean).join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 }

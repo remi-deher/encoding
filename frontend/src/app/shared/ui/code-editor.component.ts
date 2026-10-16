@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   AfterViewInit,
   Component,
   ElementRef,
@@ -17,6 +18,7 @@ import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-code-editor',
   template:
     '<div #host class="code-editor" [class.code-editor_roomy]="roomy" [attr.aria-label]="label"></div>',

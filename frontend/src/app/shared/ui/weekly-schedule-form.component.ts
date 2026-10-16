@@ -1,4 +1,12 @@
-import { Component, OnInit, computed, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  computed,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
@@ -13,6 +21,7 @@ import {
 import { WeeklyScheduleGridComponent } from './weekly-schedule-grid.component';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-weekly-schedule-form',
   imports: [
     MatButtonModule,

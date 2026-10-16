@@ -9,6 +9,9 @@
   (detailClosed)="onDetailClosed()"
   (actionClosed)="closeFlowCreation()"
   filterLabel="Type de média"
+  searchLabel="Rechercher un flow"
+  [searchQuery]="searchQuery()"
+  (searchQueryChange)="searchQuery.set($event)"
   [catalogState]="catalogState()"
   [catalogMessage]="
     catalogState() === 'loading' ? 'Chargement des flows…' : 'Impossible de charger les flows.'
@@ -28,7 +31,7 @@
   </div>
 
   <app-data-table
-    layout="cards"
+    layout="resources"
     catalogue-table
     [columns]="columns"
     [listActions]="listActions"
@@ -46,7 +49,14 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-field-list [fields]="detailFields()" [tabbed]="true" tabsLabel="Sections du flow" />
+    @if (flowSheet(); as sheet) {
+      <app-resource-sheet
+        ariaLabel="Fiche du flow"
+        [title]="sheet.title"
+        [subtitle]="sheet.subtitle"
+        [sections]="sheet.sections"
+      />
+    }
   </ng-template>
 
   <ng-template #detailHeaderActions>

@@ -16,11 +16,11 @@
     />
   </div>
 
-  <app-data-table layout="cards"
+  <app-data-table
+    layout="resources"
     catalogue-table
     [columns]="columns"
     [rows]="filteredPlugins()"
-    [selectable]="true"
     [rowOpenable]="true"
     rowOpenLabel="Consulter"
     (rowOpen)="onPluginOpen($event)"
@@ -28,12 +28,17 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    <app-detail-card-grid
-      [cards]="pluginCards()"
-      ariaLabel="Résumé du plugin"
-      emptyMessage="Aucune information disponible pour ce plugin."
-    />
     <mat-tab-group class="plugin-detail-tabs" aria-label="Détails du plugin">
+      <mat-tab label="Synthèse">
+        @if (pluginSheet(); as sheet) {
+          <app-resource-sheet
+            ariaLabel="Résumé du plugin"
+            [title]="sheet.title"
+            [subtitle]="sheet.subtitle"
+            [sections]="sheet.sections"
+          />
+        }
+      </mat-tab>
       <mat-tab label="Composants">
         <app-flow-component-list [components]="selectedComponents()" />
       </mat-tab>

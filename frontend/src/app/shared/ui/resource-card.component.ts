@@ -1,5 +1,6 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import { StatusBadgeComponent, StatusTone } from './status-badge.component';
 
@@ -59,17 +60,17 @@ export interface ResourceCardMeter {
  */
 @Component({
   selector: 'app-resource-card',
-  imports: [MatButtonModule, MatMenuModule, StatusBadgeComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [MatButtonModule, MatCheckboxModule, MatMenuModule, StatusBadgeComponent],
   template: `
     <article class="resource-card" [class.is-selected]="active()" [attr.aria-label]="title()">
       <header class="resource-card-head">
         @if (selectable()) {
-          <input
+          <mat-checkbox
             class="resource-card-check"
-            type="checkbox"
             [checked]="selected()"
             [attr.aria-label]="'Sélectionner ' + title()"
-            (change)="selectedChange.emit($any($event.target).checked)"
+            (change)="selectedChange.emit($event.checked)"
           />
         }
         <div class="resource-card-identity">

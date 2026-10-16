@@ -10,7 +10,7 @@ import {
   FlowPluginCatalog,
 } from '../../shared/models/flow-validation';
 import { FlowContinuationSource } from '../../shared/models/flow-sequence';
-import { Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import {
@@ -129,6 +129,7 @@ type ComponentDestination =
     };
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-editor-page',
   providers: [FlowSimulation],
   host: { '(window:beforeunload)': 'warnBeforeUnload($event)' },
@@ -151,7 +152,6 @@ type ComponentDestination =
 export class FlowEditorPageComponent {
   protected readonly simulator = inject(FlowSimulation);
   protected readonly simulationOpen = signal(false);
-  protected readonly simulationTemplate = viewChild<TemplateRef<unknown>>('simulation');
   protected async openSimulator(): Promise<void> {
     try {
       const definition = await this.serverValidation.document(
@@ -164,6 +164,7 @@ export class FlowEditorPageComponent {
         this.componentPacks(),
       );
       this.simulator.prepare(definition);
+      this.closeActiveDrawer();
       this.simulationOpen.set(true);
     } catch {
       this.notifications.show('Impossible de préparer le test du flow.');
@@ -171,9 +172,6 @@ export class FlowEditorPageComponent {
   }
   private readonly route = inject(ActivatedRoute);
   private readonly notifications = inject(NotificationService);
-  protected readonly componentTemplate = viewChild<TemplateRef<unknown>>('componentPicker');
-  protected readonly configurationTemplate =
-    viewChild<TemplateRef<unknown>>('componentConfiguration');
   protected readonly componentPickerOpen = signal(false);
   protected readonly configurationOpen = signal(false);
   protected readonly configuringNodeId = signal<string | undefined>(undefined);
@@ -183,7 +181,44 @@ export class FlowEditorPageComponent {
   protected readonly packPickerSection = signal('components');
   protected readonly packCatalog = signal<readonly FlowComponentPackSummary[]>([]);
   protected readonly packCreationOpen = signal(false);
-  protected readonly packCreationTemplate = viewChild<TemplateRef<unknown>>('packCreation');
+  protected readonly drawerOpen = computed(
+    () =>
+      this.componentPickerOpen() ||
+      this.simulationOpen() ||
+      this.configurationOpen() ||
+      this.packCreationOpen(),
+  );
+  protected readonly drawerSize = computed<'standard' | 'wide'>(() =>
+    this.packCreationOpen() ? 'standard' : 'wide',
+  );
+  protected readonly drawerTitle = computed(() => {
+    if (this.componentPickerOpen()) return 'Composants du flow';
+    if (this.simulationOpen()) return 'Testeur de flow';
+    if (this.configurationOpen())
+      return this.configuringNode()?.component?.name ?? 'Configuration du composant';
+    if (this.packCreationOpen()) return 'Créer un pack de composants';
+    return '';
+  });
+  protected readonly drawerDescription = computed(() => {
+    if (this.componentPickerOpen())
+      return 'Recherchez et ajoutez des blocs fournis par les plugins.';
+    if (this.simulationOpen())
+      return 'Explorez les branches avec un profil fictif ou les métadonnées d’un fichier.';
+    if (this.configurationOpen()) return this.configuringNode()?.component?.description ?? '';
+    if (this.packCreationOpen())
+      return 'Copiez une version publiée de ce flow dans les Librairies.';
+    return '';
+  });
+  protected openPackCreation(): void {
+    this.closeActiveDrawer();
+    this.packCreationOpen.set(true);
+  }
+  protected closeActiveDrawer(): void {
+    this.componentPickerOpen.set(false);
+    this.simulationOpen.set(false);
+    this.configurationOpen.set(false);
+    this.packCreationOpen.set(false);
+  }
   protected readonly packCreationForm = computed<RecordFormData>(() => ({
     title: 'Créer un pack depuis la version publiée',
     description: `La version publiée v${this.storedVersion()} sera copiée avec ses composants internes et ses ports.`,
@@ -418,6 +453,7 @@ export class FlowEditorPageComponent {
   }): void {
     this.componentDestination.set({ kind: 'branch', ...event });
     this.packPickerSection.set('components');
+    this.closeActiveDrawer();
     this.componentPickerOpen.set(true);
   }
 
@@ -425,6 +461,7 @@ export class FlowEditorPageComponent {
     if (!sources.length) return;
     this.componentDestination.set({ kind: 'continuation', sources });
     this.packPickerSection.set('components');
+    this.closeActiveDrawer();
     this.componentPickerOpen.set(true);
   }
 
@@ -756,6 +793,7 @@ export class FlowEditorPageComponent {
 
   protected onConfigurationRequested(nodeId: string): void {
     this.configuringNodeId.set(nodeId);
+    this.closeActiveDrawer();
     this.configurationOpen.set(true);
   }
 

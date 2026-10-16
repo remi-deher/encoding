@@ -72,13 +72,14 @@
 
         @if (searchOpen() && searchQuery()) {
           <div id="global-search-results" class="search-results" role="listbox" aria-label="Pages">
-            @for (item of searchResults(); track item.path) {
+            @for (item of searchResults(); track item.path; let index = $index) {
               <a
                 #firstSearchResult
                 class="search-result"
                 role="option"
                 [routerLink]="item.path"
                 (mousedown)="$event.preventDefault()"
+                (keydown)="onSearchResultKeydown($event, index)"
                 (click)="clearSearch()"
               >
                 <span class="search-result-glyph" aria-hidden="true">{{ item.glyph }}</span>
@@ -134,7 +135,7 @@
         aria-label="Navigation principale"
       >
         <div class="sidebar-content">
-          <app-primary-navigation class="sidebar-navigation" />
+          <app-primary-navigation class="sidebar-navigation" (click)="onNavigationClick()" />
 
           <div class="sidebar-user">
             @if (currentUser(); as user) {

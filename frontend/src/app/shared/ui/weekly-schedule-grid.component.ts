@@ -1,4 +1,4 @@
-import { Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import {
   CellState,
   SCHEDULE_DAYS,
@@ -10,6 +10,7 @@ import {
 
 /** Grille jour × heure : cliquer ou glisser autorise ou bloque les créneaux. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-weekly-schedule-grid',
   template: `
     <div class="schedule-scroll">

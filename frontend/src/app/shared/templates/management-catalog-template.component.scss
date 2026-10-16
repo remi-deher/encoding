@@ -10,10 +10,8 @@
 
 .catalog-panel {
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--elevation-1);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-container-low);
 }
 
 .catalog-toolbar {
@@ -84,7 +82,7 @@
 .catalog-empty-eyebrow {
   margin: 0 0 8px;
   color: var(--accent-strong);
-  font-size: 10px;
+  font-size: var(--font-label);
   font-weight: 700;
   letter-spacing: 0.1em;
 }
@@ -116,14 +114,14 @@
   border-radius: 20px;
   background: var(--surface);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-label);
   font-weight: 600;
 }
 
 .catalog-empty-footnote {
   margin: 18px 0 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-label);
   line-height: 1.5;
 }
 

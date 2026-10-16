@@ -1,4 +1,11 @@
-import { Component, input, OnChanges, signal, TemplateRef } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  OnChanges,
+  signal,
+  TemplateRef,
+} from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { CdkAccordion, CdkAccordionItem } from '@angular/cdk/accordion';
 
@@ -34,6 +41,7 @@ export interface DetailCard {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-detail-card-grid',
   imports: [CdkAccordion, CdkAccordionItem, NgTemplateOutlet],
   template: `

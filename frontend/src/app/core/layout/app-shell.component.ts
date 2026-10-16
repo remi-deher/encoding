@@ -5,14 +5,15 @@ import {
 import { PageTitle } from '../../shared/services/page-title';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
 import {
+  ChangeDetectionStrategy,
   Component,
   computed,
   ElementRef,
   effect,
-  HostListener,
   inject,
   signal,
-  ViewChild,
+  viewChild,
+  viewChildren,
 } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
@@ -31,6 +32,7 @@ import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 
 @Component({
   selector: 'app-shell',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatButtonModule,
     MatSidenavModule,
@@ -42,6 +44,9 @@ import { ThemeToggleComponent } from '../theme/theme-toggle.component';
     UserMenuComponent,
   ],
   templateUrl: './app-shell.component.html',
+  host: {
+    '(document:keydown)': 'onGlobalSearchShortcut($event)',
+  },
 })
 export class AppShellComponent {
   private readonly router = inject(Router);
@@ -83,8 +88,11 @@ export class AppShellComponent {
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
   protected readonly searchQuery = signal('');
   protected readonly searchOpen = signal(false);
-  @ViewChild('searchInput') private searchInput?: ElementRef<HTMLInputElement>;
-  @ViewChild('firstSearchResult') private firstSearchResult?: ElementRef<HTMLAnchorElement>;
+  private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+  private readonly firstSearchResult =
+    viewChild<ElementRef<HTMLAnchorElement>>('firstSearchResult');
+  private readonly searchResultElements =
+    viewChildren<ElementRef<HTMLAnchorElement>>('firstSearchResult');
 
   private readonly auth = inject(AuthService);
   protected readonly currentUser = this.auth.user;
@@ -146,7 +154,7 @@ export class AppShellComponent {
 
     if (event.key === 'ArrowDown' && this.searchResults().length) {
       event.preventDefault();
-      queueMicrotask(() => this.firstSearchResult?.nativeElement.focus());
+      queueMicrotask(() => this.firstSearchResult()?.nativeElement.focus());
       return;
     }
 
@@ -157,6 +165,36 @@ export class AppShellComponent {
         this.clearSearch();
         void this.router.navigateByUrl(firstResult.path);
       }
+    }
+  }
+
+  protected onSearchResultKeydown(event: KeyboardEvent, index: number): void {
+    const items = this.searchResultElements();
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      const next = items[index + 1] ?? items[0];
+      next?.nativeElement.focus();
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (index === 0) {
+        this.searchInput()?.nativeElement.focus();
+      } else {
+        items[index - 1]?.nativeElement.focus();
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeSearch();
+      this.searchInput()?.nativeElement.focus();
+    }
+  }
+
+  protected onNavigationClick(): void {
+    if (this.isCompactNavigation()) {
+      this.navigationOpened.set(false);
     }
   }
 
@@ -175,7 +213,6 @@ export class AppShellComponent {
     this.searchOpen.set(false);
   }
 
-  @HostListener('document:keydown', ['$event'])
   protected onGlobalSearchShortcut(event: KeyboardEvent): void {
     if (
       event.key.toLocaleLowerCase() === 'k' &&
@@ -185,7 +222,7 @@ export class AppShellComponent {
     ) {
       event.preventDefault();
       this.searchOpen.set(true);
-      this.searchInput?.nativeElement.focus();
+      this.searchInput()?.nativeElement.focus();
     }
   }
 

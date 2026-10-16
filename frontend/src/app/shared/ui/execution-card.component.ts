@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { ExecutionResponse, EXECUTION_STATE_LABELS } from '../models/execution';
@@ -7,6 +7,7 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
 
 @Component({
   selector: 'app-execution-card',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DatePipe, MatButtonModule, MatProgressBarModule, StatusBadgeComponent],
   template: `
     <article class="execution-card">
@@ -38,7 +39,9 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
         </div>
         <div>
           <span>Progression</span>
-          <strong>{{ execution().progress === null ? 'Indisponible' : execution().progress + ' %' }}</strong>
+          <strong>{{
+            execution().progress === null ? 'Indisponible' : execution().progress + ' %'
+          }}</strong>
         </div>
       </div>
 
@@ -56,15 +59,26 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
     </article>
   `,
   styles: `
-    :host { display: block; }
+    :host {
+      display: block;
+    }
     .execution-card {
       min-width: 0;
       padding: var(--space-4);
       display: grid;
       gap: 14px;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-lg);
-      background: var(--surface);
+      border-radius: var(--radius-xl);
+      background: var(--surface-container);
+      box-shadow: var(--elevation-1);
+      transition:
+        border-radius 220ms var(--motion-spring-fast),
+        background-color 220ms var(--motion-spring-fast),
+        box-shadow 220ms var(--motion-spring-fast);
+    }
+    .execution-card:hover {
+      border-radius: var(--radius-2xl);
+      background: var(--surface-container-high);
+      box-shadow: var(--elevation-2);
     }
     .execution-card__header {
       display: flex;
@@ -72,13 +86,16 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
       justify-content: space-between;
       gap: var(--space-3);
     }
-    .execution-card__title { min-width: 0; }
+    .execution-card__title {
+      min-width: 0;
+    }
     .execution-card h3 {
       margin: 0;
       overflow-wrap: anywhere;
       color: var(--text-primary);
-      font-size: var(--font-title);
+      font-size: var(--font-title-md);
       font-weight: 700;
+      letter-spacing: -0.015em;
     }
     .execution-card__title p {
       margin: 5px 0 0;
@@ -97,26 +114,51 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
     .execution-card__facts {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
-      gap: var(--space-3);
+      gap: 3px;
+      padding: 3px;
+      border-radius: var(--radius-lg);
+      background: var(--surface-container-low);
     }
-    .execution-card__facts div { min-width: 0; display: grid; gap: var(--space-1); }
-    .execution-card__facts span { color: var(--text-muted); font-size: 13px; }
+    .execution-card__facts div {
+      min-width: 0;
+      display: grid;
+      gap: var(--space-1);
+      padding: var(--space-3);
+      border-radius: var(--radius-md);
+      background: var(--surface-container-lowest);
+    }
+    .execution-card__facts span {
+      color: var(--text-muted);
+      font-size: var(--font-label);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
     .execution-card__facts strong {
       overflow-wrap: anywhere;
       color: var(--text-primary);
       font-size: var(--font-body);
       font-weight: 600;
     }
-    mat-progress-bar { display: block; border-radius: var(--radius-pill); }
+    mat-progress-bar {
+      display: block;
+      height: 6px;
+      border-radius: var(--radius-pill);
+      --mdc-linear-progress-track-height: 6px;
+      --mdc-linear-progress-active-indicator-height: 6px;
+    }
     .execution-card__footer {
       display: flex;
       justify-content: flex-end;
       padding-top: var(--space-3);
-      border-top: 1px solid var(--border-subtle);
     }
     @media (max-width: 480px) {
-      .execution-card { padding: 13px; }
-      .execution-card__header { flex-direction: column; }
+      .execution-card {
+        padding: var(--space-3);
+      }
+      .execution-card__header {
+        flex-direction: column;
+      }
     }
   `,
 })

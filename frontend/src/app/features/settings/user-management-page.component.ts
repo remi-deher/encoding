@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../core/auth/auth.service';
@@ -27,6 +27,7 @@ interface UserRow extends DataTableRow {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-user-management-page',
   imports: [
     DataTableComponent,
@@ -51,7 +52,7 @@ interface UserRow extends DataTableRow {
         <button matButton="filled" type="button" (click)="newUser()">Nouvel utilisateur</button>
       </ng-template>
       <app-data-table
-        layout="cards"
+        layout="resources"
         catalogue-table
         [columns]="columns"
         [rows]="filteredRows()"

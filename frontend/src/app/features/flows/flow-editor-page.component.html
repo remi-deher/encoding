@@ -35,7 +35,7 @@
     matButton="outlined"
     type="button"
     [disabled]="loadState() !== 'ready' || storedVersion() < 1 || saving()"
-    (click)="packCreationOpen.set(true)"
+    (click)="openPackCreation()"
   >
     Créer un pack depuis cette version
   </button>
@@ -62,13 +62,24 @@
 
 <app-detail-drawer
   mainScroll="parent"
-  [opened]="componentPickerOpen()"
-  [title]="'Composants du flow'"
-  [description]="'Recherchez et ajoutez des blocs fournis par les plugins.'"
-  [content]="componentTemplate()"
-  (closed)="componentPickerOpen.set(false)"
+  [opened]="drawerOpen()"
+  [size]="drawerSize()"
+  [title]="drawerTitle()"
+  [description]="drawerDescription()"
+  [content]="
+    componentPickerOpen()
+      ? pickerDrawerContent
+      : simulationOpen()
+        ? simulationDrawerContent
+        : configurationOpen()
+          ? configurationDrawerContent
+          : packCreationOpen()
+            ? packCreationDrawerContent
+            : undefined
+  "
+  (closed)="closeActiveDrawer()"
 >
-  <div drawer-main class="flow-editor-page">
+  <div drawer-main class="flow-editor-page editor-layout">
     @if (loadState() !== 'ready') {
       <p role="status">
         {{ loadState() === 'loading' ? 'Chargement du flow…' : 'Le flow n’a pas pu être chargé.' }}
@@ -92,7 +103,7 @@
     }
   </div>
 
-  <ng-template #componentPicker>
+  <ng-template #pickerDrawerContent>
     <app-category-tabs
       label="Types de blocs à insérer"
       [options]="pickerSections()"
@@ -117,17 +128,8 @@
       />
     }
   </ng-template>
-</app-detail-drawer>
 
-<app-detail-drawer
-  mainScroll="parent"
-  [opened]="simulationOpen()"
-  title="Testeur de flow"
-  description="Explorez les branches avec un profil fictif ou les métadonnées d’un fichier."
-  [content]="simulationTemplate()"
-  (closed)="simulationOpen.set(false)"
->
-  <ng-template #simulation>
+  <ng-template #simulationDrawerContent>
     <app-flow-simulation-panel
       [nodes]="nodes()"
       [profile]="simulator.profile()"
@@ -140,17 +142,8 @@
       (closed)="simulationOpen.set(false)"
     />
   </ng-template>
-</app-detail-drawer>
 
-<app-detail-drawer
-  mainScroll="parent"
-  [opened]="configurationOpen()"
-  [title]="configuringNode()?.component?.name ?? 'Configuration du composant'"
-  [description]="configuringNode()?.component?.description ?? ''"
-  [content]="configurationTemplate()"
-  (closed)="configurationOpen.set(false)"
->
-  <ng-template #componentConfiguration>
+  <ng-template #configurationDrawerContent>
     <app-component-configuration-form
       [schema]="configuringSchema()"
       [values]="configuringValues()"
@@ -161,17 +154,8 @@
       (cancelled)="configurationOpen.set(false)"
     />
   </ng-template>
-</app-detail-drawer>
 
-<app-detail-drawer
-  mainScroll="parent"
-  [opened]="packCreationOpen()"
-  title="Créer un pack de composants"
-  description="Copiez une version publiée de ce flow dans les Librairies."
-  [content]="packCreationTemplate()"
-  (closed)="packCreationOpen.set(false)"
->
-  <ng-template #packCreation>
+  <ng-template #packCreationDrawerContent>
     <app-record-form
       [data]="packCreationForm()"
       (submitted)="createPackFromPublishedFlow($event)"

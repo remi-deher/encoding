@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { StatusBadgeComponent, StatusTone } from './status-badge.component';
 
@@ -57,10 +57,11 @@ export interface ResourceSheetNotice {
 
 /**
  * Fiche d'une ressource unique déjà ouverte (docs/design/interface-resource-layout.md) : en-tête, avis, puis sections
- * ouvertes séparées par des filets. Les définitions métier fournissent les données ; aucun chargement ici.
+ * connectées M3 Expressive. Les définitions métier fournissent les données ; aucun chargement ici.
  */
 @Component({
   selector: 'app-resource-sheet',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, StatusBadgeComponent],
   template: `
     <div class="sheet-stack">
@@ -134,7 +135,9 @@ export interface ResourceSheetNotice {
                       </div>
                     }
                     @if (metric.detail) {
-                      <span class="sheet-detail" [class.is-stale]="metric.stale">{{ metric.detail }}</span>
+                      <span class="sheet-detail" [class.is-stale]="metric.stale">{{
+                        metric.detail
+                      }}</span>
                     }
                   </div>
                 }

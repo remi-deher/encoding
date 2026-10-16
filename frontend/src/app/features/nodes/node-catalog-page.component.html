@@ -119,18 +119,6 @@
           </div>
         }
       </app-context-banner>
-    } @else if (pageTab() === 'cluster' && clusterIdentity()) {
-      <app-context-banner
-        label="Cluster actuel"
-        [title]="clusterName()"
-        [description]="'Vous consultez cette installation depuis ' + localName() + '.'"
-      >
-        <app-status-badge
-          banner-actions
-          [label]="local.identityUnavailable() ? 'État non actualisé' : 'Cluster connu'"
-          [tone]="local.identityUnavailable() ? 'warning' : 'accent'"
-        />
-      </app-context-banner>
     }
     @if (pageTab() === 'cluster' && local.agentUnavailable() && !local.loading()) {
       <app-context-banner
@@ -297,13 +285,14 @@
       (selectedIndexChange)="selectedNodeTabIndex.set($event)"
     >
       <mat-tab label="Général">
-        <app-detail-card-grid
-          [cards]="generalCards()"
-          [initiallyExpanded]="true"
-          [collapsible]="false"
-          ariaLabel="Informations générales du nœud"
-          emptyMessage="Aucune information générale disponible pour ce nœud."
-        />
+        @if (generalSheet(); as sheet) {
+          <app-resource-sheet
+            ariaLabel="Informations générales du nœud"
+            [title]="sheet.title"
+            [subtitle]="sheet.subtitle"
+            [sections]="sheet.sections"
+          />
+        }
       </mat-tab>
       @if (rawNode()?.roles?.includes('worker')) {
         <mat-tab label="Traitement">

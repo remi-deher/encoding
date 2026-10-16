@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import {
   MatDialogActions,
@@ -11,6 +11,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { NodeMode, NodeModeDialogData } from '../models/node-mode';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-node-mode-dialog',
   imports: [
     MatButtonModule,
@@ -26,50 +27,52 @@ import { NodeMode, NodeModeDialogData } from '../models/node-mode';
         <div class="app-dialog-heading">
           <p class="app-dialog-eyebrow">Fonctions du nœud</p>
           <h2 mat-dialog-title>
-            {{ data.remoteNodeName ? 'Mode de « ' + data.remoteNodeName + ' »' : 'Mode de ce nœud' }}
+            {{
+              data.remoteNodeName ? 'Mode de « ' + data.remoteNodeName + ' »' : 'Mode de ce nœud'
+            }}
           </h2>
         </div>
       </header>
       <mat-dialog-content class="app-dialog-body">
-      @if (data.remoteNodeName) {
-        <p class="note" role="note">
-          Le nœud applique ce mode à son prochain signal de présence, à condition d’être géré par
-          l’image unique. Il garde son mode actuel tant qu’il est hors ligne.
-        </p>
-      } @else if (!data.managed) {
-        <p class="note" role="note">
-          Ce nœud n’est pas géré par l’image unique : son mode se règle par la variable
-          <code>Node__Roles</code> du déploiement.
-        </p>
-      }
-      <mat-slide-toggle
-        [checked]="server()"
-        [disabled]="!data.managed"
-        (change)="server.set($event.checked)"
-      >
-        Fonctions serveur
-      </mat-slide-toggle>
-      <p class="hint">Interface web, API, configuration partagée et orchestration.</p>
-      <mat-slide-toggle
-        [checked]="worker()"
-        [disabled]="!data.managed"
-        (change)="worker.set($event.checked)"
-      >
-        Fonctions worker
-      </mat-slide-toggle>
-      <p class="hint">Exécution des tâches de traitement avec les outils de ce nœud.</p>
-      @if (!valid()) {
-        <p class="error" role="alert">
-          Gardez au moins une fonction : sans serveur ni worker, le nœud ne ferait plus partie du
-          cluster.
-        </p>
-      }
-      @if (data.managed && !data.remoteNodeName && data.server && !server()) {
-        <p class="note" role="note">
-          Le serveur de ce nœud s’arrêtera : cette interface cessera de répondre. Rétablissez-le
-          depuis la page de ce nœud.
-        </p>
-      }
+        @if (data.remoteNodeName) {
+          <p class="note" role="note">
+            Le nœud applique ce mode à son prochain signal de présence, à condition d’être géré par
+            l’image unique. Il garde son mode actuel tant qu’il est hors ligne.
+          </p>
+        } @else if (!data.managed) {
+          <p class="note" role="note">
+            Ce nœud n’est pas géré par l’image unique : son mode se règle par la variable
+            <code>Node__Roles</code> du déploiement.
+          </p>
+        }
+        <mat-slide-toggle
+          [checked]="server()"
+          [disabled]="!data.managed"
+          (change)="server.set($event.checked)"
+        >
+          Fonctions serveur
+        </mat-slide-toggle>
+        <p class="hint">Interface web, API, configuration partagée et orchestration.</p>
+        <mat-slide-toggle
+          [checked]="worker()"
+          [disabled]="!data.managed"
+          (change)="worker.set($event.checked)"
+        >
+          Fonctions worker
+        </mat-slide-toggle>
+        <p class="hint">Exécution des tâches de traitement avec les outils de ce nœud.</p>
+        @if (!valid()) {
+          <p class="error" role="alert">
+            Gardez au moins une fonction : sans serveur ni worker, le nœud ne ferait plus partie du
+            cluster.
+          </p>
+        }
+        @if (data.managed && !data.remoteNodeName && data.server && !server()) {
+          <p class="note" role="note">
+            Le serveur de ce nœud s’arrêtera : cette interface cessera de répondre. Rétablissez-le
+            depuis la page de ce nœud.
+          </p>
+        }
       </mat-dialog-content>
       <mat-dialog-actions class="app-dialog-footer" align="end">
         <button matButton="text" type="button" (click)="dialogRef.close()">Annuler</button>

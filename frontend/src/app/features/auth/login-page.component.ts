@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
@@ -8,6 +8,7 @@ import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form
 
 /** Connexion, ou création du premier administrateur selon `data.authPage`. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-login-page',
   imports: [RecordFormComponent],
   template: `

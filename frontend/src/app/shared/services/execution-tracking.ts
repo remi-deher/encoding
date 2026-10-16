@@ -12,7 +12,11 @@ import {
   timeout,
   timer,
 } from 'rxjs';
-import { ExecutionOverviewResponse, ExecutionEventResponse, ExecutionPipelineStep } from '../models/execution';
+import {
+  ExecutionOverviewResponse,
+  ExecutionEventResponse,
+  ExecutionPipelineStep,
+} from '../models/execution';
 
 export interface ExecutionTrackingState {
   readonly status: 'loading' | 'ready' | 'error';

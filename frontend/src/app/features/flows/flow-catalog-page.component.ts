@@ -9,7 +9,7 @@ import { NotificationService } from '../../shared/services/notification.service'
 import { HttpErrorResponse } from '@angular/common/http';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { map, catchError, of, timer, switchMap } from 'rxjs';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -23,7 +23,10 @@ import {
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
-import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
+import {
+  ResourceSheetComponent,
+  ResourceSheetSection,
+} from '../../shared/ui/resource-sheet.component';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 import { FLOW_CREATION_FORM } from '../../shared/models/flow-creation';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
@@ -49,10 +52,11 @@ interface FlowRecord extends DataTableRow {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-catalog-page',
   imports: [
     DataTableComponent,
-    DetailFieldListComponent,
+    ResourceSheetComponent,
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     MatButtonModule,
@@ -194,6 +198,7 @@ export class FlowCatalogPageComponent {
   private readonly notifications = inject(NotificationService);
   protected readonly listActions = [{ id: 'import', label: 'Importer', fileAccept: '.json,.zip' }];
   protected readonly rowActions = [
+    { id: 'edit', label: 'Ouvrir l’éditeur' },
     { id: 'export', label: 'Exporter' },
     { id: 'versions', label: 'Versions / Comparer' },
     {
@@ -224,6 +229,12 @@ export class FlowCatalogPageComponent {
     }
   }
   protected async onRowAction(event: DataTableActionEvent): Promise<void> {
+    if (event.actionId === 'edit') {
+      void this.router.navigate(['/flows', String(event.row['id']), 'edit'], {
+        info: { flowEditorDirection: 'forward' },
+      });
+      return;
+    }
     if (event.actionId === 'component-pack') {
       const version = Number(event.row['publishedVersion']);
       this.packSource.set({ id: String(event.row['id']), version });
@@ -382,6 +393,7 @@ export class FlowCatalogPageComponent {
 
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Flows');
   protected readonly selectedCategory = signal('all');
+  protected readonly searchQuery = signal('');
   protected readonly actionOpen = signal(false);
   protected readonly flowCreationForm = FLOW_CREATION_FORM;
   protected readonly selectedFlow = signal<FlowRecord | null>(null);
@@ -390,19 +402,56 @@ export class FlowCatalogPageComponent {
     const flow = this.selectedFlow();
     return flow ? `${flow.mediaType} · ${flow.version} · ${flow.state}` : 'Détails du flow';
   });
-  protected readonly detailFields = computed<readonly DetailField[]>(() => {
+  protected readonly flowSheet = computed<{
+    readonly title: string;
+    readonly subtitle: string;
+    readonly sections: readonly ResourceSheetSection[];
+  } | null>(() => {
     const flow = this.selectedFlow();
-    return flow
-      ? [
-          { section: 'Flow', label: 'Type de média', value: flow.mediaType },
-          { section: 'Flow', label: 'État', value: flow.state },
-          { section: 'Flow', label: 'Version', value: flow.version },
-          { section: 'Flow', label: 'Sauvegarde JSON', value: flow.backup },
-          { section: 'Traitement', label: 'Résumé', value: flow.summary },
-          { section: 'Traitement', label: 'Composants', value: flow.components },
-          { section: 'Historique', label: 'Dernière modification', value: flow.modifiedAt },
-        ]
-      : [];
+    if (!flow) return null;
+    const sections: readonly ResourceSheetSection[] = [
+      {
+        id: 'flow',
+        title: 'Définition',
+        items: [
+          {
+            label: flow.mediaType,
+            detail: `Sauvegarde JSON : ${flow.backup}`,
+            badges: [
+              {
+                label: flow.state,
+                tone: flow.state === 'Publié' ? 'success' : 'warning',
+              },
+              { label: flow.version, tone: 'accent' },
+            ],
+          },
+        ],
+        fields: [
+          { label: 'Type de média', value: flow.mediaType },
+          { label: 'Version', value: flow.version },
+          { label: 'État', value: flow.state },
+          { label: 'Sauvegarde JSON', value: flow.backup },
+        ],
+      },
+      {
+        id: 'processing',
+        title: 'Traitement',
+        metrics: [
+          { label: 'Résumé', value: flow.summary },
+          { label: 'Composants', value: flow.components },
+        ],
+      },
+      {
+        id: 'history',
+        title: 'Historique',
+        fields: [{ label: 'Dernière modification', value: flow.modifiedAt }],
+      },
+    ];
+    return {
+      title: flow.name,
+      subtitle: `${flow.mediaType} · ${flow.version} · ${flow.state}`,
+      sections,
+    };
   });
 
   protected readonly columns: readonly DataTableColumn[] = [
@@ -424,8 +473,18 @@ export class FlowCatalogPageComponent {
 
   protected readonly filteredFlows = computed(() => {
     const category = this.selectedCategory();
-    return this.records().filter((flow) => category === 'all' || flow.category === category);
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return this.records().filter(
+      (flow) =>
+        (category === 'all' || flow.category === category) &&
+        (!query ||
+          flow.name.toLocaleLowerCase('fr-FR').includes(query) ||
+          flow.mediaType.toLocaleLowerCase('fr-FR').includes(query) ||
+          flow.summary.toLocaleLowerCase('fr-FR').includes(query) ||
+          flow.state.toLocaleLowerCase('fr-FR').includes(query)),
+    );
   });
+  protected readonly rows = this.filteredFlows;
 
   protected onCategoryChange(category: string): void {
     this.selectedCategory.set(category);

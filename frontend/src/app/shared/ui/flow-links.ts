@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 export interface FlowLinkDrawing {
   readonly id: string;
@@ -7,6 +7,7 @@ export interface FlowLinkDrawing {
   readonly insertion: { readonly x: number; readonly y: number };
 }
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-links',
   imports: [MatButtonModule],
   templateUrl: './flow-links.html',

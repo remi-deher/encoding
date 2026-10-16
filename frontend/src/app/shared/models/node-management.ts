@@ -43,7 +43,10 @@ function informationCard(
 }
 
 /** Formate un délai écoulé ; une date invalide reste « indisponible », jamais zéro. */
-export function formatLastSignal(value: string | null | undefined, now = Date.now()): string | null {
+export function formatLastSignal(
+  value: string | null | undefined,
+  now = Date.now(),
+): string | null {
   const time = value ? new Date(value).getTime() : NaN;
   if (Number.isNaN(time)) return null;
   const seconds = Math.max(0, Math.floor((now - time) / 1000));
@@ -53,7 +56,9 @@ export function formatLastSignal(value: string | null | undefined, now = Date.no
   if (minutes < 60) return `Il y a ${minutes} min`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `Il y a ${hours} h`;
-  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(time));
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(
+    new Date(time),
+  );
 }
 
 export interface LocalNodeSheetInput {
@@ -81,7 +86,9 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
   const { status, node, standalone, agentUnavailable } = input;
   const roles =
     input.mode ??
-    (status ? { server: status.roles.includes('server'), worker: status.roles.includes('worker') } : null);
+    (status
+      ? { server: status.roles.includes('server'), worker: status.roles.includes('worker') }
+      : null);
   const desired = node?.desiredRoles ?? null;
   const roleBadges = (role: 'server' | 'worker'): readonly ResourceSheetBadge[] => {
     const enabled = roles ? roles[role] : undefined;
@@ -92,21 +99,41 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
           ? [{ label: `Dernier état connu : ${enabled ? 'actif' : 'inactif'}`, tone: 'warning' }]
           : [{ label: enabled ? 'Actif' : 'Inactif', tone: enabled ? 'success' : 'neutral' }];
     if (desired && desired.includes(role) !== (enabled ?? false))
-      badges.push({ label: `Demandé : ${desired.includes(role) ? 'actif' : 'inactif'}`, tone: 'accent' });
+      badges.push({
+        label: `Demandé : ${desired.includes(role) ? 'actif' : 'inactif'}`,
+        tone: 'accent',
+      });
     return badges;
   };
   const workerOff = roles?.worker === false;
   const max = status?.maxConcurrentTasks ?? node?.maxConcurrentTasks ?? null;
   const processing: ResourceSheetMetric = workerOff
-    ? { label: 'Traitements actifs', value: 'Non applicable', unavailable: true, detail: 'La fonction worker est désactivée.' }
+    ? {
+        label: 'Traitements actifs',
+        value: 'Non applicable',
+        unavailable: true,
+        detail: 'La fonction worker est désactivée.',
+      }
     : input.activeTasks === null || max === null
-      ? { label: 'Traitements actifs', value: 'Indisponible', unavailable: true, detail: max === null ? undefined : `${max} traitement(s) simultané(s) au maximum` }
+      ? {
+          label: 'Traitements actifs',
+          value: 'Indisponible',
+          unavailable: true,
+          detail: max === null ? undefined : `${max} traitement(s) simultané(s) au maximum`,
+        }
       : {
           label: 'Traitements actifs',
           value: `${input.activeTasks} / ${max}`,
           stale: agentUnavailable,
-          detail: agentUnavailable ? 'Dernière valeur connue, pas une occupation actuelle' : undefined,
-          meter: { value: input.activeTasks, max, label: `${input.activeTasks} places de traitement occupées sur ${max}`, stale: agentUnavailable },
+          detail: agentUnavailable
+            ? 'Dernière valeur connue, pas une occupation actuelle'
+            : undefined,
+          meter: {
+            value: input.activeTasks,
+            max,
+            label: `${input.activeTasks} places de traitement occupées sur ${max}`,
+            stale: agentUnavailable,
+          },
         };
   const signal = formatLastSignal(node?.lastSeenAt, input.now);
   const inventory = node?.inventory ?? status?.inventory ?? null;
@@ -117,11 +144,20 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
     notices.push({
       tone: 'danger',
       title: 'L’agent de ce nœud ne répond pas',
-      description: 'Les informations ci-dessous sont les dernières connues ; elles peuvent ne plus être exactes.',
+      description:
+        'Les informations ci-dessous sont les dernières connues ; elles peuvent ne plus être exactes.',
     });
   if (status?.switchFailure)
-    notices.push({ tone: 'danger', title: 'Rattachement annulé', description: status.switchFailure });
-  if (desired && roles && (desired.includes('server') !== roles.server || desired.includes('worker') !== roles.worker))
+    notices.push({
+      tone: 'danger',
+      title: 'Rattachement annulé',
+      description: status.switchFailure,
+    });
+  if (
+    desired &&
+    roles &&
+    (desired.includes('server') !== roles.server || desired.includes('worker') !== roles.worker)
+  )
     notices.push({
       tone: 'accent',
       title: 'Changement de fonctions en attente',
@@ -162,10 +198,15 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
               ? {
                   label: gpus.length > 1 ? 'Processeurs graphiques' : 'Processeur graphique',
                   value: gpus.map((gpu) => gpu.name).join(' · '),
-                  detail: gpus
-                    .map((gpu) => [gpu.device, gpu.driver ? `pilote ${gpu.driver}` : null].filter(Boolean).join(' · '))
-                    .filter(Boolean)
-                    .join(' ; ') || undefined,
+                  detail:
+                    gpus
+                      .map((gpu) =>
+                        [gpu.device, gpu.driver ? `pilote ${gpu.driver}` : null]
+                          .filter(Boolean)
+                          .join(' · '),
+                      )
+                      .filter(Boolean)
+                      .join(' ; ') || undefined,
                 }
               : {
                   label: 'Processeur graphique',
@@ -174,7 +215,14 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
                   detail: inventory.gpus ? undefined : 'Cet agent ne remonte pas encore ses GPU.',
                 },
           ]
-        : [{ label: 'Matériel', value: 'Non renseigné', unavailable: true, detail: 'Disponible après le prochain signal du nœud.' }],
+        : [
+            {
+              label: 'Matériel',
+              value: 'Non renseigné',
+              unavailable: true,
+              detail: 'Disponible après le prochain signal du nœud.',
+            },
+          ],
     },
     {
       id: 'capabilities',
@@ -187,12 +235,16 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
       items: workerOff
         ? []
         : tools.map((tool) => {
-            const usable = tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
-            const detected = tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
+            const usable =
+              tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
+            const detected =
+              tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
             const badges: ResourceSheetBadge[] = [];
             if (usable) badges.push({ label: `${usable} encodeur(s) vérifié(s)`, tone: 'success' });
-            if (detected) badges.push({ label: `${detected} détecté(s), non vérifié(s)`, tone: 'neutral' });
-            for (const acceleration of tool.accelerationTypes) badges.push({ label: acceleration.toUpperCase(), tone: 'accent' });
+            if (detected)
+              badges.push({ label: `${detected} détecté(s), non vérifié(s)`, tone: 'neutral' });
+            for (const acceleration of tool.accelerationTypes)
+              badges.push({ label: acceleration.toUpperCase(), tone: 'accent' });
             return { label: `${tool.toolId} ${tool.version}`, badges };
           }),
       action: workerOff || !node ? undefined : { id: 'capabilities', label: 'Fiche des capacités' },
@@ -205,14 +257,18 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
         { label: 'Identifiant du nœud', value: status?.nodeId ?? 'Indisponible', mono: true },
         {
           label: 'Cluster',
-          value: standalone ? 'Aucun (nœud autonome)' : (input.clusterName ?? status?.clusterName ?? 'Cluster'),
+          value: standalone
+            ? 'Aucun (nœud autonome)'
+            : (input.clusterName ?? status?.clusterName ?? 'Cluster'),
         },
       ],
     },
   ];
   return {
     title: node?.displayName?.trim() || status?.name || 'Ce nœud',
-    subtitle: standalone ? 'Nœud autonome' : `Membre de ${input.clusterName ?? status?.clusterName ?? 'son cluster'}`,
+    subtitle: standalone
+      ? 'Nœud autonome'
+      : `Membre de ${input.clusterName ?? status?.clusterName ?? 'son cluster'}`,
     notices,
     sections,
   };
