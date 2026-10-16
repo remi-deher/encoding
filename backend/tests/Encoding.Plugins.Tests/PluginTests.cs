@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Encoding.Api.Flows;
 using Encoding.Api.Plugins;
 using Encoding.Contracts.Plugins;
@@ -14,6 +15,7 @@ internal static class PluginTests
         PathMappings();
         WebhookPayloads();
         CatalogAcceptsManifests();
+        InvalidManifestsAreRejected();
     }
 
     private static void PathMappings()
@@ -87,5 +89,37 @@ internal static class PluginTests
         }
         finally { Directory.Delete(directory, true); }
         Console.WriteLine("PASS: server catalog accepts the shipped and the example plugin manifests.");
+    }
+
+    private static void InvalidManifestsAreRejected()
+    {
+        var source=Path.Combine(RepositoryRoot(),"backend","plugins","example","manifest.json");
+        var root=JsonNode.Parse(File.ReadAllText(source))!.AsObject();
+        var duplicate=root.DeepClone().AsObject();
+        duplicate["components"]!.AsArray().Add(duplicate["components"]![0]!.DeepClone());
+        var unsupported=root.DeepClone().AsObject();
+        unsupported["supportedHostContractVersions"] = new JsonArray(2);
+        var cases=new Dictionary<string,JsonNode>
+        {
+            ["unsupported host contract"]=unsupported,
+            ["duplicate component identity"]=duplicate
+        };
+
+        foreach(var (name,manifest) in cases)
+        {
+            var directory=Path.Combine(Path.GetTempPath(),"encoding-plugin-invalid-"+Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                File.WriteAllText(Path.Combine(directory,"invalid.json"),manifest.ToJsonString());
+                var configuration=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["FlowPlugins:ManifestDirectory"]=directory }).Build();
+                var rejected=false;
+                try { _=new FlowComponentRegistry(configuration); }
+                catch(InvalidOperationException) { rejected=true; }
+                Check(rejected,"The catalog rejects an invalid manifest: "+name);
+            }
+            finally { Directory.Delete(directory,true); }
+        }
+        Console.WriteLine("PASS: plugin catalog rejects unsupported contracts and duplicate component identities.");
     }
 }

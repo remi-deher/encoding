@@ -224,6 +224,29 @@ internal static partial class Harness
             Console.WriteLine("PASS: direct-access worker loss — resumed by another worker without the lost node.");
         }
 
+        public async Task UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync()
+        {
+            await ResetNodesAsync();
+            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"plex-refresh","plex-refresh-library"),Node(registry,"end","base-complete-flow"));
+            var(id,first,context)=await EnqueueAsync(flow);
+            await CompleteAsync(id,a,first,"entry",context);
+            Check(await runtime.StartStepAsync(id,a,new(first.Epoch,"plex-refresh"),CancellationToken.None) is not null,
+                "The external plugin step starts and is recorded before its side effect.");
+
+            await ExpireAsync(id);
+            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,
+                "A new worker does not repeat a plugin step whose external side effect is uncertain.");
+            var result=await executions.GetAsync(id,CancellationToken.None)??throw new InvalidOperationException("The plugin execution remains observable.");
+            Check(result.State=="failed" && result.Detail?.Contains("incertain",StringComparison.OrdinalIgnoreCase)==true,
+                "The execution fails with an explicit uncertain-side-effect reason and requires a deliberate retry.");
+            Check(await runtime.ClaimAsync(a,CancellationToken.None) is null && await runtime.ClaimAsync(c,CancellationToken.None) is null,
+                "No worker replays the unfinished plugin invocation automatically.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM execution_steps WHERE execution_id=@id AND node_id='plex-refresh' AND completed_at IS NULL AND NOT idempotent",("id",id))==1,
+                "The unfinished non-idempotent plugin invocation remains recorded for diagnosis.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id",("id",id))==0,
+                "The failed uncertain plugin execution releases its media reservation.");
+        }
+
         private async Task<Guid> QueueAsync(FlowDefinition flow)
         {
             var library=Guid.NewGuid(); var id=Guid.NewGuid();

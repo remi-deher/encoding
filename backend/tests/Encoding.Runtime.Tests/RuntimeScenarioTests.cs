@@ -32,6 +32,12 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
     public Task EarlyWorkerRelayAvoidsDownloadsAndSurvivesReceiverLoss() => Scenarios.EarlyRunnerAsync();
 
     [PostgresFact]
+    public Task RejectedCheckpointWithLiveLeaseFailsWithoutRetry() => Scenarios.ConflictDuringCheckpointFailsExecutionAsync();
+
+    [MediaToolsFact]
+    public Task RejectedFinalCompletionWithLiveLeaseFailsWithoutRetry() => Scenarios.ConflictDuringFinishFailsExecutionAsync();
+
+    [PostgresFact]
     public Task CancellationReleasesTheDurableReservation() => Scenarios.CancellationAsync();
 
     [PostgresFact]
@@ -63,6 +69,9 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
 
     [PostgresFact]
     public Task DirectWorkerLossFailover() => Scenarios.DirectWorkerLossFailoverAsync();
+
+    [PostgresFact]
+    public Task UncertainPluginSideEffectIsNotRepeatedAfterWorkerLoss() => Scenarios.UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync();
 
     [PostgresFact]
     public Task ServerLossFailover() => Scenarios.ServerLossFailoverAsync();

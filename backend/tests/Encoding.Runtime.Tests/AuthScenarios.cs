@@ -56,7 +56,7 @@ internal static class AuthScenarios
             var secretFile = Path.Combine(directory, Encoding.Core.Nodes.LocalEnrollment.FileName);
             Encoding.Core.Nodes.LocalEnrollment.Create(secretFile);
             LocalSecret = File.ReadAllText(secretFile).Trim();
-            await using (var factory = CreateFactory(cluster, directory, new() { ["Auth:AnonymousRequestsPerMinute"] = "1000", ["Auth:MaxPendingPairingRequests"] = "2", [Encoding.Core.Nodes.LocalEnrollment.SecretFileSetting] = secretFile }))
+            await using (var factory = CreateFactory(cluster, directory, new() { ["Auth:AnonymousRequestsPerMinute"] = "1000", ["Auth:MaxPendingPairingRequests"] = "2", [Encoding.Core.Nodes.LocalEnrollment.SecretFileSetting] = secretFile, [Encoding.Api.Nodes.LocalNodeEndpoints.BaseUrlSetting] = "http://example.invalid/" }))
             {
                 await ScenarioAsync(factory);
                 await EndpointCatalogueAsync(factory);

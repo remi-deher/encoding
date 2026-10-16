@@ -20,6 +20,7 @@ using Encoding.NodeAgent.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -109,6 +110,8 @@ internal static partial class Harness
         private RuntimeArtifactStore artifacts = null!;
         private PluginConfigurationRepository configurations = null!;
         private ExecutionRepository executions = null!;
+        private int rejectNextCheckpoint;
+        private int rejectNextFinish;
         private readonly Guid a = Guid.NewGuid(), b = Guid.NewGuid(), c = Guid.NewGuid();
         private const string Token = "fixture-node-token-is-long-enough-for-authentication";
         private Fixture(string connection, FlowComponentRegistry registry, FlowDefinitionValidator validator, RuntimeEligibility eligibility)
@@ -142,7 +145,24 @@ internal static partial class Harness
             builder.Services.AddSingleton<LibraryProcessingRepository>(); builder.Services.AddSingleton<LibraryWorkflowRepository>();
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromHours(1)));
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton<FlowRepository>(); builder.Services.AddSingleton<FlowArchiveService>();
-            app=builder.Build(); app.MapRuntimeEndpoints(); app.MapFlowEndpoints();
+            app=builder.Build();
+            app.Use(async (context,next) =>
+            {
+                if(context.Request.Path.Value?.EndsWith("/steps/complete",StringComparison.Ordinal)==true
+                    && Interlocked.Exchange(ref rejectNextCheckpoint,0)==1)
+                {
+                    context.Response.StatusCode=StatusCodes.Status409Conflict;
+                    return;
+                }
+                if(context.Request.Path.Value?.EndsWith("/finish",StringComparison.Ordinal)==true
+                    && Interlocked.Exchange(ref rejectNextFinish,0)==1)
+                {
+                    context.Response.StatusCode=StatusCodes.Status409Conflict;
+                    return;
+                }
+                await next();
+            });
+            app.MapRuntimeEndpoints(); app.MapFlowEndpoints();
             app.MapGet("/api/v1/executions/{id:guid}",async(Guid id)=>await executions.GetAsync(id,CancellationToken.None));
             await app.StartAsync();
         }
@@ -401,6 +421,53 @@ internal static partial class Harness
             options=NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Node:DataDirectory"]=Path.Combine(directory,name) }).Build());
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
             return new(options,scanner,new MediaActions(tools,scanner,new Probe()),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),NullLogger<RuntimeFlowRunner>.Instance);
+        }
+        public async Task ConflictDuringCheckpointFailsExecutionAsync()
+        {
+            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
+            var(id,lease,_)=await EnqueueAsync(flow);
+            Interlocked.Exchange(ref rejectNextCheckpoint,1);
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            using var client=Client(a);
+            await Runner("conflict-checkpoint",out _).RunAsync(lease,client,deadline.Token);
+
+            var result=await executions.GetAsync(id,CancellationToken.None)??throw new InvalidOperationException("The execution must remain observable.");
+            Check(result.State=="failed","A rejected checkpoint with a valid lease must finish as failed, not wait for lease expiry and retry.");
+            Check(result.Detail?.Contains("refusé",StringComparison.OrdinalIgnoreCase)==true,"The failed execution records the rejected cluster operation.");
+            await using(var reservation=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id"))
+            {
+                reservation.Parameters.AddWithValue("id",id);
+                Check((long)(await reservation.ExecuteScalarAsync())! ==0,"A terminal contract rejection releases the media reservation.");
+            }
+            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"Another worker cannot retry the rejected execution.");
+        }
+        public async Task ConflictDuringFinishFailsExecutionAsync()
+        {
+            var tools=new ProcessToolRunner();
+            var source=Path.Combine(directory,"conflict-source.mkv");
+            await tools.CheckedAsync("ffmpeg",["-y","-nostdin","-v","error","-f","lavfi","-i","testsrc2=size=64x64:rate=5","-t","1","-c:v","libx264",source],directory,CancellationToken.None);
+            var librarySource=Path.Combine(directory,"source.mkv");
+            File.Copy(source,librarySource,true);
+            byte[] originalSha;
+            await using(var original=File.OpenRead(librarySource)) originalSha=await System.Security.Cryptography.SHA256.HashDataAsync(original);
+            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
+            var(id,lease,_)=await EnqueueAsync(flow,await File.ReadAllBytesAsync(source));
+            Interlocked.Exchange(ref rejectNextFinish,1);
+            using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var client=Client(a);
+            await Runner("conflict-finish",out _).RunAsync(lease,client,deadline.Token);
+
+            var result=await executions.GetAsync(id,CancellationToken.None)??throw new InvalidOperationException("The execution must remain observable.");
+            Check(result.State=="failed","A rejected final completion with a valid lease must finish as failed, not wait for lease expiry and retry.");
+            Check(result.Detail?.Contains("refusé",StringComparison.OrdinalIgnoreCase)==true,"The failed execution records the rejected cluster operation.");
+            await using(var reservation=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id"))
+            {
+                reservation.Parameters.AddWithValue("id",id);
+                Check((long)(await reservation.ExecuteScalarAsync())! ==0,"A terminal completion rejection releases the media reservation.");
+            }
+            await using(var preserved=File.OpenRead(librarySource))
+                Check(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(preserved))==Convert.ToHexStringLower(originalSha),"A rejected completion leaves the library source unchanged.");
+            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"Another worker cannot retry the rejected execution.");
         }
         public async Task EarlyRunnerAsync()
         {

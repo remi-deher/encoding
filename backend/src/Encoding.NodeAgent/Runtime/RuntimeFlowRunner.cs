@@ -361,8 +361,18 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         {
             if(cancelled && !lost) await FailureAsync("cancelled","Annulation confirmée après arrêt des processus.");
         }
-        catch(HttpRequestException exception) when(exception.StatusCode is null || exception.StatusCode==System.Net.HttpStatusCode.Conflict
-            || (int)exception.StatusCode>=500)
+        catch(HttpRequestException exception) when(exception.StatusCode==System.Net.HttpStatusCode.Conflict)
+        {
+            // Un 409 peut signaler un checkpoint ou une complétion refusé par le contrat alors que le bail
+            // est toujours valide. Traiter ce cas comme une perte de bail ferait reboucler indéfiniment
+            // les médias invalides. FailureAsync renouvelle d'abord le bail et confirme un échec terminal ;
+            // si le bail a réellement changé d'époque, le renouvellement sera refusé et l'ancien worker
+            // ne pourra rien modifier.
+            logger.LogWarning(exception,"Complétion de l’exécution {ExecutionId} refusée par le cluster ; tentative de clôture en échec.",lease.ExecutionId);
+            lost=true;
+            await FailureAsync("failed","Le cluster a refusé une étape ou une complétion de l’exécution.");
+        }
+        catch(HttpRequestException exception) when(exception.StatusCode is null || (int)exception.StatusCode>=500)
         {
             // Un 409 peut aussi être un checkpoint refusé alors que le bail est intact : rejouer ne le rendrait pas valide.
             var refused=false;
