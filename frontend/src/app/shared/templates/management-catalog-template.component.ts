@@ -46,7 +46,9 @@ export interface CatalogEmptyState {
     >
       <div drawer-main>
         <app-page-header [title]="title()" [actions]="pageActions()" />
-        <ng-content select="[catalogue-navigation]" />
+        <div class="catalog-navigation-wrapper">
+          <ng-content select="[catalogue-navigation]" />
+        </div>
         <div class="catalog-summary"><ng-content select="[catalogue-summary]" /></div>
 
         <section class="catalog-panel" [attr.aria-label]="title()">

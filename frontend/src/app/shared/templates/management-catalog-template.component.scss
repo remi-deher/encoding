@@ -1,3 +1,15 @@
+.catalog-navigation-wrapper {
+  display: flex;
+  align-items: center;
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.catalog-navigation-wrapper:empty {
+  display: none;
+}
+
 .catalog-summary {
   display: grid;
   gap: var(--space-4);

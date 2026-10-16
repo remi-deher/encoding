@@ -8,8 +8,10 @@
   align-items: center;
   gap: 3px;
   padding: 4px;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-2xl);
   background: var(--surface-container-low);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
 }
 
 .category-tab-pill {
