@@ -30,7 +30,7 @@ import {
 } from './confirmation-dialog.component';
 
 export type DataTableValue = string | number | boolean;
-export type DataTableRow = Readonly<Record<string, DataTableValue>>;
+export type DataTableRow = Readonly<Record<string, DataTableValue> & { id: string | number }>;
 export type DataTableLayout = 'table' | 'cards' | 'resources';
 
 export interface DataTableLayoutOption {
@@ -268,16 +268,16 @@ export interface DataTableListActionEvent {
           <p class="card-empty">{{ emptyMessage() }}</p>
         } @else {
           <ul class="resource-list">
-            @for (row of cardRows(); track row) {
+            @for (row of cardRows(); track rowKey(row)) {
               <li
                 class="data-card resource-row"
-                [class.data-card_selected]="selection.isSelected(row)"
+                [class.data-card_selected]="selection.isSelected(rowKey(row))"
                 [class.data-card_expanded]="isExpandedRow(row)"
               >
                 <header class="data-card-header">
                   @if (selectable()) {
                     <mat-checkbox
-                      [checked]="selection.isSelected(row)"
+                      [checked]="selection.isSelected(rowKey(row))"
                       [attr.aria-label]="'Sélectionner ' + rowSubject(row)"
                       (click)="captureCheckboxClick($event)"
                       (change)="toggleRow(row)"
@@ -395,16 +395,16 @@ export interface DataTableListActionEvent {
           <p class="card-empty">{{ emptyMessage() }}</p>
         } @else {
           <ul class="card-grid">
-            @for (row of cardRows(); track row) {
+            @for (row of cardRows(); track rowKey(row)) {
               <li
                 class="data-card"
-                [class.data-card_selected]="selection.isSelected(row)"
+                [class.data-card_selected]="selection.isSelected(rowKey(row))"
                 [class.data-card_expanded]="isExpandedRow(row)"
               >
                 <header class="data-card-header">
                   @if (selectable()) {
                     <mat-checkbox
-                      [checked]="selection.isSelected(row)"
+                      [checked]="selection.isSelected(rowKey(row))"
                       aria-label="Sélectionner cette ligne"
                       (click)="captureCheckboxClick($event)"
                       (change)="toggleRow(row)"
@@ -481,7 +481,7 @@ export interface DataTableListActionEvent {
               </th>
               <td mat-cell *matCellDef="let row" class="selection-cell" data-label="Sélection">
                 <mat-checkbox
-                  [checked]="selection.isSelected(row)"
+                  [checked]="selection.isSelected(rowKey(row))"
                   aria-label="Sélectionner cette ligne"
                   (click)="captureCheckboxClick($event)"
                   (change)="toggleRow(row)"
@@ -577,7 +577,7 @@ export interface DataTableListActionEvent {
           <tr
             mat-row
             *matRowDef="let row; columns: displayedColumnKeys()"
-            [attr.aria-selected]="selectable() ? selection.isSelected(row) : null"
+            [attr.aria-selected]="selectable() ? selection.isSelected(rowKey(row)) : null"
           ></tr>
           @if (rowDetail()) {
             <tr
@@ -648,7 +648,7 @@ export class DataTableComponent {
   });
 
   protected readonly dataSource = new MatTableDataSource<DataTableRow>();
-  protected readonly selection = new SelectionModel<DataTableRow>(true, []);
+  protected readonly selection = new SelectionModel<string>(true, []);
   protected readonly selectedRows = signal<readonly DataTableRow[]>([]);
   protected readonly displayedColumnKeys = computed(() => [
     ...(this.selectable() ? ['select'] : []),
@@ -670,7 +670,21 @@ export class DataTableComponent {
   constructor() {
     effect(() => {
       this.expandedRowId();
-      this.dataSource.data = [...this.rows()];
+      this.selectable();
+      const rows = [...this.rows()];
+      this.dataSource.data = rows;
+
+      // Polling replaces row objects; keep selection by stable id and refresh the selected records.
+      const currentKeys = new Set(rows.map((row) => this.rowKey(row)));
+      const retainedKeys = this.selectable()
+        ? this.selection.selected.filter((key) => currentKeys.has(key))
+        : [];
+      this.selection.clear();
+      if (retainedKeys.length) this.selection.select(...retainedKeys);
+      if (this.selectionAnchor && !currentKeys.has(this.selectionAnchor)) {
+        this.selectionAnchor = undefined;
+      }
+      this.emitSelectionChange();
     });
 
     this.dataSource.sortingDataAccessor = (row, property) => this.sortValue(row, property);
@@ -684,6 +698,10 @@ export class DataTableComponent {
 
   protected badgesOf(value: DataTableValue | undefined): string[] {
     return splitBadges(value);
+  }
+
+  protected rowKey(row: DataTableRow): string {
+    return String(row.id);
   }
 
   protected requestRowAction(action: DataTableRowAction, row: DataTableRow): void {
@@ -761,14 +779,16 @@ export class DataTableComponent {
   }
 
   protected openSelectedRow(): void {
-    const [row] = this.selection.selected;
+    const [key] = this.selection.selected;
+    const row = this.rows().find((candidate) => this.rowKey(candidate) === key);
     if (!row) return;
     this.rowOpen.emit(row);
     this.clearSelection();
   }
 
   protected requestSelectionAction(action: DataTableSelectionAction): void {
-    const rows = [...this.selection.selected];
+    const selectedKeys = new Set(this.selection.selected);
+    const rows = this.rows().filter((row) => selectedKeys.has(this.rowKey(row)));
     if (!rows.length) return;
     const confirmation = action.confirmation?.(rows);
     if (!confirmation) {
@@ -786,15 +806,15 @@ export class DataTableComponent {
 
   protected isAllSelected(): boolean {
     const rows = this.dataSource.filteredData;
-    return rows.length > 0 && rows.every((row) => this.selection.isSelected(row));
+    return rows.length > 0 && rows.every((row) => this.selection.isSelected(this.rowKey(row)));
   }
 
   protected toggleAll(): void {
     const rows = this.dataSource.filteredData;
     if (this.isAllSelected()) {
-      rows.forEach((row) => this.selection.deselect(row));
+      rows.forEach((row) => this.selection.deselect(this.rowKey(row)));
     } else {
-      rows.forEach((row) => this.selection.select(row));
+      this.selection.select(...rows.map((row) => this.rowKey(row)));
     }
     this.emitSelectionChange();
   }
@@ -806,12 +826,12 @@ export class DataTableComponent {
       this.selectFromRow(row, clickEvent);
       return;
     }
-    this.selection.toggle(row);
-    this.selectionAnchor = row;
+    this.selection.toggle(this.rowKey(row));
+    this.selectionAnchor = this.rowKey(row);
     this.emitSelectionChange();
   }
 
-  private selectionAnchor: DataTableRow | undefined;
+  private selectionAnchor: string | undefined;
   private pendingCheckboxClick: MouseEvent | undefined;
 
   protected captureCheckboxClick(event: MouseEvent): void {
@@ -824,12 +844,14 @@ export class DataTableComponent {
       const rows = this.dataSource.sort
         ? this.dataSource.sortData(this.dataSource.filteredData, this.dataSource.sort)
         : this.dataSource.filteredData;
-      const anchorIndex = rows.indexOf(this.selectionAnchor);
-      const targetIndex = rows.indexOf(row);
+      const anchorIndex = rows.findIndex((candidate) => this.rowKey(candidate) === this.selectionAnchor);
+      const targetIndex = rows.findIndex((candidate) => this.rowKey(candidate) === this.rowKey(row));
       if (anchorIndex >= 0 && targetIndex >= 0) {
         if (!event.ctrlKey && !event.metaKey) this.selection.clear();
         this.selection.select(
-          ...rows.slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1),
+          ...rows
+            .slice(Math.min(anchorIndex, targetIndex), Math.max(anchorIndex, targetIndex) + 1)
+            .map((candidate) => this.rowKey(candidate)),
         );
         this.emitSelectionChange();
         return;
@@ -837,12 +859,12 @@ export class DataTableComponent {
     }
 
     if (event.ctrlKey || event.metaKey) {
-      this.selection.toggle(row);
+      this.selection.toggle(this.rowKey(row));
     } else {
       this.selection.clear();
-      this.selection.select(row);
+      this.selection.select(this.rowKey(row));
     }
-    this.selectionAnchor = row;
+    this.selectionAnchor = this.rowKey(row);
     this.emitSelectionChange();
   }
 
@@ -855,7 +877,8 @@ export class DataTableComponent {
   }
 
   private emitSelectionChange(): void {
-    const selected = [...this.selection.selected];
+    const selectedKeys = new Set(this.selection.selected);
+    const selected = this.rows().filter((row) => selectedKeys.has(this.rowKey(row)));
     this.selectedRows.set(selected);
     if (!selected.length) this.selectionAnchor = undefined;
     this.selectionChange.emit(selected);

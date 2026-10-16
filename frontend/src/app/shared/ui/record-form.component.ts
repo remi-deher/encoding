@@ -1,10 +1,8 @@
 import { Component, OnChanges, SimpleChanges, input, output } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { MatStepper, MatStepperModule } from '@angular/material/stepper';
+import { SchemaFormFieldComponent } from './schema-form-field.component';
 
 export interface RecordFormField {
   readonly id: string;
@@ -57,11 +55,9 @@ type RecordFormControls = Record<string, FormControl<string>>;
   selector: 'app-record-form',
   imports: [
     MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     MatStepperModule,
     ReactiveFormsModule,
+    SchemaFormFieldComponent,
   ],
   template: `
     <section class="record-form" [attr.aria-label]="data().title">
@@ -75,66 +71,22 @@ type RecordFormControls = Record<string, FormControl<string>>;
                 }
                 <div class="field-grid">
                   @for (field of fieldsFor(step); track field.id) {
-                    @if (field.type === 'select') {
-                      <mat-form-field appearance="outline">
-                        <mat-label>{{ field.label }}</mat-label>
-                        <mat-select
-                          [formControlName]="field.id"
-                          (selectionChange)="onSelectChange(field)"
-                        >
-                          @for (option of optionsFor(field); track option.value) {
-                            <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                          }
-                        </mat-select>
-                        @if (field.hint || field.filterOptionsByFieldId) {
-                          <mat-hint>{{
-                            field.hint ?? 'Les choix proposés dépendent du type de média.'
-                          }}</mat-hint>
-                        }
-                        @if (fieldError(field); as error) {
-                          <mat-error>{{ error }}</mat-error>
-                        }
-                      </mat-form-field>
-                    } @else if (field.type === 'textarea') {
-                      <mat-form-field appearance="outline">
-                        <mat-label>{{ field.label }}</mat-label>
-                        <textarea
-                          matInput
-                          rows="4"
-                          [formControlName]="field.id"
-                          [attr.placeholder]="field.placeholder ?? null"
-                          [attr.maxlength]="field.maxLength ?? null"
-                        ></textarea>
-                        @if (field.hint) {
-                          <mat-hint>{{ field.hint }}</mat-hint>
-                        }
-                        @if (fieldError(field); as error) {
-                          <mat-error>{{ error }}</mat-error>
-                        }
-                      </mat-form-field>
-                    } @else {
-                      <mat-form-field appearance="outline">
-                        <mat-label>{{ field.label }}</mat-label>
-                        <input
-                          matInput
-                          [type]="field.type"
-                          [attr.autocomplete]="field.autocomplete ?? null"
-                          [attr.placeholder]="field.placeholder ?? null"
-                          [attr.min]="field.min ?? null"
-                          [attr.max]="field.max ?? null"
-                          [attr.step]="field.step ?? null"
-                          [attr.minlength]="field.minLength ?? null"
-                          [attr.maxlength]="field.maxLength ?? null"
-                          [formControlName]="field.id"
-                        />
-                        @if (field.hint) {
-                          <mat-hint>{{ field.hint }}</mat-hint>
-                        }
-                        @if (fieldError(field); as error) {
-                          <mat-error>{{ error }}</mat-error>
-                        }
-                      </mat-form-field>
-                    }
+                    <app-schema-form-field
+                      [label]="field.label"
+                      [type]="field.type"
+                      [control]="controlFor(field.id)!"
+                      [options]="optionsFor(field)"
+                      [hint]="fieldHint(field)"
+                      [error]="fieldError(field)"
+                      [placeholder]="field.placeholder ?? ''"
+                      [autocomplete]="field.autocomplete ?? ''"
+                      [min]="field.min"
+                      [max]="field.max"
+                      [step]="field.step"
+                      [minLength]="field.minLength"
+                      [maxLength]="field.maxLength"
+                      (selectionChanged)="onSelectChange(field)"
+                    />
                   }
                 </div>
                 <footer class="form-actions">
@@ -202,66 +154,22 @@ type RecordFormControls = Record<string, FormControl<string>>;
         >
           <div class="field-grid">
             @for (field of fieldsFor(steps()[0]); track field.id) {
-              @if (field.type === 'select') {
-                <mat-form-field appearance="outline">
-                  <mat-label>{{ field.label }}</mat-label>
-                  <mat-select
-                    [formControlName]="field.id"
-                    (selectionChange)="onSelectChange(field)"
-                  >
-                    @for (option of optionsFor(field); track option.value) {
-                      <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                    }
-                  </mat-select>
-                  @if (field.hint || field.filterOptionsByFieldId) {
-                    <mat-hint>{{
-                      field.hint ?? 'Les choix proposés dépendent du type de média.'
-                    }}</mat-hint>
-                  }
-                  @if (fieldError(field); as error) {
-                    <mat-error>{{ error }}</mat-error>
-                  }
-                </mat-form-field>
-              } @else if (field.type === 'textarea') {
-                <mat-form-field appearance="outline">
-                  <mat-label>{{ field.label }}</mat-label>
-                  <textarea
-                    matInput
-                    rows="4"
-                    [formControlName]="field.id"
-                    [attr.placeholder]="field.placeholder ?? null"
-                    [attr.maxlength]="field.maxLength ?? null"
-                  ></textarea>
-                  @if (field.hint) {
-                    <mat-hint>{{ field.hint }}</mat-hint>
-                  }
-                  @if (fieldError(field); as error) {
-                    <mat-error>{{ error }}</mat-error>
-                  }
-                </mat-form-field>
-              } @else {
-                <mat-form-field appearance="outline">
-                  <mat-label>{{ field.label }}</mat-label>
-                  <input
-                    matInput
-                    [type]="field.type"
-                    [attr.autocomplete]="field.autocomplete ?? null"
-                    [attr.placeholder]="field.placeholder ?? null"
-                    [attr.min]="field.min ?? null"
-                    [attr.max]="field.max ?? null"
-                    [attr.step]="field.step ?? null"
-                    [attr.minlength]="field.minLength ?? null"
-                    [attr.maxlength]="field.maxLength ?? null"
-                    [formControlName]="field.id"
-                  />
-                  @if (field.hint) {
-                    <mat-hint>{{ field.hint }}</mat-hint>
-                  }
-                  @if (fieldError(field); as error) {
-                    <mat-error>{{ error }}</mat-error>
-                  }
-                </mat-form-field>
-              }
+              <app-schema-form-field
+                [label]="field.label"
+                [type]="field.type"
+                [control]="controlFor(field.id)!"
+                [options]="optionsFor(field)"
+                [hint]="fieldHint(field)"
+                [error]="fieldError(field)"
+                [placeholder]="field.placeholder ?? ''"
+                [autocomplete]="field.autocomplete ?? ''"
+                [min]="field.min"
+                [max]="field.max"
+                [step]="field.step"
+                [minLength]="field.minLength"
+                [maxLength]="field.maxLength"
+                (selectionChanged)="onSelectChange(field)"
+              />
             }
           </div>
           <footer class="form-actions">
@@ -518,6 +426,11 @@ export class RecordFormComponent implements OnChanges {
     return 'Vérifiez cette valeur.';
   }
 
+  protected fieldHint(field: RecordFormField): string {
+    return field.hint ??
+      (field.filterOptionsByFieldId ? 'Les choix proposés dépendent du type de média.' : '');
+  }
+
   protected optionsFor(field: RecordFormField): readonly RecordFormOption[] {
     const filterFieldId = field.filterOptionsByFieldId;
     if (!filterFieldId) return field.options ?? [];
@@ -567,7 +480,7 @@ export class RecordFormComponent implements OnChanges {
     });
   }
 
-  private controlFor(fieldId: string): FormControl<string> | undefined {
+  protected controlFor(fieldId: string): FormControl<string> | undefined {
     for (const form of Object.values(this.stepForms)) {
       const control = form.controls[fieldId];
       if (control) return control;

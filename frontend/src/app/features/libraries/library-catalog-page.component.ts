@@ -37,7 +37,6 @@ import {
   DataTableActionEvent,
   DataTableRow,
   DataTableRowAction,
-  DataTableRowDetailDirective,
   DataTableToggleEvent,
   DataTableSelectionActionEvent,
 } from '../../shared/ui/data-table.component';
@@ -122,7 +121,6 @@ interface LibraryAccessRecord extends DataTableRow {
 
   imports: [
     DataTableComponent,
-    DataTableRowDetailDirective,
 
     DetailCardGridComponent,
 

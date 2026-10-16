@@ -1,7 +1,7 @@
 import { toSignal, toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FileDownload } from '../../shared/services/file-download';
 import { MatButtonModule } from '@angular/material/button';
-import { catchError, exhaustMap, forkJoin, map, of, switchMap, startWith, timer } from 'rxjs';
+import { catchError, forkJoin, map, of } from 'rxjs';
 import {
   ExecutionTracking,
   INITIAL_EXECUTION_TRACKING,
@@ -10,6 +10,7 @@ import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
 import { formatFileSize } from '../../shared/models/file-size';
 import { joinBadges, mediaBadges } from '../../shared/models/media-badges';
 import { NotificationService } from '../../shared/services/notification.service';
+import { ExecutionDetailPolling } from '../../shared/services/execution-detail-polling';
 import { Component, computed, inject, signal, DestroyRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -51,6 +52,7 @@ interface ExecutionRecord extends DataTableRow {
 export class TaskMonitoringPageComponent {
   private readonly downloads = inject(FileDownload);
   private readonly tracking = inject(ExecutionTracking);
+  private readonly detailPolling = inject(ExecutionDetailPolling);
   private readonly notifications = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly trackingState = toSignal(this.tracking.state$, {
@@ -58,81 +60,20 @@ export class TaskMonitoringPageComponent {
   });
   protected readonly busy = signal(false);
   protected readonly selectedExecutionId = signal<string | null>(null);
-  protected readonly eventState = toSignal(
-    toObservable(this.selectedExecutionId).pipe(
-      switchMap((id) =>
-        id
-          ? timer(0, 5000).pipe(
-              exhaustMap(() =>
-                this.tracking.events(id).pipe(
-                  map((events) => ({
-                    message: '',
-                    rows: events.map((e) => ({
-                      id: e.id,
-                      revision: e.revision,
-                      state: EXECUTION_STATE_LABELS[e.state],
-                      detail: e.detail,
-                      createdAt: this.date(e.createdAt),
-                    })),
-                  })),
-                  catchError(() =>
-                    of({ message: 'Impossible de charger la chronologie.', rows: [] }),
-                  ),
-                ),
-              ),
-              startWith({ message: 'Chargement de la chronologie…', rows: [] }),
-            )
-          : of({ message: '', rows: [] }),
-      ),
-    ),
-    { initialValue: { message: 'Chargement de la chronologie…', rows: [] } },
+  protected readonly selectedDetailTab = signal(0);
+  private readonly detailPollingState = this.detailPolling.observe(
+    toObservable(this.selectedExecutionId),
+    toObservable(this.selectedDetailTab),
   );
-  protected readonly artifactsState = toSignal(
-    toObservable(this.selectedExecutionId).pipe(
-      switchMap((id) =>
-        id
-          ? timer(0, 5000).pipe(
-              exhaustMap(() =>
-                this.tracking.artifacts(id).pipe(
-                  map((items) => ({
-                    message: '',
-                    rows: items.map((item) => ({
-                      id: item.sha256,
-                      name: item.name,
-                      size: formatFileSize(item.bytes),
-                    })),
-                  })),
-                  catchError(() =>
-                    of({ message: 'Impossible de charger les fichiers produits.', rows: [] }),
-                  ),
-                ),
-              ),
-            )
-          : of({ message: '', rows: [] }),
-      ),
-    ),
-    { initialValue: { message: '', rows: [] } },
-  );
-  protected readonly pipelineState = toSignal(
-    toObservable(this.selectedExecutionId).pipe(
-      switchMap((id) =>
-        id
-          ? timer(0, 3000).pipe(
-              exhaustMap(() =>
-                this.tracking.pipeline(id).pipe(
-                  map((steps) => ({ message: '', steps })),
-                  catchError(() =>
-                    of({ message: 'Impossible de charger les commandes de cette exécution.', steps: [] }),
-                  ),
-                ),
-              ),
-              startWith({ message: 'Chargement du pipeline…', steps: [] }),
-            )
-          : of({ message: '', steps: [] }),
-      ),
-    ),
-    { initialValue: { message: '', steps: [] } },
-  );
+  protected readonly eventState = toSignal(this.detailPollingState.events, {
+    initialValue: { message: 'Chargement de la chronologie…', rows: [] },
+  });
+  protected readonly artifactsState = toSignal(this.detailPollingState.artifacts, {
+    initialValue: { message: '', rows: [] },
+  });
+  protected readonly pipelineState = toSignal(this.detailPollingState.pipeline, {
+    initialValue: { message: '', steps: [] },
+  });
   protected downloadArtifact(row: DataTableRow): void {
     const id = this.selectedExecutionId();
     if (id)
@@ -327,6 +268,11 @@ export class TaskMonitoringPageComponent {
 
   protected onViewChange(view: ExecutionMonitorView): void {
     this.selectedView.set(view);
+  }
+
+  protected onExecutionOpened(id: string | null): void {
+    this.selectedExecutionId.set(id);
+    this.selectedDetailTab.set(0);
   }
 
   protected refresh(): void {

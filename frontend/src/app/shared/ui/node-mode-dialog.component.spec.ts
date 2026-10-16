@@ -8,7 +8,7 @@ function create(status: NodeModeDialogData) {
   TestBed.configureTestingModule({
     providers: [
       { provide: MAT_DIALOG_DATA, useValue: status },
-      { provide: MatDialogRef, useValue: { close } },
+      { provide: MatDialogRef, useValue: { close, addPanelClass: vi.fn(), updateSize: vi.fn() } },
     ],
   });
   const fixture = TestBed.createComponent(NodeModeDialogComponent);
