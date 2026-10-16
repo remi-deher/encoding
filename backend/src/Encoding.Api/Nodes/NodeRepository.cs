@@ -4,12 +4,13 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Contracts.Nodes;
 using Encoding.Core.Nodes;
+using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Nodes;
 
 public enum PairingRequestResult { Created, Conflict, TooMany }
 
-public sealed class NodeRepository(DbDataSource dataSource)
+public sealed class NodeRepository(DbDataSource dataSource, PeerClusterOptions? peers = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -364,8 +365,8 @@ public sealed class NodeRepository(DbDataSource dataSource)
             if (Sql.ToStringArray(await select.ExecuteScalarAsync(ct)) is not { } current) return ModeRequestResult.NotFound;
             roles = current;
         }
-        // 0043 : SQLite n'est pas partagé entre hôtes, un second serveur exigerait PostgreSQL (migration explicite, jamais silencieuse).
-        if (server && !roles.Contains("server") && Sql.IsSqlite(dataSource))
+        // Standalone SQLite permits one server; Raft peers keep independent replicated SQLite databases.
+        if (server && !roles.Contains("server") && Sql.IsSqlite(dataSource) && peers is not { Enabled: true })
         {
             await using var existing = Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id <> @id AND deleted_at IS NULL AND 'server' = ANY(roles))", c, tx);
             existing.Parameters.AddWithValue("id", nodeId);

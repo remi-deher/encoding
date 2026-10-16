@@ -12,6 +12,8 @@ public sealed class PeerPresenceGossipService(
     PeerPresenceRegistry registry,
     NodeRepository nodes,
     NodePresenceOptions nodePresence,
+    PeerDatabaseCoordinator database,
+    PeerObservations observations,
     ILogger<PeerPresenceGossipService> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -48,6 +50,7 @@ public sealed class PeerPresenceGossipService(
 
         foreach (var peer in trustStore.List())
         {
+            observations.Expect(peer.PeerId);
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
@@ -57,9 +60,17 @@ public sealed class PeerPresenceGossipService(
                 {
                     Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
                 };
+                PeerRequestRouting.AddProtocolHeaders(request, database);
                 using var response = await client.SendAsync(request, cancellationToken);
                 if (!response.IsSuccessStatusCode)
                     logger.LogDebug("Le pair {PeerId} a refusé le gossip avec HTTP {StatusCode}.", peer.PeerId, (int)response.StatusCode);
+                using var statusRequest = new HttpRequestMessage(HttpMethod.Get, new Uri(peer.Endpoint, PeerRequestRouting.StatusPath));
+                PeerRequestRouting.AddProtocolHeaders(statusRequest, database);
+                using var statusResponse = await client.SendAsync(statusRequest, cancellationToken);
+                if (statusResponse.IsSuccessStatusCode
+                    && await statusResponse.Content.ReadFromJsonAsync<PeerProtocolStatus>(cancellationToken) is { } status
+                    && status.PeerId == peer.PeerId && status.Protocol == PeerRequestRouting.Protocol && status.Schema == database.Schema.Fingerprint)
+                    observations.Observe(status);
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
             {
@@ -68,15 +79,17 @@ public sealed class PeerPresenceGossipService(
         }
     }
 
+
     private HttpClientHandler CreateHandler(TrustedPeer peer)
     {
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        if (options.TransportProxy is not null) handler.Proxy = new System.Net.WebProxy(options.TransportProxy);
         handler.ClientCertificates.Add(identity.Identity.Certificate);
         handler.ServerCertificateCustomValidationCallback = (_, certificate, _, _) =>
         {
             if (certificate is null) return false;
             using var presented = X509CertificateLoader.LoadCertificate(certificate.GetRawCertData());
-            return PeerIdentity.Fingerprint(presented) == peer.Thumbprint
+            return trustStore.FindByCertificate(presented)?.PeerId == peer.PeerId
                 && presented.NotBefore.ToUniversalTime() <= DateTimeOffset.UtcNow
                 && presented.NotAfter.ToUniversalTime() > DateTimeOffset.UtcNow
                 && PeerIdentityStore.CertificateSubjectMatches(presented, peer.ClusterId, peer.PeerId);

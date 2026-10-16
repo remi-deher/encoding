@@ -29,6 +29,15 @@ public sealed class PeerAssignmentGate(IRaftHttpCluster cluster) : IPeerAssignme
     }
 }
 
+public sealed class PeerProjectionHealthCheck(PeerDatabaseCoordinator database) : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
+{
+    public Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(
+        Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext context, CancellationToken cancellationToken = default)
+        => Task.FromResult(database.Image is not null && !database.NeedsRepair
+            ? Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("Projection SQL engagée disponible.")
+            : Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy("Projection SQL en attente de synchronisation ou de réparation."));
+}
+
 public sealed class PeerClusterQuorumHealthCheck(PeerConsensusService consensus) : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
 {
     public Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(

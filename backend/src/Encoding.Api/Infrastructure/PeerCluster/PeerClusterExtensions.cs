@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Server.Kestrel.Https;
+using System.Text.Json;
 using Encoding.Api.Nodes;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Hosting;
@@ -7,6 +8,8 @@ using DotNext.Net.Cluster.Consensus.Raft.Http;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 
 namespace Encoding.Api.Infrastructure.PeerCluster;
+
+public sealed record PeerCertificateRequest(string CertificatePem, string Fingerprint);
 
 public static class PeerClusterExtensions
 {
@@ -23,9 +26,14 @@ public static class PeerClusterExtensions
         builder.Services.AddSingleton(identity);
         builder.Services.AddSingleton(trust);
         builder.Services.AddSingleton<PeerConsensusService>();
+        builder.Services.AddSingleton<PeerDatabaseCoordinator>();
+        builder.Services.AddSingleton<PeerObservations>();
+        builder.Services.AddSingleton<PeerSecretProtection>();
+        builder.Services.AddTransient<PeerProtocolHandler>();
         builder.Services.AddSingleton<IPeerAssignmentGate, PeerAssignmentGate>();
         builder.Services.AddHostedService<PeerPresenceGossipService>();
         builder.Services.AddHealthChecks().AddCheck<PeerClusterQuorumHealthCheck>("peer-cluster-quorum");
+        builder.Services.AddHealthChecks().AddCheck<PeerProjectionHealthCheck>("peer-projection", tags: ["ready"]);
         var raftDirectory = Path.Combine(options.DataDirectory, "raft");
         Directory.CreateDirectory(raftDirectory);
         var membershipPath = Path.Combine(raftDirectory, "membership");
@@ -35,10 +43,12 @@ public static class PeerClusterExtensions
             Location = Path.Combine(raftDirectory, "wal"),
             FlushOnCommit = true
         });
-        builder.Services.AddHttpClient("raftClient")
+        builder.Services.AddHttpClient("raftClient", client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .AddHttpMessageHandler<PeerProtocolHandler>()
             .ConfigurePrimaryHttpMessageHandler(() =>
             {
                 var handler = new HttpClientHandler { AllowAutoRedirect = false };
+                if (options.TransportProxy is not null) handler.Proxy = new System.Net.WebProxy(options.TransportProxy);
                 handler.ClientCertificates.Add(identity.Identity.Certificate);
                 handler.ServerCertificateCustomValidationCallback = (_, certificate, _, _) =>
                 {
@@ -59,7 +69,7 @@ public static class PeerClusterExtensions
             configuration.UpperElectionTimeout = 3_000;
             configuration.IsLeaderLeaseEnabled = true;
         });
-        builder.Services.AddHostedService<PeerBusinessStateSeeder>();
+        builder.Services.AddHostedService<PeerDatabaseBootstrapService>();
         var apiUrls = builder.Configuration[WebHostDefaults.ServerUrlsKey]?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             ?? ParseHttpPorts(builder.Configuration[WebHostDefaults.HttpPortsKey] ?? builder.Configuration["ASPNETCORE_HTTP_PORTS"]);
         if (apiUrls.Length == 0) apiUrls = ["http://0.0.0.0:8080"];
@@ -109,11 +119,73 @@ public static class PeerClusterExtensions
             return Results.Ok(new PeerClusterView(identityStore.Identity.ClusterId, identityStore.Identity.PeerId,
                 identityStore.Identity.Thumbprint, identityStore.Identity.CertificatePem,
                 registry.BuildPeerViews(trustStore, options.OfflineAfter),
-                registry.MergeNodes(local, nodeOptions.OfflineAfter), true));
+                registry.MergeNodes(local, nodeOptions.OfflineAfter, replicatedCatalog: true), true));
         }).RequireAuthorization(Encoding.Api.Auth.AuthExtensions.AdministratorPolicy).WithName("GetPeerClusterView");
 
         group.MapGet("/consensus", () => Results.Ok(consensus.GetStatus()))
             .RequireAuthorization(Encoding.Api.Auth.AuthExtensions.AdministratorPolicy).WithName("GetPeerConsensusStatus");
+
+        group.MapPost("/certificate/prepare", () =>
+        {
+            try
+            {
+                using var certificate = identityStore.PrepareRotation(options.PublicEndpoint!.Host, options.IdentityPassword).Certificate;
+                return Results.Ok(new { CertificatePem = certificate.ExportCertificatePem(), Thumbprint = PeerIdentity.Fingerprint(certificate) });
+            }
+            catch (InvalidOperationException exception) { return Results.Conflict(new { title = exception.Message }); }
+        }).RequireAuthorization(Encoding.Api.Auth.AuthExtensions.AdministratorPolicy);
+
+        group.MapPost("/peers/{peerId:guid}/certificate", async (Guid peerId, PeerCertificateRequest request, CancellationToken ct) =>
+        {
+            var peer = peerId == identityStore.Identity.PeerId
+                ? new TrustedPeer(peerId, identityStore.Identity.ClusterId, options.PublicEndpoint!, identityStore.Identity.Thumbprint, identityStore.Identity.CertificatePem)
+                : trustStore.Find(peerId);
+            if (peer is null) return Results.NotFound();
+            if (!consensus.GetStatus().IsLeader) return Results.Conflict(new { title = "La rotation doit être approuvée sur le leader." });
+            try
+            {
+                using var certificate = X509Certificate2.CreateFromPem(request.CertificatePem);
+                if (!PeerIdentityStore.CertificateSubjectMatches(certificate, peer.ClusterId, peerId)
+                    || certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow || certificate.NotBefore.ToUniversalTime() > DateTime.UtcNow
+                    || PeerIdentity.Fingerprint(certificate) != PeerIdentity.NormalizeThumbprint(request.Fingerprint))
+                    return Results.BadRequest(new { title = "Le certificat ou son empreinte est invalide." });
+                if (peer.NextThumbprint is not null
+                    || consensus.Get($"peer/certificate/{peerId:D}")?.Deserialize<PeerCertificateRotation>() is { Activated: false })
+                    return Results.Conflict(new { title = "Une rotation doit être terminée avant d’en préparer une autre." });
+                var rotation = new PeerCertificateRotation(peer.Thumbprint, certificate.ExportCertificatePem(), PeerIdentity.Fingerprint(certificate), false, peer.CertificatePem);
+                await consensus.ReplicateAsync(new(Guid.NewGuid(), $"peer/certificate/{peerId:D}", System.Text.Json.JsonSerializer.SerializeToElement(rotation)), ct);
+                return Results.Ok(rotation);
+            }
+            catch (System.Security.Cryptography.CryptographicException) { return Results.BadRequest(); }
+        }).RequireAuthorization(Encoding.Api.Auth.AuthExtensions.AdministratorPolicy);
+
+        group.MapPost("/peers/{peerId:guid}/certificate/complete", async (Guid peerId, CancellationToken ct) =>
+        {
+            var peer = peerId == identityStore.Identity.PeerId
+                ? new TrustedPeer(peerId, identityStore.Identity.ClusterId, options.PublicEndpoint!, identityStore.Identity.Thumbprint, identityStore.Identity.CertificatePem)
+                : trustStore.Find(peerId);
+            var rotation = consensus.Get($"peer/certificate/{peerId:D}")?.Deserialize<PeerCertificateRotation>();
+            if (peer is null || rotation is null) return Results.NotFound();
+            if (!consensus.GetStatus().IsLeader) return Results.Conflict();
+            if (peerId == identityStore.Identity.PeerId)
+            {
+                if (identityStore.Identity.Thumbprint != rotation.Thumbprint) return Results.Conflict();
+            }
+            else
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                using var response = await app.Services.GetRequiredService<IHttpClientFactory>().CreateClient("raftClient")
+                    .GetAsync(new Uri(peer.Endpoint, PeerRequestRouting.StatusPath), timeout.Token);
+                if (!response.IsSuccessStatusCode) return Results.Conflict();
+                var remote = await response.Content.ReadFromJsonAsync<PeerProtocolStatus>(cancellationToken: timeout.Token);
+                if (remote?.Thumbprint != rotation.Thumbprint)
+                    return Results.Conflict(new { title = "Le pair ne présente pas encore son nouveau certificat." });
+            }
+            await consensus.ReplicateAsync(new(Guid.NewGuid(), $"peer/certificate/{peerId:D}",
+                System.Text.Json.JsonSerializer.SerializeToElement(rotation with { Activated = true })), ct);
+            return Results.NoContent();
+        }).RequireAuthorization(Encoding.Api.Auth.AuthExtensions.AdministratorPolicy);
 
         group.MapGet("/recovery", () =>
         {
@@ -121,7 +193,7 @@ public static class PeerClusterExtensions
             var raftDirectory = Path.Combine(options.DataDirectory, "raft");
             var identityFilesPresent = File.Exists(Path.Combine(options.DataDirectory, "peer-identity.pfx"))
                 && File.Exists(Path.Combine(options.DataDirectory, "peer-identity.json"));
-            var membershipPresent = File.Exists(Path.Combine(raftDirectory, "membership"));
+            var membershipPresent = Path.Exists(Path.Combine(raftDirectory, "membership"));
             var walPresent = Directory.Exists(Path.Combine(raftDirectory, "wal"));
             var snapshotsDirectory = Path.Combine(raftDirectory, "snapshots");
             var snapshotsPresent = Directory.Exists(snapshotsDirectory)
@@ -137,6 +209,7 @@ public static class PeerClusterExtensions
                 identityStore.Identity.ClusterId,
                 identityStore.Identity.Thumbprint,
                 Persistence = new { identityFilesPresent, membershipPresent, walPresent, snapshotsPresent },
+                Projection = PeerRequestRouting.Status(app.Services.GetRequiredService<PeerDatabaseCoordinator>(), identityStore),
                 Consensus = status,
                 Recommendation = recommendation
             });
@@ -204,6 +277,8 @@ public static class PeerClusterExtensions
             if (!status.IsLeader) return Results.Conflict(new { title = "L’ajout doit être demandé au chef Raft courant.", status.LeaderEndpoint });
             try
             {
+                if (!await PeerRequestRouting.CheckPeerAsync(peer.Endpoint, app.Services, cancellationToken))
+                    return Results.Conflict(new { title = "Le protocole, le schéma ou la clé de protection du pair est incompatible." });
                 return await consensus.AddMemberAsync(peer.Endpoint, cancellationToken)
                     ? Results.Accepted(value: new
                     {

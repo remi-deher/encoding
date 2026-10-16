@@ -39,7 +39,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     public async Task<bool> AssignAsync(Guid library,AssignLibraryFlowRequest request,CancellationToken ct)
     {
         if(request.ExpectedRevision<0 || request.ExpectedRevision==int.MaxValue || (request.FlowId is null)!=(request.Version is null)) return false;
-        if(peerConsensus is not null)
+        if(peerConsensus is { DatabaseTransactionsEnabled: false })
         {
             var currentWorkflow=peerConsensus.GetLibraryWorkflow(library);
             var currentRevision=currentWorkflow?.Revision??0;

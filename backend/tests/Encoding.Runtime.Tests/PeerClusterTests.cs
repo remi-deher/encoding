@@ -16,19 +16,21 @@ public sealed class PeerClusterTests
         {
             Guid peerId;
             string thumbprint;
+            long incarnation;
             using (var first = PeerIdentityStore.Open(directory, clusterId))
             {
                 peerId = first.Identity.PeerId;
                 thumbprint = first.Identity.Thumbprint;
                 Assert.Equal(64, thumbprint.Length);
-                Assert.Equal(1, first.StartNewIncarnation());
+                incarnation = first.StartNewIncarnation();
+                Assert.True(incarnation > 0);
                 Assert.Throws<InvalidOperationException>(() => PeerIdentityStore.Open(directory, clusterId));
             }
 
             using var restarted = PeerIdentityStore.Open(directory, clusterId);
             Assert.Equal(peerId, restarted.Identity.PeerId);
             Assert.Equal(thumbprint, restarted.Identity.Thumbprint);
-            Assert.Equal(2, restarted.StartNewIncarnation());
+            Assert.True(restarted.StartNewIncarnation() > incarnation);
             Assert.Throws<InvalidOperationException>(() => PeerIdentityStore.Open(directory, Guid.NewGuid()));
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
@@ -110,6 +112,11 @@ public sealed class PeerClusterTests
             var tampered = signed with { Nodes = [] };
             Assert.False(registry.Merge(tampered, clusterId, trusted));
             Assert.Single(registry.MergeNodes([], TimeSpan.FromSeconds(30)));
+            Assert.Empty(registry.MergeNodes([], TimeSpan.FromSeconds(30), replicatedCatalog: true));
+            var catalogNode = node with { Name = "Committed name", LastSeenAt = node.LastSeenAt.AddSeconds(-5) };
+            var merged = Assert.Single(registry.MergeNodes([catalogNode], TimeSpan.FromSeconds(30), replicatedCatalog: true));
+            Assert.Equal(catalogNode.Name, merged.Name);
+            Assert.Equal(node.LastSeenAt, merged.LastSeenAt);
 
             var newer = PeerPresenceRegistry.Sign(new PeerPresenceUnsigned(clusterId, b.Identity.PeerId, 1, 2,
                 DateTimeOffset.UtcNow, [node with { Name = "worker-1-renamed" }]), b);

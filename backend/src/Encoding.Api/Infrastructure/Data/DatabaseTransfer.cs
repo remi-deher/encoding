@@ -28,7 +28,15 @@ public static class DatabaseTransfer
 
         await using var read = await source.OpenConnectionAsync(ct);
         await using var write = await target.OpenConnectionAsync(ct);
+        await using var readTransaction = await read.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
         await using var transaction = await write.BeginTransactionAsync(ct);
+        foreach (var table in order)
+        {
+            var sourceColumns = await ColumnsAsync(read, readTransaction, table, ct);
+            var targetColumns = await ColumnsAsync(write, transaction, table, ct);
+            if (!sourceColumns.Select(column => column.Name).Order().SequenceEqual(targetColumns.Select(column => column.Name).Order()))
+                throw new InvalidOperationException($"Les colonnes de la table {table} ne correspondent pas.");
+        }
         foreach (var table in order)
             if (!Replaced.Contains(table) && await CountAsync(write, transaction, table, ct) > 0)
                 throw new InvalidOperationException($"La cible n'est pas vide : la table {table} contient déjà des lignes.");
@@ -37,8 +45,13 @@ public static class DatabaseTransfer
 
         var rows = new Dictionary<string, long>(StringComparer.Ordinal);
         foreach (var table in order)
-            rows[table] = await CopyTableAsync(read, write, transaction, table, ct);
+        {
+            rows[table] = await CopyTableAsync(read, readTransaction, write, transaction, table, ct);
+            if (rows[table] != await CountAsync(read, readTransaction, table, ct))
+                throw new InvalidDataException($"La copie de {table} est incomplète.");
+        }
         await transaction.CommitAsync(ct);
+        await readTransaction.CommitAsync(ct);
         return new(rows);
     }
 
@@ -51,11 +64,15 @@ public static class DatabaseTransfer
         return counts;
     }
 
-    private static async Task<long> CopyTableAsync(DbConnection read, DbConnection write, DbTransaction transaction, string table, CancellationToken ct)
+    private static async Task<long> CopyTableAsync(DbConnection read, DbTransaction readTransaction, DbConnection write, DbTransaction transaction, string table, CancellationToken ct)
     {
         var columns = await ColumnsAsync(write, transaction, table, ct);
         var names = string.Join(", ", columns.Select(column => column.Name));
-        await using var select = Sql.Command($"SELECT {names} FROM {table}", read);
+        // Retry chains have a self foreign key: a parent must be copied before its children.
+        var selectSql = table == "executions"
+            ? $"WITH RECURSIVE execution_order(id,depth) AS (SELECT id,0 FROM executions WHERE retry_of IS NULL UNION ALL SELECT e.id,o.depth+1 FROM executions e JOIN execution_order o ON e.retry_of=o.id) SELECT {string.Join(", ", columns.Select(column => "e." + column.Name))} FROM executions e JOIN execution_order o ON e.id=o.id ORDER BY o.depth,e.id"
+            : $"SELECT {names} FROM {table}";
+        await using var select = Sql.Command(selectSql, read, readTransaction);
         await using var reader = await select.ExecuteReaderAsync(ct);
         var sqlite = Sql.IsSqlite(write);
         // Côté PostgreSQL, la conversion explicite type aussi les valeurs nulles (le paramètre nul n'a pas de type propre).
@@ -137,7 +154,8 @@ public static class DatabaseTransfer
         await using var command = dataSource.CreateCommand(sql);
         await using var reader = await command.ExecuteReaderAsync(ct);
         var tables = new List<string>();
-        while (await reader.ReadAsync(ct)) tables.Add(reader.GetString(0));
+        while (await reader.ReadAsync(ct))
+            if (!reader.GetString(0).StartsWith("peer_replication_", StringComparison.Ordinal)) tables.Add(reader.GetString(0));
         return tables;
     }
 

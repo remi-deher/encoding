@@ -4,7 +4,8 @@ using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<RuntimeRecoveryService> logger) : BackgroundService
+public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<RuntimeRecoveryService> logger,
+    Encoding.Api.Nodes.NodePresenceOptions? presence = null, Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -12,7 +13,10 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         {
             try
             {
+                using var lease = assignment?.AcquireLease(ct);
+                if (assignment is not null && lease is null) { await Task.Delay(TimeSpan.FromSeconds(1), ct); continue; }
                 await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+                await RuntimeRepository.FailUnavailableSourcesAsync(c, tx, presence?.OfflineAfter ?? TimeSpan.FromSeconds(30), ct);
                 var expired=new List<(Guid Id,Guid? Worker,int Revision)>();
                 await using(var cmd=Sql.Command("SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id WHERE e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()) LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED",c,tx))
                 await using(var r=await cmd.ExecuteReaderAsync(ct))
@@ -26,7 +30,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
             catch(Exception exception) { logger.LogWarning("Reprise du registre momentanément indisponible : {Type}.",exception.GetType().Name); }
-            try { await Task.Delay(TimeSpan.FromSeconds(10),ct); } catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
+            try { await Task.Delay(TimeSpan.FromSeconds(1),ct); } catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
         }
     }
 }

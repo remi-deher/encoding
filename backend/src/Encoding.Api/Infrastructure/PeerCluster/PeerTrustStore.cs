@@ -4,8 +4,11 @@ using System.Text.Json;
 
 namespace Encoding.Api.Infrastructure.PeerCluster;
 
-public sealed record TrustedPeer(Guid PeerId, Guid ClusterId, Uri Endpoint, string Thumbprint, string CertificatePem);
+public sealed record TrustedPeer(Guid PeerId, Guid ClusterId, Uri Endpoint, string Thumbprint, string CertificatePem,
+    string? NextThumbprint = null, string? NextCertificatePem = null);
 public sealed record TrustPeerRequest(Guid PeerId, Guid ClusterId, string Endpoint, string CertificatePem, string Fingerprint);
+public sealed record PeerCertificateRotation(string PreviousThumbprint, string CertificatePem, string Thumbprint, bool Activated,
+    string? PreviousCertificatePem = null);
 
 /// <summary>Explicit, durable pin set. Discovery never adds trust by itself.</summary>
 public sealed class PeerTrustStore
@@ -26,9 +29,19 @@ public sealed class PeerTrustStore
         peers = Load();
     }
 
-    public IReadOnlyList<TrustedPeer> List() => peers.Values.Where(peer => !IsRevoked(peer.PeerId)).OrderBy(peer => peer.PeerId).ToArray();
+    public IReadOnlyList<TrustedPeer> List() => peers.Values.Where(peer => !IsRevoked(peer.PeerId)).Select(Effective).OrderBy(peer => peer.PeerId).ToArray();
 
-    public TrustedPeer? Find(Guid peerId) => IsRevoked(peerId) ? null : peers.GetValueOrDefault(peerId);
+    public TrustedPeer? Find(Guid peerId) => IsRevoked(peerId) || !peers.TryGetValue(peerId, out var peer) ? null : Effective(peer);
+
+    private TrustedPeer Effective(TrustedPeer peer)
+    {
+        var rotation = Volatile.Read(ref replicatedState)?.Get($"peer/certificate/{peer.PeerId:D}")?.Deserialize<PeerCertificateRotation>();
+        if (rotation is null) return peer;
+        return rotation.Activated
+            ? peer with { CertificatePem = rotation.CertificatePem, Thumbprint = rotation.Thumbprint }
+            : peer with { CertificatePem = rotation.PreviousCertificatePem ?? peer.CertificatePem, Thumbprint = rotation.PreviousThumbprint,
+                NextCertificatePem = rotation.CertificatePem, NextThumbprint = rotation.Thumbprint };
+    }
 
     public void AttachStateMachine(PeerStateMachine stateMachine) => Interlocked.Exchange(ref replicatedState, stateMachine);
 
@@ -37,7 +50,7 @@ public sealed class PeerTrustStore
     public TrustedPeer? FindByCertificate(X509Certificate2 certificate)
     {
         var thumbprint = PeerIdentity.Fingerprint(certificate);
-        return peers.Values.FirstOrDefault(peer => !IsRevoked(peer.PeerId) && peer.Thumbprint == thumbprint
+        return List().FirstOrDefault(peer => (peer.Thumbprint == thumbprint || peer.NextThumbprint == thumbprint)
             && PeerIdentityStore.CertificateSubjectMatches(certificate, peer.ClusterId, peer.PeerId)
             && IsCurrentlyValid(certificate));
     }

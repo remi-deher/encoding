@@ -23,8 +23,10 @@ public static class Sql
         return command;
     }
 
-    public static bool IsSqlite(DbConnection connection) => connection is SqliteConnectionWrapper;
-    public static bool IsSqlite(DbDataSource dataSource) => dataSource is SqliteDataSource;
+    public static bool IsSqlite(DbConnection connection) => connection is SqliteConnectionWrapper
+        || connection is PeerConnection peer && IsSqlite(peer.Inner);
+    public static bool IsSqlite(DbDataSource dataSource) => dataSource is SqliteDataSource
+        || dataSource is PeerDataSource peer && IsSqlite(peer.Inner);
 
     public static DbParameter Parameter(string name, SqlKind kind, object? value, bool sqlite = false)
     {

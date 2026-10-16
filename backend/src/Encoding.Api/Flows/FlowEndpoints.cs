@@ -39,7 +39,6 @@ public static class FlowEndpoints
         }).AllowViewer();
         flows.MapPost("/import",async(HttpRequest request,FlowArchiveService archives,PeerClusterOptions peerOptions,CancellationToken ct)=>
         {
-            if (peerOptions.Enabled) return Results.Conflict(new { title="L’import groupé des flows sera disponible quand il utilisera une commande Raft atomique." });
             try
             {
                 var (result,conflict,count)=await archives.ImportAsync(request.Body,request.ContentType=="application/zip",ct);

@@ -6,7 +6,8 @@ using System.Text.Json;
 namespace Encoding.Api.Flows;
 
 /// <summary>Replays the transactional outbox and periodically checks completed snapshots.</summary>
-public sealed class FlowBackupService(DbDataSource dataSource, IConfiguration configuration, ILogger<FlowBackupService> logger) : BackgroundService
+public sealed class FlowBackupService(DbDataSource dataSource, IConfiguration configuration, ILogger<FlowBackupService> logger,
+    Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null) : BackgroundService
 {
     private readonly string directory = Path.GetFullPath(configuration["FlowBackups:Directory"] ?? Path.Combine(AppContext.BaseDirectory,"flow-backups"));
 
@@ -16,8 +17,11 @@ public sealed class FlowBackupService(DbDataSource dataSource, IConfiguration co
         {
             try
             {
+                using var lease = assignment?.AcquireLease(stoppingToken);
+                if (assignment is not null && lease is null) { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); continue; }
                 var processed = 0;
-                while(processed++ < 50) { var worked=await ProcessOneAsync(false,stoppingToken); worked|=await ProcessOneAsync(true,stoppingToken); if(!worked) break; }
+                var token = lease?.Token ?? stoppingToken;
+                while(processed++ < 50) { var worked=await ProcessOneAsync(false,token); worked|=await ProcessOneAsync(true,token); if(!worked) break; }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception exception) { logger.LogError(exception,"Impossible de traiter la file de sauvegardes des flows."); }

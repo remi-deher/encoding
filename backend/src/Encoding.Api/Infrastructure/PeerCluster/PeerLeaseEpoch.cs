@@ -11,8 +11,9 @@ public static class PeerLeaseEpoch
 
     public static long Next(long term, long previousEpoch)
     {
-        if (term is < 1 or > uint.MaxValue)
-            throw new InvalidOperationException("Le terme Raft ne peut pas être encodé dans un bail worker.");
+        // A cold-start single-voter DotNext cluster can hold a leader lease in term zero.
+        if (term < 0 || term >= uint.MaxValue)
+            throw new InvalidOperationException($"Le terme Raft {term} ne peut pas être encodé dans un bail worker.");
         if (previousEpoch < 0)
             throw new InvalidOperationException("L’époque de bail précédente est invalide.");
 
@@ -20,9 +21,9 @@ public static class PeerLeaseEpoch
         if (sequence > SequenceMask)
             throw new InvalidOperationException("Le compteur de bail de cette tâche a atteint sa limite.");
 
-        return checked((long)(((ulong)term << SequenceBits) | sequence));
+        return checked((long)(((ulong)(term + 1) << SequenceBits) | sequence));
     }
 
     public static bool IsForTerm(long epoch, long term) =>
-        epoch > 0 && term > 0 && ((ulong)epoch >> SequenceBits) == (ulong)term;
+        epoch > 0 && term >= 0 && term < uint.MaxValue && ((ulong)epoch >> SequenceBits) == (ulong)(term + 1);
 }

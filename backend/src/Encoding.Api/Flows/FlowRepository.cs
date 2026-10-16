@@ -50,7 +50,7 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
     }
     public async Task<FlowDraftResponse?> SaveDraftAsync(SaveFlowDraftRequest request,CancellationToken ct)
     {
-        if (peerConsensus is not null)
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
         {
             var current = peerConsensus.GetFlowDraft(request.Definition.Id);
             var activeRevision = current is { HasDraft: true } ? current.Revision : 0;
@@ -102,7 +102,7 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
     /// <summary>CAS publication and backup outbox share one transaction. Versions are append-only.</summary>
     public async Task<FlowVersionResponse?> SaveAsync(SaveFlowRequest request, CancellationToken ct)
     {
-        if (peerConsensus is not null)
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
         {
             var definition = request.Definition;
             if (peerConsensus.GetFlowVersion(definition.Id, definition.Version) is { } repeated)
@@ -145,7 +145,7 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
 
     public async Task<bool> SaveManyAsync(IReadOnlyList<SaveFlowRequest> requests, bool restore, CancellationToken ct,IReadOnlyList<FlowDraftImport>? drafts=null)
     {
-        if (peerConsensus is not null)
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
         {
             // Archive imports need one atomic multi-aggregate Raft command; do not partially publish an archive.
             return false;

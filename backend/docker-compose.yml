@@ -35,6 +35,7 @@ services:
       PeerCluster__Bootstrap: ${PEER_CLUSTER_BOOTSTRAP:-false}
       PeerCluster__PublicEndpoint: ${PEER_CLUSTER_PUBLIC_ENDPOINT:-}
       PeerCluster__IdentityPassword: ${PEER_CLUSTER_IDENTITY_PASSWORD:-}
+      PeerCluster__SharedDataKey: ${PEER_CLUSTER_SHARED_DATA_KEY:-}
       PeerCluster__ListenPort: 8443
       PeerCluster__DataDirectory: /var/lib/encoding-node/peer-cluster
       Auth__SetupToken: ${AUTH_SETUP_TOKEN:-}

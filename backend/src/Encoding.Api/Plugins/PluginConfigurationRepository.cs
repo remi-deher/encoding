@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace Encoding.Api.Plugins;
 
-public sealed class PluginConfigurationRepository(DbDataSource dataSource, IDataProtectionProvider protection)
+public sealed class PluginConfigurationRepository(DbDataSource dataSource, IDataProtectionProvider protection,
+    Encoding.Api.Infrastructure.PeerCluster.PeerSecretProtection? sharedProtection = null)
 {
     private readonly IDataProtector protector = protection.CreateProtector("Encoding.PluginConfiguration.v1");
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -268,14 +269,16 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
             values.Keys.Where(secretIds.Contains).ToArray());
     }
 
-    private byte[] Protect(IReadOnlyDictionary<string, JsonElement> values) => protector.Protect(JsonSerializer.SerializeToUtf8Bytes(values, Json));
+    private byte[] ProtectData(byte[] data) => sharedProtection?.Protect(data) ?? protector.Protect(data);
+    private byte[] UnprotectData(byte[] data) => sharedProtection?.Unprotect(data) ?? protector.Unprotect(data);
+    private byte[] Protect(IReadOnlyDictionary<string, JsonElement> values) => ProtectData(JsonSerializer.SerializeToUtf8Bytes(values, Json));
     internal byte[] ProtectSnapshot(IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>> values)
-        => protector.Protect(JsonSerializer.SerializeToUtf8Bytes(values, Json));
+        => ProtectData(JsonSerializer.SerializeToUtf8Bytes(values, Json));
     internal IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>> ReadSnapshot(byte[] values)
-        => JsonSerializer.Deserialize<Dictionary<string, IReadOnlyDictionary<string, JsonElement>>>(protector.Unprotect(values), Json)
+        => JsonSerializer.Deserialize<Dictionary<string, IReadOnlyDictionary<string, JsonElement>>>(UnprotectData(values), Json)
             ?? new Dictionary<string, IReadOnlyDictionary<string, JsonElement>>();
     private Dictionary<string, JsonElement> Unprotect(byte[] values) =>
-        JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(protector.Unprotect(values), Json) ?? new(StringComparer.Ordinal);
+        JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(UnprotectData(values), Json) ?? new(StringComparer.Ordinal);
 }
 
 public sealed class PluginConfigurationValidationException(string message) : Exception(message);

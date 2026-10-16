@@ -38,7 +38,7 @@ public static class RuntimeEndpoints
             if (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method) || HttpMethods.IsOptions(request.Method))
                 return await next(context);
             var services = context.HttpContext.RequestServices;
-            if (!services.GetRequiredService<PeerClusterOptions>().Enabled) return await next(context);
+            if (services.GetService<PeerClusterOptions>() is not { Enabled: true }) return await next(context);
             if (!services.GetRequiredService<PeerConsensusService>().TryGetLeaderLease(out var leaderLease))
                 return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
                     title: "Le pair n’a pas de bail Raft valide; l’opération worker est suspendue.");

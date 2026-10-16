@@ -12,16 +12,18 @@ public sealed record PeerReplicatedStateSnapshot(Dictionary<string, JsonElement>
 /// <summary>Durable replicated key/value projection used by peer-cluster commands.</summary>
 public sealed class PeerStateMachine : SimpleStateMachine
 {
-    public const int MaximumCommandBytes = 4 * 1_048_576;
+    public const int MaximumCommandBytes = 64 * 1_048_576;
     private readonly object sync = new();
     private readonly DbDataSource? dataSource;
+    private readonly PeerDatabaseCoordinator? database;
     private readonly Dictionary<string, JsonElement> values = new(StringComparer.Ordinal);
     private readonly HashSet<Guid> appliedCommands = [];
 
-    public PeerStateMachine(PeerClusterOptions options, DbDataSource? dataSource = null)
+    public PeerStateMachine(PeerClusterOptions options, DbDataSource? dataSource = null, PeerDatabaseCoordinator? database = null)
         : base(new DirectoryInfo(Path.Combine(options.DataDirectory, "raft", "snapshots")))
     {
-        this.dataSource = dataSource;
+        this.dataSource = database?.Source ?? dataSource;
+        this.database = database;
     }
 
     public JsonElement? Get(string key)
@@ -48,6 +50,15 @@ public sealed class PeerStateMachine : SimpleStateMachine
         if (command.CommandId == Guid.Empty || string.IsNullOrWhiteSpace(command.Key) || command.Key.Length > 256)
             throw new InvalidDataException("Identifiant ou clé de commande invalide.");
         lock (sync) if (appliedCommands.Contains(command.CommandId)) return false;
+        if (command.Key == "database/transaction")
+        {
+            var transaction = command.Value.Deserialize<PeerDatabaseTransaction>()
+                ?? throw new InvalidDataException("Transaction Raft absente.");
+            if (database is null) throw new InvalidDataException("Projection SQL non configurée.");
+            await database.ApplyAsync(command.CommandId, transaction, cancellationToken);
+            // The WAL is durable for every transaction; avoid rewriting the complete image for every heartbeat.
+            return transaction.Initial is not null || transaction.Revision % 64 == 0;
+        }
         PeerFlowDraftState? draftHeadUpdate = null;
         if (PeerBusinessState.TryReadLibraryKey(command.Key, out var libraryId))
         {
@@ -100,6 +111,7 @@ public sealed class PeerStateMachine : SimpleStateMachine
         PeerReplicatedStateSnapshot snapshot;
         lock (sync) snapshot = new PeerReplicatedStateSnapshot(
             values.ToDictionary(pair => pair.Key, pair => pair.Value.Clone(), StringComparer.Ordinal), appliedCommands.ToArray());
+        if (database?.Image is { } image) snapshot.Values["database/state"] = JsonSerializer.SerializeToElement(image);
         await using var stream = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(snapshot));
         await writer.CopyFromAsync(stream, stream.Length, cancellationToken);
     }
@@ -115,6 +127,13 @@ public sealed class PeerStateMachine : SimpleStateMachine
             foreach (var (key, value) in restored.Values) values[key] = value.Clone();
             appliedCommands.Clear();
             appliedCommands.UnionWith(restored.AppliedCommandIds);
+        }
+        if (restored.Values.TryGetValue("database/state", out var databaseState))
+        {
+            if (database is null) throw new InvalidDataException("Projection SQL non configurée.");
+            await database.RestoreAsync(databaseState.Deserialize<PeerDatabaseImage>()
+                ?? throw new InvalidDataException("Instantané SQL illisible."), cancellationToken);
+            return;
         }
         foreach (var (key, value) in restored.Values.OrderBy(pair => RestorePriority(pair.Key)).ThenBy(pair => pair.Key, StringComparer.Ordinal))
         {

@@ -34,7 +34,7 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
 
     public async Task<LibraryResponse?> CreateAsync(CreateLibraryRequest request, CancellationToken cancellationToken)
     {
-        if (peerConsensus is not null)
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
         {
             var name = request.Name.Trim();
             var id = Guid.NewGuid();
@@ -57,7 +57,7 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
 
     public async Task<LibraryResponse?> UpdateAsync(Guid id, UpdateLibraryRequest request, CancellationToken cancellationToken)
     {
-        if (peerConsensus is not null)
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
         {
             var current = peerConsensus.GetLibraryDocument(id);
             if (current is null || current.Deleted) return null;
@@ -85,7 +85,7 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
 
     public async Task<LibraryResponse?> SetActiveAsync(Guid id, bool isActive, CancellationToken cancellationToken)
     {
-        if (peerConsensus is not null)
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
         {
             var current = peerConsensus.GetLibraryDocument(id);
             if (current is null || current.Deleted) return null;
@@ -107,7 +107,7 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        if (peerConsensus is not null)
+        if (peerConsensus is { DatabaseTransactionsEnabled: false })
         {
             var current = peerConsensus.GetLibraryDocument(id);
             if (current is null || current.Deleted) return false;

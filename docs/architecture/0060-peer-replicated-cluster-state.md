@@ -1,6 +1,6 @@
 # 0060 — État du cluster répliqué entre pairs
 
-Statut : direction acceptée par Rémi le 2026-10-16 ; prototype pair à pair opt-in disponible, non approuvé pour la production. Il remplace pour la cible les décisions de stockage partagé de [0001](0001-shared-state-and-node-presence.md). Le mode en production reste celui de [0043](0043-sqlite-and-data-access-abstraction.md) jusqu’à livraison complète de cette architecture.
+Statut : direction acceptée par Rémi le 2026-10-16 ; mise en œuvre optionnelle complétée par [0061](0061-peer-sql-transactions-and-operations.md). Les exigences de déploiement et limites de version sont décrites dans le [guide d’exploitation](../operations/peer-cluster-preview.md). Le mode PostgreSQL partagé de [0043](0043-sqlite-and-data-access-abstraction.md) reste disponible.
 
 ## Objectif
 
@@ -39,21 +39,21 @@ Chaque serveur membre conserve localement l’état du cluster et peut présente
 
 ## Données médias
 
-Le consensus réplique les métadonnées, pas les fichiers vidéo, audio ou image. Pour chaque bibliothèque, l’administrateur choisit les nœuds de traitement et déclare l’accès de chacun : accès direct (disque, NFS, USB ou montage WebDAV) avec un chemin propre à ce nœud, ou accès indirect via un nœud source déclaré. Le mode `transfer` implémenté copie le média vers un espace temporaire du worker puis récupère le résultat ; un service WebDAV fourni par un nœud est une option de transport à spécifier séparément. Cette configuration d’accès fait partie de l’état partagé, tandis que les chemins et fichiers demeurent liés au stockage configuré sur chaque nœud. Si aucune source directe disponible ne peut fournir le média, la tâche échoue immédiatement. Toute réplication physique des fichiers reste un choix de stockage séparé.
+Le consensus réplique les métadonnées, pas les fichiers vidéo, audio ou image. Pour chaque bibliothèque, l’administrateur choisit les nœuds de traitement et déclare l’accès de chacun : accès direct (disque, NFS, USB ou montage WebDAV) avec un chemin propre à ce nœud, ou accès indirect via un nœud source déclaré. Le mode `transfer` implémenté copie le média vers un espace temporaire du worker puis récupère le résultat ; ce transfert utilise le service WebDAV inter-nœuds existant. Cette configuration d’accès fait partie de l’état partagé, tandis que les chemins et fichiers demeurent liés au stockage configuré sur chaque nœud. Si aucune source directe disponible ne peut fournir le média, la tâche échoue immédiatement. Toute réplication physique des fichiers reste un choix de stockage séparé.
 
 ## Déploiement et migration
 
 - L’installation de démarrage crée le premier pair et son identité de cluster ; une commande de rattachement approuvée ajoute ensuite chaque serveur.
 - Chaque pair dispose d’un stockage local persistant. Il rejoint le quorum, reçoit un instantané puis rattrape le journal avant de servir comme membre à jour.
 - La migration depuis le mode actuel importe la base existante sur le premier pair, puis initialise les autres à partir de son instantané validé. Elle ne fusionne pas silencieusement deux clusters indépendants.
-- Le protocole, les écritures et les garanties de concurrence existants restent en vigueur jusqu’à ce que les tests de réplication, de reprise, de partition et de compatibilité de versions réussissent. Le mode partagé PostgreSQL demeure la seule option multi-serveur prise en charge durant la transition.
+- Le protocole, les écritures et les garanties de concurrence existants restent en vigueur jusqu’à ce que les tests de réplication, de reprise, de partition et de compatibilité de versions réussissent. Les scénarios d’acceptation sont couverts par les tests applicatifs de 0061 ; les mises à jour mixtes restent exclues du protocole initial.
 
-## Phasage
+## Livraison
 
-1. **Présence pair-à-pair — prototype livré** : identité TLS par pair, approbation manuelle, gossip signé des workers, révocation et vue locale convergente. La découverte des pairs reste manuelle.
-2. **État durable — amorcé** : membership persistante et consensus fonctionnent; le nom du cluster, les révocations, le catalogue de base des bibliothèques, leurs assignations de flow, les versions publiées et les brouillons courants des flows sont des projections métier répliquées. Identités et paramètres propres aux workers, chemins directs de stockage, profils, scripts, paramètres de plugins, files d’exécution et résultats restent locaux. La sélection des nœuds de traitement d’une bibliothèque et leur mode d’accès/source sont une configuration partagée qui reste à répliquer. L’import d’archives de flows est suspendu en mode pair à pair jusqu’à son implémentation atomique.
-3. **Orchestration — amorcée** : les nouvelles attributions et écritures runtime exigent un bail Raft avec quorum; l’époque worker combine maintenant le terme Raft et le compteur local de tentative, et les requêtes d’un ancien terme sont refusées après une élection. La réplication des tâches et des baux entre les projections SQL, ainsi que le fencing d’effets externes déjà lancés, ne sont pas livrés.
-4. **Déploiement — partiellement livré** : configuration Docker, identité protégée, guide manuel et diagnostics API disponibles. Migration automatique, sauvegarde/restauration coordonnée et rattachement guidé restent à faire.
+1. Présence : identités TLS persistantes, approbation manuelle, gossip signé, révocation et convergence. Les adresses des pairs sont configurées explicitement.
+2. État durable : toutes les tables métier sont répliquées par transaction, y compris les accès par nœud, les secrets applicatifs chiffrés et les imports groupés de flows. Comptes et sessions administrateurs restent locaux.
+3. Orchestration : tâches, baux, réservations et résultats sont répliqués. Le terme Raft et une séquence de tentative écartent les anciens workers. Une invocation externe non idempotente interrompue exige une relance explicite.
+4. Exploitation : migration depuis une autorité unique, sauvegarde/restauration à froid, rotation avec chevauchement, contrôle de protocole/schéma, métriques et règles d’alerte. Voir 0061 pour les mécanismes et leurs limites.
 
 ## Critères d’acceptation
 
@@ -72,7 +72,7 @@ La présence est cohérente à terme et peut diverger brièvement entre pairs ; 
 
 Le prototype évaluera `DotNext.Net.Cluster` et `DotNext.AspNetCore.Cluster` : le projet fournit Raft et HyParView pour le membership/gossip, cible .NET moderne et évite d’introduire un Raft développé par Encoding. Son `ConsensusOnlyState` en mémoire ne convient pas à la production ; le prototype doit utiliser un journal durable et vérifier la reconstruction après redémarrage. Les commandes doivent avoir des identifiants idempotents, car la bibliothèque ne fournit pas à l’application le contrôle des sessions clientes.
 
-Le prototype applicatif valide trois API indépendantes, le rattachement mutuel, la membership durable, le nom du cluster répliqué, la présence signée, le retrait/révocation et le refus d’un certificat client non approuvé. Il ne valide pas encore la réplication métier générale, le rattrapage après restauration complète, la migration, le fencing, les partitions prolongées ni la compatibilité entre versions. Les projections locales SQLite/PostgreSQL ne sont jamais déclarées répliquées avant que leur entrée soit engagée au quorum.
+Le test applicatif couvre trois API indépendantes, les transactions métier, les partitions réseau, les anciens baux, la rotation, le rattrapage et les restaurations individuelle et coordonnée. Les projections locales SQLite/PostgreSQL ne sont confirmées qu’après engagement de la transaction au quorum. Les médias et les artefacts binaires restent sur les stockages configurés par l’installation.
 
 ## Prototype de transport et de présence
 
@@ -80,4 +80,4 @@ Le prototype applicatif valide trois API indépendantes, le rattachement mutuel,
 
 `backend/tools/ClusterConsensusPrototype` évalue `DotNext.Net.Cluster` 6.10.0 sur trois processus loopback avec un WAL séparé par nœud. Le scénario vérifie l’élection, la validation au quorum, le refus sans quorum, la réélection, le retour d’un pair et son rattrapage. Après l’arrêt complet, il redémarre un nœud seul et constate que son index validé est restauré localement. La configuration de membership y est statique et préchargée en mémoire; le transport est TCP sur loopback et la state machine est sans projection Encoding. Le scénario reste utile pour les tests Raft bas niveau.
 
-Le code opt-in du serveur se trouve dans `backend/src/Encoding.Api/Infrastructure/PeerCluster`. Le test `PeerClusterIntegrationTests` démarre trois API et valide les éléments livrés listés dans le guide d’exploitation [peer-cluster-preview.md](../operations/peer-cluster-preview.md). Il ne transforme pas encore les bases applicatives locales en projection commune et ne doit pas être annoncé comme un cluster Encoding complet.
+Le code opt-in du serveur se trouve dans `backend/src/Encoding.Api/Infrastructure/PeerCluster`. Le test `PeerClusterIntegrationTests` démarre trois API et valide les éléments livrés listés dans le guide d’exploitation [peer-cluster-preview.md](../operations/peer-cluster-preview.md). Les bases métier sont désormais des projections communes ; les garanties et conditions de déploiement sont détaillées dans 0061.

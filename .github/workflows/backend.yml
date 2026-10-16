@@ -1,10 +1,21 @@
 name: Backend
 on:
   push:
-    paths: ['backend/**', '.github/workflows/backend.yml']
+    paths: ['backend/**', 'docs/operations/peer-cluster-alerts.yml', '.github/workflows/backend.yml']
   pull_request:
-    paths: ['backend/**', '.github/workflows/backend.yml']
+    paths: ['backend/**', 'docs/operations/peer-cluster-alerts.yml', '.github/workflows/backend.yml']
 jobs:
+  peer-alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: >-
+          docker run --rm --entrypoint promtool -v "$PWD:/repo:ro"
+          prom/prometheus:v3.5.0 check rules /repo/docs/operations/peer-cluster-alerts.yml
+      - run: >-
+          docker run --rm --entrypoint promtool -v "$PWD:/repo:ro"
+          prom/prometheus:v3.5.0 test rules /repo/backend/tests/monitoring/peer-cluster-alerts.test.yml
   build:
     runs-on: ubuntu-latest
     container: mcr.microsoft.com/dotnet/sdk:10.0

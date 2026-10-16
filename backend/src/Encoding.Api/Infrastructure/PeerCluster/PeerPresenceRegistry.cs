@@ -45,7 +45,15 @@ public sealed class PeerPresenceRegistry
         if (publicKey is null) return false;
         var unsigned = new PeerPresenceUnsigned(incoming.ClusterId, incoming.PeerId, incoming.Incarnation,
             incoming.Sequence, incoming.PublishedAtUtc, incoming.Nodes);
-        if (!publicKey.VerifyData(JsonSerializer.SerializeToUtf8Bytes(unsigned, JsonOptions), signature, HashAlgorithmName.SHA256)) return false;
+        var payload = JsonSerializer.SerializeToUtf8Bytes(unsigned, JsonOptions);
+        if (!publicKey.VerifyData(payload, signature, HashAlgorithmName.SHA256))
+        {
+            if (trustedPeer.NextCertificatePem is null) return false;
+            using var nextCertificate = X509Certificate2.CreateFromPem(trustedPeer.NextCertificatePem);
+            using var nextKey = nextCertificate.GetECDsaPublicKey();
+            if (PeerIdentity.Fingerprint(nextCertificate) != trustedPeer.NextThumbprint
+                || nextKey is null || !nextKey.VerifyData(payload, signature, HashAlgorithmName.SHA256)) return false;
+        }
 
         while (true)
         {
@@ -64,15 +72,21 @@ public sealed class PeerPresenceRegistry
 
     public bool Remove(Guid peerId) => records.TryRemove(peerId, out _);
 
-    public IReadOnlyList<NodeResponse> MergeNodes(IReadOnlyList<NodeResponse> localNodes, TimeSpan offlineAfter)
+    public IReadOnlyList<NodeResponse> MergeNodes(IReadOnlyList<NodeResponse> localNodes, TimeSpan offlineAfter, bool replicatedCatalog = false)
     {
         var latest = new Dictionary<Guid, NodeResponse>();
         foreach (var node in localNodes) latest[node.Id] = WithCurrentStatus(node, offlineAfter);
         foreach (var node in records.Values.SelectMany(record => record.Nodes))
         {
             var normalized = WithCurrentStatus(node, offlineAfter);
-            if (!latest.TryGetValue(node.Id, out var current) || normalized.LastSeenAt > current.LastSeenAt)
-                latest[node.Id] = normalized;
+            if (!latest.TryGetValue(node.Id, out var current))
+            {
+                if (!replicatedCatalog) latest[node.Id] = normalized;
+            }
+            else if (normalized.LastSeenAt > current.LastSeenAt)
+                latest[node.Id] = replicatedCatalog
+                    ? WithCurrentStatus(current with { LastSeenAt = normalized.LastSeenAt }, offlineAfter)
+                    : normalized;
         }
         return latest.Values.OrderBy(node => node.Name, StringComparer.OrdinalIgnoreCase).ThenBy(node => node.Id).ToArray();
     }

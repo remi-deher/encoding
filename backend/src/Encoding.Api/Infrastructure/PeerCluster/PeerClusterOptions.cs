@@ -9,7 +9,9 @@ public sealed record PeerClusterOptions(
     TimeSpan GossipInterval,
     TimeSpan OfflineAfter,
     string IdentityPassword,
-    string DataDirectory)
+    string DataDirectory,
+    string SharedDataKey = "",
+    string? TransportProxy = null)
 {
     public static PeerClusterOptions From(IConfiguration configuration, string contentRoot)
     {
@@ -24,6 +26,9 @@ public sealed record PeerClusterOptions(
         var gossipSeconds = configuration.GetValue("PeerCluster:GossipIntervalSeconds", 3);
         var offlineSeconds = configuration.GetValue("PeerCluster:OfflineAfterSeconds", 30);
         var identityPassword = configuration["PeerCluster:IdentityPassword"] ?? string.Empty;
+        var sharedDataKey = configuration["PeerCluster:SharedDataKey"] ?? string.Empty;
+        if (enabled && (!TryReadKey(sharedDataKey)))
+            throw new InvalidOperationException("PeerCluster:SharedDataKey doit contenir une clé aléatoire de 32 octets encodée en base64, identique sur les pairs.");
         var dataDirectory = configuration["PeerCluster:DataDirectory"]
             ?? configuration["Node:DataDirectory"]
             ?? Path.Combine(contentRoot, "data", "peer-cluster");
@@ -38,6 +43,11 @@ public sealed record PeerClusterOptions(
             throw new InvalidOperationException("PeerCluster:PublicEndpoint doit être une URL HTTPS absolue, sans chemin ni identifiants.");
 
         return new(enabled, clusterId, publicEndpoint, bootstrap, listenPort, TimeSpan.FromSeconds(gossipSeconds),
-            TimeSpan.FromSeconds(offlineSeconds), identityPassword, Path.GetFullPath(dataDirectory));
+            TimeSpan.FromSeconds(offlineSeconds), identityPassword, Path.GetFullPath(dataDirectory), sharedDataKey, configuration["PeerCluster:TransportProxy"]);
+    }
+    private static bool TryReadKey(string value)
+    {
+        Span<byte> key = stackalloc byte[32];
+        return Convert.TryFromBase64String(value, key, out var count) && count == 32;
     }
 }

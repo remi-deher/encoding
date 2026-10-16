@@ -10,7 +10,7 @@ Le projet s’inspire des outils d’automatisation de fichiers existants, tout 
 
 - Backend : **C# avec ASP.NET Core sur .NET 10 LTS**.
 - Interface : **Angular avec TypeScript**.
-- Stockage actuellement pris en charge : **PostgreSQL partagé** (cluster multi-serveurs) ou **SQLite** (cluster à un seul serveur, défaut de l’image Docker) derrière une abstraction d’accès aux données ; voir [0043](docs/architecture/0043-sqlite-and-data-access-abstraction.md). La cible pair-à-pair où chaque serveur garde une copie locale est définie dans [0060](docs/architecture/0060-peer-replicated-cluster-state.md) et n’est pas encore livrée. Ne pas la présenter comme prise en charge avant ses critères d’acceptation.
+- Stockage : **PostgreSQL partagé** ou **SQLite** autonome derrière l'abstraction [0043](docs/architecture/0043-sqlite-and-data-access-abstraction.md). Le mode pair à pair optionnel conserve une base locale par serveur et réplique les transactions métier par Raft : voir [0060](docs/architecture/0060-peer-replicated-cluster-state.md) et [0061](docs/architecture/0061-peer-sql-transactions-and-operations.md). Un groupe exige le même fournisseur, schéma et clé de protection partagée ; ses comptes administrateurs et sessions restent locaux. Consulter le guide d'exploitation avant déploiement ; les mises à jour mixtes N/N-1 ne sont pas prises en charge.
 - Déploiement : **Docker**.
 - Ces choix sont validés. Ne pas les remplacer sans décision explicite prise avec le propriétaire du projet.
 - Le frontend Angular est initialisé dans `frontend/` avec Angular Material comme base de composants d’interface partagés. La structure du backend, des plugins, des outils et des images Docker reste à définir ensemble.

@@ -9,8 +9,9 @@ namespace Encoding.Api.Infrastructure.PeerCluster;
 public sealed record PeerConsensusStatus(bool IsLeader, string? LeaderEndpoint, IReadOnlyList<string> Members,
     long LastEntryIndex, long LastCommittedEntryIndex, bool HasQuorum);
 
-public sealed class PeerConsensusService(IRaftHttpCluster cluster, PeerStateMachine stateMachine)
+public sealed class PeerConsensusService(IRaftHttpCluster cluster, PeerStateMachine stateMachine, PeerDatabaseCoordinator? database = null)
 {
+    public bool DatabaseTransactionsEnabled => database is not null;
     private static readonly TimeSpan ConsensusOperationTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan MembershipOperationTimeout = TimeSpan.FromSeconds(30);
     private static readonly JsonSerializerOptions BusinessJson = new(JsonSerializerDefaults.Web);
@@ -21,13 +22,25 @@ public sealed class PeerConsensusService(IRaftHttpCluster cluster, PeerStateMach
     {
         var raftCluster = (IRaftCluster)cluster;
         var hasQuorum = raftCluster.TryGetLeaseToken(out var leaseToken) && !leaseToken.IsCancellationRequested;
-        return new PeerConsensusStatus(cluster.Leader?.IsLeader == true, cluster.Leader?.EndPoint.ToString(),
+        return new PeerConsensusStatus(cluster.Leader is { IsRemote: false }, cluster.Leader?.EndPoint.ToString(),
             raftCluster.Members.Select(member => member.EndPoint.ToString() ?? string.Empty).Order(StringComparer.Ordinal).ToArray(),
             raftCluster.AuditTrail.LastEntryIndex, raftCluster.AuditTrail.LastCommittedEntryIndex, hasQuorum);
     }
 
     public bool TryGetLeaderLease(out CancellationToken leaseToken) =>
         ((IRaftCluster)cluster).TryGetLeaseToken(out leaseToken) && !leaseToken.IsCancellationRequested;
+
+    public long CurrentTerm => ((IRaftCluster)cluster).AuditTrail.Term;
+
+    public async Task<long?> PrepareDatabaseTransactionAsync(CancellationToken ct)
+    {
+        if (!GetStatus().IsLeader || !TryGetLeaderLease(out var lease)) return null;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, lease);
+        timeout.CancelAfter(ConsensusOperationTimeout);
+        // Commit/apply the new leader's write barrier before taking a local SQL write lock.
+        await ((IRaftCluster)cluster).ApplyReadBarrierAsync(timeout.Token);
+        return GetStatus().IsLeader && TryGetLeaderLease(out _) ? CurrentTerm : null;
+    }
 
     public bool IsPeerRevoked(Guid peerId) => Get($"peer/revoked/{peerId:D}") is { ValueKind: JsonValueKind.True };
 
@@ -102,10 +115,15 @@ public sealed class PeerConsensusService(IRaftHttpCluster cluster, PeerStateMach
         var isLibraryWorkflow = PeerBusinessState.TryReadLibraryWorkflowKey(command.Key, out var workflowLibraryId)
             && PeerBusinessState.TryParseLibraryWorkflow(command.Value, out var workflowState)
             && workflowState.LibraryId == workflowLibraryId;
-        if (!isClusterName && !isPeerRevocation && !isLibraryState && !isFlowVersion && !isFlowDraft && !isLibraryWorkflow)
+        var isDatabaseTransaction = command.Key == "database/transaction" && database is not null
+            && command.Value.Deserialize<Encoding.Api.Infrastructure.Data.PeerDatabaseTransaction>() is { Version: 1 };
+        var isRotation = command.Key.StartsWith("peer/certificate/", StringComparison.Ordinal)
+            && Guid.TryParse(command.Key["peer/certificate/".Length..], out _)
+            && command.Value.Deserialize<PeerCertificateRotation>() is not null;
+        if (!isRotation && !isDatabaseTransaction && !isClusterName && !isPeerRevocation && !isLibraryState && !isFlowVersion && !isFlowDraft && !isLibraryWorkflow)
             throw new ArgumentException("La commande de réplication ne correspond pas à une projection autorisée.");
         var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(command);
-        if (bytes.Length > PeerStateMachine.MaximumCommandBytes) throw new ArgumentException("La commande dépasse la limite de quatre mégaoctets.");
+        if (bytes.Length > PeerStateMachine.MaximumCommandBytes) throw new ArgumentException("La commande dépasse la limite de 64 mégaoctets.");
         await WithTimeoutAsync(async token =>
         {
             await ((IRaftCluster)cluster).ReplicateAsync((ReadOnlyMemory<byte>)bytes, null, token);

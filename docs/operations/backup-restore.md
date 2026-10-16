@@ -1,5 +1,9 @@
 # Sauvegarde et restauration
 
+## Mode pair à pair
+
+Un cluster `PeerCluster` se sauvegarde avec les commandes `backup-peer` / `restore-peer` du [guide des pairs](peer-cluster-preview.md#sauvegarde-à-froid-et-restauration). Conserver un ensemble coordonné des bases locales, identités, clés et journaux Raft, ainsi que les secrets séparés. Les procédures PostgreSQL ci-dessous concernent le mode historique à base partagée et ne suffisent pas à restaurer un quorum pair à pair.
+
 ## Ce qui doit être sauvegardé
 
 | Donnée | Emplacement (Compose) | Criticité |

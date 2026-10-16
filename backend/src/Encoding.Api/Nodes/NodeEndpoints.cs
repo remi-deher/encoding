@@ -134,7 +134,7 @@ public static class NodeEndpoints
         }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("LeaveCluster");
 
         nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, PeerPresenceRegistry peerPresence, CancellationToken cancellationToken) =>
-            Results.Ok(peerPresence.MergeNodes(await repository.ListAsync(options.OfflineAfter, cancellationToken), options.OfflineAfter)))
+            Results.Ok(peerPresence.MergeNodes(await repository.ListAsync(options.OfflineAfter, cancellationToken), options.OfflineAfter, replicatedCatalog: true)))
             .WithName("ListNodes");
 
         nodes.MapPut("/{nodeId:guid}/mode", async (Guid nodeId, ChangeNodeModeRequest request, NodeRepository repository, NodePresenceOptions options, CancellationToken ct) =>

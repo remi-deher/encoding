@@ -33,7 +33,7 @@ public static class PeerAuthorityDatabaseCommand
         await using var authority = Open(authorityProvider, options["authority"]);
         await using var target = Open(targetProvider, options["target"]);
         var pending = await DatabaseMigrator.StatusAsync(authority, contentRoot, ct);
-        if (pending.Pending.Count > 0)
+        if (pending.Pending.Count > 0 || pending.Unknown.Count > 0)
         {
             await output.WriteLineAsync($"La base faisant autorité a {pending.Pending.Count} migration(s) en attente : démarrez-la une fois avec sa version actuelle avant l’initialisation des pairs.");
             return 3;

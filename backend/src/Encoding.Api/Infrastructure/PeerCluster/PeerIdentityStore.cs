@@ -83,7 +83,7 @@ public sealed class PeerIdentityStore : IDisposable
         if (File.Exists(path) && !long.TryParse(File.ReadAllText(path), out current))
             throw new InvalidOperationException("Le compteur d’incarnation du pair est illisible.");
         if (current == long.MaxValue) throw new InvalidOperationException("Le compteur d’incarnation du pair a atteint sa limite.");
-        var next = current + 1;
+        var next = Math.Max(current + 1, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         var temporary = path + ".tmp";
         File.WriteAllText(temporary, next.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Text.Encoding.ASCII);
         SetPrivateFilePermissions(temporary);
@@ -99,9 +99,45 @@ public sealed class PeerIdentityStore : IDisposable
         return privateKey.SignData(payload, HashAlgorithmName.SHA256);
     }
 
-    private static PeerIdentity CreateIdentity(Guid clusterId, string certificateHost)
+    public PeerIdentity PrepareRotation(string host, string password)
     {
-        var peerId = Guid.NewGuid();
+        var next = CreateIdentity(Identity.ClusterId, host, Identity.PeerId);
+        var path = Path.Combine(directory, "peer-identity.next.pfx");
+        if (File.Exists(path)) { next.Certificate.Dispose(); throw new InvalidOperationException("Une rotation est déjà préparée."); }
+        try
+        {
+            using var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            SetPrivateFilePermissions(path);
+            file.Write(next.Certificate.Export(X509ContentType.Pkcs12, password));
+            file.Flush(flushToDisk: true);
+            return next;
+        }
+        catch (IOException exception) when (File.Exists(path))
+        {
+            next.Certificate.Dispose();
+            throw new InvalidOperationException("La préparation du certificat n’a pas pu être confirmée ; vérifiez le fichier de rotation local.", exception);
+        }
+        catch { next.Certificate.Dispose(); throw; }
+    }
+
+    public void ActivateRotation(string password, string approvedFingerprint)
+    {
+        var nextPath = Path.Combine(directory, "peer-identity.next.pfx");
+        using var certificate = X509CertificateLoader.LoadPkcs12FromFile(nextPath, password, X509KeyStorageFlags.EphemeralKeySet);
+        var next = new PeerIdentity(Identity.PeerId, Identity.ClusterId, certificate);
+        ValidateOwnCertificate(next);
+        if (next.Thumbprint != PeerIdentity.NormalizeThumbprint(approvedFingerprint))
+            throw new InvalidOperationException("L’empreinte approuvée ne correspond pas au certificat préparé.");
+        var current = Path.Combine(directory, CertificateFileName);
+        File.Copy(current, Path.Combine(directory, "peer-identity.previous.pfx"), overwrite: true);
+        SetPrivateFilePermissions(Path.Combine(directory, "peer-identity.previous.pfx"));
+        File.Move(nextPath, current, overwrite: true);
+        SetPrivateFilePermissions(current);
+    }
+
+    private static PeerIdentity CreateIdentity(Guid clusterId, string certificateHost, Guid? existingPeerId = null)
+    {
+        var peerId = existingPeerId ?? Guid.NewGuid();
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest($"CN=EncodingPeer-{clusterId:N}-{peerId:N}", key, HashAlgorithmName.SHA256);
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
