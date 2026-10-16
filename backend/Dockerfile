@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Image unique : serveur (API et interface web), worker et lanceur. Contexte de construction : racine du dépôt.
 # Le lanceur démarre et arrête le serveur et l'agent selon le mode du nœud (architecture 0036).
 ARG DOTNET_VERSION=10.0
@@ -5,7 +6,13 @@ ARG DOTNET_VERSION=10.0
 FROM node:24-alpine AS frontend-build
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    --mount=type=secret,id=proxy_ca,required=false \
+    if [ -f /run/secrets/proxy_ca ]; then \
+      NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca npm ci --strict-ssl=true; \
+    else \
+      npm ci --strict-ssl=true; \
+    fi
 COPY frontend/ ./
 RUN npm run build
 
@@ -17,28 +24,58 @@ COPY backend/src/Encoding.NodeAgent/Encoding.NodeAgent.csproj ./src/Encoding.Nod
 COPY backend/src/Encoding.Launcher/Encoding.Launcher.csproj ./src/Encoding.Launcher/
 COPY backend/src/Encoding.Contracts/Encoding.Contracts.csproj ./src/Encoding.Contracts/
 COPY backend/src/Encoding.Core/Encoding.Core.csproj ./src/Encoding.Core/
-RUN dotnet restore ./src/Encoding.Api/Encoding.Api.csproj \
- && dotnet restore ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj \
- && dotnet restore ./src/Encoding.Launcher/Encoding.Launcher.csproj
-COPY backend/migrations ./migrations
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    --mount=type=secret,id=proxy_ca,required=false \
+    set -eu; \
+    if [ -f /run/secrets/proxy_ca ]; then \
+      cat /etc/ssl/certs/ca-certificates.crt /run/secrets/proxy_ca > /tmp/ca-bundle.pem; \
+      SSL_CERT_FILE=/tmp/ca-bundle.pem dotnet restore ./src/Encoding.Api/Encoding.Api.csproj && \
+      SSL_CERT_FILE=/tmp/ca-bundle.pem dotnet restore ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj && \
+      SSL_CERT_FILE=/tmp/ca-bundle.pem dotnet restore ./src/Encoding.Launcher/Encoding.Launcher.csproj; \
+    else \
+      dotnet restore ./src/Encoding.Api/Encoding.Api.csproj && \
+      dotnet restore ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj && \
+      dotnet restore ./src/Encoding.Launcher/Encoding.Launcher.csproj; \
+    fi; \
+    rm -f /tmp/ca-bundle.pem
+COPY backend/migrations/ ./migrations/
 COPY backend/src ./src
 RUN dotnet publish ./src/Encoding.Api/Encoding.Api.csproj --configuration Release --output /app/api --no-restore \
  && dotnet publish ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj --configuration Release --output /app/agent --no-restore \
  && dotnet publish ./src/Encoding.Launcher/Encoding.Launcher.csproj --configuration Release --output /app/launcher --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg mkvtoolnix mediainfo imagemagick nodejs python3 hwdata && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=secret,id=proxy_ca,required=false \
+    set -eu; \
+    ca_opt=''; \
+    if [ -f /run/secrets/proxy_ca ]; then \
+      cat /etc/ssl/certs/ca-certificates.crt /run/secrets/proxy_ca > /tmp/ca-bundle.pem; \
+      ca_opt='-o Acquire::https::CaInfo=/tmp/ca-bundle.pem'; \
+    fi; \
+    apt-get $ca_opt update && apt-get $ca_opt install -y --no-install-recommends ffmpeg mkvtoolnix mediainfo imagemagick nodejs python3 hwdata; \
+    rm -f /tmp/ca-bundle.pem
 # Encodage matériel (docs/architecture/0051-hardware-encoding-in-image.md).
 # Intel : pilote iHD « non-free » (multiverse) pour VAAPI, repli sur la version libre ; libvpl2 + libmfx-gen1.2 (QSV Gen12+),
 # libmfx1 (Media SDK, QSV Gen9.5 comme l'UHD 630) et vainfo pour le diagnostic. AMD : Mesa VA-API (pas d'AMF).
 # NVIDIA : le pilote propriétaire vient de l'hôte par le NVIDIA Container Toolkit (rien à installer ici).
-RUN sed -i 's/^Components: main restricted universe$/Components: main restricted universe multiverse/' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true \
- && apt-get update \
- && (apt-get install -y --no-install-recommends intel-media-va-driver-non-free \
-     || apt-get install -y --no-install-recommends intel-media-va-driver) \
- && apt-get install -y --no-install-recommends libvpl2 libmfx1 libmfx-gen1.2 vainfo mesa-va-drivers libdrm-amdgpu1 \
- && rm -rf /var/lib/apt/lists/* \
- && ffmpeg -hide_banner -encoders 2>/dev/null | grep -q nvenc
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=secret,id=proxy_ca,required=false \
+    set -eu; \
+    ca_opt=''; \
+    if [ -f /run/secrets/proxy_ca ]; then \
+      cat /etc/ssl/certs/ca-certificates.crt /run/secrets/proxy_ca > /tmp/ca-bundle.pem; \
+      ca_opt='-o Acquire::https::CaInfo=/tmp/ca-bundle.pem'; \
+    fi; \
+    sed -i 's/^Components: main restricted universe$/Components: main restricted universe multiverse/' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true; \
+    apt-get $ca_opt update; \
+    (apt-get $ca_opt install -y --no-install-recommends intel-media-va-driver-non-free \
+     || apt-get $ca_opt install -y --no-install-recommends intel-media-va-driver); \
+    apt-get $ca_opt install -y --no-install-recommends libvpl2 libmfx1 libmfx-gen1.2 vainfo mesa-va-drivers libdrm-amdgpu1; \
+    ffmpeg -hide_banner -encoders 2>/dev/null | grep -q nvenc; \
+    rm -f /tmp/ca-bundle.pem
 # Plugins d'intégration livrés avec le worker (processus Python séparés, voir backend/plugins/README.md).
 # Le manifeste copié est le JSON que le serveur charge : une seule définition des composants.
 COPY backend/plugins/sdk/encoding_plugin_sdk.py backend/plugins/arr/plugin.py /opt/encoding/plugins/arr/

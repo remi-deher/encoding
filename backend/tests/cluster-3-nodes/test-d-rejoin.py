@@ -2,7 +2,7 @@
 import os, sys, json, time, subprocess, urllib.request, urllib.error
 sys.path.insert(0, '.')
 from cl import *
-P = "encoding-cluster-test"
+P = os.environ.get("COMPOSE_PROJECT_NAME", "encoding-cluster-test")
 def agent(m, p, b=None):
     out = subprocess.check_output(["python3", "agent.py", "node3", m, p] + ([json.dumps(b)] if b else []), text=True).strip()
     code, _, body = out.partition(' ')

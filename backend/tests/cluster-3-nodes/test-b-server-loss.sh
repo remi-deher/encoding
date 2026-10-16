@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test B : perte brutale (SIGKILL) du conteneur node1 (serveur + worker) pendant des traitements ; node2 doit rester opérationnel.
-set -u; cd "$(dirname "$0")"; out="${1:?fichier journal}"; P=encoding-cluster-test
+set -u; cd "$(dirname "$0")"; out="${1:?fichier journal}"; P="${COMPOSE_PROJECT_NAME:-encoding-cluster-test}"
 t0=$SECONDS; log(){ printf '[+%03ds %s] %s\n' $((SECONDS-t0)) "$(date +%T)" "$*" | tee -a "$out"; }
 q(){ docker exec -i $P-postgres-1 psql -U encoding -d encoding -At -c "$1"; }
 : > "$out"; ./sampler.sh "${out%.log}-samples.tsv" 480 &

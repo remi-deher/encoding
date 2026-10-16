@@ -12,6 +12,13 @@ x-node: &node
   networks: [cluster]
   stop_grace_period: 60s
 
+x-server-healthcheck: &server-healthcheck
+  test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=2)"]
+  interval: 3s
+  timeout: 3s
+  retries: 40
+  start_period: 15s
+
 x-env: &env
   ASPNETCORE_ENVIRONMENT: Production
   NodePresence__OfflineAfterSeconds: 30
@@ -19,6 +26,8 @@ x-env: &env
   Node__MaxConcurrentTasks: 1
   Cluster__DiscoveryPort: 8080
   Auth__SetupToken: ${SETUP_TOKEN:?SETUP_TOKEN requis}
+  NO_PROXY: localhost,127.0.0.1,node1,node2,node3,postgres
+  no_proxy: localhost,127.0.0.1,node1,node2,node3,postgres
 
 x-server-env: &server-env
   <<: *env
@@ -47,6 +56,7 @@ services:
 
   node1:
     <<: *node
+    healthcheck: *server-healthcheck
     hostname: node1
     environment:
       <<: *server-env
@@ -63,13 +73,14 @@ services:
 
   node2:
     <<: *node
+    healthcheck: *server-healthcheck
     hostname: node2
     environment:
       <<: *server-env
       Node__Name: node2
       Node__Roles: server,worker
       Cluster__AdvertisedApiBaseUrl: http://node2:8080/
-    depends_on: {postgres: {condition: service_healthy}, node1: {condition: service_started}}
+    depends_on: {postgres: {condition: service_healthy}, node1: {condition: service_healthy}}
     volumes:
       - node2-data:/var/lib/encoding-node
       - flow-backups:/var/lib/encoding/flow-backups
@@ -86,7 +97,7 @@ services:
       Node__Name: node3
       Node__Roles: worker
       Cluster__ApiBaseUrl: http://node1:8080/
-    depends_on: {node1: {condition: service_started}}
+    depends_on: {node1: {condition: service_healthy}}
     volumes:
       - node3-data:/var/lib/encoding-node
       - ${MEDIA_DIR:?MEDIA_DIR requis}:/mnt/shared-media   # chemin local différent des nœuds 1 et 2

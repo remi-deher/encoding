@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Vérifie sources (empreintes) et sorties (ffprobe + décodage complet) de la bibliothèque de test. Usage : verify-outputs.sh <MEDIA_DIR>
 set -u; dir="${1:?MEDIA_DIR}"; fail=0
+postgres="${COMPOSE_PROJECT_NAME:-encoding-cluster-test}-postgres-1"
 echo "== Intégrité des sources"; (cd "$dir" && sha256sum --quiet -c .sources.sha256 && echo "sources inchangées ($(wc -l < .sources.sha256) fichiers)") || { echo "SOURCES MODIFIÉES"; fail=1; }
 echo "== Sorties"
 while IFS='|' read -r media exec_id; do
@@ -13,5 +14,5 @@ while IFS='|' read -r media exec_id; do
   ok=$(python3 -c "print('OK' if '$vc'=='h264' and '$ac' and abs(float('$ds')-float('$do_'))<0.15 and $dec==0 else 'KO')")
   [ "$ok" = OK ] || fail=1
   echo "$media: $ok video=$vc audio=$ac dur_src=$ds dur_out=$do_ erreurs_decodage=$dec taille=$(stat -c%s "$f")o ($exec_id)"
-done < <(docker exec -i encoding-cluster-test-postgres-1 psql -U encoding -d encoding -At -F'|' -c "SELECT e.media, e.id FROM executions e WHERE e.state='succeeded' ORDER BY e.media, e.queued_at")
+done < <(docker exec -i "$postgres" psql -U encoding -d encoding -At -F'|' -c "SELECT e.media, e.id FROM executions e WHERE e.state='succeeded' ORDER BY e.media, e.queued_at")
 exit $fail

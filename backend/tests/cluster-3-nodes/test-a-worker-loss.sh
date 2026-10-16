@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test A : perte brutale (SIGKILL) du conteneur node3 pendant des traitements. Chronologie dans le fichier passé en argument.
-set -u; cd "$(dirname "$0")"; out="${1:?fichier journal}"; P=encoding-cluster-test
+set -u; cd "$(dirname "$0")"; out="${1:?fichier journal}"; P="${COMPOSE_PROJECT_NAME:-encoding-cluster-test}"
 t0=$SECONDS; log(){ printf '[+%03ds %s] %s\n' $((SECONDS-t0)) "$(date +%T)" "$*" | tee -a "$out"; }
 : > "$out"
 ./sampler.sh "${out%.log}-samples.tsv" 420 & 

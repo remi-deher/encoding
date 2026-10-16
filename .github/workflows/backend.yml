@@ -59,3 +59,4 @@ jobs:
           file: backend/Dockerfile
           push: false
           cache-from: type=gha,scope=encoding
+          cache-to: type=gha,scope=encoding,mode=max

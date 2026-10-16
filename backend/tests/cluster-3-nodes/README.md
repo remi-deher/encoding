@@ -15,19 +15,33 @@ Les volumes `flow-backups`, `runtime-artifacts` et `plugin-keys` sont partagés 
 
 ## Reproduire
 
+### Initialisation cloud recommandée
+
+Depuis n'importe quel checkout du dépôt, lancez :
+
+```bash
+backend/tests/cluster-3-nodes/run-cluster.sh
+```
+
+Le script récupère `origin/main`, construit un snapshot propre à ce commit sans toucher au checkout courant, puis démarre le cluster avec un nom et des secrets dédiés à ce commit. Il attend que PostgreSQL et les deux API serveur soient prêtes avant l'enrôlement. Au premier lancement, l'image est construite ; les caches BuildKit npm et NuGet ainsi que l'image identifiée par le SHA de `main` sont réutilisés aux lancements suivants. Si `CODEX_PROXY_CERT` est fourni dans l'environnement cloud, le script le passe en secret BuildKit et conserve la validation TLS.
+
+Le chemin du snapshot, le commit utilisé, un fichier `test-env.sh` à sourcer pour les commandes suivantes et les commandes Compose de nettoyage sont affichés à la fin. Ce fichier conserve l'accès direct au démon et ajoute les IP du cluster à `NO_PROXY`, nécessaire aux scripts d'API lancés depuis l'hôte cloud. En cas d'échec pendant l'initialisation, les journaux sont enregistrés sous `/tmp/encoding-cluster-main-<sha>/startup-failure.log` et le projet Compose temporaire est arrêté.
+
+Après l'initialisation, sourcez le `test-env.sh` affiché et placez-vous dans le sous-dossier `backend/tests/cluster-3-nodes` du chemin `Sources`. Exécutez ensuite les étapes de flow et de scénarios ci-dessous. Le script `setup-flow-library.py` désactive maintenant la surveillance automatique avant l'attribution du flow afin que seule la découverte contrôlée mette les fichiers en file.
+
+### Initialisation manuelle
+
 ```bash
 cd backend/tests/cluster-3-nodes
 export ENCODING_IMAGE=encoding:cluster-test MEDIA_DIR=/tmp/enc-test/media/lib SETUP_TOKEN=$(openssl rand -hex 8) PG_PASSWORD=$(openssl rand -hex 8)
 export COMPOSE="docker compose -f $PWD/compose.yml"
 
-# 1. Image officielle (dépôt, contexte = racine) ; dockerd doit tourner (en conteneur cloud : `dockerd &`)
-docker build -f backend/Dockerfile -t $ENCODING_IMAGE .      # depuis la racine du dépôt
-#   Derrière un proxy qui ré-signe le TLS (NuGet/apt) : construire d'abord des bases `mcr.microsoft.com/dotnet/{sdk,aspnet}:10.0-ca`
-#   contenant le CA du proxy, puis `docker build --network=host --build-arg DOTNET_VERSION=10.0-ca --build-arg HTTPS_PROXY=$HTTPS_PROXY ...`
+# 1. Depuis la racine du dépôt ; en environnement cloud, privilégier run-cluster.sh ci-dessus.
+docker build -f ../../../backend/Dockerfile -t "$ENCODING_IMAGE" ../../../
 
 # 2. Médias synthétiques (2-5 s + un fichier corrompu), puis cluster
-./gen-media.sh $MEDIA_DIR
-$COMPOSE up -d
+docker run --rm --network none --entrypoint /bin/bash -v "$PWD:/test:ro" -v "$MEDIA_DIR:$MEDIA_DIR" "$ENCODING_IMAGE" /test/gen-media.sh "$MEDIA_DIR"
+$COMPOSE up -d --wait --wait-timeout 180
 python3 bootstrap.py                  # administrateur, enrôlement de node1/node2, jumelage + approbation de node3 (codes de vérification comparés)
 python3 check-cluster.py              # vue de chaque serveur, rôles, outils, inventaire, identités uniques (code 1 si incohérence)
 python3 setup-flow-library.py         # flow H.264 (plan FFmpeg), bibliothèque test-lib, accès des 3 nœuds, attribution, découverte
@@ -39,7 +53,7 @@ python3 analyze-samples.py /tmp/t4.tsv                        # exclusivité par
 python3 concurrent-enqueue.py node1 node2                     # test C : 8 requêtes simultanées sur 2 serveurs
 
 # 4. Pannes (clips de 60 s nécessaires pour tuer un nœud en plein traitement)
-./gen-long-media.sh $MEDIA_DIR && python3 discover.py
+docker run --rm --network none --entrypoint /bin/bash -v "$PWD:/test:ro" -v "$MEDIA_DIR:$MEDIA_DIR" "$ENCODING_IMAGE" /test/gen-long-media.sh "$MEDIA_DIR" && python3 discover.py
 ./test-a-worker-loss.sh results/ta.log     # A : SIGKILL de node3 pendant des traitements, puis docker start
 ./test-b-server-loss.sh results/tb.log     # B : SIGKILL de node1 (serveur+worker) ; node2 reste ; puis docker start node1
 python3 test-d-rejoin.py                   # D : départ refusé pendant un bail, départ propre, révocation, nouveau jumelage
