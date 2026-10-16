@@ -1,0 +1,402 @@
+{
+  "formatVersion": 1,
+  "id": "3f0e1c52-8b9a-4d0e-9b6e-0a7c5d2f1e01",
+  "version": 1,
+  "name": "HEVC \u002B AAC/AC3 \u002B ASS (Crunchyroll)",
+  "mediaType": "video",
+  "nodes": [
+    {
+      "id": "entry",
+      "name": "Fichier vid\u00E9o",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-input-video",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {}
+    },
+    {
+      "id": "playback",
+      "name": "Lecture en cours dans Plex",
+      "component": {
+        "pluginId": "plex",
+        "pluginVersion": "1.1.0",
+        "componentId": "plex-check-playback",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "scope": "file",
+        "includeNextEpisode": true,
+        "nextEpisodeMarginMinutes": 15
+      }
+    },
+    {
+      "id": "defer-playing",
+      "name": "Reporter : lecture en cours",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-defer-processing",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "delayMinutes": 10,
+        "reason": "Lecture en cours dans Plex"
+      }
+    },
+    {
+      "id": "disk",
+      "name": "Verrou de disque",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-disk-lock",
+        "componentVersion": "1.5.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "disk": "disque-1"
+      }
+    },
+    {
+      "id": "defer-disk",
+      "name": "Reporter : disque occup\u00E9",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-defer-processing",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "delayMinutes": 2,
+        "reason": "Disque occup\u00E9 par un autre traitement"
+      }
+    },
+    {
+      "id": "snapshot",
+      "name": "Noms de pistes d\u0027origine",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-track-names",
+        "componentVersion": "1.3.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "mode": "snapshot"
+      }
+    },
+    {
+      "id": "prepare",
+      "name": "Pr\u00E9parer le plan FFmpeg",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-prepare-processing",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "tool": "ffmpeg",
+        "preserveUnchangedTracks": true
+      }
+    },
+    {
+      "id": "video",
+      "name": "Vid\u00E9o HEVC",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-transcode-video",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "processingMode": "plan",
+        "encoderMode": "automatic",
+        "videoCodec": "hevc"
+      }
+    },
+    {
+      "id": "audio",
+      "name": "Audio par r\u00E8gles",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-audio-rules",
+        "componentVersion": "1.2.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "processingMode": "plan",
+        "unknownLayout": "infer"
+      }
+    },
+    {
+      "id": "execute",
+      "name": "Ex\u00E9cuter le plan (une \u00E9criture)",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-execute-processing",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {}
+    },
+    {
+      "id": "subtitles",
+      "name": "Sous-titres ASS",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-subtitle-manage",
+        "componentVersion": "1.4.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "styleProfile": "crunchyroll"
+      }
+    },
+    {
+      "id": "fonts",
+      "name": "Polices",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-add-fonts",
+        "componentVersion": "1.4.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "fontSet": "Crunchyroll"
+      }
+    },
+    {
+      "id": "names",
+      "name": "Noms de pistes",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-track-names",
+        "componentVersion": "1.3.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "mode": "apply",
+        "singleDefaultAudio": true
+      }
+    },
+    {
+      "id": "done",
+      "name": "Termin\u00E9",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-complete-flow",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "result": "success"
+      }
+    },
+    {
+      "id": "fail",
+      "name": "\u00C9chec",
+      "component": {
+        "pluginId": "base",
+        "pluginVersion": "1.5.0",
+        "componentId": "base-complete-flow",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "result": "failed",
+        "message": "Une \u00E9tape du flow a \u00E9chou\u00E9 ; la source est intacte."
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "entry-success",
+      "sourceNodeId": "entry",
+      "sourceOutputId": "success",
+      "targetNodeId": "playback"
+    },
+    {
+      "id": "playback-playing",
+      "sourceNodeId": "playback",
+      "sourceOutputId": "playing",
+      "targetNodeId": "defer-playing"
+    },
+    {
+      "id": "playback-idle",
+      "sourceNodeId": "playback",
+      "sourceOutputId": "idle",
+      "targetNodeId": "disk"
+    },
+    {
+      "id": "playback-error",
+      "sourceNodeId": "playback",
+      "sourceOutputId": "error",
+      "targetNodeId": "disk"
+    },
+    {
+      "id": "disk-acquired",
+      "sourceNodeId": "disk",
+      "sourceOutputId": "acquired",
+      "targetNodeId": "snapshot"
+    },
+    {
+      "id": "disk-busy",
+      "sourceNodeId": "disk",
+      "sourceOutputId": "busy",
+      "targetNodeId": "defer-disk"
+    },
+    {
+      "id": "disk-error",
+      "sourceNodeId": "disk",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "snapshot-success",
+      "sourceNodeId": "snapshot",
+      "sourceOutputId": "success",
+      "targetNodeId": "prepare"
+    },
+    {
+      "id": "snapshot-unchanged",
+      "sourceNodeId": "snapshot",
+      "sourceOutputId": "unchanged",
+      "targetNodeId": "prepare"
+    },
+    {
+      "id": "snapshot-error",
+      "sourceNodeId": "snapshot",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "prepare-success",
+      "sourceNodeId": "prepare",
+      "sourceOutputId": "success",
+      "targetNodeId": "video"
+    },
+    {
+      "id": "prepare-error",
+      "sourceNodeId": "prepare",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "video-success",
+      "sourceNodeId": "video",
+      "sourceOutputId": "success",
+      "targetNodeId": "audio"
+    },
+    {
+      "id": "video-error",
+      "sourceNodeId": "video",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "audio-success",
+      "sourceNodeId": "audio",
+      "sourceOutputId": "success",
+      "targetNodeId": "execute"
+    },
+    {
+      "id": "audio-unchanged",
+      "sourceNodeId": "audio",
+      "sourceOutputId": "unchanged",
+      "targetNodeId": "execute"
+    },
+    {
+      "id": "audio-error",
+      "sourceNodeId": "audio",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "execute-success",
+      "sourceNodeId": "execute",
+      "sourceOutputId": "success",
+      "targetNodeId": "subtitles"
+    },
+    {
+      "id": "execute-skipped",
+      "sourceNodeId": "execute",
+      "sourceOutputId": "skipped",
+      "targetNodeId": "subtitles"
+    },
+    {
+      "id": "execute-error",
+      "sourceNodeId": "execute",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "subtitles-success",
+      "sourceNodeId": "subtitles",
+      "sourceOutputId": "success",
+      "targetNodeId": "fonts"
+    },
+    {
+      "id": "subtitles-unchanged",
+      "sourceNodeId": "subtitles",
+      "sourceOutputId": "unchanged",
+      "targetNodeId": "fonts"
+    },
+    {
+      "id": "subtitles-error",
+      "sourceNodeId": "subtitles",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "fonts-success",
+      "sourceNodeId": "fonts",
+      "sourceOutputId": "success",
+      "targetNodeId": "names"
+    },
+    {
+      "id": "fonts-unchanged",
+      "sourceNodeId": "fonts",
+      "sourceOutputId": "unchanged",
+      "targetNodeId": "names"
+    },
+    {
+      "id": "fonts-error",
+      "sourceNodeId": "fonts",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "names-success",
+      "sourceNodeId": "names",
+      "sourceOutputId": "success",
+      "targetNodeId": "done"
+    },
+    {
+      "id": "names-unchanged",
+      "sourceNodeId": "names",
+      "sourceOutputId": "unchanged",
+      "targetNodeId": "done"
+    },
+    {
+      "id": "names-error",
+      "sourceNodeId": "names",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    }
+  ],
+  "componentPacks": null
+}
