@@ -143,6 +143,7 @@
           <app-primary-navigation
             class="sidebar-navigation"
             [collapsed]="!isCompactNavigation() && navigationCollapsed()"
+            [activeExecutionCount]="activeExecutionCount()"
             (click)="onNavigationClick()"
           />
 
@@ -162,6 +163,21 @@
                   }}</span>
                 </span>
               }
+            }
+
+            @if (!isCompactNavigation() && !navigationCollapsed()) {
+              <button
+                mat-icon-button
+                class="sidebar-collapse-btn"
+                type="button"
+                aria-label="Replier la navigation"
+                title="Replier la barre de navigation"
+                (click)="toggleNavigationCollapsed()"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
             }
           </div>
         </div>

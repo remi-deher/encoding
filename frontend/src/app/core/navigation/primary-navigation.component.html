@@ -18,12 +18,25 @@
             routerLinkActive="is-active"
             [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
             ariaCurrentWhenActive="page"
-            [attr.title]="collapsed() ? item.label : null"
-            [attr.aria-label]="collapsed() ? item.label : null"
+            [matTooltip]="collapsed() ? item.label : ''"
+            matTooltipPosition="right"
+            [matTooltipDisabled]="!collapsed()"
+            [attr.aria-label]="item.label"
           >
-            <span class="navigation-glyph" aria-hidden="true">{{ item.glyph }}</span>
+            <span class="navigation-glyph-container">
+              <span class="navigation-glyph" aria-hidden="true">{{ item.glyph }}</span>
+              @if (item.path === '/tasks' && activeExecutionCount() > 0) {
+                <span class="navigation-badge-dot" aria-hidden="true"></span>
+              }
+            </span>
+
             @if (!collapsed()) {
               <span class="navigation-link-label">{{ item.label }}</span>
+              @if (item.path === '/tasks' && activeExecutionCount() > 0) {
+                <span class="navigation-badge-pill" aria-label="traitements en cours">
+                  {{ activeExecutionCount() }}
+                </span>
+              }
             }
           </a>
         }

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { Route, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../auth/auth.service';
 
 export interface NavigationItem {
@@ -78,7 +79,7 @@ export function getPrimaryNavigationGroups(routes: Route[]): readonly Navigation
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-primary-navigation',
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, MatTooltipModule],
   templateUrl: './primary-navigation.component.html',
   styleUrl: './primary-navigation.component.scss',
 })
@@ -87,6 +88,7 @@ export class PrimaryNavigationComponent {
   private readonly router = inject(Router);
 
   readonly collapsed = input(false);
+  readonly activeExecutionCount = input(0);
 
   protected readonly groups = computed(() =>
     getPrimaryNavigationGroups(this.router.config)

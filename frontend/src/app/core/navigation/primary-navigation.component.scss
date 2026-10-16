@@ -6,7 +6,7 @@
 .primary-navigation {
   display: grid;
   gap: var(--space-3);
-  transition: gap 200ms var(--motion-spring-fast);
+  transition: gap 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .navigation-group {
@@ -15,18 +15,20 @@
 
 .navigation-group-label {
   margin: 0;
-  padding: 0 var(--space-3) var(--space-2);
+  padding: 0 var(--space-3) var(--space-1);
   color: var(--sidebar-text-muted);
   font-size: var(--font-label);
   font-weight: 750;
   letter-spacing: 0.08em;
   line-height: 1.4;
   text-transform: uppercase;
+  user-select: none;
 }
 
 .navigation-group-divider {
   height: 1px;
-  margin: var(--space-2) var(--space-1);
+  width: 28px;
+  margin: var(--space-2) auto;
   background: var(--sidebar-border);
 }
 
@@ -39,88 +41,127 @@
   gap: 3px;
 }
 
+/* Lien de navigation (Capsule active Material 3 Expressive) */
 .navigation-link {
   position: relative;
   min-height: 38px;
-  padding-inline: 12px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   gap: 12px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   color: var(--sidebar-text);
   font-size: var(--font-body);
   font-weight: 600;
   text-decoration: none;
+  cursor: pointer;
   transition:
-    color 180ms var(--motion-spring-fast),
-    background-color 180ms var(--motion-spring-fast),
-    border-radius 240ms var(--motion-spring-fast),
-    transform 180ms var(--motion-spring-fast);
+    background-color 180ms cubic-bezier(0.2, 0, 0, 1),
+    color 180ms cubic-bezier(0.2, 0, 0, 1),
+    transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .navigation-link:hover {
   background: var(--sidebar-hover);
   color: var(--sidebar-text-strong);
-  border-radius: var(--radius-lg);
+  transform: translateX(2px);
 }
 
 .navigation-link.is-active {
   background: var(--sidebar-active);
   color: var(--sidebar-accent);
-  border-radius: var(--radius-pill);
   font-weight: 700;
 }
 
-.navigation-link.is-active::before {
-  position: absolute;
-  inset-block: 8px;
-  inset-inline-start: 5px;
-  width: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--sidebar-accent);
-  content: '';
+.navigation-link:focus-visible {
+  outline: 2px solid var(--sidebar-accent);
+  outline-offset: 2px;
+}
+
+/* Glyphe et conteneur d'icône */
+.navigation-glyph-container {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: grid;
+  place-items: center;
 }
 
 .navigation-glyph {
-  width: 20px;
-  flex: 0 0 20px;
-  color: currentColor;
+  color: inherit;
   font-size: 16px;
   line-height: 1;
   text-align: center;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.navigation-link:hover .navigation-glyph {
+  transform: scale(1.12);
 }
 
 .navigation-link-label {
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.navigation-link:focus-visible {
-  outline-color: var(--sidebar-accent);
-  outline-offset: 1px;
+/* Badges expressifs pour les tâches */
+.navigation-badge-pill {
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent, #ffffff);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  margin-inline-start: auto;
 }
 
-/* Mode replié (icônes uniquement) */
+.navigation-badge-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 1.5px var(--sidebar-background);
+}
+
+/* Mode replié (Navigation Rail M3 Expressive) */
 .primary-navigation.is-collapsed {
   gap: var(--space-2);
 }
 
-.primary-navigation.is-collapsed .navigation-link {
-  min-height: 40px;
-  padding-inline: 0;
-  justify-content: center;
-  border-radius: var(--radius-lg);
+.primary-navigation.is-collapsed .navigation-group-items {
+  gap: 5px;
 }
 
-.primary-navigation.is-collapsed .navigation-link.is-active {
+.primary-navigation.is-collapsed .navigation-link {
+  width: 44px;
+  height: 38px;
+  min-height: 38px;
+  margin-inline: auto;
+  padding: 0;
+  justify-content: center;
   border-radius: var(--radius-pill);
 }
 
-.primary-navigation.is-collapsed .navigation-link.is-active::before {
-  inset-block: 6px;
-  inset-inline-start: 2px;
+.primary-navigation.is-collapsed .navigation-link:hover {
+  transform: scale(1.08);
+}
+
+.primary-navigation.is-collapsed .navigation-link.is-active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-accent);
 }
 
 @media (max-width: 760px) {
