@@ -113,3 +113,15 @@ test('a standalone node names no cluster and an invalid date stays unknown', () 
   assert.equal(sheet.subtitle, 'Nœud autonome');
   assert.equal(formatLastSignal('n’importe quoi'), null);
 });
+
+test('a member without a local server still shows its technical information from the agent', () => {
+  const agentStatus = { ...status, inventory: node.inventory };
+  const sheet = localNodeSheet({ ...base, status: agentStatus, node: null, activeTasks: null });
+  const [cpu, gpu] = section(sheet, 'hardware').metrics;
+  assert.equal(cpu.value, 'AMD Ryzen 7 5700G');
+  assert.match(gpu.value, /AMD/);
+  assert.equal(section(sheet, 'capabilities').items[0].label, 'ffmpeg 7.1');
+  const [load, signal] = section(sheet, 'state').metrics;
+  assert.equal(load.value, 'Indisponible');
+  assert.match(signal.detail, /serveur du cluster/);
+});

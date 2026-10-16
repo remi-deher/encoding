@@ -17,3 +17,7 @@ L'onglet **Ce nœud** affichait trois cadres indépendants (rôle, installation,
 - Aucune charge CPU/GPU ni débit : aucune source réelle.
 - Le nom du GPU est dérivé des identifiants PCI (fabricant + identifiant) ; sans base `pci.ids`, il n'est pas plus précis. Seul un GPU exposé au conteneur (`/dev/dri`, `/sys/class/drm`) est vu.
 - Les tâches actives du nœud local reposent sur l'endpoint d'activité, donc sur la fonction serveur.
+
+## Nœud membre sans serveur local
+
+Un nœud rattaché à un autre cluster n'a plus de serveur local : la liste des nœuds et l'activité viennent du cluster d'accueil. Pour que « Ce nœud » reste complet, l'agent local joint son inventaire matériel (`inventory`) à son état (`/api/v1/worker/status`, relayé par `/api/v1/local-node/status`). La fiche l'utilise à défaut de l'inventaire du cluster. Le dernier signal et les traitements actifs restent « Indisponible » : leur suivi est assuré par le serveur du cluster.
