@@ -136,7 +136,9 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                     await using var r=await access.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
                     source=r.GetGuid(0); root=r.IsDBNull(1)?null:r.GetString(1);
                 }
-                if(item.Source is {} originalSource)
+                // Only an explicit relay pins the original source; a plain recovery after a lost worker lets any worker
+                // with a valid access of its own (direct or transfer) resume the execution (0015).
+                if(item.Source is {} originalSource && item.Selector is not null)
                 {
                     // A relay does not move ownership of the library or reinterpret the source path.
                     await using var originalAccess=Sql.Command("""

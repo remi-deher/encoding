@@ -29,9 +29,42 @@ public static class HardwareInventory
         RuntimeInformation.OSDescription,
         RuntimeInformation.ProcessArchitecture.ToString(),
         Environment.ProcessorCount,
-        Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024)),
+        ReadMemoryMb(),
         ReadProcessorModel(cpuInfoPath),
         ReadGpus(drmRoot));
+
+    private static readonly string[] CgroupLimitPaths = ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"];
+
+    /// <summary>Mémoire du conteneur (limite cgroup v2 ou v1), bornée par la mémoire de l'hôte ; le plafond du GC n'est pas la mémoire disponible.</summary>
+    public static long ReadMemoryMb() => ReadMemoryMb(CgroupLimitPaths, "/proc/meminfo");
+
+    public static long ReadMemoryMb(IEnumerable<string> cgroupLimitPaths, string memInfoPath)
+    {
+        long? host = null;
+        try
+        {
+            foreach (var line in File.ReadLines(memInfoPath))
+                if (line.StartsWith("MemTotal:", StringComparison.Ordinal))
+                {
+                    var digits = new string(line["MemTotal:".Length..].Where(char.IsDigit).ToArray());
+                    if (long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var kb)) host = kb / 1024;
+                    break;
+                }
+        }
+        catch (Exception) { }
+        long? limit = null;
+        foreach (var path in cgroupLimitPaths)
+        {
+            try
+            {
+                if (long.TryParse(File.ReadAllText(path).Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var bytes) && bytes > 0)
+                { limit = bytes / (1024 * 1024); break; }
+            }
+            catch (Exception) { }
+        }
+        var chosen = (host, limit) switch { ({ } h, { } l) => Math.Min(h, l), ({ } h, null) => h, (null, { } l) => l, _ => (long?)null };
+        return chosen ?? Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
+    }
 
     public static string? ReadProcessorModel(string cpuInfoPath)
     {

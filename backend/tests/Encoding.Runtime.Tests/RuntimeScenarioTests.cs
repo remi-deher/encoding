@@ -62,6 +62,9 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
     public Task WorkerLossFailover() => Scenarios.WorkerLossFailoverAsync();
 
     [PostgresFact]
+    public Task DirectWorkerLossFailover() => Scenarios.DirectWorkerLossFailoverAsync();
+
+    [PostgresFact]
     public Task ServerLossFailover() => Scenarios.ServerLossFailoverAsync();
 
     [MediaToolsFact]
