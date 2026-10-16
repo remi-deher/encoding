@@ -1,6 +1,6 @@
 .page-header {
   min-width: 0;
-  margin-bottom: 22px;
+  margin-bottom: var(--space-5);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -10,10 +10,10 @@
 .page-heading h1 {
   margin: 0;
   color: var(--text-primary);
-  font-size: clamp(24px, 2.4vw, 29px);
-  font-weight: 730;
-  letter-spacing: -0.04em;
-  line-height: 1.15;
+  font-size: clamp(24px, 2.6vw, var(--font-display-sm));
+  font-weight: 780;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
 }
 
 .page-actions {
@@ -33,7 +33,7 @@
 .page-description {
   margin: var(--space-2) 0 0;
   color: var(--text-secondary);
-  font-size: var(--font-label);
+  font-size: var(--font-body);
   line-height: 1.5;
 }
 .page-metadata:empty,
@@ -47,9 +47,9 @@
   gap: var(--space-4);
   padding: var(--space-5);
   margin-bottom: var(--space-5);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: var(--surface-container-low);
   box-shadow: var(--elevation-1);
 }
 .page-header_workspace .page-heading h1 {

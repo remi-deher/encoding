@@ -1,5 +1,4 @@
-import { Component, computed, input, output } from '@angular/core';
-import { MatTabsModule } from '@angular/material/tabs';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 export interface CategoryTabOption {
   readonly value: string;
@@ -9,25 +8,26 @@ export interface CategoryTabOption {
 
 @Component({
   selector: 'app-category-tabs',
-  imports: [MatTabsModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [],
   template: `
-    <mat-tab-group
-      class="category-tabs"
-      [attr.aria-label]="label()"
-      [selectedIndex]="selectedIndex()"
-      (selectedIndexChange)="onSelectedIndexChange($event)"
-    >
+    <nav class="category-tabs" [attr.aria-label]="label()" role="tablist">
       @for (option of options(); track option.value) {
-        <mat-tab>
-          <ng-template mat-tab-label>
-            {{ option.label }}
-            @if (option.count !== undefined) {
-              <span class="option-count">{{ option.count }}</span>
-            }
-          </ng-template>
-        </mat-tab>
+        <button
+          type="button"
+          class="category-tab-pill"
+          role="tab"
+          [class.is-active]="option.value === selected()"
+          [attr.aria-selected]="option.value === selected()"
+          (click)="selectedChange.emit(option.value)"
+        >
+          <span class="tab-label">{{ option.label }}</span>
+          @if (option.count !== undefined) {
+            <span class="option-count">{{ option.count }}</span>
+          }
+        </button>
       }
-    </mat-tab-group>
+    </nav>
   `,
   styleUrl: './category-tabs.component.scss',
 })
@@ -36,18 +36,4 @@ export class CategoryTabsComponent {
   readonly options = input.required<readonly CategoryTabOption[]>();
   readonly selected = input.required<string>();
   readonly selectedChange = output<string>();
-
-  protected readonly selectedIndex = computed(() =>
-    Math.max(
-      0,
-      this.options().findIndex((option) => option.value === this.selected()),
-    ),
-  );
-
-  protected onSelectedIndexChange(index: number): void {
-    const option = this.options()[index];
-    if (option) {
-      this.selectedChange.emit(option.value);
-    }
-  }
 }

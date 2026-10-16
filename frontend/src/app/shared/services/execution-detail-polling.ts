@@ -1,5 +1,15 @@
 import { Injectable } from '@angular/core';
-import { Observable, catchError, combineLatest, exhaustMap, map, of, startWith, switchMap, timer } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  combineLatest,
+  exhaustMap,
+  map,
+  of,
+  startWith,
+  switchMap,
+  timer,
+} from 'rxjs';
 import { DataTableRow } from '../ui/data-table.component';
 import { ExecutionPipelineStep } from '../models/execution';
 import { EXECUTION_STATE_LABELS } from '../models/execution';
@@ -50,7 +60,9 @@ export class ExecutionDetailPolling {
                         createdAt: this.date(event.createdAt),
                       })),
                     })),
-                    catchError(() => of({ message: 'Impossible de charger la chronologie.', rows: [] })),
+                    catchError(() =>
+                      of({ message: 'Impossible de charger la chronologie.', rows: [] }),
+                    ),
                   ),
                 ),
                 startWith({ message: 'Chargement de la chronologie…', rows: [] }),

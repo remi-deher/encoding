@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { StatusBadgeComponent, StatusTone } from './status-badge.component';
 
 export interface MatrixCell {
@@ -12,6 +12,7 @@ export interface MatrixHeader {
 
 /** Tableau croisé en lecture seule : une cellule par couple ligne × colonne. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-matrix-table',
   imports: [StatusBadgeComponent],
   template: `
@@ -59,7 +60,7 @@ export interface MatrixHeader {
     td {
       padding: var(--space-2, 8px) var(--space-3, 12px);
       text-align: left;
-      border-bottom: 1px solid var(--border, currentColor);
+      border-bottom: 1px solid var(--border-subtle);
     }
     .visually-hidden {
       position: absolute;

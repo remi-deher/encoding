@@ -1,4 +1,4 @@
-import { Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { FlowComponentDefinition, FLOW_COMPONENT_KIND_LABELS } from '../models/flow-component';
 import { flowComponentColors } from '../models/flow-presentation';
@@ -26,6 +26,7 @@ interface FlowComponentGroup {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-component-list',
   imports: [MatExpansionModule],
   template: `
@@ -186,7 +187,7 @@ interface FlowComponentGroup {
       }
     }
   `,
-  })
+})
 export class FlowComponentListComponent {
   readonly components = input.required<readonly FlowComponentDefinition[]>();
   readonly emptyMessage = input('Aucun bloc fourni par ce plugin.');

@@ -1,5 +1,13 @@
 import { flowConfigurationFieldError } from '../models/flow-graph';
-import { Component, input, output, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+  OnChanges,
+  OnDestroy,
+  SimpleChanges,
+} from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
@@ -16,6 +24,7 @@ import { flowFieldValidator } from './flow-configuration-controls';
 import { conditionTreeSummary } from '../models/condition-tree';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-inline-parameters',
   imports: [ReactiveFormsModule, MatFormFieldModule, MatSelectModule, MatInputModule],
   templateUrl: './flow-inline-parameters.html',

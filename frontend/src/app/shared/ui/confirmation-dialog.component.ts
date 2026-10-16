@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
@@ -22,16 +22,13 @@ export interface ConfirmationDialogData {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-confirmation-dialog',
   imports: [MatButtonModule, MatDialogActions, MatDialogContent, MatDialogTitle],
   template: `
     <section class="app-dialog confirmation-dialog">
       <header class="app-dialog-header">
-        <span
-          class="app-dialog-icon"
-          [class.app-dialog-icon_danger]="isDanger"
-          aria-hidden="true"
-        >
+        <span class="app-dialog-icon" [class.app-dialog-icon_danger]="isDanger" aria-hidden="true">
           {{ data.mode === 'information' ? 'i' : isDanger ? '!' : '?' }}
         </span>
         <div class="app-dialog-heading">
@@ -68,7 +65,9 @@ export interface ConfirmationDialogData {
             matButton="filled"
             type="button"
             [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
-            [style.--mat-button-filled-label-text-color]="data.confirmColor ? 'var(--on-danger)' : null"
+            [style.--mat-button-filled-label-text-color]="
+              data.confirmColor ? 'var(--on-danger)' : null
+            "
             (click)="dialogRef.close(true)"
           >
             {{ data.closeLabel ?? 'Fermer' }}
@@ -79,7 +78,9 @@ export interface ConfirmationDialogData {
             matButton="filled"
             type="button"
             [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
-            [style.--mat-button-filled-label-text-color]="data.confirmColor ? 'var(--on-danger)' : null"
+            [style.--mat-button-filled-label-text-color]="
+              data.confirmColor ? 'var(--on-danger)' : null
+            "
             (click)="dialogRef.close(true)"
           >
             {{ data.confirmLabel ?? 'Confirmer' }}

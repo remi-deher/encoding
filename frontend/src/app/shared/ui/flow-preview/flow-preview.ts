@@ -1,4 +1,4 @@
-import { Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import {
   FLOW_COMPONENT_KIND_LABELS,
   FlowComponentDefinition,
@@ -48,6 +48,7 @@ function sameReference(
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-preview',
   imports: [],
   templateUrl: './flow-preview.html',
@@ -95,15 +96,21 @@ export class FlowPreviewComponent {
         return [];
       });
       const outputs = descriptor?.outputs ?? [];
-      const connections = outputs.flatMap((output) =>
-        flowConnections
-          .filter((connection) => connection.sourceNodeId === node.id && connection.sourceOutputId === output.id)
-          .map((connection) => ({
-            label: output.label,
-            target: titleById.get(connection.targetNodeId) ?? 'Bloc indisponible',
-          })) ?? [],
+      const connections = outputs.flatMap(
+        (output) =>
+          flowConnections
+            .filter(
+              (connection) =>
+                connection.sourceNodeId === node.id && connection.sourceOutputId === output.id,
+            )
+            .map((connection) => ({
+              label: output.label,
+              target: titleById.get(connection.targetNodeId) ?? 'Bloc indisponible',
+            })) ?? [],
       );
-      const colors = descriptor ? flowComponentColors(descriptor) : { color: '#555e6b', background: '#f0f2f5' };
+      const colors = descriptor
+        ? flowComponentColors(descriptor)
+        : { color: '#555e6b', background: '#f0f2f5' };
       return {
         id: node.id,
         title: node.name || descriptor?.name || node.component.componentId,

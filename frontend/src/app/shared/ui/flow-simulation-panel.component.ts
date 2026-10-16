@@ -1,4 +1,4 @@
-import { Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { ComponentConfigurationFormComponent } from './component-configuration-form.component';
 import { DetailField, DetailFieldListComponent } from './detail-field-list.component';
@@ -15,6 +15,7 @@ import {
 } from '../models/flow-simulation';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-simulation-panel',
   imports: [
     MatExpansionModule,

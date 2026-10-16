@@ -1,7 +1,8 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 /** Bandeau de contexte d'une page de gestion : où l'on se trouve, et l'action qui s'y rapporte. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-context-banner',
   template: `
     <section class="context-banner" [attr.aria-label]="label()">

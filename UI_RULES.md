@@ -1,203 +1,99 @@
-# Règles de programmation de l’interface
+# Règles d’architecture UI / UX — Angular 22 & Material Design 3 Expressive
 
-La référence de présentation des ressources et fiches est décrite dans
-[Ressources et sections pleine largeur](docs/design/interface-resource-layout.md).
-Les prochaines refontes reprennent cette hiérarchie souple, issue de l’onglet
-Cluster, en conservant les gabarits adaptés au besoin et les règles ci-dessous.
+Ce document définit les principes de conception, d’ergonomie et d’ingénierie frontend du projet. Il remplace les anciennes règles rigides « tout-tableau / tout-tiroir » par une architecture **Angular 22 moderne** et le langage visuel **Material Design 3 Expressive (M3 Expressive)**. La déclinaison détaillée pour les listes et fiches de ressources est décrite dans [Ressources et mise en scène M3 Expressive](docs/design/interface-resource-layout.md).
 
-## 1. Partir du besoin utilisateur
+---
 
-Avant de coder une page, identifier la question à laquelle elle répond.
-Le besoin détermine le gabarit, puis la présentation.
+## 1. Intention utilisateur et clarté des parcours
 
-Chaque page ou section répond à un seul besoin :
-- Surveiller : est-ce que tout va bien ?
-- Traiter : que dois-je faire maintenant ?
-- Gérer : comment maintenir ces ressources ?
-- Suivre : où en sont les opérations en cours ?
-- Parcourir : qu’y a-t-il d’intéressant ?
-- Explorer : comment trouver précisément un élément ?
-- Analyser : que montrent les données et leur évolution ?
-- Créer : comment mettre quelque chose en place ?
-- Choisir : quel candidat sélectionner ?
-- Anticiper : qu’est-ce qui arrive, et quand ?
-- Comprendre : que s’est-il passé ?
-- Configurer : comment régler le fonctionnement ?
-- Fiche : tout connaître sur un élément.
+Avant de concevoir une vue ou un composant, identifier la question principale à laquelle il répond :
+- **Surveiller** : *Est-ce que le cluster et les traitements fonctionnent normalement ?* (Vue d’ensemble, métriques héroïques, alertes).
+- **Gérer & Explorer** : *Quel est l’état de mes ressources (nœuds, bibliothèques, flows, plugins) et comment agir dessus ?*
+- **Concevoir** : *Comment construire et tester mon pipeline de traitement ?* (Éditeur de flow).
+- **Suivre & Comprendre** : *Où en sont les opérations en cours et que s’est-il passé ?* (Suivi temps réel, journaux de pipeline).
+- **Configurer** : *Comment régler un service, un profil ou un accès ?*
 
-Une page qui mélange plusieurs besoins se découpe en sections,
-onglets ou pages distinctes.
+### Choisir le bon conteneur d’interaction
+- **Vue principale / Sections structurées** : Les informations essentielles (état, capacité, matériel, flow actif, activité) sont lisibles immédiatement sans obliger l’utilisateur à ouvrir une série de petites boîtes ou de sous-fenêtres.
+- **Tiroir latéral (`DetailDrawer`)** : Réservé à l’inspection détaillée d’un élément, à la configuration d’un bloc de flow ou à une édition contextuelle ciblée. Ne jamais empiler plusieurs tiroirs dans le DOM et éviter d’enfermer toute une application dans un tiroir.
+- **Modale (`MatDialog`)** : Réservée aux confirmations critiques, aux codes de vérification d’appairage et aux décisions courtes qui requièrent l’attention immédiate.
 
-## 2. Toutes les pages utilisent des gabarits communs
+---
 
-Aucune page ne construit sa propre structure.
+## 2. Langage visuel : Material Design 3 Expressive
 
-Un socle commun porte :
-- la navigation ;
-- la recherche et les filtres ;
-- les outils de page ;
-- les états chargement, erreur, vide et non configuré ;
-- les espacements et le comportement mobile.
+L’interface adopte les principes de **Material 3 Expressive** pour offrir une hiérarchie visuelle claire, chaleureuse et immédiatement scannable en thème clair comme en thème sombre.
 
-Le gabarit métier fixe la structure, l’ordre et les interactions.
-La page fournit les données, les définitions et le contenu prévu
-dans les emplacements du gabarit.
+### 2.1. Surfaces tonales plutôt que bordures omniprésentes
+- Structurer la profondeur par **contraste de luminance des conteneurs M3** plutôt que par des grilles de bordures `1px solid` partout :
+  - `--surface-container-lowest` / `--page-background` : toile de fond de l’application.
+  - `--surface-container-low` : grands ensembles et sections de regroupement.
+  - `--surface-container` : cartes de ressources et panneaux au repos.
+  - `--surface-container-high` : cartes survolées, barres d’outils contextuelles, tiroirs.
+  - `--surface-container-highest` : puces interactives, contrôles segmentés, jauges.
+  - Conteneurs tonaux sémantiques : `--accent-soft` (`primary-container`), `--tertiary-soft` (`tertiary-container`), `--success-soft`, `--warning-soft`, `--danger-soft`.
+- Réserver les bordures visibles aux champs de saisie (`outline`), aux séparateurs légers de listes denses et aux états sélectionnés ou mis en exergue.
 
-Si une capacité manque, faire évoluer le gabarit ou son bloc commun
-pour toutes les pages. Ne jamais le contourner depuis une page.
-Vérifier ses usages et signaler cette évolution.
+### 2.2. Formes expressives, groupes connectés et « Shape Morphing »
+- Jouer sur le contraste des rayons de bordure :
+  - Conteneurs principaux et cartes héroïques : `--radius-xl` (`20px`–`24px`) à `--radius-2xl` (`28px`).
+  - Cartes de ressources et panneaux : `--radius-lg` (`16px`).
+  - Éléments internes et puces : `--radius-md` (`12px`) ou `--radius-sm` (`8px`).
+  - Boutons d’action et badges d’état : `--radius-pill` (`999px`).
+- **Conteneurs groupés M3 (*Connected Containers*)** : Dans une pile verticale de ressources ou de sections liées (`ResourceSheet`), les blocs forment un ensemble cohérent avec des coins extérieurs généreux (`20px`–`24px`), des coins intérieurs adoucis (`6px`–`8px`) et un espacement fin (`2px`–`4px`) qui remplace les filets de bordure traditionnels.
+- **Morphing de forme à l’interaction** : Les éléments sélectionnés ou actifs marquent leur état par une transition fluide de couleur tonale, d’élévation et de rayon.
 
-## 3. Utiliser exclusivement les composants communs
+### 2.3. Typographie éditoriale et « Hero Metrics »
+- **Contraste d’échelle franc** :
+  - Utiliser les jetons d’affichage (`--font-display-sm: 28px`, `--font-display-md: 36px`, `--font-display-lg: 44px`) avec `font-variant-numeric: tabular-nums` et un poids fort (`700–800`) pour les mesures clés (workers actifs, tâches en cours, occupation).
+  - Titres de page et d’en-tête expressifs (`--font-headline`, `--font-title-lg`), distincts des libellés de section (`--font-label` en capitales aérées ou `--font-title-sm`).
+  - Jamais de taille de police inférieure à `--font-label` (`12px`). Sur mobile, les champs de saisie utilisent au minimum `14px`–`16px`.
+- **Polices spécialisées** : Police sans-serif géométrique/humaniste pour les titres et l’interface, police monospace (`ui-monospace`, `JetBrains Mono`, `Consolas`) pour les identifiants techniques, chemins de fichiers, commandes et journaux.
 
-Réutiliser les composants UI et les frameworks du projet.
-Ne pas réimplémenter leurs comportements.
+### 2.4. Physique du mouvement (« Spring Physics »)
+- Remplacer les transitions linéaires ternes par les courbes d’accélération M3 Expressive :
+  - `--motion-spring-fast` (`cubic-bezier(0.42, 1.67, 0.21, 0.90)`) pour les micro-interactions, bascules, puces et boutons.
+  - `--motion-spring-standard` (`cubic-bezier(0.27, 1.06, 0.18, 1.00)`) pour l’ouverture de panneaux, jauges et cartes.
+  - `--motion-emphasized` (`cubic-bezier(0.2, 0, 0, 1)`) pour les transitions de page et de tiroir.
+- Toujours respecter `@media (prefers-reduced-motion: reduce)`.
 
-Avant de créer un composant :
-1. Chercher un composant existant.
-2. Étendre ce composant si une capacité lui manque.
-3. Créer un nouveau composant seulement s’il est réutilisable.
+---
 
-Un composant commun possède :
-- un nom générique ;
-- des propriétés décrivant un besoin ;
-- aucune donnée ni route propre à une page ;
-- une place dans le dossier des composants partagés.
+## 3. Architecture Angular 22 Moderne
 
-Ne pas créer un composant de présentation pour une seule page.
+### 3.1. Réactivité par Signals et performance `OnPush`
+- **Signals partout** : Utiliser exclusivement `input()`, `output()`, `model()`, `signal()`, `computed()`, `linkedSignal()`, `viewChild()` et `viewChildren()`.
+- **Aucun décorateur legacy** : Ne pas utiliser `@Input()`, `@Output()`, `@ViewChild()`, `@ViewChildren()`, `@HostBinding()` ou `@HostListener()`. Déclarer les liaisons d’hôte dans `host: { ... }` du décorateur `@Component`.
+- **Détection de changements** : Privilégier `ChangeDetectionStrategy.OnPush` sur les composants UI et les vues afin d’éviter tout cycle de rendu superflu lors des rafraîchissements périodiques (polling).
+- **Flux de contrôle natif** : Utiliser `@if`, `@for` (avec `track` explicite et stable), `@switch` et `@let`.
 
-## 4. Séparer les responsabilités
+### 3.2. Découpage modulaire : Socle partagé + Composants de Feature
+- **Socle partagé (`shared/ui/`, `shared/templates/`)** : Héberge le design system M3 Expressive (en-têtes, cartes de ressources, fiches `ResourceSheet`, tuiles de métriques expressives, tableaux de données, tiroirs, modales, badges, éditeur de graphe). Ces composants sont purs et agnostiques du métier.
+- **Composants de feature (`features/<domaine>/`)** : Contrairement à l’ancienne règle qui interdisait tout sous-composant propre à une fonctionnalité et produisait des fichiers monolithiques de près de 2 000 lignes, **une page complexe doit être découpée en sous-composants et contrôleurs focalisés** (par exemple un sous-composant ou contrôleur pour la gestion du cluster, pour l’accès aux bibliothèques ou pour l’inspecteur de flow).
+- **Contrôleurs / Services de feature** : L’orchestration HTTP, le polling et les transformations métier riches vivent dans des services/contrôleurs dédiés (sur le modèle de `LocalNodeController`) plutôt que dans le template ou le corps d’un composant géant.
 
-- Vues : assemblage des gabarits et du contenu.
-- Gabarits : structure et interactions communes.
-- Composants UI : affichage et comportements réutilisables.
-- Composables : lecture des données, état et orchestration des actions.
-- Définitions métier : colonnes, filtres, actions, confirmations,
-  étapes et champs des formulaires.
-- Serveur : règles métier et état de référence.
+### 3.3. Formulaires et actions
+- **Formulaires typés vs Schémas déclaratifs** :
+  - Utiliser les composants de schéma déclaratif (`RecordFormComponent`, `ComponentConfigurationFormComponent`, `GuidedSetupComponent`) pour les assistants standardisés et les schémas dynamiques fournis par le backend/plugins.
+  - Pour les éditeurs métier spécialisés (scripts, profils d’encodage, planification hebdomadaire, arbre de conditions), utiliser des formulaires Angular typés et ergonomiques avec protection contre la perte de modifications non enregistrées.
+- **Placement et hiérarchie des actions** :
+  - Sur une carte de ressource en liste : **une seule action principale** directe (clic sur le titre ou bouton d’ouverture tonal/texte) et un menu contextuel `⋮` (`MatMenu`) pour les actions secondaires. Ne jamais aligner 4 boutons en bas de chaque carte.
+  - Dans une fiche ouverte : les actions globales sur la ressource vivent dans l’en-tête.
+  - Tous les retours d’action (succès, erreur) passent par `NotificationService`.
 
-Une vue ne contient pas de logique réutilisable.
-Les gabarits et composants d’affichage ne chargent pas eux-mêmes
-les données métier.
+---
 
-Suivre les conventions du code environnant.
+## 4. Intégrité des métriques, Accessibilité et Mobile
 
-## 5. Décrire les interfaces par des données
-
-Les colonnes, filtres, actions et formulaires sont des définitions,
-rendues par les composants communs.
-
-Les filtres actifs et leurs pastilles se déduisent des mêmes
-définitions : ne pas maintenir deux descriptions séparées.
-
-Les créations et saisies utilisent un gabarit commun piloté par :
-- des étapes ;
-- des champs typés ;
-- des validations ;
-- des conditions ;
-- des tests de connexion si nécessaire ;
-- un récapitulatif modifiable ;
-- une soumission et un résultat.
-
-Ne pas écrire de formulaire de création directement dans une page.
-Ajouter tout nouveau type de champ au gabarit commun.
-
-## 6. Unifier navigation, recherche et filtres
-
-Une seule rangée de navigation par page, fournie par le socle.
-
-Distinguer trois rôles :
-- Navigation : change de vue et d’adresse.
-- Consultation : affiche une partie d’un élément.
-- Filtrage : restreint une liste.
-
-Ne pas utiliser ces composants de manière interchangeable.
-
-La recherche et les filtres passent toujours par le socle.
-Les filtres s’appliquent immédiatement et se retirent par leurs
-pastilles. Ne pas ajouter de barre de recherche ou de panneau
-de filtres propre à une page.
-
-Les contrôles qui cadrent toute la page — période, vue du calendrier,
-pause d’un service — passent par les outils de page.
-Les filtres d’une liste restent près de cette liste.
-
-## 7. Centraliser les tableaux et leurs actions
-
-Un tableau de lecture commun gère tri, sélection et adaptation mobile.
-
-Un tableau de contrôle commun ajoute :
-- les actions groupées ;
-- les actions de ligne ;
-- les actions sur toute la liste ;
-- les confirmations ;
-- l’ouverture d’un élément ;
-- le chargement supplémentaire.
-
-Ne pas écrire de barre groupée, menu de ligne ou confirmation
-à côté du tableau.
-
-Un ensemble de cellules contenant des champs à remplir relève
-d’un formulaire de configuration, pas d’un tableau de données.
-
-## 8. Toutes les fenêtres utilisent un même socle
-
-Le socle commun gère focus, clavier, fermeture, titre, erreur,
-actions et adaptation mobile.
-
-Choisir le contenu selon le rôle :
-- Confirmer : confirmation courte avec deux boutons.
-- Saisir : gabarit de création piloté par une définition.
-- Gérer une liste : tableau de contrôle dans la fenêtre.
-- Consulter : contenu de lecture sans champs.
-- Choisir : candidats et sélection.
-
-Utiliser les tailles standard du socle.
-Ne pas inventer une largeur ou un mécanisme de fenêtre par page.
-
-## 9. Transmettre les objets métier entiers
-
-Définir des contrats métier communs entre serveur et interface.
-
-Transmettre l’objet complet aux composants plutôt que recopier
-ses champs d’affichage dans chaque page.
-
-Centraliser la traduction d’un état métier en présentation.
-Ne pas déduire artificiellement un état certain depuis une mesure :
-une progression à 100 % ne prouve pas la fin d’une opération.
-
-Distinguer état observé, état souhaité et absence d’information.
-
-## 10. Placer les actions selon le besoin
-
-- Fiche : actions dans l’en-tête, jamais dans les onglets.
-- Explorer : ouvrir la fiche ; les actions vivent dans la fiche.
-- Parcourir : découvrir ; les rails mènent à Explorer déjà filtré.
-- Traiter : actions unitaires et groupées, retour immédiat,
-  retrait de l’élément traité et annulation si possible.
-- Comprendre : aucune action dans la chronologie ;
-  au plus une dans le détail.
-- Configurer : un seul enregistrement global avec Annuler
-  et protection contre la perte de modifications.
-- Suivre : progression, cause du blocage et actions pour débloquer.
-
-Les retours de réussite ou d’échec passent par le système
-de notifications commun.
-
-## 11. Préserver la cohérence et vérifier les changements
-
-Toute modification d’un composant commun peut affecter plusieurs pages :
-examiner ses usages avant de le modifier.
-
-Vérifier selon la portée du changement :
-- types et compilation ;
-- tests métier et interactions ;
-- comportement sur ordinateur et téléphone ;
-- absence de régression fonctionnelle.
-
-Supprimer les composants et styles devenus inutiles après avoir
-vérifié qu’ils ne sont plus utilisés.
-
-Signaler explicitement les fonctions supprimées, les changements
-de comportement et les limites de validation.
-
-En cas de doute sur le besoin métier, demander plutôt qu’inventer.
+1. **Vérité des données** :
+   - N’afficher que des métriques adossées à une source réelle. Ne jamais inventer une tuile ou une jauge fictive.
+   - Une progression à `100 %` ne prouve pas la terminaison d’une tâche : seul l’état serveur fait foi.
+   - Distinguer visuellement : **état actif observé**, **état souhaité en attente**, **valeur indisponible** et **dernière valeur connue d’un nœud hors ligne** (jauge atténuée/hachurée `is-stale`).
+2. **Accessibilité (WCAG AA) et Clavier** :
+   - Tout état communiqué par la couleur (succès, avertissement, erreur, accélérateur matériel) comporte un libellé explicite.
+   - Les contrôles interactifs respectent une cible minimale accessible et possèdent un `aria-label` explicite lorsque leur libellé est iconographique.
+   - Les rafraîchissements périodiques (polling) préservent la sélection, le focus et les saisies en cours.
+3. **Adaptation Mobile et Tablette** :
+   - Aucune page ne provoque de défilement horizontal global.
+   - Les grilles de métriques et les sections de `ResourceCard` / `ResourceSheet` se replient harmonieusement sur 1 ou 2 colonnes sur écran étroit.
+   - Supprimer systématiquement le code, les styles et les composants devenus obsolètes après vérification de leurs usages.

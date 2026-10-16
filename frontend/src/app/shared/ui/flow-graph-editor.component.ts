@@ -9,6 +9,7 @@ import {
 } from '../models/flow-component';
 import { flowComponentColors } from '../models/flow-presentation';
 import {
+  ChangeDetectionStrategy,
   Component,
   computed,
   input,
@@ -47,6 +48,7 @@ import {
 } from '../models/flow-sequence';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-graph-editor',
   imports: [
     NgTemplateOutlet,

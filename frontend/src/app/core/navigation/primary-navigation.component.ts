@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Route, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
 
@@ -64,8 +64,10 @@ export function getPrimaryNavigationGroups(routes: Route[]): readonly Navigation
     .sort(([left], [right]) => {
       const leftOrder = NAVIGATION_GROUP_ORDER.indexOf(left);
       const rightOrder = NAVIGATION_GROUP_ORDER.indexOf(right);
-      return (leftOrder < 0 ? Number.MAX_SAFE_INTEGER : leftOrder) -
-        (rightOrder < 0 ? Number.MAX_SAFE_INTEGER : rightOrder);
+      return (
+        (leftOrder < 0 ? Number.MAX_SAFE_INTEGER : leftOrder) -
+        (rightOrder < 0 ? Number.MAX_SAFE_INTEGER : rightOrder)
+      );
     })
     .map(([label, items]) => ({
       label,
@@ -74,6 +76,7 @@ export function getPrimaryNavigationGroups(routes: Route[]): readonly Navigation
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-primary-navigation',
   imports: [RouterLink, RouterLinkActive],
   templateUrl: './primary-navigation.component.html',

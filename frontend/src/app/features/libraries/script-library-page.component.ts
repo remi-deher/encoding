@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -38,6 +38,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
 };
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-script-library-page',
   imports: [
     CategoryTabsComponent,
@@ -67,7 +68,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
       [actionOpen]="formOpen()"
       [actionTitle]="workspaceTitle()"
       [actionDescription]="workspaceStatus()"
-      (actionClosed)="closeEditor()"
+      (actionClosed)="requestClose()"
     >
       <ng-template #pageActions>
         @if (summaries().length > 0) {
@@ -85,7 +86,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
 
       <app-data-table
         catalogue-table
-        layout="cards"
+        layout="resources"
         [columns]="columns"
         [rows]="rows()"
         [rowOpenable]="true"

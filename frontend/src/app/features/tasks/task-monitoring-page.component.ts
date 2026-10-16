@@ -11,7 +11,14 @@ import { formatFileSize } from '../../shared/models/file-size';
 import { joinBadges, mediaBadges } from '../../shared/models/media-badges';
 import { NotificationService } from '../../shared/services/notification.service';
 import { ExecutionDetailPolling } from '../../shared/services/execution-detail-polling';
-import { Component, computed, inject, signal, DestroyRef } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+  DestroyRef,
+} from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
   DataTableActionEvent,
@@ -26,7 +33,13 @@ import {
   ExecutionMonitorView,
 } from '../../shared/templates/execution-monitor-template.component';
 
-const VIEWS: readonly ExecutionMonitorView[] = ['queue', 'active', 'errors', 'cancelled', 'history'];
+const VIEWS: readonly ExecutionMonitorView[] = [
+  'queue',
+  'active',
+  'errors',
+  'cancelled',
+  'history',
+];
 
 interface ExecutionRecord extends DataTableRow {
   readonly id: string;
@@ -45,6 +58,7 @@ interface ExecutionRecord extends DataTableRow {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-task-monitoring-page',
   imports: [ExecutionMonitorTemplateComponent, MatButtonModule],
   templateUrl: './task-monitoring-page.component.html',
@@ -116,29 +130,34 @@ export class TaskMonitoringPageComponent {
             ),
           ) + ' s'
         : '—',
-      beforeSize: e.beforeMetadata?.format?.size != null
-        ? formatFileSize(Number(e.beforeMetadata.format.size))
-        : '—',
-      afterSize: e.afterMetadata?.format?.size != null
-        ? formatFileSize(Number(e.afterMetadata.format.size))
-        : '—',
+      beforeSize:
+        e.beforeMetadata?.format?.size != null
+          ? formatFileSize(Number(e.beforeMetadata.format.size))
+          : '—',
+      afterSize:
+        e.afterMetadata?.format?.size != null
+          ? formatFileSize(Number(e.afterMetadata.format.size))
+          : '—',
       publishedPath: e.publishedPath ?? '—',
-      videoEncodingsJson: JSON.stringify((e.videoEncodings ?? []).map((encoding, index) => ({
-        id: `${encoding.flowNodeId}-${encoding.encoderId}-${index}`,
-        flowNode: encoding.flowNodeId,
-        worker: encoding.workerId,
-        codec: encoding.codec.toUpperCase(),
-        encoder: encoding.encoderId,
-        ffmpeg: encoding.ffmpegVersion,
-        acceleration: encoding.acceleration,
-        quality: `${encoding.qualityMode} (${encoding.qualityOption}) : ${encoding.quality}`,
-        preset: encoding.presetOption && encoding.presetValue
-          ? `${encoding.presetOption} : ${encoding.presetValue}`
-          : 'Sans preset',
-        profile: `${encoding.profileName} · v${encoding.profileVersion}`,
-        priority: encoding.priority + 1,
-        resolvedAt: this.date(encoding.resolvedAt),
-      }))),
+      videoEncodingsJson: JSON.stringify(
+        (e.videoEncodings ?? []).map((encoding, index) => ({
+          id: `${encoding.flowNodeId}-${encoding.encoderId}-${index}`,
+          flowNode: encoding.flowNodeId,
+          worker: encoding.workerId,
+          codec: encoding.codec.toUpperCase(),
+          encoder: encoding.encoderId,
+          ffmpeg: encoding.ffmpegVersion,
+          acceleration: encoding.acceleration,
+          quality: `${encoding.qualityMode} (${encoding.qualityOption}) : ${encoding.quality}`,
+          preset:
+            encoding.presetOption && encoding.presetValue
+              ? `${encoding.presetOption} : ${encoding.presetValue}`
+              : 'Sans preset',
+          profile: `${encoding.profileName} · v${encoding.profileVersion}`,
+          priority: encoding.priority + 1,
+          resolvedAt: this.date(encoding.resolvedAt),
+        })),
+      ),
       mediaBadges: joinBadges(mediaBadges(e.beforeMetadata)),
       attempt: e.attempt,
       progress: e.progress === null ? '—' : e.progress + ' %',

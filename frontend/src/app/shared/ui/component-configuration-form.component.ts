@@ -1,6 +1,15 @@
 import { flowFieldValidator } from './flow-configuration-controls';
 import { flowConfigurationValue } from '../models/flow-configuration';
-import { Component, OnChanges, SimpleChanges, inject, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnChanges,
+  SimpleChanges,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -32,6 +41,7 @@ type ConfigurationFormGroup = FormGroup<
 >;
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-component-configuration-form',
   imports: [
     MatButtonModule,

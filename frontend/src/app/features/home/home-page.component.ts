@@ -16,7 +16,15 @@ import {
 import { HealthBannerComponent } from '../../shared/ui/health-banner.component';
 import { MatrixCell, MatrixTableComponent } from '../../shared/ui/matrix-table.component';
 import { NodeResponse, NodeRole, NODE_ROLE_LABELS } from '../../shared/models/cluster';
-import { Component, TemplateRef, computed, inject, signal, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  TemplateRef,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { Router, RouterLink } from '@angular/router';
@@ -29,6 +37,7 @@ import { ExecutionCardComponent } from '../../shared/ui/execution-card.component
 
 @Component({
   selector: 'app-home-page',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatButtonModule,
     MatProgressBarModule,
@@ -139,7 +148,6 @@ export class HomePageComponent {
         { label: 'Nœuds en ligne', value: '—', detail: 'Données indisponibles' },
         { label: 'Workers en ligne', value: '—', detail: 'Données indisponibles' },
         { label: 'Bibliothèques actives', value: '—', detail: 'Données indisponibles' },
-        { label: 'Espace économisé', value: '—', detail: 'Mesure non disponible' },
         ...this.executionMetrics(),
       ];
     const online = snapshot.nodes.filter((n) => n.status === 'online');
@@ -161,7 +169,6 @@ export class HomePageComponent {
           snapshot.libraries.filter((l) => l.isActive).length + ' / ' + snapshot.libraries.length,
         detail: 'Configuration enregistrée dans le cluster',
       },
-      { label: 'Espace économisé', value: '—', detail: 'Mesure non disponible' },
       ...this.executionMetrics(),
     ];
   });

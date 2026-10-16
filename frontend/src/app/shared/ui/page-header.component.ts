@@ -1,10 +1,19 @@
 import { Router } from '@angular/router';
 import { PageTitle } from '../services/page-title';
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, TemplateRef, input, inject, effect, DestroyRef } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  TemplateRef,
+  input,
+  inject,
+  effect,
+  DestroyRef,
+} from '@angular/core';
 
 @Component({
   selector: 'app-page-header',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgTemplateOutlet],
   template: `
     <div class="page-header" [class.page-header_workspace]="layout() === 'workspace'">

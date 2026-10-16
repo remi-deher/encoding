@@ -1,10 +1,11 @@
 import { MatButtonModule } from '@angular/material/button';
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, TemplateRef, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, input, output } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
 
 @Component({
   selector: 'app-detail-drawer',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatSidenavModule, NgTemplateOutlet],
   template: `
     <mat-drawer-container class="detail-drawer-container" [hasBackdrop]="modal()">
@@ -74,6 +75,9 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     .detail-drawer-panel {
       width: min(1000px, 82vw);
       max-width: 100vw;
+      border-start-start-radius: var(--radius-2xl);
+      border-end-start-radius: var(--radius-2xl);
+      overflow: hidden;
     }
 
     .detail-drawer-panel_standard {
@@ -84,7 +88,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       height: 100dvh;
       display: flex;
       flex-direction: column;
-      background: var(--surface);
+      background: var(--surface-container-lowest);
     }
 
     .drawer-header {
@@ -94,7 +98,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       align-items: center;
       justify-content: space-between;
       gap: 20px;
-      border-bottom: 1px solid var(--border-subtle);
+      background: var(--surface-container-low);
     }
 
     .drawer-heading {
@@ -106,8 +110,9 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     .drawer-heading h2 {
       margin: 0;
       color: var(--text-primary);
-      font-size: var(--font-title-md);
+      font-size: var(--font-display-sm);
       font-weight: 700;
+      letter-spacing: -0.025em;
     }
 
     .drawer-heading p {
@@ -153,8 +158,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       align-items: center;
       justify-content: flex-end;
       gap: var(--space-2);
-      border-top: 1px solid var(--border-subtle);
-      background: var(--surface);
+      background: var(--surface-container-low);
     }
 
     @media (max-width: 700px) {

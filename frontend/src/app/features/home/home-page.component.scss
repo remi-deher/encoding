@@ -5,31 +5,29 @@
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 13px;
+  gap: var(--space-3);
 }
 
 .overview-grid {
-  margin-top: 19px;
+  margin-top: var(--space-5);
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.9fr);
   align-items: start;
-  gap: 15px;
+  gap: var(--space-4);
 }
 
 .overview-secondary {
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: 15px;
+  gap: var(--space-4);
 }
 
 .surface-panel {
   min-width: 0;
-  padding: 17px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--elevation-1);
+  padding: var(--space-5);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-container-low);
 }
 
 .panel-heading {
@@ -43,9 +41,9 @@
 .panel-heading h2 {
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--font-body);
+  font-size: var(--font-title-md);
   font-weight: 700;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 .panel-heading p {
@@ -78,36 +76,52 @@
 
 mat-progress-bar {
   display: block;
-  height: 5px;
+  height: 6px;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  --mdc-linear-progress-track-height: 5px;
-  --mdc-linear-progress-active-indicator-height: 5px;
+  --mdc-linear-progress-track-height: 6px;
+  --mdc-linear-progress-active-indicator-height: 6px;
   --mdc-linear-progress-track-shape: 99px;
 }
 
 .node-list {
   display: grid;
+  gap: 3px;
 }
 
 .node-row {
   min-width: 0;
-  padding-block: 11px;
+  padding: var(--space-3) var(--space-4);
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-top: 1px solid var(--border-subtle);
+  gap: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container);
+  transition: background-color 200ms var(--motion-spring-fast);
+}
+
+.node-row:first-child {
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
+}
+
+.node-row:last-child {
+  border-end-start-radius: var(--radius-lg);
+  border-end-end-radius: var(--radius-lg);
+}
+
+.node-row:hover {
+  background: var(--surface-container-high);
 }
 
 .node-avatar {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface-muted);
+  background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: var(--font-body);
   font-weight: 750;
@@ -146,7 +160,7 @@ mat-progress-bar {
 }
 
 .matrix-panel {
-  margin-top: 15px;
+  margin-top: var(--space-4);
 }
 
 .execution-card-list {
@@ -168,17 +182,17 @@ mat-progress-bar {
 @media (max-width: 600px) {
   .overview-grid,
   .overview-secondary {
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   .overview-grid {
-    margin-top: 14px;
+    margin-top: var(--space-4);
   }
 }
 
 @media (max-width: 480px) {
   .metrics-grid {
-    gap: 10px;
+    gap: var(--space-2);
   }
 
   .surface-panel {

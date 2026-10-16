@@ -27,11 +27,11 @@
     (selectedChange)="onSectionChanged($event)"
   />
 
-  <app-data-table layout="cards"
+  <app-data-table
+    layout="resources"
     catalogue-table
     [columns]="columns"
     [rows]="filteredLibraries()"
-    [selectable]="true"
     [rowOpenable]="true"
     rowOpenLabel="Consulter"
     [rowActions]="libraryRowActions"
@@ -50,23 +50,15 @@
       (selectedIndexChange)="selectedLibraryTabIndex.set($event)"
     >
       <mat-tab label="Général">
-        <app-detail-card-grid
-          [cards]="libraryCards()"
-          [initiallyExpanded]="true"
-          [collapsible]="false"
-          [cardContentTemplates]="{ 'library-processing': libraryProcessingCardContent }"
-          ariaLabel="Accès, traitement et activité de la bibliothèque"
-          emptyMessage="Aucune information disponible pour cette bibliothèque."
-        />
-        <ng-template #libraryProcessingCardContent>
-          <div class="library-card-actions">
-            <app-drawer-action-button label="Attribuer un flow" (activated)="assignFlow()" />
-            <app-drawer-action-button
-              label="Surveillance et limites"
-              (activated)="configureProcessing()"
-            />
-          </div>
-        </ng-template>
+        @if (librarySheet(); as sheet) {
+          <app-resource-sheet
+            ariaLabel="Accès, traitement et activité de la bibliothèque"
+            [title]="sheet.title"
+            [subtitle]="sheet.subtitle"
+            [notices]="sheet.notices"
+            [sections]="sheet.sections"
+          />
+        }
         @if (selectedLibrary()) {
           <h3>Fichiers détectés</h3>
           <app-data-table
@@ -145,6 +137,16 @@
 
   <ng-template #detailHeaderActions>
     @if (selectedLibrary()) {
+      <app-drawer-action-button
+        label="Attribuer un flow"
+        variant="outlined"
+        (activated)="assignFlow()"
+      />
+      <app-drawer-action-button
+        label="Surveillance et limites"
+        variant="outlined"
+        (activated)="configureProcessing()"
+      />
       <app-drawer-action-button
         label="Attribuer un nœud / groupe"
         (activated)="configureAccesses()"

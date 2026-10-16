@@ -1,4 +1,4 @@
-import { Component, computed, input, TemplateRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, TemplateRef } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatTabsModule } from '@angular/material/tabs';
 
@@ -9,6 +9,7 @@ export interface DetailField {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-detail-field-list',
   imports: [MatTabsModule, NgTemplateOutlet],
   template: `

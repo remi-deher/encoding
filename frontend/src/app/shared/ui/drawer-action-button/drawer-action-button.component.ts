@@ -1,10 +1,11 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { RouterLink } from '@angular/router';
 
 export type DrawerActionRoute = string | readonly string[];
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-drawer-action-button',
   imports: [MatButtonModule, RouterLink],
   template: `

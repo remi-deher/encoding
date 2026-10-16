@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
@@ -10,10 +10,9 @@ import {
   DataTableRow,
 } from '../../shared/ui/data-table.component';
 import {
-  DetailCard,
-  DetailCardGridComponent,
-  DetailCardIcon,
-} from '../../shared/ui/detail-card-grid.component';
+  ResourceSheetComponent,
+  ResourceSheetSection,
+} from '../../shared/ui/resource-sheet.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import { FlowComponentPackSummary } from '../../shared/models/flow-component-packs';
@@ -31,12 +30,13 @@ interface PackRow extends DataTableRow {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-component-pack-library-page',
   imports: [
     CategoryTabsComponent,
     DataTableComponent,
-    DetailCardGridComponent,
     ManagementCatalogTemplateComponent,
+    ResourceSheetComponent,
   ],
   template: `
     <app-management-catalog-template
@@ -60,8 +60,9 @@ interface PackRow extends DataTableRow {
         selected="packs"
         (selectedChange)="onSectionChanged($event)"
       />
-      <app-data-table layout="cards"
+      <app-data-table
         catalogue-table
+        layout="resources"
         [columns]="columns"
         [rows]="filteredRows()"
         [rowOpenable]="true"
@@ -70,13 +71,14 @@ interface PackRow extends DataTableRow {
         emptyMessage="Aucun pack. Créez-en un depuis une version publiée dans Flows."
       />
       <ng-template #detailContent catalogue-detail>
-        <app-detail-card-grid
-          [cards]="packCards()"
-          [initiallyExpanded]="true"
-          [collapsible]="false"
-          ariaLabel="Résumé, origine et interface du pack"
-          emptyMessage="Aucune information disponible pour ce pack."
-        />
+        @if (selectedPack(); as pack) {
+          <app-resource-sheet
+            ariaLabel="Résumé, origine et interface du pack"
+            [title]="pack.name"
+            [subtitle]="packSubtitle()"
+            [sections]="packSections()"
+          />
+        }
       </ng-template>
     </app-management-catalog-template>
   `,
@@ -134,7 +136,14 @@ export class ComponentPackLibraryPageComponent {
         )
       : this.rows();
   });
-  protected readonly packCards = computed<readonly DetailCard[]>(() => {
+  protected readonly packSubtitle = computed(() => {
+    const pack = this.selectedPack();
+    if (!pack) return '';
+    return (
+      MEDIA_TYPE_OPTIONS.find((item) => item.value === pack.mediaType)?.label ?? pack.mediaType
+    );
+  });
+  protected readonly packSections = computed<readonly ResourceSheetSection[]>(() => {
     const pack = this.selectedPack();
     if (!pack) return [];
 
@@ -155,88 +164,62 @@ export class ComponentPackLibraryPageComponent {
       {
         id: 'pack-summary',
         title: 'Pack de composants',
-        subtitle: mediaType,
-        icon: this.mediaIcon(pack.mediaType),
-        status: { label: 'Disponible', tone: 'success' },
-        tags: [
-          { label: `${pack.componentCount} composant(s)` },
-          { label: new Date(pack.createdAt).toLocaleDateString('fr-FR'), tone: 'neutral' },
-        ],
-        sections: [
+        caption: mediaType,
+        items: [
           {
-            title: 'Description',
-            items: [{ label: pack.name, description: pack.description || 'Aucune description.' }],
+            label: pack.name,
+            detail: pack.description || 'Aucune description.',
+            badges: [
+              { label: 'Disponible', tone: 'success' },
+              { label: `${pack.componentCount} composant(s)` },
+              { label: new Date(pack.createdAt).toLocaleDateString('fr-FR'), tone: 'neutral' },
+            ],
           },
         ],
       },
       {
         id: 'pack-source',
         title: 'Flow source',
-        subtitle: pack.sourceFlowName,
-        icon: 'tool',
-        status: { label: `Version publiée v${pack.sourceVersion}`, tone: 'accent' },
-        tags: [],
-        sections: [
-          {
-            title: 'Référence conservée',
-            items: [
-              { label: 'Flow', description: pack.sourceFlowName },
-              { label: 'Identifiant', description: pack.sourceFlowId },
-              { label: 'Version', description: `v${pack.sourceVersion}` },
-            ],
-          },
+        caption: `Version publiée v${pack.sourceVersion}`,
+        fields: [
+          { label: 'Flow', value: pack.sourceFlowName },
+          { label: 'Identifiant', value: pack.sourceFlowId, mono: true },
+          { label: 'Version', value: `v${pack.sourceVersion}` },
         ],
       },
       {
         id: 'pack-interface',
         title: 'Interface du pack',
-        subtitle: 'Entrée et sorties exposées',
-        icon: 'plugin',
-        status: interfaceStatus,
-        tags: [],
-        sections: [
+        caption: 'Entrée et sorties exposées',
+        items: [
           {
-            title: 'Entrée',
-            items: [
-              {
-                label: details ? inputLabel : 'Entrée du pack',
-                description: details
-                  ? 'Point d’entrée public du fragment'
-                  : loadState === 'error'
-                    ? 'Impossible de charger la définition du pack.'
-                    : 'Chargement de la définition…',
-                tone: details ? 'accent' : 'neutral',
-              },
-            ],
+            label: details ? inputLabel : 'Entrée du pack',
+            detail: details
+              ? 'Point d’entrée public du fragment'
+              : loadState === 'error'
+                ? 'Impossible de charger la définition du pack.'
+                : 'Chargement de la définition…',
+            badges: [interfaceStatus],
           },
-          {
-            title: 'Sorties',
-            items: details?.outputs.length
-              ? details.outputs.map((output) => ({
-                  label: output.label,
-                  description: 'Sortie exposée',
-                }))
-              : [
-                  {
-                    label: 'Interface',
-                    description: details
-                      ? 'Aucune sortie exposée'
-                      : loadState === 'error'
-                        ? 'Détail indisponible'
-                        : 'Chargement…',
-                  },
-                ],
-          },
+          ...(details?.outputs.length
+            ? details.outputs.map((output) => ({
+                label: output.label,
+                detail: 'Sortie exposée',
+              }))
+            : [
+                {
+                  label: 'Interface',
+                  detail: details
+                    ? 'Aucune sortie exposée'
+                    : loadState === 'error'
+                      ? 'Détail indisponible'
+                      : 'Chargement…',
+                },
+              ]),
         ],
       },
     ];
   });
-
-  private mediaIcon(mediaType: string): DetailCardIcon {
-    if (mediaType === 'music' || mediaType === 'audio') return 'audio';
-    if (mediaType === 'image') return 'image';
-    return 'video';
-  }
 
   constructor() {
     void this.loadPacks();

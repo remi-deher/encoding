@@ -1,4 +1,11 @@
-import { Component, OnChanges, SimpleChanges, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnChanges,
+  SimpleChanges,
+  input,
+  output,
+} from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatStepper, MatStepperModule } from '@angular/material/stepper';
@@ -52,13 +59,9 @@ export interface RecordFormData {
 type RecordFormControls = Record<string, FormControl<string>>;
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-record-form',
-  imports: [
-    MatButtonModule,
-    MatStepperModule,
-    ReactiveFormsModule,
-    SchemaFormFieldComponent,
-  ],
+  imports: [MatButtonModule, MatStepperModule, ReactiveFormsModule, SchemaFormFieldComponent],
   template: `
     <section class="record-form" [attr.aria-label]="data().title">
       @if (useStepper()) {
@@ -427,8 +430,10 @@ export class RecordFormComponent implements OnChanges {
   }
 
   protected fieldHint(field: RecordFormField): string {
-    return field.hint ??
-      (field.filterOptionsByFieldId ? 'Les choix proposés dépendent du type de média.' : '');
+    return (
+      field.hint ??
+      (field.filterOptionsByFieldId ? 'Les choix proposés dépendent du type de média.' : '')
+    );
   }
 
   protected optionsFor(field: RecordFormField): readonly RecordFormOption[] {

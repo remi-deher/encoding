@@ -27,7 +27,9 @@ describe('ResourceCardComponent', () => {
       { label: 'python 3.12' },
     ];
     const { element } = render({ tags });
-    const items = Array.from(element.querySelectorAll('.resource-card-tags li')).map((li) => li.textContent!.trim());
+    const items = Array.from(element.querySelectorAll('.resource-card-tags li')).map((li) =>
+      li.textContent!.trim(),
+    );
     expect(items).toEqual(['GPU Intel', 'ffmpeg 6.1', 'mkvtoolnix 82', '+2']);
   });
 

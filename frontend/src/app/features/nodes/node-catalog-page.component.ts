@@ -1,6 +1,12 @@
 import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
-import { nodeMemberSections } from '../../shared/models/node-hardware';
+import {
+  formatMemory,
+  nodeAcceleratorBadges,
+  nodeHardwareLabel,
+  nodeMemberSections,
+  tidyProcessorName,
+} from '../../shared/models/node-hardware';
 import {
   ResourceCardAction,
   ResourceCardComponent,
@@ -31,13 +37,23 @@ import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-butto
 import { DatePipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../core/auth/auth.service';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { LocalNodeController } from '../../shared/services/local-node-controller';
 import { GuidedSetupComponent, GuidedStep } from '../../shared/ui/guided-setup.component';
-import { ResourceSheetComponent } from '../../shared/ui/resource-sheet.component';
-import { StatusBadgeComponent, StatusTone } from '../../shared/ui/status-badge.component';
+import {
+  ResourceSheetComponent,
+  ResourceSheetSection,
+} from '../../shared/ui/resource-sheet.component';
+import { StatusTone } from '../../shared/ui/status-badge.component';
 import {
   AUTONOMOUS_CARDS,
   CREATE_CLUSTER_FORM,
@@ -83,10 +99,7 @@ import { nodeCapabilityCards, nodeCapabilityFields } from '../../shared/models/n
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { NodeModeController } from '../../shared/services/node-mode-controller';
 import { NotificationService } from '../../shared/services/notification.service';
-import {
-  DetailCard,
-  DetailCardGridComponent,
-} from '../../shared/ui/detail-card-grid.component';
+import { DetailCard, DetailCardGridComponent } from '../../shared/ui/detail-card-grid.component';
 import {
   LibraryNodeAccessFormComponent,
   LibraryNodeAccessOption,
@@ -154,6 +167,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
 ];
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-node-catalog-page',
   providers: [LocalNodeController],
   imports: [
@@ -172,7 +186,6 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     LibraryNodeAccessFormComponent,
     DrawerActionButtonComponent,
     GuidedSetupComponent,
-    StatusBadgeComponent,
     MatMenuModule,
     SummaryTilesComponent,
     ContextBannerComponent,
@@ -391,7 +404,14 @@ export class NodeCatalogPageComponent {
       },
     ],
   };
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Nœuds');
+  protected readonly title = computed(() => {
+    if (this.pageTab() === 'cluster') {
+      return !this.local.standalone() && this.clusterIdentity()
+        ? this.clusterName()
+        : ((this.routeData()['title'] as string) ?? 'Nœuds');
+    }
+    return this.localName() || ((this.routeData()['title'] as string) ?? 'Nœuds');
+  });
   protected readonly catalogMessage = computed(() =>
     this.loadState() === 'error'
       ? 'Impossible de joindre l’API du cluster. Vérifiez que le backend et PostgreSQL sont démarrés.'
@@ -443,146 +463,168 @@ export class NodeCatalogPageComponent {
     ),
     { initialValue: null },
   );
-  protected readonly generalCards = computed<readonly DetailCard[]>(() => {
+  protected readonly generalSheet = computed<{
+    readonly title: string;
+    readonly subtitle: string;
+    readonly sections: readonly ResourceSheetSection[];
+  } | null>(() => {
     const node = this.rawNode();
-    if (!node) return [];
+    if (!node) return null;
 
     const activity = this.nodeActivity();
     const inventory = node.inventory;
+    const gpus = inventory?.gpus ?? [];
     const libraries = this.nodeLibraries().filter(
       (library) => library.isEnabled && library.mode !== 'unsupported',
     );
     const directLibraries = libraries.filter((library) => library.mode === 'direct').length;
     const transferLibraries = libraries.filter((library) => library.mode === 'transfer').length;
     const isWorker = node.roles.includes('worker');
-    const roleTags = node.roles.map((role) => ({
+    const lifecycle = nodeLifecycle(node);
+    const roleBadges = node.roles.map((role) => ({
       label: NODE_ROLE_LABELS[role],
       tone: 'accent' as const,
     }));
-    const labelTags = Object.entries(node.labels ?? {})
+    const labelBadges = Object.entries(node.labels ?? {})
       .filter((entry): entry is [string, string] => Boolean(entry[1]))
-      .map(([key, value]) => ({ label: `${key}: ${value}` }));
+      .map(([key, value]) => ({ label: `${key}: ${value}`, tone: 'neutral' as const }));
 
-    return [
+    const sections: readonly ResourceSheetSection[] = [
       {
         id: 'node-general-identity',
         title: 'Identité et rôles',
-        subtitle: 'Membre du cluster',
-        icon: 'server',
-        status: {
-          label: node.status === 'online' ? 'En ligne' : 'Hors ligne',
-          tone: node.status === 'online' ? 'success' : 'warning',
-        },
-        tags: [...roleTags, ...labelTags],
-        sections: [
+        caption: 'Membre du cluster',
+        items: [
           {
-            title: 'Identité',
-            items: [
-              { label: 'Nom affiché', description: node.displayName?.trim() || node.name },
-              { label: 'Identifiant', description: node.id },
-              ...(node.desiredRoles?.length
-                ? [
-                    {
-                      label: 'Mode demandé',
-                      description: `${node.desiredRoles.map((role) => NODE_ROLE_LABELS[role]).join(' · ')} (en attente du prochain signal du nœud)`,
-                    },
-                  ]
-                : []),
+            label: node.displayName?.trim() || node.name,
+            detail: node.desiredRoles?.length
+              ? `Mode demandé : ${node.desiredRoles.map((role) => NODE_ROLE_LABELS[role]).join(' · ')} (en attente du prochain signal du nœud)`
+              : undefined,
+            badges: [
+              {
+                label: NODE_LIFECYCLE_LABELS[lifecycle],
+                tone: NODE_LIFECYCLE_TONES[lifecycle],
+              },
+              ...roleBadges,
+              ...labelBadges,
             ],
           },
+        ],
+        fields: [
+          { label: 'Nom affiché', value: node.displayName?.trim() || node.name },
+          { label: 'Nom technique', value: node.name },
+          { label: 'Identifiant', value: node.id, mono: true },
         ],
       },
       {
         id: 'node-general-activity',
         title: 'Disponibilité et activité',
-        subtitle: `Dernier signal · ${new Date(node.lastSeenAt).toLocaleString('fr-FR')}`,
-        icon: 'activity',
-        status: {
-          label: node.status === 'online' ? 'Connecté' : 'Signal absent',
-          tone: node.status === 'online' ? 'success' : 'warning',
-        },
-        tags: [],
-        sections: [
+        caption: `Dernier signal · ${new Date(node.lastSeenAt).toLocaleString('fr-FR')}`,
+        metrics: [
           {
-            title: 'Traitement',
-            items: [
-              {
-                label: 'Tâches actives / limite',
-                description: isWorker
-                  ? `${activity?.active ?? '—'} / ${this.nodeProcessingState()?.effectiveMaxConcurrentTasks ?? node.maxConcurrentTasks}`
-                  : 'Fonctions serveur',
-              },
-              { label: 'Réussies', description: activity?.succeeded.toString() ?? 'Indisponible' },
-              { label: 'Échecs', description: activity?.failed.toString() ?? 'Indisponible' },
-              {
-                label: 'Annulations',
-                description: activity?.cancelled.toString() ?? 'Indisponible',
-              },
-              {
-                label: 'Tâches alimentées par ce nœud',
-                description: activity?.sourceTasks.toString() ?? 'Indisponible',
-              },
-              {
-                label: 'Dernière activité',
-                description: activity
-                  ? activity.lastActivity
-                    ? new Date(activity.lastActivity).toLocaleString('fr-FR')
-                    : 'Aucune activité enregistrée'
-                  : 'Indisponible',
-              },
-            ],
+            label: 'Tâches actives / limite',
+            value: isWorker
+              ? `${activity?.active ?? '—'} / ${this.nodeProcessingState()?.effectiveMaxConcurrentTasks ?? node.maxConcurrentTasks}`
+              : 'Fonctions serveur',
+            unavailable: isWorker && !activity,
+          },
+          {
+            label: 'Réussies',
+            value: activity?.succeeded.toString() ?? 'Indisponible',
+            unavailable: !activity,
+          },
+          {
+            label: 'Échecs',
+            value: activity?.failed.toString() ?? 'Indisponible',
+            unavailable: !activity,
+          },
+          {
+            label: 'Annulations',
+            value: activity?.cancelled.toString() ?? 'Indisponible',
+            unavailable: !activity,
+          },
+          {
+            label: 'Tâches alimentées par ce nœud',
+            value: activity?.sourceTasks.toString() ?? 'Indisponible',
+            unavailable: !activity,
+          },
+          {
+            label: 'Dernière activité',
+            value: activity
+              ? activity.lastActivity
+                ? new Date(activity.lastActivity).toLocaleString('fr-FR')
+                : 'Aucune activité enregistrée'
+              : 'Indisponible',
+            unavailable: !activity,
           },
         ],
       },
       {
         id: 'node-general-system',
         title: 'Système et ressources',
-        subtitle: 'Inventaire déclaré par le worker',
-        icon: 'system',
-        status: {
-          label: inventory ? 'Inventaire disponible' : 'Non déclaré',
-          tone: inventory ? 'neutral' : 'warning',
-        },
-        tags: [],
-        sections: [
-          {
-            title: 'Configuration détectée',
-            items: [
-              { label: 'Système', description: inventory?.operatingSystem ?? 'Non déclaré' },
-              { label: 'Architecture', description: inventory?.architecture ?? 'Non déclarée' },
+        caption: inventory ? nodeHardwareLabel(node) : 'Inventaire non déclaré',
+        metrics: inventory
+          ? [
               {
-                label: 'Processeurs disponibles',
-                description: inventory?.processorCount.toString() ?? 'Non déclarés',
+                label: 'Processeur',
+                value: inventory.processorModel?.trim()
+                  ? tidyProcessorName(inventory.processorModel.trim())
+                  : `${inventory.processorCount} cœurs`,
+                detail: `${inventory.processorCount} cœurs · ${inventory.operatingSystem} · ${inventory.architecture}`,
               },
               {
                 label: 'Mémoire totale disponible',
-                description: inventory ? `${inventory.memoryMb} Mo` : 'Non déclarée',
+                value: formatMemory(inventory.memoryMb),
+                detail: `${inventory.memoryMb} Mo`,
+              },
+              {
+                label: gpus.length > 1 ? 'Processeurs graphiques' : 'Processeur graphique',
+                value: gpus.length
+                  ? gpus.map((gpu) => gpu.name).join(' · ')
+                  : inventory.gpus
+                    ? 'Aucun détecté'
+                    : 'Non déclaré',
+                unavailable: !gpus.length,
+                detail:
+                  gpus
+                    .map((gpu) =>
+                      [gpu.vendor, gpu.device, gpu.driver ? `pilote ${gpu.driver}` : null]
+                        .filter(Boolean)
+                        .join(' · '),
+                    )
+                    .filter(Boolean)
+                    .join(' ; ') || undefined,
+              },
+              {
+                label: 'Accélérateurs',
+                value: nodeAcceleratorBadges(node).join(' · '),
+              },
+            ]
+          : [
+              {
+                label: 'Matériel',
+                value: 'Non déclaré',
+                unavailable: true,
+                detail: 'Disponible après le prochain signal du worker.',
               },
             ],
-          },
-        ],
       },
       {
         id: 'node-general-libraries',
         title: 'Accès aux bibliothèques',
-        subtitle: 'Droits configurés pour ce nœud',
-        icon: 'library',
-        status: {
-          label: `${libraries.length} autorisée(s)`,
-          tone: libraries.length ? 'success' : 'warning',
-        },
-        tags: [],
-        sections: [
-          {
-            title: 'Modes d’accès',
-            items: [
-              { label: 'Accès direct', description: `${directLibraries} bibliothèque(s)` },
-              { label: 'Transfert WebDAV', description: `${transferLibraries} bibliothèque(s)` },
-            ],
-          },
+        caption: `${libraries.length} autorisée(s)`,
+        metrics: [
+          { label: 'Accès direct', value: `${directLibraries} bibliothèque(s)` },
+          { label: 'Transfert WebDAV', value: `${transferLibraries} bibliothèque(s)` },
         ],
       },
     ];
+
+    return {
+      title: node.displayName?.trim() || node.name,
+      subtitle: `${node.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · ')} · ${NODE_LIFECYCLE_LABELS[lifecycle]}`,
+      sections,
+    };
   });
   protected readonly nodeProcessingState = toSignal(
     toObservable(computed(() => this.selectedNode()?.id ?? null)).pipe(
@@ -973,8 +1015,8 @@ export class NodeCatalogPageComponent {
         title: 'Retirer cette bibliothèque du nœud ?',
         message: `L’accès de ce nœud à « ${row['name']} » sera supprimé. La bibliothèque et ses accès sur les autres nœuds resteront inchangés.`,
         confirmLabel: 'Retirer du nœud',
-        headerColor: '#b42318',
-        confirmColor: '#b42318',
+        headerColor: 'var(--danger-strong)',
+        confirmColor: 'var(--danger-strong)',
       }),
     },
   ];

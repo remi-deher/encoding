@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   Component,
   TemplateRef,
   computed,
@@ -36,6 +37,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
 
 @Component({
   selector: 'app-execution-monitor-template',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DataTableComponent,
     DetailDrawerComponent,
@@ -244,27 +246,27 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
   styles: `
     .monitor-panel {
       overflow: hidden;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-lg);
-      background: var(--surface);
-      box-shadow: var(--elevation-1);
+      border-radius: var(--radius-2xl);
+      background: var(--surface-container-low);
     }
 
     .monitor-panel-heading {
       min-height: 68px;
-      padding: 16px 18px;
+      padding: var(--space-4) var(--space-5);
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: var(--space-4);
-      border-bottom: 1px solid var(--border-subtle);
+      background: var(--surface-container);
+      border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
     }
 
     .monitor-panel-heading h2 {
       margin: 0;
       color: var(--text-primary);
-      font-size: var(--font-label);
+      font-size: var(--font-title-md);
       font-weight: 700;
+      letter-spacing: -0.015em;
     }
 
     .monitor-panel-heading p {
@@ -376,7 +378,7 @@ export class ExecutionMonitorTemplateComponent {
     { key: 'size', label: 'Taille' },
   ];
   protected readonly artifactActions: readonly DataTableRowAction[] = [
-    { id: 'download', label: 'T�l�charger' },
+    { id: 'download', label: 'Télécharger' },
   ];
   readonly note = input('');
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });

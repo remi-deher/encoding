@@ -6,6 +6,10 @@ export class NotificationService {
   private readonly snackBar = inject(MatSnackBar);
 
   show(message: string): void {
-    this.snackBar.open(message, 'Fermer', { duration: 5000, horizontalPosition: 'end', verticalPosition: 'top' });
+    this.snackBar.open(message, 'Fermer', {
+      duration: 5000,
+      horizontalPosition: 'end',
+      verticalPosition: 'top',
+    });
   }
 }

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
@@ -21,7 +21,10 @@ import {
 import { FlowPluginCatalog } from '../../shared/models/flow-validation';
 import { FlowComponentDefinition } from '../../shared/models/flow-component';
 import { FlowComponentListComponent } from '../../shared/ui/flow-component-list.component';
-import { DetailCard, DetailCardGridComponent } from '../../shared/ui/detail-card-grid.component';
+import {
+  ResourceSheetComponent,
+  ResourceSheetSection,
+} from '../../shared/ui/resource-sheet.component';
 
 type PluginFamily = 'base' | 'cluster' | 'media' | 'automation';
 
@@ -136,10 +139,11 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
 ];
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-plugin-catalog-page',
   imports: [
     DataTableComponent,
-    DetailCardGridComponent,
+    ResourceSheetComponent,
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     ComponentConfigurationFormComponent,
@@ -201,80 +205,74 @@ export class PluginCatalogPageComponent {
       pluginName: plugin.name,
     }));
   });
-  protected readonly pluginCards = computed<readonly DetailCard[]>(() => {
+  protected readonly pluginSheet = computed<{
+    readonly title: string;
+    readonly subtitle: string;
+    readonly sections: readonly ResourceSheetSection[];
+  } | null>(() => {
     const plugin = this.selectedPlugin();
-    if (!plugin) return [];
+    if (!plugin) return null;
 
     const components = this.pluginComponents(plugin.id);
     const schema = this.configurationSchema();
     const active = plugin.state.toLocaleLowerCase('fr-FR').includes('actif');
     const mediaTypes = [...new Set(components.map((component) => component.mediaType))];
 
-    return [
+    const sections: readonly ResourceSheetSection[] = [
       {
         id: 'plugin-identity',
         title: 'Identité du plugin',
-        subtitle: plugin.category,
-        icon: 'plugin',
-        status: { label: plugin.state, tone: active ? 'success' : 'accent' },
-        tags: [
-          { label: plugin.familyLabel, tone: 'accent' },
-          { label: `Version ${plugin.version}` },
-        ],
-        sections: [
+        items: [
           {
-            title: 'Catalogue',
-            items: [
-              { label: 'Famille', description: plugin.familyLabel },
-              { label: 'Type', description: plugin.category },
+            label: plugin.name,
+            detail: plugin.category,
+            badges: [
+              { label: plugin.state, tone: active ? 'success' : 'accent' },
+              { label: plugin.familyLabel, tone: 'accent' },
+              { label: `Version ${plugin.version}`, tone: 'neutral' },
             ],
           },
+        ],
+        fields: [
+          { label: 'Famille', value: plugin.familyLabel },
+          { label: 'Type', value: plugin.category },
+          { label: 'Version', value: plugin.version },
         ],
       },
       {
         id: 'plugin-runtime',
         title: 'Exécution et configuration',
-        subtitle: 'Contrat du plugin',
-        icon: 'tool',
-        status: {
-          label: schema ? `${schema.fields.length} champ(s)` : 'Sans schéma',
-          tone: 'neutral',
-        },
-        tags: [
-          { label: plugin.runtime, tone: 'neutral' },
-          { label: plugin.configuration, tone: 'neutral' },
-        ],
-        sections: [
-          {
-            title: 'Informations déclarées',
-            items: [
-              { label: 'Mode d’exécution', description: plugin.runtime },
-              { label: 'Configuration', description: plugin.configuration },
-            ],
-          },
+        caption: schema ? `${schema.fields.length} champ(s)` : 'Sans schéma',
+        fields: [
+          { label: 'Mode d’exécution', value: plugin.runtime },
+          { label: 'Configuration', value: plugin.configuration },
         ],
       },
       {
         id: 'plugin-components',
         title: 'Catalogue des composants',
-        subtitle: `${components.length} composant(s) dans le catalogue`,
-        icon: 'video',
-        status: {
-          label: components.length ? 'Catalogue chargé' : 'Aucun bloc',
-          tone: components.length ? 'success' : 'warning',
-        },
-        tags: mediaTypes.map((mediaType) => ({ label: mediaType, tone: 'accent' })),
-        sections: [
+        caption: `${components.length} composant(s)`,
+        items: [
           {
-            title: 'Résumé',
-            items: [
-              { label: 'Blocs déclarés', description: `${components.length} composant(s)` },
-              { label: 'Liste détaillée', description: 'Consulter l’onglet Composants' },
+            label: 'Blocs déclarés',
+            detail: `${components.length} composant(s) · consulter l’onglet Composants`,
+            badges: [
+              {
+                label: components.length ? 'Catalogue chargé' : 'Aucun bloc',
+                tone: components.length ? 'success' : 'warning',
+              },
+              ...mediaTypes.map((mediaType) => ({ label: mediaType, tone: 'accent' as const })),
             ],
           },
         ],
       },
     ];
+
+    return {
+      title: plugin.name,
+      subtitle: `${plugin.familyLabel} · ${plugin.category}`,
+      sections,
+    };
   });
 
   protected readonly columns: readonly DataTableColumn[] = [

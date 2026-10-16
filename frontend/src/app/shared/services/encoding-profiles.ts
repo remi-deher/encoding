@@ -33,9 +33,7 @@ export class EncodingProfiles {
   }
 
   create(draft: EncodingProfileDraft) {
-    return firstValueFrom(
-      this.http.post<EncodingProfileDetails>(this.base, { draft }),
-    );
+    return firstValueFrom(this.http.post<EncodingProfileDetails>(this.base, { draft }));
   }
 
   saveDraft(id: string, expectedRevision: number, draft: EncodingProfileDraft) {

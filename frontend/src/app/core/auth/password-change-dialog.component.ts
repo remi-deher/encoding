@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { MatDialogContent, MatDialogRef, MatDialogTitle } from '@angular/material/dialog';
 import { MINIMUM_PASSWORD_LENGTH } from '../../shared/models/auth';
 import { NotificationService } from '../../shared/services/notification.service';
@@ -6,6 +6,7 @@ import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form
 import { AuthService } from './auth.service';
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-password-change-dialog',
   imports: [MatDialogContent, MatDialogTitle, RecordFormComponent],
   template: `

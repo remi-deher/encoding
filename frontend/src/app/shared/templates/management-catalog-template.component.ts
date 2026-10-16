@@ -1,4 +1,11 @@
-import { Component, TemplateRef, contentChild, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  TemplateRef,
+  contentChild,
+  input,
+  output,
+} from '@angular/core';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
 import { PageHeaderComponent } from '../ui/page-header.component';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,6 +24,7 @@ export interface CatalogEmptyState {
 
 @Component({
   selector: 'app-management-catalog-template',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DetailDrawerComponent,
     MatButtonModule,
@@ -138,7 +146,9 @@ export class ManagementCatalogTemplateComponent {
   readonly actionClosed = output<void>();
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
   protected readonly detailContent = contentChild('detailContent', { read: TemplateRef });
-  protected readonly detailFooterActions = contentChild('detailFooterActions', { read: TemplateRef });
+  protected readonly detailFooterActions = contentChild('detailFooterActions', {
+    read: TemplateRef,
+  });
   protected readonly detailHeaderActions = contentChild('detailHeaderActions', {
     read: TemplateRef,
   });

@@ -7,7 +7,7 @@ import { LibraryResponse, NodeGroupResponse } from '../../shared/models/cluster'
 
 import { HttpClient } from '@angular/common/http';
 
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -43,7 +43,11 @@ import {
 
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 
-import { DetailCard, DetailCardGridComponent } from '../../shared/ui/detail-card-grid.component';
+import {
+  ResourceSheetComponent,
+  ResourceSheetNotice,
+  ResourceSheetSection,
+} from '../../shared/ui/resource-sheet.component';
 
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 
@@ -95,6 +99,10 @@ interface LibraryRecord extends DataTableRow {
 
   readonly associatedFlows: string;
 
+  readonly assignedFlow: string;
+
+  readonly monitoring: string;
+
   readonly state: string;
 
   readonly modifiedAt: string;
@@ -117,12 +125,13 @@ interface LibraryAccessRecord extends DataTableRow {
 }
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-library-catalog-page',
 
   imports: [
     DataTableComponent,
 
-    DetailCardGridComponent,
+    ResourceSheetComponent,
 
     ManagementCatalogTemplateComponent,
 
@@ -166,6 +175,10 @@ export class LibraryCatalogPageComponent {
   private readonly notifications = inject(NotificationService);
 
   private readonly libraries = signal<readonly LibraryRecord[]>([]);
+
+  private readonly processingByLibrary = signal<
+    Readonly<Record<string, LibraryProcessingSettings>>
+  >({});
 
   private readonly selectedAccesses = signal<readonly LibraryNodeAccessResponse[]>([]);
 
@@ -307,6 +320,10 @@ export class LibraryCatalogPageComponent {
       await firstValueFrom(
         this.clusterApi.saveLibraryProcessing(library.id, settings, this.processingRevision),
       );
+      this.processingByLibrary.update((current) => ({
+        ...current,
+        [library.id]: { ...settings, revision: this.processingRevision + 1 },
+      }));
       this.workflowRefresh.update((value) => value + 1);
       this.actionOpen.set(false);
       this.notifications.show('Surveillance et limites enregistrées.');
@@ -470,9 +487,9 @@ export class LibraryCatalogPageComponent {
 
         confirmLabel: 'Supprimer',
 
-        headerColor: '#b42318',
+        headerColor: 'var(--danger-strong)',
 
-        confirmColor: '#b42318',
+        confirmColor: 'var(--danger-strong)',
       }),
     },
   ];
@@ -494,9 +511,9 @@ export class LibraryCatalogPageComponent {
 
         confirmLabel: 'Supprimer l’accès',
 
-        headerColor: '#b42318',
+        headerColor: 'var(--danger-strong)',
 
-        confirmColor: '#b42318',
+        confirmColor: 'var(--danger-strong)',
       }),
     },
   ];
@@ -873,136 +890,125 @@ export class LibraryCatalogPageComponent {
     })),
   );
 
-  protected readonly libraryCards = computed<readonly DetailCard[]>(() => {
+  protected readonly librarySheet = computed<{
+    readonly title: string;
+    readonly subtitle: string;
+    readonly notices: readonly ResourceSheetNotice[];
+    readonly sections: readonly ResourceSheetSection[];
+  } | null>(() => {
     const library = this.selectedLibrary();
-    if (!library) return [];
+    if (!library) return null;
 
     const assignment = this.workflowState()?.assignment;
-    const processing = this.processingState();
+    const processing = this.processingState() ?? this.processingByLibrary()[library.id] ?? null;
     const scan = this.workflowState()?.scan;
     const accessCount = library.configuredNodeCount;
     const scanState = scan?.state;
-    const scanStatus = scanState
-      ? {
-          label:
-            scanState === 'queued'
-              ? 'En attente'
-              : scanState === 'running'
-                ? 'En cours'
-                : scanState === 'completed'
-                  ? 'Terminé'
-                  : 'Échec',
-          tone: scanState === 'completed' ? ('success' as const) : ('warning' as const),
-        }
-      : {
-          label: this.workflowError() ? 'Indisponible' : 'Pas de scan',
-          tone: this.workflowError() ? ('warning' as const) : ('neutral' as const),
-        };
+    const scanLabel = scanState
+      ? scanState === 'queued'
+        ? 'En attente'
+        : scanState === 'running'
+          ? 'En cours'
+          : scanState === 'completed'
+            ? 'Terminée'
+            : 'Échec'
+      : this.workflowError()
+        ? 'Indisponible'
+        : 'Aucune découverte';
 
-    return [
+    const notices: ResourceSheetNotice[] = [];
+    if (this.workflowError()) {
+      notices.push({
+        tone: 'warning',
+        title: 'Découverte indisponible',
+        description: this.workflowError(),
+      });
+    }
+
+    const sections: readonly ResourceSheetSection[] = [
       {
-        id: 'library-access',
-        title: 'Accès du cluster',
-        subtitle: accessCount ? `${accessCount} nœud(s) configuré(s)` : 'Aucun nœud configuré',
-        icon: 'tool',
-        status: {
-          label: accessCount ? 'Accès déclarés' : 'À configurer',
-          tone: accessCount ? 'success' : 'warning',
-        },
-        tags: [
-          ...(library.directAccessNodeCount
-            ? [{ label: `${library.directAccessNodeCount} direct(s)`, tone: 'accent' as const }]
-            : []),
-          ...(library.transferNodeCount
-            ? [{ label: `${library.transferNodeCount} transfert(s)`, tone: 'accent' as const }]
-            : []),
-        ],
-        sections: [
+        id: 'library-processing',
+        title: 'Flow et traitement',
+        caption: assignment ? `${assignment.name} · v${assignment.version}` : 'Aucun flow attribué',
+        items: [
           {
-            title: 'Modes configurés',
-            items: [
+            label: 'Flow attribué',
+            detail: this.workflowLabel(),
+            badges: [
               {
-                label: 'Accès direct',
-                description: `${library.directAccessNodeCount} nœud(s)`,
-              },
-              {
-                label: 'Transfert vers worker',
-                description: `${library.transferNodeCount} nœud(s)`,
+                label: assignment ? 'Flow attribué' : 'À configurer',
+                tone: assignment ? 'success' : 'warning',
               },
             ],
+          },
+          {
+            label: 'Surveillance et limites',
+            detail: this.processingSummary(),
+            badges: processing
+              ? [
+                  {
+                    label: processing.watchEnabled ? 'Automatique' : 'Manuelle',
+                    tone: processing.watchEnabled ? 'accent' : 'neutral',
+                  },
+                  {
+                    label: processing.maxConcurrentTasks
+                      ? `${processing.maxConcurrentTasks} tâche(s) max.`
+                      : 'Sans plafond global',
+                    tone: 'neutral',
+                  },
+                ]
+              : [],
           },
         ],
       },
       {
-        id: 'library-processing',
-        title: 'Flow et traitement',
-        subtitle: assignment
-          ? `${assignment.name} · v${assignment.version}`
-          : 'Aucun flow attribué',
-        icon: 'video',
-        status: {
-          label: assignment ? 'Flow attribué' : 'À configurer',
-          tone: assignment ? 'success' : 'warning',
-        },
-        tags: [
+        id: 'library-access',
+        title: 'Accès du cluster',
+        caption: accessCount ? `${accessCount} nœud(s) configuré(s)` : 'Aucun nœud configuré',
+        metrics: [
           {
-            label: processing
-              ? processing.watchEnabled
-                ? `Surveillance · ${processing.scanIntervalSeconds} s`
-                : 'Surveillance arrêtée'
-              : 'Règles de traitement…',
-            tone: processing?.watchEnabled ? 'accent' : 'neutral',
+            label: 'Accès direct',
+            value: `${library.directAccessNodeCount} nœud(s)`,
           },
           {
-            label: processing?.maxConcurrentTasks
-              ? `${processing.maxConcurrentTasks} tâche(s) max.`
-              : 'Sans plafond global',
-          },
-        ],
-        sections: [
-          {
-            title: 'Configuration appliquée',
-            items: [
-              { label: 'Flow', description: this.workflowLabel() },
-              { label: 'Surveillance et limites', description: this.processingSummary() },
-            ],
+            label: 'Transfert vers worker',
+            value: `${library.transferNodeCount} nœud(s)`,
           },
         ],
       },
       {
         id: 'library-discovery',
         title: 'Découverte et activité',
-        subtitle: scan?.detail ?? this.discoveryStatus(),
-        icon: 'tool',
-        status: scanStatus,
-        tags: [
-          { label: `${this.mediaRows().length} fichier(s) détecté(s)` },
-          ...(scan?.completedAt
-            ? [
-                {
-                  label: new Date(scan.completedAt).toLocaleString('fr-FR'),
-                  tone: 'neutral' as const,
-                },
-              ]
-            : []),
-        ],
-        sections: [
+        caption: `${this.mediaRows().length} fichier(s) détecté(s)`,
+        metrics: [
           {
-            title: 'Dernière découverte',
-            items: [
-              { label: 'État', description: this.discoveryStatus() },
-              {
-                label: 'Terminée le',
-                description: scan?.completedAt
-                  ? new Date(scan.completedAt).toLocaleString('fr-FR')
-                  : 'Aucune date enregistrée',
-              },
-              { label: 'Créée le', description: library.modifiedAt },
-            ],
+            label: 'Dernière découverte',
+            value: scanLabel,
+            detail: this.discoveryStatus(),
           },
+          {
+            label: 'Fichiers détectés',
+            value: `${this.mediaRows().length}`,
+          },
+        ],
+        fields: [
+          {
+            label: 'Terminée le',
+            value: scan?.completedAt
+              ? new Date(scan.completedAt).toLocaleString('fr-FR')
+              : 'Aucune date enregistrée',
+          },
+          { label: 'Créée le', value: library.modifiedAt },
         ],
       },
     ];
+
+    return {
+      title: library.name,
+      subtitle: `${library.state} · ${library.configuredNodes}`,
+      notices,
+      sections,
+    };
   });
 
   protected readonly columns: readonly DataTableColumn[] = [
@@ -1033,6 +1039,10 @@ export class LibraryCatalogPageComponent {
       },
     },
 
+    { key: 'assignedFlow', label: 'Flow attribué', sortable: true },
+
+    { key: 'monitoring', label: 'Surveillance', sortable: true },
+
     { key: 'configuredNodes', label: 'Accès déclarés', sortable: true },
 
     { key: 'accessModes', label: 'Modes d’accès', sortable: true },
@@ -1040,7 +1050,38 @@ export class LibraryCatalogPageComponent {
     { key: 'modifiedAt', label: 'Créée le', sortable: true, sortValueKey: 'modifiedOrder' },
   ];
 
-  protected readonly filteredLibraries = computed(() => this.libraries());
+  protected readonly libraryColumns = this.columns;
+
+  protected readonly filteredLibraries = computed<readonly LibraryRecord[]>(() => {
+    const selectedId = this.selectedLibrary()?.id;
+    const workflow = this.workflowState();
+    const selectedProcessing = this.processingState();
+    const processingMap = this.processingByLibrary();
+    return this.libraries().map((library) => {
+      const processing =
+        library.id === selectedId && selectedProcessing
+          ? selectedProcessing
+          : processingMap[library.id];
+      const assignedFlow =
+        library.id === selectedId && workflow
+          ? workflow.assignment
+            ? `${workflow.assignment.name} · v${workflow.assignment.version}`
+            : 'Aucun flow'
+          : library.assignedFlow;
+      const monitoring = processing
+        ? processing.watchEnabled
+          ? 'Automatique'
+          : 'Manuelle'
+        : library.monitoring;
+      return {
+        ...library,
+        assignedFlow,
+        monitoring,
+      };
+    });
+  });
+
+  protected readonly libraryRows = this.filteredLibraries;
 
   constructor() {
     this.refresh();
@@ -1608,15 +1649,47 @@ export class LibraryCatalogPageComponent {
         }),
       )
 
-      .subscribe((libraries) =>
-        this.libraries.set(libraries.map((library) => this.toRecord(library))),
-      );
+      .subscribe((libraries) => {
+        this.libraries.set(libraries.map((library) => this.toRecord(library)));
+        if (!libraries.length) return;
+        forkJoin(
+          libraries.map((library) =>
+            this.clusterApi.libraryProcessing(library.id).pipe(
+              map((settings) => [library.id, settings] as const),
+              catchError(() => of(null)),
+            ),
+          ),
+        ).subscribe((entries) => {
+          const valid = entries.filter(
+            (entry): entry is readonly [string, LibraryProcessingSettings] => entry !== null,
+          );
+          if (valid.length) {
+            this.processingByLibrary.update((current) => ({
+              ...current,
+              ...Object.fromEntries(valid),
+            }));
+          }
+        });
+      });
   }
 
   private toRecord(library: LibraryResponse): LibraryRecord {
     const date = new Date(library.createdAt);
 
     const summary = this.toAccessSummaryFromCounts(library);
+    const existing = this.libraries().find((item) => item.id === library.id);
+    const assignedFlow =
+      library.flowName !== undefined
+        ? library.flowName && library.flowVersion != null
+          ? `${library.flowName} · v${library.flowVersion}`
+          : 'Aucun flow'
+        : (existing?.assignedFlow ?? 'Aucun flow');
+    const processing = this.processingByLibrary()[library.id];
+    const monitoring = processing
+      ? processing.watchEnabled
+        ? 'Automatique'
+        : 'Manuelle'
+      : (existing?.monitoring ?? 'Manuelle');
 
     return {
       id: library.id,
@@ -1629,7 +1702,11 @@ export class LibraryCatalogPageComponent {
 
       lastScan: 'Jamais',
 
-      associatedFlows: 'Aucun flow associé',
+      associatedFlows: assignedFlow,
+
+      assignedFlow,
+
+      monitoring,
 
       modifiedAt: new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date),
 

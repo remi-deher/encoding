@@ -1,7 +1,15 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
-import { afterRenderEffect, Component, inject, input, output, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  afterRenderEffect,
+  Component,
+  inject,
+  input,
+  output,
+  viewChild,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -42,6 +50,7 @@ export interface GuidedStep {
 
 /** Gabarit de saisie guidée : étapes déclaratives, formulaires communs et stepper Material/CDK. */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-guided-setup',
   providers: [
     {

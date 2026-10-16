@@ -4,7 +4,9 @@ import { NodeResponse } from './cluster';
 
 type NodeCapability = NonNullable<NodeResponse['capabilities']>[number];
 
-export function nodeCapabilityFields(capabilities: readonly NodeCapability[]): readonly DetailField[] {
+export function nodeCapabilityFields(
+  capabilities: readonly NodeCapability[],
+): readonly DetailField[] {
   const tools = capabilities.filter((capability) => !capability.toolId.startsWith('plugin/'));
   return [
     { label: 'Outils détectés', value: tools.length },
@@ -14,7 +16,9 @@ export function nodeCapabilityFields(capabilities: readonly NodeCapability[]): r
     },
     {
       label: 'Accélérations vérifiées',
-      value: [...new Set(tools.flatMap((tool) => tool.accelerationTypes))].join(' · ') || 'Aucune déclarée',
+      value:
+        [...new Set(tools.flatMap((tool) => tool.accelerationTypes))].join(' · ') ||
+        'Aucune déclarée',
     },
     {
       label: 'Encodeurs vérifiés utilisables',
@@ -30,7 +34,9 @@ export function nodeCapabilityFields(capabilities: readonly NodeCapability[]): r
   ];
 }
 
-export function nodeCapabilityCards(capabilities: readonly NodeCapability[]): readonly DetailCard[] {
+export function nodeCapabilityCards(
+  capabilities: readonly NodeCapability[],
+): readonly DetailCard[] {
   return capabilities.map((tool) => {
     const isPlugin = tool.toolId.startsWith('plugin/');
     const accelerationTypes = isPlugin
@@ -40,8 +46,10 @@ export function nodeCapabilityCards(capabilities: readonly NodeCapability[]): re
       .filter((name) => name !== '=')
       .sort((left, right) => left.localeCompare(right));
     const checks = new Map((tool.encoderChecks ?? []).map((check) => [check.encoderId, check]));
-    const usableCount = tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
-    const detectedCount = tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
+    const usableCount =
+      tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
+    const detectedCount =
+      tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
     const sections: DetailCard['sections'][number][] = [];
 
     if (accelerationTypes.length) {
@@ -75,7 +83,13 @@ export function nodeCapabilityCards(capabilities: readonly NodeCapability[]): re
     if (isPlugin) {
       sections.push({
         title: 'Plugin',
-        items: [{ label: capabilityTitle(tool.toolId), description: 'Manifeste lu par le worker', tone: 'accent' }],
+        items: [
+          {
+            label: capabilityTitle(tool.toolId),
+            description: 'Manifeste lu par le worker',
+            tone: 'accent',
+          },
+        ],
       });
     }
 
@@ -83,9 +97,12 @@ export function nodeCapabilityCards(capabilities: readonly NodeCapability[]): re
       label: `${capabilityLabel(name)} utilisable`,
       tone: 'success',
     }));
-    if (usableCount) tags.push({ label: `${usableCount} encodeur(s) utilisable(s)`, tone: 'success' });
-    if (detectedCount) tags.push({ label: `${detectedCount} test(s) non concluant(s)`, tone: 'warning' });
-    if (!tags.length) tags.push({ label: isPlugin ? 'Plugin déclaré' : 'Outil détecté', tone: 'neutral' });
+    if (usableCount)
+      tags.push({ label: `${usableCount} encodeur(s) utilisable(s)`, tone: 'success' });
+    if (detectedCount)
+      tags.push({ label: `${detectedCount} test(s) non concluant(s)`, tone: 'warning' });
+    if (!tags.length)
+      tags.push({ label: isPlugin ? 'Plugin déclaré' : 'Outil détecté', tone: 'neutral' });
 
     return {
       id: tool.toolId,
