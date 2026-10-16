@@ -1,5 +1,7 @@
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Infrastructure.PeerCluster;
 using System.Data.Common;
+using System.Text.Json;
 
 namespace Encoding.Api.Infrastructure;
 
@@ -9,7 +11,7 @@ namespace Encoding.Api.Infrastructure;
 /// </summary>
 public sealed record ClusterIdentity(Guid Id, string Name, bool Standalone);
 
-public sealed class ClusterIdentityRepository(DbDataSource dataSource)
+public sealed class ClusterIdentityRepository(DbDataSource dataSource, PeerClusterOptions? peerOptions = null, PeerConsensusService? peerConsensus = null)
 {
     public const int MaximumNameLength = 128;
 
@@ -22,7 +24,17 @@ public sealed class ClusterIdentityRepository(DbDataSource dataSource)
         if (!await reader.ReadAsync(cancellationToken)) throw new InvalidOperationException("L’identité du cluster est absente.");
         var established = Convert.ToBoolean(reader.GetValue(2), System.Globalization.CultureInfo.InvariantCulture);
         var nodes = Convert.ToInt64(reader.GetValue(3), System.Globalization.CultureInfo.InvariantCulture);
-        return new ClusterIdentity(reader.GetGuid(0), reader.GetString(1), !established && nodes <= 1);
+        var id = reader.GetGuid(0);
+        var name = reader.GetString(1);
+        var standalone = !established && nodes <= 1;
+        if (peerOptions is { Enabled: true, ClusterId: { } peerClusterId })
+        {
+            id = peerClusterId;
+            standalone = false;
+            if (peerConsensus?.Get("cluster/name") is { ValueKind: JsonValueKind.String } replicatedName)
+                name = replicatedName.GetString() ?? name;
+        }
+        return new ClusterIdentity(id, name, standalone);
     }
 
     public static bool IsValidName(string? name) => name?.Trim() is { Length: > 0 and <= MaximumNameLength };

@@ -99,6 +99,7 @@ ENV Node__Roles=server,worker \
     Logging__Console__FormatterName=json \
     Logging__Console__FormatterOptions__UseUtcTimestamp=true \
     Logging__Console__FormatterOptions__IncludeScopes=true
-# 8080 : API et interface web. L'agent (8081) et le lanceur (8082) restent locaux au conteneur.
-EXPOSE 8080
+# 8080 : API et interface web ; 8443 : transport TLS mutuel entre serveurs quand PeerCluster est activé.
+# L'agent (8081) et le lanceur (8082) restent locaux au conteneur.
+EXPOSE 8080 8443
 ENTRYPOINT ["dotnet", "/app/launcher/Encoding.Launcher.dll"]

@@ -3,6 +3,7 @@ using Encoding.Api.Flows;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Libraries;
 using Encoding.Contracts.Executions;
+using Encoding.Api.Infrastructure.PeerCluster;
 using Microsoft.AspNetCore.Http.Features;
 
 namespace Encoding.Api.Executions;
@@ -29,6 +30,30 @@ public static class RuntimeEndpoints
             var runtime=context.HttpContext.RequestServices.GetRequiredService<RuntimeRepository>();
             if(!await runtime.AuthenticateAsync(node,context.HttpContext.Request.Headers["X-Node-Token"].ToString(),context.HttpContext.RequestAborted)) return Results.Unauthorized();
             return await next(context);
+        });
+        group.AddEndpointFilter(async (context, next) =>
+        {
+            var request = context.HttpContext.Request;
+            if (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method) || HttpMethods.IsOptions(request.Method))
+                return await next(context);
+            var services = context.HttpContext.RequestServices;
+            if (!services.GetRequiredService<PeerClusterOptions>().Enabled) return await next(context);
+            if (!services.GetRequiredService<PeerConsensusService>().TryGetLeaderLease(out var leaderLease))
+                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Le pair n’a pas de bail Raft valide; l’opération worker est suspendue.");
+
+            var originalToken = context.HttpContext.RequestAborted;
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(originalToken, leaderLease);
+            context.HttpContext.RequestAborted = linked.Token;
+            for (var index = 0; index < context.Arguments.Count; index++)
+                if (context.Arguments[index] is CancellationToken) context.Arguments[index] = linked.Token;
+            try { return await next(context); }
+            catch (OperationCanceledException) when (!originalToken.IsCancellationRequested && leaderLease.IsCancellationRequested)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Le bail Raft a expiré pendant l’opération worker.");
+            }
+            finally { context.HttpContext.RequestAborted = originalToken; }
         });
         group.MapGet("/capacity",async(Guid nodeId,LibraryProcessingRepository repository,CancellationToken ct)=>
             await repository.NodeAsync(nodeId,ct) is {} settings?(IResult)Results.Ok(new Encoding.Contracts.Nodes.RuntimeCapacity(settings.EffectiveMaxConcurrentTasks)):Results.NotFound());

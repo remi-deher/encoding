@@ -1,6 +1,6 @@
 # 0060 — État du cluster répliqué entre pairs
 
-Statut : direction acceptée par Rémi le 2026-10-16 ; remplace pour la cible les décisions de stockage partagé de [0001](0001-shared-state-and-node-presence.md). Le mode en production reste celui de [0043](0043-sqlite-and-data-access-abstraction.md) jusqu’à livraison complète de cette architecture.
+Statut : direction acceptée par Rémi le 2026-10-16 ; prototype pair à pair opt-in disponible, non approuvé pour la production. Il remplace pour la cible les décisions de stockage partagé de [0001](0001-shared-state-and-node-presence.md). Le mode en production reste celui de [0043](0043-sqlite-and-data-access-abstraction.md) jusqu’à livraison complète de cette architecture.
 
 ## Objectif
 
@@ -50,10 +50,10 @@ Le consensus réplique les métadonnées, pas les fichiers vidéo, audio ou imag
 
 ## Phasage
 
-1. **Présence pair-à-pair** : découverte, confiance, gossip de présence/capacités et vue « Cluster » locale convergente.
-2. **État durable** : consensus et réplication des identités, rôles, bibliothèques, flows et paramètres.
-3. **Orchestration** : journal des exécutions, baux, époque de fencing, reprise après perte d’un pair et refus sûr sans quorum.
-4. **Déploiement** : rattachement guidé, sauvegarde/restauration d’un pair, migration et diagnostics d’exploitation.
+1. **Présence pair-à-pair — prototype livré** : identité TLS par pair, approbation manuelle, gossip signé des workers, révocation et vue locale convergente. La découverte des pairs reste manuelle.
+2. **État durable — amorcé** : membership persistante et consensus fonctionnent; seul le nom du cluster et les révocations sont des projections métier répliquées. Identités des workers, rôles, bibliothèques, flows et paramètres restent locaux.
+3. **Orchestration — amorcée** : les nouvelles attributions et écritures runtime exigent un bail Raft avec quorum; la perte du bail annule la requête worker. La réplication des tâches et des baux, les epochs et le fencing des effets externes ne sont pas livrés.
+4. **Déploiement — partiellement livré** : configuration Docker, identité protégée, guide manuel et diagnostics API disponibles. Migration automatique, sauvegarde/restauration coordonnée et rattachement guidé restent à faire.
 
 ## Critères d’acceptation
 
@@ -72,10 +72,12 @@ La présence est cohérente à terme et peut diverger brièvement entre pairs ; 
 
 Le prototype évaluera `DotNext.Net.Cluster` et `DotNext.AspNetCore.Cluster` : le projet fournit Raft et HyParView pour le membership/gossip, cible .NET moderne et évite d’introduire un Raft développé par Encoding. Son `ConsensusOnlyState` en mémoire ne convient pas à la production ; le prototype doit utiliser un journal durable et vérifier la reconstruction après redémarrage. Les commandes doivent avoir des identifiants idempotents, car la bibliothèque ne fournit pas à l’application le contrôle des sessions clientes.
 
-Le choix sera conservé uniquement si un prototype à trois nœuds démontre l’élection, la réplication persistante, le rattrapage après arrêt, la modification sûre de la membership et les comportements documentés sans quorum. Les projections locales SQLite/PostgreSQL ne sont jamais déclarées validées avant que leur entrée soit engagée au quorum.
+Le prototype applicatif valide trois API indépendantes, le rattachement mutuel, la membership durable, le nom du cluster répliqué, la présence signée, le retrait/révocation et le refus d’un certificat client non approuvé. Il ne valide pas encore la réplication métier générale, le rattrapage après restauration complète, la migration, le fencing, les partitions prolongées ni la compatibilité entre versions. Les projections locales SQLite/PostgreSQL ne sont jamais déclarées répliquées avant que leur entrée soit engagée au quorum.
 
 ## Prototype de transport et de présence
 
-`backend/tools/ClusterMeshPrototype` est un spike jetable qui lance trois processus .NET. Il valide l’annonce multicast authentifiée limitée à un cluster, les échanges HTTP HMAC, le rejet d’une clé invalide et d’un rejeu, puis la convergence de trois enregistrements de présence sur les trois processus. Son scénario s’exécute dans la CI backend. Il ne valide ni une identité cryptographique individuelle des pairs, ni le rattachement/révocation, ni les garanties de disponibilité/rattrapage ; sa clé HMAC partagée permet à un pair autorisé d’usurper un autre membre. Il ne remplace donc pas l’évaluation DotNext ni les critères de réplication durable ci-dessus.
+`backend/tools/ClusterMeshPrototype` est un spike historique qui lance trois processus .NET. Il valide l’annonce multicast authentifiée limitée à un cluster, les échanges HTTP HMAC, le rejet d’une clé invalide et d’un rejeu, puis la convergence de trois enregistrements de présence sur les trois processus. Sa clé HMAC partagée permet à un pair autorisé d’usurper un autre membre; le prototype applicatif décrit ci-dessous le remplace pour les tests d’identité des serveurs.
 
-`backend/tools/ClusterConsensusPrototype` évalue `DotNext.Net.Cluster` 6.10.0 sur trois processus loopback avec un WAL séparé par nœud. Le scénario vérifie l’élection, la validation au quorum, le refus sans quorum, la réélection, le retour d’un pair et son rattrapage. Après l’arrêt complet, il redémarre un nœud seul et constate que son index validé est restauré localement. La configuration de membership est statique et préchargée en mémoire, le transport est TCP sur loopback et la state machine est sans projection Encoding. Ces résultats valident la faisabilité du journal Raft; ils ne valident pas encore le membership durable, l’application/réplication de l’état métier, l’authentification du transport, ni la sécurité en production. Le scénario s’exécute dans la CI backend.
+`backend/tools/ClusterConsensusPrototype` évalue `DotNext.Net.Cluster` 6.10.0 sur trois processus loopback avec un WAL séparé par nœud. Le scénario vérifie l’élection, la validation au quorum, le refus sans quorum, la réélection, le retour d’un pair et son rattrapage. Après l’arrêt complet, il redémarre un nœud seul et constate que son index validé est restauré localement. La configuration de membership y est statique et préchargée en mémoire; le transport est TCP sur loopback et la state machine est sans projection Encoding. Le scénario reste utile pour les tests Raft bas niveau.
+
+Le code opt-in du serveur se trouve dans `backend/src/Encoding.Api/Infrastructure/PeerCluster`. Le test `PeerClusterIntegrationTests` démarre trois API et valide les éléments livrés listés dans le guide d’exploitation [peer-cluster-preview.md](../operations/peer-cluster-preview.md). Il ne transforme pas encore les bases applicatives locales en projection commune et ne doit pas être annoncé comme un cluster Encoding complet.

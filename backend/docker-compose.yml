@@ -30,6 +30,13 @@ services:
       Runtime__ArtifactDirectory: /var/lib/encoding/runtime-artifacts
       PluginSettings__KeyDirectory: /var/lib/encoding/plugin-keys
       Cluster__DiscoveryPort: 8080
+      PeerCluster__Enabled: ${PEER_CLUSTER_ENABLED:-false}
+      PeerCluster__ClusterId: ${PEER_CLUSTER_ID:-}
+      PeerCluster__Bootstrap: ${PEER_CLUSTER_BOOTSTRAP:-false}
+      PeerCluster__PublicEndpoint: ${PEER_CLUSTER_PUBLIC_ENDPOINT:-}
+      PeerCluster__IdentityPassword: ${PEER_CLUSTER_IDENTITY_PASSWORD:-}
+      PeerCluster__ListenPort: 8443
+      PeerCluster__DataDirectory: /var/lib/encoding-node/peer-cluster
       Auth__SetupToken: ${AUTH_SETUP_TOKEN:-}
       Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://encoding:8080/}
       Node__Name: ${NODE_NAME:-encoding-dev-node}
@@ -68,6 +75,7 @@ services:
     ports:
       - "127.0.0.1:5080:8080"
       - "127.0.0.1:4201:8080"
+      - "${PEER_CLUSTER_BIND:-127.0.0.1:8443}:8443"
     depends_on:
       postgres:
         condition: service_healthy
