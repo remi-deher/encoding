@@ -3,53 +3,31 @@
   [class.workspace-shell]="workspaceMode()"
   [class.auth-shell]="authMode()"
 >
-  @if (!authMode() && !workspaceMode()) {
-    <aside class="application-sidebar">
-      <a class="brand" routerLink="/" aria-label="Encoding, accueil">
-        <span class="brand-mark" aria-hidden="true">E</span>
-        <span class="brand-name">encoding</span>
-      </a>
-
-      <div
-        class="sidebar-cluster"
-        [attr.aria-label]="'État des nœuds : ' + clusterLabel()"
-        role="status"
-      >
-        <span class="cluster-status-dot" aria-hidden="true"></span>
-        <span class="sidebar-cluster-copy">
-          <span class="sidebar-cluster-label">Cluster</span>
-          <span class="sidebar-cluster-value">{{ clusterLabel() }}</span>
-        </span>
-      </div>
-
-      <app-primary-navigation class="sidebar-navigation" />
-
-      <div class="sidebar-user">
-        @if (currentUser(); as user) {
-          <span class="sidebar-avatar" aria-hidden="true">
-            {{ user.username.slice(0, 1).toUpperCase() }}
-          </span>
-          <span class="sidebar-user-copy">
-            <span class="sidebar-user-name">{{ user.username }}</span>
-            <span class="sidebar-user-role">{{
-              user.role === 'admin' ? 'Administrateur' : 'Lecture seule'
-            }}</span>
-          </span>
-        }
-      </div>
-    </aside>
-  }
-
   <mat-toolbar class="application-header">
-    @if (authMode() || workspaceMode()) {
-      <a class="brand header-brand" routerLink="/" aria-label="Encoding, accueil">
-        <span class="brand-mark" aria-hidden="true">E</span>
-        <span class="brand-name">encoding</span>
-      </a>
-    } @else {
+    @if (!authMode() && !workspaceMode()) {
+      @if (isCompactNavigation()) {
+        <button
+          matButton="text"
+          class="navigation-menu-toggle"
+          type="button"
+          aria-label="Ouvrir la navigation"
+          [attr.aria-expanded]="navigationOpened()"
+          (click)="navigationOpened.set(!navigationOpened())"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      }
+    }
+
+    <a class="brand header-brand" routerLink="/" aria-label="Encoding, accueil">
+      <span class="brand-mark" aria-hidden="true">E</span>
+      <span class="brand-name">Encoding</span>
+    </a>
+
+    @if (!authMode()) {
       <div class="header-context">
-        <span class="header-context-label">Espace de travail</span>
-        <span class="header-context-separator" aria-hidden="true">/</span>
         <span class="header-context-title">{{ pageTitle() }}</span>
       </div>
     }
@@ -132,7 +110,7 @@
         }
         <span class="cluster-indicator">
           <span class="cluster-indicator-dot" aria-hidden="true"></span>
-          {{ clusterLabel() }}
+          <span class="cluster-indicator-label">{{ clusterLabel() }}</span>
         </span>
         <app-theme-toggle class="theme-toggle" />
         <app-user-menu />
@@ -142,18 +120,52 @@
     </div>
   </mat-toolbar>
 
-  <div class="page-transition-region">
-    <main id="main-content" class="main-content">
-      <router-outlet />
-    </main>
-
+  <mat-sidenav-container
+    class="application-navigation-layout"
+    [class.workspace-navigation-layout]="workspaceMode()"
+    [class.auth-navigation-layout]="authMode()"
+  >
     @if (!authMode() && !workspaceMode()) {
-      <footer class="application-footer">
-        <span
-          >Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span
-        >
-        <span class="footer-version">Centre d’opérations</span>
-      </footer>
+      <mat-sidenav
+        class="application-sidebar"
+        [mode]="navigationMode()"
+        [opened]="navigationOpened()"
+        (openedChange)="navigationOpened.set($event)"
+        aria-label="Navigation principale"
+      >
+        <div class="sidebar-content">
+          <app-primary-navigation class="sidebar-navigation" />
+
+          <div class="sidebar-user">
+            @if (currentUser(); as user) {
+              <span class="sidebar-avatar" aria-hidden="true">
+                {{ user.username.slice(0, 1).toUpperCase() }}
+              </span>
+              <span class="sidebar-user-copy">
+                <span class="sidebar-user-name">{{ user.username }}</span>
+                <span class="sidebar-user-role">{{
+                  user.role === 'admin' ? 'Administrateur' : 'Lecture seule'
+                }}</span>
+              </span>
+            }
+          </div>
+        </div>
+      </mat-sidenav>
     }
-  </div>
+
+    <mat-sidenav-content class="page-transition-region">
+      <main id="main-content" class="main-content">
+        <router-outlet />
+      </main>
+
+      @if (!authMode() && !workspaceMode()) {
+        <footer class="application-footer">
+          <span
+            >Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span
+          >
+          <span class="footer-version">Centre d’opérations</span>
+        </footer>
+      }
+    </mat-sidenav-content>
+  </mat-sidenav-container>
 </div>

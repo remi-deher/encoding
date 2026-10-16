@@ -8,7 +8,16 @@ const applicationRoutes: Routes = [
     pathMatch: 'full',
     loadComponent: () =>
       import('./features/home/home-page.component').then((module) => module.HomePageComponent),
-    data: { title: 'Vue d’ensemble', primaryNavigation: true },
+    data: {
+      title: 'Vue d’ensemble',
+      navigation: {
+        group: 'Vue générale',
+        label: 'Vue d’ensemble',
+        glyph: '▦',
+        exact: true,
+        keywords: ['accueil', 'dashboard'],
+      },
+    },
   },
   {
     path: 'worker',
@@ -23,7 +32,13 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Tâches',
-      primaryNavigation: true,
+      navigation: {
+        group: 'Traitements',
+        label: 'Tâches',
+        glyph: '≡',
+        order: 2,
+        keywords: ['exécutions', 'file'],
+      },
       description: 'Suivez les exécutions en attente, en cours, annulées, en erreur ou réussies.',
     },
   },
@@ -35,7 +50,14 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Librairies',
-      primaryNavigation: false,
+      navigation: {
+        group: 'Ressources',
+        label: 'Profils d’encodage',
+        glyph: '◫',
+        order: 5,
+        visible: false,
+        keywords: ['qualité', 'encodeur'],
+      },
       description: 'Gérez les profils de qualité et leurs réglages par encodeur.',
     },
   },
@@ -47,7 +69,14 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Librairies',
-      primaryNavigation: false,
+      navigation: {
+        group: 'Ressources',
+        label: 'Scripts',
+        glyph: '≋',
+        order: 3,
+        visible: false,
+        keywords: ['code'],
+      },
       description: 'Gérez les scripts réutilisables dans vos flows.',
     },
   },
@@ -59,7 +88,14 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Librairies',
-      primaryNavigation: false,
+      navigation: {
+        group: 'Ressources',
+        label: 'Packs de composants',
+        glyph: '⊞',
+        order: 4,
+        visible: false,
+        keywords: ['plugins'],
+      },
       description: 'Parcourez les packs de composants réutilisables dans vos flows.',
     },
   },
@@ -71,7 +107,14 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Librairies',
-      primaryNavigation: false,
+      navigation: {
+        group: 'Ressources',
+        label: 'Modèles',
+        glyph: '▤',
+        order: 2,
+        visible: false,
+        keywords: ['templates'],
+      },
       description: 'Parcourez les modèles de flow réutilisables.',
     },
   },
@@ -83,7 +126,13 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Librairies',
-      primaryNavigation: true,
+      navigation: {
+        group: 'Ressources',
+        label: 'Librairies',
+        glyph: '◇',
+        order: 1,
+        keywords: ['médias', 'bibliothèques'],
+      },
       description: 'Gérez les ressources partagées du cluster.',
     },
   },
@@ -95,7 +144,13 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Flows',
-      primaryNavigation: true,
+      navigation: {
+        group: 'Traitements',
+        label: 'Flows',
+        glyph: '⋈',
+        order: 1,
+        keywords: ['traitements', 'workflows'],
+      },
       description: 'Composez et gérez les traitements définis pour vos médias.',
     },
   },
@@ -133,7 +188,13 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Nœuds',
-      primaryNavigation: true,
+      navigation: {
+        group: 'Infrastructure',
+        label: 'Nœuds',
+        glyph: '▣',
+        order: 1,
+        keywords: ['workers', 'serveurs'],
+      },
       description: 'Consultez les rôles, capacités et états des installations du cluster.',
     },
   },
@@ -145,7 +206,13 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Groupes de nœuds',
-      primaryNavigation: false,
+      navigation: {
+        group: 'Infrastructure',
+        label: 'Groupes de nœuds',
+        glyph: '♧',
+        order: 2,
+        keywords: ['workers', 'groupes'],
+      },
       description: 'Organisez les workers et leurs critères de sélection.',
     },
   },
@@ -157,7 +224,13 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Plugins',
-      primaryNavigation: true,
+      navigation: {
+        group: 'Ressources',
+        label: 'Plugins',
+        glyph: '✣',
+        order: 2,
+        keywords: ['intégrations'],
+      },
       description: 'Consultez les intégrations et composants disponibles pour vos flows.',
     },
   },
@@ -169,7 +242,13 @@ const applicationRoutes: Routes = [
       ),
     data: {
       title: 'Paramètres',
-      primaryNavigation: true,
+      navigation: {
+        group: 'Administration',
+        label: 'Paramètres',
+        glyph: '⚙',
+        order: 1,
+        adminOnly: true,
+      },
       adminOnly: true,
       description: 'Gérez les comptes utilisateurs et leurs rôles.',
     },
