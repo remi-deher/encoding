@@ -22,6 +22,13 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public void AudioRulesDecideConversionsAndRefuseUnsafeLayouts()
+    {
+        var (registry, validator, eligibility) = Harness.Services();
+        AudioRuleScenarios.Run(registry, validator, eligibility);
+    }
+
+    [Fact]
     public async Task FlowSimulationCoversBranchesVariablesAndMediaInfoImport()
     {
         var (registry, validator, _) = Harness.Services();

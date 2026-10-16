@@ -160,7 +160,11 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                     var index=Number(c,"trackId"); var audio=Text(c,"audioCodec","aac"); args.AddRange(["-c:a:"+index,audio=="opus"?"libopus":audio]);
                     if(audio!="flac") args.AddRange(["-b:a:"+index,Number(c,"bitrateKbps",192)+"k"]);
                     if(Path.GetExtension(current)==".flac" && audio!="flac" || Path.GetExtension(current)==".mp4" && audio=="flac") output=Output(directory,node,".mkv");
-                    if(Text(c,"channels","source")!="source") args.AddRange(["-ac:a:"+index,Text(c,"channels")]); break;
+                    if(Text(c,"channels","source")!="source") args.AddRange(["-ac:a:"+index,Text(c,"channels")]);
+                    // Disposition déclarée à l’entrée quand la source n’en a pas (déduite, 0055) et disposition imposée à la sortie pour garder le LFE.
+                    if(Text(c,"inputLayout")!="") input.AddRange(["-channel_layout:a:"+index,Text(c,"inputLayout")]);
+                    if(Text(c,"outputLayout")!="") args.AddRange(["-channel_layout:a:"+index,Text(c,"outputLayout")]);
+                    if(Number(c,"sampleRate")!="0") args.AddRange(["-ar:a:"+index,Number(c,"sampleRate")]); break;
                 case "base-normalize-audio": if(Path.GetExtension(current)==".flac") output=Output(directory,node,".mka"); args.AddRange(["-filter:a:"+Number(c,"trackId"),"loudnorm=I="+Number(c,"targetLoudness",-16)+":TP="+Number(c,"truePeak",-1),"-c:a:"+Number(c,"trackId"),"aac"]); break;
                 case "base-resize-video": videoFilters.Add("scale="+Number(c,"width",1920)+":"+Number(c,"height",1080)+":force_original_aspect_ratio=decrease"); if(!plan.Any(p=>p.ComponentId=="base-transcode-video")) args.AddRange(["-c:v","libx264"]); break;
                 case "base-remux-media": output=Output(directory,node,"."+Text(c,"container","mkv")); break;

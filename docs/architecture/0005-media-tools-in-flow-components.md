@@ -16,6 +16,8 @@ Le catalogue des composants et l’exécution initiale des outils média sont im
 | MediaInfo | Lire le rapport complet, les caractéristiques HDR et celles d’une piste, exporter le rapport JSON |
 | ImageMagick | Convertir, redimensionner et recadrer une image |
 
+Le bloc « Audio par règles » (`base-audio-rules`, [0055](0055-audio-rules-block.md)) uniformise toutes les pistes audio avec FFmpeg et s’ajoute au plan commun.
+
 Les identifiants des outils sont des métadonnées de catalogue. Un plugin fournit le composant ; l’outil indiqué décrit le moteur média que ce composant utilisera. Cette information ne prouve ni l’installation du binaire ni la compatibilité du worker.
 
 Les définitions sont centralisées dans `frontend/src/app/shared/models/media-tool-actions.ts`, puis assemblées avec les composants de logique et d’intégration dans `flow-component-catalog.ts`. La page de l’éditeur ne décrit plus les actions métier. Les identifiants précédents restent conservés pour les points de départ existants.

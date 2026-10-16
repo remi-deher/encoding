@@ -176,6 +176,21 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         foreach(var change in response.VariableChanges) variables[change.Key]=change.Value;
                         if(response.CandidateArtifactId is { } candidate) await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate),[]),node.Id);
                     }
+                    else if(id=="base-audio-rules")
+                    {
+                        await EnsureScanAsync();
+                        var rules=AudioRuleOptions.From(c); var audioPlan=AudioRulePlanner.Plan(context.CurrentMetadata!.Value,rules);
+                        foreach(var decision in audioPlan.Decisions) logger.LogInformation("Audio piste {Track} : {Note}",decision.AudioIndex,decision.Note);
+                        var steps=audioPlan.Steps(node.Id,rules);
+                        if(steps.Count==0) output="unchanged";
+                        else if(MediaActions.Text(c,"processingMode","plan")=="plan")
+                        {
+                            if(variables.TryGetValue("plan.tool",out var selected) && selected.GetString()!="ffmpeg")
+                                throw new MediaToolException("outil du plan incompatible avec cette action",1);
+                            context=context with { Plan=[..context.Plan,..steps] };
+                        }
+                        else await ApplyOutcomeAsync(await actions.FfmpegPlanAsync(steps,current,directory,node.Id,client.NodeId,job.Token),node.Id);
+                    }
                     else if(id=="base-execute-processing")
                     {
                         await EnsureScanAsync();
@@ -219,6 +234,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     if(materialized && await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256) {
                         await EnsureScanAsync(); await ApplyOutcomeAsync(new(current,[]),node.Id);
                     }
+                }
+                catch(AudioRuleException exception)
+                {
+                    logger.LogInformation("Règles audio {Node} non applicables : {Detail}",node.Id,exception.Message);
+                    output="error";
                 }
                 catch(ConditionEvaluationException exception)
                 {
