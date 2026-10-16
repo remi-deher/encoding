@@ -8,6 +8,7 @@ import {
   Component,
   computed,
   ElementRef,
+  effect,
   HostListener,
   inject,
   signal,
@@ -15,10 +16,13 @@ import {
 } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { MatButtonModule } from '@angular/material/button';
+import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter, map, of, switchMap } from 'rxjs';
 import {
-  PRIMARY_NAVIGATION_GROUPS,
+  getPrimaryNavigationGroups,
   PrimaryNavigationComponent,
 } from '../navigation/primary-navigation.component';
 import { AuthService } from '../auth/auth.service';
@@ -28,6 +32,8 @@ import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 @Component({
   selector: 'app-shell',
   imports: [
+    MatButtonModule,
+    MatSidenavModule,
     MatToolbarModule,
     PrimaryNavigationComponent,
     RouterLink,
@@ -46,6 +52,26 @@ export class AppShellComponent {
     ),
     { initialValue: this.getCurrentPageContext() },
   );
+
+  private readonly compactNavigation = toSignal(
+    inject(BreakpointObserver)
+      .observe('(max-width: 760px)')
+      .pipe(map((state) => state.matches)),
+    { initialValue: false },
+  );
+  protected readonly isCompactNavigation = this.compactNavigation;
+  protected readonly navigationMode = computed(() =>
+    this.isCompactNavigation() ? 'over' : 'side',
+  );
+  protected readonly navigationOpened = signal(true);
+
+  constructor() {
+    effect(() => {
+      const compact = this.isCompactNavigation();
+      const context = this.navigationEnd();
+      this.navigationOpened.set(!compact && !context.authMode && !context.workspaceMode);
+    });
+  }
 
   private readonly dynamicTitle = inject(PageTitle);
   protected readonly pageTitle = computed(() => {
@@ -93,7 +119,8 @@ export class AppShellComponent {
     const query = this.normalizeSearch(this.searchQuery().trim());
     if (!query) return [];
 
-    return PRIMARY_NAVIGATION_GROUPS.flatMap((group) => group.items)
+    return getPrimaryNavigationGroups(this.router.config)
+      .flatMap((group) => group.items)
       .filter((item) => !item.adminOnly || this.auth.isAdmin())
       .filter((item) =>
         this.normalizeSearch([item.label, ...(item.keywords ?? [])].join(' ')).includes(query),

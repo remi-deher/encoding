@@ -5,7 +5,7 @@
 
 .primary-navigation {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .navigation-group {
@@ -89,39 +89,6 @@
 
 @media (max-width: 760px) {
   .primary-navigation {
-    display: flex;
     gap: var(--space-4);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .primary-navigation::-webkit-scrollbar {
-    display: none;
-  }
-
-  .navigation-group {
-    display: contents;
-  }
-
-  .navigation-group-label {
-    display: none;
-  }
-
-  .navigation-group-items {
-    display: flex;
-    flex: 0 0 auto;
-    gap: 3px;
-  }
-
-  .navigation-link {
-    min-height: 38px;
-    padding-inline: 10px;
-    white-space: nowrap;
-  }
-
-  .navigation-link.is-active::before {
-    inset: auto 10px 0;
-    width: auto;
-    height: 2px;
   }
 }
