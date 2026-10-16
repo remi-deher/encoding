@@ -277,6 +277,7 @@ export class LibraryNodeAccessFormComponent implements OnInit {
   }
 
   protected onModeChange(nodeId: string, mode: LibraryNodeAccessMode): void {
+    this.form.controls[nodeId]?.controls.mode.setValue(mode);
     this.form.controls[nodeId]?.controls.isEnabled.setValue(mode !== 'unsupported');
   }
 
