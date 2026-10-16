@@ -1,6 +1,6 @@
 # 0001 — État partagé du cluster et présence des nœuds
 
-- Statut : accepté pour le premier socle backend
+- Statut : accepté pour le premier socle backend ; cible distribuée remplacée par [0060](0060-peer-replicated-cluster-state.md)
 - Date : 13 octobre 2026
 
 ## Décision
