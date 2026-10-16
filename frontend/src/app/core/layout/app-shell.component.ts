@@ -20,7 +20,6 @@ import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSidenavModule } from '@angular/material/sidenav';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter, map, of, switchMap } from 'rxjs';
 import {
   getPrimaryNavigationGroups,
@@ -36,7 +35,6 @@ import { ThemeToggleComponent } from '../theme/theme-toggle.component';
   imports: [
     MatButtonModule,
     MatSidenavModule,
-    MatToolbarModule,
     PrimaryNavigationComponent,
     RouterLink,
     RouterOutlet,
@@ -106,8 +104,9 @@ export class AppShellComponent {
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
   protected readonly searchQuery = signal('');
-  protected readonly searchOpen = signal(false);
-  private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+  protected readonly paletteOpen = signal(false);
+  private readonly paletteSearchInput =
+    viewChild<ElementRef<HTMLInputElement>>('paletteSearchInput');
   private readonly firstSearchResult =
     viewChild<ElementRef<HTMLAnchorElement>>('firstSearchResult');
   private readonly searchResultElements =
@@ -124,6 +123,12 @@ export class AppShellComponent {
     ),
     { initialValue: INITIAL_CLUSTER_OVERVIEW },
   );
+  protected readonly clusterHealthy = computed(() => {
+    const state = this.clusterState();
+    const nodes = state.snapshot?.nodes ?? [];
+    if (!nodes.length) return true;
+    return nodes.some((n) => n.status === 'online');
+  });
   protected readonly clusterLabel = computed(() => {
     const state = this.clusterState();
     if (state.status === 'loading') return 'Chargement…';
@@ -155,19 +160,25 @@ export class AppShellComponent {
       .slice(0, 6);
   });
 
+  protected openSearchPalette(): void {
+    this.paletteOpen.set(true);
+    setTimeout(() => {
+      this.paletteSearchInput()?.nativeElement.focus();
+    }, 50);
+  }
+
+  protected closeSearchPalette(): void {
+    this.paletteOpen.set(false);
+    this.searchQuery.set('');
+  }
+
   protected onSearchInput(event: Event): void {
     this.searchQuery.set((event.target as HTMLInputElement).value);
-    this.searchOpen.set(true);
   }
 
-  protected openSearch(): void {
-    this.searchOpen.set(true);
-  }
-
-  protected onSearchKeydown(event: KeyboardEvent): void {
+  protected onPaletteKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
-      this.searchOpen.set(false);
-      (event.target as HTMLInputElement).blur();
+      this.closeSearchPalette();
       return;
     }
 
@@ -181,7 +192,7 @@ export class AppShellComponent {
       const firstResult = this.searchResults()[0];
       if (firstResult) {
         event.preventDefault();
-        this.clearSearch();
+        this.closeSearchPalette();
         void this.router.navigateByUrl(firstResult.path);
       }
     }
@@ -198,7 +209,7 @@ export class AppShellComponent {
     if (event.key === 'ArrowUp') {
       event.preventDefault();
       if (index === 0) {
-        this.searchInput()?.nativeElement.focus();
+        this.paletteSearchInput()?.nativeElement.focus();
       } else {
         items[index - 1]?.nativeElement.focus();
       }
@@ -206,8 +217,8 @@ export class AppShellComponent {
     }
     if (event.key === 'Escape') {
       event.preventDefault();
-      this.closeSearch();
-      this.searchInput()?.nativeElement.focus();
+      this.closeSearchPalette();
+      this.paletteSearchInput()?.nativeElement.focus();
     }
   }
 
@@ -215,21 +226,6 @@ export class AppShellComponent {
     if (this.isCompactNavigation()) {
       this.navigationOpened.set(false);
     }
-  }
-
-  protected closeSearch(): void {
-    this.searchOpen.set(false);
-  }
-
-  protected onSearchBlur(event: FocusEvent): void {
-    const container = (event.currentTarget as HTMLElement).closest('.global-search');
-    if (event.relatedTarget instanceof Node && container?.contains(event.relatedTarget)) return;
-    this.closeSearch();
-  }
-
-  protected clearSearch(): void {
-    this.searchQuery.set('');
-    this.searchOpen.set(false);
   }
 
   protected onGlobalSearchShortcut(event: KeyboardEvent): void {
@@ -240,8 +236,11 @@ export class AppShellComponent {
       !this.workspaceMode()
     ) {
       event.preventDefault();
-      this.searchOpen.set(true);
-      this.searchInput()?.nativeElement.focus();
+      if (this.paletteOpen()) {
+        this.closeSearchPalette();
+      } else {
+        this.openSearchPalette();
+      }
     }
   }
 
