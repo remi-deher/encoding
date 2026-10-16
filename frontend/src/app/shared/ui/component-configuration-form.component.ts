@@ -248,7 +248,11 @@ type ConfigurationFormGroup = FormGroup<
                     type="password"
                     autocomplete="new-password"
                     [control]="form.controls[field.id]"
-                    [hint]="configuredSecrets().includes(field.id) ? 'Laissez vide pour conserver le secret enregistré.' : field.description ?? ''"
+                    [hint]="
+                      configuredSecrets().includes(field.id)
+                        ? 'Laissez vide pour conserver le secret enregistré.'
+                        : (field.description ?? '')
+                    "
                     [error]="configurationFieldError(field.id)"
                     [placeholder]="field.placeholder ?? ''"
                   />
