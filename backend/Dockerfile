@@ -24,19 +24,16 @@ COPY backend/src/Encoding.NodeAgent/Encoding.NodeAgent.csproj ./src/Encoding.Nod
 COPY backend/src/Encoding.Launcher/Encoding.Launcher.csproj ./src/Encoding.Launcher/
 COPY backend/src/Encoding.Contracts/Encoding.Contracts.csproj ./src/Encoding.Contracts/
 COPY backend/src/Encoding.Core/Encoding.Core.csproj ./src/Encoding.Core/
-RUN --mount=type=cache,target=/root/.nuget/packages \
+RUN --mount=type=cache,target=/root/.local/share/NuGet/http-cache \
     --mount=type=secret,id=proxy_ca,required=false \
     set -eu; \
     if [ -f /run/secrets/proxy_ca ]; then \
       cat /etc/ssl/certs/ca-certificates.crt /run/secrets/proxy_ca > /tmp/ca-bundle.pem; \
-      SSL_CERT_FILE=/tmp/ca-bundle.pem dotnet restore ./src/Encoding.Api/Encoding.Api.csproj && \
-      SSL_CERT_FILE=/tmp/ca-bundle.pem dotnet restore ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj && \
-      SSL_CERT_FILE=/tmp/ca-bundle.pem dotnet restore ./src/Encoding.Launcher/Encoding.Launcher.csproj; \
-    else \
-      dotnet restore ./src/Encoding.Api/Encoding.Api.csproj && \
-      dotnet restore ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj && \
-      dotnet restore ./src/Encoding.Launcher/Encoding.Launcher.csproj; \
+      export SSL_CERT_FILE=/tmp/ca-bundle.pem; \
     fi; \
+    dotnet restore ./src/Encoding.Api/Encoding.Api.csproj; \
+    dotnet restore ./src/Encoding.NodeAgent/Encoding.NodeAgent.csproj; \
+    dotnet restore ./src/Encoding.Launcher/Encoding.Launcher.csproj; \
     rm -f /tmp/ca-bundle.pem
 COPY backend/migrations/ ./migrations/
 COPY backend/src ./src
