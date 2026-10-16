@@ -15,6 +15,7 @@ import { NodeResponse } from './cluster';
 export const NODE_MANAGEMENT_TABS = [
   { value: 'node', label: 'Ce nœud' },
   { value: 'cluster', label: 'Cluster' },
+  { value: 'groups', label: 'Groupes de nœuds' },
 ];
 export const CREATE_CLUSTER_FORM: RecordFormData = {
   title: 'Créer un cluster',

@@ -1,20 +1,24 @@
 <app-management-catalog-template
   [title]="title()"
   [detailOpen]="selectedNode() !== null"
-  [actionOpen]="local.flow() !== null || actionOpen()"
+  [actionOpen]="pageTab() === 'groups' ? groupFormOpen() : local.flow() !== null || actionOpen()"
   [actionTitle]="
-    local.flow() === 'join'
-      ? 'Rejoindre un cluster'
-      : local.flow() === 'create'
-        ? 'Créer un cluster'
-        : actionTitle()
+    pageTab() === 'groups'
+      ? groupForm().title
+      : local.flow() === 'join'
+        ? 'Rejoindre un cluster'
+        : local.flow() === 'create'
+          ? 'Créer un cluster'
+          : actionTitle()
   "
   [actionDescription]="
-    local.flow() === 'join'
-      ? 'Rattacher ce nœud à un cluster existant.'
-      : local.flow() === 'create'
-        ? 'Ce nœud devient le premier membre du nouveau cluster.'
-        : actionDescription()
+    pageTab() === 'groups'
+      ? groupForm().description
+      : local.flow() === 'join'
+        ? 'Rattacher ce nœud à un cluster existant.'
+        : local.flow() === 'create'
+          ? 'Ce nœud devient le premier membre du nouveau cluster.'
+          : actionDescription()
   "
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
@@ -23,7 +27,7 @@
   drawerSize="standard"
   [drawerModal]="true"
   (detailClosed)="onDetailClosed()"
-  (actionClosed)="closeCreateNode()"
+  (actionClosed)="pageTab() === 'groups' ? closeGroupForm() : closeCreateNode()"
   [showToolbar]="
     pageTab() === 'cluster' &&
     !local.standalone() &&
@@ -31,10 +35,18 @@
     clusterIdentity() !== null
   "
   filterLabel="Membres du cluster actuel"
-  note="Les fonctions, le matériel et l’accélérateur correspondent au dernier état observé. Une perte de connexion ne confirme pas un changement de cluster."
+  [note]="
+    pageTab() === 'groups'
+      ? 'Les critères des groupes automatiques sont réévalués à la lecture et à l’attribution. Les étiquettes des nœuds remplacent les étiquettes de groupe portant la même clé.'
+      : 'Les fonctions, le matériel et l’accélérateur correspondent au dernier état observé. Une perte de connexion ne confirme pas un changement de cluster.'
+  "
 >
   <ng-template #pageActions>
-    @if (pageTab() === 'node') {
+    @if (pageTab() === 'groups') {
+      @if (isAdmin()) {
+        <button matButton="filled" type="button" (click)="createGroup()">Créer un groupe</button>
+      }
+    } @else if (pageTab() === 'node') {
       @if (isAdmin()) {
         <button
           matButton="outlined"
@@ -51,7 +63,6 @@
         </button>
       }
     } @else if (!local.standalone() && clusterIdentity() && !local.externalCluster()) {
-      <a matButton="text" routerLink="/node-groups">Groupes de nœuds</a>
       @if (isAdmin()) {
         <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
         <button matButton="outlined" type="button" [matMenuTriggerFor]="clusterActions">
@@ -168,7 +179,16 @@
     </mat-form-field>
   </div>
   <div catalogue-table>
-    @if (pageTab() === 'node') {
+    @if (pageTab() === 'groups') {
+      <app-data-table
+        layout="resources"
+        [columns]="groupColumns"
+        [rows]="groupRows()"
+        [rowActions]="groupActions"
+        (rowAction)="onGroupAction($event)"
+        emptyMessage="Aucun groupe de nœuds."
+      />
+    } @else if (pageTab() === 'node') {
       <app-resource-sheet
         ariaLabel="Fiche du nœud local"
         [title]="localSheet().title"
@@ -450,7 +470,14 @@
     </mat-tab-group>
   </ng-template>
   <ng-template #actionContent>
-    @if (local.flow() === 'create') {
+    @if (pageTab() === 'groups') {
+      <app-record-form
+        [data]="groupForm()"
+        [busy]="groupBusy()"
+        (submitted)="saveGroup($event)"
+        (cancelled)="closeGroupForm()"
+      />
+    } @else if (local.flow() === 'create') {
       @if (local.error()) {
         <p role="alert">{{ local.error() }}</p>
       }

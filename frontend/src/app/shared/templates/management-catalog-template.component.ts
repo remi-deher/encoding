@@ -53,23 +53,27 @@ export interface CatalogEmptyState {
           @if (showToolbar()) {
             <div class="catalog-toolbar">
               <div class="catalog-filters">
-                <span class="catalog-filter-label">{{ filterLabel() }}</span>
-                @if (searchLabel()) {
-                  <mat-form-field
-                    appearance="outline"
-                    subscriptSizing="dynamic"
-                    class="catalog-search"
-                  >
-                    <mat-label>{{ searchLabel() }}</mat-label>
-                    <input
-                      matInput
-                      type="search"
-                      [value]="searchQuery()"
-                      (input)="onSearchInput($event)"
-                    />
-                  </mat-form-field>
+                @if (filterLabel()) {
+                  <span class="catalog-filter-label">{{ filterLabel() }}</span>
                 }
-                <ng-content select="[catalogue-filters]" />
+                <div class="catalog-toolbar-row">
+                  <ng-content select="[catalogue-filters]" />
+                  @if (searchLabel()) {
+                    <mat-form-field
+                      appearance="outline"
+                      subscriptSizing="dynamic"
+                      class="catalog-search"
+                    >
+                      <mat-label>{{ searchLabel() }}</mat-label>
+                      <input
+                        matInput
+                        type="search"
+                        [value]="searchQuery()"
+                        (input)="onSearchInput($event)"
+                      />
+                    </mat-form-field>
+                  }
+                </div>
               </div>
             </div>
           }

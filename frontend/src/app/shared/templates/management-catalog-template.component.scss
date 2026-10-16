@@ -35,8 +35,18 @@
   font-weight: 640;
 }
 
+.catalog-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  width: 100%;
+}
+
 .catalog-search {
-  width: min(360px, 100%);
+  width: min(300px, 100%);
+  margin-inline-start: auto;
 }
 
 .catalog-state {

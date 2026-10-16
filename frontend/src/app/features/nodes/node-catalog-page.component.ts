@@ -28,6 +28,9 @@ import {
   NodeActivityResponse,
   NodeProcessingSettings,
   NODE_ROLE_LABELS,
+  NodeGroupCriteria,
+  NodeGroupMode,
+  NodeGroupResponse,
 } from '../../shared/models/cluster';
 import { NodeSchedule } from '../../shared/models/node-schedule';
 import { WeeklyScheduleFormComponent } from '../../shared/ui/weekly-schedule-form.component';
@@ -67,7 +70,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { takeUntilDestroyed, toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { RouterLink } from '@angular/router';
 import {
   catchError,
   EMPTY,
@@ -149,6 +151,15 @@ interface MemberCard {
   readonly sections: readonly ResourceCardSection[];
 }
 
+interface GroupRow extends DataTableRow {
+  readonly id: string;
+  readonly name: string;
+  readonly mode: string;
+  readonly members: number;
+  readonly labels: string;
+  readonly description: string;
+}
+
 interface NodeRecord extends DataTableRow {
   readonly id: string;
   readonly name: string;
@@ -191,7 +202,6 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     ContextBannerComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
-    RouterLink,
   ],
   templateUrl: './node-catalog-page.component.html',
   styleUrl: './node-catalog-page.component.scss',
@@ -218,8 +228,58 @@ export class NodeCatalogPageComponent {
   protected readonly isAdmin = inject(AuthService).isAdmin;
   protected readonly local = inject(LocalNodeController);
   protected readonly clusterIdentity = this.local.identity;
-  protected readonly pageTab = signal('node');
+  protected readonly pageTab = signal(
+    this.route.snapshot.queryParamMap.get('tab') === 'groups'
+      ? 'groups'
+      : this.route.snapshot.queryParamMap.get('tab') === 'cluster'
+        ? 'cluster'
+        : 'node',
+  );
   protected readonly managementTabs = NODE_MANAGEMENT_TABS;
+  private readonly groups = signal<readonly NodeGroupResponse[]>([]);
+  protected readonly groupState = signal<'loading' | 'ready' | 'error'>('loading');
+  protected readonly groupMessage = signal('Chargement des groupes…');
+  protected readonly groupFormOpen = signal(false);
+  protected readonly groupBusy = signal(false);
+  private readonly groupEditing = signal<NodeGroupResponse | null>(null);
+  protected readonly groupForm = signal<RecordFormData>(this.groupFormData(null));
+  protected readonly groupColumns: readonly DataTableColumn[] = [
+    { key: 'name', label: 'Nom' },
+    { key: 'mode', label: 'Type' },
+    { key: 'members', label: 'Nœuds' },
+    { key: 'labels', label: 'Étiquettes' },
+    { key: 'description', label: 'Description' },
+  ];
+  protected readonly groupActions: readonly DataTableRowAction[] = [
+    { id: 'edit', label: 'Modifier', visibleWhen: () => this.isAdmin() },
+    {
+      id: 'delete',
+      label: 'Supprimer',
+      tone: 'danger',
+      visibleWhen: () => this.isAdmin(),
+      confirmation: (row) => ({
+        title: 'Supprimer ce groupe ?',
+        message: `Le groupe « ${row['name']} » et ses étiquettes partagées seront supprimés.`,
+        confirmLabel: 'Supprimer',
+      }),
+    },
+  ];
+  protected readonly groupRows = computed(() =>
+    this.groups().map(
+      (group) =>
+        ({
+          id: group.id,
+          name: group.name,
+          mode: group.mode === 'manual' ? 'Manuel' : 'Automatique',
+          members: group.nodeIds.length,
+          labels:
+            Object.entries(group.labels)
+              .map(([k, v]) => (v == null ? k : `${k}=${v}`))
+              .join(', ') || '—',
+          description: group.description || '—',
+        }) satisfies GroupRow,
+    ),
+  );
   protected readonly createClusterForm = CREATE_CLUSTER_FORM;
   protected readonly autonomousCards = AUTONOMOUS_CARDS;
   protected readonly localNode = computed(
@@ -282,6 +342,7 @@ export class NodeCatalogPageComponent {
     }),
   );
   protected readonly pageState = computed(() => {
+    if (this.pageTab() === 'groups') return this.groupState();
     if (this.local.loading()) return 'loading';
     if (this.pageTab() === 'cluster' && !this.clusterIdentity()) return 'error';
     return this.pageTab() === 'cluster' && !this.local.standalone() && !this.local.externalCluster()
@@ -292,6 +353,7 @@ export class NodeCatalogPageComponent {
     if (this.local.busy()) return;
     this.pageTab.set(tab);
     this.actionOpen.set(false);
+    this.closeGroupForm();
     this.onDetailClosed();
   }
   protected onSetupAction(id: string): void {
@@ -405,6 +467,9 @@ export class NodeCatalogPageComponent {
     ],
   };
   protected readonly title = computed(() => {
+    if (this.pageTab() === 'groups') {
+      return 'Groupes de nœuds';
+    }
     if (this.pageTab() === 'cluster') {
       return !this.local.standalone() && this.clusterIdentity()
         ? this.clusterName()
@@ -412,11 +477,12 @@ export class NodeCatalogPageComponent {
     }
     return this.localName() || ((this.routeData()['title'] as string) ?? 'Nœuds');
   });
-  protected readonly catalogMessage = computed(() =>
-    this.loadState() === 'error'
+  protected readonly catalogMessage = computed(() => {
+    if (this.pageTab() === 'groups') return this.groupMessage();
+    return this.loadState() === 'error'
       ? 'Impossible de joindre l’API du cluster. Vérifiez que le backend et PostgreSQL sont démarrés.'
-      : 'Chargement des nœuds du cluster…',
-  );
+      : 'Chargement des nœuds du cluster…';
+  });
   protected readonly detailTitle = computed(
     () => this.rawNode()?.displayName?.trim() || this.rawNode()?.name || 'Détails du nœud',
   );
@@ -1370,6 +1436,13 @@ export class NodeCatalogPageComponent {
   );
 
   constructor() {
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      const tab = params.get('tab');
+      if (tab === 'groups' || tab === 'cluster' || tab === 'node') {
+        this.pageTab.set(tab);
+      }
+    });
+    void this.loadGroups();
     this.installProcessingSettingsEffect();
     this.loadLibraryAccessSummary();
     timer(0, 10_000)
@@ -1942,5 +2015,225 @@ export class NodeCatalogPageComponent {
     return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(
       new Date(value),
     );
+  }
+
+  protected createGroup(): void {
+    this.groupEditing.set(null);
+    this.groupForm.set(this.groupFormData(null));
+    this.groupFormOpen.set(true);
+  }
+
+  protected closeGroupForm(): void {
+    this.groupFormOpen.set(false);
+    this.groupBusy.set(false);
+  }
+
+  protected onGroupAction(event: DataTableActionEvent): void {
+    const group = this.groups().find((item) => item.id === event.row['id']);
+    if (!group) return;
+    if (event.actionId === 'edit') {
+      this.groupEditing.set(group);
+      this.groupForm.set(this.groupFormData(group));
+      this.groupFormOpen.set(true);
+    }
+    if (event.actionId === 'delete') void this.removeGroup(group);
+  }
+
+  protected async saveGroup(values: Record<string, string>): Promise<void> {
+    if (this.groupBusy()) return;
+    let labels: Record<string, string | null> = {};
+    try {
+      labels = this.parseGroupLabels(values['labels'] ?? '');
+    } catch {
+      this.notifications.show(
+        'Étiquettes invalides. Utilisez une clé par ligne, avec une valeur facultative après =.',
+      );
+      return;
+    }
+    const mode = values['mode'] as NodeGroupMode;
+    const role = values['role'];
+    const criteria: NodeGroupCriteria =
+      mode === 'automatic'
+        ? {
+            roles: role === 'all' ? [] : [role as 'server' | 'worker'],
+            operatingSystem: values['os'] || null,
+            architecture: values['architecture'] || null,
+            minimumMemoryMb: values['memoryMb'] ? Number(values['memoryMb']) : null,
+            requiredToolIds: (values['tools'] || '')
+              .split(',')
+              .map((x) => x.trim())
+              .filter(Boolean),
+            minimumConcurrentTasks: values['concurrency'] ? Number(values['concurrency']) : null,
+            minimumProcessorCount: values['processors'] ? Number(values['processors']) : null,
+          }
+        : {};
+    const nodeIds =
+      mode === 'manual'
+        ? (values['nodeIds'] || '')
+            .split(/[\s,]+/)
+            .map((x) => x.trim())
+            .filter(Boolean)
+        : [];
+    if (nodeIds.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) {
+      this.notifications.show('Chaque nœud doit être identifié par un UUID valide.');
+      return;
+    }
+    const body = {
+      name: values['name'],
+      description: values['description'],
+      mode,
+      criteria,
+      labels,
+      nodeIds,
+    };
+    const current = this.groupEditing();
+    this.groupBusy.set(true);
+    try {
+      if (current) await firstValueFrom(this.http.put(`/api/v1/node-groups/${current.id}`, body));
+      else await firstValueFrom(this.http.post('/api/v1/node-groups', body));
+      await this.loadGroups();
+      this.closeGroupForm();
+      this.notifications.show('Groupe enregistré.');
+    } catch {
+      this.notifications.show(
+        'Le groupe n’a pas pu être enregistré. Vérifiez son nom, ses étiquettes et les nœuds sélectionnés.',
+      );
+    } finally {
+      this.groupBusy.set(false);
+    }
+  }
+
+  private async removeGroup(group: NodeGroupResponse): Promise<void> {
+    try {
+      await firstValueFrom(this.http.delete(`/api/v1/node-groups/${group.id}`));
+      await this.loadGroups();
+      this.notifications.show('Groupe supprimé.');
+    } catch (error) {
+      const title = (error as { error?: { title?: unknown } }).error?.title;
+      this.notifications.show(
+        typeof title === 'string' ? title : 'Le groupe n’a pas pu être supprimé.',
+      );
+    }
+  }
+
+  private async loadGroups(): Promise<void> {
+    this.groupState.set('loading');
+    try {
+      this.groups.set(
+        await firstValueFrom(this.http.get<readonly NodeGroupResponse[]>('/api/v1/node-groups')),
+      );
+      this.groupState.set('ready');
+    } catch {
+      this.groupState.set('error');
+      this.groupMessage.set('Impossible de charger les groupes de nœuds.');
+    }
+  }
+
+  private parseGroupLabels(source: string): Record<string, string | null> {
+    const labels: Record<string, string | null> = {};
+    for (const line of source
+      .split(/[\n,]+/)
+      .map((x) => x.trim())
+      .filter(Boolean)) {
+      const i = line.indexOf('=');
+      const key = (i < 0 ? line : line.slice(0, i)).trim();
+      if (!/^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/.test(key)) throw new Error('invalid key');
+      labels[key] = i < 0 ? null : line.slice(i + 1).trim();
+    }
+    return labels;
+  }
+
+  private groupFormData(group: NodeGroupResponse | null): RecordFormData {
+    const c = group?.criteria;
+    return {
+      title: group ? 'Modifier un groupe' : 'Créer un groupe',
+      description:
+        'Les étiquettes s’écrivent une par ligne : gpu=nvidia ou production. Pour un groupe manuel, indiquez les UUID des nœuds séparés par des virgules.',
+      submitLabel: 'Enregistrer',
+      fields: [
+        { id: 'name', label: 'Nom unique', type: 'text', required: true, maxLength: 128 },
+        { id: 'description', label: 'Description', type: 'textarea', maxLength: 2000 },
+        {
+          id: 'mode',
+          label: 'Mode',
+          type: 'select',
+          required: true,
+          options: [
+            { value: 'manual', label: 'Manuel' },
+            { value: 'automatic', label: 'Automatique' },
+          ],
+        },
+        {
+          id: 'nodeIds',
+          label: 'UUID des nœuds (manuel)',
+          type: 'textarea',
+          hint: 'Une liste séparée par des espaces ou des virgules.',
+        },
+        {
+          id: 'role',
+          label: 'Rôle requis (automatique)',
+          type: 'select',
+          options: [
+            { value: 'all', label: 'Tous les rôles' },
+            { value: 'worker', label: 'Worker' },
+            { value: 'server', label: 'Serveur' },
+          ],
+        },
+        { id: 'os', label: 'Système (automatique)', type: 'text', maxLength: 128 },
+        { id: 'architecture', label: 'Architecture (automatique)', type: 'text', maxLength: 64 },
+        {
+          id: 'memoryMb',
+          label: 'Mémoire minimale en Mo',
+          type: 'number',
+          min: 0,
+          max: 4194304,
+          step: 1,
+        },
+        {
+          id: 'concurrency',
+          label: 'Traitements simultanés minimum',
+          type: 'number',
+          min: 0,
+          max: 1024,
+          step: 1,
+        },
+        {
+          id: 'processors',
+          label: 'Processeurs disponibles minimum',
+          type: 'number',
+          min: 0,
+          max: 4096,
+          step: 1,
+        },
+        {
+          id: 'tools',
+          label: 'Identifiants d’outils requis',
+          type: 'text',
+          hint: 'Séparés par des virgules, par exemple ffmpeg, ffprobe.',
+        },
+        {
+          id: 'labels',
+          label: 'Étiquettes partagées',
+          type: 'textarea',
+          hint: 'Les étiquettes locales du nœud remplacent celles du groupe.',
+        },
+      ],
+      initialValues: {
+        name: group?.name ?? '',
+        description: group?.description ?? '',
+        mode: group?.mode ?? 'manual',
+        nodeIds: group?.nodeIds.join(', ') ?? '',
+        role: c?.roles?.[0] ?? 'all',
+        os: c?.operatingSystem ?? '',
+        architecture: c?.architecture ?? '',
+        memoryMb: c?.minimumMemoryMb?.toString() ?? '',
+        concurrency: c?.minimumConcurrentTasks?.toString() ?? '',
+        tools: c?.requiredToolIds?.join(', ') ?? '',
+        processors: c?.minimumProcessorCount?.toString() ?? '',
+        labels: Object.entries(group?.labels ?? {})
+          .map(([k, v]) => (v == null ? k : `${k}=${v}`))
+          .join('\n'),
+      },
+    };
   }
 }

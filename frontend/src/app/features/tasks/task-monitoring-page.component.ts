@@ -1,6 +1,5 @@
 import { toSignal, toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FileDownload } from '../../shared/services/file-download';
-import { MatButtonModule } from '@angular/material/button';
 import { catchError, forkJoin, map, of } from 'rxjs';
 import {
   ExecutionTracking,
@@ -60,7 +59,7 @@ interface ExecutionRecord extends DataTableRow {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-task-monitoring-page',
-  imports: [ExecutionMonitorTemplateComponent, MatButtonModule],
+  imports: [ExecutionMonitorTemplateComponent],
   templateUrl: './task-monitoring-page.component.html',
 })
 export class TaskMonitoringPageComponent {

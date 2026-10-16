@@ -200,21 +200,7 @@ const applicationRoutes: Routes = [
   },
   {
     path: 'node-groups',
-    loadComponent: () =>
-      import('./features/nodes/node-groups-page.component').then(
-        (module) => module.NodeGroupsPageComponent,
-      ),
-    data: {
-      title: 'Groupes de nœuds',
-      navigation: {
-        group: 'Infrastructure',
-        label: 'Groupes de nœuds',
-        glyph: '♧',
-        order: 2,
-        keywords: ['workers', 'groupes'],
-      },
-      description: 'Organisez les workers et leurs critères de sélection.',
-    },
+    redirectTo: () => '/nodes?tab=groups',
   },
   {
     path: 'plugins',

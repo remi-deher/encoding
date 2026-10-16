@@ -46,6 +46,7 @@ interface FlowRecord extends DataTableRow {
   readonly summary: string;
   readonly components: string;
   readonly state: string;
+  readonly status: string;
   readonly backup: string;
   readonly modifiedAt: string;
   readonly modifiedOrder: number;
@@ -65,6 +66,13 @@ interface FlowRecord extends DataTableRow {
     FlowPreviewComponent,
   ],
   templateUrl: './flow-catalog-page.component.html',
+  styles: `
+    .import-file-btn {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+    }
+  `,
 })
 export class FlowCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
@@ -197,6 +205,25 @@ export class FlowCatalogPageComponent {
   private readonly downloads = inject(FileDownload);
   private readonly notifications = inject(NotificationService);
   protected readonly listActions = [{ id: 'import', label: 'Importer', fileAccept: '.json,.zip' }];
+  protected async onImportFile(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const result = await this.api.import(file);
+      this.notifications.show(result.imported + ' flow(s) importé(s).');
+    } catch (error) {
+      this.notifications.show(
+        error instanceof HttpErrorResponse
+          ? (error.error?.title ??
+              error.error?.issues?.map((issue: { message: string }) => issue.message).join(' ') ??
+              'Import impossible.')
+          : 'Import impossible.',
+      );
+    } finally {
+      input.value = '';
+    }
+  }
   protected readonly rowActions = [
     { id: 'edit', label: 'Ouvrir l’éditeur' },
     { id: 'export', label: 'Exporter' },
@@ -365,13 +392,17 @@ export class FlowCatalogPageComponent {
           name: flow.name,
           category: flow.mediaType,
           mediaType:
-            MEDIA_TYPE_OPTIONS.find((type) => type.value === flow.mediaType)?.label ??
-            flow.mediaType,
+            (MEDIA_TYPE_OPTIONS.find((type) => type.value === flow.mediaType)?.label ??
+              flow.mediaType) +
+            ' · ' +
+            flow.nodeCount +
+            (flow.nodeCount === 1 ? ' étape' : ' étapes'),
           publishedVersion: flow.version,
           version: 'v' + flow.version,
           summary: flow.nodeCount + ' étapes',
           components: flow.nodeCount + ' composants',
           state: flow.isDraft ? 'Brouillon' : 'Publié',
+          status: (flow.isDraft ? 'Brouillon' : 'Publié') + ' · v' + flow.version,
           backup:
             flow.backupStatus === 'draft'
               ? 'Brouillon en base'
@@ -456,9 +487,8 @@ export class FlowCatalogPageComponent {
 
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom du flow', sortable: true },
-    { key: 'mediaType', label: 'Type', sortable: true },
-    { key: 'version', label: 'Version', sortable: true },
-    { key: 'state', label: 'État', sortable: true },
+    { key: 'mediaType', label: 'Média & étapes', sortable: true },
+    { key: 'status', label: 'État & version', sortable: true },
     { key: 'backup', label: 'Sauvegarde JSON', sortable: true },
     { key: 'modifiedAt', label: 'Modifié le', sortable: true, sortValueKey: 'modifiedOrder' },
   ];
@@ -481,6 +511,7 @@ export class FlowCatalogPageComponent {
           flow.name.toLocaleLowerCase('fr-FR').includes(query) ||
           flow.mediaType.toLocaleLowerCase('fr-FR').includes(query) ||
           flow.summary.toLocaleLowerCase('fr-FR').includes(query) ||
+          flow.status.toLocaleLowerCase('fr-FR').includes(query) ||
           flow.state.toLocaleLowerCase('fr-FR').includes(query)),
     );
   });

@@ -8,7 +8,7 @@
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
   (actionClosed)="closeFlowCreation()"
-  filterLabel="Type de média"
+  filterLabel=""
   searchLabel="Rechercher un flow"
   [searchQuery]="searchQuery()"
   (searchQueryChange)="searchQuery.set($event)"
@@ -18,6 +18,10 @@
   "
 >
   <ng-template #pageActions>
+    <label matButton="outlined" class="import-file-btn">
+      Importer
+      <input type="file" accept=".json,.zip" (change)="onImportFile($event)" hidden />
+    </label>
     <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
   </ng-template>
 
@@ -34,14 +38,10 @@
     layout="resources"
     catalogue-table
     [columns]="columns"
-    [listActions]="listActions"
     [rowActions]="rowActions"
-    [selectionActions]="selectionActions"
-    (listAction)="onListAction($event)"
     (rowAction)="onRowAction($event)"
-    (selectionAction)="onSelectionAction($event)"
     [rows]="filteredFlows()"
-    [selectable]="true"
+    [selectable]="false"
     [rowOpenable]="true"
     rowOpenLabel="Consulter"
     (rowOpen)="onFlowOpen($event)"
