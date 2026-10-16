@@ -1,7 +1,15 @@
-<nav class="primary-navigation" aria-label="Navigation principale">
+<nav
+  class="primary-navigation"
+  [class.is-collapsed]="collapsed()"
+  aria-label="Navigation principale"
+>
   @for (group of groups(); track group.label) {
     <section class="navigation-group" [attr.aria-label]="group.label">
-      <h2 class="navigation-group-label">{{ group.label }}</h2>
+      @if (!collapsed()) {
+        <h2 class="navigation-group-label">{{ group.label }}</h2>
+      } @else {
+        <div class="navigation-group-divider" aria-hidden="true"></div>
+      }
       <div class="navigation-group-items">
         @for (item of group.items; track item.path) {
           <a
@@ -10,9 +18,13 @@
             routerLinkActive="is-active"
             [routerLinkActiveOptions]="{ exact: item.exact ?? false }"
             ariaCurrentWhenActive="page"
+            [attr.title]="collapsed() ? item.label : null"
+            [attr.aria-label]="collapsed() ? item.label : null"
           >
             <span class="navigation-glyph" aria-hidden="true">{{ item.glyph }}</span>
-            <span class="navigation-link-label">{{ item.label }}</span>
+            @if (!collapsed()) {
+              <span class="navigation-link-label">{{ item.label }}</span>
+            }
           </a>
         }
       </div>

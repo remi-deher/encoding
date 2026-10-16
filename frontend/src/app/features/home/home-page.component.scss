@@ -2,6 +2,12 @@
   display: block;
 }
 
+.health-banner-section {
+  margin-block: var(--space-3) var(--space-5);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -26,8 +32,10 @@
 .surface-panel {
   min-width: 0;
   padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-2xl);
-  background: var(--surface-container-low);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
 }
 
 .panel-heading {

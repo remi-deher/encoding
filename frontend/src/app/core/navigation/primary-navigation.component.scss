@@ -5,7 +5,8 @@
 
 .primary-navigation {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
+  transition: gap 200ms var(--motion-spring-fast);
 }
 
 .navigation-group {
@@ -17,28 +18,38 @@
   padding: 0 var(--space-3) var(--space-2);
   color: var(--sidebar-text-muted);
   font-size: var(--font-label);
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-weight: 750;
+  letter-spacing: 0.08em;
   line-height: 1.4;
   text-transform: uppercase;
 }
 
+.navigation-group-divider {
+  height: 1px;
+  margin: var(--space-2) var(--space-1);
+  background: var(--sidebar-border);
+}
+
+.navigation-group:first-child .navigation-group-divider {
+  display: none;
+}
+
 .navigation-group-items {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .navigation-link {
   position: relative;
-  min-height: 42px;
-  padding-inline: 14px;
+  min-height: 38px;
+  padding-inline: 12px;
   display: flex;
   align-items: center;
   gap: 12px;
   border-radius: var(--radius-md);
   color: var(--sidebar-text);
   font-size: var(--font-body);
-  font-weight: 560;
+  font-weight: 600;
   text-decoration: none;
   transition:
     color 180ms var(--motion-spring-fast),
@@ -62,8 +73,8 @@
 
 .navigation-link.is-active::before {
   position: absolute;
-  inset-block: 10px;
-  inset-inline-start: 6px;
+  inset-block: 8px;
+  inset-inline-start: 5px;
   width: 3px;
   border-radius: var(--radius-pill);
   background: var(--sidebar-accent);
@@ -71,8 +82,8 @@
 }
 
 .navigation-glyph {
-  width: 18px;
-  flex: 0 0 18px;
+  width: 20px;
+  flex: 0 0 20px;
   color: currentColor;
   font-size: 16px;
   line-height: 1;
@@ -91,8 +102,29 @@
   outline-offset: 1px;
 }
 
+/* Mode replié (icônes uniquement) */
+.primary-navigation.is-collapsed {
+  gap: var(--space-2);
+}
+
+.primary-navigation.is-collapsed .navigation-link {
+  min-height: 40px;
+  padding-inline: 0;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+}
+
+.primary-navigation.is-collapsed .navigation-link.is-active {
+  border-radius: var(--radius-pill);
+}
+
+.primary-navigation.is-collapsed .navigation-link.is-active::before {
+  inset-block: 6px;
+  inset-inline-start: 2px;
+}
+
 @media (max-width: 760px) {
   .primary-navigation {
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
 }

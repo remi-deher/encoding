@@ -69,6 +69,25 @@ export class AppShellComponent {
     this.isCompactNavigation() ? 'over' : 'side',
   );
   protected readonly navigationOpened = signal(true);
+  protected readonly navigationCollapsed = signal(
+    typeof localStorage !== 'undefined' ? localStorage.getItem('nav_collapsed') === 'true' : false,
+  );
+
+  protected toggleNavigationCollapsed(): void {
+    if (this.isCompactNavigation()) {
+      this.navigationOpened.set(!this.navigationOpened());
+    } else {
+      this.navigationCollapsed.update((v) => {
+        const next = !v;
+        try {
+          localStorage.setItem('nav_collapsed', String(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    }
+  }
 
   constructor() {
     effect(() => {

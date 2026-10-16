@@ -53,33 +53,20 @@ app-shell {
 }
 
 .brand-name {
+  max-width: 280px;
   overflow: hidden;
   font-size: var(--font-title);
   font-weight: 740;
-  letter-spacing: 0.01em;
-  text-overflow: ellipsis;
-}
-
-.header-context {
-  min-width: 0;
-  max-width: 240px;
-  padding-inline-start: clamp(8px, 1.4vw, 18px);
-  overflow: hidden;
-  border-inline-start: 1px solid var(--border-subtle);
-}
-
-.header-context-title {
-  display: block;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: var(--font-label);
-  font-weight: 630;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .navigation-menu-toggle {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
   min-width: 40px;
   width: 40px;
   height: 40px;
@@ -314,10 +301,40 @@ app-shell {
 
 .application-sidebar {
   box-sizing: border-box;
-  width: 252px;
+  width: 216px;
+  transition: width 240ms cubic-bezier(0.2, 0, 0, 1);
   border-inline-end: 1px solid var(--sidebar-border);
-  background: var(--sidebar-background);
+  background: var(--sidebar-background) !important;
   color: var(--sidebar-text);
+  overflow-x: hidden;
+
+  &.is-collapsed {
+    width: 68px;
+
+    .sidebar-content {
+      padding-inline: 8px;
+    }
+
+    .sidebar-user {
+      justify-content: center;
+      padding-inline: 0;
+
+      .sidebar-user-copy {
+        display: none;
+      }
+    }
+  }
+}
+
+.application-shell:has(.detail-drawer-panel.mat-drawer-opened),
+.application-shell:has(.detail-drawer-panel.mat-drawer-animating) {
+  .application-header {
+    z-index: 1;
+  }
+
+  .application-navigation-layout {
+    z-index: 100;
+  }
 }
 
 .sidebar-content {
@@ -463,14 +480,13 @@ app-shell {
     gap: var(--space-3);
   }
 
-  .header-context {
-    max-width: 170px;
+  .brand-name {
+    max-width: 200px;
   }
 
   .main-content {
     width: min(100% - 40px, 1440px);
   }
-
 }
 
 @media (max-width: 760px) {
@@ -499,11 +515,8 @@ app-shell {
   }
 
   .brand-name {
+    max-width: 140px;
     font-size: var(--font-label);
-  }
-
-  .header-context {
-    display: none;
   }
 
   .cluster-indicator {
