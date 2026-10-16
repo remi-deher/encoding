@@ -81,6 +81,9 @@ class FakeArr:
             def do_POST(self):  # noqa: N802
                 self._answer("POST")
 
+            def do_PUT(self):  # noqa: N802
+                self._answer("PUT")
+
             def log_message(self, *args):
                 pass
 
@@ -406,6 +409,65 @@ class PlexTests(unittest.TestCase):
         self.routes[("GET", "/status/sessions")] = (200, {"MediaContainer": {"size": 0}})
         self.assertEqual(self.run_component("plex-check-playback", {"scope": "global"})["outputId"], "idle")
         self.assertEqual(self.run_component("plex-check-playback")["outputId"], "idle")
+
+    EPISODE_E1 = {"ratingKey": "101", "type": "episode", "grandparentRatingKey": "9", "parentIndex": 1, "index": 1,
+                  "Media": [{"Part": [{"file": "/tv/Show/Season 1/e1.mkv"}]}]}
+    EPISODE_E2 = {"ratingKey": "102", "type": "episode", "grandparentRatingKey": "9", "parentIndex": 1, "index": 2,
+                  "Media": [{"Part": [{"file": "/tv/Show/Season 1/e2.mkv"}]}]}
+
+    def route_episodes(self, *items):
+        for name, item in (("Show/Season 1/e1.mkv", self.EPISODE_E1), ("Show/Season 1/e2.mkv", self.EPISODE_E2)):
+            query = urllib.parse.urlencode({"file": "/tv/" + name, "X-Plex-Container-Start": 0, "X-Plex-Container-Size": 50, "type": 4})
+            self.routes[("GET", "/library/sections/2/all?" + query)] = (200, {"MediaContainer": {"Metadata": [item]}})
+
+    def session(self, item, remaining_seconds):
+        duration = 40 * 60 * 1000
+        return {"MediaContainer": {"Metadata": [dict(item, duration=duration, viewOffset=duration - remaining_seconds * 1000)]}}
+
+    def test_next_episode_counts_only_when_requested_and_within_the_margin(self):
+        self.route_episodes()
+        self.routes[("GET", "/status/sessions")] = (200, self.session(self.EPISODE_E1, 5 * 60))
+        e2 = "Show/Season 1/e2.mkv"
+        self.assertEqual(self.run_component("plex-check-playback", media=e2)["outputId"], "idle", "sans option, seul le fichier compte")
+        both = {"includeNextEpisode": True}
+        self.assertEqual(self.run_component("plex-check-playback", both, media=e2)["outputId"], "playing", "marge 0 : tout l'épisode précédent compte")
+        self.assertEqual(self.run_component("plex-check-playback", dict(both, nextEpisodeMarginMinutes=10), media=e2)["outputId"], "playing")
+        self.assertEqual(self.run_component("plex-check-playback", dict(both, nextEpisodeMarginMinutes=3), media=e2)["outputId"], "idle",
+                         "il reste 5 minutes, au-delà de la marge de 3")
+        self.assertEqual(self.run_component("plex-check-playback", both, media="Show/Season 1/e1.mkv")["outputId"], "playing", "le fichier lui-même compte toujours")
+
+    def test_next_episode_ignores_other_series_and_following_episodes(self):
+        self.route_episodes()
+        other = dict(self.EPISODE_E1, grandparentRatingKey="77")
+        self.routes[("GET", "/status/sessions")] = (200, self.session(other, 60))
+        self.assertEqual(self.run_component("plex-check-playback", {"includeNextEpisode": True}, media="Show/Season 1/e2.mkv")["outputId"], "idle")
+        self.routes[("GET", "/status/sessions")] = (200, self.session(self.EPISODE_E2, 60))
+        self.assertEqual(self.run_component("plex-check-playback", {"includeNextEpisode": True}, media="Show/Season 1/e1.mkv")["outputId"], "idle",
+                         "lire l'épisode suivant ne retarde pas le précédent")
+
+    def test_blocks_playback_rules(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("plex_plugin", PLEX)
+        plex_plugin = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(plex_plugin)
+        sessions = [{"files": ["/tv/a/e1.mkv"], "episode": ("9", 1, 1), "remaining": None}]
+        self.assertTrue(plex_plugin.blocks_playback(sessions, "/tv/a/e2.mkv", ("9", 1, 2), True, 10), "durée restante inconnue : on attend")
+        self.assertFalse(plex_plugin.blocks_playback(sessions, "/tv/a/e2.mkv", ("9", 1, 2), False, 10))
+        self.assertFalse(plex_plugin.blocks_playback(sessions, "/tv/a/e3.mkv", ("9", 1, 3), True, 0), "seul l'épisode immédiatement précédent compte")
+        self.assertFalse(plex_plugin.blocks_playback(sessions, "/tv/a/e2.mkv", None, True, 0), "épisode inconnu : seul le fichier compte")
+
+    def test_analyze_by_path_or_key(self):
+        self.route_episodes()
+        self.routes[("PUT", "/library/metadata/102/analyze")] = (200, None)
+        result = self.run_component("plex-analyze-media", media="Show/Season 1/e2.mkv")
+        self.assertEqual(result["outputId"], "success")
+        self.assertEqual([r["path"] for r in self.fake.requests if r["method"] == "PUT"], ["/library/metadata/102/analyze"])
+        self.assertTrue(all(r["key"] == "plex-secret-token" for r in self.fake.requests))
+        self.assertEqual(self.run_component("plex-analyze-media", media="Show/Season 1/inconnu.mkv")["outputId"], "notFound")
+        self.routes[("GET", "/library/metadata/55")] = (200, {})
+        self.routes[("PUT", "/library/metadata/55/analyze")] = (200, None)
+        self.assertEqual(self.run_component("plex-analyze-media", {"ratingKey": "55"})["outputId"], "success")
+        self.assertEqual(self.run_component("plex-analyze-media", {"ratingKey": "56"})["outputId"], "notFound")
 
     @staticmethod
     def paths_for_check():

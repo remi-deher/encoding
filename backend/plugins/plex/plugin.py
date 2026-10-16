@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plugin Plex : actualiser une bibliothèque, attendre la fin de son scan, vérifier qu'un élément est indexé.
+"""Plugin Plex : actualiser une bibliothèque, attendre la fin de son scan, vérifier qu'un élément est indexé ou en lecture, demander son analyse.
 
 Le fichier traité est retrouvé par la correspondance de chemins du plugin (bibliothèque Encoding -> chemin vu
 par Plex) : la section Plex est celle dont un dossier est le plus long préfixe du fichier, et l'actualisation
@@ -53,16 +53,23 @@ class PlexClient:
         status, _ = self.api.request("GET", "library/metadata/%s" % urllib.parse.quote(rating_key, safe=""))
         return status != 404
 
-    def playing_files(self):
-        """Fichiers des sessions de lecture en cours (lectures en pause comprises) ; None dans la liste = session sans fichier connu."""
-        _, payload = self.api.request("GET", "status/sessions")
-        files = []
-        for item in ((payload or {}).get("MediaContainer") or {}).get("Metadata") or []:
-            parts = [part.get("file") for media in item.get("Media") or [] for part in media.get("Part") or [] if isinstance(part.get("file"), str)]
-            files.extend(parts or [None])
-        return files
+    def playing_sessions(self):
+        """Sessions de lecture en cours (lectures en pause comprises) : [{files, episode, remaining}].
 
-    def has_file(self, section, kind, path):
+        files = fichiers de la session (vide si inconnus) ; episode = (série, saison, épisode) d'un épisode, sinon None ;
+        remaining = secondes restantes avant la fin du contenu, ou None si Plex ne les donne pas.
+        """
+        _, payload = self.api.request("GET", "status/sessions")
+        sessions = []
+        for item in ((payload or {}).get("MediaContainer") or {}).get("Metadata") or []:
+            files = [part.get("file") for media in item.get("Media") or [] for part in media.get("Part") or [] if isinstance(part.get("file"), str)]
+            duration, offset = item.get("duration"), item.get("viewOffset")
+            remaining = (duration - offset) / 1000 if isinstance(duration, (int, float)) and isinstance(offset, (int, float)) and duration >= offset else None
+            sessions.append({"files": files, "episode": episode_of(item), "remaining": remaining})
+        return sessions
+
+    def find_item(self, section, kind, path):
+        """Élément Plex qui porte exactement ce fichier, ou None."""
         query = {"file": path, "X-Plex-Container-Start": 0, "X-Plex-Container-Size": 50}
         if kind in ITEM_TYPES:
             query["type"] = ITEM_TYPES[kind]
@@ -71,8 +78,42 @@ class PlexClient:
             for media in item.get("Media") or []:
                 for part in media.get("Part") or []:
                     if isinstance(part.get("file"), str) and _norm(part["file"]) == _norm(path):
-                        return True
-        return False
+                        return item
+        return None
+
+    def has_file(self, section, kind, path):
+        return self.find_item(section, kind, path) is not None
+
+    def analyze(self, rating_key):
+        self.api.request("PUT", "library/metadata/%s/analyze" % urllib.parse.quote(str(rating_key), safe=""))
+
+def episode_of(item):
+    """(série, saison, épisode) d'un épisode Plex, ou None pour tout autre élément."""
+    if item.get("type") != "episode":
+        return None
+    series, season, number = item.get("grandparentRatingKey"), item.get("parentIndex"), item.get("index")
+    if series is None or not isinstance(season, int) or not isinstance(number, int):
+        return None
+    return str(series), season, number
+
+
+def blocks_playback(sessions, path, episode=None, include_next=False, margin_minutes=0):
+    """True si une lecture concerne ce fichier.
+
+    Une session sur le fichier lui-même compte toujours. Avec include_next, une session sur l'épisode précédent de la
+    même saison compte aussi (la lecture enchaînera sur ce fichier) : toujours si margin_minutes vaut 0, sinon seulement
+    quand il reste au plus margin_minutes de lecture (une durée restante inconnue compte).
+    """
+    for session in sessions:
+        if any(_norm(f) == _norm(path) for f in session["files"]):
+            return True
+        if include_next and episode is not None and session["episode"] is not None:
+            series, season, number = session["episode"]
+            if (series, season) == (episode[0], episode[1]) and number == episode[2] - 1:
+                remaining = session["remaining"]
+                if margin_minutes <= 0 or remaining is None or remaining <= margin_minutes * 60:
+                    return True
+    return False
 
 
 def section_for(sections, path):
@@ -171,15 +212,42 @@ def build(opener=None, sleep=time.sleep, clock=time.monotonic):
     @plugin.component("plex-check-playback")
     def playback(ctx):
         api = client(ctx)
-        files = api.playing_files()
+        sessions = api.playing_sessions()
         if ctx.text("scope") == "global":
-            return Outcome.output("playing", "Plex est en cours de lecture.") if files else Outcome.output("idle", "Aucune lecture en cours dans Plex.")
+            return Outcome.output("playing", "Plex est en cours de lecture.") if sessions else Outcome.output("idle", "Aucune lecture en cours dans Plex.")
         path, error = remote_path(ctx)
         if error:
             return Outcome.output("error", error)
-        if any(f is not None and _norm(f) == _norm(path) for f in files):
+        include_next = ctx.flag("includeNextEpisode")
+        episode = None
+        if include_next and sessions:
+            section = section_for(api.sections(), path)
+            item = None if section is None else api.find_item(section[0], section[1], path)
+            episode = None if item is None else episode_of(item)
+        margin = ctx.number("nextEpisodeMarginMinutes") or 0
+        if not blocks_playback(sessions, path, episode, include_next, margin):
+            return Outcome.output("idle", "Le fichier n'est pas en cours de lecture dans Plex.")
+        if any(_norm(f) == _norm(path) for session in sessions for f in session["files"]):
             return Outcome.output("playing", "Le fichier est en cours de lecture dans Plex.")
-        return Outcome.output("idle", "Le fichier n'est pas en cours de lecture dans Plex.")
+        return Outcome.output("playing", "L'épisode précédent est en cours de lecture : la lecture enchaînera sur ce fichier.")
+
+    @plugin.component("plex-analyze-media")
+    def analyze(ctx):
+        api = client(ctx)
+        rating_key = ctx.text("ratingKey")
+        if rating_key is None:
+            path, error = remote_path(ctx)
+            if error:
+                return Outcome.output("error", error)
+            section = section_for(api.sections(), path)
+            item = None if section is None else api.find_item(section[0], section[1], path)
+            if item is None or item.get("ratingKey") is None:
+                return Outcome.output("notFound", "Fichier inconnu de Plex : rien à analyser.")
+            rating_key = str(item["ratingKey"])
+        elif not api.metadata_exists(rating_key):
+            return Outcome.output("notFound", "Élément absent de Plex : rien à analyser.")
+        api.analyze(rating_key)
+        return Outcome.output("success", "L'analyse de l'élément Plex %s a été demandée (Plex la termine seul)." % rating_key)
 
     return plugin
 

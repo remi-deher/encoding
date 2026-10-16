@@ -53,7 +53,7 @@ internal static class ProcessTests
                 ["Runtime:Plugins:0:Id"] = "sonarr", ["Runtime:Plugins:0:Version"] = "1.0.0", ["Runtime:Plugins:0:Executable"] = python,
                 ["Runtime:Plugins:0:Arguments:0"] = "-B", ["Runtime:Plugins:0:Arguments:1"] = Path.Combine(plugins, "arr", "plugin.py"), ["Runtime:Plugins:0:Arguments:2"] = "sonarr",
                 ["Runtime:Plugins:0:ReadOnlyPaths:0"] = plugins, ["Runtime:Plugins:0:ReadOnlyPaths:1"] = Path.Combine(RepositoryRoot(), "backend", "src", "Encoding.Api", "Flows", "Catalog"),
-                ["Runtime:Plugins:1:Id"] = "plex", ["Runtime:Plugins:1:Version"] = "1.0.0", ["Runtime:Plugins:1:Executable"] = python,
+                ["Runtime:Plugins:1:Id"] = "plex", ["Runtime:Plugins:1:Version"] = "1.1.0", ["Runtime:Plugins:1:Executable"] = python,
                 ["Runtime:Plugins:1:Arguments:0"] = "-B", ["Runtime:Plugins:1:Arguments:1"] = Path.Combine(plugins, "plex", "plugin.py"),
                 ["Runtime:Plugins:1:ReadOnlyPaths:0"] = plugins, ["Runtime:Plugins:1:ReadOnlyPaths:1"] = Path.Combine(RepositoryRoot(), "backend", "src", "Encoding.Api", "Flows", "Catalog"),
                 ["Runtime:Plugins:2:Id"] = "jellyfin", ["Runtime:Plugins:2:Version"] = "1.0.0", ["Runtime:Plugins:2:Executable"] = python,

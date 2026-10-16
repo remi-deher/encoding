@@ -5,7 +5,7 @@ using Encoding.NodeAgent.Services;
 
 namespace Encoding.NodeAgent.Runtime;
 
-public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdentityStore identities,MediaScanner scanner,ILogger<RuntimeTransferService> logger) : BackgroundService
+public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdentityStore identities,MediaScanner scanner,PublicationGuardRunner guards,ILogger<RuntimeTransferService> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid,Task> active=new();
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -122,8 +122,12 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                     Encoding.Core.AtomicFilePublication.Confirm(target);
                     SourceReplacementReport? replacement=null;
                     if(transfer.ReplacementGraceHours is not null)
-                        replacement=await SourceReplacer.ReplaceAsync(transfer.Root,transfer.ExecutionId,transfer.MediaPath,incoming,transfer.SourceSha256,transfer.ResultSha256,transfer.ResultExtension,
+                    {
+                        var verdict=await guards.CheckAsync(transfer,ct);
+                        replacement=!verdict.Allowed?new SourceReplacementReport("failed",null,null,0,DateTimeOffset.UtcNow,verdict.Detail)
+                        :await SourceReplacer.ReplaceAsync(transfer.Root,transfer.ExecutionId,transfer.MediaPath,incoming,transfer.SourceSha256,transfer.ResultSha256,transfer.ResultExtension,
                             async token=>(await client.ExecutionAsync(transfer.ExecutionId,token)).State=="running" && await TryRenewSourceAsync(client,transfer,token),ct);
+                    }
                     var status=await client.ExecutionAsync(transfer.ExecutionId,ct);
                     await client.PostAsync<object>($"executions/{transfer.ExecutionId:D}/publication",new ConfirmRuntimePublication(transfer.Epoch,Guid.NewGuid(),status.Revision,relative,transfer.ResultSha256,replacement),ct);
                 }

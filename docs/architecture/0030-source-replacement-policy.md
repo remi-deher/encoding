@@ -22,6 +22,10 @@ Chaque étape est reprenable : après perte du nœud, une sauvegarde sans bascul
 
 Le serveur n’accepte un rapport que si le chemin remplaçant est dans le dossier du média et si la sauvegarde est exactement `.encoding-replaced/<exécution>/original.<ext>`. Un agent qui ne connaît pas encore le rapport confirme sans remplacement (comportement sûr pendant une mise à jour progressive).
 
+## Gardes de publication
+
+Avant l'étape 2, le nœud d'accès consulte les gardes fournies par les plugins (0059) : sans autorisation explicite, le remplacement n'a pas lieu, la source est intacte et le rapport `failed` en donne la raison.
+
 ## Registre, période de grâce, restauration
 
 `source_replacements` conserve par exécution l’état (`replaced`, `rollback_requested`, `rolled_back`, `finalized`, `retained`, `failed`), les chemins, les empreintes et l’échéance, écrits dans la même transaction que la réussite de l’exécution.

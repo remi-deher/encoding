@@ -36,6 +36,13 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public async Task PublicationGuardsWaitAllowAndRefuseSafely()
+    {
+        var (registry, _, _) = Harness.Services();
+        await PublicationGuardScenarios.RunAsync(registry);
+    }
+
+    [Fact]
     public void SubtitleProfileConversionDuplicatesForcedTracksAndFonts()
     {
         var (registry, validator, eligibility) = Harness.Services();
