@@ -54,7 +54,7 @@ services:
       Runtime__Plugins__1__Arguments__2: radarr
       Runtime__Plugins__1__ReadOnlyPaths__0: /opt/encoding/plugins/arr
       Runtime__Plugins__2__Id: plex
-      Runtime__Plugins__2__Version: 1.0.0
+      Runtime__Plugins__2__Version: 1.1.0
       Runtime__Plugins__2__Executable: /usr/bin/python3
       Runtime__Plugins__2__Arguments__0: -B
       Runtime__Plugins__2__Arguments__1: /opt/encoding/plugins/plex/plugin.py

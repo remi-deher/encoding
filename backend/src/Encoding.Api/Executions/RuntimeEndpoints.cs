@@ -63,7 +63,14 @@ public static class RuntimeEndpoints
             await waits.ReportProbeAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapPost("/executions/{id:guid}/finish",async(Guid nodeId,Guid id,FinishRuntimeExecution request,RuntimeTransferRepository transfers,CancellationToken ct)=>
             await transfers.FinishAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
-        group.MapGet("/transfers",async(Guid nodeId,RuntimeTransferRepository transfers,CancellationToken ct)=>Results.Ok(await transfers.ListAsync(nodeId,ct)));
+        group.MapGet("/transfers",async(Guid nodeId,RuntimeTransferRepository transfers,Encoding.Api.Plugins.PublicationGuardProvider guards,CancellationToken ct)=>
+        {
+            var list=await transfers.ListAsync(nodeId,ct);
+            static bool Replaces(RuntimeTransfer item)=>item.Publish && item.ReplacementGraceHours is not null;
+            if(!list.Any(Replaces)) return Results.Ok(list);
+            var active=await guards.ListAsync(ct);
+            return Results.Ok(active.Count==0?list:list.Select(item=>Replaces(item)?item with { Guards=active }:item).ToArray());
+        });
         group.MapGet("/executions/{id:guid}/source",async(Guid nodeId,Guid id,long epoch,RuntimeArtifactStore artifacts,RuntimeRepository runtime,CancellationToken ct)=>
             await artifacts.AuthorizeAsync(id,nodeId,epoch,ct) ? (IResult)Results.Ok(await runtime.SourceAsync(id,ct)) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/publication",async(Guid nodeId,Guid id,ConfirmRuntimePublication request,RuntimeTransferRepository transfers,CancellationToken ct)=>

@@ -11,7 +11,23 @@ public sealed record PluginManifest(
     string Name,
     IReadOnlyList<int> SupportedHostContractVersions,
     IReadOnlyList<FlowComponentDescriptor> Components,
-    FlowConfigurationSchema? ConfigurationSchema = null);
+    FlowConfigurationSchema? ConfigurationSchema = null,
+    PluginPublicationGuard? PublicationGuard = null);
+
+/// <summary>
+/// Point d'extension (architecture 0059) : le plugin fournit une garde consultée par le nœud d'accès avant de remplacer un
+/// fichier source. Le composant <see cref="ComponentId"/> est exécuté avec la configuration fixe <see cref="FixedConfiguration"/>
+/// complétée par les champs du plugin <see cref="ConfigurationFields"/> (champ du composant -> champ du plugin) ; une sortie de
+/// <see cref="WaitOutputs"/> retarde le remplacement, une sortie de <see cref="AllowOutputs"/> l'autorise, toute autre est un refus.
+/// </summary>
+public sealed record PluginPublicationGuard(
+    string ComponentId,
+    string EnabledField,
+    string MaxWaitField,
+    IReadOnlyDictionary<string, JsonElement> FixedConfiguration,
+    IReadOnlyDictionary<string, string> ConfigurationFields,
+    IReadOnlyList<string> WaitOutputs,
+    IReadOnlyList<string> AllowOutputs);
 
 public sealed record FlowComponentDescriptor(
     string Id,

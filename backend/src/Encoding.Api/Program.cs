@@ -70,6 +70,7 @@ builder.Services.AddHttpClient("PluginConnectionTest", client => client.Timeout 
 builder.Services.AddSingleton<RuntimeEligibility>();
 builder.Services.AddSingleton<RuntimeRepository>();
 builder.Services.AddSingleton<DiskLockRepository>();
+builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>();
 builder.Services.AddSingleton<RuntimeArtifactStore>();
 builder.Services.AddSingleton<RuntimeTransferRepository>();
 builder.Services.AddSingleton<SourceReplacementRepository>();

@@ -18,6 +18,8 @@ builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<WorkerIdentityStore>();
 builder.Services.AddSingleton<ProcessToolRunner>();
 builder.Services.AddSingleton<PluginProcessHost>();
+builder.Services.AddSingleton<IPublicationGuardInvoker,PluginPublicationGuardInvoker>();
+builder.Services.AddSingleton<PublicationGuardRunner>();
 builder.Services.AddSingleton<MediaScanner>();
 builder.Services.AddSingleton<MediaActions>();
 builder.Services.AddSingleton<RuntimeFlowRunner>();

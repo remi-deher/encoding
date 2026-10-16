@@ -69,6 +69,23 @@ public sealed class FlowComponentRegistry
                     || pluginSchema.Fields.Select(field => field.Id).Distinct(StringComparer.Ordinal).Count() != pluginSchema.Fields.Count
                     || pluginSchema.Fields.Any(field => field.Type is not ("text" or "secret" or "number" or "boolean" or "select"))))
                 throw new InvalidOperationException($"Schéma de configuration invalide : {installed.Id}.");
+            if (installed.PublicationGuard is { } guard)
+            {
+                var guardComponent = installed.Components.SingleOrDefault(item => item.Id == guard.ComponentId);
+                var pluginFields = installed.ConfigurationSchema?.Fields.ToDictionary(field => field.Id, StringComparer.Ordinal) ?? [];
+                var componentFields = guardComponent?.ConfigurationSchema.Fields.Select(field => field.Id).ToHashSet(StringComparer.Ordinal) ?? [];
+                var outputs = guardComponent?.Outputs.Select(output => output.Id).ToHashSet(StringComparer.Ordinal) ?? [];
+                if (guardComponent is null
+                    || !pluginFields.TryGetValue(guard.EnabledField, out var enabled) || enabled.Type != "boolean"
+                    || !pluginFields.TryGetValue(guard.MaxWaitField, out var maxWait) || maxWait.Type != "number"
+                    || guard.WaitOutputs.Count == 0 || guard.AllowOutputs.Count == 0
+                    || guard.WaitOutputs.Concat(guard.AllowOutputs).Any(id => !outputs.Contains(id))
+                    || guard.WaitOutputs.Intersect(guard.AllowOutputs).Any()
+                    || guard.FixedConfiguration.Keys.Concat(guard.ConfigurationFields.Keys).Any(id => !componentFields.Contains(id))
+                    || guard.FixedConfiguration.Keys.Intersect(guard.ConfigurationFields.Keys).Any()
+                    || guard.ConfigurationFields.Values.Any(id => !pluginFields.ContainsKey(id)))
+                    throw new InvalidOperationException($"Garde de publication invalide : {installed.Id}.");
+            }
             foreach (var component in installed.Components)
             {
                 if (string.IsNullOrWhiteSpace(component.Id) || string.IsNullOrWhiteSpace(component.Version)
