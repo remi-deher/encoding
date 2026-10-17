@@ -365,6 +365,10 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         return node is null ? null : (await WithLifecycleAsync([node], cancellationToken))[0];
     }
 
+    public Task<NodeResponse?> FindByIdAsync(Guid nodeId, CancellationToken cancellationToken) =>
+        GetAsync(nodeId, TimeSpan.FromDays(365), cancellationToken);
+
+
 
     /// <summary>Donne un nom convivial à un nœud qui n'en a pas encore ; ne remplace jamais un nom choisi par un administrateur.</summary>
     public async Task SetDisplayNameIfUnsetAsync(Guid nodeId, string displayName, CancellationToken ct)

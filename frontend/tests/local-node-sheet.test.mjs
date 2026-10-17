@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadModel } from './model-loader.mjs';
-const { localNodeSheet, formatLastSignal, clusterJoinSteps, reconciliationBannerPresentation } = await loadModel('node-management');
+const { localNodeSheet, formatLastSignal, clusterJoinSteps, reconciliationBannerPresentation } =
+  await loadModel('node-management');
 const { formatNodeLabel } = await loadModel('cluster');
 
 const NOW = Date.parse('2026-10-15T12:00:00Z');
@@ -132,7 +133,11 @@ test('cluster join step waiting highlights the verification code as heroCode', (
     addressForm: { title: '', description: '', fields: [] },
     target: { id: 'c1', name: 'Maison', apiBaseUrl: 'http://127.0.0.1:8080' },
     status: { name: 'encoding-50', verificationCode: 'R7EPDH', pairingKey: 'KEY123' },
-    pairing: { verificationCode: 'R7EPDH', expiresAt: '2026-10-17T16:08:00Z', pairingKey: 'KEY123' },
+    pairing: {
+      verificationCode: 'R7EPDH',
+      expiresAt: '2026-10-17T16:08:00Z',
+      pairingKey: 'KEY123',
+    },
     clusters: [],
     localServerActive: true,
     canChoose: false,
@@ -144,39 +149,58 @@ test('cluster join step waiting highlights the verification code as heroCode', (
 });
 
 test('reconciliationBannerPresentation returns Serveur unique when single server and 0 peers', () => {
-  const banner = reconciliationBannerPresentation({
-    enabled: true,
-    disabledReason: null,
-    discoveryAvailable: true,
-    discoveryError: null,
-    peers: [],
-  }, 1, true);
+  const banner = reconciliationBannerPresentation(
+    {
+      enabled: true,
+      disabledReason: null,
+      discoveryAvailable: true,
+      discoveryError: null,
+      peers: [],
+    },
+    1,
+    true,
+  );
   assert.equal(banner.title, 'Serveur unique');
   assert.match(banner.description, /Ce cluster ne comporte qu’un seul serveur/);
 });
 
 test('reconciliationBannerPresentation warns about mDNS when multiple servers and 0 peers discovered', () => {
-  const banner = reconciliationBannerPresentation({
-    enabled: true,
-    disabledReason: null,
-    discoveryAvailable: true,
-    discoveryError: null,
-    peers: [],
-  }, 2, true);
+  const banner = reconciliationBannerPresentation(
+    {
+      enabled: true,
+      disabledReason: null,
+      discoveryAvailable: true,
+      discoveryError: null,
+      peers: [],
+    },
+    2,
+    true,
+  );
   assert.equal(banner.title, 'Aucun serveur pair détecté');
   assert.match(banner.description, /Aucun pair n’a été découvert/);
 });
 
 test('reconciliationBannerPresentation displays active status when peers are connected', () => {
-  const banner = reconciliationBannerPresentation({
-    enabled: true,
-    disabledReason: null,
-    discoveryAvailable: true,
-    discoveryError: null,
-    peers: [
-      { url: 'http://node2:5080/', configured: false, discovered: true, lastAttemptAt: '2026-10-17T16:00:00Z', lastSuccessAt: '2026-10-17T16:00:00Z', lastError: null },
-    ],
-  }, 2, true);
+  const banner = reconciliationBannerPresentation(
+    {
+      enabled: true,
+      disabledReason: null,
+      discoveryAvailable: true,
+      discoveryError: null,
+      peers: [
+        {
+          url: 'http://node2:5080/',
+          configured: false,
+          discovered: true,
+          lastAttemptAt: '2026-10-17T16:00:00Z',
+          lastSuccessAt: '2026-10-17T16:00:00Z',
+          lastError: null,
+        },
+      ],
+    },
+    2,
+    true,
+  );
   assert.match(banner.title, /Synchronisation active avec 1 serveur/);
 });
 
