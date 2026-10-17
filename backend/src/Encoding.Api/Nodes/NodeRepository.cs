@@ -10,7 +10,7 @@ namespace Encoding.Api.Nodes;
 
 public enum PairingRequestResult { Created, Conflict, TooMany }
 
-public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmissionRepository? peerAdmissions = null)
+public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmissionRepository? peerAdmissions = null, Infrastructure.PeerCluster.PeerClusterOptions? peerOptions = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -385,6 +385,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
     /// </summary>
     public async Task<bool> SetFallbackLocalDisplayNameAsync(string displayName, CancellationToken ct)
     {
+        if (peerOptions is { Enabled: true }) return false;
         await using var command = dataSource.CreateCommand("""
             UPDATE cluster_nodes SET display_name = @name
             WHERE id = (
