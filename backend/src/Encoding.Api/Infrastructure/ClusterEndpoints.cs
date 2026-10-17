@@ -45,13 +45,13 @@ public static class ClusterEndpoints
                 }
             }
             var current = await repository.GetAsync(cancellationToken);
-            if (current.Standalone) await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);
+            await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);
             return await repository.CreateAsync(request.Name, cancellationToken)
                 ? Results.Ok(await repository.GetAsync(cancellationToken))
                 : Results.Conflict(new { title = "Ce nœud fait déjà partie d’un cluster." });
         }).WithTags("Cluster").WithName("CreateCluster");
 
-        app.MapPut(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, IServiceProvider services, CancellationToken cancellationToken) =>
+        app.MapPut(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions, ClusterDataKeyStore dataKeyStore, IServiceProvider services, CancellationToken cancellationToken) =>
         {
             var peerOptions = services.GetRequiredService<PeerClusterOptions>();
             var peerConsensus = peerOptions.Enabled ? services.GetRequiredService<PeerConsensusService>() : null;
@@ -71,6 +71,9 @@ public static class ClusterEndpoints
                     return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Le quorum Raft n’a pas confirmé le nouveau nom du cluster.");
                 }
             }
+            var current = await repository.GetAsync(cancellationToken);
+            if (!dataKeyStore.HasKey(current.Id))
+                await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);
             return await repository.RenameAsync(request.Name, cancellationToken)
                 ? Results.Ok(await repository.GetAsync(cancellationToken))
                 : Results.Conflict(new { title = "Ce nœud est autonome : créez d’abord un cluster." });

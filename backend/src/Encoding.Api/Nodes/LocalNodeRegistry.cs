@@ -45,7 +45,14 @@ public sealed class LocalNodeRegistry(NodeRepository repository)
             id = nodeId;
             if (id is null) pendingName = name;
         }
-        if (id is not null) await repository.SetDisplayNameIfUnsetAsync(id.Value, name, ct);
+        if (id is not null)
+        {
+            await repository.SetDisplayNameIfUnsetAsync(id.Value, name, ct);
+        }
+        else
+        {
+            await repository.SetFallbackLocalDisplayNameAsync(name, ct);
+        }
     }
 
     public async Task<string?> ResolveDisplayNameAsync(CancellationToken ct)

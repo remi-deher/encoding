@@ -50,6 +50,27 @@ export function nodeAcceleratorBadges(node: NodeResponse): string[] {
   ];
 }
 
+export type OperatingSystemFamily = 'linux' | 'windows' | 'macos' | 'unknown';
+
+export function detectOsFamily(osString?: string | null): OperatingSystemFamily {
+  if (!osString) return 'unknown';
+  const lower = osString.toLowerCase();
+  if (lower.includes('linux') || lower.includes('ubuntu') || lower.includes('debian') || lower.includes('fedora') || lower.includes('centos') || lower.includes('alpine') || lower.includes('arch') || lower.includes('redhat') || lower.includes('suse')) {
+    return 'linux';
+  }
+  if (lower.includes('windows') || lower.includes('win32') || lower.includes('win64')) {
+    return 'windows';
+  }
+  if (lower.includes('mac') || lower.includes('darwin') || lower.includes('osx') || lower.includes('apple')) {
+    return 'macos';
+  }
+  return 'unknown';
+}
+
+export function nodeOsFamily(node: NodeResponse): OperatingSystemFamily {
+  return detectOsFamily(node.inventory?.operatingSystem);
+}
+
 /** Matériel déclaré : système, processeur, mémoire installée, puis processeur graphique. */
 export function nodeHardwareLabel(node: NodeResponse): string {
   const inventory = node.inventory;
@@ -66,11 +87,22 @@ export function nodeHardwareLabel(node: NodeResponse): string {
 export const nodeAcceleratorValue = (node: NodeResponse): string =>
   joinBadges(nodeAcceleratorBadges(node));
 
-const ACCELERATION_TONES: Readonly<Record<string, ResourceCardTone>> = {
+export const ACCELERATION_TONES: Readonly<Record<string, ResourceCardTone>> = {
   nvenc: 'lime',
   qsv: 'blue',
   vaapi: 'purple',
 };
+
+export function nodeAcceleratorChips(node: NodeResponse): ResourceCardChip[] {
+  if (!node.roles.includes('worker') || !node.capabilities.length) return [];
+  const toneOf = (item: string): ResourceCardTone =>
+    ACCELERATION_TONES[
+      Object.keys(ACCELERATION_LABELS).find((key) => ACCELERATION_LABELS[key] === item) ?? ''
+    ] ?? 'neutral';
+  return nodeAcceleratorBadges(node)
+    .filter((item) => !item.endsWith(' détecté') && item !== 'CPU')
+    .map((item) => ({ label: item, tone: toneOf(item) }));
+}
 
 /** « Intel(R) Xeon(R) CPU E5620 @ 2.40GHz » devient « Intel Xeon E5620 @ 2.40GHz ». */
 export function tidyProcessorName(name: string): string {
@@ -165,10 +197,14 @@ function processingSection(node: NodeResponse, input: NodeProcessingInput): Reso
   };
 }
 
-/** Blocs de la carte d'un membre du cluster : accélérateur, matériel, traitements. */
+/** Blocs de la carte d'un membre du cluster : accélérateur (optionnel), matériel, traitements. */
 export function nodeMemberSections(
   node: NodeResponse,
   input: NodeProcessingInput,
+  options?: { readonly includeAccelerator?: boolean },
 ): ResourceCardSection[] {
-  return [acceleratorSection(node), hardwareSection(node), processingSection(node, input)];
+  const includeAcc = options?.includeAccelerator ?? true;
+  return includeAcc
+    ? [acceleratorSection(node), hardwareSection(node), processingSection(node, input)]
+    : [hardwareSection(node), processingSection(node, input)];
 }

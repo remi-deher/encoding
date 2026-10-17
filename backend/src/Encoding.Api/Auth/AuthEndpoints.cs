@@ -36,6 +36,9 @@ public static class AuthEndpoints
             if (request.Mode == "createCluster" && !string.IsNullOrWhiteSpace(request.ClusterName))
             {
                 var clusterRepo = http.RequestServices.GetRequiredService<Encoding.Api.Infrastructure.ClusterIdentityRepository>();
+                var admissions = http.RequestServices.GetRequiredService<Encoding.Api.Infrastructure.ClusterPeerAdmissionRepository>();
+                var current = await clusterRepo.GetAsync(ct);
+                await admissions.EnsureRootAdmissionAsync(current.Id, ct);
                 await clusterRepo.CreateAsync(request.ClusterName, ct);
             }
             var effectiveUsername = string.IsNullOrWhiteSpace(request.Username) ? "admin" : request.Username.Trim();

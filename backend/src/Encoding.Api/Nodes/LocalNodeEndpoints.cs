@@ -22,8 +22,8 @@ public static class LocalNodeEndpoints
     {
         var local = app.MapGroup("/api/v1/local-node").WithTags("Local node");
         // Lecture : le rôle lecture voit l'état, mais ni la clé de jumelage ni le code de vérification.
-        local.MapGet("/status", (HttpContext http, IHttpClientFactory clients, Infrastructure.ClusterIdentityRepository cluster, CancellationToken ct) =>
-            RelayAsync(http, clients, HttpMethod.Get, "status", ct, hideSecrets: !http.User.IsInRole("admin"), cluster)).WithName("GetLocalNodeStatus");
+        local.MapGet("/status", (HttpContext http, IHttpClientFactory clients, Infrastructure.ClusterIdentityRepository cluster, LocalNodeRegistry registry, CancellationToken ct) =>
+            RelayAsync(http, clients, HttpMethod.Get, "status", ct, hideSecrets: !http.User.IsInRole("admin"), cluster, registry)).WithName("GetLocalNodeStatus");
         local.MapGet("/clusters", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
             RelayAsync(http, clients, HttpMethod.Get, "clusters", ct)).WithName("ListLocalNodeClusters");
         local.MapPost("/clusters", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
@@ -47,13 +47,24 @@ public static class LocalNodeEndpoints
         return status.ToJsonString();
     }
 
-    /// <summary>Ajoute <c>standalone</c> à l'état du nœud : vrai quand il n'est rattaché qu'à son propre cluster implicite (nœud autonome, architecture 0045).</summary>
-    private static async Task<string> MarkStandaloneAsync(string statusJson, Infrastructure.ClusterIdentityRepository cluster, CancellationToken cancellationToken)
+    /// <summary>Ajoute <c>standalone</c> à l'état du nœud et synchronise son identifiant et son nom d'affichage avec le registre local.</summary>
+    private static async Task<string> MarkStandaloneAsync(string statusJson, Infrastructure.ClusterIdentityRepository cluster, LocalNodeRegistry? registry, CancellationToken cancellationToken)
     {
         if (JsonNode.Parse(statusJson) is not JsonObject status) return statusJson;
         var identity = await cluster.GetAsync(cancellationToken);
         var attachedTo = status["clusterId"]?.GetValue<string>();
         status["standalone"] = identity.Standalone && Guid.TryParse(attachedTo, out var id) && id == identity.Id;
+        if (registry is not null)
+        {
+            if (Guid.TryParse(status["nodeId"]?.GetValue<string>(), out var nodeId) && nodeId != Guid.Empty)
+                await registry.RegisterAsync(nodeId, cancellationToken);
+            if (string.IsNullOrWhiteSpace(status["displayName"]?.GetValue<string>()))
+            {
+                var resolved = await registry.ResolveDisplayNameAsync(cancellationToken);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    status["displayName"] = resolved;
+            }
+        }
         return status.ToJsonString();
     }
 
@@ -73,6 +84,10 @@ public static class LocalNodeEndpoints
                     content = obj.ToJsonString();
                 }
             }
+            else
+            {
+                await registry.RequestNameAsync(current, cancellationToken);
+            }
         }
         using var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/worker/" + path)
         {
@@ -81,6 +96,7 @@ public static class LocalNodeEndpoints
         try
         {
             using var response = await clients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NoContent) return Results.NoContent();
             var text = await response.Content.ReadAsStringAsync(cancellationToken);
             return Results.Content(text, "application/json", statusCode: (int)response.StatusCode);
         }
@@ -90,7 +106,7 @@ public static class LocalNodeEndpoints
         }
     }
 
-    private static async Task<IResult> RelayAsync(HttpContext http, IHttpClientFactory clients, HttpMethod method, string path, CancellationToken cancellationToken, bool hideSecrets = false, Infrastructure.ClusterIdentityRepository? cluster = null)
+    private static async Task<IResult> RelayAsync(HttpContext http, IHttpClientFactory clients, HttpMethod method, string path, CancellationToken cancellationToken, bool hideSecrets = false, Infrastructure.ClusterIdentityRepository? cluster = null, LocalNodeRegistry? registry = null)
     {
         using var request = new HttpRequestMessage(method, "api/v1/worker/" + path);
         if (method != HttpMethod.Get)
@@ -101,9 +117,10 @@ public static class LocalNodeEndpoints
         try
         {
             using var response = await clients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NoContent) return Results.NoContent();
             var text = await response.Content.ReadAsStringAsync(cancellationToken);
             if (hideSecrets && response.IsSuccessStatusCode) text = HideSecrets(text);
-            if (cluster is not null && response.IsSuccessStatusCode) text = await MarkStandaloneAsync(text, cluster, cancellationToken);
+            if (cluster is not null && response.IsSuccessStatusCode) text = await MarkStandaloneAsync(text, cluster, registry, cancellationToken);
             return Results.Content(text, "application/json", statusCode: (int)response.StatusCode);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)

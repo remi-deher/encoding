@@ -24,6 +24,7 @@
   overflow: hidden;
   border-radius: var(--radius-2xl);
   background: var(--surface-container-low);
+  margin-top: var(--space-4);
 }
 
 .catalog-toolbar {
@@ -31,7 +32,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-4) 0;
+  padding: var(--space-4) var(--space-4) var(--space-4);
 }
 
 .catalog-filters {

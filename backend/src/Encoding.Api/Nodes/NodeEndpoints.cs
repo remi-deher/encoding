@@ -30,7 +30,7 @@ public static class NodeEndpoints
             if (request.ClusterPeerId is not null)
             {
                 var identity = await clusterIdentity.GetAsync(cancellationToken);
-                if (identity.Standalone && !dataKeyStore.HasKey(identity.Id))
+                if (!dataKeyStore.HasKey(identity.Id))
                     await peerAdmissions.EnsureRootAdmissionAsync(identity.Id, cancellationToken);
             }
             // Le nœud local de l'image unique prouve son appartenance au conteneur par un secret de fichier : il est enrôlé d'office.
@@ -68,7 +68,7 @@ public static class NodeEndpoints
             if (request.Node.ClusterPeerId is not null)
             {
                 var identity = await clusterIdentity.GetAsync(cancellationToken);
-                if (identity.Standalone && !dataKeyStore.HasKey(identity.Id))
+                if (!dataKeyStore.HasKey(identity.Id))
                     await peerAdmissions.EnsureRootAdmissionAsync(identity.Id, cancellationToken);
             }
             return await repository.CreatePairingRequestAsync(request, authOptions.MaxPendingPairingRequests, cancellationToken) switch

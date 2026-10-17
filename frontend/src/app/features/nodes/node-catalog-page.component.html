@@ -154,13 +154,19 @@
       />
     }
     @if (local.identityUnavailable() && !local.loading()) {
-      <p role="alert">
-        L’identité du cluster n’a pas pu être actualisée. Réessayez avant de modifier son
-        appartenance.
-      </p>
+      <div class="node-alert-banner node-alert-banner_warning" role="alert">
+        <span class="node-alert-icon" aria-hidden="true">⚠️</span>
+        <p>
+          L’identité du cluster n’a pas pu être actualisée. Réessayez avant de modifier son
+          appartenance.
+        </p>
+      </div>
     }
     @if (pageTab() === 'cluster' && local.status()?.switchFailure; as failure) {
-      <p role="alert">Rattachement annulé : {{ failure }}</p>
+      <div class="node-alert-banner node-alert-banner_danger" role="alert">
+        <span class="node-alert-icon" aria-hidden="true">✕</span>
+        <p>Rattachement annulé : {{ failure }}</p>
+      </div>
     }
     @if (
       pageTab() === 'cluster' &&
@@ -170,7 +176,7 @@
       <app-summary-tiles label="Synthèse du cluster" [tiles]="summaryTiles()" />
     }
   </ng-container>
-  <div catalogue-filters>
+  <div catalogue-filters class="catalogue-filters-container">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Fonctions</mat-label
       ><mat-select [value]="selectedRole()" (selectionChange)="onRoleChange($event.value)">
@@ -294,6 +300,9 @@
               [statusLabel]="card.statusLabel"
               [statusTone]="card.statusTone"
               [badges]="card.badges"
+              [acceleratorBadges]="card.acceleratorBadges"
+              [osFamily]="card.osFamily"
+              [osLabel]="card.osLabel"
               [meta]="card.meta"
               [sections]="card.sections"
               [actions]="memberActions()"
