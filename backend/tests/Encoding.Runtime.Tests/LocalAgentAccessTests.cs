@@ -105,6 +105,49 @@ public sealed class LocalAgentAccessTests
         Assert.Equal(2, sentSecrets.Count);
     }
 
+    [Fact]
+    public async Task ServerLocalNodeRelayHandles204NoContentOnLeaveAndForgetCluster()
+    {
+        using var fixture = new SecretFile();
+        await using var agent = Agent(fixture.Path);
+        var root = Path.Combine(Path.GetTempPath(), "encoding-local-relay-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            await using var server = new WebApplicationFactory<Encoding.Api.Auth.AuthOptions>().WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting(WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
+                builder.UseSetting("Logging:LogLevel:Default", "Error");
+                builder.UseSetting("ConnectionStrings:Cluster", $"Data Source={Path.Combine(root, "cluster.db")};Pooling=False");
+                builder.UseSetting("Database:Provider", "sqlite");
+                builder.UseSetting("Node:DataDirectory", root);
+                builder.UseSetting("Auth:Enabled", "false");
+                builder.UseSetting(LocalEnrollment.SecretFileSetting, fixture.Path);
+                builder.ConfigureServices(services =>
+                {
+                    foreach (var descriptor in services.Where(item => item.ServiceType == typeof(IHostedService)).ToArray())
+                        services.Remove(descriptor);
+                    services.AddHttpClient(LocalNodeEndpoints.HttpClientName, client =>
+                    {
+                        client.BaseAddress = new Uri("http://127.0.0.1:8081/");
+                    }).ConfigurePrimaryHttpMessageHandler(() => new LocalAgentAuthenticationHandler(fixture.Configuration)
+                    {
+                        InnerHandler = agent.Server.CreateHandler()
+                    });
+                });
+            });
+
+            using var client = server.CreateClient();
+            using var leaveResponse = await client.PostAsync("/api/v1/local-node/leave", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.NoContent, leaveResponse.StatusCode);
+            Assert.Equal(0, (await leaveResponse.Content.ReadAsByteArrayAsync()).Length);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static WebApplicationFactory<NodeAgentOptions> Agent(string? secretFile) =>
         new WebApplicationFactory<NodeAgentOptions>().WithWebHostBuilder(builder =>
         {

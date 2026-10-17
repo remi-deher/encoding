@@ -17,9 +17,18 @@ public sealed class ClusterPeerIdentityStore : IDisposable
     private readonly string filePath;
     private readonly RSA privateKey;
 
+    public static string ResolveKeyDirectory(IConfiguration configuration, string? defaultRoot = null)
+    {
+        if (configuration["PluginSettings:KeyDirectory"] is { Length: > 0 } configured)
+            return Path.GetFullPath(configured);
+        if (configuration["Node:DataDirectory"] is { Length: > 0 } dataDirectory)
+            return Path.Combine(Path.GetFullPath(dataDirectory), "plugin-keys");
+        return Path.Combine(defaultRoot ?? AppContext.BaseDirectory, "data", "plugin-keys");
+    }
+
     public ClusterPeerIdentityStore(IConfiguration configuration, IDataProtectionProvider protection)
     {
-        var directory = Path.Combine(configuration["PluginSettings:KeyDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "data", "plugin-keys"), "cluster-reconciliation");
+        var directory = Path.Combine(ResolveKeyDirectory(configuration), "cluster-reconciliation");
         Directory.CreateDirectory(directory);
         filePath = Path.Combine(directory, "server-identity.json");
         protector = protection.CreateProtector("Encoding.ClusterPeerIdentity.v1");
@@ -109,7 +118,7 @@ public sealed class ClusterDataKeyStore : IDisposable
 
     public ClusterDataKeyStore(IConfiguration configuration, IDataProtectionProvider protection)
     {
-        var directory = Path.Combine(configuration["PluginSettings:KeyDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "data", "plugin-keys"), "cluster-reconciliation");
+        var directory = Path.Combine(ClusterPeerIdentityStore.ResolveKeyDirectory(configuration), "cluster-reconciliation");
         Directory.CreateDirectory(directory);
         filePath = Path.Combine(directory, "cluster-data-key.json");
         protector = protection.CreateProtector("Encoding.ClusterDataKey.v1");
@@ -233,7 +242,15 @@ public sealed class ClusterPeerAdmissionRepository(
 
     public async Task EnsureRootAdmissionAsync(Guid clusterId, CancellationToken ct)
     {
-        var existing = await FindAsync(localIdentity.PeerId, ct);
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        await EnsureRootAdmissionAsync(connection, transaction, clusterId, ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    public async Task EnsureRootAdmissionAsync(DbConnection connection, DbTransaction transaction, Guid clusterId, CancellationToken ct)
+    {
+        var existing = await FindAsync(connection, transaction, clusterId, localIdentity.PeerId, ct);
         if (existing is not null)
         {
             if (existing.ClusterId != clusterId || existing.PublicKey != localIdentity.PublicKey || existing.ApprovedByPeerId != localIdentity.PeerId)
@@ -251,11 +268,20 @@ public sealed class ClusterPeerAdmissionRepository(
                 dataKeyStore.InstallVerified(clusterId, rootKey);
             return;
         }
+        var existingGrants = await ListGrantsAsync(connection, transaction, clusterId, ct);
+        if (existingGrants.Any(grant => grant.NodeId is not null && grant.RevokedAt is null))
+            throw new InvalidOperationException("La clé de données du cluster n’a pas encore été installée sur ce serveur.");
+        if (existingGrants.Count > 0)
+        {
+            await using var clearStale = Sql.Command("DELETE FROM cluster_peer_admissions WHERE cluster_id = @cluster_id", connection, transaction);
+            clearStale.Parameters.AddWithValue("cluster_id", clusterId);
+            await clearStale.ExecuteNonQueryAsync(ct);
+        }
         var dataKey = dataKeyStore.GetOrCreate(clusterId);
         var rootEnvelope = Convert.ToBase64String(localIdentity.WrapDataKey(dataKey));
         var grant = CreateGrant(clusterId, localIdentity.PeerId, null, localIdentity.PublicKey,
             localIdentity.PeerId, rootEnvelope, Fingerprint(dataKey), revokedAt: null);
-        await InsertGrantAsync(grant, ct);
+        await InsertGrantAsync(connection, transaction, grant, ct);
     }
 
     public async Task CreateApprovalGrantAsync(DbConnection connection, DbTransaction transaction,
@@ -268,6 +294,8 @@ public sealed class ClusterPeerAdmissionRepository(
         var clusterIdValue = await identityCommand.ExecuteScalarAsync(ct)
             ?? throw new InvalidOperationException("L’identité du cluster est absente.");
         var clusterId = clusterIdValue is Guid id ? id : Guid.Parse(Convert.ToString(clusterIdValue, System.Globalization.CultureInfo.InvariantCulture)!);
+        if (!dataKeyStore.HasKey(clusterId))
+            await EnsureRootAdmissionAsync(connection, transaction, clusterId, ct);
         var dataKey = dataKeyStore.GetRequired(clusterId);
         var wrapped = Convert.ToBase64String(subjectKey.Encrypt(dataKey, RSAEncryptionPadding.OaepSHA256));
         await EnsureApproverActiveAsync(connection, transaction, clusterId, ct);
@@ -485,8 +513,14 @@ public sealed class ClusterPeerAdmissionRepository(
     private async Task<ClusterPeerAdmissionGrant?> FindAsync(Guid peerId, CancellationToken ct)
     {
         var cluster = await clusterIdentity.GetAsync(ct);
-        await using var command = dataSource.CreateCommand("SELECT cluster_id, peer_id, node_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, revoked_at, signature FROM cluster_peer_admissions WHERE cluster_id = @cluster_id AND peer_id = @peer_id");
-        command.Parameters.AddWithValue("cluster_id", cluster.Id);
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        return await FindAsync(connection, transaction: null, cluster.Id, peerId, ct);
+    }
+
+    private static async Task<ClusterPeerAdmissionGrant?> FindAsync(DbConnection connection, DbTransaction? transaction, Guid clusterId, Guid peerId, CancellationToken ct)
+    {
+        await using var command = Sql.Command("SELECT cluster_id, peer_id, node_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, revoked_at, signature FROM cluster_peer_admissions WHERE cluster_id = @cluster_id AND peer_id = @peer_id", connection, transaction);
+        command.Parameters.AddWithValue("cluster_id", clusterId);
         command.Parameters.AddWithValue("peer_id", peerId);
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadGrant(reader) : null;
@@ -494,8 +528,14 @@ public sealed class ClusterPeerAdmissionRepository(
 
     private async Task<IReadOnlyList<ClusterPeerAdmissionGrant>> ListGrantsAsync(Guid clusterId, CancellationToken ct)
     {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        return await ListGrantsAsync(connection, transaction: null, clusterId, ct);
+    }
+
+    private static async Task<IReadOnlyList<ClusterPeerAdmissionGrant>> ListGrantsAsync(DbConnection connection, DbTransaction? transaction, Guid clusterId, CancellationToken ct)
+    {
         var grants = new List<ClusterPeerAdmissionGrant>();
-        await using var command = dataSource.CreateCommand("SELECT cluster_id, peer_id, node_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, revoked_at, signature FROM cluster_peer_admissions WHERE cluster_id = @cluster_id ORDER BY issued_at, peer_id");
+        await using var command = Sql.Command("SELECT cluster_id, peer_id, node_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, revoked_at, signature FROM cluster_peer_admissions WHERE cluster_id = @cluster_id ORDER BY issued_at, peer_id", connection, transaction);
         command.Parameters.AddWithValue("cluster_id", clusterId);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct)) grants.Add(ReadGrant(reader));

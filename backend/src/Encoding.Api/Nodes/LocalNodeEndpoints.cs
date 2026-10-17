@@ -81,6 +81,7 @@ public static class LocalNodeEndpoints
         try
         {
             using var response = await clients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NoContent) return Results.NoContent();
             var text = await response.Content.ReadAsStringAsync(cancellationToken);
             return Results.Content(text, "application/json", statusCode: (int)response.StatusCode);
         }
@@ -101,6 +102,7 @@ public static class LocalNodeEndpoints
         try
         {
             using var response = await clients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NoContent) return Results.NoContent();
             var text = await response.Content.ReadAsStringAsync(cancellationToken);
             if (hideSecrets && response.IsSuccessStatusCode) text = HideSecrets(text);
             if (cluster is not null && response.IsSuccessStatusCode) text = await MarkStandaloneAsync(text, cluster, cancellationToken);

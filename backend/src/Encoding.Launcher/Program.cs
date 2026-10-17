@@ -15,12 +15,23 @@ var localEnrollmentSecretFile = Path.Combine(dataDirectory, LocalEnrollment.File
 LocalEnrollment.Create(localEnrollmentSecretFile);
 var home = configuration["Launcher:Home"] ?? "/app";
 
-IReadOnlyDictionary<string, string> ServerEnvironment(NodeMode _) => new Dictionary<string, string>
+IReadOnlyDictionary<string, string> ServerEnvironment(NodeMode _)
 {
-    ["ASPNETCORE_URLS"] = $"http://+:{apiPort}",
-    ["Launcher__ControlUrl"] = controlUrl,
-    ["Node__LocalEnrollmentSecretFile"] = localEnrollmentSecretFile,
-};
+    var environment = new Dictionary<string, string>
+    {
+        ["ASPNETCORE_URLS"] = $"http://+:{apiPort}",
+        ["Node__DataDirectory"] = dataDirectory,
+        ["Launcher__ControlUrl"] = controlUrl,
+        ["Node__LocalEnrollmentSecretFile"] = localEnrollmentSecretFile,
+    };
+    if (string.IsNullOrWhiteSpace(configuration["PluginSettings:KeyDirectory"]))
+        environment["PluginSettings__KeyDirectory"] = Path.Combine(dataDirectory, "plugin-keys");
+    if (string.IsNullOrWhiteSpace(configuration["FlowBackups:Directory"]))
+        environment["FlowBackups__Directory"] = Path.Combine(dataDirectory, "flow-backups");
+    if (string.IsNullOrWhiteSpace(configuration["Runtime:ArtifactDirectory"]))
+        environment["Runtime__ArtifactDirectory"] = Path.Combine(dataDirectory, "runtime-artifacts");
+    return environment;
+}
 
 IReadOnlyDictionary<string, string> AgentEnvironment(NodeMode mode)
 {

@@ -9,7 +9,8 @@ namespace Encoding.Api.Flows;
 public sealed class FlowBackupService(DbDataSource dataSource, IConfiguration configuration, ILogger<FlowBackupService> logger,
     Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null) : BackgroundService
 {
-    private readonly string directory = Path.GetFullPath(configuration["FlowBackups:Directory"] ?? Path.Combine(AppContext.BaseDirectory,"flow-backups"));
+    private readonly string directory = Path.GetFullPath(configuration["FlowBackups:Directory"]
+        ?? (configuration["Node:DataDirectory"] is { Length: > 0 } dataDir ? Path.Combine(dataDir, "flow-backups") : Path.Combine(AppContext.BaseDirectory, "flow-backups")));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

@@ -95,6 +95,9 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
 ENV Node__Roles=server,worker \
     ConnectionStrings__Cluster="Data Source=/var/lib/encoding-node/cluster.db" \
     Node__DataDirectory=/var/lib/encoding-node \
+    PluginSettings__KeyDirectory=/var/lib/encoding-node/plugin-keys \
+    FlowBackups__Directory=/var/lib/encoding-node/flow-backups \
+    Runtime__ArtifactDirectory=/var/lib/encoding-node/runtime-artifacts \
     Logging__Console__FormatterName=json \
     Logging__Console__FormatterOptions__UseUtcTimestamp=true \
     Logging__Console__FormatterOptions__IncludeScopes=true

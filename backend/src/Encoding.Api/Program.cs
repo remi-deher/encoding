@@ -27,8 +27,7 @@ if (args.FirstOrDefault() is { } peerCommand && PeerOperationsCommand.Names.Cont
 var builder = WebApplication.CreateBuilder(args);
 builder.AddOperations();
 var peerClusterOptions = builder.AddPeerCluster();
-var pluginKeyDirectory = builder.Configuration["PluginSettings:KeyDirectory"]
-    ?? Path.Combine(builder.Environment.ContentRootPath, "data", "plugin-keys");
+var pluginKeyDirectory = ClusterPeerIdentityStore.ResolveKeyDirectory(builder.Configuration, builder.Environment.ContentRootPath);
 Directory.CreateDirectory(pluginKeyDirectory);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(pluginKeyDirectory))
