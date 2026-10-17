@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Api.Infrastructure.PeerCluster;
-using Microsoft.Extensions.Configuration;
+using Encoding.Api.Infrastructure.Data.Sqlite;
 
 namespace Encoding.Api.Infrastructure.Data;
 
@@ -30,12 +30,9 @@ public static class PeerOperationsCommand
             await output.WriteLineAsync("Certificat activé. Redémarrez ce pair avec son volume et sa membership existants.");
             return 0;
         }
-        var provider = Required("database-provider");
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = provider }).Build();
         var connectionString = Required("database");
-        if (DatabaseProvider.Name(configuration) == DatabaseProvider.SqliteName)
-            connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString) { Pooling = false }.ToString();
-        await using var database = DatabaseProvider.Create(configuration, connectionString);
+        connectionString = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString) { Pooling = false }.ToString();
+        await using var database = new SqliteDataSource(connectionString);
         var keys = Path.GetFullPath(Required("key-directory"));
         if (Within(directory, keys) || Within(keys, directory))
             throw new ArgumentException("Les dossiers d’identité et de clés doivent être distincts et non imbriqués.");

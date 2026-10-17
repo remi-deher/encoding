@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+using Encoding.Api.Infrastructure.Data.Sqlite;
 
 namespace Encoding.Api.Infrastructure.Data;
 
@@ -14,24 +14,21 @@ public static class PeerAuthorityDatabaseCommand
     {
         var options = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var i = 0; i + 1 < args.Length; i += 2) options[args[i].TrimStart('-')] = args[i + 1];
-        foreach (var required in new[] { "authority-provider", "authority", "target-provider", "target" })
+        foreach (var required in new[] { "authority", "target" })
             if (!options.ContainsKey(required))
             {
-                await output.WriteLineAsync($"Option manquante : --{required}. Usage : {Name} --authority-provider sqlite|postgres --authority <connexion> --target-provider sqlite|postgres --target <connexion>");
+                await output.WriteLineAsync($"Option manquante : --{required}. Usage : {Name} --authority <connexion SQLite> --target <connexion SQLite>");
                 return 2;
             }
 
-        var authorityProvider = NormalizeProvider(options["authority-provider"]);
-        var targetProvider = NormalizeProvider(options["target-provider"]);
-        if (authorityProvider == targetProvider
-            && string.Equals(options["authority"].Trim(), options["target"].Trim(), StringComparison.Ordinal))
+        if (string.Equals(Canonicalize(options["authority"]), Canonicalize(options["target"]), StringComparison.Ordinal))
         {
             await output.WriteLineAsync("La base faisant autorité et la cible doivent être deux bases distinctes.");
             return 2;
         }
 
-        await using var authority = Open(authorityProvider, options["authority"]);
-        await using var target = Open(targetProvider, options["target"]);
+        await using var authority = Open(options["authority"]);
+        await using var target = Open(options["target"]);
         var pending = await DatabaseMigrator.StatusAsync(authority, contentRoot, ct);
         if (pending.Pending.Count > 0 || pending.Unknown.Count > 0)
         {
@@ -56,18 +53,13 @@ public static class PeerAuthorityDatabaseCommand
         return 0;
     }
 
-    private static string NormalizeProvider(string provider) => provider.Trim().ToLowerInvariant() switch
+    private static string Canonicalize(string connection)
     {
-        "sqlite" => "sqlite",
-        "postgres" or "postgresql" => "postgres",
-        _ => throw new ArgumentException("Le fournisseur doit être sqlite ou postgres.")
-    };
-
-    private static System.Data.Common.DbDataSource Open(string provider, string connection)
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = provider })
-            .Build();
-        return DatabaseProvider.Create(configuration, connection);
+        var builder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connection);
+        if (builder.DataSource != ":memory:" && !builder.DataSource.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            builder.DataSource = Path.GetFullPath(builder.DataSource);
+        return builder.ToString();
     }
+
+    private static SqliteDataSource Open(string connection) => new(connection);
 }

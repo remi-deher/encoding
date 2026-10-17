@@ -204,7 +204,7 @@ public sealed class PeerStateMachine : SimpleStateMachine
         if (dataSource is null) return;
         var id = state.Definition.Id;
         var version = state.Definition.Version;
-        var maximum = Sql.IsSqlite(dataSource) ? "MAX(flows.current_version,excluded.current_version)" : "GREATEST(flows.current_version,excluded.current_version)";
+        const string maximum = "MAX(flows.current_version,excluded.current_version)";
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using (var flow = Sql.Command($"""
@@ -243,7 +243,7 @@ public sealed class PeerStateMachine : SimpleStateMachine
     private async Task ApplyFlowDraftProjectionAsync(PeerFlowDraftState state, CancellationToken cancellationToken)
     {
         if (dataSource is null) return;
-        var maximum = Sql.IsSqlite(dataSource) ? "MAX(flows.current_version,excluded.current_version)" : "GREATEST(flows.current_version,excluded.current_version)";
+        const string maximum = "MAX(flows.current_version,excluded.current_version)";
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using (var flow = Sql.Command($"""

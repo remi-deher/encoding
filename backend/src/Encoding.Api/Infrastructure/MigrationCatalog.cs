@@ -16,6 +16,7 @@ public static partial class MigrationCatalog
     public static readonly IReadOnlyDictionary<string, string> RenamedFrom = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["0036_cluster_reconciliation"] = "0035_cluster_reconciliation",
+        ["0037_library_cluster_tombstones"] = "0036_library_cluster_tombstones",
     };
 
     [GeneratedRegex("^(?<number>[0-9]{4})_[a-z0-9]+(_[a-z0-9]+)*$", RegexOptions.CultureInvariant)]

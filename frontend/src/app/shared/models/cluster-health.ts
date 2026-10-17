@@ -31,11 +31,12 @@ export interface ClusterHealth {
   readonly issues: readonly string[];
 }
 
-/** Synthèse de santé : ce qui empêche le cluster de travailler normalement. */
+/** Synthèse de santé : ce qui empêche le nœud ou le cluster de travailler normalement. */
 export function assessClusterHealth(
   nodes: readonly NodeResponse[],
   libraries: readonly LibraryResponse[],
   accesses: readonly LibraryNodeAccessResponse[],
+  standalone = false,
 ): ClusterHealth {
   const issues: string[] = [];
   const states = nodes.map((node) => ({ node, state: nodeLifecycle(node) }));
@@ -69,7 +70,11 @@ export function assessClusterHealth(
   }
   const critical = quarantined.length > 0 || incompatible.length > 0 || available.size === 0;
   if (!issues.length)
-    return { tone: 'success', title: 'Le cluster fonctionne normalement.', issues };
+    return {
+      tone: 'success',
+      title: standalone ? 'Le nœud fonctionne normalement.' : 'Le cluster fonctionne normalement.',
+      issues,
+    };
   return {
     tone: critical && nodes.length ? 'danger' : 'warning',
     title:

@@ -133,6 +133,7 @@ export class AppShellComponent {
     const state = this.clusterState();
     if (state.status === 'loading') return 'Chargement…';
     if (state.status === 'error') return 'Données indisponibles';
+    if (state.snapshot?.identity.standalone) return 'Nœud autonome';
     const nodes = state.snapshot?.nodes ?? [];
     return nodes.filter((n) => n.status === 'online').length + ' / ' + nodes.length + ' en ligne';
   });

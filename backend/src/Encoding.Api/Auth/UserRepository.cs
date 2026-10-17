@@ -170,57 +170,24 @@ public sealed class UserRepository(DbDataSource dataSource)
 
     public async Task CreateSessionAsync(Guid userId, byte[] tokenHash, AuthOptions options, CancellationToken ct)
     {
-        if (Sql.IsSqlite(dataSource))
-        {
-            await using var local = dataSource.CreateCommand("""
-                DELETE FROM user_sessions WHERE expires_at <= clock_timestamp();
-                INSERT INTO user_sessions(token_hash, user_id, expires_at) VALUES (@hash, @user, @expires)
-                """);
-            local.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
-            local.Parameters.AddWithValue("user", userId);
-            local.Parameters.AddWithValue("expires", DateTimeOffset.UtcNow + (options.SessionIdleTimeout < options.SessionAbsoluteLifetime ? options.SessionIdleTimeout : options.SessionAbsoluteLifetime));
-            await local.ExecuteNonQueryAsync(ct);
-            return;
-        }
         await using var command = dataSource.CreateCommand("""
             DELETE FROM user_sessions WHERE expires_at <= clock_timestamp();
-            INSERT INTO user_sessions(token_hash, user_id, expires_at)
-            VALUES (@hash, @user, clock_timestamp() + LEAST(@idle, @absolute))
+            INSERT INTO user_sessions(token_hash, user_id, expires_at) VALUES (@hash, @user, @expires)
             """);
         command.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
         command.Parameters.AddWithValue("user", userId);
-        command.Parameters.AddWithValue("idle", options.SessionIdleTimeout);
-        command.Parameters.AddWithValue("absolute", options.SessionAbsoluteLifetime);
+        command.Parameters.AddWithValue("expires", DateTimeOffset.UtcNow + (options.SessionIdleTimeout < options.SessionAbsoluteLifetime ? options.SessionIdleTimeout : options.SessionAbsoluteLifetime));
         await command.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>Valide une session et prolonge son inactivité (au plus une écriture par minute), sans dépasser sa durée absolue.</summary>
     public async Task<SessionUser?> ValidateSessionAsync(byte[] tokenHash, AuthOptions options, CancellationToken ct)
     {
-        if (Sql.IsSqlite(dataSource)) return await ValidateSessionLocalAsync(tokenHash, options, ct);
-        await using var command = dataSource.CreateCommand("""
-            WITH current AS (
-                SELECT s.token_hash, s.created_at, s.last_seen_at, u.id, u.username, u.role
-                FROM user_sessions s JOIN users u ON u.id = s.user_id
-                WHERE s.token_hash = @hash AND u.is_active AND s.expires_at > clock_timestamp()
-            ), touched AS (
-                UPDATE user_sessions s SET last_seen_at = clock_timestamp(),
-                    expires_at = LEAST(s.created_at + @absolute, clock_timestamp() + @idle)
-                FROM current c
-                WHERE s.token_hash = c.token_hash AND c.last_seen_at < clock_timestamp() - interval '1 minute'
-                RETURNING 1
-            )
-            SELECT id, username, role FROM current
-            """);
-        command.Parameters.AddWithValue("hash", SqlKind.Bytes, tokenHash);
-        command.Parameters.AddWithValue("idle", options.SessionIdleTimeout);
-        command.Parameters.AddWithValue("absolute", options.SessionAbsoluteLifetime);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? new SessionUser(reader.GetGuid(0), reader.GetString(1), ParseRole(reader.GetString(2))) : null;
+        return await ValidateSessionSqliteAsync(tokenHash, options, ct);
     }
 
     // SQLite n'accepte pas d'écriture dans une expression de table : lecture puis prolongation en deux ordres, dans une transaction.
-    private async Task<SessionUser?> ValidateSessionLocalAsync(byte[] tokenHash, AuthOptions options, CancellationToken ct)
+    private async Task<SessionUser?> ValidateSessionSqliteAsync(byte[] tokenHash, AuthOptions options, CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
@@ -263,7 +230,7 @@ public sealed class UserRepository(DbDataSource dataSource)
 
     private static async Task RevokeSessionsAsync(DbConnection connection, DbTransaction transaction, Guid userId, byte[]? keep, CancellationToken ct)
     {
-        await using var command = Sql.Command("DELETE FROM user_sessions WHERE user_id = @user AND (@keep::bytea IS NULL OR token_hash <> @keep)", connection, transaction);
+        await using var command = Sql.Command("DELETE FROM user_sessions WHERE user_id = @user AND (@keep IS NULL OR token_hash <> @keep)", connection, transaction);
         command.Parameters.AddWithValue("user", userId);
         command.Parameters.AddWithValue("keep", SqlKind.Bytes, (object?)keep ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(ct);

@@ -10,22 +10,21 @@ namespace Encoding.Runtime.Tests;
 [Collection("peer-operations")]
 public sealed class PeerOperationsTests
 {
-    [PostgresFact]
+    [DatabaseFact]
     public async Task AuthorityInitializationCopiesIntoEmptyDatabaseAndRefusesAMerge()
     {
         await using var source = await TestDatabase.CreateAsync(TestDatabase.ConfiguredConnection, "authority_source");
         await using var target = await TestDatabase.CreateAsync(TestDatabase.ConfiguredConnection, "authority_target");
         await DatabaseMigrator.ApplyAsync(source.Db, Harness.RepositoryRoot(), CancellationToken.None);
         await using (var insert = source.Db.CreateCommand("INSERT INTO libraries(name) VALUES('Authoritative library')")) await insert.ExecuteNonQueryAsync();
-        string[] args = ["--authority-provider", source.Provider, "--authority", source.ConnectionString,
-            "--target-provider", target.Provider, "--target", target.ConnectionString];
+        string[] args = ["--authority", source.ConnectionString, "--target", target.ConnectionString];
         Assert.Equal(0, await PeerAuthorityDatabaseCommand.RunAsync(args, Harness.RepositoryRoot(), TextWriter.Null, CancellationToken.None));
         var expected = await DatabaseTransfer.CountsAsync(source.Db, CancellationToken.None);
         Assert.Equal(expected, await DatabaseTransfer.CountsAsync(target.Db, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => PeerAuthorityDatabaseCommand.RunAsync(args, Harness.RepositoryRoot(), TextWriter.Null, CancellationToken.None));
         Assert.Equal(expected, await DatabaseTransfer.CountsAsync(source.Db, CancellationToken.None));
     }
-    [PostgresFact]
+    [DatabaseFact]
     public async Task ColdBackupRestoresSameIdentityDatabaseAndKeysAndRejectsTampering()
     {
         var root = Path.Combine(Path.GetTempPath(), "encoding-peer-backup-" + Guid.NewGuid().ToString("N"));
@@ -43,7 +42,7 @@ public sealed class PeerOperationsTests
             await DatabaseMigrator.ApplyAsync(source.Db, Harness.RepositoryRoot(), CancellationToken.None);
             await using (var insert = source.Db.CreateCommand("INSERT INTO libraries(name) VALUES('From authority')")) await insert.ExecuteNonQueryAsync();
             Guid identityId;
-            string[] backupArguments = ["--data-directory", peer, "--cluster-id", cluster.ToString(), "--database-provider", source.Provider,
+            string[] backupArguments = ["--data-directory", peer, "--cluster-id", cluster.ToString(),
                 "--database", source.ConnectionString, "--key-directory", keys, "--output", backup, "--backup-set", set.ToString()];
             using (var identity = PeerIdentityStore.Open(peer, cluster, pfxPassword: password))
             {
@@ -58,7 +57,7 @@ public sealed class PeerOperationsTests
             var manifest = JsonSerializer.Deserialize<PeerBackupManifest>(await File.ReadAllTextAsync(Path.Combine(backup, "manifest.json")))!;
             Assert.Equal(identityId, manifest.PeerId);
             var restoredPeer = Path.Combine(root, "restored-peer"); var restoredKeys = Path.Combine(root, "restored-keys");
-            string[] restoreArguments = ["--data-directory", restoredPeer, "--cluster-id", cluster.ToString(), "--database-provider", target.Provider,
+            string[] restoreArguments = ["--data-directory", restoredPeer, "--cluster-id", cluster.ToString(),
                 "--database", target.ConnectionString, "--key-directory", restoredKeys, "--input", backup, "--backup-set", set.ToString()];
             Assert.Equal(0, await PeerOperationsCommand.RunAsync("restore-peer", restoreArguments, Harness.RepositoryRoot(), TextWriter.Null, CancellationToken.None));
             Assert.Equal(await DatabaseTransfer.CountsAsync(source.Db, CancellationToken.None), await DatabaseTransfer.CountsAsync(target.Db, CancellationToken.None));

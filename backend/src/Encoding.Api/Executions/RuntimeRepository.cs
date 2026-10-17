@@ -468,9 +468,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 executionWorker=await owner.ScalarGuidAsync(ct) is {} nodeId?nodeId:null;
                 if(executionWorker!=resolution.WorkerId)
                 {
-                    await using var plannedOwner=Sql.Command(Sql.IsSqlite(c)
-                        ? "SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL AND EXISTS(SELECT 1 FROM json_each(checkpoint->'context'->'videoEncodings') stored, json_each(@resolution) wanted WHERE json(stored.value)=json(wanted.value)) ORDER BY completed_revision DESC LIMIT 1"
-                        : "SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL AND checkpoint->'context'->'videoEncodings' @> @resolution ORDER BY completed_revision DESC LIMIT 1",c,tx);
+                    await using var plannedOwner=Sql.Command("SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL AND EXISTS(SELECT 1 FROM json_each(checkpoint->'context'->'videoEncodings') stored, json_each(@resolution) wanted WHERE json(stored.value)=json(wanted.value)) ORDER BY completed_revision DESC LIMIT 1",c,tx);
                     plannedOwner.Parameters.AddWithValue("id",executionId); plannedOwner.Parameters.AddWithValue("resolution",SqlKind.Json,JsonSerializer.Serialize(new[]{resolution},Json));
                     executionWorker=await plannedOwner.ScalarGuidAsync(ct) is {} plannedNodeId?plannedNodeId:null;
                 }

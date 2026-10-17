@@ -112,7 +112,9 @@ export class HomePageComponent {
       {
         label: 'Exécutions en cours',
         value: data ? String(data.activeCount) : '—',
-        detail: 'Traitements enregistrés dans le cluster',
+        detail: this.standalone()
+          ? 'Traitements enregistrés sur ce nœud'
+          : 'Traitements enregistrés dans le cluster',
       },
       {
         label: 'Dans la file',
@@ -140,34 +142,53 @@ export class HomePageComponent {
   protected readonly state = toSignal(this.overview.state$, {
     initialValue: INITIAL_CLUSTER_OVERVIEW,
   });
+  protected readonly standalone = computed(
+    () => this.state().snapshot?.identity.standalone ?? false,
+  );
   protected readonly observedAt = computed(() => this.state().snapshot?.observedAt ?? null);
   protected readonly metrics = computed(() => {
     const snapshot = this.state().snapshot;
     if (!snapshot)
       return [
-        { label: 'Nœuds en ligne', value: '—', detail: 'Données indisponibles' },
-        { label: 'Workers en ligne', value: '—', detail: 'Données indisponibles' },
-        { label: 'Bibliothèques actives', value: '—', detail: 'Données indisponibles' },
+        { label: 'État de l’installation', value: '—', detail: 'Données indisponibles' },
+        { label: 'Worker local', value: '—', detail: 'Données indisponibles' },
+        { label: 'Bibliothèques configurées', value: '—', detail: 'Données indisponibles' },
         ...this.executionMetrics(),
       ];
     const online = snapshot.nodes.filter((n) => n.status === 'online');
     const workers = snapshot.nodes.filter((n) => n.roles.includes('worker'));
+    const onlineWorkers = online.filter((n) => n.roles.includes('worker'));
+    const standalone = snapshot.identity.standalone;
     return [
       {
-        label: 'Nœuds en ligne',
-        value: online.length + ' / ' + snapshot.nodes.length,
-        detail: snapshot.nodes.length - online.length + ' hors ligne',
+        label: standalone ? 'Ce nœud' : 'Nœuds en ligne',
+        value: standalone
+          ? online.length > 0
+            ? 'En ligne'
+            : 'Hors ligne'
+          : online.length + ' / ' + snapshot.nodes.length,
+        detail: standalone
+          ? snapshot.nodes[0]?.displayName?.trim() || snapshot.nodes[0]?.name || 'État local'
+          : snapshot.nodes.length - online.length + ' hors ligne',
       },
       {
-        label: 'Workers en ligne',
-        value: online.filter((n) => n.roles.includes('worker')).length + ' / ' + workers.length,
-        detail: 'Présence observée, disponibilité de traitement non mesurée',
+        label: standalone ? 'Worker local' : 'Workers en ligne',
+        value: standalone
+          ? workers.length === 0
+            ? 'Non configuré'
+            : onlineWorkers.length > 0
+              ? 'En ligne'
+              : 'Hors ligne'
+          : onlineWorkers.length + ' / ' + workers.length,
+        detail: standalone
+          ? 'Fonction de traitement sur cette installation'
+          : 'Présence observée, disponibilité de traitement non mesurée',
       },
       {
         label: 'Bibliothèques actives',
         value:
           snapshot.libraries.filter((l) => l.isActive).length + ' / ' + snapshot.libraries.length,
-        detail: 'Configuration enregistrée dans le cluster',
+        detail: standalone ? 'Configuration locale' : 'Configuration enregistrée dans le cluster',
       },
       ...this.executionMetrics(),
     ];
@@ -176,7 +197,12 @@ export class HomePageComponent {
   protected readonly health = computed(() => {
     const snapshot = this.state().snapshot;
     return snapshot
-      ? assessClusterHealth(snapshot.nodes, snapshot.libraries, snapshot.accesses)
+      ? assessClusterHealth(
+          snapshot.nodes,
+          snapshot.libraries,
+          snapshot.accesses,
+          snapshot.identity.standalone,
+        )
       : null;
   });
   protected readonly matrixRows = computed(() =>
