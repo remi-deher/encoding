@@ -2,7 +2,7 @@
 
 Socle API ASP.NET Core sur .NET 10, avec SQLite local par serveur. Les serveurs d'un cluster réconcilient progressivement leurs données via le maillage décrit dans [`0049`](../docs/architecture/0049-multi-server-shared-cluster.md). L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`.
 
-Le mode optionnel **pair à pair** permet aussi une base SQLite ou PostgreSQL indépendante par serveur, avec état métier répliqué par Raft. Configuration, jointure, sauvegarde/restauration, rotation et contraintes de version : [guide d’exploitation](../docs/operations/peer-cluster-preview.md).
+Le mode optionnel **pair à pair** conserve une base SQLite indépendante par serveur et réplique l’état métier avec Raft. Configuration, jointure, sauvegarde/restauration, rotation et contraintes de version : [guide d’exploitation](../docs/operations/peer-cluster-preview.md).
 
 ## Développement local
 

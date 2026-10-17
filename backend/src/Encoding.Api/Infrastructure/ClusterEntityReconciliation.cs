@@ -99,7 +99,7 @@ public sealed class ClusterEntityReconciliation(
                 var where = predicates.Count == 0 ? "" : " WHERE " + string.Join(" AND ", predicates);
                 await using var command = Sql.Command($"SELECT {string.Join(",", table.Columns)} FROM {table.Name}{where}{(table.OrderBy.Length == 0 ? "" : " ORDER BY " + string.Join(",", table.OrderBy))}", readConnection);
                 if (cursor is not null)
-                    command.Parameters.AddWithValue("cursor", Sql.IsSqlite(readConnection) ? cursor.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff'Z'", CultureInfo.InvariantCulture) : cursor.Value);
+                    command.Parameters.AddWithValue("cursor", cursor.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff'Z'", CultureInfo.InvariantCulture));
                 await using var reader = await command.ExecuteReaderAsync(ct);
                 while (await reader.ReadAsync(ct))
                 {
@@ -130,7 +130,7 @@ public sealed class ClusterEntityReconciliation(
                 ORDER BY e.updated_at,r.library_id,m.relative_path
                 """, readConnection);
             if (receiptCursor is not null)
-                receipts.Parameters.AddWithValue("cursor", Sql.IsSqlite(readConnection) ? receiptCursor.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff'Z'", CultureInfo.InvariantCulture) : receiptCursor.Value);
+                receipts.Parameters.AddWithValue("cursor", receiptCursor.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff'Z'", CultureInfo.InvariantCulture));
             await using (var reader = await receipts.ExecuteReaderAsync(ct))
             {
                 while (await reader.ReadAsync(ct))
@@ -377,9 +377,7 @@ public sealed class ClusterEntityReconciliation(
                 var nodeId = payload["nodeId"]!.GetValue<string>();
                 var lastSeenAt = payload["lastSeenAt"]!.GetValue<string>();
                 await using var update = Sql.Command("UPDATE cluster_nodes SET last_seen_at = CASE WHEN last_seen_at < @last_seen_at THEN @last_seen_at ELSE last_seen_at END WHERE id = @id", connection, transaction);
-                update.Parameters.AddWithValue("last_seen_at", Sql.IsSqlite(connection)
-                    ? lastSeenAt
-                    : DateTimeOffset.Parse(lastSeenAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal));
+                update.Parameters.AddWithValue("last_seen_at", lastSeenAt);
                 update.Parameters.AddWithValue("id", Guid.Parse(nodeId));
                 if (await update.ExecuteNonQueryAsync(ct) == 0) return false;
             }
@@ -545,35 +543,17 @@ public sealed class ClusterEntityReconciliation(
     private async Task UpsertRowAsync(DbConnection connection, DbTransaction transaction, EntityTable table, JsonObject row, CancellationToken ct)
     {
         var localRow = PrepareRowForLocalStorage(table, row);
-        if (Sql.IsSqlite(connection))
-        {
-            var expressions = table.Columns.Select(column => table.BinaryColumns.Contains(column, StringComparer.Ordinal) ? "@binary_" + column : "json_extract(@row, '$." + column + "')").ToArray();
-            var updates = table.Columns.Where(column => !table.KeyColumns.Contains(column, StringComparer.Ordinal) && !table.PreserveColumnsOnUpdate.Contains(column, StringComparer.Ordinal)).Select(column => column == "last_seen_at" && table.Name == "cluster_nodes"
-                ? "last_seen_at = CASE WHEN cluster_nodes.last_seen_at < excluded.last_seen_at THEN excluded.last_seen_at ELSE cluster_nodes.last_seen_at END"
-                : $"{column}=excluded.{column}");
-            var onConflict = table.Immutable ? "DO NOTHING" : "DO UPDATE SET " + string.Join(",", updates);
-            var sql = $"INSERT INTO {table.Name} ({string.Join(",", table.Columns)}) SELECT {string.Join(",", expressions)} WHERE true ON CONFLICT ({string.Join(",", table.KeyColumns)}) {onConflict}";
-            await using var command = Sql.Command(sql, connection, transaction);
-            command.Parameters.AddWithValue("row", JsonKind(localRow));
-            foreach (var column in table.BinaryColumns)
-                command.Parameters.AddWithValue("binary_" + column, SqlKind.Bytes, ReadHex(localRow[column]));
-            await command.ExecuteNonQueryAsync(ct);
-            return;
-        }
-
-        var pgRow = localRow;
+        var expressions = table.Columns.Select(column => table.BinaryColumns.Contains(column, StringComparer.Ordinal) ? "@binary_" + column : "json_extract(@row, '$." + column + "')").ToArray();
+        var updates = table.Columns.Where(column => !table.KeyColumns.Contains(column, StringComparer.Ordinal) && !table.PreserveColumnsOnUpdate.Contains(column, StringComparer.Ordinal)).Select(column => column == "last_seen_at" && table.Name == "cluster_nodes"
+            ? "last_seen_at = CASE WHEN cluster_nodes.last_seen_at < excluded.last_seen_at THEN excluded.last_seen_at ELSE cluster_nodes.last_seen_at END"
+            : $"{column}=excluded.{column}");
+        var onConflict = table.Immutable ? "DO NOTHING" : "DO UPDATE SET " + string.Join(",", updates);
+        var sql = $"INSERT INTO {table.Name} ({string.Join(",", table.Columns)}) SELECT {string.Join(",", expressions)} WHERE true ON CONFLICT ({string.Join(",", table.KeyColumns)}) {onConflict}";
+        await using var command = Sql.Command(sql, connection, transaction);
+        command.Parameters.AddWithValue("row", JsonKind(localRow));
         foreach (var column in table.BinaryColumns)
-            if (pgRow[column] is JsonValue binary && binary.TryGetValue<string>(out var hex) && hex is not null)
-                pgRow[column] = "\\x" + hex;
-        var projected = $"jsonb_populate_record(NULL::{table.Name}, @row::jsonb)";
-        var pgUpdates = table.Columns.Where(column => !table.KeyColumns.Contains(column, StringComparer.Ordinal) && !table.PreserveColumnsOnUpdate.Contains(column, StringComparer.Ordinal)).Select(column => column == "last_seen_at" && table.Name == "cluster_nodes"
-            ? "last_seen_at = CASE WHEN cluster_nodes.last_seen_at < EXCLUDED.last_seen_at THEN EXCLUDED.last_seen_at ELSE cluster_nodes.last_seen_at END"
-            : $"{column} = EXCLUDED.{column}");
-        var conflict = table.Immutable ? "DO NOTHING" : "DO UPDATE SET " + string.Join(",", pgUpdates);
-        var pgSql = $"INSERT INTO {table.Name} ({string.Join(",", table.Columns)}) SELECT {string.Join(",", table.Columns)} FROM {projected} WHERE true ON CONFLICT ({string.Join(",", table.KeyColumns)}) {conflict}";
-        await using var pgCommand = Sql.Command(pgSql, connection, transaction);
-        pgCommand.Parameters.AddWithValue("row", SqlKind.Json, JsonKind(pgRow));
-        await pgCommand.ExecuteNonQueryAsync(ct);
+            command.Parameters.AddWithValue("binary_" + column, SqlKind.Bytes, ReadHex(localRow[column]));
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     private static async Task<bool> UpsertProcessingReceiptAsync(DbConnection connection, DbTransaction transaction, JsonObject row, CancellationToken ct)
@@ -682,27 +662,10 @@ public sealed class ClusterEntityReconciliation(
 
     private async Task DeleteRowAsync(DbConnection connection, DbTransaction transaction, EntityTable table, string keyJson, CancellationToken ct)
     {
-        using var key = JsonDocument.Parse(keyJson);
-        var keyObject = key.RootElement;
-        string sql;
-        if (Sql.IsSqlite(connection))
-        {
-            sql = $"DELETE FROM {table.Name} WHERE {string.Join(" AND ", table.KeyColumns.Select(column => column + " = json_extract(@key, '$." + column + "')"))}";
-        }
-        else
-        {
-            sql = $"DELETE FROM {table.Name} WHERE ({string.Join(",", table.KeyColumns)}) IN (SELECT {string.Join(",", table.KeyColumns)} FROM jsonb_populate_record(NULL::{table.Name}, @key::jsonb))";
-        }
+        var sql = $"DELETE FROM {table.Name} WHERE {string.Join(" AND ", table.KeyColumns.Select(column => column + " = json_extract(@key, '$." + column + "')"))}";
         await using var command = Sql.Command(sql, connection, transaction);
-        command.Parameters.AddWithValue("key", Sql.IsSqlite(connection) ? keyJson : JsonKind(CreateKeyObject(keyObject, table.KeyColumns)));
+        command.Parameters.AddWithValue("key", keyJson);
         await command.ExecuteNonQueryAsync(ct);
-    }
-
-    private static JsonObject CreateKeyObject(JsonElement key, string[] columns)
-    {
-        var result = new JsonObject();
-        foreach (var column in columns) result[column] = JsonNode.Parse(key.GetProperty(column).GetRawText());
-        return result;
     }
 
     private async Task<LocalIdentity> ReadLocalIdentityAsync(DbConnection connection, DbTransaction transaction, CancellationToken ct)

@@ -391,7 +391,7 @@ public sealed class PeerClusterIntegrationTests
         Environment.SetEnvironmentVariable("PeerCluster__IdentityPassword", TestIdentityPassword(rotating));
         try
         {
-            string[] common = ["--cluster-id", clusterId.ToString(), "--database-provider", "sqlite", "--database", $"Data Source={Path.Combine(nodeDirectory, "cluster.sqlite")}",
+            string[] common = ["--cluster-id", clusterId.ToString(), "--database", $"Data Source={Path.Combine(nodeDirectory, "cluster.sqlite")}",
                 "--data-directory", Path.Combine(nodeDirectory, "peer-data"), "--key-directory", Path.Combine(nodeDirectory, "plugin-keys"), "--backup-set", backupSet];
             Assert.Equal(0, await PeerOperationsCommand.RunAsync("backup-peer", [.. common, "--output", backup], Harness.RepositoryRoot(), TextWriter.Null, CancellationToken.None));
             Directory.Delete(nodeDirectory, true); // Only the synthetic test peer; contains no user media.
@@ -413,7 +413,7 @@ public sealed class PeerClusterIntegrationTests
             {
                 Environment.SetEnvironmentVariable("PeerCluster__IdentityPassword", TestIdentityPassword(index));
                 nodeDirectory = Path.Combine(root, $"peer-{index}");
-                string[] common = ["--cluster-id", clusterId.ToString(), "--database-provider", "sqlite", "--database", $"Data Source={Path.Combine(nodeDirectory, "cluster.sqlite")}",
+                string[] common = ["--cluster-id", clusterId.ToString(), "--database", $"Data Source={Path.Combine(nodeDirectory, "cluster.sqlite")}",
                     "--data-directory", Path.Combine(nodeDirectory, "peer-data"), "--key-directory", Path.Combine(nodeDirectory, "plugin-keys"), "--backup-set", coordinatedSet];
                 var archive = Path.Combine(root, $"coordinated-backup-{index}");
                 Assert.Equal(0, await PeerOperationsCommand.RunAsync("backup-peer", [.. common, "--output", archive], Harness.RepositoryRoot(), TextWriter.Null, CancellationToken.None));

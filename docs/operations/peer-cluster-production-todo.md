@@ -7,7 +7,7 @@ Les six points sont traités dans le code et les procédures. Voir [0061](../arc
 | 1. État métier partagé | [x] Terminé | Réplication transactionnelle de toutes les tables métier ; imports de flows atomiques ; mutations reçues sur un follower transmises au leader. Comptes et sessions restent locaux. |
 | 2. Orchestration durable | [x] Terminé | Tâches, checkpoints, baux, réservations et résultats répliqués. Époques incluant le terme Raft ; ancien worker refusé après élection ; effets externes incertains sans répétition automatique. |
 | 3. Membership et reprise | [x] Terminé | Approbation explicite, ajout/retrait engagés, refus de fusion de groupes indépendants, rattrapage et restauration d’un pair avec sa propre identité. |
-| 4. Migration de l’autorité | [x] Terminé | Copie cohérente vers cible vide, source intacte, vérification des compteurs, ordre des références et refus de fusion. Tests SQLite/PostgreSQL et transferts croisés. |
+| 4. Migration de l’autorité | [x] Terminé | Copie cohérente d’une base SQLite vers une cible vide, source intacte, vérification des compteurs, ordre des références et refus de fusion. |
 | 5. Stockage et accès | [x] Terminé | Nœuds de traitement choisis par bibliothèque, accès direct avec chemin propre ou transfert WebDAV via une source déclarée. Médias externes à Raft. Source indisponible/transfert échoué : échec immédiat et réservation libérée. |
 | 6. Exploitation et mises à jour | [x] Terminé | Partitions, majorité/minorité, anciens baux, redémarrages, rejeu du WAL, restauration d’un pair et des trois pairs, rotation des certificats, refus des versions incompatibles, métriques et alertes. |
 
@@ -22,11 +22,11 @@ Les six points sont traités dans le code et les procédures. Voir [0061](../arc
 
 ## Preuves reproductibles
 
-Validation locale du 2026-10-16 : compilation Release de la solution avec `--warnaserror` (0 avertissement, 0 erreur), **119 tests runtime SQLite et 119 PostgreSQL réussis**, 37 tests Python de plugins réussis et scénarios du lanceur réussis. `promtool` valide les sept alertes et les quatre scénarios associés. Ces résultats locaux ne remplacent pas l’exécution de la CI sur le commit proposé.
+La CI utilise SQLite pour toutes les bases. La validation locale du 2026-10-17 compile la solution Release avec `--warnaserror` (0 avertissement, 0 erreur) et passe les prototypes de maillage et de consensus, les 37 tests Python, les 123 tests runtime SQLite avec les outils médias, ainsi que les scénarios du lanceur et des plugins. `promtool` valide les sept alertes et les quatre scénarios associés.
 
 `PeerClusterIntegrationTests` utilise trois processus API, des volumes temporaires séparés et des partitions bidirectionnelles réelles du transport TLS. Il vérifie les lectures convergentes après reconnexion, la poursuite des écritures majoritaires, le refus de l’ancien leader, le rejet d’un ancien bail, la perte du quorum, les rotations et les restaurations. Une écriture après le dernier instantané doit survivre à la restauration complète par rejeu du WAL.
 
-`PeerDatabaseReplicationTests`, `PeerOperationsTests`, `DatabaseTransferTests` et les scénarios runtime complètent les essais sur SQLite et PostgreSQL. Les règles d’alerte sont fournies dans `peer-cluster-alerts.yml` et vérifiées par `promtool`, avec quatre scénarios (quorum disponible/perdu, journal inactif/bloqué). Ce contrôle est intégré à la CI.
+`PeerDatabaseReplicationTests`, `PeerOperationsTests`, le transfert SQLite et les scénarios runtime complètent les essais. Les règles d’alerte sont fournies dans `peer-cluster-alerts.yml` et vérifiées par `promtool`, avec quatre scénarios (quorum disponible/perdu, journal inactif/bloqué). Ce contrôle est intégré à la CI.
 
 ## Évolutions hors périmètre de cette livraison
 

@@ -1,7 +1,6 @@
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Nodes;
-using Encoding.Api.Infrastructure.PeerCluster;
 using Xunit;
 
 namespace Encoding.Runtime.Tests;
@@ -56,9 +55,7 @@ public sealed class SqliteClusterTests
         var server = Guid.NewGuid(); var worker = Guid.NewGuid();
         await InsertNodeAsync(database, server, "server,worker");
         await InsertNodeAsync(database, worker, "worker");
-        var peers = new PeerClusterOptions(true, Guid.NewGuid(), new Uri("https://localhost:8443/"), false, 8443,
-            TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(30), new string('x', 32), Path.GetTempPath());
-        var repository = new NodeRepository(database.Db, peers);
+        var repository = new NodeRepository(database.Db);
         Assert.Equal(NodeRepository.ModeRequestResult.Accepted,
             await repository.RequestModeAsync(worker, true, true, TimeSpan.FromMinutes(5), CancellationToken.None));
     }

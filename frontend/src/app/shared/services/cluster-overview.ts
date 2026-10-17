@@ -15,9 +15,11 @@ import {
 } from 'rxjs';
 import { ClusterApi } from './cluster-api';
 import { LibraryResponse, NodeResponse } from '../models/cluster';
+import { ClusterIdentity } from '../models/local-node';
 import { LibraryNodeAccessResponse } from '../ui/library-node-access-types';
 
 export interface ClusterSnapshot {
+  readonly identity: ClusterIdentity;
   readonly nodes: readonly NodeResponse[];
   readonly libraries: readonly LibraryResponse[];
   /** Accès de chaque nœud à chaque bibliothèque (liste vide si indisponible). */
@@ -36,7 +38,11 @@ export class ClusterOverview {
   private readonly refreshRequested = new Subject<void>();
   readonly state$ = merge(timer(0, 10000), this.refreshRequested).pipe(
     exhaustMap(() =>
-      forkJoin({ nodes: this.api.listNodes(), libraries: this.api.listLibraries() }).pipe(
+      forkJoin({
+        identity: this.api.identity(),
+        nodes: this.api.listNodes(),
+        libraries: this.api.listLibraries(),
+      }).pipe(
         switchMap((data) =>
           (data.libraries.length
             ? forkJoin(

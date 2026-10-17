@@ -1,6 +1,6 @@
 # 0060 — État du cluster répliqué entre pairs
 
-Statut : direction acceptée par Rémi le 2026-10-16 ; mise en œuvre optionnelle complétée par [0061](0061-peer-sql-transactions-and-operations.md). Les exigences de déploiement et limites de version sont décrites dans le [guide d’exploitation](../operations/peer-cluster-preview.md). Le mode PostgreSQL partagé de [0043](0043-sqlite-and-data-access-abstraction.md) reste disponible.
+Statut : direction acceptée par Rémi le 2026-10-16 ; mise en œuvre optionnelle complétée par [0061](0061-peer-sql-transactions-and-operations.md). Les exigences de déploiement et limites de version sont décrites dans le [guide d’exploitation](../operations/peer-cluster-preview.md). SQLite est le seul fournisseur de base pris en charge.
 
 ## Objectif
 
@@ -72,7 +72,7 @@ La présence est cohérente à terme et peut diverger brièvement entre pairs ; 
 
 Le prototype évaluera `DotNext.Net.Cluster` et `DotNext.AspNetCore.Cluster` : le projet fournit Raft et HyParView pour le membership/gossip, cible .NET moderne et évite d’introduire un Raft développé par Encoding. Son `ConsensusOnlyState` en mémoire ne convient pas à la production ; le prototype doit utiliser un journal durable et vérifier la reconstruction après redémarrage. Les commandes doivent avoir des identifiants idempotents, car la bibliothèque ne fournit pas à l’application le contrôle des sessions clientes.
 
-Le test applicatif couvre trois API indépendantes, les transactions métier, les partitions réseau, les anciens baux, la rotation, le rattrapage et les restaurations individuelle et coordonnée. Les projections locales SQLite/PostgreSQL ne sont confirmées qu’après engagement de la transaction au quorum. Les médias et les artefacts binaires restent sur les stockages configurés par l’installation.
+Le test applicatif couvre trois API indépendantes, les transactions métier, les partitions réseau, les anciens baux, la rotation, le rattrapage et les restaurations individuelle et coordonnée. Les projections SQLite locales ne sont confirmées qu’après engagement de la transaction au quorum. Les médias et les artefacts binaires restent sur les stockages configurés par l’installation.
 
 ## Prototype de transport et de présence
 

@@ -1,6 +1,6 @@
 # Exploiter un cluster pair à pair
 
-Le mode `PeerCluster` est optionnel. Trois serveurs conservent chacun une base locale et un journal Raft indépendants ; la majorité confirme les changements métier. SQLite ou PostgreSQL peuvent être utilisés, avec le même fournisseur et la même version applicative sur les trois pairs. Aucun serveur central permanent n’est requis. Voir [0061](../architecture/0061-peer-sql-transactions-and-operations.md).
+Le mode `PeerCluster` est optionnel. Trois serveurs conservent chacun une base SQLite locale et un journal Raft indépendants ; la majorité confirme les changements métier. Tous les pairs utilisent la même version applicative. Aucun serveur central permanent n’est requis. Voir [0061](../architecture/0061-peer-sql-transactions-and-operations.md).
 
 ## Ce qui est partagé
 
@@ -61,11 +61,11 @@ Désigner une seule base faisant autorité ; arrêter les écritures et les agen
 
 ```sh
 dotnet Encoding.Api.dll initialize-peer-database \
-  --authority-provider postgres --authority "$AUTHORITY_CONNECTION" \
-  --target-provider sqlite --target "$NEW_PEER_CONNECTION"
+  --authority "$AUTHORITY_CONNECTION" \
+  --target "$NEW_PEER_CONNECTION"
 ```
 
-La commande vérifie la version source, migre la cible, copie toutes les tables dans une transaction cohérente et vérifie les compteurs. Une cible peuplée est refusée. Les fournisseurs peuvent différer durant cette conversion, puis les pairs du nouveau groupe doivent tous utiliser le même fournisseur.
+La commande vérifie la version source, migre la cible, copie les tables SQLite dans une transaction cohérente et vérifie les compteurs. Une cible peuplée est refusée.
 
 Copier les clés locales de protection de l’ancienne autorité pour que le premier pair puisse déchiffrer puis rechiffrer les configurations historiques avec `SharedDataKey`. Démarrer ce premier pair en bootstrap et ajouter les pairs vides ensuite. Ne jamais importer une autre base indépendante par-dessus cette autorité. L’image initiale et chaque transaction sont limitées à 64 Mio ; un import supérieur demande une évolution préalable du protocole, sans tronquer les données.
 
@@ -78,7 +78,7 @@ Pour un ensemble coordonné : mettre l’installation en maintenance, arrêter a
 ```sh
 dotnet Encoding.Api.dll backup-peer \
   --data-directory "$PEER_DATA" --cluster-id "$CLUSTER_ID" \
-  --database-provider sqlite --database "$PEER_CONNECTION" \
+  --database "$PEER_CONNECTION" \
   --key-directory "$PLUGIN_KEYS" --backup-set "$BACKUP_SET" \
   --output "$ARCHIVE_DIRECTORY"
 ```
@@ -88,12 +88,12 @@ Pour restaurer, utiliser des bases et répertoires cibles vides et les mêmes se
 ```sh
 dotnet Encoding.Api.dll restore-peer \
   --data-directory "$EMPTY_PEER_DATA" --cluster-id "$CLUSTER_ID" \
-  --database-provider sqlite --database "$EMPTY_PEER_CONNECTION" \
+  --database "$EMPTY_PEER_CONNECTION" \
   --key-directory "$EMPTY_PLUGIN_KEYS" --backup-set "$BACKUP_SET" \
   --input "$ARCHIVE_DIRECTORY"
 ```
 
-Utiliser `postgres` et une connexion PostgreSQL locale pour les pairs concernés. La restauration vérifie l’ensemble et les empreintes avant la copie, refuse une cible peuplée et contrôle les compteurs. Redémarrer les trois pairs avec `Bootstrap=false`, attendre quorum, projection prête et convergence des révisions avant de relancer les agents. Un pair restauré plus ancien peut rejoindre une majorité existante et rattraper ses entrées. Un ensemble complet doit provenir du même arrêt coordonné ; ne pas mélanger des dates ou identités.
+La restauration vérifie l’ensemble et les empreintes avant la copie, refuse une cible peuplée et contrôle les compteurs. Redémarrer les trois pairs avec `Bootstrap=false`, attendre quorum, projection prête et convergence des révisions avant de relancer les agents. Un pair restauré plus ancien peut rejoindre une majorité existante et rattraper ses entrées. Un ensemble complet doit provenir du même arrêt coordonné ; ne pas mélanger des dates ou identités.
 
 En cas de quorum perdu, rétablir assez de membres avec leurs propres volumes. Ne jamais effacer le WAL ni forcer un nouveau bootstrap sur un membre isolé. `GET /api/v1/peer-cluster/recovery` expose les fichiers persistants à conserver.
 
@@ -142,4 +142,4 @@ dotnet test backend/tests/Encoding.Runtime.Tests/Encoding.Runtime.Tests.csproj \
   --filter 'FullyQualifiedName~Peer'
 ```
 
-Exécuter aussi les tests runtime et de transfert sur SQLite et PostgreSQL avec les outils médias de `backend/tests/Dockerfile`. Voir [monitoring.md](monitoring.md) et [peer-cluster-alerts.yml](peer-cluster-alerts.yml) pour la supervision et [le suivi](peer-cluster-production-todo.md) pour la clôture des six points.
+Exécuter les tests runtime SQLite avec les outils médias de `backend/tests/Dockerfile`. Voir [monitoring.md](monitoring.md) et [peer-cluster-alerts.yml](peer-cluster-alerts.yml) pour la supervision et [le suivi](peer-cluster-production-todo.md) pour la clôture des six points.

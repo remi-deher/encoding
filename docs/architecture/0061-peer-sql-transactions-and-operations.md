@@ -4,9 +4,9 @@ Statut : implémenté ; complète [0060](0060-peer-replicated-cluster-state.md).
 
 ## État durable
 
-Chaque pair conserve sa propre base SQLite ou PostgreSQL et son propre journal Raft. Tous les pairs d'un groupe utilisent le même fournisseur, les mêmes migrations et la même clé `PeerCluster:SharedDataKey`. Aucune base centrale n'est nécessaire.
+Chaque pair conserve sa propre base SQLite et son propre journal Raft. Tous les pairs d'un groupe utilisent les mêmes migrations et la même clé `PeerCluster:SharedDataKey`. Aucune base centrale n'est nécessaire.
 
-Les repositories utilisent `DbDataSource`. En mode pair, `PeerDataSource` intercepte les transactions ; des triggers propres au fournisseur capturent leurs lignes après modification et leurs suppressions. On réplique ces valeurs, y compris les identifiants, dates, secrets chiffrés et valeurs générées. Le SQL et ses fonctions non déterministes ne sont pas rejoués sur les autres pairs.
+Les repositories utilisent `DbDataSource`. En mode pair, `PeerDataSource` intercepte les transactions ; des triggers SQLite capturent leurs lignes après modification et leurs suppressions. On réplique ces valeurs, y compris les identifiants, dates, secrets chiffrés et valeurs générées. Le SQL et ses fonctions non déterministes ne sont pas rejoués sur les autres pairs.
 
 Avant d'ouvrir une transaction SQL sur le leader, une barrière de lecture Raft forte attend l'application des entrées engagées. Un verrou local sérialise les transactions. Les modifications partagées exigent un bail et le même terme à l'ouverture et à la confirmation. Raft engage la transaction avant la confirmation SQL et la réponse HTTP. Sur le leader, l'application de sa transaction en cours met à jour l'image immuable sans réentrer dans sa transaction SQL ; les autres pairs appliquent les lignes atomiquement. Une confirmation incertaine ferme les écritures jusqu'à reconstruction de la projection depuis l'image engagée.
 
@@ -18,7 +18,7 @@ Le premier pair importe l'image complète de l'unique base faisant autorité. Un
 
 Les lectures utilisent la projection locale et peuvent être en retard pendant une partition. Les mutations reçues sur un follower sont transmises au leader par TLS mutuel. Le principal déjà authentifié est transmis uniquement sur ce canal interne ; les sessions locales ne sont pas copiées. L'API publique ne peut pas injecter ce principal. Les jetons workers sont vérifiés par le leader et la protection CSRF reste appliquée. Le gossip ne réintroduit pas un nœud retiré du catalogue SQL et ne remplace pas ses paramètres durables par une ancienne observation.
 
-Le port pair exige un certificat explicitement approuvé et les en-têtes du protocole. L'empreinte de compatibilité inclut le fournisseur, les migrations avec leurs checksums, le schéma et l'identifiant de clé partagée. Une incompatibilité retourne HTTP 426 avant le traitement du message Raft. La jointure refuse la fusion de deux groupes indépendamment initialisés.
+Le port pair exige un certificat explicitement approuvé et les en-têtes du protocole. L'empreinte de compatibilité inclut les migrations avec leurs checksums, le schéma SQLite et l'identifiant de clé partagée. Une incompatibilité retourne HTTP 426 avant le traitement du message Raft. La jointure refuse la fusion de deux groupes indépendamment initialisés.
 
 La clé partagée de 32 octets chiffre les secrets applicatifs avec AES-GCM. Les anciens secrets Data Protection sont rechiffrés par l'autorité lors de l'import initial. Les certificats privés, comptes administrateurs et sessions conservent leur protection locale. La clé partagée, les mots de passe d'identité et les sauvegardes doivent être conservés hors du dépôt.
 
@@ -38,4 +38,4 @@ La première politique de mise à jour est coordonnée : même version sur les p
 
 ## Validation
 
-`PeerClusterIntegrationTests` lance trois API avec bases et volumes indépendants, isole un leader par des proxys CONNECT de test, vérifie l'élection majoritaire, le refus des écritures isolées et des anciens baux, la convergence au retour, la rotation, la restauration d'un pair puis des trois pairs et le rejeu d'une transaction postérieure au dernier instantané. Les tests de projection, migration et sauvegarde sont exécutés sur SQLite et PostgreSQL. Les incompatibilités de protocole et d'empreinte sont testées avec un certificat valide.
+`PeerClusterIntegrationTests` lance trois API avec bases et volumes indépendants, isole un leader par des proxys CONNECT de test, vérifie l'élection majoritaire, le refus des écritures isolées et des anciens baux, la convergence au retour, la rotation, la restauration d'un pair puis des trois pairs et le rejeu d'une transaction postérieure au dernier instantané. Les tests de projection, migration et sauvegarde utilisent SQLite. Les incompatibilités de protocole et d'empreinte sont testées avec un certificat valide.

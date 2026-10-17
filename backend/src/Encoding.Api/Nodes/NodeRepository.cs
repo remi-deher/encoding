@@ -4,13 +4,12 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Contracts.Nodes;
 using Encoding.Core.Nodes;
-using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Nodes;
 
 public enum PairingRequestResult { Created, Conflict, TooMany }
 
-public sealed class NodeRepository(DbDataSource dataSource, PeerClusterOptions? peers = null)
+public sealed class NodeRepository(DbDataSource dataSource)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 

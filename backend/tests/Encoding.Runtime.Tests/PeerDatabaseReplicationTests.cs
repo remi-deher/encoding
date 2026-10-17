@@ -10,7 +10,7 @@ namespace Encoding.Runtime.Tests;
 
 public sealed class PeerDatabaseReplicationTests
 {
-    [PostgresFact]
+    [DatabaseFact]
     public async Task TransactionsReplicateGeneratedValuesBinaryColumnsAccessesTasksAndSnapshots()
     {
         await using var source = await TestDatabase.CreateAsync(TestDatabase.ConfiguredConnection, "peer_source");
@@ -83,7 +83,7 @@ public sealed class PeerDatabaseReplicationTests
         Assert.Equal(await DatabaseTransfer.CountsAsync(source.Db, CancellationToken.None), await DatabaseTransfer.CountsAsync(target.Db, CancellationToken.None));
     }
 
-    [PostgresFact]
+    [DatabaseFact]
     public async Task SharedWritesAreRolledBackWhenNoCommittedInitialStateExists()
     {
         await using var db = await TestDatabase.CreateAsync(TestDatabase.ConfiguredConnection, "peer_blocked");
@@ -114,7 +114,7 @@ public sealed class PeerDatabaseReplicationTests
         Assert.ThrowsAny<CryptographicException>(() => second.Unprotect(encrypted));
     }
 
-    [PostgresFact]
+    [DatabaseFact]
     public async Task AnUncertainFormerLeaderRepairsItsProjectionWithoutAQuorumLease()
     {
         await using var db = await TestDatabase.CreateAsync(TestDatabase.ConfiguredConnection, "peer_repair");
