@@ -17,7 +17,7 @@ L’application est ensuite disponible sur `http://localhost:4200`.
 npm run build
 ```
 
-Le frontend utilise Angular Material pour ses composants partagés. L’accueil lit les nœuds et bibliothèques via les API du cluster et s’actualise toutes les 10 secondes. Les exécutions et leur chronologie proviennent du registre PostgreSQL, actualisé toutes les cinq secondes. Les économies ne sont pas encore mesurées. Les workers n’exécutent pas encore de flows ; le registre est vide tant qu’aucune attente n’y est enregistrée. Le catalogue liste les flows en PostgreSQL. L’éditeur enregistre des versions validées et les rouvre ; leur sauvegarde JSON est effectuée dans un volume séparé. Aucun script ou outil média n’est encore lancé.
+Le frontend utilise Angular Material pour ses composants partagés. L’accueil lit les nœuds et bibliothèques via les API du cluster et s’actualise toutes les 10 secondes. Les exécutions et leur chronologie proviennent du registre de la base configurée, actualisé toutes les cinq secondes. Les économies ne sont pas encore mesurées. Les workers n’exécutent pas encore de flows ; le registre est vide tant qu’aucune attente n’y est enregistrée. Le catalogue liste les flows dans la base configurée. L’éditeur enregistre des versions validées et les rouvre ; leur sauvegarde JSON est effectuée dans un volume séparé. Aucun script ou outil média n’est encore lancé.
 
 ## Vérifications
 

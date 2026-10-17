@@ -242,16 +242,7 @@ export class NodeCatalogPageComponent {
     }),
   );
   protected readonly clusterName = computed(() =>
-    this.local.externalCluster()
-      ? (this.local.status()?.clusterName ?? 'Cluster d’accueil')
-      : (this.clusterIdentity()?.name ?? 'Cluster'),
-  );
-  protected readonly clusterAddress = computed(
-    () =>
-      this.local.target()?.apiBaseUrl ??
-      this.local.clusters().find((cluster) => cluster.id === this.local.status()?.clusterId)
-        ?.apiBaseUrl ??
-      null,
+    this.clusterIdentity()?.name ?? this.local.status()?.clusterName ?? 'Cluster',
   );
   private readonly addressForm = computed(() => clusterAddressForm(this.local.address()));
   protected readonly joinSteps = computed(() =>
@@ -269,7 +260,7 @@ export class NodeCatalogPageComponent {
   protected readonly pageState = computed(() => {
     if (this.local.loading()) return 'loading';
     if (this.pageTab() === 'cluster' && !this.clusterIdentity()) return 'error';
-    return this.pageTab() === 'cluster' && !this.local.standalone() && !this.local.externalCluster()
+    return this.pageTab() === 'cluster' && !this.local.standalone()
       ? this.loadState()
       : 'ready';
   });
@@ -389,7 +380,7 @@ export class NodeCatalogPageComponent {
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Nœuds');
   protected readonly catalogMessage = computed(() =>
     this.loadState() === 'error'
-      ? 'Impossible de joindre l’API du cluster. Vérifiez que le backend et PostgreSQL sont démarrés.'
+      ? 'Impossible de joindre l’API du cluster. Vérifiez que le serveur et sa base de données sont disponibles.'
       : 'Chargement des nœuds du cluster…',
   );
   protected readonly detailTitle = computed(

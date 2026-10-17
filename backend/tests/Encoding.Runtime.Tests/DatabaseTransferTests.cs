@@ -10,16 +10,11 @@ public sealed class DatabaseTransferTests
 {
     private static async Task<TestDatabase> MigratedAsync(string kind, string? postgres)
     {
-        var previous = Environment.GetEnvironmentVariable("ENCODING_TEST_PROVIDER");
-        Environment.SetEnvironmentVariable("ENCODING_TEST_PROVIDER", kind);
-        try
-        {
-            var database = await TestDatabase.CreateAsync(postgres, "transfer");
-            var root = Harness.RepositoryRoot();
-            await DatabaseMigrator.ApplyAsync(database.Db, root, CancellationToken.None);
-            return database;
-        }
-        finally { Environment.SetEnvironmentVariable("ENCODING_TEST_PROVIDER", previous); }
+        var database = string.Equals(kind, "sqlite", StringComparison.OrdinalIgnoreCase)
+            ? await TestDatabase.CreateSqliteAsync("transfer")
+            : await TestDatabase.CreatePostgresAsync(postgres, "transfer");
+        await DatabaseMigrator.ApplyAsync(database.Db, Harness.RepositoryRoot(), CancellationToken.None);
+        return database;
     }
 
     private static async Task SeedAsync(TestDatabase database, Guid node, Guid library, Guid execution)

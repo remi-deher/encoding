@@ -1,6 +1,6 @@
 # Backend
 
-Socle API ASP.NET Core sur .NET 10 et PostgreSQL partagé. L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`. Les décisions d’architecture sont décrites dans [`../docs/architecture/`](../docs/architecture/).
+Socle API ASP.NET Core sur .NET 10, avec SQLite local par défaut et PostgreSQL pris en charge. Les serveurs d'un cluster réconcilient progressivement leurs données via le maillage décrit dans [`0049`](../docs/architecture/0049-multi-server-shared-cluster.md). L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`.
 
 ## Développement local
 
@@ -99,7 +99,7 @@ La migration 0019 ajoute les modèles partagés. `POST /api/v1/templates/from-fl
 
 La migration 0009 ajoute les versions immuables et la file de sauvegardes. GET /api/v1/flows liste les flows ; GET /api/v1/flows/{id} et /versions/{version} lisent leurs documents ; PUT /api/v1/flows/{id} publie une version validée avec expectedVersion. Un conflit concurrent reçoit HTTP 409. La création d’exécution exige une version enregistrée.
 
-FlowBackups__Directory configure le dossier JSON. Compose monte encoding-flow-backups dans /var/lib/encoding/flow-backups, séparément de PostgreSQL. Les erreurs sont visibles dans backupStatus et retentées. En cluster multi-hôte, monter un dossier commun durable sur tous les serveurs consommateurs. Voir [0014](../docs/architecture/0014-flow-version-storage-and-backups.md) pour la récupération et les limites.
+FlowBackups__Directory configure le dossier JSON. Compose monte encoding-flow-backups dans /var/lib/encoding/flow-backups, séparément de la base. Les erreurs sont visibles dans backupStatus et retentées. En maillage SQLite, chaque serveur recrée ses propres fichiers depuis les définitions réconciliées ; le volume de sauvegarde reste local et doit être sauvegardé indépendamment. Voir [0014](../docs/architecture/0014-flow-version-storage-and-backups.md) pour la récupération et les limites.
 
 
 ## Runtime, brouillons et restauration

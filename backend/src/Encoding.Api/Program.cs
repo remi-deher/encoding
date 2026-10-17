@@ -84,8 +84,13 @@ builder.Services.AddSingleton<LibraryProcessingRepository>();
 builder.Services.AddHostedService<LibraryMonitoringService>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
 builder.Services.AddSingleton<ClusterIdentityRepository>();
+builder.Services.AddSingleton<ClusterReconciliationRepository>();
+builder.Services.AddSingleton<ClusterEntityReconciliation>();
 builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
+builder.Services.AddHttpClient("ClusterReconciliation", client => client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHostedService<ClusterReconciliationService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -120,6 +125,7 @@ app.MapOperationsEndpoints();
 app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();
 app.MapClusterEndpoints();
+app.MapClusterReconciliationEndpoints();
 app.MapNodeEndpoints();
 app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();

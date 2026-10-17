@@ -242,6 +242,17 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                 catch(ArgumentException exception) { Issue("field.invalid","/nodes/"+node.Id+"/configuration",exception.Message); }
             }
         }
+        var retryNodes=flow.Nodes.Where(node=>node?.Component is not null && node.Component.PluginId=="nodes"
+            && node.Component.ComponentId==RuntimeRetryPolicy.ComponentId).ToArray();
+        if(retryNodes.Length>1)
+            Issue("retry.policy.duplicate","/nodes","Un flow ne peut contenir qu’une seule règle de relance après perte du worker.");
+        foreach(var node in retryNodes)
+        {
+            if(!flow.Connections.Any(edge=>edge.SourceNodeId==node.Id && edge.SourceOutputId=="success"))
+                Issue("retry.policy.next.required","/nodes","La règle de relance doit être reliée à la suite du flow.");
+            try { _=RuntimeRetryPolicy.Resolve(flow); }
+            catch(ArgumentException exception) { Issue("retry.policy.invalid","/nodes/"+node.Id+"/configuration",exception.Message); }
+        }
         foreach(var node in flow.Nodes.Where(node=>node?.Component is not null && node.Configuration is not null && RuntimeWaitPolicy.IsWait(node)))
         {
             RuntimeWait wait;

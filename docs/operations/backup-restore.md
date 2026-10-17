@@ -72,11 +72,11 @@ Retirer le nœud depuis l’interface (l’identité retirée n’est jamais ré
 
 Avant une mise à jour qui apporte des migrations, faire une sauvegarde de base. Les migrations ne sont pas réversibles : le retour arrière se fait en restaurant cette sauvegarde. Pendant une mise à jour progressive, un serveur plus ancien voit des migrations qu’il ne connaît pas et se déclare `degraded`, sans cesser de servir.
 
-## Cluster sur SQLite (architecture 0043)
+## Cluster sur SQLite (architectures 0043 et 0049)
 
-Un cluster à un seul serveur peut utiliser SQLite : un fichier (`cluster.db` par défaut, dans le dossier de données du nœud), en mode WAL. Les fichiers `cluster.db-wal` et `cluster.db-shm` font partie de la base tant que le serveur tourne.
+Chaque serveur peut utiliser SQLite dans son fichier local (`cluster.db` par défaut, dans le dossier de données du nœud), en mode WAL. Les fichiers `cluster.db-wal` et `cluster.db-shm` font partie de la base tant que le serveur tourne. Le maillage réconcilie les domaines pris en charge après les coupures ; une sauvegarde reste nécessaire et les journaux de réconciliation ne remplacent pas une sauvegarde.
 
 - **Sauvegarde à chaud** : `sqlite3 cluster.db "VACUUM INTO '/sauvegardes/cluster-AAAAMMJJ.db'"` produit une copie cohérente sans arrêter le serveur.
 - **Sauvegarde à froid** : serveur arrêté, copier `cluster.db` seul (le WAL est alors vide).
 - **Restauration** : serveur arrêté, remplacer `cluster.db` par la copie et supprimer d'éventuels `cluster.db-wal` et `cluster.db-shm` restants.
-- **Passer à PostgreSQL** (second serveur nécessaire) : serveur arrêté, `Encoding.Api transfer-database --from-provider sqlite --from "Data Source=…/cluster.db" --to-provider postgres --to "Host=…"`, puis démarrer le serveur avec la chaîne PostgreSQL. La cible doit être vide ; la source n'est pas modifiée et sert de retour arrière.
+- **Passer à PostgreSQL** (facultatif) : serveur arrêté, `Encoding.Api transfer-database --from-provider sqlite --from "Data Source=…/cluster.db" --to-provider postgres --to "Host=…"`, puis démarrer le serveur avec la chaîne PostgreSQL. La cible doit être vide ; la source n'est pas modifiée et sert de retour arrière. Cette commande copie une base ; elle ne fusionne pas deux bases ayant évolué séparément.

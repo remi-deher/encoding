@@ -391,15 +391,18 @@ internal static partial class Harness
             var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The original frozen target must receive the relay.");
             Check(received.PluginConfigurations!["nodes"]["targetNodeId"].GetGuid()==b,"The receiver retains the original configuration snapshot.");
             Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel frozen fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
+            var staleGlobal=await configurations.SaveGlobalAsync(plugin,new(0,new Dictionary<string,JsonElement>{["targetNodeId"]=J(c)}),CancellationToken.None);
+            Check(staleGlobal?.Revision==saved.Revision+2 && staleGlobal.Values["targetNodeId"].GetGuid()==c,"A stale global configuration save wins when it commits last.");
             var overrideFlow=Guid.NewGuid();
             var overrideSaved=await configurations.SaveFlowAsync(overrideFlow,plugin,new(0,new Dictionary<string,JsonElement>{["mode"]=J("eligible")}),CancellationToken.None);
             Check(overrideSaved is not null,"Create a flow-specific plugin override.");
             var overrideUpdated=await configurations.SaveFlowAsync(overrideFlow,plugin,new(overrideSaved!.Revision,new Dictionary<string,JsonElement>{["mode"]=J("node"),["targetNodeId"]=J(b)}),CancellationToken.None);
             Check(overrideUpdated?.Revision==overrideSaved.Revision+1,"An existing flow override can be updated.");
-            Check(await configurations.SaveFlowAsync(overrideFlow,plugin,new(overrideSaved.Revision,new Dictionary<string,JsonElement>{["targetNodeId"]=J(c)}),CancellationToken.None) is null,"A stale override revision cannot overwrite newer settings.");
+            var staleOverride=await configurations.SaveFlowAsync(overrideFlow,plugin,new(overrideSaved.Revision,new Dictionary<string,JsonElement>{["targetNodeId"]=J(c)}),CancellationToken.None);
+            Check(staleOverride?.Revision==overrideUpdated!.Revision+1,"A stale editor save is accepted and becomes the latest committed configuration.");
             await using var connection=await db.OpenConnectionAsync();await using var transaction=await connection.BeginTransactionAsync();
             var effective=await configurations.ResolveEffectiveAsync(overrideFlow,["nodes"],connection,transaction,CancellationToken.None);
-            Check(effective["nodes"]["targetNodeId"].GetGuid()==b,"A flow override takes precedence over global settings.");
+            Check(effective["nodes"]["targetNodeId"].GetGuid()==c,"The last committed flow override takes precedence over global settings.");
         }
         private async Task ExpireAsync(Guid id)
         {
@@ -408,10 +411,8 @@ internal static partial class Harness
         }
         private async Task RecoverCancellationAsync(Guid id)
         {
-            using var service=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
-            await service.StartAsync(CancellationToken.None);
-            for(var retry=0;retry<50 && (await executions.GetAsync(id,CancellationToken.None))!.State!="cancelled";retry++) await Task.Delay(100);
-            await service.StopAsync(CancellationToken.None);
+            var service=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await service.ProcessOnceAsync(CancellationToken.None);
             Check((await executions.GetAsync(id,CancellationToken.None))!.State=="cancelled","Cancellation recovery must finish.");
             await using var command=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id");command.Parameters.AddWithValue("id",id);
             Check((long)(await command.ExecuteScalarAsync())! ==0,"Cancellation releases the reservation.");
@@ -478,9 +479,11 @@ internal static partial class Harness
             Check(!Directory.EnumerateFiles(options.DataDirectory,"*",SearchOption.AllDirectories).Any(),"An early relay must not materialize media on the first worker.");
             var received=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The early runner must yield.");
             Check(received.Checkpoint?.Context.Variables["selected"].GetInt32()==42,"The runner persists variables before the relay.");
-            await ExpireAsync(id);var resumed=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("Receiver crash must resume.");
-            Check(resumed.Checkpoint?.NextNodeId=="end" && resumed.Epoch>received.Epoch,"Lease expiration resumes after the relay without repeating it.");
-            Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel early fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
+            await ExpireAsync(id);
+            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"An interrupted receiver attempt is not reassigned under the same execution.");
+            var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="failed","The disconnected receiver leaves the attempt in error.");
         }
         public async Task CancellationAsync()
         {

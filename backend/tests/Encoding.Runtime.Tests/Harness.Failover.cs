@@ -156,42 +156,48 @@ internal static partial class Harness
             context=context with { Variables=new Dictionary<string,JsonElement>{["kept"]=J(7)} };
             await CompleteAsync(id,a,first,"entry",context); await CompleteAsync(id,a,first,"variable",context);
 
-            await ExpireAsync(id); // the worker running on node a stops renewing; node a stays reachable as the library access point.
-            await using(var lost=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=0 WHERE id=@id")){ lost.Parameters.AddWithValue("id",a); await lost.ExecuteNonQueryAsync(); }
-            Check(await runtime.ClaimAsync(a,CancellationToken.None) is null,"The lost worker cannot claim anything.");
-            // The access node itself is unreachable: transfer workers cannot reach the media, so nobody takes it and nothing is lost.
-            await using(var offline=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@id")){ offline.Parameters.AddWithValue("id",a); await offline.ExecuteNonQueryAsync(); }
-            Check(await runtime.ClaimAsync(b,CancellationToken.None) is null && await runtime.ClaimAsync(c,CancellationToken.None) is null,"No transfer worker takes over while the library access node is offline.");
-            await using(var back=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp() WHERE id=@id")){ back.Parameters.AddWithValue("id",a); await back.ExecuteNonQueryAsync(); }
-            // Vidange, quarantaine et incompatibilité de version (0041) : aucun de ces nœuds ne reprend l'exécution abandonnée.
-            foreach(var restriction in new[]{"draining=true","quarantined=true","incompatible_reason='protocole trop ancien'"})
-            {
-                await using(var set=db.CreateCommand($"UPDATE cluster_nodes SET {restriction} WHERE id=ANY(@ids)")){ set.Parameters.AddWithValue("ids",new[]{b,c}); await set.ExecuteNonQueryAsync(); }
-                Check(await runtime.ClaimAsync(b,CancellationToken.None) is null && await runtime.ClaimAsync(c,CancellationToken.None) is null,$"A node that is not accepting work ({restriction}) takes nothing.");
-                await using(var clear=db.CreateCommand("UPDATE cluster_nodes SET draining=false,quarantined=false,incompatible_reason=NULL WHERE id=ANY(@ids)")){ clear.Parameters.AddWithValue("ids",new[]{b,c}); await clear.ExecuteNonQueryAsync(); }
-            }
-            var claims=await Task.WhenAll(runtime.ClaimAsync(b,CancellationToken.None),runtime.ClaimAsync(c,CancellationToken.None));
-            Check(claims.Count(claim=>claim?.ExecutionId==id)==1,"Exactly one surviving worker takes over the abandoned execution.");
-            var taker=claims.Single(claim=>claim?.ExecutionId==id)!; var takerNode=claims[0]?.ExecutionId==id?b:c; var other=takerNode==b?c:b;
-            Check(taker.Epoch>first.Epoch && taker.Attempt==first.Attempt,"The takeover is the same attempt under a higher epoch.");
-            Check(taker.Checkpoint?.NextNodeId=="end" && taker.Checkpoint.Context.Variables["kept"].GetInt32()==7,"The new worker resumes from the last durable checkpoint, without repeating completed steps.");
-            Check(await runtime.RenewAsync(id,a,first.Epoch,CancellationToken.None) is null,"The lost worker is fenced when it comes back.");
-            Check(await runtime.StartStepAsync(id,a,new(first.Epoch,"end"),CancellationToken.None) is null,"A returning worker cannot start a step with the old epoch.");
-            Check(!await artifacts.AuthorizeAsync(id,a,first.Epoch,CancellationToken.None),"A returning worker cannot read artifacts with the old epoch.");
-            Check(!await new RuntimeTransferRepository(db).FinishAsync(id,a,new(first.Epoch,Guid.NewGuid(),first.Revision,"failed","Stale worker",null,null),CancellationToken.None),"A returning worker cannot finish the execution.");
-            Check(await runtime.ClaimAsync(other,CancellationToken.None) is null,"No other worker can take an execution that has a valid lease.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id AND lease_epoch=@epoch",("id",id),("epoch",taker.Epoch))==1,"A single reservation follows the new epoch.");
-
-            // The replacement worker is lost in turn.
             await ExpireAsync(id);
-            var third=await runtime.ClaimAsync(other,CancellationToken.None)??throw new InvalidOperationException("The remaining worker must take over.");
-            Check(third.ExecutionId==id && third.Epoch>taker.Epoch,"Epochs increase on every takeover.");
-            Check(await runtime.RenewAsync(id,takerNode,taker.Epoch,CancellationToken.None) is null,"The second lost worker is fenced as well.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE library_id=@library",("library",third.LibraryId!.Value))==1,"Only one execution holds the media at any time.");
-            await CompleteAsync(id,other,third,"end",context);
-            Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up the failover fixture.");
-            await ExpireAsync(id); await RecoverCancellationAsync(id);
-            Console.WriteLine("PASS: worker loss — lease expiry, single takeover, checkpoint resume, stale-epoch fencing and successive failures.");
+            var claims=await Task.WhenAll(runtime.ClaimAsync(a,CancellationToken.None),runtime.ClaimAsync(b,CancellationToken.None),runtime.ClaimAsync(c,CancellationToken.None));
+            Check(claims.All(claim=>claim is null),"An expired assigned task is not silently resumed by any worker.");
+            var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="failed","The interrupted attempt is published as failed.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id",("id",id))==0,"Failure releases the media reservation.");
+
+            await using(var lost=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=0 WHERE id=@id")){ lost.Parameters.AddWithValue("id",a); await lost.ExecuteNonQueryAsync(); }
+            var retryId=await executions.RetryAsync(id,CancellationToken.None)??throw new InvalidOperationException("An explicit retry must create a new execution.");
+            var retry=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The eligible surviving worker must claim the explicit retry.");
+            Check(retry.ExecutionId==retryId && retry.ExecutionId!=id && retry.Attempt==first.Attempt+1,"An explicit retry uses a new execution ID and increments the attempt number.");
+            Check(retry.Checkpoint is null && retry.EntryNodeId=="entry","A retry starts the flow again instead of resuming the interrupted checkpoint.");
+            Check(await runtime.RenewAsync(id,a,first.Epoch,CancellationToken.None) is null,"The disconnected worker is fenced after failure.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM execution_events WHERE execution_id=@id AND state='failed'",("id",id))==1,"The failed state remains in the execution history.");
+            Check(await executions.CancelAsync(retryId,CancellationToken.None),"Clean up the explicit retry.");await ExpireAsync(retryId);await RecoverCancellationAsync(retryId);
+            Console.WriteLine("PASS: worker loss fails the attempt; explicit retry creates a fresh execution from the flow entry.");
+        }
+
+        public async Task BoundedFlowRetryAsync()
+        {
+            await ResetNodesAsync();
+            var entry=Node(registry,"entry","base-input-file");
+            var policy=Node(registry,"retry","nodes-retry-on-worker-loss");
+            var flow=Chain(entry,policy,Node(registry,"end","base-complete-flow"));
+            var(id,first,_)=await EnqueueAsync(flow);
+            await ExpireAsync(id);
+            var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="failed","The original lost attempt is recorded as failed.");
+            var retryId=await ScalarAsync<Guid>("SELECT id FROM executions WHERE retry_of=@id",("id",id));
+            Check(retryId!=Guid.Empty,"The flow policy creates a fresh attempt automatically.");
+            Check(await ScalarAsync<int>("SELECT attempt FROM executions WHERE id=@id",("id",retryId))==first.Attempt+1,"The automatic retry increments the attempt count.");
+            Check(await ScalarAsync<Guid>("SELECT previous_worker_node_id FROM execution_work WHERE execution_id=@id",("id",retryId))==a,"The failed worker is excluded from its automatic retry.");
+            await using(var unavailable=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=0 WHERE id=@id")){ unavailable.Parameters.AddWithValue("id",a); await unavailable.ExecuteNonQueryAsync(); }
+            var retry=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The retry must go to another eligible worker.");
+            Check(retry.ExecutionId==retryId && retry.Checkpoint is null && retry.EntryNodeId=="entry","A flow retry starts at its own entry with isolated artifacts.");
+            await ExpireAsync(retryId);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(retryId,CancellationToken.None))!.State=="failed","A second lost attempt also fails.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM executions WHERE retry_of=@id",("id",retryId))==0,"The flow's one-retry limit prevents an unbounded loop.");
+            Console.WriteLine("PASS: flow retry policy is opt-in, excludes the failed worker, starts a new execution, and obeys its retry limit.");
         }
 
         /// <summary>Accès direct sur plusieurs nœuds : la perte du worker détenteur n'attend pas son retour, et son nœud, resté en ligne, ne fige pas la reprise.</summary>

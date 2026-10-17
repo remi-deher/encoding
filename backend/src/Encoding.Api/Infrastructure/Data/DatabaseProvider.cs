@@ -5,8 +5,8 @@ using Npgsql;
 namespace Encoding.Api.Infrastructure.Data;
 
 /// <summary>
-/// Choix du fournisseur de base de données (architecture 0043). <c>Database:Provider</c> vaut « postgres » (défaut) ou « sqlite » ;
-/// SQLite est réservé aux clusters à un seul serveur. La chaîne de connexion « Cluster » est celle du fournisseur choisi.
+/// Choix du fournisseur de base de données (architectures 0043/0049). <c>Database:Provider</c> vaut « postgres » ou « sqlite » ;
+/// chaque serveur peut utiliser son fichier SQLite local et réconcilier ses données avec le cluster. La chaîne « Cluster » est celle du fournisseur choisi.
 /// </summary>
 public static class DatabaseProvider
 {

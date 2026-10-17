@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "nodes",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Nœuds",
   "supportedHostContractVersions": [
     1
@@ -57,7 +57,8 @@
       "requiresMedia": false,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -111,7 +112,8 @@
       "requiresMedia": false,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -183,6 +185,29 @@
             "description": "Toutes les conditions doivent correspondre : gpu=nvidia,region=eu.",
             "placeholder": "gpu=nvidia,region=eu"
           }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": ["1.1.0"]
+    },
+    {
+      "id": "nodes-retry-on-worker-loss",
+      "version": "1.0.0",
+      "name": "Relancer sur perte du worker",
+      "description": "Autorise un nombre borné de nouvelles tentatives depuis le début du flow si un worker perd sa connexion. Les tentatives ont chacune leurs propres sorties.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": ["video", "image", "music", "subtitles"],
+      "outputs": [{"id":"success","label":"Suite","description":"La règle de relance est activée pour ce flow."}],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {"id":"maxRetries","type":"number","label":"Nombre maximal de relances","defaultValue":1,"min":1,"max":10,"inline":true},
+          {"id":"targetNodeId","type":"text","label":"Worker précis (facultatif)","placeholder":"UUID du worker"},
+          {"id":"targetGroupId","type":"text","label":"Groupe de workers (facultatif)","placeholder":"UUID du groupe"},
+          {"id":"requiredLabels","type":"text","label":"Étiquettes requises (facultatif)","placeholder":"gpu=nvidia,region=eu"}
         ]
       },
       "requiredTools": [],

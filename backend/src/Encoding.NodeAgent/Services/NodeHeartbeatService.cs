@@ -58,7 +58,7 @@ public sealed class NodeHeartbeatService(
                         {
                             await identityStore.MarkEnrolledAsync(stoppingToken);
                             logger.LogInformation("L’enrôlement en attente du worker {NodeId} a été confirmé par le cluster.", identity.Id);
-                            await enrollment.CompleteSwitchAsync(identity.ApiBaseUrl!, stoppingToken);
+                            await enrollment.CompleteSwitchAsync(stoppingToken);
                         }
                         logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", identity.Id);
                         var node = await response.Content.ReadFromJsonAsync<NodeResponse>(AgentJson.Options, stoppingToken);

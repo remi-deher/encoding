@@ -2,13 +2,13 @@
 
 ## Décision
 
-Le plugin intégré Nœuds ajoute `nodes-handoff` : un point de relais dans un flow séquentiel. L'exécution, sa tentative, sa version publiée et la réservation du média restent identiques. Le prochain bloc s'exécute sous un nouveau bail sur un autre worker.
+Le plugin intégré Nœuds ajoute `nodes-handoff` : un point de relais dans un flow séquentiel. L'exécution, sa tentative, sa version publiée et la réservation du média restent identiques. Le prochain bloc s'exécute sous un nouveau bail sur un autre worker. Si ce worker perd ensuite son bail, cette tentative échoue ; elle ne reprend pas automatiquement au checkpoint.
 
 Le sélecteur choisit un nœud précis ou un worker éligible. Sa configuration résulte des valeurs globales du plugin, des surcharges du flow puis de celles du bloc. Les configurations effectives des plugins sont figées à la première attribution et conservées chiffrées dans PostgreSQL pour les reprises et les relais. Une cible absente, retirée, occupée ou incompatible laisse le relais en attente ; aucun repli sur le worker précédent n'est autorisé.
 
 ## Transition atomique
 
-La fin du bloc et la demande de relais sont enregistrées dans une seule transaction : checkpoint, événement, révocation du bail et changement d'époque. La réservation reste durable pendant l'attente et ne peut être récupérée que par la même exécution. Une nouvelle attribution rétablit un bail de 60 secondes et une réservation avec la nouvelle époque. Toute requête de l'ancien worker est refusée. Une répétition du checkpoint identique est reconnue sans effectuer de nouveau relais.
+La fin du bloc et la demande de relais sont enregistrées dans une seule transaction : checkpoint, événement, révocation du bail et changement d'époque. La réservation reste durable pendant l'attente du destinataire. Une attribution du relais rétablit un bail de 60 secondes et une réservation avec la nouvelle époque. Toute requête de l'ancien worker est refusée. Une répétition du checkpoint identique est reconnue sans effectuer de nouveau relais. L'expiration d'un bail après attribution au destinataire clôt la tentative en échec et libère la réservation.
 
 L'état public reste `running` avec un détail « relais en attente » ; `execution_work.handoff_pending` distingue cette phase sans introduire un nouvel état public incompatible. L'annulation en attente libère la réservation via le mécanisme de récupération existant.
 
@@ -24,7 +24,7 @@ La matérialisation locale est différée jusqu'à une étape qui nécessite un 
 
 La première version utilise le stockage durable partagé et les endpoints de transfert existants. Le transfert direct entre workers pourra être ajouté avec négociation authentifiée, reprise, contrôle d'intégrité et repli vers ce stockage. Aucun serveur permanent ni connexion directe entre workers n'est nécessaire.
 
-Le plugin Nœuds passe en version 1.1.0, tout en gardant les références 1.0.0 des deux contraintes historiques résolubles. Le champ facultatif `compatiblePluginVersions` d'un descripteur déclare ces références compatibles ; le registre, l'éligibilité et l'éditeur utilisent la même déclaration. La référence originale du bloc est conservée. Le nouveau bloc n'est attribué qu'aux agents annonçant 1.1.0. Un agent ancien ne peut pas réclamer un segment qui contient un relais.
+Le plugin Nœuds passe en version 1.2.0 avec le bloc de relance bornée. Les références 1.0.0 et 1.1.0 des composants précédents restent résolubles. Le nouveau bloc n'est attribué qu'aux agents annonçant 1.2.0 ; les anciens agents ne connaissent pas sa règle d'exécution.
 
 ## Garanties à vérifier
 

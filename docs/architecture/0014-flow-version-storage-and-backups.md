@@ -20,7 +20,7 @@ Le fichier contient le document portable, sans wrapper ni code d’interface. Un
 
 Le statut pending/ready/failed est indépendant de la version. Un échec est retenté toutes les 30 secondes. Une sauvegarde réussie est revérifiée toutes les 10 minutes ; un fichier manquant est recréé depuis la version immuable. Les fichiers temporaires de l’écriture courante sont nettoyés ; aucune suppression des instantanés n’est programmée.
 
-En multi-serveur sur plusieurs machines, tous les consommateurs doivent monter le même dossier durable ou un système de fichiers partagé adéquat. Un volume Docker local ne remplace pas une réplication ou une sauvegarde du stockage de l’hôte.
+Avec le maillage SQLite, les définitions et les entrées de la file de sauvegarde sont réconciliées, mais le statut de sauvegarde reste propre à chaque serveur. Chaque serveur régénère et vérifie ses propres fichiers depuis les versions répliquées ; le même dossier n'a donc pas besoin d'être monté sur tous les hôtes. Un volume Docker local doit tout de même être sauvegardé si l'on veut conserver ce filet de sécurité indépendant de la base.
 
 ## Exécutions
 

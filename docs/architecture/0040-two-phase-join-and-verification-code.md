@@ -9,7 +9,7 @@ Avant : un nœud qui changeait de cluster quittait d'abord l'ancien. Un échec e
 Maintenant, depuis un nœud déjà rattaché :
 
 1. **Mise de côté.** L'identité actuelle (identifiant, jeton, cluster) est conservée telle quelle dans l'identité locale. Une identité neuve attend l'accueil du nouveau cluster, avec une échéance de 12 minutes (la clé de jumelage vit 10 minutes). Pendant l'attente, le nœud continue d'envoyer sa présence à l'ancien cluster : ses baux et ses tâches ne sont pas touchés, et son serveur local reste en marche.
-2. **Confirmation.** Dès que le nouveau cluster accepte le nœud (enrôlement direct réussi, ou premier signal de présence accepté après approbation), l'ancien cluster est prévenu au mieux (`leave`) et son identité est oubliée ; le serveur local s'arrête si le cluster d'accueil n'est pas celui du conteneur (0039).
+2. **Confirmation.** Dès que le nouveau cluster accepte le nœud (enrôlement direct réussi, ou premier signal de présence accepté après approbation), l'ancien cluster est prévenu au mieux (`leave`) et son identité est oubliée. Le serveur local reste actif, selon la règle 0049.
 3. **Retour arrière.** Si le cluster d'accueil est injoignable, refuse la demande ou n'approuve pas avant l'échéance, l'ancien rattachement est rétabli à l'identique, sans rien avoir envoyé à l'ancien cluster. La raison est conservée et affichée dans la console (« changement annulé : … »). Annuler à la main fait la même chose.
 
 ## Code de vérification

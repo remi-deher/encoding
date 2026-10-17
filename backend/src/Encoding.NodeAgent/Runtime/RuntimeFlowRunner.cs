@@ -172,6 +172,10 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(handoff.Mode=="node" && handoff.TargetNodeId==client.NodeId)
                             throw new IOException("Le relais doit sélectionner un autre worker.");
                     }
+                    else if(node.Component.PluginId=="nodes" && node.Component.ComponentId==RuntimeRetryPolicy.ComponentId)
+                    {
+                        // This block declares an execution policy; retry decisions are made by the server after a lost lease.
+                    }
                     else if(node.Component.PluginId=="nodes"
                         && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability"))
                     {

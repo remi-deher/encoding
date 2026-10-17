@@ -74,6 +74,9 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
     public Task UncertainPluginSideEffectIsNotRepeatedAfterWorkerLoss() => Scenarios.UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync();
 
     [PostgresFact]
+    public Task FlowRetryPolicyIsBounded() => Scenarios.BoundedFlowRetryAsync();
+
+    [PostgresFact]
     public Task ServerLossFailover() => Scenarios.ServerLossFailoverAsync();
 
     [MediaToolsFact]

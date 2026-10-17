@@ -29,17 +29,25 @@ public sealed class TestDatabase : IAsyncDisposable
 
     public static async Task<TestDatabase> CreateAsync(string? postgresConnection, string prefix)
     {
+        if (IsSqlite) return await CreateSqliteAsync(prefix);
+        return await CreatePostgresAsync(postgresConnection, prefix);
+    }
+
+    public static async Task<TestDatabase> CreatePostgresAsync(string? postgresConnection, string prefix)
+    {
         var name = prefix + "_" + Guid.NewGuid().ToString("N");
-        if (IsSqlite)
-        {
-            var path = Path.Combine(Path.GetTempPath(), name + ".db");
-            var connection = $"Data Source={path};Pooling=False";
-            return new(connection, new SqliteDataSource(connection), null, null, path);
-        }
         ArgumentException.ThrowIfNullOrWhiteSpace(postgresConnection);
         await using (var admin = NpgsqlDataSource.Create(postgresConnection)) await admin.CreateCommand($"CREATE SCHEMA {name}").ExecuteNonQueryAsync();
         var cluster = new NpgsqlConnectionStringBuilder(postgresConnection) { SearchPath = name }.ConnectionString;
         return new(cluster, NpgsqlDataSource.Create(cluster), postgresConnection, name, null);
+    }
+
+    public static Task<TestDatabase> CreateSqliteAsync(string prefix)
+    {
+        var name = prefix + "_" + Guid.NewGuid().ToString("N");
+        var path = Path.Combine(Path.GetTempPath(), name + ".db");
+        var connection = $"Data Source={path};Pooling=False";
+        return Task.FromResult(new TestDatabase(connection, new SqliteDataSource(connection), null, null, path));
     }
 
     /// <summary>Second accès à la même base, comme un second serveur du cluster.</summary>

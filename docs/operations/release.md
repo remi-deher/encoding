@@ -23,7 +23,7 @@ Calculé par `.github/scripts/next-version.sh` à partir du dernier tag `vX.Y.Z`
 
 ## Utiliser l'image
 
-Sans configuration de base de données, l'image utilise SQLite dans le dossier de données (`/var/lib/encoding-node/cluster.db`), ce qui convient à un cluster à un seul serveur (architecture 0043) :
+Sans configuration de base de données, l'image utilise SQLite dans le dossier de données (`/var/lib/encoding-node/cluster.db`). Chaque serveur garde son propre fichier ; les données se réconcilient par le maillage opportuniste 0049 :
 
 ```
 docker run -d --name encoding -p 8080:8080 \
@@ -32,7 +32,7 @@ docker run -d --name encoding -p 8080:8080 \
   <utilisateur>/encoding:latest
 ```
 
-Pour PostgreSQL (obligatoire dès qu'un cluster a plusieurs serveurs), fournir la chaîne de connexion : le fournisseur est alors déduit de la chaîne (`Host=…`), ou imposé par `Database__Provider=postgres|sqlite`.
+Pour utiliser PostgreSQL comme base commune, fournir la chaîne de connexion : le fournisseur est alors déduit de la chaîne (`Host=…`), ou imposé par `Database__Provider=postgres|sqlite`. Pour le maillage SQLite, configurer le même `Cluster__Reconciliation__SharedSecret` (au moins 32 octets) sur chaque serveur ; les pairs mDNS du même cluster sont découverts automatiquement. Les pairs hors découverte locale peuvent être ajoutés via `Cluster__Reconciliation__Peers__0`, `__1`, etc.
 
 ```
   -e ConnectionStrings__Cluster="Host=...;Database=encoding;Username=...;Password=..."

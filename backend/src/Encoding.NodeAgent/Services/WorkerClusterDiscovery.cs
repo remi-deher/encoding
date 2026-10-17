@@ -195,7 +195,10 @@ public sealed class WorkerClusterDiscovery(
         if (!Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return;
 
-        var cluster = new DiscoveredCluster(clusterId, service.InstanceName, uri.AbsoluteUri.EndsWith('/') ? uri.AbsoluteUri : uri.AbsoluteUri + '/', DateTimeOffset.UtcNow);
+        var clusterName = service.Properties.TryGetValue("clusterName", out var configuredName) && !string.IsNullOrWhiteSpace(configuredName)
+            ? configuredName
+            : service.InstanceName;
+        var cluster = new DiscoveredCluster(clusterId, clusterName, uri.AbsoluteUri.EndsWith('/') ? uri.AbsoluteUri : uri.AbsoluteUri + '/', DateTimeOffset.UtcNow);
         clusters[clusterId] = cluster;
         logger.LogInformation("Cluster découvert : {ClusterName} ({ClusterId}).", cluster.Name, cluster.Id);
     }
