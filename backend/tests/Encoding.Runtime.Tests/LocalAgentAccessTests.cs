@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Encoding.Api.Nodes;
+using Encoding.Contracts.Nodes;
 using Encoding.Core.Nodes;
 using Encoding.NodeAgent;
 using Microsoft.AspNetCore.Builder;
@@ -142,6 +143,99 @@ public sealed class LocalAgentAccessTests
             using var leaveResponse = await client.PostAsync("/api/v1/local-node/leave", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
             Assert.Equal(HttpStatusCode.NoContent, leaveResponse.StatusCode);
             Assert.Empty(await leaveResponse.Content.ReadAsByteArrayAsync());
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SetupAppliesDisplayNameWhenLocalNodeEnrolledBeforeRestartAndInitializesRootKeyOnCreateCluster()
+    {
+        using var fixture = new SecretFile();
+        await using var agent = Agent(fixture.Path);
+        var root = Path.Combine(Path.GetTempPath(), "encoding-setup-displayname-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var dbPath = Path.Combine(root, "cluster.db");
+            var localNodeId = Guid.NewGuid();
+            var localNodeToken = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+
+            WebApplicationFactory<Encoding.Api.Auth.AuthOptions> CreateServer() =>
+                new WebApplicationFactory<Encoding.Api.Auth.AuthOptions>().WithWebHostBuilder(builder =>
+                {
+                    builder.UseSetting(WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
+                    builder.UseSetting("Logging:LogLevel:Default", "Error");
+                    builder.UseSetting("ConnectionStrings:Cluster", $"Data Source={dbPath};Pooling=False");
+                    builder.UseSetting("Database:Provider", "sqlite");
+                    builder.UseSetting("Node:DataDirectory", root);
+                    builder.UseSetting("Auth:Enabled", "false");
+                    builder.UseSetting(LocalEnrollment.SecretFileSetting, fixture.Path);
+                    builder.ConfigureServices(services =>
+                    {
+                        foreach (var descriptor in services.Where(item => item.ServiceType == typeof(IHostedService)).ToArray())
+                            services.Remove(descriptor);
+                        services.AddHttpClient(LocalNodeEndpoints.HttpClientName, client =>
+                        {
+                            client.BaseAddress = new Uri("http://127.0.0.1:8081/");
+                        }).ConfigurePrimaryHttpMessageHandler(() => new LocalAgentAuthenticationHandler(fixture.Configuration)
+                        {
+                            InnerHandler = agent.Server.CreateHandler()
+                        });
+                    });
+                });
+
+            // 1. First boot: local worker enrolls before /setup is completed.
+            await using (var firstBoot = CreateServer())
+            {
+                using var firstClient = firstBoot.CreateClient();
+                using var enrollMessage = new HttpRequestMessage(HttpMethod.Post, "/api/v1/nodes/enroll")
+                {
+                    Content = JsonContent.Create(new Encoding.Contracts.Nodes.NodeEnrollmentRequest(
+                        localNodeId,
+                        "encoding-host",
+                        [NodeRole.Server, NodeRole.Worker],
+                        1,
+                        [],
+                        localNodeToken))
+                };
+                enrollMessage.Headers.Add(LocalEnrollment.HeaderName, LocalEnrollment.Read(fixture.Path)!);
+                using var enrollResponse = await firstClient.SendAsync(enrollMessage);
+                Assert.Equal(HttpStatusCode.OK, enrollResponse.StatusCode);
+            }
+
+            // 2. Second boot (simulating container restart before /setup, so LocalNodeRegistry in memory starts empty):
+            await using (var secondBoot = CreateServer())
+            {
+                using var secondClient = secondBoot.CreateClient();
+                secondClient.DefaultRequestHeaders.Add(Encoding.Api.Auth.ManagementAccessHandler.CsrfHeader, "1");
+
+                using var setupResponse = await secondClient.PostAsJsonAsync(
+                    "/api/v1/auth/setup",
+                    new Encoding.Contracts.Auth.SetupRequest(
+                        NodeDisplayName: "Serveur Principal",
+                        Mode: "createCluster",
+                        ClusterName: "Cluster Salon"));
+                Assert.Equal(HttpStatusCode.Created, setupResponse.StatusCode);
+
+                // Display name is saved on the already-enrolled local node in cluster_nodes:
+                var nodesJson = await secondClient.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/v1/nodes");
+                var updatedNode = Assert.Single(nodesJson.EnumerateArray(), n => n.GetProperty("id").GetGuid() == localNodeId);
+                Assert.Equal("Serveur Principal", updatedNode.GetProperty("displayName").GetString());
+
+                // And /api/v1/local-node/status also enriches displayName with the saved name:
+                var statusJson = await secondClient.GetFromJsonAsync<System.Text.Json.JsonElement>("/api/v1/local-node/status");
+                Assert.Equal("Serveur Principal", statusJson.GetProperty("displayName").GetString());
+
+                // And creating the cluster during setup initialized the root admission and cluster data key:
+                var keyStore = secondBoot.Services.GetRequiredService<Encoding.Api.Infrastructure.ClusterDataKeyStore>();
+                var clusterIdentity = await secondBoot.Services.GetRequiredService<Encoding.Api.Infrastructure.ClusterIdentityRepository>().GetAsync(CancellationToken.None);
+                Assert.False(clusterIdentity.Standalone);
+                Assert.Equal("Cluster Salon", clusterIdentity.Name);
+                Assert.True(keyStore.HasKey(clusterIdentity.Id));
+            }
         }
         finally
         {

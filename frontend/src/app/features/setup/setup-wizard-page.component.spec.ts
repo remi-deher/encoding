@@ -164,4 +164,23 @@ describe('SetupWizardPageComponent', () => {
     });
     expect(navigateFn).toHaveBeenCalledWith(['/']);
   });
+
+  it('passes custom nodeName when requesting cluster join and finishing setup', async () => {
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const localController = fixture.debugElement.injector.get(LocalNodeController);
+
+    component['nodeName'].set('Worker Garage');
+    component['selectedMode'].set('joinCluster');
+    await component['requestClusterJoin']();
+
+    expect(localController.sendRequest).toHaveBeenCalledWith('Worker Garage');
+
+    await component['submitJoinFinish']();
+    expect(setupFn).toHaveBeenCalledWith({
+      nodeDisplayName: 'Worker Garage',
+      mode: 'joinCluster',
+    });
+  });
 });

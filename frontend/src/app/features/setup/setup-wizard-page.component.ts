@@ -959,7 +959,7 @@ export class SetupWizardPageComponent {
     this.errorMessage.set('');
     this.busy.set(true);
     try {
-      await this.localController.sendRequest();
+      await this.localController.sendRequest(this.effectiveNodeName());
       if (this.localController.error()) {
         this.errorMessage.set(this.localController.error());
       }

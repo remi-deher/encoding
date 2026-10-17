@@ -247,14 +247,16 @@ export class LocalNodeController {
     if (cluster) void this.verifyAddress({ address: cluster.apiBaseUrl });
   }
 
-  async sendRequest(): Promise<void> {
+  async sendRequest(displayName?: string): Promise<void> {
     const target = this.target();
     if (!target || !this.canJoin()) return;
+    const effectiveDisplayName =
+      displayName?.trim() || this.status()?.displayName?.trim() || undefined;
     await this.run(
       this.http.post<LocalNodePairing>('/api/v1/local-node/pairing-key', {
         clusterId: target.id,
         leaveCurrent: !!this.status()?.clusterId,
-        displayName: this.status()?.displayName ?? undefined,
+        displayName: effectiveDisplayName,
       }),
       (pairing) => {
         this.pairing.set(pairing);

@@ -165,7 +165,6 @@ interface MemberCard {
   readonly sections: readonly ResourceCardSection[];
 }
 
-
 interface NodeRecord extends DataTableRow {
   readonly id: string;
   readonly name: string;
@@ -259,7 +258,11 @@ export class NodeCatalogPageComponent {
     () => this.nodes().find((node) => node.id === this.local.status()?.nodeId) ?? null,
   );
   protected readonly localName = computed(
-    () => this.localNode()?.displayName?.trim() || this.local.status()?.name || 'Ce nœud',
+    () =>
+      this.localNode()?.displayName?.trim() ||
+      this.local.status()?.displayName?.trim() ||
+      this.local.status()?.name ||
+      'Ce nœud',
   );
   /** Tâches actives du nœud local ; inconnues tant que la source n'a pas répondu. */
   protected readonly localActivity = toSignal(
@@ -289,8 +292,8 @@ export class NodeCatalogPageComponent {
       activeTasks: this.localActivity()?.active ?? null,
     }),
   );
-  protected readonly clusterName = computed(() =>
-    this.clusterIdentity()?.name ?? this.local.status()?.clusterName ?? 'Cluster',
+  protected readonly clusterName = computed(
+    () => this.clusterIdentity()?.name ?? this.local.status()?.clusterName ?? 'Cluster',
   );
   protected readonly clusterAddress = computed(
     () =>
@@ -316,9 +319,7 @@ export class NodeCatalogPageComponent {
     if (this.pageTab() === 'groups') return this.groupState();
     if (this.local.loading()) return 'loading';
     if (this.pageTab() === 'cluster' && !this.clusterIdentity()) return 'error';
-    return this.pageTab() === 'cluster' && !this.local.standalone()
-      ? this.loadState()
-      : 'ready';
+    return this.pageTab() === 'cluster' && !this.local.standalone() ? this.loadState() : 'ready';
   });
   protected onManagementTabChange(tab: string): void {
     if (this.local.busy()) return;

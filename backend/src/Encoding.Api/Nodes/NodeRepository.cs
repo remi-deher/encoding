@@ -373,10 +373,30 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
     /// <summary>Donne un nom convivial à un nœud qui n'en a pas encore ; ne remplace jamais un nom choisi par un administrateur.</summary>
     public async Task SetDisplayNameIfUnsetAsync(Guid nodeId, string displayName, CancellationToken ct)
     {
-        await using var command = dataSource.CreateCommand("UPDATE cluster_nodes SET display_name = @name WHERE id = @id AND deleted_at IS NULL AND display_name IS NULL");
+        await using var command = dataSource.CreateCommand("UPDATE cluster_nodes SET display_name = @name WHERE id = @id AND deleted_at IS NULL AND (display_name IS NULL OR trim(display_name) = '')");
         command.Parameters.AddWithValue("id", nodeId);
         command.Parameters.AddWithValue("name", displayName);
         await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Attribue le nom d'affichage au seul nœud actif sans nom lorsque l'identifiant du nœud local n'est pas encore en mémoire
+    /// (par exemple après un redémarrage du serveur alors que l'agent local était déjà enrôlé).
+    /// </summary>
+    public async Task<bool> SetFallbackLocalDisplayNameAsync(string displayName, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand("""
+            UPDATE cluster_nodes SET display_name = @name
+            WHERE id = (
+                SELECT id FROM cluster_nodes
+                WHERE deleted_at IS NULL AND (display_name IS NULL OR trim(display_name) = '')
+                ORDER BY last_seen_at DESC
+                LIMIT 1
+            )
+            AND (SELECT count(*) FROM cluster_nodes WHERE deleted_at IS NULL) = 1
+            """);
+        command.Parameters.AddWithValue("name", displayName);
+        return await command.ExecuteNonQueryAsync(ct) > 0;
     }
 
     public enum ModeRequestResult { Accepted, NotFound, LastServer }
