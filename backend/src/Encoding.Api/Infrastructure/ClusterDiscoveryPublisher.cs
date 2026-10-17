@@ -20,9 +20,10 @@ public sealed class ClusterDiscoveryPublisher(
                 var configuredPort = configuration.GetValue("Cluster:DiscoveryPort", 8080);
                 if (configuredPort is < 1 or > 65535) throw new InvalidOperationException("Cluster:DiscoveryPort doit être compris entre 1 et 65535.");
                 var apiUrl = configuration["Cluster:AdvertisedApiBaseUrl"];
+                var reconciliationApiUrl = configuration["Cluster:Reconciliation:AdvertisedApiBaseUrl"];
                 var instanceName = configuration["Cluster:DiscoveryInstanceName"]?.Trim();
                 if (string.IsNullOrWhiteSpace(instanceName)) instanceName = Environment.MachineName;
-                var signature = $"{identity.Id:D}|{identity.Name}|{instanceName}|{configuredPort}|{apiUrl}";
+                var signature = $"{identity.Id:D}|{identity.Name}|{instanceName}|{configuredPort}|{apiUrl}|{reconciliationApiUrl}";
                 if (!string.Equals(signature, announcedIdentity, StringComparison.Ordinal))
                 {
                     advertiser?.Dispose();
@@ -32,6 +33,7 @@ public sealed class ClusterDiscoveryPublisher(
                         ["clusterName"] = identity.Name
                     };
                     if (!string.IsNullOrWhiteSpace(apiUrl)) properties["apiUrl"] = apiUrl;
+                    if (!string.IsNullOrWhiteSpace(reconciliationApiUrl)) properties["reconciliationApiUrl"] = reconciliationApiUrl;
                     advertiser = new MdnsAdvertiser(new ServiceProfile(instanceName, "_encoding._tcp", (ushort)configuredPort, properties));
                     advertiser.Start();
                     announcedIdentity = signature;

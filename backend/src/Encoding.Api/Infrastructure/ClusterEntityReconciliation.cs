@@ -5,8 +5,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Contracts.Cluster;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Encoding.Api.Infrastructure;
@@ -17,9 +17,10 @@ namespace Encoding.Api.Infrastructure;
 /// </summary>
 public sealed class ClusterEntityReconciliation(
     DbDataSource dataSource,
-    IConfiguration configuration,
+    ClusterDataKeyStore dataKeyStore,
     IDataProtectionProvider protection,
-    ILogger<ClusterEntityReconciliation> logger)
+    ILogger<ClusterEntityReconciliation> logger,
+    ClusterPeerAdmissionRepository? peerAdmissions = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IDataProtector pluginProtector = protection.CreateProtector("Encoding.PluginConfiguration.v1");
@@ -31,7 +32,8 @@ public sealed class ClusterEntityReconciliation(
     private static readonly EntityTable[] Tables =
     [
         new("cluster_nodes", ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "last_seen_at", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"], ["id"], ["capabilities", "labels", "inventory"], ["roles", "desired_roles"], ["node_token_hash"], ["id", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "deleted_at", "display_name", "labels", "inventory", "desired_roles", "draining", "quarantined", "incompatible_reason", "protocol_version", "node_token_hash"]),
-        new("node_enrollment_requests", ["node_id", "pairing_key_hash", "node_token_hash", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "expires_at", "inventory"], ["node_id"], ["capabilities", "inventory"], ["roles"], ["pairing_key_hash", "node_token_hash"]),
+        new("node_enrollment_requests", ["node_id", "pairing_key_hash", "node_token_hash", "peer_id", "peer_public_key", "name", "roles", "max_concurrent_tasks", "capabilities", "created_at", "expires_at", "inventory"], ["node_id"], ["capabilities", "inventory"], ["roles"], ["pairing_key_hash", "node_token_hash"]),
+        new("cluster_peer_admissions", ["cluster_id", "peer_id", "node_id", "public_key", "approved_by_peer_id", "wrapped_data_key", "key_fingerprint", "issued_at", "revoked_at", "signature"], ["cluster_id", "peer_id"], immutable: false, detectDeletes: false),
         new("node_groups", ["id", "name", "description", "mode", "criteria", "labels", "created_at", "updated_at"], ["id"], ["criteria", "labels"]),
         new("libraries", ["id", "name", "created_at", "is_active", "flow_assignment_revision"], ["id"]),
         new("flows", ["id", "current_version", "updated_at"], ["id"]),
@@ -161,7 +163,7 @@ public sealed class ClusterEntityReconciliation(
                 if (existing.TryGetValue(snapshot.Key, out var state) && !state.IsDeleted && state.Fingerprint == snapshot.Fingerprint) continue;
                 var occurredAt = DateTimeOffset.UtcNow;
                 var sequence = ++nextSequence;
-                var payload = CreateSetPayload(snapshot, occurredAt);
+                var payload = CreateSetPayload(snapshot, occurredAt, local.ClusterId);
                 await InsertLocalEventAsync(connection, transaction, local.ClusterId, local.OriginId, sequence, EntitySetType, payload, occurredAt, ct);
                 await UpsertEntityStateAsync(connection, transaction, table.Name, snapshot.Key, snapshot.Fingerprint, occurredAt, local.OriginId, sequence, false, ct);
                 if (table.Name == "library_scans") changedScans.Add((snapshot.Row["library_id"]!.GetValue<string>(), snapshot.Row["id"]!.GetValue<string>()));
@@ -187,7 +189,7 @@ public sealed class ClusterEntityReconciliation(
             if (receiptStates.TryGetValue(snapshot.Key, out var state) && !state.IsDeleted && state.Fingerprint == snapshot.Fingerprint) continue;
             var occurredAt = DateTimeOffset.UtcNow;
             var sequence = ++nextSequence;
-            await InsertLocalEventAsync(connection, transaction, local.ClusterId, local.OriginId, sequence, EntitySetType, CreateSetPayload(snapshot, occurredAt), occurredAt, ct);
+            await InsertLocalEventAsync(connection, transaction, local.ClusterId, local.OriginId, sequence, EntitySetType, CreateSetPayload(snapshot, occurredAt, local.ClusterId), occurredAt, ct);
             await UpsertEntityStateAsync(connection, transaction, ProcessingReceiptTable.Name, snapshot.Key, snapshot.Fingerprint, occurredAt, local.OriginId, sequence, false, ct);
             captured++;
         }
@@ -217,7 +219,7 @@ public sealed class ClusterEntityReconciliation(
                 if (mediaStates.TryGetValue(snapshot.Key, out var mediaState) && !mediaState.IsDeleted && mediaState.Fingerprint == snapshot.Fingerprint) continue;
                 var occurredAt = DateTimeOffset.UtcNow;
                 var sequence = ++nextSequence;
-                var payload = CreateSetPayload(snapshot, occurredAt);
+                var payload = CreateSetPayload(snapshot, occurredAt, local.ClusterId);
                 await InsertLocalEventAsync(connection, transaction, local.ClusterId, local.OriginId, sequence, EntitySetType, payload, occurredAt, ct);
                 await UpsertEntityStateAsync(connection, transaction, MediaTable.Name, snapshot.Key, snapshot.Fingerprint, occurredAt, local.OriginId, sequence, false, ct);
                 captured++;
@@ -311,7 +313,9 @@ public sealed class ClusterEntityReconciliation(
             row = payload["row"] as JsonObject;
             fingerprint = payload["fingerprint"]?.GetValue<string>() ?? "";
             deleted = false;
-            if (!TryGetTable(entityType, out var table) || row is null || !TryUnprotectSensitive(entityType, row)) return await DropPendingAsync(pending.Change.EventId, ct);
+            if (!TryGetTable(entityType, out var table) || row is null
+                || (entityType == "cluster_peer_admissions" && peerAdmissions is not null && !await peerAdmissions.VerifyIncomingGrantAsync(row, ct))
+                || !TryUnprotectSensitive(pending.Change.ClusterId, entityType, row)) return await DropPendingAsync(pending.Change.EventId, ct);
             var incomingKey = payload["key"];
             key = MakeKey(row, table.KeyColumns);
             if (incomingKey is null || !JsonNode.DeepEquals(incomingKey, JsonNode.Parse(key))
@@ -484,10 +488,10 @@ public sealed class ClusterEntityReconciliation(
 
     private static string Fingerprint(string value) => Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
-    private string CreateSetPayload(EntitySnapshot snapshot, DateTimeOffset occurredAt)
+    private string CreateSetPayload(EntitySnapshot snapshot, DateTimeOffset occurredAt, Guid clusterId)
     {
         var row = (JsonObject)snapshot.Row.DeepClone();
-        ProtectSensitive(snapshot.Table.Name, row);
+        ProtectSensitive(clusterId, snapshot.Table.Name, row);
         return new JsonObject
         {
             ["table"] = snapshot.Table.Name,
@@ -498,34 +502,32 @@ public sealed class ClusterEntityReconciliation(
         }.ToJsonString(JsonOptions);
     }
 
-    private void ProtectSensitive(string table, JsonObject row)
+    private void ProtectSensitive(Guid clusterId, string table, JsonObject row)
     {
         foreach (var column in SensitiveColumns(table))
         {
             if (!row.TryGetPropertyValue(column, out var value) || value is null || IsEncrypted(value)) continue;
-            var secret = configuration["Cluster:Reconciliation:SharedSecret"] ?? "";
             var raw = System.Text.Encoding.UTF8.GetBytes(value.ToJsonString(JsonOptions));
             var nonce = RandomNumberGenerator.GetBytes(12);
             var ciphertext = new byte[raw.Length];
             var tag = new byte[16];
-            using var aes = new AesGcm(DeriveKey(secret), tag.Length);
+            using var aes = new AesGcm(DeriveKey(dataKeyStore.GetRequired(clusterId)), tag.Length);
             aes.Encrypt(nonce, raw, ciphertext, tag, System.Text.Encoding.UTF8.GetBytes(table + "." + column));
             row[column] = new JsonObject { ["encrypted"] = Convert.ToBase64String([.. nonce, .. tag, .. ciphertext]) };
         }
     }
 
-    private bool TryUnprotectSensitive(string table, JsonObject row)
+    private bool TryUnprotectSensitive(Guid clusterId, string table, JsonObject row)
     {
         try
         {
             foreach (var column in SensitiveColumns(table))
             {
                 if (!row.TryGetPropertyValue(column, out var value) || value is null || !IsEncrypted(value)) continue;
-                var secret = configuration["Cluster:Reconciliation:SharedSecret"] ?? "";
                 var packed = Convert.FromBase64String(value["encrypted"]!.GetValue<string>());
                 if (packed.Length < 28) return false;
                 var plaintext = new byte[packed.Length - 28];
-                using var aes = new AesGcm(DeriveKey(secret), 16);
+                using var aes = new AesGcm(DeriveKey(dataKeyStore.GetRequired(clusterId)), 16);
                 aes.Decrypt(packed.AsSpan(0, 12), packed.AsSpan(28), packed.AsSpan(12, 16), plaintext, System.Text.Encoding.UTF8.GetBytes(table + "." + column));
                 row[column] = JsonNode.Parse(plaintext);
             }
@@ -538,7 +540,8 @@ public sealed class ClusterEntityReconciliation(
     }
 
     private static bool IsEncrypted(JsonNode node) => node is JsonObject obj && obj.Count == 1 && obj.ContainsKey("encrypted");
-    private static byte[] DeriveKey(string secret) => SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("Encoding.ClusterReconciliation.Data.v1\0" + secret));
+    private static byte[] DeriveKey(ReadOnlySpan<byte> clusterDataKey) =>
+        HMACSHA256.HashData(clusterDataKey, System.Text.Encoding.UTF8.GetBytes("Encoding.ClusterReconciliation.Data.v2"));
 
     private async Task UpsertRowAsync(DbConnection connection, DbTransaction transaction, EntityTable table, JsonObject row, CancellationToken ct)
     {

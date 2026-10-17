@@ -54,14 +54,15 @@ public sealed class NodeHeartbeatService(
                         logger.LogWarning("Le heartbeat du nœud {NodeId} a reçu HTTP {StatusCode}.", identity.Id, (int)response.StatusCode);
                     else if (response.IsSuccessStatusCode)
                     {
+                        var node = await response.Content.ReadFromJsonAsync<NodeResponse>(AgentJson.Options, stoppingToken);
                         if (!identity.IsEnrolled)
                         {
+                            await enrollment.AdoptApprovedClusterAsync(identity, identity.Id, stoppingToken);
                             await identityStore.MarkEnrolledAsync(stoppingToken);
                             logger.LogInformation("L’enrôlement en attente du worker {NodeId} a été confirmé par le cluster.", identity.Id);
                             await enrollment.CompleteSwitchAsync(stoppingToken);
                         }
                         logger.LogDebug("Heartbeat envoyé pour le nœud {NodeId}.", identity.Id);
-                        var node = await response.Content.ReadFromJsonAsync<NodeResponse>(AgentJson.Options, stoppingToken);
                         ReportLifecycle(node);
                         await ApplyDesiredModeAsync(node?.DesiredRoles, stoppingToken);
                     }

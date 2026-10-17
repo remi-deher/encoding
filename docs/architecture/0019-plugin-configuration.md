@@ -13,7 +13,7 @@ Pour chaque invocation, le moteur fournit séparément les paramètres de l’in
 
 ## Secrets et archives
 
-Les clés API, mots de passe et autres champs secrets ne sont jamais enregistrés en clair dans une définition de flow, une sauvegarde JSON, une archive portable, un événement ou un journal. Les configurations globales et les dérogations de flow sont conservées chiffrées en base. Pendant la réconciliation, Encoding les déchiffre localement, les protège avec AES-GCM dérivé du secret partagé du maillage, puis les rechiffre avec le trousseau Data Protection local du serveur destinataire. Les trousseaux n’ont donc pas à être partagés. Le runtime ne transmet les valeurs effectives qu’au worker auquel la tâche a été attribuée et au processus plugin concerné.
+Les clés API, mots de passe et autres champs secrets ne sont jamais enregistrés en clair dans une définition de flow, une sauvegarde JSON, une archive portable, un événement ou un journal. Les configurations globales et les dérogations de flow sont conservées chiffrées en base. Pendant la réconciliation, Encoding les déchiffre localement, les protège avec AES-GCM et la clé de données partagée du cluster, puis les rechiffre avec le trousseau Data Protection local du serveur destinataire. Le runtime ne transmet les valeurs effectives qu’au worker auquel la tâche a été attribuée et au processus plugin concerné.
 
 La configuration globale et les dérogations de flow ne sont pas incluses dans les exports JSON/ZIP : elles appartiennent au cluster et sont configurées séparément. Après import dans un autre cluster, le flow hérite donc des réglages globaux de ce cluster jusqu’à la création de nouvelles dérogations.
 

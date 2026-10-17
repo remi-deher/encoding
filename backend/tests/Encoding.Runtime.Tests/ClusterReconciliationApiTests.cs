@@ -6,9 +6,12 @@ using Encoding.Api.Auth;
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Infrastructure.Data.Sqlite;
+using Encoding.Contracts.Cluster;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
@@ -16,7 +19,6 @@ namespace Encoding.Runtime.Tests;
 
 public sealed class ClusterReconciliationApiTests
 {
-    private const string SharedSecret = "test-mesh-secret-with-at-least-32-bytes";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
@@ -38,6 +40,13 @@ public sealed class ClusterReconciliationApiTests
             var clusterId = Guid.NewGuid();
             await new ClusterIdentityRepository(source).AdoptAsync(clusterId, "Media", CancellationToken.None);
             await new ClusterIdentityRepository(target).AdoptAsync(clusterId, "Media", CancellationToken.None);
+            var sourceProtection = new EphemeralDataProtectionProvider();
+            var sourceConfiguration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PluginSettings:KeyDirectory"] = Path.Combine(root, "source-keys")
+            }).Build();
+            using var sourceIdentity = new ClusterPeerIdentityStore(sourceConfiguration, sourceProtection);
+            await TrustPeerAsync(target, clusterId, sourceIdentity);
             var sourceJournal = new ClusterReconciliationRepository(source);
             await sourceJournal.SetRegisterAsync("cluster.name", JsonSerializer.Serialize("Maison"), CancellationToken.None);
             var changes = await sourceJournal.GetEventsAfterAsync(clusterId, new Dictionary<Guid, long>(), ClusterReconciliationRepository.MaximumBatchSize, CancellationToken.None);
@@ -46,23 +55,32 @@ public sealed class ClusterReconciliationApiTests
 
             await using var factory = CreateFactory(targetConnectionString, root);
             using var client = factory.CreateClient();
-            using var response = await SendSignedAsync(client, requestBytes, SharedSecret);
+            using var response = await SendSignedAsync(client, requestBytes, sourceIdentity);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             var responseBytes = await response.Content.ReadAsByteArrayAsync();
+            var responsePeerId = Guid.Parse(response.Headers.GetValues(ClusterReconciliationSignature.PeerHeader).Single());
+            var targetIdentity = factory.Services.GetRequiredService<ClusterPeerIdentityStore>();
+            Assert.Equal(targetIdentity.PeerId, responsePeerId);
             Assert.True(ClusterReconciliationSignature.Verify(
-                SharedSecret,
+                targetIdentity.PublicKey,
+                responsePeerId,
                 response.Headers.GetValues(ClusterReconciliationSignature.TimeHeader).Single(),
                 response.Headers.GetValues(ClusterReconciliationSignature.SignatureHeader).Single(),
                 responseBytes));
             Assert.Equal("Maison", await ClusterNameAsync(target));
             Assert.Equal(1L, await CountEventsAsync(target));
 
-            using var duplicate = await SendSignedAsync(client, requestBytes, SharedSecret);
+            using var duplicate = await SendSignedAsync(client, requestBytes, sourceIdentity);
             Assert.Equal(HttpStatusCode.OK, duplicate.StatusCode);
             Assert.Equal(1L, await CountEventsAsync(target));
 
-            using var forged = await SendSignedAsync(client, requestBytes, "wrong-secret-with-at-least-32-bytes");
+            var rogueConfiguration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PluginSettings:KeyDirectory"] = Path.Combine(root, "rogue-keys")
+            }).Build();
+            using var rogueIdentity = new ClusterPeerIdentityStore(rogueConfiguration, sourceProtection);
+            using var forged = await SendSignedAsync(client, requestBytes, rogueIdentity);
             Assert.Equal(HttpStatusCode.Unauthorized, forged.StatusCode);
         }
         finally
@@ -77,7 +95,6 @@ public sealed class ClusterReconciliationApiTests
             builder.UseSetting(WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
             builder.UseSetting("ConnectionStrings:Cluster", connectionString);
             builder.UseSetting("Database:Provider", "sqlite");
-            builder.UseSetting("Cluster:Reconciliation:SharedSecret", SharedSecret);
             builder.UseSetting("Auth:SetupToken", "mesh-test-setup-token");
             builder.UseSetting("FlowBackups:Directory", Path.Combine(dataDirectory, "backups"));
             builder.UseSetting("Runtime:ArtifactDirectory", Path.Combine(dataDirectory, "artifacts"));
@@ -88,7 +105,24 @@ public sealed class ClusterReconciliationApiTests
             });
         });
 
-    private static async Task<HttpResponseMessage> SendSignedAsync(HttpClient client, byte[] body, string secret)
+    private static async Task TrustPeerAsync(DbDataSource database, Guid clusterId, ClusterPeerIdentityStore peer)
+    {
+        await using var command = database.CreateCommand("""
+            INSERT INTO cluster_peer_admissions (cluster_id, peer_id, public_key, approved_by_peer_id, wrapped_data_key, key_fingerprint, issued_at, signature)
+            VALUES (@cluster_id, @peer_id, @public_key, @approved_by_peer_id, @wrapped_data_key, @key_fingerprint, @issued_at, @signature)
+            """);
+        command.Parameters.AddWithValue("cluster_id", clusterId);
+        command.Parameters.AddWithValue("peer_id", peer.PeerId);
+        command.Parameters.AddWithValue("public_key", peer.PublicKey);
+        command.Parameters.AddWithValue("approved_by_peer_id", peer.PeerId);
+        command.Parameters.AddWithValue("wrapped_data_key", "test-envelope");
+        command.Parameters.AddWithValue("key_fingerprint", new string('0', 64));
+        command.Parameters.AddWithValue("issued_at", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("signature", "test-signature");
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<HttpResponseMessage> SendSignedAsync(HttpClient client, byte[] body, ClusterPeerIdentityStore identity)
     {
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/cluster/reconciliation/exchange")
@@ -96,8 +130,9 @@ public sealed class ClusterReconciliationApiTests
             Content = new ByteArrayContent(body)
         };
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        request.Headers.Add(ClusterReconciliationSignature.PeerHeader, identity.PeerId.ToString("D"));
         request.Headers.Add(ClusterReconciliationSignature.TimeHeader, timestamp);
-        request.Headers.Add(ClusterReconciliationSignature.SignatureHeader, ClusterReconciliationSignature.Create(secret, timestamp, body));
+        request.Headers.Add(ClusterReconciliationSignature.SignatureHeader, ClusterReconciliationSignature.Create(identity, timestamp, body));
         return await client.SendAsync(request);
     }
 

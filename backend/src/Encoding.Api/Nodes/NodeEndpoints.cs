@@ -2,6 +2,7 @@ using Encoding.Api.Auth;
 using Encoding.Api.Infrastructure.PeerCluster;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Nodes;
+using Encoding.Api.Infrastructure;
 using Encoding.Core.Nodes;
 
 namespace Encoding.Api.Nodes;
@@ -16,18 +17,32 @@ public static class NodeEndpoints
             NodeRepository repository,
             EnrollmentWindowRepository window,
             LocalNodeRegistry localNode,
+            ClusterIdentityRepository clusterIdentity,
+            ClusterDataKeyStore dataKeyStore,
+            ClusterPeerAdmissionRepository peerAdmissions,
             IConfiguration configuration,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
             var errors = NodeHeartbeatValidator.Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            if (request.ClusterPeerId is not null)
+            {
+                var identity = await clusterIdentity.GetAsync(cancellationToken);
+                if (identity.Standalone && !dataKeyStore.HasKey(identity.Id))
+                    await peerAdmissions.EnsureRootAdmissionAsync(identity.Id, cancellationToken);
+            }
             // Le nœud local de l'image unique prouve son appartenance au conteneur par un secret de fichier : il est enrôlé d'office.
             var isLocal = LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting], httpContext.Request.Headers[LocalEnrollment.HeaderName].ToString());
             var windowOpen = isLocal || (await window.GetAsync(cancellationToken)).IsOpen;
             var node = await repository.EnrollAsync(request, windowOpen, cancellationToken);
             if (node is not null && isLocal) await localNode.RegisterAsync(node.Id, cancellationToken);
-            if (node is not null) return Results.Ok(node);
+            if (node is not null)
+            {
+                if (request.ClusterPeerId is { } peerId && request.ClusterPeerPublicKey is { } publicKey)
+                    await peerAdmissions.CreateDirectApprovalGrantAsync(node.Id, peerId, publicKey, cancellationToken);
+                return Results.Ok(node with { ClusterBootstrap = await peerAdmissions.GetBootstrapForNodeAsync(node.Id, cancellationToken) });
+            }
             return windowOpen
                 ? Results.Conflict(new { title = "Cet identifiant appartient déjà à un autre nœud." })
                 : Results.Json(new { title = "L’enrôlement direct est fermé. Ouvrez la fenêtre d’enrôlement depuis l’interface ou utilisez une clé de jumelage." },
@@ -37,6 +52,9 @@ public static class NodeEndpoints
         nodes.MapPost("/enrollment-requests", async (
             CreateNodeEnrollmentRequest request,
             NodeRepository repository,
+            ClusterIdentityRepository clusterIdentity,
+            ClusterDataKeyStore dataKeyStore,
+            ClusterPeerAdmissionRepository peerAdmissions,
             AuthOptions authOptions,
             FirstLinkRepository firstLink,
             ILogger<FirstLinkRepository> logger,
@@ -44,6 +62,12 @@ public static class NodeEndpoints
         {
             var errors = NodeHeartbeatValidator.Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            if (request.Node.ClusterPeerId is not null)
+            {
+                var identity = await clusterIdentity.GetAsync(cancellationToken);
+                if (identity.Standalone && !dataKeyStore.HasKey(identity.Id))
+                    await peerAdmissions.EnsureRootAdmissionAsync(identity.Id, cancellationToken);
+            }
             return await repository.CreatePairingRequestAsync(request, authOptions.MaxPendingPairingRequests, cancellationToken) switch
             {
                 PairingRequestResult.Created => await AcceptIfFirstLinkAsync(),
@@ -68,6 +92,22 @@ public static class NodeEndpoints
             CancellationToken cancellationToken) =>
             Results.Ok(await repository.ListPendingPairingRequestsAsync(cancellationToken)))
             .WithName("ListPendingNodeEnrollmentRequests");
+
+        nodes.MapGet("/{nodeId:guid}/cluster-bootstrap", async (
+            Guid nodeId,
+            NodeRepository repository,
+            ClusterPeerAdmissionRepository peerAdmissions,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var token = httpContext.Request.Headers["X-Node-Token"].ToString();
+            if (string.IsNullOrWhiteSpace(token) || !await repository.AuthenticateTokenAsync(nodeId, token, cancellationToken))
+                return (IResult)Results.Unauthorized();
+            var bootstrap = await peerAdmissions.GetBootstrapForNodeAsync(nodeId, cancellationToken);
+            return bootstrap is null
+                ? Results.NotFound(new { title = "Aucune admission de serveur n’est disponible pour ce nœud." })
+                : Results.Ok(bootstrap);
+        }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("GetClusterBootstrapForNode");
 
         nodes.MapPost("/enrollment-requests/{nodeId:guid}/approve", async (
             Guid nodeId,

@@ -91,13 +91,18 @@ builder.Services.AddSingleton<LibraryProcessingRepository>();
 builder.Services.AddHostedService<LibraryMonitoringService>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
 builder.Services.AddSingleton<ClusterIdentityRepository>();
+builder.Services.AddSingleton<ClusterPeerIdentityStore>();
+builder.Services.AddSingleton<ClusterDataKeyStore>();
+builder.Services.AddSingleton<ClusterPeerAdmissionRepository>();
 builder.Services.AddSingleton<ClusterReconciliationRepository>();
 builder.Services.AddSingleton<ClusterEntityReconciliation>();
+builder.Services.AddSingleton<ClusterReconciliationHealth>();
 builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
 builder.Services.AddHttpClient("ClusterReconciliation", client => client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-builder.Services.AddHostedService<ClusterReconciliationService>();
+builder.Services.AddSingleton<ClusterReconciliationService>();
+builder.Services.AddHostedService<ClusterReconciliationService>(services => services.GetRequiredService<ClusterReconciliationService>());
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
