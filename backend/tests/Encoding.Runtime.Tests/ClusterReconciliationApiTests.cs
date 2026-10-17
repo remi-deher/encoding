@@ -147,7 +147,6 @@ public sealed class ClusterReconciliationApiTests
             builder.UseSetting(WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
             builder.UseSetting("ConnectionStrings:Cluster", connectionString);
             builder.UseSetting("Database:Provider", "sqlite");
-            builder.UseSetting("Auth:SetupToken", "mesh-test-setup-token");
             builder.UseSetting("FlowBackups:Directory", Path.Combine(dataDirectory, "backups"));
             builder.UseSetting("Runtime:ArtifactDirectory", Path.Combine(dataDirectory, "artifacts"));
             builder.UseSetting("PluginSettings:KeyDirectory", Path.Combine(dataDirectory, "keys"));

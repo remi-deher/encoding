@@ -8,7 +8,13 @@ public sealed record AuthStatusResponse(bool SetupRequired, CurrentUserResponse?
 
 public sealed record UserResponse(Guid Id, string Username, UserRole Role, bool IsActive, DateTimeOffset CreatedAt);
 
-public sealed record SetupRequest(string Username, string Password, string? SetupToken, string? NodeDisplayName = null);
+public sealed record SetupRequest(
+    string? Username = null,
+    string? Password = null,
+    string? SetupToken = null,
+    string? NodeDisplayName = null,
+    string? Mode = null,
+    string? ClusterName = null);
 
 public sealed record LoginRequest(string Username, string Password);
 

@@ -23,7 +23,6 @@ services:
       PeerCluster__SharedDataKey: ${PEER_CLUSTER_SHARED_DATA_KEY:-}
       PeerCluster__ListenPort: 8443
       PeerCluster__DataDirectory: /var/lib/encoding-node/peer-cluster
-      Auth__SetupToken: ${AUTH_SETUP_TOKEN:-}
       Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://encoding:8080/}
       Node__Name: ${NODE_NAME:-encoding-dev-node}
       Node__Roles: ${NODE_ROLES:-server,worker}

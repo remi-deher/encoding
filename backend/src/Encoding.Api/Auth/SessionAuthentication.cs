@@ -24,18 +24,37 @@ public sealed class SessionAuthenticationHandler(
         if (Context.Items.TryGetValue(Encoding.Api.Infrastructure.PeerCluster.PeerRequestRouting.PrincipalItem, out var forwarded)
             && forwarded is ClaimsPrincipal principal)
             return AuthenticateResult.Success(new AuthenticationTicket(principal, SessionAuthentication.Scheme));
-        if (!Request.Cookies.TryGetValue(SessionAuthentication.CookieName, out var token) || string.IsNullOrWhiteSpace(token))
-            return AuthenticateResult.NoResult();
-        var user = await users.ValidateSessionAsync(AuthService.TokenHash(token), authOptions, Context.RequestAborted);
-        if (user is null) return AuthenticateResult.Fail("Session absente, expirée ou révoquée.");
-        var identity = new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString("D")),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Role, UserRepository.RoleName(user.Role)),
-            ],
-            SessionAuthentication.Scheme);
-        return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SessionAuthentication.Scheme));
+
+        if (Request.Cookies.TryGetValue(SessionAuthentication.CookieName, out var token) && !string.IsNullOrWhiteSpace(token))
+        {
+            var user = await users.ValidateSessionAsync(AuthService.TokenHash(token), authOptions, Context.RequestAborted);
+            if (user is not null)
+            {
+                var identity = new ClaimsIdentity(
+                    [
+                        new Claim(ClaimTypes.NameIdentifier, user.Id.ToString("D")),
+                        new Claim(ClaimTypes.Name, user.Username),
+                        new Claim(ClaimTypes.Role, UserRepository.RoleName(user.Role)),
+                    ],
+                    SessionAuthentication.Scheme);
+                return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SessionAuthentication.Scheme));
+            }
+            if (authOptions.Enabled) return AuthenticateResult.Fail("Session absente, expirée ou révoquée.");
+        }
+
+        if (!authOptions.Enabled)
+        {
+            var defaultIdentity = new ClaimsIdentity(
+                [
+                    new Claim(ClaimTypes.NameIdentifier, "00000000-0000-0000-0000-000000000001"),
+                    new Claim(ClaimTypes.Name, "admin"),
+                    new Claim(ClaimTypes.Role, "admin"),
+                ],
+                SessionAuthentication.Scheme);
+            return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(defaultIdentity), SessionAuthentication.Scheme));
+        }
+
+        return AuthenticateResult.NoResult();
     }
 
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
