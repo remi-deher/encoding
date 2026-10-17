@@ -1,10 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -33,24 +27,28 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
         }),
     },
   ],
-  imports: [
-    CommonModule,
-    FormsModule,
-    MatStepperModule,
-    MatButtonModule,
-    MatProgressBarModule,
-  ],
+  imports: [CommonModule, FormsModule, MatStepperModule, MatButtonModule, MatProgressBarModule],
   template: `
-    <main class="wizard-container" aria-label="Assistant de premier démarrage">
+    <section class="wizard-container" aria-label="Assistant de premier démarrage">
       <header class="wizard-header">
         <div class="brand-badge">
-          <svg class="brand-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            class="brand-icon"
+            viewBox="0 0 24 24"
+            width="28"
+            height="28"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7" />
           </svg>
           <span class="brand-name">Encoding</span>
         </div>
         <h1 class="wizard-title">Assistant d'initialisation</h1>
-        <p class="wizard-subtitle">Configurez cette machine en quelques étapes simples pour commencer à traiter vos médias.</p>
+        <p class="wizard-subtitle">
+          Configurez cette machine en quelques étapes simples pour commencer à traiter vos médias.
+        </p>
       </header>
 
       @if (busy()) {
@@ -59,7 +57,14 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
 
       @if (errorMessage()) {
         <div role="alert" class="wizard-error">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <circle cx="12" cy="12" r="10" />
             <path d="M12 8v4m0 4h.01" stroke-linecap="round" />
           </svg>
@@ -68,14 +73,39 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       }
 
       <div class="wizard-card">
-        <mat-stepper linear #stepper [selectedIndex]="currentStep()" (selectionChange)="goToStep($event.selectedIndex)">
+        <mat-stepper
+          linear
+          #stepper
+          [selectedIndex]="currentStep()"
+          (selectionChange)="goToStep($event.selectedIndex)"
+        >
           <ng-template matStepperIcon="done">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
               <path d="m5 12 4 4 10-10" />
             </svg>
           </ng-template>
           <ng-template matStepperIcon="edit">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
               <path d="m5 12 4 4 10-10" />
             </svg>
           </ng-template>
@@ -85,7 +115,10 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
             <ng-template matStepLabel>Identification</ng-template>
             <div class="step-content">
               <h2>Bienvenue sur Encoding</h2>
-              <p class="step-desc">Commençons par nommer cette machine pour la repérer facilement sur votre réseau local.</p>
+              <p class="step-desc">
+                Commençons par nommer cette machine pour la repérer facilement sur votre réseau
+                local.
+              </p>
 
               <div class="form-group">
                 <label for="node-name-input" class="field-label">Nom de ce nœud</label>
@@ -98,12 +131,22 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                   maxlength="128"
                   autocomplete="off"
                 />
-                <span class="field-hint">Exemple : Serveur Salon, NAS Synology, Worker RTX. Modifiable à tout moment depuis la page Nœuds.</span>
+                <span class="field-hint"
+                  >Exemple : Serveur Salon, NAS Synology, Worker RTX. Modifiable à tout moment
+                  depuis la page Nœuds.</span
+                >
               </div>
 
               <div class="info-card">
                 <div class="info-card-header">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
                     <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
                     <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
                     <line x1="6" y1="6" x2="6.01" y2="6" />
@@ -164,7 +207,14 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 >
                   <div class="mode-header">
                     <div class="mode-icon-box">
-                      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="24"
+                        height="24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
                         <line x1="8" y1="21" x2="16" y2="21" />
                         <line x1="12" y1="17" x2="12" y2="21" />
@@ -176,7 +226,8 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     </div>
                   </div>
                   <p class="mode-description">
-                    Installation unique et indépendante. Elle gère directement ses bibliothèques, ses flows et ses encodages locaux sans cluster.
+                    Installation unique et indépendante. Elle gère directement ses bibliothèques,
+                    ses flows et ses encodages locaux sans cluster.
                   </p>
                 </button>
 
@@ -191,7 +242,14 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 >
                   <div class="mode-header">
                     <div class="mode-icon-box">
-                      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="24"
+                        height="24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
                         <circle cx="18" cy="5" r="3" />
                         <circle cx="6" cy="12" r="3" />
                         <circle cx="18" cy="19" r="3" />
@@ -205,7 +263,8 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     </div>
                   </div>
                   <p class="mode-description">
-                    Cette machine devient le premier serveur d'un nouveau cluster, prête à fédérer d'autres serveurs ou workers pour distribuer la charge.
+                    Cette machine devient le premier serveur d'un nouveau cluster, prête à fédérer
+                    d'autres serveurs ou workers pour distribuer la charge.
                   </p>
                 </button>
 
@@ -220,7 +279,14 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 >
                   <div class="mode-header">
                     <div class="mode-icon-box">
-                      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="24"
+                        height="24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
                         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                       </svg>
@@ -231,15 +297,14 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     </div>
                   </div>
                   <p class="mode-description">
-                    Vous avez déjà un serveur Encoding actif sur votre réseau. Cette machine le rejoint pour exécuter des tâches et apporter sa puissance.
+                    Vous avez déjà un serveur Encoding actif sur votre réseau. Cette machine le
+                    rejoint pour exécuter des tâches et apporter sa puissance.
                   </p>
                 </button>
               </div>
 
               <div class="step-actions">
-                <button mat-button type="button" (click)="goToStep(0)">
-                  ← Retour
-                </button>
+                <button mat-button type="button" (click)="goToStep(0)">← Retour</button>
                 <button mat-flat-button color="primary" type="button" (click)="goToStep(2)">
                   Suivant →
                 </button>
@@ -254,7 +319,10 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
               <!-- Cas 3A : Autonome -->
               @if (selectedMode() === 'standalone') {
                 <h2>Prêt à démarrer en mode autonome</h2>
-                <p class="step-desc">Votre serveur local est prêt. Vous allez accéder directement à votre interface de gestion.</p>
+                <p class="step-desc">
+                  Votre serveur local est prêt. Vous allez accéder directement à votre interface de
+                  gestion.
+                </p>
 
                 <div class="summary-box">
                   <div class="summary-row">
@@ -267,23 +335,33 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                   </div>
                   <div class="summary-row">
                     <span class="summary-label">Sécurité & Accès</span>
-                    <span class="summary-value">Accès libre sans mot de passe (activable dans Paramètres)</span>
+                    <span class="summary-value"
+                      >Accès libre sans mot de passe (activable dans Paramètres)</span
+                    >
                   </div>
                 </div>
 
                 <div class="tip-box">
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
                     <circle cx="12" cy="12" r="10" />
                     <line x1="12" y1="16" x2="12" y2="12" />
                     <line x1="12" y1="8" x2="12.01" y2="8" />
                   </svg>
-                  <span>Vous pourrez à tout moment créer ou rejoindre un cluster depuis l'onglet <strong>Nœuds</strong> de l'application.</span>
+                  <span
+                    >Vous pourrez à tout moment créer ou rejoindre un cluster depuis l'onglet
+                    <strong>Nœuds</strong> de l'application.</span
+                  >
                 </div>
 
                 <div class="step-actions">
-                  <button mat-button type="button" (click)="goToStep(1)">
-                    ← Retour
-                  </button>
+                  <button mat-button type="button" (click)="goToStep(1)">← Retour</button>
                   <button
                     mat-flat-button
                     color="primary"
@@ -299,7 +377,10 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
               <!-- Cas 3B : Créer un cluster -->
               @if (selectedMode() === 'createCluster') {
                 <h2>Nommer votre nouveau cluster</h2>
-                <p class="step-desc">Donnez un nom clair pour ce cluster afin de le reconnaître lors de l'ajout d'autres machines.</p>
+                <p class="step-desc">
+                  Donnez un nom clair pour ce cluster afin de le reconnaître lors de l'ajout
+                  d'autres machines.
+                </p>
 
                 <div class="form-group">
                   <label for="cluster-name-input" class="field-label">Nom du cluster</label>
@@ -327,9 +408,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 </div>
 
                 <div class="step-actions">
-                  <button mat-button type="button" (click)="goToStep(1)">
-                    ← Retour
-                  </button>
+                  <button mat-button type="button" (click)="goToStep(1)">← Retour</button>
                   <button
                     mat-flat-button
                     color="primary"
@@ -345,7 +424,10 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
               <!-- Cas 3C : Rejoindre un cluster -->
               @if (selectedMode() === 'joinCluster') {
                 <h2>Rejoindre un cluster existant</h2>
-                <p class="step-desc">Sélectionnez un cluster détecté sur votre réseau ou saisissez l'adresse de son serveur principal.</p>
+                <p class="step-desc">
+                  Sélectionnez un cluster détecté sur votre réseau ou saisissez l'adresse de son
+                  serveur principal.
+                </p>
 
                 @if (availableClusters().length > 0) {
                   <div class="discovered-clusters">
@@ -372,7 +454,9 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 }
 
                 <div class="form-group">
-                  <label for="cluster-address-input" class="field-label">Adresse du cluster d'accueil</label>
+                  <label for="cluster-address-input" class="field-label"
+                    >Adresse du cluster d'accueil</label
+                  >
                   <div class="input-with-button">
                     <input
                       id="cluster-address-input"
@@ -390,7 +474,9 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                       Vérifier
                     </button>
                   </div>
-                  <span class="field-hint">Adresse URL complète avec port (ex: http://192.168.1.50:8090).</span>
+                  <span class="field-hint"
+                    >Adresse URL complète avec port (ex: http://192.168.1.50:8090).</span
+                  >
                 </div>
 
                 @if (localController.target(); as target) {
@@ -404,7 +490,8 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                         <span class="code-label">Code de confirmation à comparer</span>
                         <div class="hero-digits">{{ code }}</div>
                         <p class="code-helper">
-                          Un administrateur du cluster <strong>{{ target.name }}</strong> doit valider ce code depuis sa page Nœuds.
+                          Un administrateur du cluster <strong>{{ target.name }}</strong> doit
+                          valider ce code depuis sa page Nœuds.
                         </p>
                       </div>
                     } @else {
@@ -422,9 +509,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 }
 
                 <div class="step-actions">
-                  <button mat-button type="button" (click)="goToStep(1)">
-                    ← Retour
-                  </button>
+                  <button mat-button type="button" (click)="goToStep(1)">← Retour</button>
                   <button
                     mat-flat-button
                     color="primary"
@@ -440,7 +525,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
           </mat-step>
         </mat-stepper>
       </div>
-    </main>
+    </section>
   `,
   styles: `
     .wizard-container {
@@ -570,7 +655,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       gap: 2px;
     }
     .info-label {
-      font-size: 11px;
+      font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--text-secondary, #757575);
@@ -635,7 +720,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       color: var(--text-primary, #ffffff);
     }
     .mode-badge {
-      font-size: 11px;
+      font-size: 12px;
       padding: 2px 8px;
       border-radius: var(--radius-pill);
       font-weight: 500;
@@ -750,7 +835,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
     }
     .target-badge {
       display: inline-block;
-      font-size: 11px;
+      font-size: 12px;
       text-transform: uppercase;
       font-weight: 700;
       color: #81c784;
@@ -927,7 +1012,9 @@ export class SetupWizardPageComponent {
         this.errorMessage.set(this.localController.error());
       }
     } catch {
-      this.errorMessage.set('La vérification de l’adresse a échoué. Vérifiez que le serveur est allumé.');
+      this.errorMessage.set(
+        'La vérification de l’adresse a échoué. Vérifiez que le serveur est allumé.',
+      );
     } finally {
       this.busy.set(false);
     }

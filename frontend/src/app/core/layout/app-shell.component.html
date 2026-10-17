@@ -1,3 +1,5 @@
+<a class="skip-to-content-link" href="#main-content">Aller au contenu principal</a>
+
 <div
   class="application-shell"
   [class.workspace-shell]="workspaceMode()"
@@ -9,23 +11,7 @@
         <span class="brand-mark" aria-hidden="true">E</span>
         <span class="brand-name">Encoding</span>
       </a>
-    </header>
-  } @else if (isCompactNavigation() && !workspaceMode()) {
-    <header class="mobile-header">
-      <button
-        matButton="text"
-        class="navigation-menu-toggle"
-        type="button"
-        [attr.aria-label]="navigationOpened() ? 'Fermer la navigation' : 'Ouvrir la navigation'"
-        [attr.aria-expanded]="navigationOpened()"
-        (click)="toggleNavigationCollapsed()"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 7h16M4 12h16M4 17h16" />
-        </svg>
-      </button>
-
-      <span class="mobile-page-title">{{ pageTitle() || 'Encoding' }}</span>
+      <app-theme-toggle class="auth-theme-toggle" />
     </header>
   }
 
@@ -48,36 +34,17 @@
             class="sidebar-header"
             [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
           >
-            <div class="sidebar-search-action">
+            <a
+              class="brand sidebar-brand"
+              routerLink="/"
+              [attr.aria-label]="'Encoding, accueil'"
+              (click)="onNavigationClick()"
+            >
+              <span class="brand-mark" aria-hidden="true">E</span>
               @if (isCompactNavigation() || !navigationCollapsed()) {
-                <button
-                  type="button"
-                  class="sidebar-search-trigger"
-                  (click)="openSearchPalette()"
-                  aria-label="Rechercher une page (⌘K)"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="10.8" cy="10.8" r="6.8" />
-                    <path d="m16 16 5 5" />
-                  </svg>
-                  <span class="search-trigger-placeholder">Rechercher…</span>
-                  <kbd class="search-shortcut">⌘K</kbd>
-                </button>
-              } @else {
-                <button
-                  type="button"
-                  class="sidebar-search-trigger is-collapsed"
-                  (click)="openSearchPalette()"
-                  aria-label="Rechercher une page (⌘K)"
-                  title="Rechercher… (⌘K)"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="10.8" cy="10.8" r="6.8" />
-                    <path d="m16 16 5 5" />
-                  </svg>
-                </button>
+                <span class="brand-name">Encoding</span>
               }
-            </div>
+            </a>
           </div>
 
           <app-primary-navigation
@@ -87,125 +54,123 @@
             (click)="onNavigationClick()"
           />
 
-          <div
-            class="sidebar-footer"
-            [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
-          >
-            <div
-              class="sidebar-cluster-status"
-              [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
-            >
-              <span
-                class="cluster-indicator-dot"
-                [class.is-offline]="!clusterHealthy()"
-                [attr.title]="clusterLabel()"
-                aria-hidden="true"
-              ></span>
-              @if (isCompactNavigation() || !navigationCollapsed()) {
-                <span class="cluster-indicator-label" [attr.title]="clusterLabel()">
-                  {{ clusterLabel() }}
-                </span>
-              }
+          @if (!isCompactNavigation()) {
+            <div class="sidebar-footer" [class.is-collapsed]="navigationCollapsed()">
+              <button
+                type="button"
+                class="sidebar-collapse-btn"
+                [attr.aria-label]="
+                  navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
+                "
+                [matTooltip]="
+                  navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
+                "
+                matTooltipPosition="right"
+                (click)="toggleNavigationCollapsed()"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  @if (navigationCollapsed()) {
+                    <path d="M9 5l7 7-7 7" />
+                  } @else {
+                    <path d="M15 19l-7-7 7-7" />
+                  }
+                </svg>
+                @if (!navigationCollapsed()) {
+                  <span class="collapse-btn-label">Replier</span>
+                }
+              </button>
             </div>
-
-            <div class="sidebar-user-block">
-              <app-user-menu [collapsed]="!isCompactNavigation() && navigationCollapsed()" />
-            </div>
-
-            <div class="sidebar-footer-controls">
-              <app-theme-toggle class="sidebar-theme-toggle" />
-              @if (!isCompactNavigation()) {
-                <button
-                  type="button"
-                  class="sidebar-collapse-btn"
-                  [attr.aria-label]="
-                    navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
-                  "
-                  [attr.title]="
-                    navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
-                  "
-                  (click)="toggleNavigationCollapsed()"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    @if (navigationCollapsed()) {
-                      <path d="M9 5l7 7-7 7" />
-                    } @else {
-                      <path d="M15 19l-7-7 7-7" />
-                    }
-                  </svg>
-                </button>
-              }
-            </div>
-          </div>
+          }
         </div>
       </mat-sidenav>
     }
 
     <mat-sidenav-content class="page-transition-region">
-      <main id="main-content" class="main-content" tabindex="0">
+      @if (!authMode() && !workspaceMode()) {
+        <header class="shell-topbar" aria-label="Barre de contexte et d’outils système">
+          <div class="topbar-start">
+            @if (isCompactNavigation()) {
+              <button
+                matButton="text"
+                class="navigation-menu-toggle"
+                type="button"
+                [attr.aria-label]="
+                  navigationOpened() ? 'Fermer la navigation' : 'Ouvrir la navigation'
+                "
+                [attr.aria-expanded]="navigationOpened()"
+                (click)="toggleNavigationCollapsed()"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+              </button>
+            }
+
+            <nav class="topbar-breadcrumb" aria-label="Fil d’Ariane">
+              @if (sectionGroup()) {
+                <span class="breadcrumb-group">{{ sectionGroup() }}</span>
+                <span class="breadcrumb-sep" aria-hidden="true">›</span>
+              }
+              <span class="breadcrumb-current">{{ pageTitle() || 'Encoding' }}</span>
+              @if (subSectionLabel()) {
+                <span class="breadcrumb-sep" aria-hidden="true">›</span>
+                <span class="breadcrumb-sub">{{ subSectionLabel() }}</span>
+              }
+            </nav>
+          </div>
+
+          <div class="topbar-end">
+            <button
+              type="button"
+              class="topbar-search-pill"
+              (click)="openSearchPalette()"
+              aria-label="Rechercher une page ou une ressource (⌘K)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="10.8" cy="10.8" r="6.8" />
+                <path d="m16 16 5 5" />
+              </svg>
+              <span class="search-trigger-placeholder">Rechercher…</span>
+              <kbd class="search-shortcut" aria-hidden="true">⌘K</kbd>
+            </button>
+
+            <a
+              class="topbar-cluster-pill"
+              routerLink="/nodes"
+              [queryParams]="{ tab: 'cluster' }"
+              [class.is-offline]="!clusterHealthy()"
+              [attr.aria-label]="'État du cluster : ' + clusterLabel()"
+              [matTooltip]="'État du cluster : ' + clusterLabel()"
+            >
+              <span
+                class="cluster-indicator-dot"
+                [class.is-offline]="!clusterHealthy()"
+                aria-hidden="true"
+              ></span>
+              <span class="cluster-indicator-label">{{ clusterLabel() }}</span>
+            </a>
+
+            @if (activeExecutionCount() > 0) {
+              <a
+                class="topbar-tasks-pill"
+                routerLink="/tasks"
+                [queryParams]="{ view: 'active' }"
+                [attr.aria-label]="activeExecutionCount() + ' traitement(s) en cours'"
+              >
+                <span class="tasks-pulse-dot" aria-hidden="true"></span>
+                <span>{{ activeExecutionCount() }} en cours</span>
+              </a>
+            }
+
+            <app-theme-toggle class="topbar-theme-toggle" />
+            <app-user-menu [collapsed]="true" />
+          </div>
+        </header>
+      }
+
+      <main id="main-content" class="main-content" tabindex="-1">
         <router-outlet />
       </main>
-
-      @if (!authMode() && !workspaceMode()) {
-        <footer class="application-footer">
-          <span
-            >Encoding <span class="footer-separator">·</span> Centre de traitement multimédia</span
-          >
-          <span class="footer-version">Centre d’opérations</span>
-        </footer>
-      }
     </mat-sidenav-content>
   </mat-sidenav-container>
-
-  @if (paletteOpen()) {
-    <div class="palette-backdrop" (click)="closeSearchPalette()">
-      <div
-        class="palette-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Palette de recherche"
-        (click)="$event.stopPropagation()"
-      >
-        <div class="palette-input-bar">
-          <svg viewBox="0 0 24 24" class="palette-search-icon" aria-hidden="true">
-            <circle cx="10.8" cy="10.8" r="6.8" />
-            <path d="m16 16 5 5" />
-          </svg>
-          <input
-            #paletteSearchInput
-            type="search"
-            role="combobox"
-            aria-autocomplete="list"
-            autocomplete="off"
-            placeholder="Rechercher une page…"
-            [value]="searchQuery()"
-            (input)="onSearchInput($event)"
-            (keydown)="onPaletteKeydown($event)"
-          />
-          <kbd class="palette-esc-badge" (click)="closeSearchPalette()">Échap</kbd>
-        </div>
-
-        @if (searchQuery()) {
-          <div class="palette-results" role="listbox" aria-label="Résultats">
-            @for (item of searchResults(); track item.path; let index = $index) {
-              <a
-                #firstSearchResult
-                class="palette-result-item"
-                role="option"
-                [routerLink]="item.path"
-                (keydown)="onSearchResultKeydown($event, index)"
-                (click)="closeSearchPalette()"
-              >
-                <span class="palette-result-glyph" aria-hidden="true">{{ item.glyph }}</span>
-                <span class="palette-result-label">{{ item.label }}</span>
-                <span class="palette-result-enter" aria-hidden="true">↵</span>
-              </a>
-            } @empty {
-              <p class="palette-empty">Aucune page ne correspond à « {{ searchQuery() }} ».</p>
-            }
-          </div>
-        }
-      </div>
-    </div>
-  }
 </div>

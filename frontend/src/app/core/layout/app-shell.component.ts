@@ -8,33 +8,32 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  ElementRef,
   effect,
   inject,
   signal,
-  viewChild,
-  viewChildren,
 } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter, map, of, switchMap } from 'rxjs';
-import {
-  getPrimaryNavigationGroups,
-  PrimaryNavigationComponent,
-} from '../navigation/primary-navigation.component';
+import { PrimaryNavigationComponent } from '../navigation/primary-navigation.component';
 import { AuthService } from '../auth/auth.service';
 import { UserMenuComponent } from '../auth/user-menu.component';
 import { ThemeToggleComponent } from '../theme/theme-toggle.component';
+import { SearchPaletteDialogComponent } from './search-palette-dialog.component';
 
 @Component({
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatButtonModule,
+    MatDialogModule,
     MatSidenavModule,
+    MatTooltipModule,
     PrimaryNavigationComponent,
     RouterLink,
     RouterOutlet,
@@ -48,6 +47,9 @@ import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 })
 export class AppShellComponent {
   private readonly router = inject(Router);
+  private readonly dialog = inject(MatDialog);
+  private paletteDialogRef: MatDialogRef<SearchPaletteDialogComponent> | null = null;
+
   private readonly navigationEnd = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -101,16 +103,10 @@ export class AppShellComponent {
     const override = this.dynamicTitle.current();
     return override?.url === context.url ? override.title : context.title;
   });
+  protected readonly sectionGroup = computed(() => this.navigationEnd().group);
+  protected readonly subSectionLabel = computed(() => this.navigationEnd().subLabel);
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
-  protected readonly searchQuery = signal('');
-  protected readonly paletteOpen = signal(false);
-  private readonly paletteSearchInput =
-    viewChild<ElementRef<HTMLInputElement>>('paletteSearchInput');
-  private readonly firstSearchResult =
-    viewChild<ElementRef<HTMLAnchorElement>>('firstSearchResult');
-  private readonly searchResultElements =
-    viewChildren<ElementRef<HTMLAnchorElement>>('firstSearchResult');
 
   private readonly auth = inject(AuthService);
   protected readonly currentUser = this.auth.user;
@@ -148,79 +144,23 @@ export class AppShellComponent {
   protected readonly activeExecutionCount = computed(
     () => this.executionState().data?.activeCount ?? 0,
   );
-  protected readonly searchResults = computed(() => {
-    const query = this.normalizeSearch(this.searchQuery().trim());
-    if (!query) return [];
-
-    return getPrimaryNavigationGroups(this.router.config)
-      .flatMap((group) => group.items)
-      .filter((item) => !item.adminOnly || this.auth.isAdmin())
-      .filter((item) =>
-        this.normalizeSearch([item.label, ...(item.keywords ?? [])].join(' ')).includes(query),
-      )
-      .slice(0, 6);
-  });
 
   protected openSearchPalette(): void {
-    this.paletteOpen.set(true);
-    setTimeout(() => {
-      this.paletteSearchInput()?.nativeElement.focus();
-    }, 50);
-  }
-
-  protected closeSearchPalette(): void {
-    this.paletteOpen.set(false);
-    this.searchQuery.set('');
-  }
-
-  protected onSearchInput(event: Event): void {
-    this.searchQuery.set((event.target as HTMLInputElement).value);
-  }
-
-  protected onPaletteKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
-      this.closeSearchPalette();
+    if (this.paletteDialogRef) {
+      this.paletteDialogRef.close();
       return;
     }
-
-    if (event.key === 'ArrowDown' && this.searchResults().length) {
-      event.preventDefault();
-      queueMicrotask(() => this.firstSearchResult()?.nativeElement.focus());
-      return;
-    }
-
-    if (event.key === 'Enter') {
-      const firstResult = this.searchResults()[0];
-      if (firstResult) {
-        event.preventDefault();
-        this.closeSearchPalette();
-        void this.router.navigateByUrl(firstResult.path);
-      }
-    }
-  }
-
-  protected onSearchResultKeydown(event: KeyboardEvent, index: number): void {
-    const items = this.searchResultElements();
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      const next = items[index + 1] ?? items[0];
-      next?.nativeElement.focus();
-      return;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (index === 0) {
-        this.paletteSearchInput()?.nativeElement.focus();
-      } else {
-        items[index - 1]?.nativeElement.focus();
-      }
-      return;
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      this.closeSearchPalette();
-      this.paletteSearchInput()?.nativeElement.focus();
-    }
+    this.paletteDialogRef = this.dialog.open(SearchPaletteDialogComponent, {
+      width: 'min(560px, 94vw)',
+      maxWidth: '560px',
+      position: { top: '10vh' },
+      panelClass: 'search-palette-dialog-panel',
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
+    });
+    this.paletteDialogRef.afterClosed().subscribe(() => {
+      this.paletteDialogRef = null;
+    });
   }
 
   protected onNavigationClick(): void {
@@ -233,27 +173,17 @@ export class AppShellComponent {
     if (
       event.key.toLocaleLowerCase() === 'k' &&
       (event.metaKey || event.ctrlKey) &&
-      !this.authMode() &&
-      !this.workspaceMode()
+      !this.authMode()
     ) {
       event.preventDefault();
-      if (this.paletteOpen()) {
-        this.closeSearchPalette();
-      } else {
-        this.openSearchPalette();
-      }
+      this.openSearchPalette();
     }
-  }
-
-  private normalizeSearch(value: string): string {
-    return value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLocaleLowerCase('fr');
   }
 
   private getCurrentPageContext(): {
     title: string;
+    group: string;
+    subLabel: string;
     url: string;
     workspaceMode: boolean;
     authMode: boolean;
@@ -264,9 +194,17 @@ export class AppShellComponent {
       route = route.firstChild;
     }
 
+    const nav = route.data['navigation'] as
+      { group?: string; label?: string; visible?: boolean } | undefined;
+    const title = (route.data['title'] as string | undefined) ?? 'Vue d’ensemble';
+    const subLabel =
+      nav && nav.visible === false && nav.label && nav.label !== title ? nav.label : '';
+
     return {
       url: this.router.url,
-      title: (route.data['title'] as string | undefined) ?? 'Vue d’ensemble',
+      title,
+      group: nav?.group ?? '',
+      subLabel,
       workspaceMode: route.data['layout'] === 'workspace',
       authMode: route.data['authPage'] !== undefined,
     };

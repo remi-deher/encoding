@@ -2,6 +2,8 @@
   @defer (when flowActionOpen()) {
     <app-detail-drawer
       [opened]="true"
+      size="standard"
+      [modal]="true"
       title="Créer un flow"
       description="Choisissez un nom, un média et un point de départ avant d’ouvrir l’éditeur."
       [content]="flowFormTemplate()"
@@ -66,121 +68,121 @@
           Le suivi n’a pas pu être actualisé. Les dernières valeurs reçues peuvent être obsolètes.
         </p>
       }
-      @for (task of activeTasks(); track task.id) {
-        <article class="node-row">
-          <div class="node-info">
-            <h3>{{ task.media }}</h3>
-            <p>
-              {{ task.library }} · {{ task.node || 'Worker non renseigné' }} ·
-              {{ executionLabels[task.state] }}
-            </p>
-            <p>{{ task.detail }}</p>
-            <mat-progress-bar
-              [mode]="task.progress === null ? 'indeterminate' : 'determinate'"
-              [value]="task.progress ?? 0"
-              aria-label="Progression du traitement"
-            />
-            <p>{{ task.progress === null ? 'Progression inconnue' : task.progress + ' %' }}</p>
-          </div>
-        </article>
-      } @empty {
-        @if (executionState().status === 'ready') {
-          <p>Aucune exécution en cours.</p>
+      <div class="execution-card-list">
+        @for (task of activeTasks(); track task.id) {
+          <app-execution-card [execution]="task" />
+        } @empty {
+          @if (executionState().status === 'ready') {
+            <p class="empty-panel-message">Aucune exécution en cours.</p>
+          }
         }
-      }
+      </div>
     </section>
 
-    <div class="overview-secondary">
-      <section class="surface-panel nodes-panel" aria-labelledby="nodes-heading">
-        <div class="panel-heading">
-          <div>
-            <h2 id="nodes-heading">{{ standalone() ? 'Ce nœud' : 'Nœuds du cluster' }}</h2>
-            <p>
-              {{
-                standalone()
-                  ? 'Disponibilité et fonctions de cette installation.'
-                  : 'Disponibilité et activité des installations.'
-              }}
-            </p>
-          </div>
-          <a class="subtle-link" routerLink="/nodes"
-            >{{ standalone() ? 'Gérer ce nœud' : 'Voir les nœuds' }}
-            <span aria-hidden="true">→</span></a
-          >
-        </div>
-
-        <div class="node-list">
-          @for (node of nodes(); track node.id) {
-            <article class="node-row">
-              <div class="node-avatar" aria-hidden="true">
-                {{ node.name.substring(0, 1).toUpperCase() }}
-              </div>
-              <div class="node-info">
-                <h3>{{ node.name }}</h3>
-                <p>{{ roleLabel(node.roles) }}</p>
-              </div>
-              <div class="node-state">
-                <app-status-badge [label]="lifecycleLabel(node)" [tone]="lifecycleTone(node)" />
-                <span class="node-workload"
-                  >Dernier signal : {{ node.lastSeenAt | date: 'dd/MM HH:mm:ss' }}</span
-                >
-              </div>
-            </article>
-          } @empty {
-            @if (state().status === 'ready') {
-              <p>
-                {{ standalone() ? 'Aucune information sur ce nœud.' : 'Aucun nœud enregistré dans le cluster.' }}
-              </p>
-            }
-          }
-        </div>
-      </section>
-      <section class="activity-panel surface-panel" aria-labelledby="activity-heading">
-        <div class="panel-heading">
-          <div>
-            <h2 id="activity-heading">Activité récente</h2>
-            <p>Les cinq exécutions récemment actualisées.</p>
-          </div>
-          <a class="subtle-link" routerLink="/tasks"
-            >Historique <span aria-hidden="true">→</span></a
-          >
-        </div>
-        <div class="execution-card-list">
-          @for (execution of recentExecutions(); track execution.id) {
-            <app-execution-card [execution]="execution" />
-          } @empty {
-            @if (executionState().status === 'ready') {
-              <p>Aucune exécution récente.</p>
-            }
-          }
-        </div>
-      </section>
-    </div>
-  </div>
-
-  @if (matrixColumns().length && matrixRows().length) {
-    <section class="surface-panel matrix-panel" aria-labelledby="matrix-heading">
+    <section class="surface-panel nodes-panel" aria-labelledby="nodes-heading">
       <div class="panel-heading">
         <div>
-          <h2 id="matrix-heading">Accès aux bibliothèques</h2>
+          <h2 id="nodes-heading">{{ standalone() ? 'Ce nœud' : 'Nœuds du cluster' }}</h2>
           <p>
             {{
               standalone()
-                ? 'Comment ce nœud atteint chaque bibliothèque.'
-                : 'Comment chaque nœud atteint chaque bibliothèque.'
+                ? 'Disponibilité et fonctions de cette installation.'
+                : 'Disponibilité et activité des installations.'
             }}
           </p>
         </div>
+        <a class="subtle-link" routerLink="/nodes"
+          >{{ standalone() ? 'Gérer ce nœud' : 'Voir les nœuds' }}
+          <span aria-hidden="true">→</span></a
+        >
       </div>
-      <app-matrix-table
-        [caption]="standalone() ? 'Accès de ce nœud à chaque bibliothèque' : 'Accès de chaque nœud à chaque bibliothèque'"
-        cornerLabel="Nœud"
-        [rows]="matrixRows()"
-        [columns]="matrixColumns()"
-        [cells]="matrixCells()"
-      />
+
+      <div class="node-list">
+        @for (node of nodes(); track node.id) {
+          <article class="node-row">
+            <div class="node-avatar" aria-hidden="true">
+              {{ node.name.substring(0, 1).toUpperCase() }}
+            </div>
+            <div class="node-info">
+              <h3>{{ node.name }}</h3>
+              <p>{{ roleLabel(node.roles) }}</p>
+            </div>
+            <div class="node-state">
+              <app-status-badge [label]="lifecycleLabel(node)" [tone]="lifecycleTone(node)" />
+              <span class="node-workload"
+                >Dernier signal : {{ node.lastSeenAt | date: 'dd/MM HH:mm:ss' }}</span
+              >
+            </div>
+          </article>
+        } @empty {
+          @if (state().status === 'ready') {
+            <p class="empty-panel-message">
+              {{
+                standalone()
+                  ? 'Aucune information sur ce nœud.'
+                  : 'Aucun nœud enregistré dans le cluster.'
+              }}
+            </p>
+          }
+        }
+      </div>
     </section>
-  }
+  </div>
+
+  <div
+    class="overview-bottom-grid"
+    [class.has-matrix]="matrixColumns().length && matrixRows().length"
+  >
+    <section class="activity-panel surface-panel" aria-labelledby="activity-heading">
+      <div class="panel-heading">
+        <div>
+          <h2 id="activity-heading">Activité récente</h2>
+          <p>Les cinq exécutions récemment actualisées.</p>
+        </div>
+        <a class="subtle-link" routerLink="/tasks">Historique <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="execution-card-list">
+        @for (execution of recentExecutions(); track execution.id) {
+          <app-execution-card [execution]="execution" />
+        } @empty {
+          @if (executionState().status === 'ready') {
+            <p class="empty-panel-message">Aucune exécution récente.</p>
+          }
+        }
+      </div>
+    </section>
+
+    @if (matrixColumns().length && matrixRows().length) {
+      <section class="surface-panel matrix-panel" aria-labelledby="matrix-heading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="matrix-heading">Accès aux bibliothèques</h2>
+            <p>
+              {{
+                standalone()
+                  ? 'Comment ce nœud atteint chaque bibliothèque.'
+                  : 'Comment chaque nœud atteint chaque bibliothèque.'
+              }}
+            </p>
+          </div>
+          <a class="subtle-link" routerLink="/libraries"
+            >Librairies <span aria-hidden="true">→</span></a
+          >
+        </div>
+        <app-matrix-table
+          [caption]="
+            standalone()
+              ? 'Accès de ce nœud à chaque bibliothèque'
+              : 'Accès de chaque nœud à chaque bibliothèque'
+          "
+          cornerLabel="Nœud"
+          [rows]="matrixRows()"
+          [columns]="matrixColumns()"
+          [cells]="matrixCells()"
+        />
+      </section>
+    }
+  </div>
 </ng-template>
 
 <ng-template #pageActions>

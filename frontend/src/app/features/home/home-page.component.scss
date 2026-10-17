@@ -4,38 +4,42 @@
 
 .health-banner-section {
   margin-block: var(--space-3) var(--space-5);
-  padding-bottom: var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: var(--space-3);
 }
 
 .overview-grid {
   margin-top: var(--space-5);
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 1fr);
   align-items: start;
   gap: var(--space-4);
 }
 
-.overview-secondary {
-  min-width: 0;
+.overview-bottom-grid {
+  margin-top: var(--space-4);
   display: grid;
-  align-content: start;
+  grid-template-columns: 1fr;
+  align-items: start;
   gap: var(--space-4);
+
+  &.has-matrix {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
 }
 
+/* Surfaces tonales M3 Expressive sans cages de bordures */
 .surface-panel {
   min-width: 0;
   padding: var(--space-5);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-2xl);
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
+  background: var(--surface-container-low);
+  box-shadow: var(--elevation-1);
 }
 
 .panel-heading {
@@ -50,46 +54,38 @@
   margin: 0;
   color: var(--text-primary);
   font-size: var(--font-title-md);
-  font-weight: 700;
+  font-weight: 730;
   letter-spacing: -0.02em;
 }
 
 .panel-heading p {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   color: var(--text-muted);
   font-size: var(--font-body);
   line-height: 1.5;
 }
 
 .subtle-link {
-  padding-top: 2px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-container);
   color: var(--accent-strong);
-  font-size: var(--font-body);
-  font-weight: 660;
+  font-size: var(--font-label);
+  font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
+  transition: background-color 160ms var(--motion-spring-fast);
 }
 
 .subtle-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  background: var(--accent-soft);
 }
 
 .node-info h3 {
   margin: 0;
   color: var(--text-primary);
   font-size: var(--font-body);
-  font-weight: 660;
-}
-
-mat-progress-bar {
-  display: block;
-  height: 6px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  --mdc-linear-progress-track-height: 6px;
-  --mdc-linear-progress-active-indicator-height: 6px;
-  --mdc-linear-progress-track-shape: 99px;
+  font-weight: 680;
 }
 
 .node-list {
@@ -109,13 +105,13 @@ mat-progress-bar {
 }
 
 .node-row:first-child {
-  border-start-start-radius: var(--radius-lg);
-  border-start-end-radius: var(--radius-lg);
+  border-start-start-radius: var(--radius-xl);
+  border-start-end-radius: var(--radius-xl);
 }
 
 .node-row:last-child {
-  border-end-start-radius: var(--radius-lg);
-  border-end-end-radius: var(--radius-lg);
+  border-end-start-radius: var(--radius-xl);
+  border-end-end-radius: var(--radius-xl);
 }
 
 .node-row:hover {
@@ -123,8 +119,8 @@ mat-progress-bar {
 }
 
 .node-avatar {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -132,7 +128,7 @@ mat-progress-bar {
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: var(--font-body);
-  font-weight: 750;
+  font-weight: 760;
 }
 
 .node-info {
@@ -149,7 +145,7 @@ mat-progress-bar {
 .node-info p {
   margin: var(--space-1) 0 0;
   color: var(--text-muted);
-  font-size: var(--font-body);
+  font-size: var(--font-label);
 }
 
 .node-state {
@@ -160,40 +156,36 @@ mat-progress-bar {
 
 .node-workload {
   color: var(--text-muted);
+  font-size: var(--font-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-panel-message {
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container);
+  color: var(--text-muted);
   font-size: var(--font-body);
-}
-
-.activity-panel {
-  margin-top: 0;
-}
-
-.matrix-panel {
-  margin-top: var(--space-4);
 }
 
 .execution-card-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   gap: var(--space-3);
 }
 
-@media (max-width: 1000px) {
-  .metrics-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .overview-grid {
+@media (max-width: 1080px) {
+  .overview-grid,
+  .overview-bottom-grid.has-matrix {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 600px) {
   .overview-grid,
-  .overview-secondary {
+  .overview-bottom-grid {
     gap: var(--space-3);
-  }
-
-  .overview-grid {
     margin-top: var(--space-4);
   }
 }

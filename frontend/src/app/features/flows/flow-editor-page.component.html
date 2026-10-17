@@ -2,7 +2,7 @@
   [title]="flowTitle()"
   [shellTitle]="flowTitle()"
   layout="workspace"
-  [showHeading]="false"
+  [showHeading]="true"
 >
   <span page-metadata role="status">
     {{ editorStatus() }}
@@ -23,7 +23,7 @@
   </span>
   <button
     page-tools
-    matButton="outlined"
+    matButton="tonal"
     type="button"
     [disabled]="loadState() !== 'ready' || simulator.busy()"
     (click)="openSimulator()"
@@ -48,7 +48,7 @@
   >
     {{ validating() ? 'Vérification…' : 'Vérifier le flow' }}
   </button>
-  <a page-actions matButton="text" routerLink="/flows">Annuler</a>
+  <a page-actions matButton="text" routerLink="/flows">← Flows</a>
   <button
     page-actions
     matButton="filled"
