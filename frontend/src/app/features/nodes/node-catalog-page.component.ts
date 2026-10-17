@@ -18,7 +18,7 @@ import {
   NODE_LIFECYCLE_TONES,
 } from '../../shared/models/cluster-health';
 import { firstValueFrom } from 'rxjs';
-import { ClusterApi } from '../../shared/services/cluster-api';
+import { ClusterApi, ClusterReconciliationHealthStatus } from '../../shared/services/cluster-api';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../../shared/models/auth';
 import {
   NodeRole,
@@ -217,6 +217,7 @@ export class NodeCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
   private readonly nodes = signal<readonly NodeResponse[]>([]);
+  protected readonly reconciliationStatus = signal<ClusterReconciliationHealthStatus | null>(null);
   private readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
   private readonly allLibraries = signal<readonly LibraryResponse[]>([]);
   private readonly nodeAccessByLibrary = signal<
@@ -480,6 +481,50 @@ export class NodeCatalogPageComponent {
     return this.loadState() === 'error'
       ? 'Impossible de joindre l’API du cluster. Vérifiez que le serveur et sa base de données sont disponibles.'
       : 'Chargement des nœuds du cluster…';
+  });
+  protected readonly reconciliationBanner = computed(() => {
+    const status = this.reconciliationStatus();
+    if (!status) {
+      return {
+        title: 'État de synchronisation indisponible',
+        description: 'Impossible de lire l’état du maillage entre les serveurs.',
+      };
+    }
+    if (!status.enabled) {
+      return {
+        title: 'Synchronisation entre serveurs inactive',
+        description:
+          `${status.disabledReason ?? 'Le rattachement du serveur au cluster n’est pas terminé.'} Sans ce maillage, chaque serveur ne voit que ses données locales.`,
+      };
+    }
+    const peers = status.peers.filter((peer) => peer.configured || peer.discovered);
+    if (!peers.length) {
+      const detail = status.discoveryAvailable
+        ? 'Aucun pair n’a été découvert. Vérifiez que mDNS est autorisé entre les serveurs ou configurez Cluster:Reconciliation:Peers__0 avec une adresse joignable.'
+        : `La découverte mDNS est indisponible${status.discoveryError ? ` (${status.discoveryError})` : ''}. Configurez Cluster:Reconciliation:Peers__0 avec une adresse joignable.`;
+      return { title: 'Aucun serveur pair détecté', description: detail };
+    }
+    const failed = peers.filter((peer) => peer.lastError);
+    if (failed.length) {
+      const firstError = failed[0].lastError;
+      return {
+        title: `Synchronisation en échec avec ${failed.length} serveur(s)`,
+        description: firstError
+          ? `${failed[0].url} — ${firstError}`
+          : 'Vérifiez que les serveurs sont approuvés dans le cluster et peuvent communiquer.',
+      };
+    }
+    const pending = peers.filter((peer) => !peer.lastSuccessAt).length;
+    if (pending) {
+      return {
+        title: 'Serveur(s) détecté(s), premier échange en attente',
+        description: `${pending} pair(s) n’a pas encore confirmé de réconciliation. Vérifiez sa disponibilité réseau et son admission au cluster.`,
+      };
+    }
+    return {
+      title: `Synchronisation active avec ${peers.length} serveur(s)`,
+      description: `Dernier échange réussi : ${new Date(Math.max(...peers.map((peer) => Date.parse(peer.lastSuccessAt!)))).toLocaleString()}.`,
+    };
   });
   protected readonly detailTitle = computed(
     () => this.rawNode()?.displayName?.trim() || this.rawNode()?.name || 'Détails du nœud',
@@ -1448,6 +1493,7 @@ export class NodeCatalogPageComponent {
         switchMap(() =>
           forkJoin({
             nodes: this.clusterApi.listNodes(),
+            reconciliation: this.clusterApi.reconciliationStatus().pipe(catchError(() => of(null))),
             pending: this.http.get<readonly PendingNodeEnrollmentResponse[]>(
               '/api/v1/nodes/enrollment-requests',
             ),
@@ -1463,12 +1509,13 @@ export class NodeCatalogPageComponent {
         ),
         takeUntilDestroyed(),
       )
-      .subscribe(({ nodes, pending, activity }) => {
+      .subscribe(({ nodes, reconciliation, pending, activity }) => {
         if (activity) {
           this.activeTasks.set(activity);
           this.activityLoaded.set(true);
         }
         this.nodes.set(nodes);
+        this.reconciliationStatus.set(reconciliation);
         this.pendingEnrollments.set(pending);
         this.loadState.set('ready');
       });

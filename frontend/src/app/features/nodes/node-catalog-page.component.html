@@ -90,6 +90,18 @@
     (selectedChange)="onManagementTabChange($event)"
   />
   <ng-container catalogue-summary>
+    @if (
+      pageTab() === 'cluster' &&
+      !local.standalone() &&
+      clusterIdentity() &&
+      loadState() === 'ready'
+    ) {
+      <app-context-banner
+        label="Synchronisation des serveurs"
+        [title]="reconciliationBanner().title"
+        [description]="reconciliationBanner().description"
+      />
+    }
     @if (pageTab() === 'cluster' && local.pending()) {
       <app-context-banner
         label="Rattachement en cours"

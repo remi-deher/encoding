@@ -127,12 +127,11 @@ public sealed class ClusterReconciliationSqliteTests
             }
         }
 
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["Cluster:Reconciliation:SharedSecret"] = "cluster-mesh-sqlite-test-secret-0123456789"
-        }).Build();
-        var sourceReconciliation = new ClusterEntityReconciliation(source.Db, configuration, new EphemeralDataProtectionProvider(), NullLogger<ClusterEntityReconciliation>.Instance);
-        var targetReconciliation = new ClusterEntityReconciliation(target.Db, configuration, new EphemeralDataProtectionProvider(), NullLogger<ClusterEntityReconciliation>.Instance);
+        var clusterDataKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        using var sourceDataKey = new ClusterDataKeyStore(clusterId, clusterDataKey);
+        using var targetDataKey = new ClusterDataKeyStore(clusterId, clusterDataKey);
+        var sourceReconciliation = new ClusterEntityReconciliation(source.Db, sourceDataKey, new EphemeralDataProtectionProvider(), NullLogger<ClusterEntityReconciliation>.Instance);
+        var targetReconciliation = new ClusterEntityReconciliation(target.Db, targetDataKey, new EphemeralDataProtectionProvider(), NullLogger<ClusterEntityReconciliation>.Instance);
         var sourceJournal = new ClusterReconciliationRepository(source.Db);
         var targetJournal = new ClusterReconciliationRepository(target.Db);
 

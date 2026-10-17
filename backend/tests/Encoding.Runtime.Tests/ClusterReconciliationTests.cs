@@ -98,14 +98,21 @@ public sealed class ClusterReconciliationTests
     [Fact]
     public void ExchangeSignatureAuthenticatesBodyAndRejectsExpiredMessages()
     {
-        const string secret = "maillage-test-secret-0123456789abcdef";
+        var directory = Path.Combine(Path.GetTempPath(), "encoding-signature-" + Guid.NewGuid().ToString("N"));
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["PluginSettings:KeyDirectory"] = directory
+        }).Build();
+        var protection = new EphemeralDataProtectionProvider();
+        using var identity = new ClusterPeerIdentityStore(configuration, protection);
         var body = "{\"clusterId\":\"test\"}"u8.ToArray();
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var signature = ClusterReconciliationSignature.Create(secret, timestamp, body);
+        var signature = ClusterReconciliationSignature.Create(identity, timestamp, body);
 
-        Assert.True(ClusterReconciliationSignature.Verify(secret, timestamp, signature, body));
-        Assert.False(ClusterReconciliationSignature.Verify(secret, timestamp, signature, "{}"u8));
-        Assert.False(ClusterReconciliationSignature.Verify(secret, "1", signature, body));
+        Assert.True(ClusterReconciliationSignature.Verify(identity.PublicKey, identity.PeerId, timestamp, signature, body));
+        Assert.False(ClusterReconciliationSignature.Verify(identity.PublicKey, identity.PeerId, timestamp, signature, "{}"u8));
+        Assert.False(ClusterReconciliationSignature.Verify(identity.PublicKey, identity.PeerId, "1", signature, body));
+        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
     }
 
     [Fact]
@@ -287,12 +294,11 @@ public sealed class ClusterReconciliationTests
             }
         }
 
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["Cluster:Reconciliation:SharedSecret"] = "cluster-mesh-test-secret-with-at-least-32-bytes"
-        }).Build();
-        var entitySyncFirst = new ClusterEntityReconciliation(first.Db, config, sourceProtection, NullLogger<ClusterEntityReconciliation>.Instance);
-        var entitySyncSecond = new ClusterEntityReconciliation(second.Db, config, targetProtection, NullLogger<ClusterEntityReconciliation>.Instance);
+        var clusterDataKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        using var sourceDataKey = new ClusterDataKeyStore(clusterId, clusterDataKey);
+        using var targetDataKey = new ClusterDataKeyStore(clusterId, clusterDataKey);
+        var entitySyncFirst = new ClusterEntityReconciliation(first.Db, sourceDataKey, sourceProtection, NullLogger<ClusterEntityReconciliation>.Instance);
+        var entitySyncSecond = new ClusterEntityReconciliation(second.Db, targetDataKey, targetProtection, NullLogger<ClusterEntityReconciliation>.Instance);
         var source = new ClusterReconciliationRepository(first.Db);
         var target = new ClusterReconciliationRepository(second.Db);
 

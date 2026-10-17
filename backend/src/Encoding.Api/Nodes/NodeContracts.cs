@@ -65,6 +65,20 @@ public static class NodeHeartbeatValidator
         if (request.Id == Guid.Empty) errors["id"] = ["L’identifiant du nœud doit être un UUID non vide."];
         if (string.IsNullOrWhiteSpace(request.NodeToken) || request.NodeToken.Length is < 40 or > 256)
             errors["nodeToken"] = ["L’identité locale du nœud est invalide."];
+        if ((request.ClusterPeerId is null) != string.IsNullOrWhiteSpace(request.ClusterPeerPublicKey)
+            || request.ClusterPeerId == Guid.Empty)
+            errors["clusterPeer"] = ["L’identité du serveur de cluster est incomplète."];
+        if (!string.IsNullOrWhiteSpace(request.ClusterPeerPublicKey))
+        {
+            try
+            {
+                using var rsa = Encoding.Api.Infrastructure.ClusterPeerIdentityStore.ImportPublicKey(request.ClusterPeerPublicKey);
+            }
+            catch (Exception exception) when (exception is FormatException or System.Security.Cryptography.CryptographicException)
+            {
+                errors["clusterPeerPublicKey"] = ["La clé publique du serveur est invalide."];
+            }
+        }
         return errors;
     }
 

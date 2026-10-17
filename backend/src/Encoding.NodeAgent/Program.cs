@@ -74,10 +74,13 @@ app.MapDelete("/api/v1/worker/clusters/{clusterId:guid}", (Guid clusterId, Worke
     discovery.Forget(clusterId)
         ? Results.NoContent()
         : Results.NotFound(new { title = "Seule une adresse ajoutée à la main peut être oubliée ; ce cluster est détecté automatiquement." })).WithName("ForgetWorkerCluster");
-app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe, CancellationToken cancellationToken) =>
+app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, WorkerIdentityStore identityStore, IToolCapabilityProbe capabilityProbe, WorkerEnrollmentService enrollment, CancellationToken cancellationToken) =>
 {
     var identity = await identityStore.GetAsync(cancellationToken);
     var capabilities = await capabilityProbe.DiscoverAsync(cancellationToken);
+    Encoding.Contracts.Cluster.ClusterPeerPublicIdentity? peerIdentity = null;
+    try { peerIdentity = await enrollment.GetLocalPeerIdentityAsync(cancellationToken); }
+    catch (HttpRequestException) { }
     return Results.Ok(new
     {
         nodeId = identity.Id,
@@ -92,7 +95,7 @@ app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, Worker
         pairingExpiresAt = identity.IsPairingPending ? identity.PairingExpiresAt : null,
         clusterId = identity.ClusterId,
         clusterName = identity.ClusterName,
-        verificationCode = identity.HasCredentials ? NodeVerificationCode.FromToken(identity.Id, identity.NodeToken!) : null,
+        verificationCode = identity.HasCredentials ? NodeVerificationCode.FromToken(identity.Id, identity.NodeToken!, peerIdentity?.PublicKey) : null,
         switching = identity.IsSwitching
             ? new { previousClusterName = identity.Previous!.ClusterName, deadline = identity.SwitchDeadline }
             : null,

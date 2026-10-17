@@ -1,4 +1,5 @@
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Infrastructure;
 using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -9,7 +10,7 @@ namespace Encoding.Api.Nodes;
 
 public enum PairingRequestResult { Created, Conflict, TooMany }
 
-public sealed class NodeRepository(DbDataSource dataSource)
+public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmissionRepository? peerAdmissions = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -51,6 +52,14 @@ public sealed class NodeRepository(DbDataSource dataSource)
         return (await command.ScalarBoolAsync(cancellationToken));
     }
 
+    public async Task<bool> AuthenticateTokenAsync(Guid nodeId, string token, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id = @id AND node_token_hash = @hash AND deleted_at IS NULL)");
+        command.Parameters.AddWithValue("id", nodeId);
+        command.Parameters.AddWithValue("hash", SqlKind.Bytes, HashSecret(token));
+        return await command.ScalarBoolAsync(cancellationToken);
+    }
+
     /// <summary>Vrai si cet identifiant a été retiré du cluster (suppression ou départ) : le nœud doit repartir d'une identité neuve (0017).</summary>
     public async Task<bool> IsRemovedAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -70,12 +79,14 @@ public sealed class NodeRepository(DbDataSource dataSource)
         var nodeTokenHash = HashSecret(request.Node.NodeToken);
         const string sql = """
             INSERT INTO node_enrollment_requests
-                (node_id, pairing_key_hash, node_token_hash, name, roles, max_concurrent_tasks, capabilities, inventory, expires_at)
+                (node_id, pairing_key_hash, node_token_hash, peer_id, peer_public_key, name, roles, max_concurrent_tasks, capabilities, inventory, expires_at)
             VALUES
-                (@id, @pairing_key_hash, @node_token_hash, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp() + interval '10 minutes')
+                (@id, @pairing_key_hash, @node_token_hash, @peer_id, @peer_public_key, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp() + interval '10 minutes')
             ON CONFLICT (node_id) DO UPDATE SET
                 pairing_key_hash = EXCLUDED.pairing_key_hash,
                 node_token_hash = EXCLUDED.node_token_hash,
+                peer_id = EXCLUDED.peer_id,
+                peer_public_key = EXCLUDED.peer_public_key,
                 name = EXCLUDED.name,
                 roles = EXCLUDED.roles,
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
@@ -97,13 +108,15 @@ public sealed class NodeRepository(DbDataSource dataSource)
             request.Node.Inventory));
         command.Parameters.AddWithValue("pairing_key_hash", SqlKind.Bytes, pairingKeyHash);
         command.Parameters.AddWithValue("node_token_hash", SqlKind.Bytes, nodeTokenHash);
+        command.Parameters.AddWithValue("peer_id", (object?)request.Node.ClusterPeerId ?? DBNull.Value);
+        command.Parameters.AddWithValue("peer_public_key", (object?)request.Node.ClusterPeerPublicKey ?? DBNull.Value);
         return await command.ExecuteScalarAsync(cancellationToken) is not null ? PairingRequestResult.Created : PairingRequestResult.Conflict;
     }
 
     public async Task<IReadOnlyList<PendingNodeEnrollmentResponse>> ListPendingPairingRequestsAsync(CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at, inventory, node_token_hash
+            SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at, inventory, node_token_hash, peer_public_key
             FROM node_enrollment_requests
             WHERE expires_at > clock_timestamp() AND NOT EXISTS(SELECT 1 FROM cluster_nodes n WHERE n.id=node_enrollment_requests.node_id AND n.deleted_at IS NOT NULL)
             ORDER BY created_at, node_id
@@ -121,7 +134,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
                 new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc)),
                 new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc)),
                 ReadInventory(reader.GetString(7)),
-                NodeVerificationCode.FromTokenHash(reader.GetGuid(0), reader.GetFieldValue<byte[]>(8))));
+                NodeVerificationCode.FromTokenHash(reader.GetGuid(0), reader.GetFieldValue<byte[]>(8), reader.IsDBNull(9) ? null : reader.GetString(9))));
         }
         return requests;
     }
@@ -142,13 +155,15 @@ public sealed class NodeRepository(DbDataSource dataSource)
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var requestPredicate = requestedNodeId.HasValue ? "node_id = @node_id" : "pairing_key_hash = @pairing_key_hash";
         var selectSql = $"""
-            SELECT node_id, node_token_hash, name, roles, max_concurrent_tasks, capabilities, inventory
+            SELECT node_id, node_token_hash, name, roles, max_concurrent_tasks, capabilities, inventory, peer_id, peer_public_key
             FROM node_enrollment_requests
             WHERE {requestPredicate} AND expires_at > clock_timestamp()
             FOR UPDATE
             """;
         Guid nodeId;
         byte[] nodeTokenHash;
+        Guid? peerId;
+        string? peerPublicKey;
         NodeHeartbeatRequest heartbeat;
         await using (var selectCommand = Sql.Command(selectSql, connection, transaction))
         {
@@ -168,6 +183,8 @@ public sealed class NodeRepository(DbDataSource dataSource)
                 reader.GetInt32(4),
                 JsonSerializer.Deserialize<IReadOnlyList<NodeToolCapability>>(reader.GetString(5), JsonOptions) ?? [],
                 ReadInventory(reader.GetString(6)));
+            peerId = reader.IsDBNull(7) ? null : reader.GetGuid(7);
+            peerPublicKey = reader.IsDBNull(8) ? null : reader.GetString(8);
         }
 
         const string enrollSql = """
@@ -196,6 +213,9 @@ public sealed class NodeRepository(DbDataSource dataSource)
             await transaction.RollbackAsync(cancellationToken);
             return null;
         }
+
+        if (peerId.HasValue && peerPublicKey is not null && peerAdmissions is not null)
+            await peerAdmissions.CreateApprovalGrantAsync(connection, transaction, nodeId, peerId.Value, peerPublicKey, cancellationToken);
 
         await using (var deleteCommand = Sql.Command(
             "DELETE FROM node_enrollment_requests WHERE node_id = @id", connection, transaction))
@@ -408,6 +428,7 @@ public sealed class NodeRepository(DbDataSource dataSource)
           OR EXISTS(SELECT 1 FROM library_scans WHERE node_id=@id AND state='running' AND lease_until>clock_timestamp())
           """,c,tx);
         active.Parameters.AddWithValue("id",id); if((await active.ScalarBoolAsync(ct))) return "busy";
+        if (peerAdmissions is not null) await peerAdmissions.RevokeNodeAdmissionAsync(c, tx, id, ct);
         await using var remove=Sql.Command("""
           UPDATE cluster_nodes SET deleted_at=clock_timestamp(),node_token_hash=NULL WHERE id=@id;
           DELETE FROM node_group_members WHERE node_id=@id;

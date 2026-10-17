@@ -488,6 +488,8 @@ CREATE TABLE node_enrollment_requests (
     node_id TEXT PRIMARY KEY,
     pairing_key_hash BLOB NOT NULL,
     node_token_hash BLOB NOT NULL,
+    peer_id TEXT,
+    peer_public_key TEXT,
     name TEXT NOT NULL,
     roles TEXT NOT NULL,
     max_concurrent_tasks INTEGER NOT NULL,
@@ -498,6 +500,24 @@ CREATE TABLE node_enrollment_requests (
     UNIQUE (pairing_key_hash),
     CHECK (((max_concurrent_tasks >= 0) AND (max_concurrent_tasks <= 1024)))
 );
+
+-- Membership proof and a cluster-key envelope for each server API admitted to the mesh.
+-- The private signing/decryption key never leaves its server; only this signed public grant is replicated.
+CREATE TABLE cluster_peer_admissions (
+    cluster_id TEXT NOT NULL,
+    peer_id TEXT NOT NULL,
+    node_id TEXT,
+    public_key TEXT NOT NULL,
+    approved_by_peer_id TEXT NOT NULL,
+    wrapped_data_key TEXT,
+    key_fingerprint TEXT NOT NULL,
+    issued_at TEXT NOT NULL,
+    revoked_at TEXT,
+    signature TEXT NOT NULL,
+    PRIMARY KEY (cluster_id, peer_id),
+    UNIQUE (cluster_id, node_id)
+);
+CREATE INDEX ix_cluster_peer_admissions_node ON cluster_peer_admissions (cluster_id, node_id);
 
 CREATE TABLE node_group_members (
     group_id TEXT NOT NULL,

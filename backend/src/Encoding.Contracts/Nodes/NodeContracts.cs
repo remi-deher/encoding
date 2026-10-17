@@ -1,3 +1,5 @@
+using Encoding.Contracts.Cluster;
+
 namespace Encoding.Contracts.Nodes;
 
 public enum NodeRole
@@ -86,7 +88,8 @@ public sealed record NodeResponse(
     IReadOnlyDictionary<string, string?>? Labels = null,
     IReadOnlyList<NodeRole>? DesiredRoles = null,
     NodeLifecycle? Lifecycle = null,
-    string? LifecycleReason = null);
+    string? LifecycleReason = null,
+    ClusterJoinBootstrap? ClusterBootstrap = null);
 
 /// <summary>Demande d'un administrateur : mode de fonctionnement voulu pour un nœud, appliqué par le nœud à son prochain signal de présence (architecture 0036).</summary>
 public sealed record ChangeNodeModeRequest(bool Server, bool Worker);
@@ -98,7 +101,9 @@ public sealed record NodeEnrollmentRequest(
     int MaxConcurrentTasks,
     IReadOnlyList<NodeToolCapability> Capabilities,
     string NodeToken,
-    NodeInventory? Inventory = null);
+    NodeInventory? Inventory = null,
+    Guid? ClusterPeerId = null,
+    string? ClusterPeerPublicKey = null);
 
 public sealed record CreateNodeEnrollmentRequest(NodeEnrollmentRequest Node, string PairingKey);
 

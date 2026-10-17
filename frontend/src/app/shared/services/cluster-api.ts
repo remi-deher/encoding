@@ -7,6 +7,23 @@ import { NodeSchedule } from '../models/node-schedule';
 import { NodeResponse, LibraryResponse, NodeProcessingSettings } from '../models/cluster';
 import { ClusterIdentity } from '../models/local-node';
 
+export interface ClusterReconciliationPeerHealth {
+  readonly url: string;
+  readonly configured: boolean;
+  readonly discovered: boolean;
+  readonly lastAttemptAt: string | null;
+  readonly lastSuccessAt: string | null;
+  readonly lastError: string | null;
+}
+
+export interface ClusterReconciliationHealthStatus {
+  readonly enabled: boolean;
+  readonly disabledReason: string | null;
+  readonly discoveryAvailable: boolean;
+  readonly discoveryError: string | null;
+  readonly peers: readonly ClusterReconciliationPeerHealth[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ClusterApi {
   private readonly http = inject(HttpClient);
@@ -16,6 +33,9 @@ export class ClusterApi {
   }
   listNodes() {
     return this.http.get<readonly NodeResponse[]>('/api/v1/nodes');
+  }
+  reconciliationStatus() {
+    return this.http.get<ClusterReconciliationHealthStatus>('/api/v1/cluster/reconciliation/status');
   }
   libraryProcessing(id: string) {
     return this.http.get<LibraryProcessingSettings>('/api/v1/libraries/' + id + '/processing');

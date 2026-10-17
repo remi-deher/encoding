@@ -5,9 +5,10 @@ namespace Encoding.Api.Infrastructure;
 
 using Encoding.Api.Infrastructure.PeerCluster;
 using System.Text.Json;
+using Encoding.Contracts.Cluster;
 
 public sealed record ClusterNameRequest(string Name);
-public sealed record ClusterJoinRequest(Guid ClusterId, string ClusterName);
+public sealed record ClusterJoinRequest(Guid ClusterId, string ClusterName, Guid NodeId, ClusterJoinBootstrap? Bootstrap = null);
 
 public static class ClusterEndpoints
 {
@@ -21,7 +22,7 @@ public static class ClusterEndpoints
         }).AllowAnonymous().WithTags("Cluster").WithName("GetClusterIdentity");
 
         // Un nœud autonome devient un cluster en le nommant ; ensuite seul le nom change (architecture 0045).
-        app.MapPost(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, IServiceProvider services, CancellationToken cancellationToken) =>
+        app.MapPost(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions, IServiceProvider services, CancellationToken cancellationToken) =>
         {
             var peerOptions = services.GetRequiredService<PeerClusterOptions>();
             var peerConsensus = peerOptions.Enabled ? services.GetRequiredService<PeerConsensusService>() : null;
@@ -43,6 +44,8 @@ public static class ClusterEndpoints
                     return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Le quorum Raft n’a pas confirmé le nom du cluster.");
                 }
             }
+            var current = await repository.GetAsync(cancellationToken);
+            if (current.Standalone) await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);
             return await repository.CreateAsync(request.Name, cancellationToken)
                 ? Results.Ok(await repository.GetAsync(cancellationToken))
                 : Results.Conflict(new { title = "Ce nœud fait déjà partie d’un cluster." });
@@ -79,12 +82,21 @@ public static class ClusterEndpoints
             IConfiguration configuration,
             HttpContext http,
             ClusterIdentityRepository repository,
+            ClusterPeerAdmissionRepository admissions,
             CancellationToken cancellationToken) =>
         {
             if (!LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting], http.Request.Headers[LocalEnrollment.HeaderName].ToString()))
                 return Results.Unauthorized();
             if (request.ClusterId == Guid.Empty || !ClusterIdentityRepository.IsValidName(request.ClusterName))
                 return Results.BadRequest(new { title = "Identité du cluster invalide." });
+            if (request.NodeId == Guid.Empty || request.Bootstrap is null || request.Bootstrap.ClusterId != request.ClusterId
+                || !string.Equals(request.Bootstrap.ClusterName, request.ClusterName, StringComparison.Ordinal))
+                return Results.BadRequest(new { title = "La preuve d’admission du cluster est absente ou incohérente." });
+            try { await admissions.ImportBootstrapAsync(request.Bootstrap, request.NodeId, cancellationToken); }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or FormatException or System.Security.Cryptography.CryptographicException or KeyNotFoundException)
+            {
+                return Results.BadRequest(new { title = "La signature ou la clé de données du cluster est invalide." });
+            }
             await repository.AdoptAsync(request.ClusterId, request.ClusterName, cancellationToken);
             return Results.Ok(await repository.GetAsync(cancellationToken));
         })

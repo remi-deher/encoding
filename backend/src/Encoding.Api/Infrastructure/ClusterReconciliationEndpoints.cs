@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Encoding.Api.Auth;
+using Encoding.Core.Nodes;
 
 namespace Encoding.Api.Infrastructure;
 
@@ -22,24 +23,43 @@ public static class ClusterReconciliationEndpoints
 
     public static void MapClusterReconciliationEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/v1/cluster/reconciliation/exchange", async (
+        app.MapGet("/api/v1/cluster/reconciliation/local-identity", (
             HttpContext http,
             IConfiguration configuration,
+            ClusterPeerIdentityStore localIdentity) =>
+        {
+            if (!LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting],
+                    http.Request.Headers[LocalEnrollment.HeaderName].ToString())) return Results.Unauthorized();
+            return Results.Ok(new Encoding.Contracts.Cluster.ClusterPeerPublicIdentity(localIdentity.PeerId, localIdentity.PublicKey));
+        })
+        .AllowAnonymous()
+        .RequireRateLimiting(AuthExtensions.AnonymousPolicy)
+        .WithTags("Cluster reconciliation")
+        .WithName("GetLocalClusterPeerIdentity");
+
+        app.MapGet("/api/v1/cluster/reconciliation/status", (ClusterReconciliationHealth health) =>
+                Results.Ok(health.GetStatus()))
+            .RequireAuthorization()
+            .WithTags("Cluster reconciliation")
+            .WithName("GetClusterReconciliationStatus");
+
+        app.MapPost("/api/v1/cluster/reconciliation/exchange", async (
+            HttpContext http,
             ClusterIdentityRepository identityRepository,
+            ClusterPeerIdentityStore localIdentity,
+            ClusterPeerAdmissionRepository peerAdmissions,
             ClusterReconciliationRepository repository,
             ClusterEntityReconciliation entityReconciliation,
             CancellationToken ct) =>
         {
-            var configuredSecret = configuration["Cluster:Reconciliation:SharedSecret"];
-            if (string.IsNullOrWhiteSpace(configuredSecret) || System.Text.Encoding.UTF8.GetByteCount(configuredSecret) < 32)
-                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "La réconciliation de cluster n’est pas configurée.");
             var body = await ReadBoundedBodyAsync(http.Request, ct);
             if (body is null) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
-            if (!ClusterReconciliationSignature.Verify(
-                    configuredSecret,
+            if (!Guid.TryParse(http.Request.Headers[ClusterReconciliationSignature.PeerHeader], out var peerId)) return Results.Unauthorized();
+            var identity = await identityRepository.GetAsync(ct);
+            var publicKey = await peerAdmissions.GetActivePublicKeyAsync(identity.Id, peerId, ct);
+            if (publicKey is null || !ClusterReconciliationSignature.Verify(publicKey, peerId,
                     http.Request.Headers[ClusterReconciliationSignature.TimeHeader],
-                    http.Request.Headers[ClusterReconciliationSignature.SignatureHeader],
-                    body)) return Results.Unauthorized();
+                    http.Request.Headers[ClusterReconciliationSignature.SignatureHeader], body)) return Results.Unauthorized();
             ClusterReconciliationExchangeRequest? request;
             try { request = JsonSerializer.Deserialize<ClusterReconciliationExchangeRequest>(body, JsonOptions); }
             catch (JsonException) { return Results.BadRequest(new { title = "Requête de réconciliation invalide." }); }
@@ -51,7 +71,6 @@ public static class ClusterReconciliationEndpoints
             if (request.Changes.Count > ClusterReconciliationRepository.MaximumBatchSize)
                 return Results.BadRequest(new { title = "Lot de réconciliation trop volumineux." });
 
-            var identity = await identityRepository.GetAsync(ct);
             if (request.ClusterId != identity.Id) return Results.Conflict(new { title = "Les serveurs n’appartiennent pas au même cluster." });
             try
             {
@@ -66,8 +85,9 @@ public static class ClusterReconciliationEndpoints
             var changes = (await repository.GetEventsAfterAsync(identity.Id, request.KnownSequences, ClusterReconciliationRepository.MaximumBatchSize, ct)).ToList();
             var responseBody = SerializeBoundedResponse(identity.Id, vector, changes);
             var responseTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+            http.Response.Headers[ClusterReconciliationSignature.PeerHeader] = localIdentity.PeerId.ToString("D");
             http.Response.Headers[ClusterReconciliationSignature.TimeHeader] = responseTime;
-            http.Response.Headers[ClusterReconciliationSignature.SignatureHeader] = ClusterReconciliationSignature.Create(configuredSecret, responseTime, responseBody);
+            http.Response.Headers[ClusterReconciliationSignature.SignatureHeader] = ClusterReconciliationSignature.Create(localIdentity, responseTime, responseBody);
             return Results.Bytes(responseBody, "application/json");
         })
         .AllowAnonymous()

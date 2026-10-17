@@ -8,12 +8,15 @@ Chaque serveur utilise sa base SQLite locale. Les serveurs d'un même cluster se
 
 Après approbation du rattachement, l’agent local adopte l’identifiant du cluster d’accueil. L’annonce mDNS est actualisée, puis le serveur conserve son API et réconcilie ses données avec les pairs. Les écritures sont faites sur le serveur ouvert par l’administrateur ; les pairs les reçoivent au prochain échange. La convergence est éventuelle, pas synchrone.
 
+Une demande de rattachement transporte la clé publique de l’API locale et un code de vérification qui la lie à la demande. Une fois approuvée depuis n’importe quel serveur, le nœud détecte l’accord au prochain heartbeat, récupère l’admission signée et installe automatiquement la clé du cluster chiffrée pour son identité. L’API locale adopte ensuite l’identité du cluster avant de déclarer le rattachement terminé.
+
 ## Transport et conflits
 
 - La migration 0036 ajoute l’identité de l’origine, le journal séquencé, les registres, les versions d’entités, les curseurs et les projections en attente.
 - `POST /api/v1/cluster/reconciliation/exchange` échange des lots bornés. Les événements conservent leur origine lorsqu’ils sont relayés ; `(origine, séquence)` élimine les doublons.
 - Les pairs sont découverts par mDNS quand ils annoncent le même identifiant de cluster. `Cluster:Reconciliation:Peers` accepte aussi des URL explicites.
-- `Cluster:Reconciliation:SharedSecret` doit être identique sur les serveurs et contenir au moins 32 octets. HMAC authentifie les messages ; AES-GCM protège dans le journal et sur le transport les empreintes de jetons de nœuds, les hachages des codes et jetons de jumelage, les hachages de mot de passe et les valeurs de configuration des plugins. Les configurations de plugins sont déchiffrées puis rechiffrées avec le trousseau Data Protection local de chaque serveur.
+- L'URL de pair `Cluster:Reconciliation:AdvertisedApiBaseUrl` est distincte de l'adresse `Cluster:AdvertisedApiBaseUrl` destinée aux workers ; les serveurs conteneurisés ne doivent pas annoncer aux autres hôtes un nom DNS interne à leur réseau Compose.
+- Chaque serveur génère une identité RSA locale. Une approbation signe l’admission et enveloppe la clé de données du cluster avec la clé publique du serveur entrant. Les clés privées restent locales et protégées par Data Protection. Les admissions signées sont répliquées ; tout serveur admis peut donc approuver une jonction. Les échanges du maillage sont signés avec ces identités. AES-GCM protège dans le journal les jetons de nœuds, les demandes de jumelage, les hachages de mot de passe et les valeurs de configuration des plugins. La clé de données est créée lors de la création du cluster et stockée chiffrée sur chaque serveur.
 - Les modifications sont arbitrées par entité : l’horodatage UTC gagne, puis l’identifiant d’origine et le numéro de séquence départagent une égalité. Les suppressions sont des tombstones. Les serveurs doivent garder leurs horloges synchronisées.
 - Un événement reçu est journalisé et relayé même si une clé étrangère n’est pas encore disponible ; sa projection est retentée après réception des dépendances.
 
@@ -25,7 +28,7 @@ Les écritures des tables ci-dessous sont détectées par empreinte de ligne, co
 - Utilisateurs du cluster, réglages de rattachement et demandes de jumelage en attente. Une demande approuvée ou supprimée sur un serveur disparaît des autres après convergence. Les sessions restent propres à chaque serveur ; un compte se connecte localement sur le serveur qu’il utilise.
 - Bibliothèques, chemins et accès par nœud, limites, paramètres de traitement, politiques de remplacement, dernier scan terminé et inventaire média.
 - Flows, brouillons, historique des brouillons et versions publiées ; scripts et profils d'encodage ; templates et packs de composants. Les travaux de sauvegarde sont recréés localement à partir des définitions, et leur statut indique l'état du stockage de chaque serveur.
-- Configurations globales et dérogations de plugins, y compris les secrets, protégés avec le secret partagé du maillage puis rechiffrés localement.
+- Configurations globales et dérogations de plugins, y compris les secrets, protégés avec la clé de données du cluster puis rechiffrés localement.
 - État durable des exécutions, événements, étapes, checkpoints, métadonnées d'artefacts et reçus de traitement. Les reçus sont identifiés par le chemin du média afin de rester cohérents même si deux bases SQLite ont attribué des identifiants média différents.
 
 La dernière écriture d’une même entité gagne. Deux créations isolées avec le même nom restent soumises aux contraintes uniques de la base : la projection qui entre en conflit est conservée en attente jusqu’à résolution de la collision. Une fois le réseau rétabli, les modifications indépendantes convergent sans verrou global.
@@ -45,10 +48,8 @@ La convergence n’est pas une transaction globale : deux serveurs isolés peuve
 ## Limites opérationnelles
 
 - Ne pas partager un même fichier SQLite entre hôtes ni le monter comme base distribuée sur un stockage réseau.
-- Les données ordinaires de réconciliation restent lisibles sur le réseau ; HTTPS est recommandé pour les URL de pairs. Les champs sensibles protégés par AES-GCM restent chiffrés même avec une URL HTTP.
+- HTTPS est recommandé pour les URL de pairs. Les admissions et échanges sont signés, et les champs sensibles du journal restent chiffrés avec la clé de données du cluster.
 - Les fichiers médias et les artefacts doivent être accessibles séparément depuis les workers concernés. La réplication de leurs métadonnées ne copie pas leur contenu.
 - Une nouvelle installation commence avec un fichier SQLite vide ; les données partagées convergent ensuite via le maillage.
 
-## Vérifications
-
-Les tests couvrent le relais, les doublons, le départage LWW, le rattachement à une nouvelle identité, la réplication de configurations et d’historiques sur deux bases SQLite, la protection des secrets plugin, le remappage des reçus de traitement, la création locale des tâches de sauvegarde et la non-réplication des baux actifs.
+Les clés privées de pair et la clé locale Data Protection doivent être conservées dans le volume `PluginSettings:KeyDirectory`. Une installation réinitialisée crée une nouvelle clé de cluster au moment de sa création ; tous les serveurs rejoignent ensuite par le parcours de jumelage approuvé.
