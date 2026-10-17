@@ -21,6 +21,7 @@ import {
         <input
           type="search"
           role="combobox"
+          aria-label="Rechercher une destination"
           aria-autocomplete="list"
           aria-controls="palette-results-listbox"
           [attr.aria-expanded]="results().length > 0"

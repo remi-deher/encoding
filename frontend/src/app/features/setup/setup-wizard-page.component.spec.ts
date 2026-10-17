@@ -22,7 +22,14 @@ describe('SetupWizardPageComponent', () => {
       roles: ['server', 'worker'],
       maxConcurrentTasks: 2,
       automaticEnrollmentEnabled: true,
-      capabilities: [{ toolId: 'ffmpeg', version: '7.1', accelerationTypes: ['nvenc'], mediaTypes: ['video', 'audio'] }],
+      capabilities: [
+        {
+          toolId: 'ffmpeg',
+          version: '7.1',
+          accelerationTypes: ['nvenc'],
+          mediaTypes: ['video', 'audio'],
+        },
+      ],
       inventory: {
         processorCount: 16,
         memoryMb: 32768,
@@ -92,6 +99,27 @@ describe('SetupWizardPageComponent', () => {
     expect(el.textContent).toContain('NVIDIA GeForce RTX 3080');
     expect(el.textContent).toContain('Accélération GPU');
     expect(el.textContent).toContain('NVENC');
+  });
+
+  it('renders the contextual panel dynamically when switching operation modes', () => {
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.textContent).toContain('Prêt à démarrer en mode autonome');
+
+    const modeRadios = Array.from(el.querySelectorAll('[role="radio"]')) as HTMLButtonElement[];
+    expect(modeRadios.length).toBe(3);
+
+    modeRadios[1].click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedMode']()).toBe('createCluster');
+    expect(el.textContent).toContain('Nommer votre nouveau cluster');
+
+    modeRadios[2].click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedMode']()).toBe('joinCluster');
+    expect(el.textContent).toContain('Connexion au cluster d’accueil');
   });
 
   it('allows selecting operation modes', () => {
