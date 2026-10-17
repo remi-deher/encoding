@@ -1,7 +1,6 @@
--- Schéma SQLite de référence (architecture 0043), équivalent à l'ensemble des migrations PostgreSQL 0001 à 0033.
--- Les migrations suivantes portent le même numéro dans migrations/ (PostgreSQL) et migrations/sqlite/.
+-- Schéma SQLite de référence (architecture 0043) pour toute nouvelle installation.
+-- Les migrations suivantes font évoluer ce schéma de façon incrémentale.
 -- Instants : texte UTC de largeur fixe « AAAA-MM-JJ HH:MM:SS.ffffffZ ». JSON et tableaux : texte JSON.
--- Contrôles propres à PostgreSQL (jsonb_typeof, cardinality, expressions rationnelles) non reportés : le backend valide ces valeurs.
 
 CREATE TABLE cluster_identity (
     singleton BOOLEAN DEFAULT 1 PRIMARY KEY,
@@ -35,9 +34,6 @@ CREATE TABLE cluster_nodes (
     accepts_work BOOLEAN GENERATED ALWAYS AS (((NOT draining) AND (NOT quarantined) AND (incompatible_reason IS NULL))) VIRTUAL,
     CHECK (((max_concurrent_tasks >= 0) AND (max_concurrent_tasks <= 1024)))
 );
-    -- omis (PostgreSQL seulement) : (jsonb_typeof(labels) = 'object'::text)
-    -- omis (PostgreSQL seulement) : (jsonb_typeof(inventory) = 'object'::text)
-    -- omis (PostgreSQL seulement) : ((desired_roles IS NULL) OR (((cardinality(desired_roles) >= 1) AND (cardinality
 
 CREATE TABLE encoding_profile_versions (
     profile_id TEXT NOT NULL,
@@ -502,7 +498,6 @@ CREATE TABLE node_enrollment_requests (
     UNIQUE (pairing_key_hash),
     CHECK (((max_concurrent_tasks >= 0) AND (max_concurrent_tasks <= 1024)))
 );
-    -- omis (PostgreSQL seulement) : (jsonb_typeof(inventory) = 'object'::text)
 
 CREATE TABLE node_group_members (
     group_id TEXT NOT NULL,
@@ -526,8 +521,6 @@ CREATE TABLE node_groups (
     CHECK ((length(description) <= 2000)),
     CHECK (mode IN ('manual', 'automatic'))
 );
-    -- omis (PostgreSQL seulement) : (jsonb_typeof(criteria) = 'object'::text)
-    -- omis (PostgreSQL seulement) : (jsonb_typeof(labels) = 'object'::text)
 
 CREATE TABLE node_processing_settings (
     node_id TEXT PRIMARY KEY,
@@ -539,7 +532,6 @@ CREATE TABLE node_processing_settings (
     FOREIGN KEY (node_id) REFERENCES cluster_nodes(id),
     CHECK (((max_concurrent_tasks >= 1) AND (max_concurrent_tasks <= 1000)))
 );
-    -- omis (PostgreSQL seulement) : ((length(schedule_slots) = 672) AND (schedule_slots !~ '[^01]'::text))
 
 CREATE TABLE plugin_configurations (
     plugin_id TEXT PRIMARY KEY,

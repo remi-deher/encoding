@@ -15,7 +15,7 @@ Deux composants Base, sans outil requis (tout worker peut les exécuter) :
 
 ## Garanties
 
-- Table `disk_locks(disk_key PRIMARY KEY, execution_id, lease_epoch, lease_until)`. La prise est une seule instruction `INSERT … ON CONFLICT DO UPDATE … WHERE` : elle réussit si le verrou est libre, déjà tenu par la même exécution (idempotent) ou expiré. Deux prises concurrentes donnent le disque à une seule exécution, sur PostgreSQL comme sur SQLite.
+- Table `disk_locks(disk_key PRIMARY KEY, execution_id, lease_epoch, lease_until)`. La prise est une seule instruction `INSERT … ON CONFLICT DO UPDATE … WHERE` : elle réussit si le verrou est libre, déjà tenu par la même exécution (idempotent) ou expiré. L'exclusion est garantie dans une base SQLite locale ; les bases de plusieurs serveurs ne sont pas transactionnellement partagées.
 - Prise et libération sont **fenced** par le bail et l'époque de l'exécution (`RuntimeRepository.FenceAsync`) : un worker périmé reçoit 409 et ne peut ni prendre ni libérer un verrou. Libérer un disque tenu par une autre exécution ne change rien.
 - Le verrou suit le bail : `RenewAsync` le prolonge de 60 secondes avec l'exécution ; une exécution perdue le laisse expirer, et la prise suivante le reprend sans intervention.
 - Libération automatique à la fin et à la récupération de l'exécution (`RuntimeRepository.ReleaseAsync`), à l'entrée en attente durable et au relais vers un autre worker. Le média reste réservé pendant l'attente ; seul le disque est rendu.
@@ -29,4 +29,4 @@ Deux composants Base, sans outil requis (tout worker peut les exécuter) :
 
 ## Tests
 
-`DiskLocksSerializeHeavyWorkPerDisk` (Runtime.Tests, SQLite et PostgreSQL) : normalisation, prise idempotente, occupé avec détenteur, course concurrente, époque et worker périmés, reprise après expiration, libération idempotente, prolongation par le renouvellement, routes worker, libération à l'annulation et à l'attente. Le catalogue et l'éligibilité sont vérifiés dans `SubtitleScenarios`.
+`DiskLocksSerializeHeavyWorkPerDisk` (Runtime.Tests, SQLite) : normalisation, prise idempotente, occupé avec détenteur, course concurrente, époque et worker périmés, reprise après expiration, libération idempotente, prolongation par le renouvellement, routes worker, libération à l'annulation et à l'attente. Le catalogue et l'éligibilité sont vérifiés dans `SubtitleScenarios`.

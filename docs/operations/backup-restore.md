@@ -4,79 +4,55 @@
 
 | Donnée | Emplacement (Compose) | Criticité |
 | --- | --- | --- |
-| Base PostgreSQL : flows, bibliothèques, nœuds, exécutions, configuration des plugins | volume `encoding-postgres-data` | **Indispensable** |
-| Clés Data Protection des plugins | volume `encoding-plugin-keys` (`PluginSettings__KeyDirectory`) | **Indispensable.** Sans elles, les secrets de plugins stockés en base ne sont plus déchiffrables. À sauvegarder avec la base, dans un lieu distinct. |
-| Sauvegardes JSON des versions de flow | volume `encoding-flow-backups` (`FlowBackups__Directory`) | Recommandé. Filet de sécurité indépendant de PostgreSQL. |
-| Artefacts d’exécution | volume `encoding-runtime-artifacts` (`Runtime__ArtifactDirectory`) | Facultatif. Reconstituables en relançant les tâches ; ne pas sauvegarder les exécutions terminées. |
-| Identité d’un worker | volume `encoding-node-data` de chaque agent | Facultatif. Perdue, il faut ré-enrôler le worker. |
-| Fichiers publiés | bibliothèques média | Hors périmètre de l’application : sauvegarde du stockage média habituel. |
+| Base SQLite locale : configuration, flows, bibliothèques, membres et historique réconcilié | `/var/lib/encoding-node/cluster.db`, volume `encoding-node-data` | **Indispensable sur chaque serveur** |
+| Clés Data Protection des plugins | volume `encoding-plugin-keys` (`PluginSettings__KeyDirectory`) | **Indispensable.** À sauvegarder avec la base : elles servent à déchiffrer les secrets de plugins. |
+| Sauvegardes JSON des flows | volume `encoding-flow-backups` (`FlowBackups__Directory`) | Recommandé. Une copie indépendante de la base. |
+| Artefacts d’exécution | volume `encoding-runtime-artifacts` (`Runtime__ArtifactDirectory`) | Facultatif pour les tâches terminées ; requis pour préserver les reprises d’étapes qui en dépendent. |
+| Identité locale du nœud | volume `encoding-node-data` | À conserver pour éviter un nouvel enrôlement. |
+| Fichiers média publiés | bibliothèques média | À sauvegarder selon la politique du stockage média. |
 
-Les sources ne sont jamais remplacées automatiquement, mais une sauvegarde du stockage média reste nécessaire avant toute politique de remplacement.
+Chaque serveur conserve sa propre base. Sauvegarder la base de chacun ; la réconciliation n’est ni une sauvegarde ni une copie des fichiers médias et artefacts.
 
-## Sauvegarde
+## Sauvegarde à froid
 
-PostgreSQL, à chaud et cohérente :
-
-```bash
-docker compose exec -T postgres pg_dump -U encoding -d encoding -Fc > encoding-$(date -u +%Y%m%dT%H%M%SZ).dump
-```
-
-Volumes de fichiers (les clés de plugins sont petites, à copier à chaque sauvegarde de base) :
+Arrêter le conteneur pour vider le WAL SQLite, puis archiver le volume de données et les volumes séparés utiles :
 
 ```bash
-for volume in encoding-plugin-keys encoding-flow-backups; do
+docker compose stop encoding
+for volume in encoding-node-data encoding-plugin-keys encoding-flow-backups encoding-runtime-artifacts; do
   docker run --rm -v "backend_${volume}:/data:ro" -v "$PWD:/out" alpine \
     tar czf "/out/${volume}-$(date -u +%Y%m%dT%H%M%SZ).tgz" -C /data .
 done
+docker compose start encoding
 ```
 
-Le préfixe du volume (`backend_` ci-dessus) est le nom du projet Compose ; vérifier avec `docker volume ls`.
+Le préfixe `backend_` correspond au nom de projet Compose de cet exemple ; vérifier le nom réel avec `docker volume ls`. Conserver une copie chiffrée hors de l’hôte, surtout pour les clés de plugins.
 
-Conserver au moins une copie hors de l’hôte, chiffrée : les clés de plugins donnent accès aux secrets qu’elles protègent. Une rotation quotidienne de la base et une copie des clés à chaque changement sont un minimum raisonnable.
+Pour une sauvegarde à chaud, utiliser `sqlite3` sur le fichier monté dans un chemin local et `.backup destination.db`, qui inclut les changements du WAL. Ne jamais copier uniquement `cluster.db` pendant que le serveur tourne.
 
-## Vérifier une sauvegarde
+## Vérifier et restaurer
 
-Une sauvegarde non restaurée n’est pas une sauvegarde. Régulièrement, restaurer dans une base jetable :
+Restaurer périodiquement une sauvegarde dans un volume de test puis démarrer une instance isolée avec ce volume. Contrôler `/health/details`, les flows, les utilisateurs, les bibliothèques et les événements d’exécution avant de déclarer la sauvegarde exploitable.
 
-```bash
-docker run --rm -d --name encoding-restore-check -e POSTGRES_PASSWORD=check postgres:17
-docker exec -i encoding-restore-check pg_restore -U postgres -d postgres --no-owner < encoding-XXXX.dump
-docker exec encoding-restore-check psql -U postgres -c "SELECT count(*) FROM flows" -c "SELECT max(version) FROM schema_migrations"
-docker rm -f encoding-restore-check
-```
+Pour une restauration réelle :
 
-## Restauration complète
+1. Arrêter le serveur concerné et conserver une copie de ses volumes actuels.
+2. Restaurer ensemble `encoding-node-data` et `encoding-plugin-keys`. Restaurer également les volumes de sauvegarde de flows et d’artefacts si nécessaire.
+3. Démarrer le serveur et contrôler `GET /health/details` : `database`, `migrations` et les contrôles de stockage doivent être `healthy`.
+4. Vérifier la page Cluster et laisser les pairs se réconcilier. Les données réconciliables plus récentes peuvent revenir depuis un autre nœud ; les états locaux, baux actifs et fichiers ne sont pas récupérés par le maillage.
 
-1. Arrêter tous les serveurs et agents (`docker compose stop encoding`). Les workers ne doivent pas tenir de bail pendant la restauration.
-2. Restaurer les clés de plugins dans `encoding-plugin-keys` **avant** de redémarrer un serveur.
-3. Recréer la base vide puis restaurer :
-   ```bash
-   docker compose exec -T postgres psql -U encoding -d postgres -c "DROP DATABASE encoding" -c "CREATE DATABASE encoding OWNER encoding"
-   docker compose exec -T postgres pg_restore -U encoding -d encoding --no-owner < encoding-XXXX.dump
-   ```
-4. Restaurer `encoding-flow-backups` si le volume est perdu.
-5. Démarrer un serveur. Il applique les migrations manquantes sous verrou PostgreSQL et refuse de démarrer si le contenu d’une migration déjà appliquée a changé. Contrôler `GET /health/details` : `database`, `migrations` et `artifact-storage` doivent être `healthy`.
-6. Démarrer les autres serveurs puis les agents. Les exécutions qui tenaient un bail au moment de la sauvegarde sont reprises à l’expiration du bail ; une invocation externe interrompue avant checkpoint exige une relance explicite (voir 0015). Vérifier la page Tâches.
+Si un média a été remplacé, sa sauvegarde de remplacement doit également être restaurée depuis le stockage configuré pour cette bibliothèque.
 
-Les médias ne sont pas modifiés par la restauration : les résultats sont publiés à côté de la source (`.encoding-results/`). Un artefact d’exécution absent après restauration oblige à relancer la tâche.
+## Installation fraîche
 
-## Perte de PostgreSQL seul
+Au premier démarrage, le serveur crée `/var/lib/encoding-node/cluster.db`, applique les migrations et établit l’identité locale du cluster. Pour installer sans reprendre les données précédentes, démarrer avec un volume `encoding-node-data` neuf. Cela réinitialise aussi l’identité du nœud ; les volumes de sauvegardes, de clés de plugins et d’artefacts sont distincts et doivent être conservés ou remplacés selon le besoin.
 
-Si la base est perdue sans sauvegarde mais que `encoding-flow-backups` existe, les versions de flows se récupèrent : chaque version publiée est `<flowId>.v<version>.json` et chaque brouillon `<flowId>.draft.r<revision>.json`. Réimporter le contenu des fichiers de version par `POST /api/v1/flows/import` (JSON ou archive ZIP). Bibliothèques, accès par nœud, configuration des plugins et historique ne sont pas reconstructibles par ce moyen.
+## Perte d’un worker ou d’un serveur
 
-## Perte d’un seul worker
+Retirer une identité de worker perdue depuis l’interface, puis enrôler la nouvelle installation et redéclarer ses accès aux bibliothèques. Les tentatives actives d’un worker perdu échouent après expiration du bail ; elles ne sont pas reprises automatiquement. Une relance vient d’une règle explicite du flow ou d’une action manuelle.
 
-Retirer le nœud depuis l’interface (l’identité retirée n’est jamais réactivée implicitement), puis enrôler une nouvelle installation et redéclarer ses accès aux bibliothèques.
+À la perte d’un serveur, un autre pair conserve les états réconciliés. Restaurer le volume du nœud perdu si son état local doit être récupéré ; réenrôler l’installation si l’identité de nœud a été perdue. Les journaux du maillage ne remplacent pas les sauvegardes.
 
-## Mise à jour et retour arrière
+## Mise à jour
 
-Avant une mise à jour qui apporte des migrations, faire une sauvegarde de base. Les migrations ne sont pas réversibles : le retour arrière se fait en restaurant cette sauvegarde. Pendant une mise à jour progressive, un serveur plus ancien voit des migrations qu’il ne connaît pas et se déclare `degraded`, sans cesser de servir.
-
-## Cluster sur SQLite (architectures 0043 et 0049)
-
-Chaque serveur peut utiliser SQLite dans son fichier local (`cluster.db` par défaut, dans le dossier de données du nœud), en mode WAL. Les fichiers `cluster.db-wal` et `cluster.db-shm` font partie de la base tant que le serveur tourne. Le maillage réconcilie les domaines pris en charge après les coupures ; une sauvegarde reste nécessaire et les journaux de réconciliation ne remplacent pas une sauvegarde.
-
-- **Sauvegarde à chaud** : `sqlite3 cluster.db "VACUUM INTO '/sauvegardes/cluster-AAAAMMJJ.db'"` produit une copie cohérente sans arrêter le serveur.
-- **Sauvegarde à froid** : serveur arrêté, copier `cluster.db` seul (le WAL est alors vide).
-- **Restauration** : serveur arrêté, remplacer `cluster.db` par la copie et supprimer d'éventuels `cluster.db-wal` et `cluster.db-shm` restants.
-- **Passer à PostgreSQL** (facultatif) : serveur arrêté, `Encoding.Api transfer-database --from-provider sqlite --from "Data Source=…/cluster.db" --to-provider postgres --to "Host=…"`, puis démarrer le serveur avec la chaîne PostgreSQL. La cible doit être vide ; la source n'est pas modifiée et sert de retour arrière. Cette commande copie une base ; elle ne fusionne pas deux bases ayant évolué séparément.
+Avant une mise à jour qui apporte des migrations, sauvegarder chaque fichier SQLite et les clés de plugins. Les migrations ne sont pas réversibles : un retour arrière exige de restaurer la base et les volumes correspondants. Les migrations sont appliquées dans une transaction SQLite d’écriture immédiate.

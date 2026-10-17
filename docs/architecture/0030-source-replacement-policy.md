@@ -32,7 +32,7 @@ Avant l'étape 2, le nœud d'accès consulte les gardes fournies par les plugins
 
 - **Restauration** : `POST /api/v1/executions/{id}/replacement/rollback`, uniquement pendant la période de grâce. Elle réserve le média (`media_reservations`, époque -1, 15 minutes) pour qu’aucun traitement ne le modifie en parallèle ; la demande est refusée (`409`) si le média est en cours de traitement. Le nœud d’accès restaure octet pour octet (date comprise) et refuse si le fichier remplaçant a été modifié depuis ; l’échec ramène à `replaced` avec la raison.
 - **Purge** : après l’échéance, le nœud d’accès supprime la sauvegarde seulement si le fichier remplaçant existe encore. Sinon la sauvegarde est conservée (`retained`) et demande une action humaine ; elle n’est jamais retentée automatiquement.
-- Tous les états sont dans PostgreSQL : n’importe quel serveur lit et modifie le même enregistrement, et des transitions conditionnelles garantissent qu’une seule restauration démarre même si deux serveurs la reçoivent.
+- L'état est enregistré localement en SQLite puis réconcilié entre les serveurs selon 0049. Les écritures concurrentes peuvent converger après coupure ; la restauration vérifie toujours le fichier, l'empreinte et la réservation média avant d'agir.
 
 ## Surveillance
 
@@ -47,4 +47,4 @@ Le fichier produit (et l’original restauré) est enregistré dans `media_repla
 
 ## Tests
 
-`SourceReplacementTests` couvre les garanties fichier (sauvegarde, bascule, changement de conteneur, refus, reprise, restauration, purge). Les scénarios PostgreSQL couvrent la politique, la période de grâce, la restauration, la protection de la surveillance, la perte d’un worker (expiration du bail, reprise unique, époques, reprise depuis le checkpoint, nœud d’accès hors ligne) et la perte d’un serveur (verrous libérés à la coupure, aucun double bail entre deux serveurs, confirmation idempotente, restauration unique). Un scénario complet avec FFmpeg remplace puis restaure une vraie source H.265.
+`SourceReplacementTests` couvre les garanties fichier (sauvegarde, bascule, changement de conteneur, refus, reprise, restauration, purge) et les scénarios d'état sur SQLite locale. Les propriétés d'exclusion et de reprise entre plusieurs serveurs doivent être considérées dans le cadre de la convergence éventuelle, pas d'une base transactionnelle commune. Un scénario complet avec FFmpeg remplace puis restaure une vraie source H.265.

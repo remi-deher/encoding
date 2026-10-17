@@ -2,51 +2,51 @@ using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
-[Collection(PostgresCollection.Name)]
-public sealed class RuntimeScenarioTests(PostgresFixture database)
+[Collection(RuntimeCollection.Name)]
+public sealed class RuntimeScenarioTests(RuntimeFixture database)
 {
-    private Harness.Fixture Scenarios => database.Scenarios ?? throw new InvalidOperationException("The PostgreSQL fixture is not initialized.");
+    private Harness.Fixture Scenarios => database.Scenarios ?? throw new InvalidOperationException("The SQLite fixture is not initialized.");
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task FlowSavingIsIdempotentAndConcurrencySafe() => Scenarios.FlowSavingAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task NodeGroupsResolveAutomaticMembershipAndLabelInheritance() => Scenarios.NodeGroupsAndLabelsAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task DurableRelayBeforeTransformation() => Scenarios.BackendRelayAsync(false);
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task DurableRelayAfterTransformation() => Scenarios.BackendRelayAsync(true);
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task ConfigurationSnapshotsStayFixedAndForgedTargetsAreRejected() => Scenarios.FrozenConfigurationAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task MissingOrCorruptArtifactsAndUnavailableTargetsAreRefused() => Scenarios.IntegrityAndAvailabilityAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task ConcurrentReceiverClaimsKeepOneOwner() => Scenarios.ConcurrentRelayAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task EarlyWorkerRelayAvoidsDownloadsAndSurvivesReceiverLoss() => Scenarios.EarlyRunnerAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task RejectedCheckpointWithLiveLeaseFailsWithoutRetry() => Scenarios.ConflictDuringCheckpointFailsExecutionAsync();
 
     [MediaToolsFact]
     public Task RejectedFinalCompletionWithLiveLeaseFailsWithoutRetry() => Scenarios.ConflictDuringFinishFailsExecutionAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task CancellationReleasesTheDurableReservation() => Scenarios.CancellationAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task ConditionalRelayYesBranch() => Scenarios.ConditionalRelayAsync("yes");
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task ConditionalRelayNoBranch() => Scenarios.ConditionalRelayAsync("no");
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task ConditionalRelayErrorBranch() => Scenarios.ConditionalRelayAsync("error");
 
     [MediaToolsFact]
@@ -55,66 +55,60 @@ public sealed class RuntimeScenarioTests(PostgresFixture database)
     [MediaToolsFact]
     public Task H265PlanHandedOffBeforeExecution() => Scenarios.MediaRelayAsync(true);
 
-    [PostgresFact]
-    public Task OperationsMigrationsHealthAndArtifactRetention() => OperationsScenarios.RunDatabaseAsync(PostgresFixture.ConnectionString!);
+    [DatabaseFact]
+    public Task OperationsMigrationsHealthAndArtifactRetention() => OperationsScenarios.RunDatabaseAsync(RuntimeFixture.ConnectionString!);
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task SourceReplacementLifecycle() => Scenarios.ReplacementLifecycleAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task WaitMediaPolicy() => Scenarios.WaitMediaPolicyAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task WorkerLossFailover() => Scenarios.WorkerLossFailoverAsync();
 
-    [PostgresFact]
-    public Task DirectWorkerLossFailover() => Scenarios.DirectWorkerLossFailoverAsync();
-
-    [PostgresFact]
+    [DatabaseFact]
     public Task UncertainPluginSideEffectIsNotRepeatedAfterWorkerLoss() => Scenarios.UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task FlowRetryPolicyIsBounded() => Scenarios.BoundedFlowRetryAsync();
-
-    [PostgresFact]
-    public Task ServerLossFailover() => Scenarios.ServerLossFailoverAsync();
 
     [MediaToolsFact]
     public Task H265SourceReplacedThenRestored() => Scenarios.MediaRelayAsync(false, true);
 
-    [PostgresFact]
-    public Task AuthenticationRolesPairingAndAnonymousRouteCatalogue() => AuthScenarios.RunAsync(PostgresFixture.ConnectionString!);
+    [DatabaseFact]
+    public Task AuthenticationRolesPairingAndAnonymousRouteCatalogue() => AuthScenarios.RunAsync(RuntimeFixture.ConnectionString!);
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task NodeScheduleBlocksNewClaimsOnly() => Scenarios.NodeScheduleAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task PublicationGuardsComeFromTheConfiguredPlugin() => Scenarios.PublicationGuardsAsync();
 
-    [PostgresFact]
-    public Task DiskStaysReservedWhenItsWorkerIsLost() => Scenarios.DiskLockSurvivesWorkerLossAsync();
+    [DatabaseFact]
+    public Task DiskLockIsReleasedWhenWorkerAttemptFails() => Scenarios.DiskLockReleasedAfterWorkerLossAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task DiskLocksSerializeHeavyWorkPerDisk() => Scenarios.DiskLocksAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task WaitTimerReleasesTheWorkerAndResumesAfterTheBlock() => Scenarios.WaitTimerAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task WaitDeadlineWithTimeoutOutput() => Scenarios.WaitDeadlineAsync(true);
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task WaitDeadlineWithoutTimeoutOutputFails() => Scenarios.WaitDeadlineAsync(false);
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task WaitServerEvaluatedEvents() => Scenarios.WaitServerEventsAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task WaitOnPluginConditionUsesFencedProbes() => Scenarios.WaitBlockProbeAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public Task WaitRunnerYieldsAndCancellationClosesTheWait() => Scenarios.WaitRunnerAndCancellationAsync();
 
-    [PostgresFact]
+    [DatabaseFact]
     public void WaitBlockContractsAndCompatibility() => Scenarios.WaitContracts();
 }

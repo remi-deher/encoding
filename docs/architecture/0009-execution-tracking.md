@@ -2,7 +2,7 @@
 
 ## Décision
 
-PostgreSQL stocke les exécutions et leurs événements. Chaque tentative conserve son identifiant, sa source, les noms de bibliothèque/flow, la version et la définition JSON immuable du flow, ainsi que les horodatages serveur. Les nœuds serveur lisent le même registre.
+SQLite stocke localement les exécutions et leurs événements. Chaque tentative conserve son identifiant, sa source, les noms de bibliothèque/flow, la version et la définition JSON immuable du flow, ainsi que les horodatages. Le maillage 0049 réconcilie l’historique durable entre serveurs ; les tâches et baux actifs restent locaux au serveur qui les a créés.
 
 Les états sont queued, running, cancelling, succeeded, failed et cancelled. Une progression de 100 % ne change pas l’état. Les transitions terminales sont explicites. Une annulation avant démarrage termine l’attente ; en cours, elle devient une demande que le moteur doit confirmer après arrêt. Une relance conserve l’échec et crée une tentative liée ; une contrainte empêche les relances concurrentes de la même tentative.
 

@@ -15,7 +15,7 @@ Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; a
 
 ## Situation actuelle (code)
 
-- Un cluster possède un identifiant propre (`/api/v1/cluster`) ; chaque serveur peut garder sa base SQLite et réconcilier ses données avec ses pairs selon 0049. PostgreSQL commun reste une option.
+- Un cluster possède un identifiant propre (`/api/v1/cluster`) ; chaque serveur garde sa base SQLite locale et réconcilie les domaines prévus avec ses pairs selon 0049.
 - Un nœud porte une identité locale (`node-identity.json` : id, jeton, cluster) et des rôles serveur / worker. Un worker rejoint un cluster par enrôlement (fenêtre, clé de jumelage approuvée, acceptation automatique) ; il le trouve par DNS-SD ou par `Cluster__ApiBaseUrl`.
 - Avec l'image unique (0036, 0037), le nœud local est enrôlé d'office à son propre serveur. Un nœud est rattaché à un seul cluster ; en changer exige de réinitialiser son identité. Après rattachement, son serveur local reste actif et sert aussi l'interface de gestion du cluster.
 - Les bibliothèques sont des définitions du cluster ; chaque nœud déclare son accès (direct, non pris en charge, transfert).
@@ -42,7 +42,7 @@ Une seule tâche à la fois sur un média, baux et reprise après perte d'un nœ
 
 ## 8. Stockage (décision précisée par 0043 et 0049)
 
-Le stockage privilégié est SQLite local par serveur ; PostgreSQL commun reste pris en charge. Les serveurs actifs gardent chacun leur base locale, le serveur local reste actif après rattachement et l'identité du cluster est alignée. Les configurations et états durables sont réconciliés par le maillage ; voir 0043 et 0049 pour les exceptions et l'éventualité de convergence.
+Le stockage est SQLite local par serveur. Les serveurs actifs gardent chacun leur base locale, le serveur local reste actif après rattachement et l'identité du cluster est alignée. Les configurations et états durables sont réconciliés par le maillage ; voir 0043 et 0049 pour les exceptions et l'éventualité de convergence.
 
 ## 9. Synchronisation entre clusters (demande de Rémi)
 
@@ -54,7 +54,7 @@ Principe proposé : **la cohérence forte reste à l'intérieur d'un cluster, la
 - Les **états et l'historique** (exécutions terminées, journaux, instantanés avant/après, définitions de bibliothèques et de flows publiés) sont répliqués de façon asynchrone, sans consensus.
 - **Chaque enregistrement a un cluster propriétaire** (celui qui l'a produit) et n'est modifiable que là ; les autres clusters en tiennent une copie en lecture. Les conflits d'écriture disparaissent par construction. Les modifications partagées (par exemple une bibliothèque commune) ont un propriétaire unique à un instant donné, transférable avec approbation.
 - Mécanisme : journal de changements append-only par cluster (identifiant d'origine, numéro de séquence), tiré par les clusters liés avec un curseur, application idempotente, reprise après coupure. Aucun quorum : chaque cluster fonctionne seul et rattrape son retard au retour du lien.
-- Transport : HTTPS authentifié par la relation approuvée entre les deux clusters (4) ; indépendant du moteur de base de données, donc compatible avec PostgreSQL comme avec SQLite.
+- Transport : HTTPS authentifié par la relation approuvée entre les deux clusters (4) ; le stockage reste SQLite local, comme décrit dans 0043 et 0049.
 
 Limite à assumer : sans quorum, aucun mécanisme ne peut garantir à la fois la bascule automatique et l'absence de traitement en double après une coupure entre deux clusters. Deux traitements simultanés d'un même média restent sans danger pour les données tant que la source est préservée et que chaque exécution publie dans son propre dossier (0015, 0030) : ils coûtent du calcul, pas de l'intégrité. Recommandation : propriété d'une bibliothèque à un seul cluster à la fois, reprise par l'autre cluster sur action explicite ou sur délai configuré, avec le remplacement de la source désactivé dans les deux cas.
 

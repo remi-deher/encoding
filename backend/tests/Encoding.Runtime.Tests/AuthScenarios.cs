@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Npgsql;
 // Encoding.Api et Encoding.NodeAgent exposent chacun un Program : un type de l’assemblage API désigne le point d’entrée à héberger.
 using ApiAssembly = Encoding.Api.Auth.AuthOptions;
 

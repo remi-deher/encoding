@@ -8,8 +8,7 @@ public enum TriggerRecordResult { Accepted, Duplicate, UnknownLibrary }
 public sealed record IntegrationTriggerRequest(Guid Id, string PluginId, Guid LibraryId, string RelativePath, DateTimeOffset RequestedAt);
 
 /// <summary>
-/// Demandes de traitement reçues d’un service externe. PostgreSQL est l’autorité : plusieurs serveurs peuvent
-/// recevoir et traiter les demandes, chacune n’étant réclamée que par un serveur à la fois et pour une durée bornée.
+/// Demandes de traitement reçues d’un service externe. La file reste locale au serveur qui l’a reçue, avec une réclamation récupérable.
 /// </summary>
 public sealed class IntegrationTriggerRepository(DbDataSource dataSource)
 {
@@ -86,6 +85,6 @@ public sealed class IntegrationTriggerRepository(DbDataSource dataSource)
         await using var command = dataSource.CreateCommand("SELECT id FROM library_media WHERE library_id=@library AND relative_path=@path");
         command.Parameters.AddWithValue("library", library);
         command.Parameters.AddWithValue("path", relativePath);
-        return await command.ExecuteScalarAsync(ct) as Guid?;
+        return await command.ScalarGuidAsync(ct);
     }
 }

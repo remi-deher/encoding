@@ -126,15 +126,33 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         if(files.Any(file=>!LibraryMediaTypes.Matches(file.RelativePath,type))) return false;
         if(request.Error is null)
         {
-            await using var save=Sql.Command("""
-              INSERT INTO library_media(id,library_id,relative_path,byte_length,modified_at,scan_id)
-              SELECT gen_random_uuid(),@library,item."relativePath",item.bytes,item."modifiedAt",@scan
-              FROM jsonb_to_recordset(@files) AS item("relativePath" text,bytes bigint,"modifiedAt" timestamptz)
-              ON CONFLICT(library_id,relative_path) DO UPDATE
-              SET stable_since=CASE WHEN library_media.byte_length=EXCLUDED.byte_length AND library_media.modified_at=EXCLUDED.modified_at THEN library_media.stable_since ELSE clock_timestamp() END,byte_length=EXCLUDED.byte_length,modified_at=EXCLUDED.modified_at,scan_id=EXCLUDED.scan_id
-              """,c,tx);
-            save.Parameters.AddWithValue("library",library); save.Parameters.AddWithValue("scan",id);
-            save.Parameters.AddWithValue("files",SqlKind.Json,JsonSerializer.Serialize(files,Json)); await save.ExecuteNonQueryAsync(ct);
+            // Use portable VALUES batches instead of provider-specific JSON table functions.
+            // Keep batches small enough for SQLite's bind limit.
+            const int batchSize = 200;
+            for (var offset = 0; offset < files.Length; offset += batchSize)
+            {
+                var batch = files.Skip(offset).Take(batchSize).ToArray();
+                var values = new string[batch.Length];
+                await using var save = Sql.Command("", c, tx);
+                save.Parameters.AddWithValue("library", library);
+                save.Parameters.AddWithValue("scan", id);
+                for (var index = 0; index < batch.Length; index++)
+                {
+                    var file = batch[index];
+                    values[index] = $"(@id{index},@library,@path{index},@bytes{index},@modified{index},@scan)";
+                    save.Parameters.AddWithValue($"id{index}", Guid.NewGuid());
+                    save.Parameters.AddWithValue($"path{index}", file.RelativePath);
+                    save.Parameters.AddWithValue($"bytes{index}", file.Bytes);
+                    save.Parameters.AddWithValue($"modified{index}", file.ModifiedAt);
+                }
+                save.CommandText = $"""
+                  INSERT INTO library_media(id,library_id,relative_path,byte_length,modified_at,scan_id)
+                  VALUES {string.Join(",", values)}
+                  ON CONFLICT(library_id,relative_path) DO UPDATE
+                  SET stable_since=CASE WHEN library_media.byte_length=EXCLUDED.byte_length AND library_media.modified_at=EXCLUDED.modified_at THEN library_media.stable_since ELSE clock_timestamp() END,byte_length=EXCLUDED.byte_length,modified_at=EXCLUDED.modified_at,scan_id=EXCLUDED.scan_id
+                  """;
+                await save.ExecuteNonQueryAsync(ct);
+            }
             await using var remove=Sql.Command("DELETE FROM library_media WHERE library_id=@library AND scan_id<>@scan",c,tx);
             remove.Parameters.AddWithValue("library",library); remove.Parameters.AddWithValue("scan",id); await remove.ExecuteNonQueryAsync(ct);
         }

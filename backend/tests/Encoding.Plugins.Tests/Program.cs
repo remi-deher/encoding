@@ -16,12 +16,6 @@ await TrackNamesMediaTests.RunAsync();
 await SubtitlesMediaTests.RunAsync();
 await ProcessTests.RunAsync();
 
-var connection = Environment.GetEnvironmentVariable("ENCODING_TEST_DATABASE");
-if (string.IsNullOrWhiteSpace(connection))
-{
-    Console.WriteLine("PostgreSQL trigger tests require ENCODING_TEST_DATABASE; see README.md.");
-    return 0;
-}
-await TriggerTests.RunAsync(connection);
+await TriggerTests.RunAsync();
 Console.WriteLine("PASS: all plugin and trigger scenarios.");
 return 0;

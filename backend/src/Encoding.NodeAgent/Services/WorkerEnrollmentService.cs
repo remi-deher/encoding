@@ -144,7 +144,7 @@ public sealed class WorkerEnrollmentService(
 
     /// <summary>
     /// Seconde phase d'un changement de cluster (0040), une fois le nouveau cluster confirmé : l'ancien est prévenu (au mieux) et son identité oubliée.
-    /// Le serveur reste actif sur chaque nœud ; son API expose les données du cluster lorsque la base PostgreSQL partagée est configurée (0049).
+    /// Le serveur reste actif sur chaque nœud ; sa base SQLite locale réconcilie les données du cluster avec les pairs (0049).
     /// </summary>
     public async Task CompleteSwitchAsync(CancellationToken cancellationToken)
     {
@@ -172,7 +172,7 @@ public sealed class WorkerEnrollmentService(
         return abandoned;
     }
 
-    /// <summary>Un nœud rattaché conserve son serveur local actif ; il faut une base PostgreSQL partagée pour exposer le même cluster (0049).</summary>
+    /// <summary>Un nœud rattaché conserve son serveur local actif ; le maillage réconcilie sa copie SQLite du cluster (0049).</summary>
     public async Task KeepLocalServerActiveAsync(CancellationToken cancellationToken)
     {
         if (launcher is null) return;

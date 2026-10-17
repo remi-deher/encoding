@@ -7,12 +7,12 @@ using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
-public sealed class ClusterReconciliationProviderTests
+public sealed class ClusterReconciliationSqliteTests
 {
-    [PostgresFact]
+    [DatabaseFact]
     public async Task ProcessingReceiptsMapToTheDestinationMediaIdAndFlowBackupsAreMaterialized()
     {
-        var connectionString = PostgresFixture.ConnectionString!;
+        var connectionString = RuntimeFixture.ConnectionString!;
         await using var source = await TestDatabase.CreateAsync(connectionString, "mesh_receipt_source");
         await using var target = await TestDatabase.CreateAsync(connectionString, "mesh_receipt_target");
         var migrations = Harness.RepositoryRoot();
@@ -41,8 +41,7 @@ public sealed class ClusterReconciliationProviderTests
             await using (var node = Sql.Command("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at) VALUES(@id,'worker-a',@roles,1,'[]',@seen)", connection))
             {
                 node.Parameters.AddWithValue("id", nodeId);
-                if (Sql.IsSqlite(connection)) node.Parameters.AddWithValue("roles", "[\"worker\"]");
-                else node.Parameters.AddWithValue("roles", SqlKind.TextArray, new[] { "worker" });
+                node.Parameters.AddWithValue("roles", "[\"worker\"]");
                 node.Parameters.AddWithValue("seen", DateTimeOffset.UtcNow);
                 await node.ExecuteNonQueryAsync();
             }
@@ -51,8 +50,7 @@ public sealed class ClusterReconciliationProviderTests
                 pending.Parameters.AddWithValue("id", pendingNodeId);
                 pending.Parameters.AddWithValue("pairing", SqlKind.Bytes, pairingHash);
                 pending.Parameters.AddWithValue("token", SqlKind.Bytes, pendingTokenHash);
-                if (Sql.IsSqlite(connection)) pending.Parameters.AddWithValue("roles", "[\"worker\"]");
-                else pending.Parameters.AddWithValue("roles", SqlKind.TextArray, new[] { "worker" });
+                pending.Parameters.AddWithValue("roles", "[\"worker\"]");
                 pending.Parameters.AddWithValue("expires", DateTimeOffset.UtcNow.AddMinutes(10));
                 await pending.ExecuteNonQueryAsync();
             }
@@ -131,7 +129,7 @@ public sealed class ClusterReconciliationProviderTests
 
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Cluster:Reconciliation:SharedSecret"] = "cluster-mesh-postgres-test-secret-0123456789"
+            ["Cluster:Reconciliation:SharedSecret"] = "cluster-mesh-sqlite-test-secret-0123456789"
         }).Build();
         var sourceReconciliation = new ClusterEntityReconciliation(source.Db, configuration, new EphemeralDataProtectionProvider(), NullLogger<ClusterEntityReconciliation>.Instance);
         var targetReconciliation = new ClusterEntityReconciliation(target.Db, configuration, new EphemeralDataProtectionProvider(), NullLogger<ClusterEntityReconciliation>.Instance);

@@ -4,8 +4,9 @@ using System.Text.RegularExpressions;
 namespace Encoding.Api.Infrastructure.Data.Sqlite;
 
 /// <summary>
-/// Traduit le SQL écrit pour PostgreSQL vers SQLite (architecture 0043). Les règles sont volontairement limitées aux
-/// constructions réellement utilisées par le backend ; une construction inconnue échoue à l'exécution plutôt qu'en silence.
+/// Adapte les constructions SQL historiques utilisées par les dépôts aux fonctions SQLite (architecture 0043).
+/// Les règles sont volontairement limitées aux constructions réellement utilisées par le backend ; une construction
+/// inconnue échoue à l'exécution plutôt qu'en silence.
 /// Les instants sont du texte UTC de largeur fixe (<see cref="Instant"/>) : l'ordre alphabétique est l'ordre chronologique.
 /// </summary>
 public static partial class SqliteTranslator
@@ -23,8 +24,6 @@ public static partial class SqliteTranslator
     {
         var text = sql;
         text = InfinityRegex().Replace(text, InfinityLiteral);
-        text = AdvisoryLockRegex().Replace(text, "SELECT 1");
-        text = RegclassRegex().Replace(text, m => $"EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '{m.Groups[1].Value}')");
         text = RowLockRegex().Replace(text, "");
         text = text.Replace("gen_random_uuid()", RandomUuid, StringComparison.Ordinal);
         text = Regex.Replace(text, @"EXTRACT\(\s*EPOCH\s+FROM\s+clock_timestamp\(\)\s*-\s*(min\(\w+\)|[\w.]+)\s*\)", "((julianday('now') - julianday($1)) * 86400.0)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -152,8 +151,6 @@ public static partial class SqliteTranslator
         "lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6)))";
 
     [GeneratedRegex(@"'infinity'(::timestamptz)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex InfinityRegex();
-    [GeneratedRegex(@"SELECT\s+pg_advisory_(?:xact_)?(?:un)?lock\(hashtext\('[^']*'\)\)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex AdvisoryLockRegex();
-    [GeneratedRegex(@"to_regclass\('(\w+)'\)\s+IS\s+NOT\s+NULL", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex RegclassRegex();
     [GeneratedRegex(@"\s+FOR\s+(?:NO\s+KEY\s+)?(?:UPDATE|SHARE)\b(?:\s+OF\s+\w+(?:\s*,\s*\w+)*)?(?:\s+SKIP\s+LOCKED|\s+NOWAIT)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex RowLockRegex();
     [GeneratedRegex(@"clock_timestamp\(\)\s*([+-])\s*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex ClockOffsetRegex();
     [GeneratedRegex(@"interval\s+'(\d+)\s+(\w+)'", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex IntervalLiteralRegex();

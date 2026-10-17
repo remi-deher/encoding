@@ -4,7 +4,7 @@ La suppression retire un nœud du catalogue, révoque son jeton et supprime ses 
 
 DELETE /api/v1/nodes/{id} prend un verrou sur le nœud et refuse HTTP 409 si celui-ci participe à une exécution ou découverte avec un bail valide, en tant que worker ou source. Un nœud inexistant ou déjà retiré retourne 404. Les heartbeats, l’authentification runtime, l’attribution et la sélection des accès excluent les identités retirées. Les références historiques restent valides.
 
-GET /api/v1/nodes/{id}/activity fournit les baux de traitement actifs, les totaux réussis/échoués/annulés, les tâches alimentées comme source et la dernière activité. Ces compteurs proviennent de PostgreSQL et ne sont pas limités aux 200 dernières exécutions affichées ailleurs.
+GET /api/v1/nodes/{id}/activity fournit les baux de traitement actifs, les totaux réussis/échoués/annulés, les tâches alimentées comme source et la dernière activité. Ces compteurs sont calculés depuis l'état local SQLite et l'historique reçu par réconciliation ; ils ne sont pas limités aux 200 dernières exécutions affichées ailleurs.
 
 Le drawer présente des cartes de synthèse, l’identité, la connexion et l’activité, puis une matrice des outils/plugins : version, médias, accélérations annoncées, encodeurs détectés et encodeurs vérifiés utilisables. L’agent contrôle les encodeurs vidéo catalogués sur une mire synthétique et conserve le résultat dans ses capacités ; le cluster ne déduit pas l’accès à un GPU de la seule présence d’un fichier de périphérique. Les anciens agents sans état de vérification restent visibles comme non vérifiés. Aucune donnée CPU/RAM matérielle non déclarée n’est inventée.
 

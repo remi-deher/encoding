@@ -1,21 +1,4 @@
 services:
-  postgres:
-    image: postgres:17
-    environment:
-      POSTGRES_DB: encoding
-      POSTGRES_USER: encoding
-      POSTGRES_PASSWORD: encoding
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - encoding-postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U encoding -d encoding"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
-
   # Image unique : le mode (serveur, worker ou les deux) se règle ici au premier démarrage, puis depuis l'interface
   # (page Nœuds ou console du worker) sans redémarrer le conteneur. Le mode enregistré prévaut ensuite sur Node__Roles.
   encoding:
@@ -24,7 +7,7 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Cluster: Host=postgres;Port=5432;Database=encoding;Username=encoding;Password=encoding
+      ConnectionStrings__Cluster: Data Source=/var/lib/encoding-node/cluster.db
       NodePresence__OfflineAfterSeconds: 30
       FlowBackups__Directory: /var/lib/encoding/flow-backups
       Runtime__ArtifactDirectory: /var/lib/encoding/runtime-artifacts
@@ -68,9 +51,6 @@ services:
     ports:
       - "127.0.0.1:5080:8080"
       - "127.0.0.1:4201:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
     volumes:
       - encoding-flow-backups:/var/lib/encoding/flow-backups
       - encoding-runtime-artifacts:/var/lib/encoding/runtime-artifacts
@@ -83,5 +63,4 @@ volumes:
   encoding-flow-backups:
   encoding-runtime-artifacts:
   encoding-plugin-keys:
-  encoding-postgres-data:
   encoding-node-data:

@@ -20,7 +20,7 @@ Limites : 100 flows sélectionnés, 1 000 documents, 20 Mio compressés et déco
 
 POST /api/v1/media-executions reçoit bibliothèque, chemin relatif et version publiée. Le tableau fournit cette action via le formulaire commun. Les montages et accès des bibliothèques restent explicitement configurés.
 
-Les serveurs attribuent les travaux depuis PostgreSQL avec verrous transactionnels et SKIP LOCKED, sans serveur permanent. Le worker doit être présent, avoir une place disponible, les outils et encodeurs requis, les versions exactes des plugins et un accès direct ou par transfert éligible.
+Chaque serveur attribue uniquement les travaux créés dans sa base SQLite locale, avec des transactions d’écriture immédiate. L’historique réconcilié n’est pas une file de tâches commune et ne crée pas de double attribution entre serveurs. Le worker doit être présent, avoir une place disponible, les outils et encodeurs requis, les versions exactes des plugins et un accès direct ou par transfert éligible.
 
 Le bail dure 60 secondes, renouvelé toutes les 15 secondes. Une réservation unique porte sur bibliothèque/chemin ; les étapes, transferts, renouvellements et publications vérifient l’époque et l’expiration. Checkpoint et événement sont enregistrés dans la même transaction. Quand un worker attribué perd son bail, sa tentative passe en erreur et libère la réservation ; elle n’est pas réattribuée sous le même identifiant. Seuls un relais ou une attente explicitement enregistrés, sans worker affecté, peuvent continuer sous le même identifiant.
 

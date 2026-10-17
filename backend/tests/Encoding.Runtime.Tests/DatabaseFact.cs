@@ -4,36 +4,22 @@ using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
-/// <summary>
-/// Fact that needs a PostgreSQL server. Locally it is skipped when ENCODING_TEST_DATABASE is unset;
-/// in CI ENCODING_TEST_REQUIRE_DATABASE=1 turns a missing database into a failure so tests cannot be silently skipped.
-/// </summary>
-public sealed class PostgresFactAttribute : FactAttribute
-{
-    public PostgresFactAttribute()
-    {
-        if (!string.IsNullOrWhiteSpace(PostgresFixture.ConnectionString)) return;
-        if (Environment.GetEnvironmentVariable("ENCODING_TEST_REQUIRE_DATABASE") == "1") return;
-        Skip = "Set ENCODING_TEST_DATABASE to run PostgreSQL tests (see backend/README.md).";
-    }
-}
+/// <summary>Scenario qui utilise une base SQLite temporaire.</summary>
+public sealed class DatabaseFactAttribute : FactAttribute { }
 
 /// <summary>Fact that needs ffmpeg with libx265 and ffprobe, skipped locally when they are absent.</summary>
 public sealed class MediaToolsFactAttribute : FactAttribute
 {
     public MediaToolsFactAttribute()
     {
-        if (!string.IsNullOrWhiteSpace(PostgresFixture.ConnectionString) is false
-            && Environment.GetEnvironmentVariable("ENCODING_TEST_REQUIRE_DATABASE") != "1")
-        { Skip = "Set ENCODING_TEST_DATABASE to run PostgreSQL tests (see backend/README.md)."; return; }
         if (Environment.GetEnvironmentVariable("ENCODING_TEST_REQUIRE_MEDIA_TOOLS") == "1") return;
         if (Encoding.NodeAgent.Runtime.ProcessToolRunner.Find("ffmpeg") is null || Encoding.NodeAgent.Runtime.ProcessToolRunner.Find("ffprobe") is null)
             Skip = "ffmpeg and ffprobe are required (included in backend/tests/Dockerfile).";
     }
 }
 
-/// <summary>One isolated schema shared by the PostgreSQL scenarios; they run sequentially in the same collection.</summary>
-public sealed class PostgresFixture : IAsyncLifetime
+/// <summary>One SQLite file shared by database scenarios, run sequentially in this collection.</summary>
+public sealed class RuntimeFixture : IAsyncLifetime
 {
     public static string? ConnectionString => TestDatabase.ConfiguredConnection;
     internal Harness.Fixture? Scenarios { get; private set; }
@@ -52,7 +38,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 }
 
 [CollectionDefinition(Name)]
-public sealed class PostgresCollection : ICollectionFixture<PostgresFixture>
+public sealed class RuntimeCollection : ICollectionFixture<RuntimeFixture>
 {
-    public const string Name = "postgres";
+    public const string Name = "sqlite";
 }

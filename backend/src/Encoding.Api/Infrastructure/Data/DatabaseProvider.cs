@@ -1,39 +1,25 @@
 using System.Data.Common;
 using Encoding.Api.Infrastructure.Data.Sqlite;
-using Npgsql;
+using Microsoft.Data.Sqlite;
 
 namespace Encoding.Api.Infrastructure.Data;
 
-/// <summary>
-/// Choix du fournisseur de base de données (architectures 0043/0049). <c>Database:Provider</c> vaut « postgres » ou « sqlite » ;
-/// chaque serveur peut utiliser son fichier SQLite local et réconcilier ses données avec le cluster. La chaîne « Cluster » est celle du fournisseur choisi.
-/// </summary>
+/// <summary>SQLite est l'unique fournisseur de données de l'application.</summary>
 public static class DatabaseProvider
 {
-    public const string Postgres = "postgres";
     public const string SqliteName = "sqlite";
 
-    /// <summary>
-    /// Fournisseur choisi : <c>Database:Provider</c> s'il est fourni ; sinon déduit de la chaîne de connexion (« Data Source=… » sans « Host= »
-    /// désigne SQLite), ce qui laisse les installations PostgreSQL existantes inchangées.
-    /// </summary>
-    public static string Name(IConfiguration configuration) =>
-        (configuration["Database:Provider"] ?? Infer(configuration.GetConnectionString("Cluster"))).Trim().ToLowerInvariant() switch
-        {
-            Postgres or "postgresql" => Postgres,
-            SqliteName => SqliteName,
-            var other => throw new InvalidOperationException($"Fournisseur de base de données inconnu : « {other} ». Valeurs possibles : postgres, sqlite.")
-        };
-
-    private static string Infer(string? connectionString) =>
-        connectionString is not null
-        && connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase)
-        && !connectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase)
-            ? SqliteName : Postgres;
-
-    public static DbDataSource Create(IConfiguration configuration, string connectionString) => Name(configuration) switch
+    public static DbDataSource CreateRuntime(IConfiguration configuration)
     {
-        SqliteName => new SqliteDataSource(connectionString),
-        _ => NpgsqlDataSource.Create(connectionString)
-    };
+        var provider = configuration["Database:Provider"]?.Trim();
+        var connection = configuration.GetConnectionString("Cluster") ?? "Data Source=./data/cluster.db";
+        if (provider is not null && !string.Equals(provider, SqliteName, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Seul le fournisseur SQLite est pris en charge. Configurez Database:Provider=sqlite.");
+        try { _ = new SqliteConnectionStringBuilder(connection); }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException("La connexion doit être une chaîne SQLite valide, par exemple Data Source=./data/cluster.db.", exception);
+        }
+        return new SqliteDataSource(connection);
+    }
 }

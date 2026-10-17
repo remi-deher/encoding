@@ -32,13 +32,7 @@ docker run -d --name encoding -p 8080:8080 \
   <utilisateur>/encoding:latest
 ```
 
-Pour utiliser PostgreSQL comme base commune, fournir la chaîne de connexion : le fournisseur est alors déduit de la chaîne (`Host=…`), ou imposé par `Database__Provider=postgres|sqlite`. Pour le maillage SQLite, configurer le même `Cluster__Reconciliation__SharedSecret` (au moins 32 octets) sur chaque serveur ; les pairs mDNS du même cluster sont découverts automatiquement. Les pairs hors découverte locale peuvent être ajoutés via `Cluster__Reconciliation__Peers__0`, `__1`, etc.
-
-```
-  -e ConnectionStrings__Cluster="Host=...;Database=encoding;Username=...;Password=..."
-```
-
-Pour passer d'un mode à l'autre, voir `Encoding.Api transfer-database` dans [sauvegarde et restauration](backup-restore.md).
+SQLite est le seul fournisseur de données. Le fichier est `/var/lib/encoding-node/cluster.db` et reste propre à chaque nœud. Configurer le même `Cluster__Reconciliation__SharedSecret` (au moins 32 octets) sur chaque serveur ; les pairs mDNS du même cluster sont découverts automatiquement. Les pairs hors découverte locale peuvent être ajoutés via `Cluster__Reconciliation__Peers__0`, `__1`, etc. Une installation fraîche crée automatiquement son fichier SQLite au premier démarrage.
 
 `Node__Roles` (`server`, `worker` ou `server,worker`) donne le mode initial. Ensuite le mode se change depuis la page Nœuds (« Ce nœud et son cluster » → « Mode du nœud »), sans redémarrer le conteneur ; le choix est conservé dans le dossier de données du nœud. Un worker seul doit définir `Cluster__ApiBaseUrl` (ou être découvert sur le réseau) ; le volume de données doit être conservé pour garder l'identité du nœud et son mode.
 

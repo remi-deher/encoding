@@ -53,7 +53,7 @@ Installer Base par défaut ; adapter les définitions du catalogue actuel au con
 
 ### 2. Enregistrement des flows
 
-Créer le dépôt PostgreSQL de définitions versionnées, les endpoints brouillon/publication et le service de sauvegarde JSON atomique décrit dans 0004. Écrire un travail de sauvegarde rejouable dans la transaction de publication ; afficher les échecs de sauvegarde. Les définitions d’exécution doivent provenir d’une version validée et immuable plutôt que d’un document arbitraire envoyé à POST executions.
+Créer le dépôt SQLite local de définitions versionnées, les endpoints brouillon/publication et le service de sauvegarde JSON atomique décrit dans 0004. Écrire un travail de sauvegarde rejouable dans la transaction de publication ; afficher les échecs de sauvegarde. Les définitions d’exécution doivent provenir d’une version validée et immuable plutôt que d’un document arbitraire envoyé à POST executions.
 
 ### 3. Attribution récupérable
 

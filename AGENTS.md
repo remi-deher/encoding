@@ -10,7 +10,7 @@ Le projet s’inspire des outils d’automatisation de fichiers existants, tout 
 
 - Backend : **C# avec ASP.NET Core sur .NET 10 LTS**.
 - Interface : **Angular avec TypeScript**.
-- Base de données : **SQLite local par serveur** par défaut, avec réconciliation opportuniste de proche en proche ; **PostgreSQL** reste pris en charge pour une base commune. Voir [0043](docs/architecture/0043-sqlite-and-data-access-abstraction.md) et [0049](docs/architecture/0049-multi-server-shared-cluster.md). Ne jamais partager un même fichier SQLite entre hôtes.
+- Base de données : **SQLite local par serveur uniquement**, avec réconciliation opportuniste de proche en proche. Voir [0043](docs/architecture/0043-sqlite-and-data-access-abstraction.md) et [0049](docs/architecture/0049-multi-server-shared-cluster.md). Ne jamais partager un même fichier SQLite entre hôtes.
 - Déploiement : **Docker**.
 - Ces choix sont validés. Ne pas les remplacer sans décision explicite prise avec le propriétaire du projet.
 - Le frontend Angular est initialisé dans `frontend/` avec Angular Material comme base de composants d’interface partagés. La structure du backend, des plugins, des outils et des images Docker reste à définir ensemble.
@@ -81,7 +81,7 @@ WebDAV est ici un canal de transfert de fichiers entre nœuds. Les outils d’en
 - Dans le code, distinguer les composants de flow des composants UI Angular et des nœuds de cluster.
 - Les plugins ne contournent pas les garanties du système sur l’attribution des tâches, l’accès aux bibliothèques et l’intégrité des fichiers.
 
-La décision de stockage des définitions de flow est décrite dans [l’architecture 0004](docs/architecture/0004-flow-definition-storage.md) : document JSON versionné stocké en PostgreSQL, avec sauvegardes de versions immuables dans un dossier persistant séparé.
+La décision de stockage des définitions de flow est décrite dans [l’architecture 0004](docs/architecture/0004-flow-definition-storage.md) : document JSON versionné stocké dans SQLite local et réconcilié entre pairs, avec sauvegardes de versions immuables dans un dossier persistant séparé.
 
 ## Outils média
 
@@ -126,7 +126,7 @@ Les premiers contrats de définition, de catalogue plugin et d’invocation sont
 
 Le registre déclaratif Base et la validation backend sont implémentés : consulter [0013 — Catalogue et validation](docs/architecture/0013-flow-catalog-and-validation.md). La création d’une exécution utilise cette validation. Le runtime worker exécute Base et les plugins tiers configurés en processus séparés ; disponibilité d’un descripteur et capacité d’exécution sont distinctes.
 
-Les versions validées des flows sont enregistrées dans PostgreSQL avec contrôle de concurrence. Une file transactionnelle écrit et vérifie leurs sauvegardes JSON dans un dossier persistant séparé. Le catalogue et l’éditeur utilisent ce stockage ; voir [0014 — Stockage et sauvegardes](docs/architecture/0014-flow-version-storage-and-backups.md). Les brouillons incomplets, leurs sauvegardes immuables et l’import/export JSON/ZIP sont implémentés ; la restauration utilise les actions du tableau.
+Les versions validées des flows sont enregistrées dans la base SQLite locale avec contrôle de concurrence et réconciliées entre pairs. Une file locale écrit et vérifie leurs sauvegardes JSON dans un dossier persistant séparé. Le catalogue et l’éditeur utilisent ce stockage ; voir [0014 — Stockage et sauvegardes](docs/architecture/0014-flow-version-storage-and-backups.md). Les brouillons incomplets, leurs sauvegardes immuables et l’import/export JSON/ZIP sont implémentés ; la restauration utilise les actions du tableau.
 
 
 ## Runtime des flows

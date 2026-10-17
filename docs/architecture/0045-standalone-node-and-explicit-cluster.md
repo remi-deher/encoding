@@ -18,8 +18,8 @@ Statut : implémentée (demande de Rémi) ; remplace le point 1 de [0038](0038-c
 
 ## Impacts et limites
 
-Contrat de `GET /api/v1/cluster` (champ ajouté), migrations PostgreSQL et SQLite 0034, panneau « Ce nœud ». La découverte réseau annonce toujours le nœud, même autonome. Un cluster qui retombe à un seul nœud non créé explicitement redevient autonome.
+Contrat de `GET /api/v1/cluster` (champ ajouté), migration SQLite 0034, panneau « Ce nœud ». La découverte réseau annonce toujours le nœud, même autonome. Un cluster qui retombe à un seul nœud non créé explicitement redevient autonome.
 
 ## Vérifications
 
-Scénario d'authentification : autonome par défaut, création refusée au rôle lecture, nom obligatoire, création puis 409 au second appel, renommage, 409 sur un nœud autonome ; suite complète sur PostgreSQL et SQLite.
+Scénario d'authentification : autonome par défaut, création refusée au rôle lecture, nom obligatoire, création puis 409 au second appel, renommage, 409 sur un nœud autonome ; suite exécutée sur SQLite.

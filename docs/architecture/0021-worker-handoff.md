@@ -4,7 +4,7 @@
 
 Le plugin intégré Nœuds ajoute `nodes-handoff` : un point de relais dans un flow séquentiel. L'exécution, sa tentative, sa version publiée et la réservation du média restent identiques. Le prochain bloc s'exécute sous un nouveau bail sur un autre worker. Si ce worker perd ensuite son bail, cette tentative échoue ; elle ne reprend pas automatiquement au checkpoint.
 
-Le sélecteur choisit un nœud précis ou un worker éligible. Sa configuration résulte des valeurs globales du plugin, des surcharges du flow puis de celles du bloc. Les configurations effectives des plugins sont figées à la première attribution et conservées chiffrées dans PostgreSQL pour les reprises et les relais. Une cible absente, retirée, occupée ou incompatible laisse le relais en attente ; aucun repli sur le worker précédent n'est autorisé.
+Le sélecteur choisit un nœud précis ou un worker éligible. Sa configuration résulte des valeurs globales du plugin, des surcharges du flow puis de celles du bloc. La configuration effective est figée à la première attribution dans l'état local de l'exécution ; la configuration globale réconciliée reste dans SQLite. Une cible absente, retirée, occupée ou incompatible laisse le relais en attente ; aucun repli sur le worker précédent n'est autorisé.
 
 ## Transition atomique
 
@@ -34,4 +34,4 @@ Relais avant et après transformation, contexte inchangé, reprises à chaque pa
 
 La migration additive `0017_worker_handoff` ajoute l'état interne de relais, le sélecteur, le worker précédent, les configurations chiffrées et l'identité de fin de checkpoint. Une fin de checkpoint identique est acquittée même après la révocation du bail ; une variante du contenu ou de l'identité est refusée.
 
-La suite `backend/tests/Encoding.Runtime.Tests` vérifie les dépôts sur PostgreSQL isolé, les endpoints et le runner réel. Elle couvre les fichiers originaux et transformés, les artefacts annexes, les doublons, les anciennes époques, les réclamations concurrentes, les configurations figées et les surcharges, les limites, les cibles hors ligne, l'accès bibliothèque, le retrait de la source et l'annulation. Deux parcours FFmpeg sur une vidéo synthétique vérifient la conversion en H.265 avant relais et la transmission d'un plan avant exécution, jusqu'à la publication réelle par le service source. La CI exécute ces mêmes scénarios.
+La suite `backend/tests/Encoding.Runtime.Tests` vérifie les dépôts sur SQLite, les endpoints et le runner réel. Elle couvre les fichiers originaux et transformés, les artefacts annexes, les doublons, les anciennes époques, les réclamations concurrentes, les configurations figées et les surcharges, les limites, les cibles hors ligne, l'accès bibliothèque, le retrait de la source et l'annulation. Deux parcours FFmpeg sur une vidéo synthétique vérifient la conversion en H.265 avant relais et la transmission d'un plan avant exécution, jusqu'à la publication réelle par le service source. La CI exécute ces mêmes scénarios.

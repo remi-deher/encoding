@@ -1,16 +1,16 @@
 # 0049 — SQLite local et réconciliation maillée
 
-Statut : transport et première couverture des données partagées implémentés. Chaque serveur garde une base locale et peut servir l’interface de gestion du cluster.
+Statut : transport et première couverture des données partagées implémentés. Chaque serveur garde sa base SQLite locale et peut servir l’interface de gestion du cluster.
 
 ## Décision
 
-Chaque serveur utilise sa base SQLite locale par défaut. Les serveurs d'un même cluster se découvrent par DNS-SD/mDNS et échangent un journal append-only de proche en proche. Aucun serveur permanent, quorum ou Raft n'est nécessaire. PostgreSQL reste pris en charge, notamment pour les installations utilisant une base commune.
+Chaque serveur utilise sa base SQLite locale. Les serveurs d'un même cluster se découvrent par DNS-SD/mDNS et échangent un journal append-only de proche en proche. Aucun serveur permanent, quorum ni service de base de données central n'est nécessaire.
 
 Après approbation du rattachement, l’agent local adopte l’identifiant du cluster d’accueil. L’annonce mDNS est actualisée, puis le serveur conserve son API et réconcilie ses données avec les pairs. Les écritures sont faites sur le serveur ouvert par l’administrateur ; les pairs les reçoivent au prochain échange. La convergence est éventuelle, pas synchrone.
 
 ## Transport et conflits
 
-- La migration 0035 ajoute l’identité de l’origine, le journal séquencé, les registres, les versions d’entités, les curseurs et les projections en attente.
+- La migration 0036 ajoute l’identité de l’origine, le journal séquencé, les registres, les versions d’entités, les curseurs et les projections en attente.
 - `POST /api/v1/cluster/reconciliation/exchange` échange des lots bornés. Les événements conservent leur origine lorsqu’ils sont relayés ; `(origine, séquence)` élimine les doublons.
 - Les pairs sont découverts par mDNS quand ils annoncent le même identifiant de cluster. `Cluster:Reconciliation:Peers` accepte aussi des URL explicites.
 - `Cluster:Reconciliation:SharedSecret` doit être identique sur les serveurs et contenir au moins 32 octets. HMAC authentifie les messages ; AES-GCM protège dans le journal et sur le transport les empreintes de jetons de nœuds, les hachages des codes et jetons de jumelage, les hachages de mot de passe et les valeurs de configuration des plugins. Les configurations de plugins sont déchiffrées puis rechiffrées avec le trousseau Data Protection local de chaque serveur.
@@ -47,8 +47,8 @@ La convergence n’est pas une transaction globale : deux serveurs isolés peuve
 - Ne pas partager un même fichier SQLite entre hôtes ni le monter comme base distribuée sur un stockage réseau.
 - Les données ordinaires de réconciliation restent lisibles sur le réseau ; HTTPS est recommandé pour les URL de pairs. Les champs sensibles protégés par AES-GCM restent chiffrés même avec une URL HTTP.
 - Les fichiers médias et les artefacts doivent être accessibles séparément depuis les workers concernés. La réplication de leurs métadonnées ne copie pas leur contenu.
-- `transfer-database` reste une copie initiale vers une base vide ; il ne fusionne pas deux bases existantes.
+- Une nouvelle installation commence avec un fichier SQLite vide ; les données partagées convergent ensuite via le maillage.
 
 ## Vérifications
 
-Les tests couvrent le relais, les doublons, le départage LWW, le rattachement à une nouvelle identité, la réplication de configurations et d’historiques sur deux bases SQLite, la protection des secrets plugin, le remappage des reçus de traitement sur SQLite et PostgreSQL, la création locale des tâches de sauvegarde et la non-réplication des baux actifs.
+Les tests couvrent le relais, les doublons, le départage LWW, le rattachement à une nouvelle identité, la réplication de configurations et d’historiques sur deux bases SQLite, la protection des secrets plugin, le remappage des reçus de traitement, la création locale des tâches de sauvegarde et la non-réplication des baux actifs.

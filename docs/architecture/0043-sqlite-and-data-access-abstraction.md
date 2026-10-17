@@ -1,22 +1,23 @@
-# 0043 — SQLite derrière une abstraction d'accès aux données
+# 0043 — SQLite local par serveur
 
-Statut : SQLite et PostgreSQL sont pris en charge. SQLite est le choix par défaut pour une installation neuve ; la décision de garder une base locale par serveur est précisée dans [0049](0049-multi-server-shared-cluster.md).
+Statut : SQLite est le seul moteur de stockage de l’application.
 
-## Abstraction livrée
+## Utilisation
 
-- Les dépôts utilisent les types ADO.NET génériques (`DbDataSource`, `DbConnection`, `DbCommand`). `Infrastructure/Data/Sql.cs` centralise les paramètres propres aux fournisseurs et l'identification SQLite/PostgreSQL.
-- `Database:Provider` choisit explicitement le fournisseur. Sinon, `ConnectionStrings:Cluster` permet de le déduire : `Data Source=…` désigne SQLite ; `Host=…` désigne PostgreSQL. Le fichier `appsettings.json` et l'image Docker démarrent avec SQLite ; les déploiements PostgreSQL existants restent compatibles.
-- `SqliteDataSource` active WAL, clés étrangères et délai d'attente d'écriture. Les transactions `BEGIN IMMEDIATE` sérialisent les écritures propres à un fichier. Les dates sont en texte UTC, les UUID en texte, les tableaux et JSON en JSON texte.
-- Le traducteur SQLite adapte le SQL commun (horloge, intervalles, verrous, tableaux, JSON et alias de mise à jour). Les différences restantes sont traitées au point d'accès concerné avec `Sql.IsSqlite`.
-- Les migrations PostgreSQL sont dans `migrations/`, celles de SQLite dans `migrations/sqlite/`. Le baseline SQLite 0033 représente le schéma PostgreSQL au moment du portage ; les changements ultérieurs ont des migrations parallèles.
-- `Encoding.Api transfer-database` copie les données entre fournisseurs vers une cible vide, en conservant la source. Cette commande reste une migration/copie initiale ; elle ne fusionne pas des bases ayant évolué séparément.
+- Chaque serveur ouvre son propre fichier `cluster.db` dans son volume de données. Ne jamais partager le fichier entre hôtes ni le placer sur un stockage réseau.
+- `SqliteDataSource` active WAL, les clés étrangères et un délai d’attente d’écriture. Les transactions d’écriture immédiate sérialisent les changements du fichier local ; les serveurs distincts convergent par le maillage 0049, sans transaction globale.
+- Les dates sont stockées en texte UTC de largeur fixe, les UUID en texte et les tableaux/JSON en texte JSON. L’adaptateur SQL convertit les constructions utilisées par les dépôts vers les fonctions SQLite.
+- Les migrations exécutées par le serveur se trouvent dans `backend/migrations/sqlite/`. Le baseline 0033 crée le schéma initial et les migrations suivantes font évoluer ce schéma. Les fichiers SQLite sont copiés dans l’image lors de la publication.
+- La configuration de connexion accepte uniquement SQLite. Sans configuration, le serveur utilise `Data Source=./data/cluster.db`.
 
-## Stockage multi-serveur
+## Installation fraîche
 
-Un fichier SQLite ne doit pas être partagé entre hôtes. Chaque serveur utilise son fichier local et réconcilie progressivement ses données avec les autres serveurs du cluster via le maillage 0049. Plusieurs processus sur le même fichier sont sérialisés par SQLite ; un déploiement peut aussi conserver PostgreSQL comme base commune.
+Au premier démarrage, le serveur crée le fichier SQLite, applique toutes les migrations et crée une identité de cluster locale. Chaque serveur doit avoir son propre volume de données. Pour recommencer avec une base vide, utiliser un volume neuf ; cela crée une nouvelle identité locale et ne restaure aucun état métier.
 
-Le maillage ajoute un journal séquencé et signé, ainsi qu'une projection LWW des membres, configurations, bibliothèques, flows, profils et états d'exécution durables. Les tables de baux et de réservations actives restent locales ; la liste précise est tenue dans 0049.
+## Cluster
 
-## Tests
+Chaque serveur conserve les données locales nécessaires à son travail et réconcilie les données partagées avec les autres serveurs selon 0049. Un nœud isolé continue de lire et modifier sa copie ; la convergence est éventuelle. Les baux, réservations actives, sessions, files locales et fichiers binaires ne sont pas répliqués comme des lignes SQLite.
 
-Les scénarios pertinents s'exécutent sur les deux fournisseurs avec `ENCODING_TEST_PROVIDER=sqlite|postgres`. Les tests SQLite utilisent un fichier temporaire par scénario. Les migrations, le traducteur SQL, le runtime, la copie inter-fournisseurs et le maillage disposent de tests dédiés.
+## Vérification
+
+La suite exécute les migrations, dépôts, runtime, sauvegardes, scénarios d’API et maillage sur des fichiers SQLite temporaires. Les tests de cluster utilisent deux bases distinctes pour vérifier le transport et la réconciliation. Aucun serveur de base externe n’est requis.

@@ -41,8 +41,6 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var configurationLock = Sql.Command("SELECT pg_advisory_xact_lock(hashtext('encoding.plugin_configurations'))", connection, transaction))
-            await configurationLock.ExecuteNonQueryAsync(ct);
         var current = await ReadAsync("SELECT encrypted_values FROM plugin_configurations WHERE plugin_id=@id FOR UPDATE", connection, transaction, "id", plugin.Id, ct);
         var values = Merge(plugin.ConfigurationSchema, current, request.Values, request.ClearSecrets, flowOverride: false);
         var validation = Validate(plugin.ConfigurationSchema, values, requireRequired: true);

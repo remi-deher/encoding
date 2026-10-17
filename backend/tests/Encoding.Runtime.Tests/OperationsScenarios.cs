@@ -15,7 +15,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
 
 namespace Encoding.Runtime.Tests;
 
@@ -27,15 +26,14 @@ internal static class OperationsScenarios
         if (!condition) throw new InvalidOperationException(message);
     }
 
-    private static string First => TestDatabase.IsSqlite ? "0033_baseline" : "0001_cluster_nodes";
+    private const string First = "0033_baseline";
 
     public static void Run()
     {
-        var repositoryMigrations = Path.Combine(Harness.RepositoryRoot(), "migrations");
+        var repositoryMigrations = Path.Combine(Harness.RepositoryRoot(), "migrations", "sqlite");
         var catalog = MigrationCatalog.Load(repositoryMigrations);
-        Check(catalog.Count > 20 && catalog.Select(file => file.Number).Distinct().Count() == catalog.Count, "Chaque numéro de migration du dépôt est unique.");
-        Check(MigrationCatalog.RenamedFrom.Keys.All(version => catalog.Any(file => file.Version == version)), "Une migration renommée référence un fichier existant.");
-        Check(catalog.All(file => !MigrationCatalog.RenamedFrom.Values.Contains(file.Version)), "L’ancien nom d’une migration renommée ne reste pas dans le dossier.");
+        Check(catalog.Count >= 4 && catalog.Select(file => file.Number).Distinct().Count() == catalog.Count, "Chaque numéro de migration SQLite du dépôt est unique.");
+        Check(catalog.Any(file => file.Version == "0033_baseline"), "Le catalogue SQLite commence par son schéma de référence.");
 
         var scratch = Directory.CreateTempSubdirectory("encoding-migrations-").FullName;
         try
@@ -79,23 +77,12 @@ internal static class OperationsScenarios
             var db = database.Db;
 
             var before = await DatabaseMigrator.StatusAsync(db, contentRoot, CancellationToken.None);
-            Check(before.Applied == 0 && before.Pending.Count > (TestDatabase.IsSqlite ? 0 : 20), "Une base vide a toutes les migrations en attente.");
+            Check(before.Applied == 0 && before.Pending.Count > 0, "Une base vide a toutes les migrations en attente.");
             await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None);
             await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None);
             var status = await DatabaseMigrator.StatusAsync(db, contentRoot, CancellationToken.None);
             Check(status.Pending.Count == 0 && status.Unknown.Count == 0, "Les migrations appliquées deux fois restent cohérentes.");
             Check(await Scalar(db, "SELECT count(*) FROM schema_migrations WHERE checksum IS NULL") == 0, "Chaque migration enregistre son empreinte.");
-
-            if (!TestDatabase.IsSqlite)
-            {
-            // Base déjà en production : elle a enregistré l’ancien nom, la migration renommée ne doit pas rejouer son SQL.
-            await Exec(db, "DELETE FROM schema_migrations WHERE version = '0023_library_node_access_activation'");
-            await Exec(db, "INSERT INTO schema_migrations(version) VALUES ('0006_library_node_access_activation')");
-            var legacyStatus = await DatabaseMigrator.StatusAsync(db, contentRoot, CancellationToken.None);
-            Check(legacyStatus.Pending.Count == 0 && legacyStatus.Unknown.Count == 0, "L’ancien nom d’une migration renommée vaut application.");
-            await DatabaseMigrator.ApplyAsync(db, contentRoot, CancellationToken.None);
-            Check(await Scalar(db, "SELECT count(*) FROM schema_migrations WHERE version = '0023_library_node_access_activation'") == 1, "La migration renommée est enregistrée sans être rejouée.");
-            }
 
             await Exec(db, "INSERT INTO schema_migrations(version, checksum) VALUES ('9999_from_a_newer_node', 'x')");
             Check((await DatabaseMigrator.StatusAsync(db, contentRoot, CancellationToken.None)).Unknown.SequenceEqual(["9999_from_a_newer_node"]), "Une migration d’un nœud plus récent est signalée sans bloquer.");
@@ -110,7 +97,7 @@ internal static class OperationsScenarios
 
             await RetentionAsync(db, directory);
             await EndpointsAsync(db, directory, contentRoot);
-            Console.WriteLine("PASS: versioned migrations, artifact retention, health checks and /metrics on PostgreSQL.");
+            Console.WriteLine("PASS: versioned SQLite migrations, artifact retention, health checks and /metrics.");
         }
         finally
         {

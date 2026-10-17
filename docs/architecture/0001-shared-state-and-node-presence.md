@@ -5,7 +5,7 @@
 
 ## Décision
 
-Les instances serveur sont des pairs sans autorité permanente. Le premier modèle utilisait PostgreSQL comme source commune. La décision actuelle privilégie un fichier SQLite local par serveur et la réconciliation éventuelle de proche en proche, sans quorum ; PostgreSQL commun reste pris en charge. Le journal et les domaines réconciliables sont suivis dans 0049.
+Les instances serveur sont des pairs sans autorité permanente. Chaque serveur utilise son fichier SQLite local et réconcilie éventuellement ses données de proche en proche, sans quorum. Le journal et les domaines réconciliables sont suivis dans 0049.
 
 Le premier contrat backend versionné est `api/v1`. Un nœud publie périodiquement son identité, ses rôles et les capacités qu'il a observées. `lastSeenAt` est horodaté par le serveur, jamais fourni par le nœud. L'état en ligne/hors ligne est dérivé de cette date et du seuil de présence configuré, ce n'est pas un état persistant distinct.
 
@@ -29,6 +29,6 @@ Les scripts SQL du dossier `backend/migrations` sont versionnés et appliqués d
 
 - Une panne du stockage local rend les mises à jour de présence de ce serveur indisponibles ; les autres serveurs continuent sur leurs propres bases.
 - Chaque serveur peut répondre aux lectures et écrire les signaux de présence sans état local faisant autorité.
-- PostgreSQL calcule l'état de présence depuis son horloge afin que les serveurs API ne divergent pas à cause d'horloges locales différentes.
+- Chaque serveur calcule la présence à partir de son horloge locale ; les horloges doivent rester synchronisées pour départager correctement les écritures réconciliées.
 - Les clients affichent le contrat métier (`status`, `lastSeenAt`) sans reconstruire la règle de présence.
-- L'attribution exclusive des tâches, les baux récupérables, l'enrôlement et la rotation des secrets, et la topologie HA PostgreSQL restent des décisions et livrables distincts.
+- L'attribution des tâches est locale au serveur qui les crée ; les baux actifs ne sont pas réconciliés. Une reprise exige une relance explicite selon 0015 et 0049.

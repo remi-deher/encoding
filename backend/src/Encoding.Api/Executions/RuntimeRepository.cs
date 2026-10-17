@@ -137,8 +137,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                     await using var r=await access.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
                     source=r.GetGuid(0); root=r.IsDBNull(1)?null:r.GetString(1);
                 }
-                // Only an explicit relay pins the original source; a plain recovery after a lost worker lets any worker
-                // with a valid access of its own (direct or transfer) resume the execution (0015).
+                // An explicit relay keeps the original library-access node pinned. A fresh assignment after a wait
+                // or a flow retry uses the receiving worker's own library access.
                 if(item.Source is {} originalSource && item.Selector is not null)
                 {
                     // A relay does not move ownership of the library or reinterpret the source path.

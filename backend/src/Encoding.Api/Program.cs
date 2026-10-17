@@ -13,11 +13,7 @@ using Encoding.Api.Plugins;
 using Encoding.Contracts.Nodes;
 using Encoding.Core.Nodes;
 using Encoding.Contracts.Libraries;
-using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
-
-if (args.FirstOrDefault() == DatabaseTransferCommand.Name)
-    Environment.Exit(await DatabaseTransferCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddOperations();
@@ -27,14 +23,12 @@ Directory.CreateDirectory(pluginKeyDirectory);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(pluginKeyDirectory))
     .SetApplicationName("Encoding.PluginSettings");
-var connectionString = builder.Configuration.GetConnectionString("Cluster")
-    ?? throw new InvalidOperationException("La chaîne de connexion 'Cluster' est obligatoire.");
 var offlineAfterSeconds = builder.Configuration.GetValue("NodePresence:OfflineAfterSeconds", 30);
 if (offlineAfterSeconds <= 0)
 {
     throw new InvalidOperationException("NodePresence:OfflineAfterSeconds doit être supérieur à zéro.");
 }
-builder.Services.AddSingleton<System.Data.Common.DbDataSource>(DatabaseProvider.Create(builder.Configuration, connectionString));
+builder.Services.AddSingleton<System.Data.Common.DbDataSource>(DatabaseProvider.CreateRuntime(builder.Configuration));
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
 builder.Services.AddSingleton<NodeGroupRepository>();

@@ -7,7 +7,7 @@ Voir [0029](../architecture/0029-operations-observability-and-retention.md) pour
 | Endpoint | Usage |
 | --- | --- |
 | `GET /health/live` | Vivacité du processus (sonde Docker/orchestrateur). |
-| `GET /health/ready` | PostgreSQL joignable (retrait du répartiteur). |
+| `GET /health/ready` | Base SQLite locale joignable (retrait du répartiteur). |
 | `GET /health/details` | Tous les contrôles, avec données chiffrées. Statut global `healthy`, `degraded` ou `unhealthy`. |
 | `GET /metrics` | Métriques Prometheus. |
 
@@ -29,7 +29,7 @@ Les métriques de cluster (`encoding_nodes`, `encoding_executions`, …) sont id
 
 | Métrique | Signification |
 | --- | --- |
-| `encoding_up`, `encoding_database_up` | Le serveur et PostgreSQL répondent. |
+| `encoding_up`, `encoding_database_up` | Le serveur et sa base SQLite locale répondent. |
 | `encoding_nodes{status}` | Nœuds en ligne / hors ligne (retirés exclus). |
 | `encoding_executions{state}` | Exécutions par état. |
 | `encoding_executions_oldest_queued_age_seconds` | Ancienneté de la plus ancienne exécution en file. |

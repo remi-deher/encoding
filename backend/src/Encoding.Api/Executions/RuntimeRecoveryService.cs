@@ -51,6 +51,8 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             var cancelled=item.State=="cancelling";
             var detail=cancelled
                 ? "Annulation terminée après expiration du bail ; la source est conservée."
+                : item.HasNonIdempotentStep
+                    ? "Le worker a perdu sa connexion pendant une étape à effet externe. Le résultat est incertain ; la tâche est en erreur et nécessite une relance explicite."
                 : "Le worker a perdu sa connexion pendant cette tentative. La tâche est en erreur ; une relance doit créer une nouvelle tentative.";
             if(await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,cancelled?"cancelled":"failed",item.Worker,null,detail),c,tx,ct))
             {

@@ -15,18 +15,17 @@ public static partial class MigrationCatalog
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> RenamedFrom = new Dictionary<string, string>(StringComparer.Ordinal)
     {
-        ["0023_library_node_access_activation"] = "0006_library_node_access_activation",
+        ["0036_cluster_reconciliation"] = "0035_cluster_reconciliation",
     };
 
     [GeneratedRegex("^(?<number>[0-9]{4})_[a-z0-9]+(_[a-z0-9]+)*$", RegexOptions.CultureInvariant)]
     private static partial Regex VersionPattern();
 
-    /// <summary>Dossier des migrations du fournisseur : <c>migrations/</c> pour PostgreSQL, <c>migrations/sqlite/</c> pour SQLite.</summary>
-    public static string ResolveDirectory(string contentRoot, bool sqlite = false)
+    /// <summary>Returns the bundled SQLite migration directory, falling back to the source tree during development.</summary>
+    public static string ResolveDirectory(string contentRoot)
     {
-        var outputDirectory = Path.Combine(AppContext.BaseDirectory, "migrations");
-        var directory = Directory.Exists(outputDirectory) ? outputDirectory : Path.Combine(contentRoot, "migrations");
-        if (sqlite) directory = Path.Combine(directory, "sqlite");
+        var outputDirectory = Path.Combine(AppContext.BaseDirectory, "migrations", "sqlite");
+        var directory = Directory.Exists(outputDirectory) ? outputDirectory : Path.Combine(contentRoot, "migrations", "sqlite");
         return Directory.Exists(directory) ? directory : throw new DirectoryNotFoundException($"Dossier de migrations introuvable : {directory}");
     }
 

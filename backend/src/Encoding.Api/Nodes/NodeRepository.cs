@@ -349,14 +349,12 @@ public sealed class NodeRepository(DbDataSource dataSource)
 
     /// <summary>
     /// Enregistre le mode voulu d'un nœud ; le nœud l'applique à son prochain signal de présence. Refuse de retirer la fonction
-    /// serveur du dernier nœud serveur en ligne (les changements de mode sont sérialisés par un verrou consultatif).
+    /// serveur du dernier nœud serveur en ligne (les transactions SQLite sérialisent les changements de mode).
     /// </summary>
     public async Task<ModeRequestResult> RequestModeAsync(Guid nodeId, bool server, bool worker, TimeSpan offlineAfter, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(ct);
-        await using (var lockCommand = Sql.Command("SELECT pg_advisory_xact_lock(hashtext('cluster_node_mode'))", c, tx))
-            await lockCommand.ExecuteNonQueryAsync(ct);
         string[] roles;
         await using (var select = Sql.Command("SELECT roles FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL FOR UPDATE", c, tx))
         {
