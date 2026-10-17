@@ -220,27 +220,25 @@ export interface DetailCard {
       min-width: 0;
       overflow: hidden;
       border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      background: var(--surface);
-      transition:
-        border-color 120ms ease,
-        box-shadow 120ms ease;
+      border-radius: var(--radius-lg);
+      background: var(--surface-container-low);
+      transition: border-color 120ms ease, box-shadow 120ms ease;
     }
     .detail-card_expanded {
       grid-column: 1 / -1;
       border-color: color-mix(in srgb, var(--accent) 38%, var(--border-subtle));
-      box-shadow: 0 3px 12px rgb(32 43 40 / 5%);
+      box-shadow: var(--elevation-1);
     }
     .detail-card-heading {
       margin: 0;
     }
     .detail-card-toggle {
       width: 100%;
-      min-height: 68px;
-      padding: 11px 12px;
+      min-height: 72px;
+      padding: 12px 14px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       border: 0;
       background: transparent;
       color: var(--text-primary);
@@ -256,18 +254,18 @@ export interface DetailCard {
       outline-offset: -2px;
     }
     .detail-card-icon {
-      width: 36px;
-      height: 36px;
+      width: 40px;
+      height: 40px;
       display: grid;
       place-items: center;
       flex: 0 0 auto;
-      border-radius: 10px;
+      border-radius: var(--radius-md, 12px);
       background: var(--accent-soft);
       color: var(--accent-strong);
     }
     .detail-card-icon svg {
-      width: 19px;
-      height: 19px;
+      width: 20px;
+      height: 20px;
       fill: none;
       stroke: currentColor;
       stroke-linecap: round;
@@ -282,19 +280,21 @@ export interface DetailCard {
       min-width: 0;
       flex: 1;
       display: grid;
-      gap: 3px;
+      gap: 4px;
     }
     .detail-card-title {
       overflow: hidden;
-      font-size: 13px;
+      font-size: var(--font-title-sm, 15px);
       font-weight: 700;
+      letter-spacing: -0.01em;
       text-overflow: ellipsis;
       white-space: nowrap;
+      color: var(--text-primary);
     }
     .detail-card-subtitle {
       overflow: hidden;
       color: var(--text-muted);
-      font-size: 11px;
+      font-size: var(--font-label, 12px);
       font-weight: 400;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -303,29 +303,23 @@ export interface DetailCard {
     .detail-card-tag {
       max-width: 100%;
       width: fit-content;
-      padding: 4px 7px;
-      border-radius: 6px;
+      padding: 4px 8px;
+      border-radius: var(--radius-xs, 6px);
       background: var(--surface-muted);
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: var(--font-label, 12px);
       font-weight: 600;
       line-height: 1.25;
     }
-    .detail-card-status_success,
-    .detail-card-tag_success,
-    .detail-card-detail_success {
+    .detail-card-status_success, .detail-card-tag_success, .detail-card-detail_success {
       background: var(--success-soft);
       color: var(--success);
     }
-    .detail-card-status_warning,
-    .detail-card-tag_warning,
-    .detail-card-detail_warning {
+    .detail-card-status_warning, .detail-card-tag_warning, .detail-card-detail_warning {
       background: var(--warning-soft);
       color: var(--warning);
     }
-    .detail-card-status_accent,
-    .detail-card-tag_accent,
-    .detail-card-detail_accent {
+    .detail-card-status_accent, .detail-card-tag_accent, .detail-card-detail_accent {
       background: var(--accent-soft);
       color: var(--accent-strong);
     }
@@ -339,31 +333,31 @@ export interface DetailCard {
       transform: rotate(180deg);
     }
     .detail-card-tags {
-      padding: 0 12px 12px 58px;
+      padding: 0 14px 12px 66px;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
     }
     .detail-card-content {
-      padding: 12px;
+      padding: var(--space-4, 16px);
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+      gap: var(--space-4, 16px);
       border-top: 1px solid var(--border-subtle);
     }
     .detail-card-section h4 {
-      margin: 0 0 7px;
+      margin: 0 0 var(--space-2, 8px);
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: var(--font-label, 12px);
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
     }
     .detail-card-section ul {
       margin: 0;
       padding: 0;
       display: grid;
-      gap: 6px;
+      gap: var(--space-2, 8px);
       list-style: none;
     }
     .detail-card-section li {
@@ -371,42 +365,43 @@ export interface DetailCard {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      font-size: 11px;
+      gap: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-secondary);
     }
     .detail-card-section li > span:first-child {
       overflow-wrap: anywhere;
     }
     .detail-card-detail {
-      padding: 3px 6px;
-      border-radius: 5px;
+      padding: 3px 8px;
+      border-radius: var(--radius-xs, 6px);
       background: var(--surface-muted);
-      color: var(--text-secondary);
-      font-size: 10px;
+      color: var(--text-primary);
+      font-size: var(--font-label, 12px);
+      font-weight: 600;
       text-align: right;
     }
     .detail-card-empty,
     .detail-card-empty-state {
       margin: 0;
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: var(--font-body, 14px);
       line-height: 1.5;
     }
     .detail-card-empty-state {
-      padding: 16px;
+      padding: var(--space-4, 16px);
       border: 1px dashed var(--border-subtle);
-      border-radius: 10px;
+      border-radius: var(--radius-md, 12px);
       background: var(--surface-muted);
     }
     @media (max-width: 600px) {
-      .detail-card-grid {
-        grid-template-columns: 1fr;
-      }
+      .detail-card-grid,
       .detail-card-content {
         grid-template-columns: 1fr;
       }
       .detail-card-status {
-        max-width: 86px;
+        max-width: 100px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;

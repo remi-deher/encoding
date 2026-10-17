@@ -336,7 +336,7 @@ export function clusterJoinSteps(data: JoinPresentation): readonly GuidedStep[] 
         new Date(expires),
       )
     : null;
-  const code = data.status?.verificationCode;
+  const code = data.status?.verificationCode ?? data.pairing?.verificationCode;
   return [
     {
       id: 'address',
@@ -394,6 +394,15 @@ export function clusterJoinSteps(data: JoinPresentation): readonly GuidedStep[] 
       id: 'waiting',
       label: 'Approbation',
       description: `Demande envoyée à ${name}. Un administrateur doit la vérifier depuis Nœuds → Cluster → Demandes de rattachement.`,
+      heroCode: code
+        ? {
+            code,
+            label: 'Code à comparer',
+            helper: `Un administrateur du cluster ${name} doit confirmer ce code identique sur son écran.`,
+            badge: 'En attente d’approbation',
+            tone: 'accent',
+          }
+        : undefined,
       cards: [
         informationCard(
           'join-pending',
@@ -401,7 +410,7 @@ export function clusterJoinSteps(data: JoinPresentation): readonly GuidedStep[] 
           'Le rattachement précédent est conservé pendant la vérification',
           [
             { label: 'Nœud demandeur', description: data.status?.name ?? 'Ce nœud' },
-            { label: 'Code à comparer', description: code ?? 'Lecture du code de vérification…' },
+            ...(code ? [] : [{ label: 'Code à comparer', description: 'Lecture du code de vérification…' }]),
             ...(expiry ? [{ label: 'Demande valable jusqu’au', description: expiry }] : []),
             ...(data.pairing?.pairingKey || data.status?.pairingKey
               ? [
