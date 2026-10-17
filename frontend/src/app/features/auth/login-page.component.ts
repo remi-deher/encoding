@@ -1,8 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
-import { MINIMUM_PASSWORD_LENGTH, safeReturnUrl } from '../../shared/models/auth';
+import { safeReturnUrl } from '../../shared/models/auth';
 import { NotificationService } from '../../shared/services/notification.service';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 

@@ -63,9 +63,7 @@ export class AuthService {
             setupToken: setupToken || null,
             nodeDisplayName: legacyDisplayName.trim() || null,
           };
-    const user = await firstValueFrom(
-      this.http.post<CurrentUser>('/api/v1/auth/setup', payload),
-    );
+    const user = await firstValueFrom(this.http.post<CurrentUser>('/api/v1/auth/setup', payload));
     this.state.set({ setupRequired: false, user });
   }
 

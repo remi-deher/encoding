@@ -4,7 +4,7 @@ using Encoding.Contracts.Auth;
 
 namespace Encoding.Api.Auth;
 
-public enum SetupOutcome { Created, AlreadyConfigured, InvalidSetupToken }
+public enum SetupOutcome { Created, AlreadyConfigured }
 
 public sealed record LoginResult(CurrentUserResponse User, string SessionToken);
 
@@ -84,7 +84,4 @@ public sealed partial class AuthService(UserRepository users, AuthOptions option
         users.SetPasswordAsync(userId, PasswordHasher.Hash(newPassword), null, ct);
 
     public static byte[] TokenHash(string token) => SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
-
-    private static bool SecretsEqual(string? provided, string expected) =>
-        CryptographicOperations.FixedTimeEquals(TokenHash(provided ?? string.Empty), TokenHash(expected));
 }

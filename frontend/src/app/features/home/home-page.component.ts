@@ -95,7 +95,7 @@ export class HomePageComponent {
   protected readonly executionLabels = EXECUTION_STATE_LABELS;
   protected readonly activeTasks = computed(
     () =>
-      this.executionState().data?.executions.filter(
+      this.executionState().data?.executions?.filter(
         (e) => e.state === 'running' || e.state === 'cancelling',
       ) ?? [],
   );

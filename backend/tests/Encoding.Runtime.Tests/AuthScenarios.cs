@@ -23,7 +23,6 @@ namespace Encoding.Runtime.Tests;
 /// <summary>Authentification, rôles et durcissement du jumelage, vérifiés sur le vrai pipeline HTTP de l’API.</summary>
 internal static class AuthScenarios
 {
-    private const string SetupToken = "jeton-d-initialisation-de-test";
     private const string AdminPassword = "correct horse battery staple";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) } };
 
