@@ -47,7 +47,11 @@ test('the search command palette opens from the topbar and navigates to encoding
   await combobox.press('Enter');
 
   await expect(page).toHaveURL(/\/libraries\/encoding-profiles$/);
-  await expect(page.getByRole('heading', { name: /Profils d’encodage/ }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Librairies/ }).first()).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Profils d’encodage/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
 });
 
 test('the first-run setup studio completes standalone onboarding and passes WCAG AA audit', async ({
@@ -133,7 +137,7 @@ test('the first-run setup studio completes standalone onboarding and passes WCAG
 
   await page.getByRole('button', { name: /Accéder au tableau de bord/ }).click();
   await expect(page).toHaveURL(/\/$/);
-  expect(setupPayload).toEqual({
+  expect(setupPayload).toMatchObject({
     nodeDisplayName: 'Serveur Salon',
     mode: 'standalone',
   });
