@@ -162,7 +162,29 @@ public sealed class NodeGroupRepository(DbDataSource dataSource)
             && (c.MinimumMemoryMb is null || inv?.MemoryMb >= c.MinimumMemoryMb)
             && (c.MinimumProcessorCount is null || inv?.ProcessorCount >= c.MinimumProcessorCount)
             && (c.MinimumConcurrentTasks is null || n.MaxConcurrentTasks >= c.MinimumConcurrentTasks)
-            && (c.RequiredToolIds is null || c.RequiredToolIds.All(tool => n.Capabilities.Any(x => string.Equals(x.ToolId, tool, StringComparison.OrdinalIgnoreCase))));
+            && (c.RequiredToolIds is null || c.RequiredToolIds.All(tool => n.Capabilities.Any(x => string.Equals(x.ToolId, tool, StringComparison.OrdinalIgnoreCase))))
+            && (c.RequiredEncoders is null || c.RequiredEncoders.All(req => NodeSupportsEncoder(n, req)));
+    }
+
+    public static bool NodeSupportsEncoder(NodeResponse n, string req)
+    {
+        var ffmpeg = n.Capabilities.FirstOrDefault(x => string.Equals(x.ToolId, "ffmpeg", StringComparison.OrdinalIgnoreCase));
+        if (ffmpeg is null) return false;
+        var sought = req.Trim();
+        var matchingDescriptors = Encoding.Contracts.Flows.VideoEncoderCatalog.All
+            .Where(desc => string.Equals(desc.Codec, sought, StringComparison.OrdinalIgnoreCase) || string.Equals(desc.Id, sought, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (matchingDescriptors.Count > 0)
+        {
+            var usableChecks = ffmpeg.EncoderChecks?.Where(check => check.Status == "usable").Select(check => check.EncoderId) ?? [];
+            var availableEncoders = ffmpeg.Encoders ?? [];
+            return matchingDescriptors.Any(desc =>
+                usableChecks.Contains(desc.Id, StringComparer.OrdinalIgnoreCase) || (ffmpeg.EncoderChecks is null && availableEncoders.Contains(desc.Id, StringComparer.OrdinalIgnoreCase)));
+        }
+
+        return (ffmpeg.EncoderChecks?.Any(c => c.Status == "usable" && string.Equals(c.EncoderId, sought, StringComparison.OrdinalIgnoreCase)) == true)
+            || (ffmpeg.Encoders?.Contains(sought, StringComparer.OrdinalIgnoreCase) == true);
     }
 
     private static GroupRow ReadGroup(DbDataReader r) => new(r.GetGuid(0), r.GetString(1), r.GetString(2),

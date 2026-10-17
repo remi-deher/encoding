@@ -18,7 +18,7 @@ public sealed record ConditionFieldDefinition(string Id, string Label, string Ty
     bool RequiresVariableName = false, IReadOnlyList<FlowSelectOption>? Options = null, string? Unit = null);
 public sealed record ConditionPreset(string Id, string Label, ConditionExpression Expression, IReadOnlyList<string> SupportedFlowMediaTypes);
 public sealed record ConditionEvaluationContext(RuntimeContext Runtime, Guid SourceNodeId, Guid WorkerNodeId,
-    Guid? LibraryId, string MediaPath, string SourceSha256);
+    Guid? LibraryId, string MediaPath, string SourceSha256, IReadOnlyList<string>? WorkerCodecs = null);
 public sealed class ConditionEvaluationException(string message) : Exception(message);
 public sealed record ConditionObservation(ConditionRule Rule, JsonElement? Actual, bool? Result, string? Error = null);
 
@@ -64,6 +64,7 @@ public static class ConditionTree
         new("library.id", "Identifiant de la bibliothèque d'origine", "text", TextOperators, AllMedia),
         new("source.nodeId", "Identifiant du nœud d'accès d'origine", "text", TextOperators, AllMedia),
         new("worker.nodeId", "Identifiant du worker courant", "text", TextOperators, AllMedia),
+        new("worker.codecs", "Codecs vidéo supportés par le worker", "text-list", ListOperators, ["video", "image"]),
         new("processing.modified", "Le fichier a été transformé", "boolean", BoolOperators, AllMedia),
         new("processing.planPending", "Un plan de traitement est en attente", "boolean", BoolOperators, AllMedia),
         new("variable.text", "Variable texte", "text", TextOperators, AllMedia, RequiresVariableName: true),
@@ -77,6 +78,7 @@ public static class ConditionTree
         Preset("audio-language", "Piste audio en français", new("audio.languages", "contains", Element("fra")), ["video", "music"]),
         Preset("subtitles", "Présence de sous-titres", new("subtitles.present", "eq", Element(true)), ["video", "subtitles"]),
         Preset("storage", "Stockage d'origine", new("source.nodeId", "eq", Element("")), AllMedia),
+        Preset("worker-av1", "Worker compatible AV1", new("worker.codecs", "contains", Element("av1")), ["video", "image"]),
         Preset("variable", "Valeur d'une variable", new("variable.text", "eq", Element(""), "status"), AllMedia)
     ];
     private static ConditionPreset Preset(string id, string label, ConditionRule rule, string[] media) => new(id, label, new ConditionGroup("all", [rule]), media);
@@ -201,6 +203,7 @@ public static class ConditionTree
             case "file.path": return Element(data.MediaPath);
             case "source.nodeId": return Element(data.SourceNodeId.ToString("D"));
             case "worker.nodeId": return Element(data.WorkerNodeId.ToString("D"));
+            case "worker.codecs": return Element(data.WorkerCodecs ?? []);
             case "library.id": return data.LibraryId is { } library ? Element(library.ToString("D")) : null;
             case "processing.modified": return Element(data.Runtime.CurrentSha256 != data.SourceSha256);
             case "processing.planPending": return Element(data.Runtime.Plan.Count != 0);

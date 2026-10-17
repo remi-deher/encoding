@@ -65,10 +65,11 @@ test('a healthy member shows load, hardware, CPU model, GPU and tools', () => {
   assert.equal(cpu.value, 'AMD Ryzen 7 5700G');
   assert.match(cpu.detail, /32 Go/);
   assert.match(gpu.detail, /pilote amdgpu/);
-  const tool = section(sheet, 'capabilities').items[0];
+  const motor = section(sheet, 'capabilities').items[0];
+  assert.equal(motor.label, 'Moteur d’accélération');
   assert.deepEqual(
-    tool.badges.map((b) => b.label),
-    ['1 encodeur(s) vérifié(s)', '1 détecté(s), non vérifié(s)', 'VAAPI'],
+    motor.badges.map((b) => b.label),
+    ['VAAPI', 'AMD 0x1638'],
   );
 });
 
@@ -122,7 +123,7 @@ test('a member without a local server still shows its technical information from
   const [cpu, gpu] = section(sheet, 'hardware').metrics;
   assert.equal(cpu.value, 'AMD Ryzen 7 5700G');
   assert.match(gpu.value, /AMD/);
-  assert.equal(section(sheet, 'capabilities').items[0].label, 'ffmpeg 7.1');
+  assert.equal(section(sheet, 'capabilities').items[0].label, 'Moteur d’accélération');
   const [load, signal] = section(sheet, 'state').metrics;
   assert.equal(load.value, 'Indisponible');
   assert.match(signal.detail, /serveur du cluster/);

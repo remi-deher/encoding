@@ -45,7 +45,9 @@ export interface CatalogEmptyState {
       (closed)="onDrawerClosed()"
     >
       <div drawer-main>
-        <app-page-header [title]="title()" [actions]="pageActions()" />
+        @if (showPageHeader()) {
+          <app-page-header [title]="title()" [actions]="pageActions()" />
+        }
         <div class="catalog-navigation-wrapper">
           <ng-content select="[catalogue-navigation]" />
         </div>
@@ -128,6 +130,7 @@ export interface CatalogEmptyState {
 })
 export class ManagementCatalogTemplateComponent {
   readonly title = input.required<string>();
+  readonly showPageHeader = input(true);
   readonly filterLabel = input('Filtres');
   readonly searchLabel = input('');
   readonly searchQuery = input('');

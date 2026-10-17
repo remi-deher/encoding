@@ -9,7 +9,8 @@ public sealed record NodeGroupCriteria(
     int? MinimumMemoryMb = null,
     IReadOnlyList<string>? RequiredToolIds = null,
     int? MinimumConcurrentTasks = null,
-    int? MinimumProcessorCount = null);
+    int? MinimumProcessorCount = null,
+    IReadOnlyList<string>? RequiredEncoders = null);
 
 public sealed record NodeGroupResponse(
     Guid Id,

@@ -80,6 +80,7 @@ export class NodeGroupEditorComponent {
   protected readonly minProcessorCount = signal<number | null>(null);
   protected readonly minConcurrentTasks = signal<number | null>(null);
   protected readonly selectedTools = signal<Set<string>>(new Set());
+  protected readonly selectedEncoders = signal<Set<string>>(new Set());
   protected readonly customTool = signal('');
 
   // Labels state
@@ -94,6 +95,11 @@ export class NodeGroupEditorComponent {
     extractAvailableArchitectures(this.nodes()),
   );
   protected readonly availableTools = computed(() => extractAvailableTools(this.nodes()));
+  protected readonly availableEncoderOptions = computed(() => [
+    { id: 'av1', label: 'AV1' },
+    { id: 'hevc', label: 'HEVC / H.265' },
+    { id: 'h264', label: 'H.264' },
+  ]);
 
   // Computed criteria for automatic group
   protected readonly automaticCriteria = computed<NodeGroupCriteria>(() => {
@@ -109,6 +115,7 @@ export class NodeGroupEditorComponent {
       minimumProcessorCount: this.minProcessorCount(),
       minimumConcurrentTasks: this.minConcurrentTasks(),
       requiredToolIds: Array.from(this.selectedTools()),
+      requiredEncoders: Array.from(this.selectedEncoders()),
     };
   });
 
@@ -140,7 +147,8 @@ export class NodeGroupEditorComponent {
       c.minimumMemoryMb != null ||
       c.minimumProcessorCount != null ||
       c.minimumConcurrentTasks != null ||
-      (c.requiredToolIds && c.requiredToolIds.length > 0)
+      (c.requiredToolIds && c.requiredToolIds.length > 0) ||
+      (c.requiredEncoders && c.requiredEncoders.length > 0)
     );
   });
 
@@ -181,6 +189,7 @@ export class NodeGroupEditorComponent {
         this.minProcessorCount.set(c.minimumProcessorCount ?? null);
         this.minConcurrentTasks.set(c.minimumConcurrentTasks ?? null);
         this.selectedTools.set(new Set(c.requiredToolIds ?? []));
+        this.selectedEncoders.set(new Set(c.requiredEncoders ?? []));
       } else {
         this.reset();
       }
@@ -221,6 +230,16 @@ export class NodeGroupEditorComponent {
       set.add(toolId);
     }
     this.selectedTools.set(set);
+  }
+
+  protected toggleEncoder(encoderId: string): void {
+    const set = new Set(this.selectedEncoders());
+    if (set.has(encoderId)) {
+      set.delete(encoderId);
+    } else {
+      set.add(encoderId);
+    }
+    this.selectedEncoders.set(set);
   }
 
   protected addCustomTool(): void {
@@ -322,6 +341,7 @@ export class NodeGroupEditorComponent {
     this.minProcessorCount.set(null);
     this.minConcurrentTasks.set(null);
     this.selectedTools.set(new Set());
+    this.selectedEncoders.set(new Set());
     this.customTool.set('');
     this.labels.set({});
     this.newLabelKey.set('');

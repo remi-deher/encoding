@@ -290,8 +290,20 @@ export class NodeCatalogPageComponent {
       clusterName: this.local.standalone() ? null : this.clusterName(),
       agentUnavailable: this.local.agentUnavailable(),
       activeTasks: this.localActivity()?.active ?? null,
+      isAdmin: this.isAdmin(),
     }),
   );
+
+  protected onLocalSheetAction(actionId: string): void {
+    if (actionId === 'settings' || actionId === 'capabilities') {
+      const node = this.localNode();
+      if (node) this.openNodeCard(node.id);
+    } else if (actionId === 'toggle-server') {
+      this.local.toggleRole('server');
+    } else if (actionId === 'toggle-worker') {
+      this.local.toggleRole('worker');
+    }
+  }
   protected readonly clusterName = computed(
     () => this.clusterIdentity()?.name ?? this.local.status()?.clusterName ?? 'Cluster',
   );

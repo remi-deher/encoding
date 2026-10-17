@@ -81,7 +81,20 @@ export class NodeModeController {
     }
   }
 
-  private confirmServerStop(nodeName?: string): Promise<boolean> {
+  async apply(endpoint: string, mode: NodeMode): Promise<NodeModeStatus | null> {
+    try {
+      const applied = await firstValueFrom(this.http.put<NodeModeStatus>(endpoint, mode));
+      this.notifications.show(
+        'Mode appliqué. Les fonctions retirées s’arrêtent dans quelques secondes.',
+      );
+      return applied;
+    } catch (error) {
+      this.notifications.show(this.errorMessage(error));
+      return null;
+    }
+  }
+
+  confirmServerStop(nodeName?: string): Promise<boolean> {
     return firstValueFrom(
       this.dialog
         .open<ConfirmationDialogComponent, unknown, boolean>(ConfirmationDialogComponent, {
