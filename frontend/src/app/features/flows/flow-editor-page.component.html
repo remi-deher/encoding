@@ -1,165 +1,130 @@
-<app-page-header
-  [title]="flowTitle()"
-  [shellTitle]="flowTitle()"
-  layout="workspace"
-  [showHeading]="true"
->
-  <span page-metadata role="status">
-    {{ editorStatus() }}
-    @if (storedVersion()) {
-      · Version publiée {{ storedVersion() }}
-    }
-    · {{ nodes().length }} {{ nodes().length === 1 ? 'bloc' : 'blocs' }}
-    @if (storedVersion()) {
-      · Sauvegarde :
-      {{
-        backupStatus() === 'ready'
-          ? 'disponible'
-          : backupStatus() === 'failed'
-            ? 'en échec'
-            : 'en attente'
-      }}
-    }
-  </span>
-  <button
-    page-tools
-    matButton="tonal"
-    type="button"
-    [disabled]="loadState() !== 'ready' || simulator.busy()"
-    (click)="openSimulator()"
-  >
-    Tester le flow
-  </button>
-  <button
-    page-tools
-    matButton="outlined"
-    type="button"
-    [disabled]="loadState() !== 'ready' || storedVersion() < 1 || saving()"
-    (click)="openPackCreation()"
-  >
-    Créer un pack depuis cette version
-  </button>
-  <button
-    page-tools
-    matButton="text"
-    type="button"
-    [disabled]="validating() || loadState() !== 'ready'"
-    (click)="validateGraph()"
-  >
-    {{ validating() ? 'Vérification…' : 'Vérifier le flow' }}
-  </button>
-  <a page-actions matButton="text" routerLink="/flows">← Flows</a>
-  <button
-    page-actions
-    matButton="filled"
-    type="button"
-    [disabled]="saving() || loadState() !== 'ready' || (!hasUnsavedChanges() && !hasDraft())"
-    (click)="saveFlow()"
-  >
-    {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
-  </button>
-</app-page-header>
+<div class="flow-workbench">
+  <!-- Zone 1 : Command Bar -->
+  <app-flow-command-bar
+    [title]="flowTitle()"
+    [mediaType]="flowMediaType()"
+    [storedVersion]="storedVersion()"
+    [hasDraft]="hasDraft()"
+    [hasUnsavedChanges]="hasUnsavedChanges()"
+    [backupStatus]="backupStatus()"
+    [editorStatus]="editorStatus()"
+    [nodeCount]="nodes().length"
+    [saving]="saving()"
+    [validating]="validating()"
+    [canSave]="hasUnsavedChanges() || hasDraft()"
+    [disabled]="loadState() !== 'ready'"
+    [simulatorBusy]="simulator.busy()"
+    [canCreatePack]="storedVersion() >= 1"
+    [paletteOpen]="paletteOpen()"
+    [inspectorOpen]="inspectorOpen()"
+    [trayOpen]="trayOpen()"
+    (titleChange)="onTitleChange($event)"
+    (saveRequested)="saveFlow()"
+    (validateRequested)="validateGraph()"
+    (simulateRequested)="openSimulator()"
+    (packCreationRequested)="openPackCreation()"
+    (togglePalette)="paletteOpen.set(!paletteOpen())"
+    (toggleInspector)="inspectorOpen.set(!inspectorOpen())"
+    (toggleTray)="trayOpen.set(!trayOpen())"
+  />
 
-<app-detail-drawer
-  mainScroll="parent"
-  [opened]="drawerOpen()"
-  [size]="drawerSize()"
-  [title]="drawerTitle()"
-  [description]="drawerDescription()"
-  [content]="
-    componentPickerOpen()
-      ? pickerDrawerContent
-      : simulationOpen()
-        ? simulationDrawerContent
-        : configurationOpen()
-          ? configurationDrawerContent
-          : packCreationOpen()
-            ? packCreationDrawerContent
-            : undefined
-  "
-  (closed)="closeActiveDrawer()"
->
-  <div drawer-main class="flow-editor-page editor-layout">
-    @if (loadState() !== 'ready') {
-      <p role="status">
-        {{ loadState() === 'loading' ? 'Chargement du flow…' : 'Le flow n’a pas pu être chargé.' }}
-      </p>
-    } @else {
-      <app-flow-graph-editor
-        [nodes]="nodes()"
-        [componentPacks]="componentPacks()"
-        [mediaType]="flowMediaType()"
-        (configurationChanged)="onInlineConfigurationChanged($event)"
-        [connections]="connections()"
-        (configurationRequested)="onConfigurationRequested($event)"
-        (branchComponentRequested)="onBranchComponentRequested($event)"
-        (terminationRequested)="onTerminationRequested($event)"
-        (connectionRequested)="onConnectionRequested($event)"
-        (continuationRequested)="onContinuationRequested($event)"
-        (connectionsChanged)="onConnectionsChanged($event)"
-        (nodeRemoved)="removeNode($event)"
-        (connectionRemoved)="removeConnection($event)"
-      />
-    }
-  </div>
-
-  <ng-template #pickerDrawerContent>
-    <app-category-tabs
-      label="Types de blocs à insérer"
-      [options]="pickerSections()"
-      [selected]="packPickerSection()"
-      (selectedChange)="packPickerSection.set($event)"
+  <!-- Main Split Body (Zone 2, Zone 3, Zone 4) -->
+  <div class="workbench-body">
+    <!-- Zone 2 : Left Palette Dock -->
+    <app-flow-palette-dock
+      [opened]="paletteOpen()"
+      [components]="components()"
+      [packCatalog]="packCatalog()"
+      [insertionPending]="componentDestination() !== null"
+      [destinationLabel]="destinationDescription()"
+      (openedChange)="paletteOpen.set($event)"
+      (componentSelected)="onPaletteComponentSelected($event)"
+      (packSelected)="onPalettePackSelected($event)"
+      (cancelInsertion)="cancelInsertion()"
     />
-    @if (packPickerSection() === 'components') {
-      <app-searchable-component-catalog
-        [components]="components()"
-        [typeOptions]="typeOptions()"
-        [pluginOptions]="pluginOptions()"
-        (selected)="addComponent($event)"
-      />
-    } @else {
-      <app-data-table
-        [columns]="packColumns"
-        [rows]="packRows()"
-        [rowActions]="packRowActions"
-        [separateRowActionColumns]="true"
-        (rowAction)="onPackRowAction($event)"
-        emptyMessage="Aucun pack disponible. Créez-en depuis la page Flows."
-      />
-    }
-  </ng-template>
 
-  <ng-template #simulationDrawerContent>
-    <app-flow-simulation-panel
-      [nodes]="nodes()"
-      [profile]="simulator.profile()"
-      [result]="simulator.result()"
-      [busy]="simulator.busy()"
-      [error]="simulator.error()"
-      (runRequested)="simulator.run($event)"
-      (continueRequested)="simulator.continue($event)"
-      (fileSelected)="simulator.import($event)"
-      (closed)="simulationOpen.set(false)"
-    />
-  </ng-template>
+    <!-- Zone 3 : Center Canvas Workspace -->
+    <main class="workbench-canvas" role="main" aria-label="Canevas d'édition du flow">
+      @if (loadState() !== 'ready') {
+        <div class="canvas-state-message" role="status">
+          <p>
+            {{
+              loadState() === 'loading' ? 'Chargement du flow…' : 'Le flow n’a pas pu être chargé.'
+            }}
+          </p>
+        </div>
+      } @else {
+        <app-flow-graph-editor
+          [nodes]="nodes()"
+          [componentPacks]="componentPacks()"
+          [mediaType]="flowMediaType()"
+          (configurationChanged)="onInlineConfigurationChanged($event)"
+          [connections]="connections()"
+          (configurationRequested)="onConfigurationRequested($event)"
+          (branchComponentRequested)="onBranchComponentRequested($event)"
+          (terminationRequested)="onTerminationRequested($event)"
+          (connectionRequested)="onConnectionRequested($event)"
+          (continuationRequested)="onContinuationRequested($event)"
+          (connectionsChanged)="onConnectionsChanged($event)"
+          (nodeRemoved)="removeNode($event)"
+          (connectionRemoved)="removeConnection($event)"
+        />
+      }
+    </main>
 
-  <ng-template #configurationDrawerContent>
-    <app-component-configuration-form
+    <!-- Zone 4 : Right Inspector Dock -->
+    <app-flow-inspector-dock
+      [opened]="inspectorOpen()"
+      [node]="configuringNode()"
       [schema]="configuringSchema()"
       [values]="configuringValues()"
-      [instanceName]="configuringNode()?.name ?? ''"
-      submitLabel="Appliquer au flow"
+      [flowTitle]="flowTitle()"
+      [flowMediaType]="flowMediaType()"
+      [nodeCount]="nodes().length"
+      [connectionCount]="connections().length"
+      (openedChange)="inspectorOpen.set($event)"
       (instanceNameChange)="renameNode($event)"
-      (saved)="saveNodeConfiguration($event)"
-      (cancelled)="configurationOpen.set(false)"
+      (configurationSaved)="saveNodeConfiguration($event)"
+      (deleteNodeRequested)="onInspectorDeleteNode($event)"
+      (closeRequested)="closeInspector()"
     />
-  </ng-template>
+  </div>
 
-  <ng-template #packCreationDrawerContent>
-    <app-record-form
-      [data]="packCreationForm()"
-      (submitted)="createPackFromPublishedFlow($event)"
-      (cancelled)="packCreationOpen.set(false)"
-    />
-  </ng-template>
-</app-detail-drawer>
+  <!-- Zone 5 : Bottom Tray (Simulation & Diagnostics) -->
+  <app-flow-simulation-tray
+    [opened]="trayOpen()"
+    [(activeTab)]="trayTab"
+    [nodes]="nodes()"
+    [profile]="simulator.profile()"
+    [result]="simulator.result()"
+    [busy]="simulator.busy()"
+    [error]="simulator.error()"
+    [validationIssues]="validationIssues()"
+    [validating]="validating()"
+    [isValid]="validationSuccess()"
+    (openedChange)="trayOpen.set($event)"
+    (runRequested)="simulator.run($event)"
+    (continueRequested)="simulator.continue($event)"
+    (fileSelected)="simulator.import($event)"
+    (revalidateRequested)="validateGraph()"
+  />
+
+  <!-- Modal Dialog : Création de Pack -->
+  @if (packCreationOpen()) {
+    <div
+      class="modal-backdrop"
+      (click)="packCreationOpen.set(false)"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Créer un pack depuis la version publiée"
+    >
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <app-record-form
+          [data]="packCreationForm()"
+          (submitted)="createPackFromPublishedFlow($event)"
+          (cancelled)="packCreationOpen.set(false)"
+        />
+      </div>
+    </div>
+  }
+</div>

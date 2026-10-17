@@ -1,3 +1,85 @@
-.flow-editor-page {
+:host {
+  display: block;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.flow-workbench {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   width: 100%;
+  background: var(--surface-container-lowest);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.workbench-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.workbench-canvas {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 28px 24px 60px;
+  background-color: var(--surface-container-lowest);
+  background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
+  background-size: 24px 24px;
+  position: relative;
+  outline: none;
+}
+
+.canvas-state-message {
+  padding: 48px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  animation: fadeIn 0.18s ease-out;
+}
+
+.modal-card {
+  width: min(560px, 94vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--elevation-2);
+  padding: 24px;
+  animation: slideUp 0.2s var(--motion-spring-standard);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(12px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+  }
 }

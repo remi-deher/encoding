@@ -10,9 +10,16 @@ import {
   FlowPluginCatalog,
 } from '../../shared/models/flow-validation';
 import { FlowContinuationSource } from '../../shared/models/flow-sequence';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   GENERIC_FILE_INPUT,
   MEDIA_INPUT_COMPONENTS,
@@ -23,8 +30,6 @@ import { canConnectFlowGraph, flowConfigurationFieldError } from '../../shared/m
 import { NotificationService } from '../../shared/services/notification.service';
 import { FLOW_COMPONENT_CATALOG } from '../../shared/models/flow-component-catalog';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
-import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
-import { ComponentConfigurationFormComponent } from '../../shared/ui/component-configuration-form.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import {
   createDefaultFlowComponentConfiguration,
@@ -38,10 +43,7 @@ import {
   FlowGraphNode,
 } from '../../shared/models/flow-component';
 import { FlowGraphEditorComponent } from '../../shared/ui/flow-graph-editor.component';
-import { SearchableComponentCatalogComponent } from '../../shared/ui/searchable-component-catalog.component';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { FlowSimulation } from '../../shared/services/flow-simulation';
-import { FlowSimulationPanelComponent } from '../../shared/ui/flow-simulation-panel.component';
 import { FlowTemplates } from '../../shared/services/flow-templates';
 import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import {
@@ -49,13 +51,14 @@ import {
   FlowComponentPackSummary,
 } from '../../shared/models/flow-component-packs';
 import { FlowComponentPackInstance } from '../../shared/models/flow-validation';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { PageTitle } from '../../shared/services/page-title';
+import { FlowCommandBarComponent } from './editor/flow-command-bar.component';
+import { FlowPaletteDockComponent } from './editor/flow-palette-dock.component';
+import { FlowInspectorDockComponent } from './editor/flow-inspector-dock.component';
 import {
-  DataTableActionEvent,
-  DataTableColumn,
-  DataTableComponent,
-  DataTableRow,
-} from '../../shared/ui/data-table.component';
+  FlowSimulationTrayComponent,
+  FlowValidationIssue,
+} from './editor/flow-simulation-tray.component';
 
 const TYPE_OPTIONS = [
   { value: 'video', label: 'Vidéo' },
@@ -64,20 +67,24 @@ const TYPE_OPTIONS = [
   { value: 'subtitles', label: 'Sous-titres' },
   { value: 'general', label: 'Logique' },
 ] as const;
+
 interface FlowNodeSeed {
   readonly id: string;
   readonly componentId: string;
 }
+
 interface FlowConnectionSeed {
   readonly sourceNodeId: string;
   readonly sourceOutputId: string;
   readonly targetNodeId: string;
 }
+
 interface FlowDemo {
   readonly name: string;
   readonly nodes: readonly FlowNodeSeed[];
   readonly connections?: readonly FlowConnectionSeed[];
 }
+
 const FLOW_EDITOR_DEMOS: Readonly<Record<string, FlowDemo>> = {
   'flow-video-library': {
     name: 'Films — H.265',
@@ -120,6 +127,7 @@ const FLOW_EDITOR_DEMOS: Readonly<Record<string, FlowDemo>> = {
     nodes: [{ id: 'prepare', componentId: 'base-script' }],
   },
 };
+
 type ComponentDestination =
   | { readonly kind: 'continuation'; readonly sources: readonly FlowContinuationSource[] }
   | {
@@ -132,18 +140,16 @@ type ComponentDestination =
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-editor-page',
   providers: [FlowSimulation],
-  host: { '(window:beforeunload)': 'warnBeforeUnload($event)' },
+  host: {
+    '(window:beforeunload)': 'warnBeforeUnload($event)',
+    '(window:keydown)': 'onWindowKeyDown($event)',
+  },
   imports: [
-    RouterLink,
-    MatButtonModule,
-    ComponentConfigurationFormComponent,
-    DetailDrawerComponent,
+    FlowCommandBarComponent,
+    FlowPaletteDockComponent,
+    FlowInspectorDockComponent,
+    FlowSimulationTrayComponent,
     FlowGraphEditorComponent,
-    SearchableComponentCatalogComponent,
-    PageHeaderComponent,
-    FlowSimulationPanelComponent,
-    CategoryTabsComponent,
-    DataTableComponent,
     RecordFormComponent,
   ],
   templateUrl: './flow-editor-page.component.html',
@@ -151,74 +157,131 @@ type ComponentDestination =
 })
 export class FlowEditorPageComponent {
   protected readonly simulator = inject(FlowSimulation);
-  protected readonly simulationOpen = signal(false);
-  protected async openSimulator(): Promise<void> {
-    try {
-      const definition = await this.serverValidation.document(
-        this.validationFlowId,
-        this.storedVersion() + 1,
-        this.flowTitle(),
-        this.flowMediaType(),
-        this.nodes(),
-        this.connections(),
-        this.componentPacks(),
-      );
-      this.simulator.prepare(definition);
-      this.closeActiveDrawer();
-      this.simulationOpen.set(true);
-    } catch {
-      this.notifications.show('Impossible de préparer le test du flow.');
-    }
-  }
   private readonly route = inject(ActivatedRoute);
   private readonly notifications = inject(NotificationService);
-  protected readonly componentPickerOpen = signal(false);
-  protected readonly configurationOpen = signal(false);
+  private readonly serverValidation = inject(FlowValidation);
+  private readonly templates = inject(FlowTemplates);
+  private readonly editorRouter = inject(Router);
+  private readonly packApi = inject(FlowComponentPacks);
+  private readonly pageTitleService = inject(PageTitle);
+
+  // Workbench shell state
+  protected readonly paletteOpen = signal(true);
+  protected readonly inspectorOpen = signal(false);
+  protected readonly trayOpen = signal(false);
+  protected readonly trayTab = signal<'simulation' | 'diagnostics'>('simulation');
+  protected readonly validationIssues = signal<readonly FlowValidationIssue[]>([]);
+  protected readonly validationSuccess = signal<boolean | null>(null);
+
   protected readonly configuringNodeId = signal<string | undefined>(undefined);
   protected readonly nodes = signal<readonly FlowGraphNode[]>([]);
   protected readonly connections = signal<readonly FlowGraphConnection[]>([]);
   protected readonly componentPacks = signal<readonly FlowComponentPackInstance[]>([]);
-  protected readonly packPickerSection = signal('components');
   protected readonly packCatalog = signal<readonly FlowComponentPackSummary[]>([]);
   protected readonly packCreationOpen = signal(false);
-  protected readonly drawerOpen = computed(
-    () =>
-      this.componentPickerOpen() ||
-      this.simulationOpen() ||
-      this.configurationOpen() ||
-      this.packCreationOpen(),
+
+  protected readonly flowMediaType = signal<MediaType>('video');
+  private readonly installedComponents = signal<readonly FlowComponentDefinition[]>([]);
+
+  protected readonly components = computed(() =>
+    this.installedComponents().filter(
+      (component) =>
+        component.kind !== 'input' && isFlowComponentCompatible(component, this.flowMediaType()),
+    ),
   );
-  protected readonly drawerSize = computed<'standard' | 'wide'>(() =>
-    this.packCreationOpen() ? 'standard' : 'wide',
+
+  protected readonly typeOptions = computed(() =>
+    TYPE_OPTIONS.filter((option) =>
+      this.components().some((component) => component.mediaType === option.value),
+    ),
   );
-  protected readonly drawerTitle = computed(() => {
-    if (this.componentPickerOpen()) return 'Composants du flow';
-    if (this.simulationOpen()) return 'Testeur de flow';
-    if (this.configurationOpen())
-      return this.configuringNode()?.component?.name ?? 'Configuration du composant';
-    if (this.packCreationOpen()) return 'Créer un pack de composants';
-    return '';
+
+  protected readonly pluginOptions = computed(() => [
+    ...new Map(
+      this.components().map((component) => [
+        component.pluginId,
+        { value: component.pluginId, label: component.pluginName },
+      ]),
+    ).values(),
+  ]);
+
+  protected readonly configuringNode = computed(() =>
+    this.nodes().find((node) => node.id === this.configuringNodeId()),
+  );
+
+  protected readonly configuringSchema = computed(() =>
+    this.configuringNode()?.component.kind === 'input'
+      ? createFlowInputConfigurationSchema(this.flowMediaType())
+      : getFlowConfigurationSchema(
+          this.configuringNode()?.component.configurationSchema,
+          this.flowMediaType(),
+        ),
+  );
+
+  protected readonly configuringValues = computed<FlowComponentConfiguration>(() => {
+    const node = this.configuringNode();
+    return node?.component.kind === 'input'
+      ? { inputComponentId: node.component.id }
+      : (node?.configuration ?? {});
   });
-  protected readonly drawerDescription = computed(() => {
-    if (this.componentPickerOpen())
-      return 'Recherchez et ajoutez des blocs fournis par les plugins.';
-    if (this.simulationOpen())
-      return 'Explorez les branches avec un profil fictif ou les métadonnées d’un fichier.';
-    if (this.configurationOpen()) return this.configuringNode()?.component?.description ?? '';
-    if (this.packCreationOpen())
-      return 'Copiez une version publiée de ce flow dans les Librairies.';
-    return '';
+
+  private readonly flowId = this.route.snapshot.paramMap.get('flowId');
+  private readonly starterId = this.flowId ?? this.route.snapshot.queryParamMap.get('starter');
+  private readonly demoFlow =
+    this.starterId && this.starterId !== 'blank' ? FLOW_EDITOR_DEMOS[this.starterId] : undefined;
+  private readonly savedName = signal<string | null>(null);
+
+  protected readonly flowTitle = computed(() => {
+    if (this.savedName()) return this.savedName()!;
+    const name = this.route.snapshot.queryParamMap.get('name');
+    if (name) return name;
+    return this.demoFlow?.name ?? (this.flowId ? 'Modifier un flow' : 'Nouveau flow');
   });
-  protected openPackCreation(): void {
-    this.closeActiveDrawer();
-    this.packCreationOpen.set(true);
-  }
-  protected closeActiveDrawer(): void {
-    this.componentPickerOpen.set(false);
-    this.simulationOpen.set(false);
-    this.configurationOpen.set(false);
-    this.packCreationOpen.set(false);
-  }
+
+  protected readonly componentDestination = signal<ComponentDestination | null>(null);
+
+  protected readonly destinationDescription = computed(() => {
+    const dest = this.componentDestination();
+    if (!dest) return null;
+    if (dest.kind === 'branch') {
+      const source = this.nodes().find((node) => node.id === dest.sourceNodeId);
+      const sourceName = source?.name || source?.component.name || 'Étape';
+      return `Insertion sur la sortie « ${dest.output.label} » de ${sourceName}`;
+    }
+    return `Insertion sur une suite commune (${dest.sources.length} branche${dest.sources.length > 1 ? 's' : ''})`;
+  });
+
+  private nextNodeId = 1;
+  private nextConnectionId = 1;
+
+  private readonly validationFlowId =
+    this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)
+      ? this.flowId
+      : crypto.randomUUID();
+
+  private readonly savedGraph = signal<string | null>(null);
+  private readonly savedDocumentKey = signal<string | null>(null);
+  private readonly draftRevision = signal<number | undefined>(undefined);
+  protected readonly storedVersion = signal(0);
+  protected readonly saving = signal(false);
+  protected readonly loadState = signal<'ready' | 'loading' | 'error'>('ready');
+  protected readonly backupStatus = signal<string | null>(null);
+  protected readonly validating = signal(false);
+
+  protected readonly hasDraft = computed(() => this.draftRevision() !== undefined);
+
+  protected readonly editorStatus = computed(() =>
+    this.loadState() === 'loading'
+      ? 'Chargement du flow…'
+      : this.loadState() === 'error'
+        ? 'Chargement impossible'
+        : this.hasUnsavedChanges()
+          ? 'Modifications non enregistrées'
+          : this.draftRevision() !== undefined
+            ? 'Brouillon enregistré'
+            : 'Enregistré',
+  );
+
   protected readonly packCreationForm = computed<RecordFormData>(() => ({
     title: 'Créer un pack depuis la version publiée',
     description: `La version publiée v${this.storedVersion()} sera copiée avec ses composants internes et ses ports.`,
@@ -229,83 +292,19 @@ export class FlowEditorPageComponent {
       { id: 'description', label: 'Description', type: 'text', maxLength: 1000 },
     ],
   }));
-  protected readonly pickerSections = computed<readonly CategoryTabOption[]>(() => [
-    { value: 'components', label: 'Composants' },
-    { value: 'packs', label: 'Packs', count: this.packCatalog().length },
-  ]);
-  protected readonly packColumns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Pack', sortable: true },
-    { key: 'mediaType', label: 'Type de média', sortable: true },
-    { key: 'componentCount', label: 'Composants', sortable: true },
-  ];
-  protected readonly packRows = computed<readonly DataTableRow[]>(() =>
-    this.packCatalog().map((pack) => ({
-      id: pack.id,
-      name: pack.name,
-      mediaType: pack.mediaType,
-      componentCount: pack.componentCount,
-    })),
-  );
-  protected readonly packRowActions = [{ id: 'insert-pack', label: 'Insérer le pack' }];
-  protected readonly flowMediaType = signal<MediaType>('video');
-  private readonly installedComponents = signal<readonly FlowComponentDefinition[]>([]);
-  protected readonly components = computed(() =>
-    this.installedComponents().filter(
-      (component) =>
-        component.kind !== 'input' && isFlowComponentCompatible(component, this.flowMediaType()),
-    ),
-  );
-  protected readonly typeOptions = computed(() =>
-    TYPE_OPTIONS.filter((option) =>
-      this.components().some((component) => component.mediaType === option.value),
-    ),
-  );
-  protected readonly pluginOptions = computed(() => [
-    ...new Map(
-      this.components().map((component) => [
-        component.pluginId,
-        { value: component.pluginId, label: component.pluginName },
-      ]),
-    ).values(),
-  ]);
-  protected readonly configuringNode = computed(() =>
-    this.nodes().find((node) => node.id === this.configuringNodeId()),
-  );
-  protected readonly configuringSchema = computed(() =>
-    this.configuringNode()?.component.kind === 'input'
-      ? createFlowInputConfigurationSchema(this.flowMediaType())
-      : getFlowConfigurationSchema(
-          this.configuringNode()?.component.configurationSchema,
-          this.flowMediaType(),
-        ),
-  );
-  protected readonly configuringValues = computed<FlowComponentConfiguration>(() => {
-    const node = this.configuringNode();
-    return node?.component.kind === 'input'
-      ? { inputComponentId: node.component.id }
-      : (node?.configuration ?? {});
-  });
-  private readonly flowId = this.route.snapshot.paramMap.get('flowId');
-  private readonly starterId = this.flowId ?? this.route.snapshot.queryParamMap.get('starter');
-  private readonly demoFlow =
-    this.starterId && this.starterId !== 'blank' ? FLOW_EDITOR_DEMOS[this.starterId] : undefined;
-  private readonly savedName = signal<string | null>(null);
-  protected readonly flowTitle = computed(() => {
-    if (this.savedName()) return this.savedName()!;
-    const name = this.route.snapshot.queryParamMap.get('name');
-    if (name) return name;
-    return this.demoFlow?.name ?? (this.flowId ? 'Modifier un flow' : 'Nouveau flow');
-  });
-  private readonly componentDestination = signal<ComponentDestination | null>(null);
-  private readonly packApi = inject(FlowComponentPacks);
-  private nextNodeId = 1;
-  private nextConnectionId = 1;
 
   constructor() {
+    effect(() => {
+      const title = this.flowTitle();
+      this.pageTitleService.set(this, this.editorRouter.url, title);
+    });
+    inject(DestroyRef).onDestroy(() => this.pageTitleService.clear(this));
+
     void this.packApi.list().subscribe({
       next: (packs) => this.packCatalog.set(packs),
       error: () => this.packCatalog.set([]),
     });
+
     const componentsById = new Map(
       FLOW_COMPONENT_CATALOG.map((component) => [component.id, component]),
     );
@@ -438,37 +437,78 @@ export class FlowEditorPageComponent {
       });
   }
 
-  protected onTerminationRequested(event: {
-    readonly sourceNodeId: string;
-    readonly output: FlowComponentOutput;
-  }): void {
-    const component = this.components().find((component) => component.id === 'base-complete-flow');
-    if (!component) return;
-    this.componentDestination.set({ kind: 'branch', ...event });
+  hasUnsavedChanges(): boolean {
+    return this.loadState() === 'ready' && this.savedGraph() !== this.graphSnapshot();
+  }
+
+  private graphSnapshot(): string {
+    return JSON.stringify([this.nodes(), this.connections(), this.componentPacks()]);
+  }
+
+  protected warnBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.hasUnsavedChanges()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
+  protected onWindowKeyDown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      void this.saveFlow();
+    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
+      event.preventDefault();
+      this.paletteOpen.update((v) => !v);
+    } else if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      void this.openSimulator();
+    } else if (event.key === 'Escape') {
+      if (this.packCreationOpen()) {
+        this.packCreationOpen.set(false);
+      } else if (this.componentDestination()) {
+        this.componentDestination.set(null);
+      } else if (this.inspectorOpen()) {
+        this.closeInspector();
+      }
+    }
+  }
+
+  protected onTitleChange(newTitle: string): void {
+    this.savedName.set(newTitle);
+  }
+
+  protected cancelInsertion(): void {
+    this.componentDestination.set(null);
+  }
+
+  protected closeInspector(): void {
+    this.inspectorOpen.set(false);
+    this.configuringNodeId.set(undefined);
+  }
+
+  protected onInspectorDeleteNode(nodeId: string): void {
+    this.removeNode(nodeId);
+    this.configuringNodeId.set(undefined);
+    this.inspectorOpen.set(false);
+  }
+
+  protected async onPaletteComponentSelected(component: FlowComponentDefinition): Promise<void> {
+    if (!this.componentDestination()) {
+      this.notifications.show(
+        'Pour placer ce composant, cliquez sur un point de sortie (+) ou insérez une suite sur le flow.',
+      );
+      return;
+    }
     this.addComponent(component);
   }
-  protected onBranchComponentRequested(event: {
-    readonly sourceNodeId: string;
-    readonly output: FlowComponentOutput;
-  }): void {
-    this.componentDestination.set({ kind: 'branch', ...event });
-    this.packPickerSection.set('components');
-    this.closeActiveDrawer();
-    this.componentPickerOpen.set(true);
-  }
 
-  protected onContinuationRequested(sources: readonly FlowContinuationSource[]): void {
-    if (!sources.length) return;
-    this.componentDestination.set({ kind: 'continuation', sources });
-    this.packPickerSection.set('components');
-    this.closeActiveDrawer();
-    this.componentPickerOpen.set(true);
-  }
-
-  protected async onPackRowAction(event: DataTableActionEvent): Promise<void> {
-    if (event.actionId !== 'insert-pack' || !this.componentDestination()) return;
-    const summary = this.packCatalog().find((candidate) => candidate.id === event.row['id']);
-    if (!summary) return;
+  protected async onPalettePackSelected(summary: FlowComponentPackSummary): Promise<void> {
+    if (!this.componentDestination()) {
+      this.notifications.show(
+        'Pour insérer ce pack, cliquez sur un point de sortie (+) ou insérez une suite sur le flow.',
+      );
+      return;
+    }
     try {
       const pack = await this.packApi.get(summary.id);
       await this.insertPack(pack);
@@ -479,6 +519,53 @@ export class FlowEditorPageComponent {
           : 'Chargement du pack impossible.',
       );
     }
+  }
+
+  protected async openSimulator(): Promise<void> {
+    try {
+      const definition = await this.serverValidation.document(
+        this.validationFlowId,
+        this.storedVersion() + 1,
+        this.flowTitle(),
+        this.flowMediaType(),
+        this.nodes(),
+        this.connections(),
+        this.componentPacks(),
+      );
+      this.simulator.prepare(definition);
+      this.trayTab.set('simulation');
+      this.trayOpen.set(true);
+    } catch {
+      this.notifications.show('Impossible de préparer le test du flow.');
+    }
+  }
+
+  protected openPackCreation(): void {
+    this.packCreationOpen.set(true);
+  }
+
+  protected onTerminationRequested(event: {
+    readonly sourceNodeId: string;
+    readonly output: FlowComponentOutput;
+  }): void {
+    const component = this.components().find((component) => component.id === 'base-complete-flow');
+    if (!component) return;
+    this.componentDestination.set({ kind: 'branch', ...event });
+    this.addComponent(component);
+  }
+
+  protected onBranchComponentRequested(event: {
+    readonly sourceNodeId: string;
+    readonly output: FlowComponentOutput;
+  }): void {
+    this.componentDestination.set({ kind: 'branch', ...event });
+    this.paletteOpen.set(true);
+  }
+
+  protected onContinuationRequested(sources: readonly FlowContinuationSource[]): void {
+    if (!sources.length) return;
+    this.componentDestination.set({ kind: 'continuation', sources });
+    this.paletteOpen.set(true);
   }
 
   protected async createPackFromPublishedFlow(values: Record<string, string>): Promise<void> {
@@ -603,7 +690,6 @@ export class FlowEditorPageComponent {
     }
     this.componentPacks.update((instances) => [...instances, instance]);
     this.setGraph(nodes, next);
-    this.componentPickerOpen.set(false);
     this.componentDestination.set(null);
   }
 
@@ -678,7 +764,7 @@ export class FlowEditorPageComponent {
               : pack,
           ),
         );
-      this.componentPickerOpen.set(false);
+      this.componentDestination.set(null);
       return;
     }
     const existing =
@@ -763,7 +849,7 @@ export class FlowEditorPageComponent {
             : pack,
         ),
       );
-    this.componentPickerOpen.set(false);
+    this.componentDestination.set(null);
   }
 
   protected onInlineConfigurationChanged(event: {
@@ -793,8 +879,7 @@ export class FlowEditorPageComponent {
 
   protected onConfigurationRequested(nodeId: string): void {
     this.configuringNodeId.set(nodeId);
-    this.closeActiveDrawer();
-    this.configurationOpen.set(true);
+    this.inspectorOpen.set(true);
   }
 
   protected renameNode(name: string): void {
@@ -804,45 +889,6 @@ export class FlowEditorPageComponent {
     );
   }
 
-  private readonly serverValidation = inject(FlowValidation);
-  private readonly templates = inject(FlowTemplates);
-  private readonly editorRouter = inject(Router);
-  private readonly validationFlowId =
-    this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)
-      ? this.flowId
-      : crypto.randomUUID();
-
-  private readonly savedGraph = signal<string | null>(null);
-  private readonly savedDocumentKey = signal<string | null>(null);
-  protected readonly hasDraft = computed(() => this.draftRevision() !== undefined);
-  protected readonly editorStatus = computed(() =>
-    this.loadState() === 'loading'
-      ? 'Chargement du flow…'
-      : this.loadState() === 'error'
-        ? 'Chargement impossible'
-        : this.hasUnsavedChanges()
-          ? 'Modifications non enregistrées'
-          : this.draftRevision() !== undefined
-            ? 'Brouillon enregistré'
-            : 'Enregistré',
-  );
-  hasUnsavedChanges(): boolean {
-    return this.loadState() === 'ready' && this.savedGraph() !== this.graphSnapshot();
-  }
-  private graphSnapshot(): string {
-    return JSON.stringify([this.nodes(), this.connections(), this.componentPacks()]);
-  }
-  protected warnBeforeUnload(event: BeforeUnloadEvent): void {
-    if (this.hasUnsavedChanges()) {
-      event.preventDefault();
-      event.returnValue = '';
-    }
-  }
-  private readonly draftRevision = signal<number | undefined>(undefined);
-  protected readonly storedVersion = signal(0);
-  protected readonly saving = signal(false);
-  protected readonly loadState = signal<'ready' | 'loading' | 'error'>('ready');
-  protected readonly backupStatus = signal<string | null>(null);
   private async loadSavedFlow(id: string): Promise<void> {
     try {
       const [saved, plugins] = await Promise.all([
@@ -1026,7 +1072,7 @@ export class FlowEditorPageComponent {
       this.saving.set(false);
     }
   }
-  protected readonly validating = signal(false);
+
   protected async validateGraph(): Promise<void> {
     if (this.validating()) return;
     this.validating.set(true);
@@ -1052,9 +1098,13 @@ export class FlowEditorPageComponent {
         );
         return;
       }
+      this.validationIssues.set(result.issues ?? []);
+      this.validationSuccess.set(result.isValid);
+      this.trayTab.set('diagnostics');
+      this.trayOpen.set(true);
       this.notifications.show(
         result.isValid
-          ? 'Le backend confirme la validité du flow. Le moteur ne lance pas encore de traitement.'
+          ? 'Le backend confirme la validité du flow.'
           : result.issues.map((issue) => issue.path + ' : ' + issue.message).join(' '),
       );
     } catch {
@@ -1084,7 +1134,7 @@ export class FlowEditorPageComponent {
             : node,
         ),
       );
-      this.configurationOpen.set(false);
+      this.inspectorOpen.set(false);
       return;
     }
     this.nodes.update((nodes) =>
@@ -1094,7 +1144,7 @@ export class FlowEditorPageComponent {
           : node,
       ),
     );
-    this.configurationOpen.set(false);
+    this.inspectorOpen.set(false);
   }
 
   protected onConnectionRequested(event: {
