@@ -12,11 +12,15 @@ using Encoding.Contracts.Libraries;
 namespace Encoding.Api.Libraries;
 
 public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefinitionValidator validator,NodePresenceOptions presence,
-    IPeerAssignmentGate? peerAssignmentGate = null,PeerConsensusService? peerConsensus = null)
+    IPeerAssignmentGate? peerAssignmentGate = null,PeerConsensusService? peerConsensus = null,ExecutionStreamBroadcaster? broadcaster = null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
-    public async Task<LibraryWorkflowResponse> GetAsync(Guid library,CancellationToken ct)
+    public Task<LibraryWorkflowResponse> GetAsync(Guid library,CancellationToken ct)=>GetAsync(library,null,null,null,ct);
+    public async Task<LibraryWorkflowResponse> GetAsync(Guid library,string? search,int? limit,int? offset,CancellationToken ct)
     {
+        var effectiveLimit=Math.Clamp(limit is null or <=0?10000:limit.Value,1,10000);
+        var effectiveOffset=Math.Max(0,offset??0);
+        var normalizedSearch=string.IsNullOrWhiteSpace(search)?null:search.Trim().ToLowerInvariant();
         LibraryFlowAssignment? assignment=null; LibraryScanStatus? scan=null; int revision=0;
         await using(var cmd=dataSource.CreateCommand("SELECT l.flow_assignment_revision,a.flow_id,a.flow_version,a.revision,v.definition->>'name' FROM libraries l LEFT JOIN library_flow_assignments a ON a.library_id=l.id LEFT JOIN flow_versions v ON v.flow_id=a.flow_id AND v.version=a.flow_version WHERE l.id=@id AND NOT l.is_deleted"))
         {
@@ -28,13 +32,25 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
             cmd.Parameters.AddWithValue("id",library); await using var r=await cmd.ExecuteReaderAsync(ct);
             if(await r.ReadAsync(ct)) scan=new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.IsDBNull(3)?null:r.GetFieldValue<DateTimeOffset>(3));
         }
-        var files=new List<LibraryMediaFile>();
-        await using(var cmd=dataSource.CreateCommand("SELECT id,relative_path,byte_length,modified_at FROM library_media WHERE library_id=@id ORDER BY relative_path,id LIMIT 10000"))
+        var searchFilter=normalizedSearch is not null?" AND lower(relative_path) LIKE @search":string.Empty;
+        int totalFiles;
+        await using(var countCmd=dataSource.CreateCommand($"SELECT count(*)::integer FROM library_media WHERE library_id=@id{searchFilter}"))
         {
-            cmd.Parameters.AddWithValue("id",library); await using var r=await cmd.ExecuteReaderAsync(ct);
+            countCmd.Parameters.AddWithValue("id",library);
+            if(normalizedSearch is not null) countCmd.Parameters.AddWithValue("search",$"%{normalizedSearch}%");
+            totalFiles=await countCmd.ScalarInt32Async(ct)??0;
+        }
+        var files=new List<LibraryMediaFile>();
+        await using(var cmd=dataSource.CreateCommand($"SELECT id,relative_path,byte_length,modified_at FROM library_media WHERE library_id=@id{searchFilter} ORDER BY relative_path,id LIMIT @limit OFFSET @offset"))
+        {
+            cmd.Parameters.AddWithValue("id",library);
+            if(normalizedSearch is not null) cmd.Parameters.AddWithValue("search",$"%{normalizedSearch}%");
+            cmd.Parameters.AddWithValue("limit",effectiveLimit);
+            cmd.Parameters.AddWithValue("offset",effectiveOffset);
+            await using var r=await cmd.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct)) files.Add(new(r.GetGuid(0),r.GetString(1),r.GetInt64(2),r.GetFieldValue<DateTimeOffset>(3)));
         }
-        return new(assignment,scan,files,revision);
+        return new(assignment,scan,files,revision,totalFiles,effectiveLimit,effectiveOffset);
     }
     public async Task<bool> AssignAsync(Guid library,AssignLibraryFlowRequest request,CancellationToken ct)
     {
@@ -211,6 +227,8 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
             receipt.Parameters.AddWithValue("library",library);receipt.Parameters.AddWithValue("file",file.Id);receipt.Parameters.AddWithValue("flow",flow.Id);receipt.Parameters.AddWithValue("version",flow.Version);
             receipt.Parameters.AddWithValue("bytes",file.Bytes);receipt.Parameters.AddWithValue("modified",file.Modified.ToUniversalTime());receipt.Parameters.AddWithValue("execution",execution);await receipt.ExecuteNonQueryAsync(ct);
         }
-        await tx.CommitAsync(ct); return(queued,files.Count-queued);
+        await tx.CommitAsync(ct);
+        if(queued>0) broadcaster?.Publish();
+        return(queued,files.Count-queued);
     }
 }

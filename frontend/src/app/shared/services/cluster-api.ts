@@ -1,5 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { LibraryWorkflow, LibraryProcessingSettings } from '../models/library-workflow';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../models/auth';
 import { LibraryNodeAccessResponse } from '../ui/library-node-access-types';
@@ -35,7 +35,9 @@ export class ClusterApi {
     return this.http.get<readonly NodeResponse[]>('/api/v1/nodes');
   }
   reconciliationStatus() {
-    return this.http.get<ClusterReconciliationHealthStatus>('/api/v1/cluster/reconciliation/status');
+    return this.http.get<ClusterReconciliationHealthStatus>(
+      '/api/v1/cluster/reconciliation/status',
+    );
   }
   libraryProcessing(id: string) {
     return this.http.get<LibraryProcessingSettings>('/api/v1/libraries/' + id + '/processing');
@@ -65,8 +67,15 @@ export class ClusterApi {
       schedule,
     });
   }
-  libraryWorkflow(id: string) {
-    return this.http.get<LibraryWorkflow>('/api/v1/libraries/' + id + '/workflow');
+  libraryWorkflow(
+    id: string,
+    options?: { readonly search?: string; readonly limit?: number; readonly offset?: number },
+  ) {
+    let params = new HttpParams();
+    if (options?.search) params = params.set('search', options.search);
+    if (options?.limit !== undefined) params = params.set('limit', String(options.limit));
+    if (options?.offset !== undefined) params = params.set('offset', String(options.offset));
+    return this.http.get<LibraryWorkflow>('/api/v1/libraries/' + id + '/workflow', { params });
   }
   assignLibraryFlow(
     id: string,

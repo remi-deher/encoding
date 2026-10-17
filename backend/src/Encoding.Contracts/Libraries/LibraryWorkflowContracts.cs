@@ -5,7 +5,7 @@ public sealed record AssignLibraryFlowRequest(Guid? FlowId,int? Version,int Expe
 public sealed record LibraryFlowAssignment(Guid FlowId,int Version,int Revision,string Name);
 public sealed record LibraryMediaFile(Guid Id,string RelativePath,long Bytes,DateTimeOffset ModifiedAt);
 public sealed record LibraryScanStatus(Guid Id,string State,string Detail,DateTimeOffset? CompletedAt);
-public sealed record LibraryWorkflowResponse(LibraryFlowAssignment? Assignment,LibraryScanStatus? Scan,IReadOnlyList<LibraryMediaFile> Files,int Revision);
+public sealed record LibraryWorkflowResponse(LibraryFlowAssignment? Assignment,LibraryScanStatus? Scan,IReadOnlyList<LibraryMediaFile> Files,int Revision,int TotalFiles=0,int Limit=10000,int Offset=0);
 public sealed record EnqueueLibraryFilesRequest(IReadOnlyList<Guid> FileIds,int AssignmentRevision);
 public sealed record LibraryScanLease(Guid Id,Guid LibraryId,long Epoch,string Root,string MediaType);
 public sealed record DiscoveredLibraryFile(string RelativePath,long Bytes,DateTimeOffset ModifiedAt);

@@ -1,3 +1,4 @@
+using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
 using Encoding.Contracts.Libraries;
@@ -20,15 +21,11 @@ public static class LibraryEndpoints
         }).WithName("ExportLibraries");
         libraries.MapPost("", async (CreateLibraryRequest request, LibraryRepository repository, CancellationToken cancellationToken) =>
         {
-            var errors = new Dictionary<string, string[]>();
-            if (string.IsNullOrWhiteSpace(request.Name)) errors["name"] = ["Le nom de la bibliothèque est obligatoire."];
-            else if (request.Name.Trim().Length > 128) errors["name"] = ["Le nom ne peut pas dépasser 128 caractères."];
-            if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
             var created = await repository.CreateAsync(request, cancellationToken);
             return created is null
-                ? Results.Conflict(new { title = "Une bibliothèque porte déjà ce nom." })
+                ? ApiProblem.Conflict("Une bibliothèque porte déjà ce nom.")
                 : Results.Created($"/api/v1/libraries/{created.Id}", created);
-        }).WithName("CreateLibrary");
+        }).AddEndpointFilter<ValidateLibraryNameFilter>().WithName("CreateLibrary");
 
         libraries.MapPut("/{libraryId:guid}", async (
             Guid libraryId,
@@ -36,20 +33,16 @@ public static class LibraryEndpoints
             LibraryRepository repository,
             CancellationToken cancellationToken) =>
         {
-            var errors = new Dictionary<string, string[]>();
-            if (string.IsNullOrWhiteSpace(request.Name)) errors["name"] = ["Le nom de la bibliothèque est obligatoire."];
-            else if (request.Name.Trim().Length > 128) errors["name"] = ["Le nom ne peut pas dépasser 128 caractères."];
-            if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
             try
             {
                 var updated = await repository.UpdateAsync(libraryId, request, cancellationToken);
-                return updated is null ? (IResult)Results.NotFound() : Results.Ok(updated);
+                return updated is null ? ApiProblem.NotFound() : Results.Ok(updated);
             }
             catch (DbException exception) when (Sql.IsUniqueViolation(exception))
             {
-                return Results.Conflict(new { title = "Une bibliothèque porte déjà ce nom." });
+                return ApiProblem.Conflict("Une bibliothèque porte déjà ce nom.");
             }
-        }).WithName("UpdateLibrary");
+        }).AddEndpointFilter<ValidateLibraryNameFilter>().WithName("UpdateLibrary");
 
         libraries.MapPut("/{libraryId:guid}/activation", async (
             Guid libraryId,
@@ -58,14 +51,14 @@ public static class LibraryEndpoints
             CancellationToken cancellationToken) =>
         {
             var updated = await repository.SetActiveAsync(libraryId, request.IsActive, cancellationToken);
-            return updated is null ? (IResult)Results.NotFound() : Results.Ok(updated);
+            return updated is null ? ApiProblem.NotFound() : Results.Ok(updated);
         }).WithName("SetLibraryActivation");
 
         libraries.MapDelete("/{libraryId:guid}", async (
             Guid libraryId,
             LibraryRepository repository,
             CancellationToken cancellationToken) =>
-            await repository.DeleteAsync(libraryId, cancellationToken) ? Results.NoContent() : Results.NotFound())
+            await repository.DeleteAsync(libraryId, cancellationToken) ? Results.NoContent() : ApiProblem.NotFound())
             .WithName("DeleteLibrary");
 
         libraries.MapGet("/{libraryId:guid}/node-access", async (
@@ -74,7 +67,7 @@ public static class LibraryEndpoints
             CancellationToken cancellationToken) =>
         {
             var accesses = await repository.ListAsync(libraryId, cancellationToken);
-            return accesses is null ? (IResult)Results.NotFound() : Results.Ok(accesses);
+            return accesses is null ? ApiProblem.NotFound() : Results.Ok(accesses);
         }).WithName("ListLibraryNodeAccesses");
 
         libraries.MapPut("/{libraryId:guid}/node-access", async (
@@ -86,11 +79,11 @@ public static class LibraryEndpoints
             try
             {
                 var accesses = await repository.ConfigureAsync(libraryId, request, cancellationToken);
-                return accesses is null ? (IResult)Results.NotFound() : Results.Ok(accesses);
+                return accesses is null ? ApiProblem.NotFound() : Results.Ok(accesses);
             }
             catch (LibraryNodeAccessValidationException exception)
             {
-                return Results.ValidationProblem(exception.Errors.ToDictionary(pair => pair.Key, pair => pair.Value));
+                return ApiProblem.Validation(exception.Errors.ToDictionary(pair => pair.Key, pair => pair.Value));
             }
         }).WithName("ConfigureLibraryNodeAccesses");
 
@@ -102,7 +95,7 @@ public static class LibraryEndpoints
             CancellationToken cancellationToken) =>
         {
             var access = await repository.SetEnabledAsync(libraryId, nodeId, request.IsEnabled, cancellationToken);
-            return access is null ? (IResult)Results.NotFound() : Results.Ok(access);
+            return access is null ? ApiProblem.NotFound() : Results.Ok(access);
         }).WithName("SetLibraryNodeAccessActivation");
     }
 }

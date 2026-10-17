@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace Encoding.Api.Executions;
 
 /// <summary>Persistent lifecycle journal. Does not assign work or publish media.</summary>
-public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRegistry? components = null)
+public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRegistry? components = null, ExecutionStreamBroadcaster? broadcaster = null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private const string Columns = """
@@ -31,22 +31,65 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         }
         catch(JsonException) { return []; }
     }
-    public async Task<ExecutionOverviewResponse> OverviewAsync(CancellationToken ct)
+    public Task<ExecutionOverviewResponse> OverviewAsync(CancellationToken ct) =>
+        OverviewAsync(new ExecutionFilterQuery(), ct);
+
+    public async Task<ExecutionOverviewResponse> OverviewAsync(ExecutionFilterQuery query, CancellationToken ct)
     {
+        var limit = Math.Clamp(query.Limit <= 0 ? 200 : query.Limit, 1, 500);
+        var offset = Math.Max(0, query.Offset);
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
         var counts = new Dictionary<string, int>();
         await using (var cmd = Sql.Command("SELECT state,count(*)::integer FROM executions GROUP BY state", c, tx))
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { while (await r.ReadAsync(ct)) counts[r.GetString(0)] = r.GetInt32(1); }
+
+        var predicates = new List<string>();
+        void BindFilters(DbCommand cmd)
+        {
+            if (!string.IsNullOrWhiteSpace(query.State))
+                cmd.Parameters.AddWithValue("state", query.State.Trim().ToLowerInvariant());
+            if (query.LibraryId is { } libraryId)
+                cmd.Parameters.AddWithValue("libraryId", libraryId);
+            if (query.NodeId is { } nodeId)
+                cmd.Parameters.AddWithValue("nodeId", nodeId);
+            if (query.Since is { } since)
+                cmd.Parameters.AddWithValue("since", since);
+        }
+        if (!string.IsNullOrWhiteSpace(query.State)) predicates.Add("e.state=@state");
+        if (query.LibraryId is not null) predicates.Add("w.library_id=@libraryId");
+        if (query.NodeId is not null) predicates.Add("e.node_id=@nodeId");
+        if (query.Since is not null) predicates.Add("e.updated_at>=@since");
+        var whereSql = predicates.Count > 0 ? " WHERE " + string.Join(" AND ", predicates) : string.Empty;
+
+        int totalCount;
+        if (predicates.Count == 0)
+        {
+            totalCount = counts.Values.Sum();
+        }
+        else
+        {
+            await using var countCmd = Sql.Command($"SELECT count(*)::integer FROM executions e LEFT JOIN execution_work w ON w.execution_id=e.id{whereSql}", c, tx);
+            BindFilters(countCmd);
+            totalCount = await countCmd.ScalarInt32Async(ct) ?? 0;
+        }
+
         var list = new List<ExecutionResponse>();
-        await using (var cmd = Sql.Command($"SELECT {Columns} FROM executions e LEFT JOIN cluster_nodes n ON n.id=e.node_id LEFT JOIN execution_work w ON w.execution_id=e.id ORDER BY CASE WHEN e.state IN ('queued','running','cancelling') THEN 0 ELSE 1 END,e.updated_at DESC,e.id LIMIT 200", c, tx))
-        await using (var r = await cmd.ExecuteReaderAsync(ct)) { while (await r.ReadAsync(ct)) list.Add(Read(r)); }
+        await using (var cmd = Sql.Command($"SELECT {Columns} FROM executions e LEFT JOIN cluster_nodes n ON n.id=e.node_id LEFT JOIN execution_work w ON w.execution_id=e.id{whereSql} ORDER BY CASE WHEN e.state IN ('queued','running','cancelling') THEN 0 ELSE 1 END,e.updated_at DESC,e.id LIMIT @limit OFFSET @offset", c, tx))
+        {
+            BindFilters(cmd);
+            cmd.Parameters.AddWithValue("limit", limit);
+            cmd.Parameters.AddWithValue("offset", offset);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) list.Add(Read(r));
+        }
+
         var activity = new List<ExecutionActivityResponse>();
         await using (var cmd = Sql.Command("SELECT v.id,v.execution_id,e.media,v.state,v.detail,v.created_at FROM execution_events v JOIN executions e ON e.id=v.execution_id ORDER BY v.created_at DESC,v.id LIMIT 20", c, tx))
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { while (await r.ReadAsync(ct)) activity.Add(new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetFieldValue<DateTimeOffset>(5))); }
         await tx.CommitAsync(ct);
         int Count(string s) => counts.GetValueOrDefault(s);
-        return new(list, Count("queued"), Count("running") + Count("cancelling"), Count("failed"), Count("cancelled"), Count("succeeded"), DateTimeOffset.UtcNow, activity, Count("deferred"));
+        return new(list, Count("queued"), Count("running") + Count("cancelling"), Count("failed"), Count("cancelled"), Count("succeeded"), DateTimeOffset.UtcNow, activity, Count("deferred"), totalCount, limit, offset);
     }
 
     public async Task<ExecutionResponse?> GetAsync(Guid id, CancellationToken ct)
@@ -56,11 +99,19 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         cmd.Parameters.AddWithValue("id", id); await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Read(r) : null;
     }
-    public async Task<IReadOnlyList<ExecutionEventResponse>> EventsAsync(Guid id, CancellationToken ct)
+
+    public Task<IReadOnlyList<ExecutionEventResponse>> EventsAsync(Guid id, CancellationToken ct) =>
+        EventsAsync(id, null, null, ct);
+
+    public async Task<IReadOnlyList<ExecutionEventResponse>> EventsAsync(Guid id, int? afterRevision, int? limit, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
-        await using var cmd = Sql.Command("SELECT id,revision,state,detail,created_at FROM execution_events WHERE execution_id=@id ORDER BY revision", c);
+        var filterSql = afterRevision is not null ? " AND revision>@afterRevision" : string.Empty;
+        var limitSql = limit is not null ? " LIMIT @limit" : string.Empty;
+        await using var cmd = Sql.Command($"SELECT id,revision,state,detail,created_at FROM execution_events WHERE execution_id=@id{filterSql} ORDER BY revision{limitSql}", c);
         cmd.Parameters.AddWithValue("id", id);
+        if (afterRevision is { } rev) cmd.Parameters.AddWithValue("afterRevision", rev);
+        if (limit is { } max) cmd.Parameters.AddWithValue("limit", Math.Clamp(max, 1, 1000));
         await using var r = await cmd.ExecuteReaderAsync(ct); var list = new List<ExecutionEventResponse>();
         while (await r.ReadAsync(ct)) list.Add(new(r.GetGuid(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetFieldValue<DateTimeOffset>(4)));
         return list;
@@ -131,14 +182,18 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
    """, c, tx); cmd.Parameters.AddWithValue("id", id);
         int revision; string state, detail;
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { if (!await r.ReadAsync(ct)) return false; revision = r.GetInt32(0); state = r.GetString(1); detail = r.GetString(2); }
-        await AddEvent(c, tx, id, Guid.NewGuid(), revision, state, detail, ct); await tx.CommitAsync(ct); return true;
+        await AddEvent(c, tx, id, Guid.NewGuid(), revision, state, detail, ct); await tx.CommitAsync(ct);
+        broadcaster?.Publish(id);
+        return true;
     }
     public async Task<Guid?> RetryAsync(Guid id, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
         var created=await RetryInTransactionAsync(id,null,null,"Nouvelle tentative demandée.",c,tx,ct);
         if(created is null) return null;
-        await tx.CommitAsync(ct); return created;
+        await tx.CommitAsync(ct);
+        broadcaster?.Publish(created);
+        return created;
     }
 
     internal static async Task<Guid?> RetryInTransactionAsync(Guid id,RuntimeHandoffSelector? selector,Guid? previousWorker,string detail,
@@ -173,7 +228,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     {
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
         var recorded=await RecordInTransactionAsync(id,update,c,tx,ct);
-        if(recorded) await tx.CommitAsync(ct);
+        if(recorded) { await tx.CommitAsync(ct); broadcaster?.Publish(id); }
         return recorded;
     }
     internal static async Task<bool> RecordInTransactionAsync(Guid id, RecordExecutionProgress update, DbConnection c,DbTransaction tx,CancellationToken ct)

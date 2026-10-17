@@ -12,6 +12,15 @@ public sealed record CreateExecutionRequest(Guid Id, string Media, string Librar
 public sealed record ExecutionOverviewResponse(
  IReadOnlyList<ExecutionResponse> Executions, int QueuedCount, int ActiveCount,
  int FailedCount, int CancelledCount, int SucceededCount, DateTimeOffset ObservedAt,
- IReadOnlyList<ExecutionActivityResponse> Activity, int DeferredCount = 0);
+ IReadOnlyList<ExecutionActivityResponse> Activity, int DeferredCount = 0,
+ int TotalCount = 0, int Limit = 200, int Offset = 0);
+public sealed record ExecutionFilterQuery(
+ string? State = null, Guid? LibraryId = null, Guid? NodeId = null,
+ DateTimeOffset? Since = null, int Limit = 200, int Offset = 0);
 public sealed record ExecutionActivityResponse(Guid Id, Guid ExecutionId, string Media, string State, string Detail, DateTimeOffset CreatedAt);
 public sealed record RecordExecutionProgress(Guid EventId, int ExpectedRevision, string State, Guid? NodeId, decimal? Progress, string Detail);
+public sealed record ExecutionDetailSnapshot(
+ ExecutionResponse Execution,
+ IReadOnlyList<ExecutionEventResponse> Events,
+ IReadOnlyList<ExecutionPipelineStepResponse> Pipeline,
+ DateTimeOffset ObservedAt);
