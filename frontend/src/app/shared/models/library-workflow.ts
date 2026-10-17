@@ -20,6 +20,9 @@ export interface LibraryWorkflow {
     readonly completedAt: string | null;
   } | null;
   readonly files: readonly LibraryMediaFile[];
+  readonly totalFiles?: number;
+  readonly limit?: number;
+  readonly offset?: number;
 }
 
 export interface LibraryProcessingSettings {

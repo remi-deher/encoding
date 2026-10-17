@@ -90,6 +90,17 @@ export interface ExecutionOverviewResponse {
   readonly deferredCount?: number;
   readonly observedAt: string;
   readonly activity: readonly ExecutionActivityResponse[];
+  readonly totalCount?: number;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+export interface ExecutionFilterQuery {
+  readonly state?: ExecutionState;
+  readonly libraryId?: string;
+  readonly nodeId?: string;
+  readonly since?: string;
+  readonly limit?: number;
+  readonly offset?: number;
 }
 export const EXECUTION_STATE_LABELS: Record<ExecutionState, string> = {
   queued: 'En attente',

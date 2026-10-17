@@ -9,7 +9,8 @@ public sealed record AuthOptions(
     int MaxFailedAttempts,
     int MaxPendingPairingRequests,
     int AnonymousRequestsPerMinute,
-    bool Enabled = false)
+    bool Enabled = false,
+    int HeavyOperationsPerMinute = 30)
 {
     public static AuthOptions From(IConfiguration configuration)
     {
@@ -18,7 +19,9 @@ public sealed record AuthOptions(
         var maxFailures = configuration.GetValue("Auth:MaxFailedAttempts", 5);
         var maxPending = configuration.GetValue("Auth:MaxPendingPairingRequests", 20);
         var perMinute = configuration.GetValue("Auth:AnonymousRequestsPerMinute", 20);
+        var heavyPerMinute = configuration.GetValue("Auth:HeavyOperationsPerMinute", 30);
         if (perMinute <= 0) throw new InvalidOperationException("Auth:AnonymousRequestsPerMinute doit être supérieur à zéro.");
+        if (heavyPerMinute <= 0) throw new InvalidOperationException("Auth:HeavyOperationsPerMinute doit être supérieur à zéro.");
         if (idle <= 0) throw new InvalidOperationException("Auth:SessionIdleMinutes doit être supérieur à zéro.");
         if (absolute <= 0) throw new InvalidOperationException("Auth:SessionAbsoluteHours doit être supérieur à zéro.");
         if (maxFailures <= 0) throw new InvalidOperationException("Auth:MaxFailedAttempts doit être supérieur à zéro.");
@@ -33,6 +36,7 @@ public sealed record AuthOptions(
             maxFailures,
             maxPending,
             perMinute,
-            enabled);
+            enabled,
+            heavyPerMinute);
     }
 }

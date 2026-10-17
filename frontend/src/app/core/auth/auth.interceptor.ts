@@ -8,6 +8,15 @@ import { AuthService } from './auth.service';
 /** En-tête exigé par le serveur pour toute modification authentifiée par cookie (protection inter-sites). */
 export const CSRF_HEADER = 'X-Encoding-Csrf';
 
+function extractProblemTitle(error: HttpErrorResponse): string | null {
+  const payload = error.error;
+  if (typeof payload === 'object' && payload !== null && 'title' in payload) {
+    const title = (payload as { title?: unknown }).title;
+    if (typeof title === 'string' && title.trim().length > 0) return title;
+  }
+  return null;
+}
+
 export const authInterceptor: HttpInterceptorFn = (request, next) => {
   if (!request.url.startsWith('/api/')) return next(request);
   const injector = inject(Injector);
@@ -20,6 +29,13 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
         if (error.status === 401) injector.get(AuthService).sessionExpired();
         else if (error.status === 403)
           injector.get(NotificationService).show('Cette action est réservée aux administrateurs.');
+        else if (error.status === 429)
+          injector
+            .get(NotificationService)
+            .show(
+              extractProblemTitle(error) ??
+                'Trop de requêtes. Veuillez réessayer dans quelques instants.',
+            );
       }
       return throwError(() => error);
     }),

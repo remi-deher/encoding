@@ -48,7 +48,9 @@ builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
 builder.Services.AddSingleton<FirstLinkRepository>();
 builder.Services.AddSingleton<LocalNodeRegistry>();
+builder.Services.AddApiProblemDetails();
 builder.Services.AddClusterAuthentication(builder.Configuration);
+builder.Services.AddSingleton<ExecutionStreamBroadcaster>();
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
 builder.Services.AddSingleton<FlowDefinitionValidator>();
@@ -204,6 +206,7 @@ app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();
 app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
+app.MapOpenApiEndpoints();
 
 app.MapFallbackToFile("index.html").AllowAnonymous();
 

@@ -111,4 +111,8 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
 
     [DatabaseFact]
     public void WaitBlockContractsAndCompatibility() => Scenarios.WaitContracts();
+
+    [DatabaseFact]
+    public Task ApiImprovementsOpenApiProblemDetailsPaginationSseFiltersAndRateLimiting() =>
+        ApiImprovementsScenarios.RunAsync(RuntimeFixture.ConnectionString!);
 }
