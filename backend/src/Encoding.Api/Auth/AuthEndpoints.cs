@@ -10,25 +10,40 @@ public static class AuthEndpoints
     {
         var auth = app.MapGroup("/api/v1/auth").WithTags("Authentification");
         auth.MapGet("/status", async (HttpContext http, AuthService service, CancellationToken ct) =>
-            Results.Ok(new AuthStatusResponse(await service.SetupRequiredAsync(ct), Current(http.User))))
-            .AllowAnonymous().WithName("GetAuthStatus");
+        {
+            var setupRequired = await service.SetupRequiredAsync(ct);
+            return Results.Ok(new AuthStatusResponse(setupRequired, setupRequired ? null : Current(http.User)));
+        }).AllowAnonymous().WithName("GetAuthStatus");
 
         auth.MapPost("/setup", async (SetupRequest request, HttpContext http, AuthService service, AuthOptions options, Encoding.Api.Nodes.LocalNodeRegistry localNode, CancellationToken ct) =>
         {
-            var errors = AuthService.ValidateNewUser(request.Username, request.Password);
+            var errors = new Dictionary<string, string[]>();
+            if (!string.IsNullOrWhiteSpace(request.Username) || !string.IsNullOrWhiteSpace(request.Password))
+            {
+                foreach (var (k, v) in AuthService.ValidateNewUser(request.Username, request.Password))
+                    errors[k] = v;
+            }
             if (!Encoding.Api.Nodes.LocalNodeRegistry.IsValidName(request.NodeDisplayName))
                 errors["nodeDisplayName"] = [$"Le nom du nœud ne peut pas dépasser {Encoding.Api.Nodes.LocalNodeRegistry.MaximumNameLength} caractères."];
+            if (request.Mode == "createCluster" && !string.IsNullOrWhiteSpace(request.ClusterName) && !Encoding.Api.Infrastructure.ClusterIdentityRepository.IsValidName(request.ClusterName))
+                errors["clusterName"] = [$"Le nom du cluster ne peut pas dépasser {Encoding.Api.Infrastructure.ClusterIdentityRepository.MaximumNameLength} caractères."];
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+
             var (outcome, _) = await service.SetupAsync(request, ct);
             switch (outcome)
             {
-                case SetupOutcome.InvalidSetupToken:
-                    return Results.Json(new { title = "Le jeton d’initialisation est invalide." }, statusCode: StatusCodes.Status403Forbidden);
                 case SetupOutcome.AlreadyConfigured:
                     return Results.Conflict(new { title = "Le cluster possède déjà un administrateur." });
             }
             await localNode.RequestNameAsync(request.NodeDisplayName, ct);
-            var login = await service.LoginAsync(request.Username, request.Password, ct);
+            if (request.Mode == "createCluster" && !string.IsNullOrWhiteSpace(request.ClusterName))
+            {
+                var clusterRepo = http.RequestServices.GetRequiredService<Encoding.Api.Infrastructure.ClusterIdentityRepository>();
+                await clusterRepo.CreateAsync(request.ClusterName, ct);
+            }
+            var effectiveUsername = string.IsNullOrWhiteSpace(request.Username) ? "admin" : request.Username.Trim();
+            var effectivePassword = service.LastCreatedPassword ?? request.Password ?? "admin";
+            var login = await service.LoginAsync(effectiveUsername, effectivePassword, ct);
             if (login is null) return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "Le compte a été créé mais la session n’a pas pu être ouverte.");
             SetSessionCookie(http, login.SessionToken, options);
             return Results.Created("/api/v1/auth/me", login.User);

@@ -253,7 +253,9 @@ const publicRoutes: Routes = [
     path: 'setup',
     canActivate: [guestGuard],
     loadComponent: () =>
-      import('./features/auth/login-page.component').then((module) => module.LoginPageComponent),
+      import('./features/setup/setup-wizard-page.component').then(
+        (module) => module.SetupWizardPageComponent,
+      ),
     data: { title: 'Initialisation', authPage: 'setup' },
   },
 ];

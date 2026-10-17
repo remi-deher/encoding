@@ -90,7 +90,7 @@ internal static class AuthScenarios
             builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
             foreach (var (key, value) in cluster.Settings()) builder.UseSetting(key, value);
             builder.UseSetting("Logging:LogLevel:Default", "Error");
-            builder.UseSetting("Auth:SetupToken", SetupToken);
+            builder.UseSetting("Auth:Enabled", "true");
             builder.UseSetting("FlowBackups:Directory", Path.Combine(directory, "backups"));
             builder.UseSetting("Runtime:ArtifactDirectory", Path.Combine(directory, "artifacts"));
             builder.UseSetting("PluginSettings:KeyDirectory", Path.Combine(directory, "keys"));
@@ -163,16 +163,15 @@ internal static class AuthScenarios
         Check(await anonymous.StatusAsync(post, "/api/v1/libraries", new { name = "x" }) == HttpStatusCode.Unauthorized, "Anonymous writes are refused.");
 
         // Initialisation du premier administrateur.
-        Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("root", AdminPassword, "mauvais jeton"), csrf: false) == HttpStatusCode.Forbidden, "Setup refuses a wrong setup token.");
-        Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("root", "court", SetupToken), csrf: false) == HttpStatusCode.BadRequest, "Setup enforces the password policy.");
-        using (var setup = await anonymous.SendAsync(post, "/api/v1/auth/setup", new SetupRequest("root", AdminPassword, SetupToken, "  Serveur du salon  "), csrf: false))
+        Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("root", "court"), csrf: false) == HttpStatusCode.BadRequest, "Setup enforces the password policy when credentials are provided.");
+        using (var setup = await anonymous.SendAsync(post, "/api/v1/auth/setup", new SetupRequest("root", AdminPassword, NodeDisplayName: "  Serveur du salon  "), csrf: false))
         {
             Check(setup.StatusCode == HttpStatusCode.Created, "Setup creates the first administrator.");
             admin.Cookie = ReadCookie(setup);
             Check((await setup.Content.ReadFromJsonAsync<CurrentUserResponse>(Json))!.Role == UserRole.Admin, "The first account is an administrator.");
         }
-        Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("autre", AdminPassword, SetupToken), csrf: false) == HttpStatusCode.Conflict, "Setup cannot run twice.");
-        var concurrent = await Task.WhenAll(Enumerable.Range(0, 1).Select(_ => anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("racer", AdminPassword, SetupToken), csrf: false)));
+        Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("autre", AdminPassword), csrf: false) == HttpStatusCode.Conflict, "Setup cannot run twice.");
+        var concurrent = await Task.WhenAll(Enumerable.Range(0, 1).Select(_ => anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("racer", AdminPassword), csrf: false)));
         Check(concurrent.All(code => code == HttpStatusCode.Conflict), "A later setup attempt never creates a second administrator.");
 
         // Administrateur : lecture, écriture avec protection CSRF.

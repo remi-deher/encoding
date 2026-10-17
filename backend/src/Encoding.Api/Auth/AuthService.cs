@@ -38,13 +38,16 @@ public sealed partial class AuthService(UserRepository users, AuthOptions option
         return errors;
     }
 
+    public string? LastCreatedPassword { get; private set; }
+
     public async Task<bool> SetupRequiredAsync(CancellationToken ct) => !await users.AnyAsync(ct);
 
     public async Task<(SetupOutcome Outcome, UserResponse? User)> SetupAsync(SetupRequest request, CancellationToken ct)
     {
-        if (options.SetupToken is not null && !SecretsEqual(request.SetupToken, options.SetupToken))
-            return (SetupOutcome.InvalidSetupToken, null);
-        var user = await users.CreateFirstAdministratorAsync(request.Username.Trim(), PasswordHasher.Hash(request.Password), ct);
+        var username = string.IsNullOrWhiteSpace(request.Username) ? "admin" : request.Username.Trim();
+        var password = string.IsNullOrWhiteSpace(request.Password) ? Convert.ToHexString(RandomNumberGenerator.GetBytes(16)) : request.Password;
+        LastCreatedPassword = password;
+        var user = await users.CreateFirstAdministratorAsync(username, PasswordHasher.Hash(password), ct);
         return user is null ? (SetupOutcome.AlreadyConfigured, null) : (SetupOutcome.Created, user);
     }
 
