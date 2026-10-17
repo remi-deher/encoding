@@ -55,7 +55,8 @@ export function decideAccess(
 
 /** Décide si l’une des pages publiques d’authentification est utile à l’utilisateur courant. */
 export function decideGuestAccess(status: AuthStatus, page: 'login' | 'setup'): AccessDecision {
-  if (status.setupRequired) return page === 'setup' ? { kind: 'allow' } : { kind: 'redirect', path: '/setup' };
+  if (status.setupRequired)
+    return page === 'setup' ? { kind: 'allow' } : { kind: 'redirect', path: '/setup' };
   if (status.user) return { kind: 'redirect', path: '/' };
   if (page === 'setup') return { kind: 'redirect', path: '/login' };
   return { kind: 'allow' };

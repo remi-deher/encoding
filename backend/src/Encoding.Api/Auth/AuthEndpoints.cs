@@ -30,11 +30,8 @@ public static class AuthEndpoints
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
 
             var (outcome, _) = await service.SetupAsync(request, ct);
-            switch (outcome)
-            {
-                case SetupOutcome.AlreadyConfigured:
-                    return Results.Conflict(new { title = "Le cluster possède déjà un administrateur." });
-            }
+            if (outcome == SetupOutcome.AlreadyConfigured)
+                return Results.Conflict(new { title = "Le cluster possède déjà un administrateur." });
             await localNode.RequestNameAsync(request.NodeDisplayName, ct);
             if (request.Mode == "createCluster" && !string.IsNullOrWhiteSpace(request.ClusterName))
             {
