@@ -291,7 +291,7 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
               badges: motorBadges,
               detail:
                 hardwareAccels.length > 0
-                  ? 'Accélération matérielle active pour les encodages compatibles'
+                  ? undefined
                   : 'Traitements assurés par le processeur principal',
             });
 
@@ -304,16 +304,12 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
             );
             if (av1Hw) codecBadges.push({ label: 'AV1 (Matériel)', tone: 'success' });
             else if (av1Sw) codecBadges.push({ label: 'AV1 (CPU)', tone: 'neutral' });
-            else if (['av1_nvenc', 'av1_qsv', 'av1_vaapi', 'libsvtav1'].some((id) => detectedChecks.has(id)))
-              codecBadges.push({ label: 'AV1 (Détecté)', tone: 'warning' });
 
             // HEVC / H.265
             const hevcHw = ['hevc_nvenc', 'hevc_qsv', 'hevc_vaapi'].some((id) => usableChecks.has(id));
             const hevcSw = usableChecks.has('libx265') || rawEncoders.has('libx265');
             if (hevcHw) codecBadges.push({ label: 'HEVC / H.265 (Matériel)', tone: 'success' });
             else if (hevcSw) codecBadges.push({ label: 'HEVC / H.265 (CPU)', tone: 'neutral' });
-            else if (['hevc_nvenc', 'hevc_qsv', 'hevc_vaapi', 'libx265'].some((id) => detectedChecks.has(id)))
-              codecBadges.push({ label: 'HEVC (Détecté)', tone: 'warning' });
 
             // H.264
             const h264Hw = ['h264_nvenc', 'h264_qsv', 'h264_vaapi'].some((id) => usableChecks.has(id));
@@ -328,7 +324,33 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
               });
             }
 
-            // 3. Outils déclarés
+            // 3. Encodeurs non validés
+            const unvalidatedTypes = ['NVENC', 'Quick Sync', 'VAAPI'].filter((acc) => {
+              const key = acc === 'Quick Sync' ? 'qsv' : acc.toLowerCase();
+              return (
+                !usableChecks.has(`h264_${key}`) &&
+                !usableChecks.has(`hevc_${key}`) &&
+                !usableChecks.has(`av1_${key}`) &&
+                (detectedChecks.has(`h264_${key}`) ||
+                  detectedChecks.has(`hevc_${key}`) ||
+                  detectedChecks.has(`av1_${key}`))
+              );
+            });
+            if (unvalidatedTypes.length > 0) {
+              items.push({
+                label: 'Encodeurs non validés',
+                badges: unvalidatedTypes.map((type) => ({
+                  label: `${type} (non validé)`,
+                  tone: 'warning',
+                })),
+                detail:
+                  unvalidatedTypes.length > 1
+                    ? 'Encodeurs FFmpeg présents, non validés par le test de mire.'
+                    : 'Encodeur FFmpeg présent, non validé par le test de mire.',
+              });
+            }
+
+            // 4. Outils déclarés
             const toolBadges: ResourceSheetBadge[] = tools.map((t) => ({
               label:
                 t.toolId.toLowerCase() === 'mkvtoolnix'
