@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatStepperIntl, MatStepperModule } from '@angular/material/stepper';
 import { AuthService } from '../../core/auth/auth.service';
 import { LocalNodeController } from '../../shared/services/local-node-controller';
 import { NotificationService } from '../../shared/services/notification.service';
@@ -15,48 +14,20 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-setup-wizard-page',
-  providers: [
-    LocalNodeController,
-    {
-      provide: MatStepperIntl,
-      useFactory: () =>
-        Object.assign(new MatStepperIntl(), {
-          completedLabel: 'Terminée',
-          editableLabel: 'Modifiable',
-          optionalLabel: 'Facultatif',
-        }),
-    },
-  ],
-  imports: [CommonModule, FormsModule, MatStepperModule, MatButtonModule, MatProgressBarModule],
+  providers: [LocalNodeController],
+  imports: [CommonModule, FormsModule, MatButtonModule, MatProgressBarModule],
   template: `
-    <section class="wizard-container" aria-label="Assistant de premier démarrage">
-      <header class="wizard-header">
-        <div class="brand-badge">
-          <svg
-            class="brand-icon"
-            viewBox="0 0 24 24"
-            width="28"
-            height="28"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7" />
-          </svg>
-          <span class="brand-name">Encoding</span>
-        </div>
-        <h1 class="wizard-title">Assistant d'initialisation</h1>
-        <p class="wizard-subtitle">
-          Configurez cette machine en quelques étapes simples pour commencer à traiter vos médias.
-        </p>
-      </header>
-
+    <section class="setup-studio" aria-label="Assistant de premier démarrage">
       @if (busy()) {
-        <mat-progress-bar mode="indeterminate" aria-label="Action en cours" />
+        <mat-progress-bar
+          class="setup-progress"
+          mode="indeterminate"
+          aria-label="Action en cours"
+        />
       }
 
       @if (errorMessage()) {
-        <div role="alert" class="wizard-error">
+        <div role="alert" class="setup-error">
           <svg
             viewBox="0 0 24 24"
             width="20"
@@ -64,6 +35,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
             fill="none"
             stroke="currentColor"
             stroke-width="2"
+            aria-hidden="true"
           >
             <circle cx="12" cy="12" r="10" />
             <path d="M12 8v4m0 4h.01" stroke-linecap="round" />
@@ -72,811 +44,992 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
         </div>
       }
 
-      <div class="wizard-card">
-        <mat-stepper
-          linear
-          #stepper
-          [selectedIndex]="currentStep()"
-          (selectionChange)="goToStep($event.selectedIndex)"
-        >
-          <ng-template matStepperIcon="done">
+      <div class="setup-grid">
+        <!-- Colonne gauche : Fiche d'identité live & télémétrie matérielle -->
+        <aside class="setup-telemetry" aria-label="Identité et matériel détecté">
+          <header class="setup-brand">
+            <div class="brand-badge">
+              <span class="brand-mark" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                >
+                  <polygon points="6 4 20 12 6 20 6 4" />
+                </svg>
+              </span>
+              <span class="brand-name">Encoding</span>
+              <span class="brand-tag">Premier démarrage</span>
+            </div>
+            <h1 class="setup-title">Bienvenue sur Encoding</h1>
+            <p class="setup-subtitle">
+              Configurez cette machine en un coup d’œil et vérifiez les ressources matérielles
+              détectées localement.
+            </p>
+          </header>
+
+          <div class="hardware-bento" role="region" aria-labelledby="hardware-card-title">
+            <div class="hardware-bento-header">
+              <span class="live-dot" aria-hidden="true"></span>
+              <div class="hardware-bento-title-group">
+                <span class="hardware-eyebrow">Nœud local détecté</span>
+                <h2 id="hardware-card-title" class="hardware-node-name">
+                  {{ effectiveNodeName() }}
+                </h2>
+                <span class="hardware-host-meta">{{ hostPlatformLabel() }}</span>
+              </div>
+            </div>
+
+            <div class="hardware-tiles">
+              <div class="hardware-tile">
+                <span class="tile-label">Processeur</span>
+                <span class="tile-value">{{ cpuInfo() }}</span>
+              </div>
+              <div class="hardware-tile">
+                <span class="tile-label">Mémoire</span>
+                <span class="tile-value">{{ memoryInfo() }}</span>
+              </div>
+              <div class="hardware-tile hardware-tile--wide">
+                <span class="tile-label">Graphique / GPU</span>
+                <span class="tile-value">{{ gpuInfo() }}</span>
+              </div>
+              <div class="hardware-tile hardware-tile--wide hardware-tile--accent">
+                <span class="tile-label">Accélération GPU</span>
+                <span class="tile-value">{{ gpuAccelerationInfo() }}</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="telemetry-footnote">
             <svg
               viewBox="0 0 24 24"
               width="16"
               height="16"
               fill="none"
               stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+              stroke-width="2"
               aria-hidden="true"
             >
-              <path d="m5 12 4 4 10-10" />
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
             </svg>
-          </ng-template>
-          <ng-template matStepperIcon="edit">
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m5 12 4 4 10-10" />
-            </svg>
-          </ng-template>
+            <span>
+              Vous pourrez renommer ce nœud ou basculer entre autonome et cluster à chaud depuis la
+              page <strong>Nœuds</strong>.
+            </span>
+          </p>
+        </aside>
 
-          <!-- Étape 1 : Identification du nœud -->
-          <mat-step [completed]="isStep1Valid()">
-            <ng-template matStepLabel>Identification</ng-template>
-            <div class="step-content">
-              <h2>Bienvenue sur Encoding</h2>
-              <p class="step-desc">
-                Commençons par nommer cette machine pour la repérer facilement sur votre réseau
-                local.
-              </p>
-
-              <div class="form-group">
-                <label for="node-name-input" class="field-label">Nom de ce nœud</label>
-                <input
-                  id="node-name-input"
-                  type="text"
-                  class="text-input"
-                  [placeholder]="defaultNodeName()"
-                  [(ngModel)]="nodeName"
-                  maxlength="128"
-                  autocomplete="off"
-                />
-                <span class="field-hint"
-                  >Exemple : Serveur Salon, NAS Synology, Worker RTX. Modifiable à tout moment
-                  depuis la page Nœuds.</span
-                >
-              </div>
-
-              <div class="info-card">
-                <div class="info-card-header">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="20"
-                    height="20"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-                    <line x1="6" y1="6" x2="6.01" y2="6" />
-                    <line x1="6" y1="18" x2="6.01" y2="18" />
-                  </svg>
-                  <h3>Matériel détecté localement</h3>
-                </div>
-                <div class="info-grid">
-                  <div class="info-item">
-                    <span class="info-label">Processeur</span>
-                    <span class="info-value">{{ cpuInfo() }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">Mémoire</span>
-                    <span class="info-value">{{ memoryInfo() }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">Graphique / GPU</span>
-                    <span class="info-value">{{ gpuInfo() }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="info-label">Accélération GPU</span>
-                    <span class="info-value">{{ gpuAccelerationInfo() }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="step-actions">
-                <button
-                  mat-flat-button
-                  color="primary"
-                  type="button"
-                  [disabled]="!isStep1Valid()"
-                  (click)="goToStep(1)"
-                >
-                  Continuer →
-                </button>
+        <!-- Colonne droite : Atelier de configuration directe -->
+        <div class="setup-workbench">
+          <!-- Section 1 : Identité -->
+          <section class="workbench-card" aria-labelledby="step-identity-heading">
+            <div class="section-heading">
+              <span class="step-pill" aria-hidden="true">1</span>
+              <div>
+                <h2 id="step-identity-heading">Identifier cette machine</h2>
+                <p>Donnez un nom convivial pour repérer facilement ce nœud sur votre réseau.</p>
               </div>
             </div>
-          </mat-step>
 
-          <!-- Étape 2 : Choix du mode de fonctionnement -->
-          <mat-step [completed]="isStep2Valid()">
-            <ng-template matStepLabel>Mode de fonctionnement</ng-template>
-            <div class="step-content">
-              <h2>Comment souhaitez-vous utiliser cette machine ?</h2>
-              <p class="step-desc">Sélectionnez le rôle de cette installation sur votre réseau.</p>
-
-              <div class="mode-options" role="radiogroup" aria-label="Choix du mode">
-                <!-- Option 1 : Autonome -->
-                <button
-                  type="button"
-                  class="mode-card"
-                  [class.selected]="selectedMode() === 'standalone'"
-                  (click)="selectedMode.set('standalone')"
-                  role="radio"
-                  [attr.aria-checked]="selectedMode() === 'standalone'"
-                >
-                  <div class="mode-header">
-                    <div class="mode-icon-box">
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="24"
-                        height="24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                        <line x1="8" y1="21" x2="16" y2="21" />
-                        <line x1="12" y1="17" x2="12" y2="21" />
-                      </svg>
-                    </div>
-                    <div class="mode-title-group">
-                      <span class="mode-title">Démarrer comme machine autonome</span>
-                      <span class="mode-badge primary">Recommandé pour débuter</span>
-                    </div>
-                  </div>
-                  <p class="mode-description">
-                    Installation unique et indépendante. Elle gère directement ses bibliothèques,
-                    ses flows et ses encodages locaux sans cluster.
-                  </p>
-                </button>
-
-                <!-- Option 2 : Créer un cluster -->
-                <button
-                  type="button"
-                  class="mode-card"
-                  [class.selected]="selectedMode() === 'createCluster'"
-                  (click)="selectedMode.set('createCluster')"
-                  role="radio"
-                  [attr.aria-checked]="selectedMode() === 'createCluster'"
-                >
-                  <div class="mode-header">
-                    <div class="mode-icon-box">
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="24"
-                        height="24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <circle cx="18" cy="5" r="3" />
-                        <circle cx="6" cy="12" r="3" />
-                        <circle cx="18" cy="19" r="3" />
-                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                      </svg>
-                    </div>
-                    <div class="mode-title-group">
-                      <span class="mode-title">Créer un cluster</span>
-                      <span class="mode-badge neutral">Multi-machines</span>
-                    </div>
-                  </div>
-                  <p class="mode-description">
-                    Cette machine devient le premier serveur d'un nouveau cluster, prête à fédérer
-                    d'autres serveurs ou workers pour distribuer la charge.
-                  </p>
-                </button>
-
-                <!-- Option 3 : Rejoindre un cluster -->
-                <button
-                  type="button"
-                  class="mode-card"
-                  [class.selected]="selectedMode() === 'joinCluster'"
-                  (click)="selectedMode.set('joinCluster')"
-                  role="radio"
-                  [attr.aria-checked]="selectedMode() === 'joinCluster'"
-                >
-                  <div class="mode-header">
-                    <div class="mode-icon-box">
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="24"
-                        height="24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                      </svg>
-                    </div>
-                    <div class="mode-title-group">
-                      <span class="mode-title">Rejoindre un cluster</span>
-                      <span class="mode-badge accent">Worker / Renfort</span>
-                    </div>
-                  </div>
-                  <p class="mode-description">
-                    Vous avez déjà un serveur Encoding actif sur votre réseau. Cette machine le
-                    rejoint pour exécuter des tâches et apporter sa puissance.
-                  </p>
-                </button>
-              </div>
-
-              <div class="step-actions">
-                <button mat-button type="button" (click)="goToStep(0)">← Retour</button>
-                <button mat-flat-button color="primary" type="button" (click)="goToStep(2)">
-                  Suivant →
-                </button>
-              </div>
-            </div>
-          </mat-step>
-
-          <!-- Étape 3 : Finalisation selon le mode -->
-          <mat-step [completed]="false">
-            <ng-template matStepLabel>Finalisation</ng-template>
-            <div class="step-content">
-              <!-- Cas 3A : Autonome -->
-              @if (selectedMode() === 'standalone') {
-                <h2>Prêt à démarrer en mode autonome</h2>
-                <p class="step-desc">
-                  Votre serveur local est prêt. Vous allez accéder directement à votre interface de
-                  gestion.
-                </p>
-
-                <div class="summary-box">
-                  <div class="summary-row">
-                    <span class="summary-label">Nom de cette machine</span>
-                    <strong class="summary-value">{{ effectiveNodeName() }}</strong>
-                  </div>
-                  <div class="summary-row">
-                    <span class="summary-label">Mode d'organisation</span>
-                    <span class="summary-value">Machine autonome (aucun cluster requis)</span>
-                  </div>
-                  <div class="summary-row">
-                    <span class="summary-label">Sécurité & Accès</span>
-                    <span class="summary-value"
-                      >Accès libre sans mot de passe (activable dans Paramètres)</span
-                    >
-                  </div>
-                </div>
-
-                <div class="tip-box">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="18"
-                    height="18"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="16" x2="12" y2="12" />
-                    <line x1="12" y1="8" x2="12.01" y2="8" />
-                  </svg>
-                  <span
-                    >Vous pourrez à tout moment créer ou rejoindre un cluster depuis l'onglet
-                    <strong>Nœuds</strong> de l'application.</span
-                  >
-                </div>
-
-                <div class="step-actions">
-                  <button mat-button type="button" (click)="goToStep(1)">← Retour</button>
+            <div class="form-group">
+              <label for="node-name-input" class="field-label">Nom de ce nœud</label>
+              <input
+                id="node-name-input"
+                type="text"
+                class="text-input"
+                [placeholder]="defaultNodeName()"
+                [ngModel]="nodeName()"
+                (ngModelChange)="nodeName.set($event)"
+                maxlength="128"
+                autocomplete="off"
+              />
+              <div class="Quick-suggestions" aria-label="Suggestions de noms">
+                <span class="suggestions-label">Suggestions :</span>
+                @for (suggestion of nodeNameSuggestions; track suggestion) {
                   <button
-                    mat-flat-button
-                    color="primary"
+                    type="button"
+                    class="suggestion-chip"
+                    [class.active]="nodeName() === suggestion"
+                    (click)="nodeName.set(suggestion)"
+                  >
+                    {{ suggestion }}
+                  </button>
+                }
+              </div>
+            </div>
+          </section>
+
+          <!-- Section 2 : Choix de l'architecture -->
+          <section class="workbench-card" aria-labelledby="step-mode-heading">
+            <div class="section-heading">
+              <span class="step-pill" aria-hidden="true">2</span>
+              <div>
+                <h2 id="step-mode-heading">Comment souhaitez-vous utiliser cette machine ?</h2>
+                <p>Sélectionnez l’organisation initiale de votre installation.</p>
+              </div>
+            </div>
+
+            <div class="mode-grid" role="radiogroup" aria-labelledby="step-mode-heading">
+              <!-- Mode 1 : Autonome -->
+              <button
+                type="button"
+                class="mode-card"
+                [class.selected]="selectedMode() === 'standalone'"
+                (click)="selectMode('standalone')"
+                role="radio"
+                [attr.aria-checked]="selectedMode() === 'standalone'"
+              >
+                <div class="mode-card-top">
+                  <span class="mode-icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                      <line x1="8" y1="21" x2="16" y2="21" />
+                      <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                  </span>
+                  <span class="mode-badge primary">Recommandé</span>
+                </div>
+                <strong class="mode-title">Machine autonome</strong>
+                <p class="mode-description">
+                  Serveur et worker réunis sur cette machine. Idéal pour démarrer immédiatement sans
+                  cluster.
+                </p>
+              </button>
+
+              <!-- Mode 2 : Créer un cluster -->
+              <button
+                type="button"
+                class="mode-card"
+                [class.selected]="selectedMode() === 'createCluster'"
+                (click)="selectMode('createCluster')"
+                role="radio"
+                [attr.aria-checked]="selectedMode() === 'createCluster'"
+              >
+                <div class="mode-card-top">
+                  <span class="mode-icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                    </svg>
+                  </span>
+                  <span class="mode-badge neutral">Multi-machines</span>
+                </div>
+                <strong class="mode-title">Créer un cluster</strong>
+                <p class="mode-description">
+                  Initialise un nouveau maillage prêt à accueillir d’autres serveurs ou workers.
+                </p>
+              </button>
+
+              <!-- Mode 3 : Rejoindre un cluster -->
+              <button
+                type="button"
+                class="mode-card"
+                [class.selected]="selectedMode() === 'joinCluster'"
+                (click)="selectMode('joinCluster')"
+                role="radio"
+                [attr.aria-checked]="selectedMode() === 'joinCluster'"
+              >
+                <div class="mode-card-top">
+                  <span class="mode-icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    </svg>
+                  </span>
+                  <span class="mode-badge accent">Worker / Pair</span>
+                </div>
+                <strong class="mode-title">Rejoindre un cluster</strong>
+                <p class="mode-description">
+                  Rattache cette machine à un cluster Encoding déjà actif sur votre réseau.
+                </p>
+              </button>
+            </div>
+          </section>
+
+          <!-- Section 3 : Finalisation contextuelle selon le mode choisi -->
+          <section class="workbench-card workbench-card--Contextual" aria-live="polite">
+            @if (selectedMode() === 'standalone') {
+              <div class="contextual-summary">
+                <div class="contextual-summary-head">
+                  <span class="status-check" aria-hidden="true">✓</span>
+                  <div>
+                    <h3>Prêt à démarrer en mode autonome</h3>
+                    <p>
+                      <strong>{{ effectiveNodeName() }}</strong> assurera l’interface serveur et
+                      l’encodage local. L’accès initial est ouvert sans mot de passe (activable dans
+                      Paramètres).
+                    </p>
+                  </div>
+                </div>
+                <div class="workbench-actions">
+                  <button
+                    matButton="filled"
                     type="button"
                     [disabled]="busy()"
                     (click)="submitStandalone()"
                   >
-                    Accéder au tableau de bord ✓
+                    Accéder au tableau de bord →
                   </button>
                 </div>
-              }
+              </div>
+            }
 
-              <!-- Cas 3B : Créer un cluster -->
-              @if (selectedMode() === 'createCluster') {
-                <h2>Nommer votre nouveau cluster</h2>
-                <p class="step-desc">
-                  Donnez un nom clair pour ce cluster afin de le reconnaître lors de l'ajout
-                  d'autres machines.
-                </p>
-
-                <div class="form-group">
-                  <label for="cluster-name-input" class="field-label">Nom du cluster</label>
-                  <input
-                    id="cluster-name-input"
-                    type="text"
-                    class="text-input"
-                    [placeholder]="defaultClusterName()"
-                    [(ngModel)]="clusterName"
-                    maxlength="128"
-                    autocomplete="off"
-                  />
-                  <span class="field-hint">Exemple : Cluster Maison, Encodage-Prod, Homelab.</span>
+            @if (selectedMode() === 'createCluster') {
+              <div class="section-heading">
+                <span class="step-pill" aria-hidden="true">3</span>
+                <div>
+                  <h3>Nommer votre nouveau cluster</h3>
+                  <p>Ce nom sera affiché lors de l’ajout d’autres serveurs ou workers.</p>
                 </div>
+              </div>
 
-                <div class="summary-box">
-                  <div class="summary-row">
-                    <span class="summary-label">Premier membre</span>
-                    <strong class="summary-value">{{ effectiveNodeName() }}</strong>
-                  </div>
-                  <div class="summary-row">
-                    <span class="summary-label">Rôle initial</span>
-                    <span class="summary-value">Serveur coordinateur et worker</span>
-                  </div>
+              <div class="form-group">
+                <label for="cluster-name-input" class="field-label">Nom du cluster</label>
+                <input
+                  id="cluster-name-input"
+                  type="text"
+                  class="text-input"
+                  [placeholder]="defaultClusterName()"
+                  [ngModel]="clusterName()"
+                  (ngModelChange)="clusterName.set($event)"
+                  maxlength="128"
+                  autocomplete="off"
+                />
+                <span class="field-hint">
+                  Premier coordinateur et worker : <strong>{{ effectiveNodeName() }}</strong>
+                </span>
+              </div>
+
+              <div class="workbench-actions">
+                <button
+                  matButton="filled"
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="submitCreateCluster()"
+                >
+                  Créer le cluster et continuer →
+                </button>
+              </div>
+            }
+
+            @if (selectedMode() === 'joinCluster') {
+              <div class="section-heading">
+                <span class="step-pill" aria-hidden="true">3</span>
+                <div>
+                  <h3>Connexion au cluster d’accueil</h3>
+                  <p>
+                    Sélectionnez un cluster découvert sur le réseau local ou indiquez son adresse
+                    URL.
+                  </p>
                 </div>
+              </div>
 
-                <div class="step-actions">
-                  <button mat-button type="button" (click)="goToStep(1)">← Retour</button>
-                  <button
-                    mat-flat-button
-                    color="primary"
-                    type="button"
-                    [disabled]="busy()"
-                    (click)="submitCreateCluster()"
-                  >
-                    Créer le cluster et continuer ✓
-                  </button>
-                </div>
-              }
-
-              <!-- Cas 3C : Rejoindre un cluster -->
-              @if (selectedMode() === 'joinCluster') {
-                <h2>Rejoindre un cluster existant</h2>
-                <p class="step-desc">
-                  Sélectionnez un cluster détecté sur votre réseau ou saisissez l'adresse de son
-                  serveur principal.
-                </p>
-
-                @if (availableClusters().length > 0) {
-                  <div class="discovered-clusters">
-                    <span class="list-label">Clusters détectés automatiquement :</span>
-                    <div class="cluster-cards-list">
-                      @for (cluster of availableClusters(); track cluster.id) {
-                        <div class="cluster-card">
-                          <div class="cluster-info">
-                            <strong>{{ cluster.name }}</strong>
-                            <span class="cluster-address">{{ cluster.apiBaseUrl }}</span>
-                          </div>
-                          <button
-                            mat-stroked-button
-                            color="primary"
-                            type="button"
-                            (click)="selectClusterAddress(cluster.apiBaseUrl)"
-                          >
-                            Sélectionner
-                          </button>
+              @if (availableClusters().length > 0) {
+                <div class="discovered-clusters">
+                  <span class="list-label">Clusters détectés automatiquement (mDNS) :</span>
+                  <div class="cluster-cards-list">
+                    @for (cluster of availableClusters(); track cluster.id) {
+                      <div class="cluster-card">
+                        <div class="cluster-info">
+                          <strong>{{ cluster.name }}</strong>
+                          <span class="cluster-address">{{ cluster.apiBaseUrl }}</span>
                         </div>
-                      }
-                    </div>
-                  </div>
-                }
-
-                <div class="form-group">
-                  <label for="cluster-address-input" class="field-label"
-                    >Adresse du cluster d'accueil</label
-                  >
-                  <div class="input-with-button">
-                    <input
-                      id="cluster-address-input"
-                      type="url"
-                      class="text-input"
-                      placeholder="http://192.168.1.50:8090"
-                      [(ngModel)]="clusterAddress"
-                    />
-                    <button
-                      mat-flat-button
-                      type="button"
-                      [disabled]="!clusterAddress() || busy()"
-                      (click)="verifyClusterAddress()"
-                    >
-                      Vérifier
-                    </button>
-                  </div>
-                  <span class="field-hint"
-                    >Adresse URL complète avec port (ex: http://192.168.1.50:8090).</span
-                  >
-                </div>
-
-                @if (localController.target(); as target) {
-                  <div class="target-confirmed-box">
-                    <div class="target-badge">Cluster joignable</div>
-                    <h3>{{ target.name }}</h3>
-                    <p class="target-url">{{ target.apiBaseUrl }} ({{ target.id }})</p>
-
-                    @if (pairingCode(); as code) {
-                      <div class="hero-code-box">
-                        <span class="code-label">Code de confirmation à comparer</span>
-                        <div class="hero-digits">{{ code }}</div>
-                        <p class="code-helper">
-                          Un administrateur du cluster <strong>{{ target.name }}</strong> doit
-                          valider ce code depuis sa page Nœuds.
-                        </p>
+                        <button
+                          matButton="outlined"
+                          type="button"
+                          (click)="selectClusterAddress(cluster.apiBaseUrl)"
+                        >
+                          Sélectionner
+                        </button>
                       </div>
-                    } @else {
-                      <button
-                        mat-flat-button
-                        color="primary"
-                        type="button"
-                        [disabled]="busy()"
-                        (click)="requestClusterJoin()"
-                      >
-                        Envoyer la demande de rattachement
-                      </button>
                     }
                   </div>
-                }
-
-                <div class="step-actions">
-                  <button mat-button type="button" (click)="goToStep(1)">← Retour</button>
-                  <button
-                    mat-flat-button
-                    color="primary"
-                    type="button"
-                    [disabled]="busy()"
-                    (click)="submitJoinFinish()"
-                  >
-                    Terminer et ouvrir l'application ✓
-                  </button>
                 </div>
               }
-            </div>
-          </mat-step>
-        </mat-stepper>
+
+              <div class="form-group">
+                <label for="cluster-address-input" class="field-label">
+                  Adresse du cluster d’accueil
+                </label>
+                <div class="input-with-button">
+                  <input
+                    id="cluster-address-input"
+                    type="url"
+                    class="text-input"
+                    placeholder="http://192.168.1.50:8090"
+                    [ngModel]="clusterAddress()"
+                    (ngModelChange)="clusterAddress.set($event)"
+                  />
+                  <button
+                    matButton="outlined"
+                    type="button"
+                    [disabled]="!clusterAddress() || busy()"
+                    (click)="verifyClusterAddress()"
+                  >
+                    Vérifier
+                  </button>
+                </div>
+                <span class="field-hint">
+                  Adresse complète avec port (ex. http://192.168.1.50:8090).
+                </span>
+              </div>
+
+              @if (localController.target(); as target) {
+                <div class="target-confirmed-box">
+                  <div class="target-badge">Cluster joignable</div>
+                  <h4>{{ target.name }}</h4>
+                  <p class="target-url">{{ target.apiBaseUrl }} ({{ target.id }})</p>
+
+                  @if (pairingCode(); as code) {
+                    <div class="hero-code-box">
+                      <span class="code-label">Code de confirmation à comparer</span>
+                      <div class="hero-digits">{{ code }}</div>
+                      <p class="code-helper">
+                        Un administrateur du cluster <strong>{{ target.name }}</strong> doit valider
+                        ce code depuis sa page Nœuds.
+                      </p>
+                    </div>
+                  } @else {
+                    <button
+                      matButton="outlined"
+                      type="button"
+                      [disabled]="busy()"
+                      (click)="requestClusterJoin()"
+                    >
+                      Envoyer la demande de rattachement
+                    </button>
+                  }
+                </div>
+              }
+
+              <div class="workbench-actions">
+                <button
+                  matButton="filled"
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="submitJoinFinish()"
+                >
+                  Terminer et ouvrir l’application →
+                </button>
+              </div>
+            }
+          </section>
+        </div>
       </div>
     </section>
   `,
   styles: `
-    .wizard-container {
-      width: min(100%, 720px);
-      margin: 4vh auto;
-      padding: 0 16px;
-      font-family: inherit;
+    .setup-studio {
+      width: min(100%, 1060px);
+      margin: 2vh auto 4vh;
+      display: grid;
+      gap: var(--space-4);
     }
-    .wizard-header {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-    .brand-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
+
+    .setup-progress {
       border-radius: var(--radius-pill);
-      background: var(--surface-container-high, #2b2b2b);
-      color: var(--accent, #64b5f6);
-      margin-bottom: 12px;
-      font-weight: 600;
+      overflow: hidden;
     }
-    .wizard-title {
-      font-size: var(--font-title-lg, 24px);
-      font-weight: 700;
-      color: var(--text-primary, #ffffff);
-      margin: 0 0 8px;
-      letter-spacing: -0.02em;
-    }
-    .wizard-subtitle {
-      color: var(--text-secondary, #b0bec5);
-      font-size: var(--font-body, 14px);
-      margin: 0;
-      line-height: 1.5;
-    }
-    .wizard-card {
-      background: var(--surface-container, #1e1e1e);
-      border: 1px solid var(--border-subtle, #333333);
-      border-radius: var(--radius-xl, 20px);
-      padding: 24px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
-    }
-    .wizard-error {
+
+    .setup-error {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 12px 16px;
-      border-radius: var(--radius-md, 12px);
-      background: rgba(239, 83, 80, 0.15);
-      color: #ef5350;
-      border: 1px solid rgba(239, 83, 80, 0.3);
-      margin-bottom: 16px;
-      font-size: 14px;
+      border-radius: var(--radius-md);
+      background: var(--danger-soft);
+      color: var(--danger);
+      border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+      font-size: var(--font-body);
     }
-    .step-content {
-      padding: 20px 8px 8px;
+
+    .setup-grid {
+      display: grid;
+      grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
+      gap: var(--space-5);
+      align-items: start;
     }
-    .step-content h2 {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-primary, #ffffff);
-      margin: 0 0 6px;
+
+    /* Colonne gauche : Identité & Matériel */
+    .setup-telemetry {
+      position: sticky;
+      top: 76px;
+      display: grid;
+      gap: var(--space-4);
+      padding: var(--space-5);
+      border-radius: var(--radius-2xl, 24px);
+      background: var(--surface-container-low);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-soft);
     }
-    .step-desc {
-      color: var(--text-secondary, #9e9e9e);
-      font-size: 14px;
-      margin: 0 0 20px;
-      line-height: 1.5;
+
+    .setup-brand {
+      display: grid;
+      gap: 10px;
     }
-    .form-group {
-      margin-bottom: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .field-label {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-primary, #ffffff);
-    }
-    .text-input {
-      padding: 12px 14px;
-      border-radius: var(--radius-md, 10px);
-      border: 1px solid var(--border-subtle, #424242);
-      background: var(--surface-container-high, #2a2a2a);
-      color: var(--text-primary, #ffffff);
-      font-size: 15px;
-      outline: none;
-      transition: border-color 0.2s ease;
-    }
-    .text-input:focus {
-      border-color: var(--accent, #64b5f6);
-    }
-    .field-hint {
-      font-size: 12px;
-      color: var(--text-secondary, #757575);
-    }
-    .info-card {
-      background: var(--surface-container-low, #181818);
-      border: 1px solid var(--border-subtle, #333333);
-      border-radius: var(--radius-lg, 14px);
-      padding: 16px;
-      margin-bottom: 24px;
-    }
-    .info-card-header {
-      display: flex;
+
+    .brand-badge {
+      display: inline-flex;
       align-items: center;
       gap: 8px;
-      color: var(--accent, #64b5f6);
-      margin-bottom: 14px;
+      width: fit-content;
     }
-    .info-card-header h3 {
-      font-size: 14px;
-      font-weight: 600;
-      margin: 0;
-      color: var(--text-primary, #ffffff);
-    }
-    .info-grid {
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
+      place-items: center;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+      color: var(--on-accent);
     }
-    .info-item {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+
+    .brand-name {
+      font-weight: 800;
+      font-size: var(--font-body);
+      color: var(--text-primary);
     }
-    .info-label {
+
+    .brand-tag {
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--accent-soft);
+      color: var(--accent);
       font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-secondary, #757575);
+      font-weight: 700;
     }
-    .info-value {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-primary, #e0e0e0);
+
+    .setup-title {
+      margin: 0;
+      font-size: var(--font-title-lg);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
     }
-    .mode-options {
+
+    .setup-subtitle {
+      margin: 0;
+      font-size: var(--font-body);
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .hardware-bento {
+      display: grid;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border-radius: var(--radius-lg);
+      background: var(--surface-container);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .hardware-bento-header {
       display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-bottom: 24px;
+      align-items: flex-start;
+      gap: 10px;
     }
+
+    .live-dot {
+      width: 10px;
+      height: 10px;
+      margin-top: 5px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 20%, transparent);
+      flex-shrink: 0;
+    }
+
+    .hardware-bento-title-group {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .hardware-eyebrow {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+
+    .hardware-node-name {
+      margin: 0;
+      font-size: var(--font-title-md);
+      font-weight: 800;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .hardware-host-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .hardware-tiles {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-2);
+    }
+
+    .hardware-tile {
+      display: grid;
+      gap: 3px;
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      background: var(--surface-container-high);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .hardware-tile--wide {
+      grid-column: 1 / -1;
+    }
+
+    .hardware-tile--accent {
+      background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface-container-high));
+      border-color: color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+    }
+
+    .tile-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .tile-value {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+
+    .telemetry-footnote {
+      margin: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+
+    .telemetry-footnote svg {
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: var(--accent);
+    }
+
+    /* Colonne droite : Atelier */
+    .setup-workbench {
+      display: grid;
+      gap: var(--space-4);
+    }
+
+    .workbench-card {
+      display: grid;
+      gap: var(--space-4);
+      padding: var(--space-5);
+      border-radius: var(--radius-2xl, 24px);
+      background: var(--surface-container-low);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .workbench-card--Contextual {
+      background: color-mix(in srgb, var(--surface-container) 85%, var(--accent-soft));
+      border-color: color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+    }
+
+    .step-pill {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .section-heading h2,
+    .section-heading h3 {
+      margin: 0 0 4px;
+      font-size: var(--font-title-md);
+      font-weight: 750;
+      color: var(--text-primary);
+    }
+
+    .section-heading p {
+      margin: 0;
+      font-size: var(--font-body);
+      color: var(--text-secondary);
+    }
+
+    .form-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .text-input {
+      min-height: 44px;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-strong);
+      background: var(--surface-container-high);
+      color: var(--text-primary);
+      font-size: var(--font-body);
+      outline: none;
+      transition:
+        border-color 140ms ease,
+        box-shadow 140ms ease;
+    }
+
+    .text-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .field-hint {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .Quick-suggestions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .suggestions-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .suggestion-chip {
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-subtle);
+      background: var(--surface-container);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition:
+        background-color 120ms ease,
+        color 120ms ease,
+        border-color 120ms ease;
+    }
+
+    .suggestion-chip:hover,
+    .suggestion-chip.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+
+    /* Grille des 3 modes */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+
     .mode-card {
       display: flex;
       flex-direction: column;
-      text-align: left;
-      padding: 16px;
-      background: var(--surface-container-low, #181818);
-      border: 2px solid var(--border-subtle, #333333);
-      border-radius: var(--radius-lg, 14px);
-      cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
-      color: inherit;
-    }
-    .mode-card:hover {
-      background: var(--surface-container-high, #252525);
-      border-color: #555555;
-    }
-    .mode-card.selected {
-      background: rgba(100, 181, 246, 0.08);
-      border-color: var(--accent, #64b5f6);
-    }
-    .mode-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 6px;
-    }
-    .mode-icon-box {
-      width: 40px;
-      height: 40px;
-      border-radius: var(--radius-md, 10px);
-      background: var(--surface-container-high, #2a2a2a);
-      color: var(--accent, #64b5f6);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .mode-title-group {
-      display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 10px;
-      flex-wrap: wrap;
+      text-align: left;
+      padding: var(--space-4);
+      border-radius: var(--radius-lg);
+      background: var(--surface-container);
+      border: 2px solid var(--border-subtle);
+      color: inherit;
+      cursor: pointer;
+      transition:
+        border-color 150ms ease,
+        background-color 150ms ease,
+        transform 150ms ease;
     }
-    .mode-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-primary, #ffffff);
+
+    .mode-card:hover {
+      background: var(--surface-container-high);
+      border-color: var(--border-strong);
     }
+
+    .mode-card.selected {
+      background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface-container));
+      border-color: var(--accent);
+    }
+
+    .mode-card-top {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .mode-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--surface-container-high);
+      color: var(--accent);
+    }
+
     .mode-badge {
       font-size: 12px;
       padding: 2px 8px;
       border-radius: var(--radius-pill);
-      font-weight: 500;
+      font-weight: 700;
     }
+
     .mode-badge.primary {
-      background: rgba(76, 175, 80, 0.15);
-      color: #81c784;
+      background: var(--success-soft);
+      color: var(--success);
     }
+
     .mode-badge.neutral {
-      background: rgba(158, 158, 158, 0.15);
-      color: #bdbdbd;
+      background: var(--surface-container-high);
+      color: var(--text-secondary);
     }
+
     .mode-badge.accent {
-      background: rgba(100, 181, 246, 0.15);
-      color: #90caf9;
+      background: var(--accent-soft);
+      color: var(--accent);
     }
+
+    .mode-title {
+      font-size: var(--font-body);
+      font-weight: 750;
+      color: var(--text-primary);
+    }
+
     .mode-description {
       margin: 0;
-      font-size: 13px;
-      color: var(--text-secondary, #9e9e9e);
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    /* Zone contextuelle */
+    .contextual-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+    }
+
+    .contextual-summary-head {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      flex: 1 1 320px;
+    }
+
+    .status-check {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--success-soft);
+      color: var(--success);
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .contextual-summary-head h3 {
+      margin: 0 0 4px;
+      font-size: var(--font-title-md);
+      color: var(--text-primary);
+    }
+
+    .contextual-summary-head p {
+      margin: 0;
+      font-size: var(--font-body);
+      color: var(--text-secondary);
       line-height: 1.5;
     }
-    .summary-box {
-      background: var(--surface-container-low, #181818);
-      border: 1px solid var(--border-subtle, #333333);
-      border-radius: var(--radius-lg, 14px);
-      padding: 16px;
-      margin-bottom: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .summary-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      font-size: 14px;
-    }
-    .summary-label {
-      color: var(--text-secondary, #9e9e9e);
-    }
-    .summary-value {
-      color: var(--text-primary, #ffffff);
-      text-align: right;
-    }
-    .tip-box {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px;
-      border-radius: var(--radius-md, 10px);
-      background: rgba(100, 181, 246, 0.08);
-      border: 1px solid rgba(100, 181, 246, 0.2);
-      color: #90caf9;
-      font-size: 13px;
-      margin-bottom: 24px;
-    }
-    .step-actions {
+
+    .workbench-actions {
       display: flex;
       justify-content: flex-end;
       align-items: center;
-      gap: 12px;
-      margin-top: 24px;
+      gap: var(--space-2);
     }
+
     .input-with-button {
       display: flex;
       gap: 8px;
     }
+
     .input-with-button .text-input {
       flex: 1;
     }
+
     .discovered-clusters {
-      margin-bottom: 16px;
-    }
-    .list-label {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-secondary, #9e9e9e);
-      margin-bottom: 8px;
-      display: block;
-    }
-    .cluster-cards-list {
-      display: flex;
-      flex-direction: column;
+      display: grid;
       gap: 8px;
     }
+
+    .list-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    .cluster-cards-list {
+      display: grid;
+      gap: 8px;
+    }
+
     .cluster-card {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: var(--space-3);
       padding: 10px 14px;
-      background: var(--surface-container-high, #252525);
-      border-radius: var(--radius-md, 10px);
-      border: 1px solid var(--border-subtle, #333333);
+      background: var(--surface-container);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
     }
+
     .cluster-info {
-      display: flex;
-      flex-direction: column;
+      display: grid;
       gap: 2px;
     }
+
     .cluster-address {
       font-size: 12px;
-      color: var(--text-secondary, #9e9e9e);
+      color: var(--text-secondary);
     }
+
     .target-confirmed-box {
-      background: var(--surface-container-low, #181818);
-      border: 1px solid var(--accent, #64b5f6);
-      border-radius: var(--radius-lg, 14px);
-      padding: 18px;
-      margin-top: 16px;
+      background: var(--surface-container);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      display: grid;
+      gap: 8px;
     }
+
     .target-badge {
       display: inline-block;
       font-size: 12px;
       text-transform: uppercase;
       font-weight: 700;
-      color: #81c784;
-      margin-bottom: 6px;
+      color: var(--success);
     }
-    .target-confirmed-box h3 {
-      margin: 0 0 4px;
-      font-size: 16px;
-      color: var(--text-primary, #ffffff);
+
+    .target-confirmed-box h4 {
+      margin: 0;
+      font-size: var(--font-title-md);
+      color: var(--text-primary);
     }
+
     .target-url {
-      margin: 0 0 16px;
-      font-size: 13px;
-      color: var(--text-secondary, #9e9e9e);
+      margin: 0;
+      font-size: 12px;
+      color: var(--text-secondary);
     }
+
     .hero-code-box {
       text-align: center;
-      padding: 20px;
-      border-radius: var(--radius-lg, 14px);
-      background: rgba(100, 181, 246, 0.1);
-      border: 1px solid rgba(100, 181, 246, 0.3);
-      margin-top: 12px;
+      padding: var(--space-4);
+      border-radius: var(--radius-lg);
+      background: var(--accent-soft);
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      margin-top: 6px;
     }
+
     .code-label {
       font-size: 12px;
-      color: var(--text-secondary, #90caf9);
+      color: var(--accent);
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
+
     .hero-digits {
-      font-size: 36px;
+      font-size: 32px;
       font-weight: 800;
-      letter-spacing: 0.15em;
-      color: var(--text-primary, #ffffff);
+      letter-spacing: 0.14em;
+      color: var(--text-primary);
       margin: 8px 0;
       font-family: ui-monospace, monospace;
     }
+
     .code-helper {
-      font-size: 13px;
-      color: var(--text-secondary, #e0e0e0);
+      font-size: 12px;
+      color: var(--text-secondary);
       margin: 0;
+    }
+
+    @media (max-width: 900px) {
+      .setup-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .setup-telemetry {
+        position: static;
+      }
+
+      .mode-grid {
+        grid-template-columns: 1fr;
+      }
     }
   `,
 })
@@ -895,6 +1048,8 @@ export class SetupWizardPageComponent {
   protected readonly clusterName = signal('');
   protected readonly clusterAddress = signal('');
 
+  protected readonly nodeNameSuggestions = ['Serveur Salon', 'Worker GPU', 'NAS Médias'] as const;
+
   protected readonly defaultNodeName = computed(() => {
     const status = this.localController.status();
     return status?.displayName || status?.name || 'Mon Serveur';
@@ -902,6 +1057,14 @@ export class SetupWizardPageComponent {
 
   protected readonly effectiveNodeName = computed(() => {
     return this.nodeName().trim() || this.defaultNodeName();
+  });
+
+  protected readonly hostPlatformLabel = computed(() => {
+    const status = this.localController.status();
+    const inv = status?.inventory;
+    const host = status?.name || 'localhost';
+    if (!inv) return `Hôte : ${host}`;
+    return `${host} · ${inv.operatingSystem} (${inv.architecture})`;
   });
 
   protected readonly defaultClusterName = computed(() => {
@@ -979,12 +1142,9 @@ export class SetupWizardPageComponent {
       null,
   );
 
-  protected isStep1Valid(): boolean {
-    return true; // Nom facultatif avec valeur par défaut automatique
-  }
-
-  protected isStep2Valid(): boolean {
-    return !!this.selectedMode();
+  protected selectMode(mode: SetupOperationMode): void {
+    this.errorMessage.set('');
+    this.selectedMode.set(mode);
   }
 
   protected goToStep(index: number): void {

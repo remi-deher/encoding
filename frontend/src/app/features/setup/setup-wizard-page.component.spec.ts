@@ -101,30 +101,25 @@ describe('SetupWizardPageComponent', () => {
     expect(el.textContent).toContain('NVENC');
   });
 
-  it('advances across steps when clicking Continuer and Suivant', () => {
+  it('renders the contextual panel dynamically when switching operation modes', () => {
     const fixture = TestBed.createComponent(SetupWizardPageComponent);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    const continueBtn = Array.from(el.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Continuer'),
-    );
-    expect(continueBtn).toBeTruthy();
-    continueBtn!.click();
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance['currentStep']()).toBe(1);
-    expect(el.textContent).toContain('Comment souhaitez-vous utiliser cette machine ?');
-
-    const nextBtn = Array.from(el.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Suivant'),
-    );
-    expect(nextBtn).toBeTruthy();
-    nextBtn!.click();
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance['currentStep']()).toBe(2);
     expect(el.textContent).toContain('Prêt à démarrer en mode autonome');
+
+    const modeRadios = Array.from(el.querySelectorAll('[role="radio"]')) as HTMLButtonElement[];
+    expect(modeRadios.length).toBe(3);
+
+    modeRadios[1].click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedMode']()).toBe('createCluster');
+    expect(el.textContent).toContain('Nommer votre nouveau cluster');
+
+    modeRadios[2].click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedMode']()).toBe('joinCluster');
+    expect(el.textContent).toContain('Connexion au cluster d’accueil');
   });
 
   it('allows selecting operation modes', () => {
