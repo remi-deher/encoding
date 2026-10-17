@@ -6,6 +6,7 @@ const {
   validateLabelKey,
   parseLabels,
   matchesGroupCriteria,
+  nodeSupportsEncoder,
   filterNodesByCriteria,
   formatGroupCriteriaBadges,
   extractAvailableOperatingSystems,
@@ -160,4 +161,65 @@ test('extraction des options disponibles depuis l’inventaire des nœuds', () =
   assert.deepEqual(extractAvailableOperatingSystems([node1, node2]), ['Linux', 'Windows']);
   assert.deepEqual(extractAvailableArchitectures([node1, node2]), ['Arm64', 'X64']);
   assert.deepEqual(extractAvailableTools([node1, node2]), ['ffmpeg', 'ffprobe', 'mkvmerge']);
+});
+
+test('détection du support des encodeurs et codecs vidéo majeurs', () => {
+  const nodeWithChecks = makeNode({
+    capabilities: [
+      {
+        toolId: 'ffmpeg',
+        encoderChecks: [
+          { encoderId: 'av1_nvenc', status: 'usable' },
+          { encoderId: 'hevc_nvenc', status: 'usable' },
+          { encoderId: 'h264_nvenc', status: 'broken' },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(nodeSupportsEncoder(nodeWithChecks, 'av1'), true);
+  assert.equal(nodeSupportsEncoder(nodeWithChecks, 'hevc'), true);
+  assert.equal(nodeSupportsEncoder(nodeWithChecks, 'h264'), false);
+  assert.equal(nodeSupportsEncoder(nodeWithChecks, 'av1_nvenc'), true);
+  assert.equal(nodeSupportsEncoder(nodeWithChecks, 'libsvtav1'), false);
+
+  const nodeWithRawEncoders = makeNode({
+    capabilities: [
+      {
+        toolId: 'ffmpeg',
+        encoders: ['libsvtav1', 'libx265', 'libx264'],
+      },
+    ],
+  });
+
+  assert.equal(nodeSupportsEncoder(nodeWithRawEncoders, 'av1'), true);
+  assert.equal(nodeSupportsEncoder(nodeWithRawEncoders, 'hevc'), true);
+  assert.equal(nodeSupportsEncoder(nodeWithRawEncoders, 'h264'), true);
+});
+
+test('évaluation du critère requiredEncoders pour les groupes de nœuds', () => {
+  const av1Node = makeNode({
+    capabilities: [
+      {
+        toolId: 'ffmpeg',
+        encoderChecks: [{ encoderId: 'libsvtav1', status: 'usable' }],
+      },
+    ],
+  });
+
+  const legacyNode = makeNode({
+    capabilities: [
+      {
+        toolId: 'ffmpeg',
+        encoderChecks: [{ encoderId: 'libx264', status: 'usable' }],
+      },
+    ],
+  });
+
+  assert.equal(matchesGroupCriteria({ requiredEncoders: ['av1'] }, av1Node), true);
+  assert.equal(matchesGroupCriteria({ requiredEncoders: ['av1'] }, legacyNode), false);
+  assert.equal(matchesGroupCriteria({ requiredEncoders: ['av1', 'h264'] }, av1Node), false);
+
+  const badges = formatGroupCriteriaBadges({ requiredEncoders: ['av1', 'hevc'] });
+  assert.deepEqual(badges, ['Encodeurs: AV1, HEVC']);
 });

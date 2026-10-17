@@ -48,9 +48,26 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 var toolId=node.Configuration.TryGetValue("toolId",out var requestedTool)?requestedTool.GetString():null;
                 var minimum=node.Configuration.TryGetValue("minimumVersion",out var requestedVersion)?requestedVersion.GetString():null;
                 var required=node.Configuration.TryGetValue("requiredCapability",out var requestedCapability)?requestedCapability.GetString():null;
+                var encoder=node.Configuration.TryGetValue("requiredEncoder",out var requestedEncoder)?requestedEncoder.GetString():null;
                 if(toolId is null || !capabilities.Any(capability=>capability.ToolId==toolId
                     && (string.IsNullOrWhiteSpace(minimum) || Version.TryParse(capability.Version,out var actual) && Version.TryParse(minimum,out var min) && actual>=min)
                     && (string.IsNullOrWhiteSpace(required) || capability.AccelerationTypes.Contains(required,StringComparer.Ordinal)))) return false;
+                if(!string.IsNullOrWhiteSpace(encoder))
+                {
+                    var ffmpeg = capabilities.FirstOrDefault(c => string.Equals(c.ToolId, "ffmpeg", StringComparison.OrdinalIgnoreCase));
+                    if (ffmpeg is null) return false;
+                    var sought = encoder.Trim();
+                    var matching = Encoding.Contracts.Flows.VideoEncoderCatalog.All
+                        .Where(desc => string.Equals(desc.Codec, sought, StringComparison.OrdinalIgnoreCase) || string.Equals(desc.Id, sought, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    var usable = ffmpeg.EncoderChecks?.Where(c => c.Status == "usable").Select(c => c.EncoderId) ?? [];
+                    var av = ffmpeg.Encoders ?? [];
+                    var supported = matching.Count > 0
+                        ? matching.Any(desc => usable.Contains(desc.Id, StringComparer.OrdinalIgnoreCase) || (ffmpeg.EncoderChecks is null && av.Contains(desc.Id, StringComparer.OrdinalIgnoreCase)))
+                        : (ffmpeg.EncoderChecks?.Any(c => c.Status == "usable" && string.Equals(c.EncoderId, sought, StringComparison.OrdinalIgnoreCase)) == true)
+                          || av.Contains(sought, StringComparer.OrdinalIgnoreCase);
+                    if (!supported) return false;
+                }
             }
             var component=registry.Resolve(node.Component)!;
             if(component is null) return false;

@@ -84,7 +84,43 @@ export function matchesGroupCriteria(criteria: NodeGroupCriteria, node: NodeResp
     }
   }
 
+  if (criteria.requiredEncoders && criteria.requiredEncoders.length > 0) {
+    for (const enc of criteria.requiredEncoders) {
+      if (!nodeSupportsEncoder(node, enc)) {
+        return false;
+      }
+    }
+  }
+
   return true;
+}
+
+const KNOWN_CODECS_MAP: Record<string, string[]> = {
+  av1: ['av1_nvenc', 'av1_qsv', 'av1_vaapi', 'libsvtav1', 'libaom-av1'],
+  hevc: ['hevc_nvenc', 'hevc_qsv', 'hevc_vaapi', 'libx265'],
+  h264: ['h264_nvenc', 'h264_qsv', 'h264_vaapi', 'libx264'],
+};
+
+/**
+ * Détermine si un nœud dispose des capacités requises pour un encodeur ou un codec.
+ */
+export function nodeSupportsEncoder(node: NodeResponse, requiredEncoderOrCodec: string): boolean {
+  const ffmpeg = node.capabilities.find((c) => c.toolId.toLowerCase() === 'ffmpeg');
+  if (!ffmpeg) return false;
+  const sought = requiredEncoderOrCodec.trim().toLowerCase();
+  const usableChecks = new Set(
+    ffmpeg.encoderChecks?.filter((c) => c.status === 'usable').map((c) => c.encoderId.toLowerCase()) ?? [],
+  );
+  const rawEncoders = new Set((ffmpeg.encoders ?? []).map((e) => e.toLowerCase()));
+
+  const candidateIds = KNOWN_CODECS_MAP[sought];
+  if (candidateIds) {
+    return candidateIds.some(
+      (id) => usableChecks.has(id) || (ffmpeg.encoderChecks == null && rawEncoders.has(id)),
+    );
+  }
+
+  return usableChecks.has(sought) || (ffmpeg.encoderChecks == null && rawEncoders.has(sought));
 }
 
 /**
@@ -135,6 +171,10 @@ export function formatGroupCriteriaBadges(criteria: NodeGroupCriteria | null | u
 
   if (criteria.requiredToolIds && criteria.requiredToolIds.length > 0) {
     badges.push(`Outils: ${criteria.requiredToolIds.join(', ')}`);
+  }
+
+  if (criteria.requiredEncoders && criteria.requiredEncoders.length > 0) {
+    badges.push(`Encodeurs: ${criteria.requiredEncoders.map((e) => e.toUpperCase()).join(', ')}`);
   }
 
   return badges;

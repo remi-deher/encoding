@@ -264,6 +264,23 @@
             }
           </div>
         </div>
+
+        <!-- Capacité d'encodeurs -->
+        <div class="full-width">
+          <label class="section-label">Capacité d’encodeurs vidéo requise</label>
+          <div class="tool-chips-selector">
+            @for (enc of availableEncoderOptions(); track enc.id) {
+              <button
+                type="button"
+                class="tool-chip"
+                [class.is-selected]="selectedEncoders().has(enc.id)"
+                (click)="toggleEncoder(enc.id)"
+              >
+                {{ enc.label }}
+              </button>
+            }
+          </div>
+        </div>
       </div>
 
       <!-- Live Matching Preview -->

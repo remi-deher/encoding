@@ -25,10 +25,23 @@ export interface ResourceSheetMetric {
   readonly meter?: ResourceSheetMeter;
 }
 
+export interface ResourceSheetHeadAction {
+  readonly id: string;
+  readonly label: string;
+  readonly icon?: 'settings' | string;
+}
+
+export interface ResourceSheetItemAction {
+  readonly id: string;
+  readonly label: string;
+  readonly disabled?: boolean;
+}
+
 export interface ResourceSheetItem {
   readonly label: string;
   readonly detail?: string;
   readonly badges?: readonly ResourceSheetBadge[];
+  readonly action?: ResourceSheetItemAction;
 }
 
 export interface ResourceSheetField {
@@ -73,10 +86,28 @@ export interface ResourceSheetNotice {
       }
       <article class="sheet" [attr.aria-label]="ariaLabel()">
         <header class="sheet-head">
-          <div>
-            <h2>{{ title() }}</h2>
-            @if (subtitle()) {
-              <p>{{ subtitle() }}</p>
+          <div class="sheet-head-content">
+            <div class="sheet-head-titles">
+              <h2>{{ title() }}</h2>
+              @if (subtitle()) {
+                <p>{{ subtitle() }}</p>
+              }
+            </div>
+            @if (headAction(); as action) {
+              <button
+                type="button"
+                class="sheet-head-action-btn"
+                [attr.aria-label]="action.label"
+                [title]="action.label"
+                (click)="actionSelected.emit(action.id)"
+              >
+                <svg viewBox="0 0 24 24" class="sheet-head-action-icon" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3.2" />
+                  <path
+                    d="M12 3v2.2m0 13.6V21M3 12h2.2m13.6 0H21m-2.6-6.4-1.6 1.6M7.2 16.8l-1.6 1.6m0-12.8 1.6 1.6m9.6 9.6 1.6 1.6"
+                  />
+                </svg>
+              </button>
             }
           </div>
         </header>
@@ -101,9 +132,22 @@ export interface ResourceSheetNotice {
                 @for (item of section.items; track item.label) {
                   <li>
                     <div class="sheet-item-line">
-                      <strong>{{ item.label }}</strong>
-                      @for (badge of item.badges ?? []; track badge.label) {
-                        <app-status-badge [label]="badge.label" [tone]="badge.tone ?? 'neutral'" />
+                      <div class="sheet-item-main">
+                        <strong>{{ item.label }}</strong>
+                        @for (badge of item.badges ?? []; track badge.label) {
+                          <app-status-badge [label]="badge.label" [tone]="badge.tone ?? 'neutral'" />
+                        }
+                      </div>
+                      @if (item.action; as action) {
+                        <button
+                          matButton="outlined"
+                          type="button"
+                          class="sheet-item-action-btn"
+                          [disabled]="action.disabled"
+                          (click)="actionSelected.emit(action.id)"
+                        >
+                          {{ action.label }}
+                        </button>
                       }
                     </div>
                     @if (item.detail) {
@@ -167,6 +211,7 @@ export class ResourceSheetComponent {
   readonly ariaLabel = input.required<string>();
   readonly title = input.required<string>();
   readonly subtitle = input<string>('');
+  readonly headAction = input<ResourceSheetHeadAction | null>(null);
   readonly notices = input<readonly ResourceSheetNotice[]>([]);
   readonly sections = input.required<readonly ResourceSheetSection[]>();
   readonly actionSelected = output<string>();

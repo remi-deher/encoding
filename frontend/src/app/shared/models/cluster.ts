@@ -53,6 +53,7 @@ export interface NodeGroupCriteria {
   readonly requiredToolIds?: readonly string[] | null;
   readonly minimumConcurrentTasks?: number | null;
   readonly minimumProcessorCount?: number | null;
+  readonly requiredEncoders?: readonly string[] | null;
 }
 export interface NodeGroupResponse {
   readonly id: string;

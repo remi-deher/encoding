@@ -21,7 +21,7 @@ import {
   LocalNodePairing,
   LocalNodeStatus,
 } from '../models/local-node';
-import { NodeModeStatus } from '../models/node-mode';
+import { NodeMode, NodeModeStatus } from '../models/node-mode';
 import { ConfirmationDialogComponent } from '../ui/confirmation-dialog.component';
 import { ClusterApi } from './cluster-api';
 import { NodeModeController } from './node-mode-controller';
@@ -144,6 +144,14 @@ export class LocalNodeController {
               expiresAt: agent.status.pairingExpiresAt ?? '',
               verificationCode: agent.status.verificationCode,
             });
+          } else if (
+            agent.status?.verificationCode &&
+            this.pairing() &&
+            !this.pairing()?.verificationCode
+          ) {
+            this.pairing.update((p) =>
+              p ? { ...p, verificationCode: agent.status.verificationCode } : p,
+            );
           }
         }
         this.loading.set(false);
@@ -175,6 +183,33 @@ export class LocalNodeController {
   async changeMode(): Promise<void> {
     if (this.isAdmin() && !this.busy() && (await this.nodeMode.change('/api/v1/node/mode')))
       this.refresh();
+  }
+
+  async toggleRole(role: 'server' | 'worker'): Promise<void> {
+    if (!this.isAdmin() || this.busy()) return;
+    let status: NodeModeStatus;
+    try {
+      status = await firstValueFrom(this.http.get<NodeModeStatus>('/api/v1/node/mode'));
+    } catch {
+      this.notifications.show('Impossible de lire le mode de ce nœud.');
+      return;
+    }
+    const target: NodeMode = {
+      server: role === 'server' ? !status.server : status.server,
+      worker: role === 'worker' ? !status.worker : status.worker,
+    };
+    if (!target.server && !target.worker) {
+      this.notifications.show(
+        'Gardez au moins une fonction : sans serveur ni worker, le nœud ne ferait plus partie du cluster.',
+      );
+      return;
+    }
+    if (status.server && !target.server && !(await this.nodeMode.confirmServerStop())) {
+      return;
+    }
+    if (await this.nodeMode.apply('/api/v1/node/mode', target)) {
+      this.refresh();
+    }
   }
 
   async create(values: Record<string, string>): Promise<void> {
@@ -344,7 +379,14 @@ export class LocalNodeController {
       if (!this.target())
         this.target.set(
           this.clusters().find((cluster) => cluster.id.toLowerCase() === targetId!.toLowerCase()) ??
-            null,
+            (next.clusterId
+              ? {
+                  id: next.clusterId,
+                  name: next.clusterName ?? 'le cluster d’accueil',
+                  apiBaseUrl: '',
+                  discoveredAt: '',
+                }
+              : null),
         );
     }
     if (!targetId) return;
@@ -355,11 +397,9 @@ export class LocalNodeController {
       this.observedPending = false;
       this.joinIndex.set(3);
       this.notifications.show(`Ce nœud a rejoint ${next.clusterName ?? this.targetName()}.`);
-    } else if (sameTarget && (!next.isEnrolled || next.switching)) this.observedPending = true;
-    else if (
-      this.observedPending ||
-      (next.switchFailure && next.switchFailure !== this.status()?.switchFailure)
-    ) {
+    } else if (sameTarget && (!next.isEnrolled || next.switching)) {
+      this.observedPending = true;
+    } else if (this.observedPending) {
       this.submittedTargetId.set(null);
       this.pairing.set(null);
       this.observedPending = false;

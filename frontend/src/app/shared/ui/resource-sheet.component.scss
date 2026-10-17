@@ -46,6 +46,18 @@
   background: var(--surface-container);
 }
 
+.sheet-head-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.sheet-head-titles {
+  min-width: 0;
+  flex: 1;
+}
+
 .sheet-head h2 {
   margin: 0;
   font-size: var(--font-display-sm);
@@ -57,6 +69,42 @@
 .sheet-head p {
   margin: var(--space-1) 0 0;
   color: var(--text-secondary);
+}
+
+.sheet-head-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--surface-container-high);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--motion-spring-fast);
+  flex-shrink: 0;
+
+  &:hover {
+    background: var(--surface-container-highest);
+    color: var(--text-primary);
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+.sheet-head-action-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .sheet-section {
@@ -102,7 +150,7 @@
 
 .sheet-items {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--space-4) var(--space-6);
   margin: 0;
   padding: 0;
@@ -119,7 +167,21 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
+}
+
+.sheet-item-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sheet-item-action-btn {
+  font-size: var(--font-label);
+  line-height: 1;
+  padding: var(--space-1) var(--space-3);
 }
 
 .sheet-metrics {

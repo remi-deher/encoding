@@ -34,32 +34,12 @@
     clusterIdentity() !== null
   "
   filterLabel="Membres du cluster actuel"
-  [note]="
-    pageTab() === 'groups'
-      ? 'Les critères des groupes automatiques sont réévalués à la lecture et à l’attribution. Les étiquettes des nœuds remplacent les étiquettes de groupe portant la même clé.'
-      : 'Les fonctions, le matériel et l’accélérateur correspondent au dernier état observé. Une perte de connexion ne confirme pas un changement de cluster.'
-  "
+  [showPageHeader]="pageTab() !== 'node'"
 >
   <ng-template #pageActions>
     @if (pageTab() === 'groups') {
       @if (isAdmin()) {
         <button matButton="filled" type="button" (click)="createGroup()">Créer un groupe</button>
-      }
-    } @else if (pageTab() === 'node') {
-      @if (isAdmin()) {
-        <button
-          matButton="outlined"
-          type="button"
-          [disabled]="local.busy()"
-          (click)="local.changeMode()"
-        >
-          Modifier les fonctions
-        </button>
-      }
-      @if (localNode(); as node) {
-        <button matButton="text" type="button" (click)="openNodeCard(node.id)">
-          Consulter les réglages
-        </button>
       }
     } @else if (!local.standalone() && clusterIdentity()) {
       @if (isAdmin()) {
@@ -233,9 +213,10 @@
         ariaLabel="Fiche du nœud local"
         [title]="localSheet().title"
         [subtitle]="localSheet().subtitle"
+        [headAction]="localSheet().headAction ?? null"
         [notices]="localSheet().notices"
         [sections]="localSheet().sections"
-        (actionSelected)="localNode() && openNodeCard(localNode()!.id)"
+        (actionSelected)="onLocalSheetAction($event)"
       />
     } @else if (local.standalone()) {
       <app-detail-card-grid

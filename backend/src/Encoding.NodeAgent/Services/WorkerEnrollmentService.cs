@@ -275,7 +275,9 @@ public sealed class WorkerEnrollmentService(
         if (identity.IsEnrolled)
             throw new InvalidOperationException("Ce worker est déjà rattaché à un cluster. Quittez-le d’abord, ou demandez à changer de cluster.");
 
-        var effectiveDisplayName = string.IsNullOrWhiteSpace(displayName) ? options.DisplayName : displayName.Trim();
+        var effectiveDisplayName = !string.IsNullOrWhiteSpace(displayName)
+            ? displayName.Trim()
+            : (identity.DisplayName ?? options.DisplayName);
         var pending = await identityStore.SavePairingAsync(cluster.Id.ToString("D"), cluster.Name, cluster.ApiBaseUrl, cancellationToken, effectiveDisplayName);
         var capabilities = await capabilityProbe.DiscoverAsync(cancellationToken);
         var peerIdentity = await GetLocalPeerIdentityAsync(cancellationToken);
@@ -321,10 +323,11 @@ public sealed class WorkerEnrollmentService(
 
         await identityStore.MarkPairingPublishedAsync(cancellationToken);
         logger.LogInformation("Une clé de jumelage a été créée pour le worker {NodeId} vers le cluster {ClusterId}.", pending.Id, cluster.Id);
-        return new WorkerPairingResponse(pending.PairingKey!, pending.PairingExpiresAt!.Value);
+        var verificationCode = NodeVerificationCode.FromToken(pending.Id, pending.NodeToken!, peerIdentity?.PublicKey);
+        return new WorkerPairingResponse(pending.PairingKey!, pending.PairingExpiresAt!.Value, verificationCode);
     }
 
     private static NodeInventory CreateInventory() => HardwareInventory.Current();
 }
 
-public sealed record WorkerPairingResponse(string PairingKey, DateTimeOffset ExpiresAt);
+public sealed record WorkerPairingResponse(string PairingKey, DateTimeOffset ExpiresAt, string? VerificationCode = null);

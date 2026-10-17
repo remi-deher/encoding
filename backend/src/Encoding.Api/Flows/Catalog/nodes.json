@@ -105,6 +105,13 @@
             "label": "Accélération requise",
             "description": "Facultatif. Valeur déclarée par l’outil sur le worker, par exemple nvenc ou vaapi.",
             "placeholder": "nvenc"
+          },
+          {
+            "id": "requiredEncoder",
+            "type": "text",
+            "label": "Encodeur ou codec requis",
+            "description": "Facultatif. Exige un codec (ex. av1, hevc, h264) ou un encodeur précis (ex. libsvtav1, hevc_nvenc) disponible sur le worker.",
+            "placeholder": "av1"
           }
         ]
       },

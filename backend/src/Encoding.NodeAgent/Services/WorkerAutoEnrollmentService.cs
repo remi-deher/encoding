@@ -29,6 +29,11 @@ public sealed class WorkerAutoEnrollmentService(
                 var identity = await identityStore.GetAsync(stoppingToken);
                 var hasActivePairing = identity.PairingExpiresAt > DateTimeOffset.UtcNow
                     && !string.IsNullOrWhiteSpace(identity.PairingKey);
+                if (identity.IsSwitching || hasActivePairing)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                    continue;
+                }
                 var clusters = discovery.List();
                 var local = clusters.FirstOrDefault(enrollment.IsLocalCluster);
                 // Un nœud qui a déjà choisi un autre cluster (jumelage en cours ou enrôlé) n'est pas ramené au serveur local.
@@ -38,7 +43,7 @@ public sealed class WorkerAutoEnrollmentService(
                     await enrollment.EnrollAsync(local.Id, stoppingToken);
                     logger.LogInformation("Le nœud local a rejoint le cluster {ClusterId}.", local.Id);
                 }
-                else if (options.AutomaticEnrollmentEnabled && !identity.IsEnrolled && !hasActivePairing && clusters.Count == 1)
+                else if (options.AutomaticEnrollmentEnabled && !identity.IsEnrolled && clusters.Count == 1)
                 {
                     await enrollment.EnrollAsync(clusters[0].Id, stoppingToken);
                     logger.LogInformation("L’enrôlement automatique auprès du cluster {ClusterId} est terminé.", clusters[0].Id);

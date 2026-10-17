@@ -2,6 +2,8 @@ import { DetailCard } from '../ui/detail-card-grid.component';
 import { formatMemory } from './node-hardware';
 import {
   ResourceSheetBadge,
+  ResourceSheetHeadAction,
+  ResourceSheetItem,
   ResourceSheetMetric,
   ResourceSheetNotice,
   ResourceSheetSection,
@@ -73,6 +75,7 @@ export interface LocalNodeSheetInput {
   /** Tâches actives observées ; `null` tant que la source n'a pas répondu. */
   readonly activeTasks: number | null;
   readonly now?: number;
+  readonly isAdmin?: boolean;
 }
 
 /**
@@ -82,6 +85,7 @@ export interface LocalNodeSheetInput {
 export function localNodeSheet(input: LocalNodeSheetInput): {
   readonly title: string;
   readonly subtitle: string;
+  readonly headAction?: ResourceSheetHeadAction | null;
   readonly notices: readonly ResourceSheetNotice[];
   readonly sections: readonly ResourceSheetSection[];
 } {
@@ -171,8 +175,28 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
       title: 'État et activité',
       caption: agentUnavailable ? 'Agent injoignable' : 'Agent joignable',
       items: [
-        { label: 'Serveur', badges: roleBadges('server') },
-        { label: 'Worker', badges: roleBadges('worker') },
+        {
+          label: 'Serveur',
+          badges: roleBadges('server'),
+          action: input.isAdmin
+            ? {
+                id: 'toggle-server',
+                label: roles?.server ? 'Désactiver' : 'Activer',
+                disabled: agentUnavailable,
+              }
+            : undefined,
+        },
+        {
+          label: 'Worker',
+          badges: roleBadges('worker'),
+          action: input.isAdmin
+            ? {
+                id: 'toggle-worker',
+                label: roles?.worker ? 'Désactiver' : 'Activer',
+                disabled: agentUnavailable,
+              }
+            : undefined,
+        },
       ],
       metrics: [
         processing,
@@ -236,20 +260,93 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
           : 'Aucun outil déclaré.',
       items: workerOff
         ? []
-        : tools.map((tool) => {
-            const usable =
-              tool.encoderChecks?.filter((check) => check.status === 'usable').length ?? 0;
-            const detected =
-              tool.encoderChecks?.filter((check) => check.status === 'detected').length ?? 0;
-            const badges: ResourceSheetBadge[] = [];
-            if (usable) badges.push({ label: `${usable} encodeur(s) vérifié(s)`, tone: 'success' });
-            if (detected)
-              badges.push({ label: `${detected} détecté(s), non vérifié(s)`, tone: 'neutral' });
-            for (const acceleration of tool.accelerationTypes)
-              badges.push({ label: acceleration.toUpperCase(), tone: 'accent' });
-            return { label: `${tool.toolId} ${tool.version}`, badges };
-          }),
-      action: workerOff || !node ? undefined : { id: 'capabilities', label: 'Fiche des capacités' },
+        : (() => {
+            const items: ResourceSheetItem[] = [];
+            const ffmpeg = tools.find((t) => t.toolId.toLowerCase() === 'ffmpeg');
+            const usableChecks = new Set(
+              ffmpeg?.encoderChecks
+                ?.filter((c) => c.status === 'usable')
+                .map((c) => c.encoderId.toLowerCase()) ?? [],
+            );
+            const detectedChecks = new Set(
+              ffmpeg?.encoderChecks
+                ?.filter((c) => c.status === 'detected')
+                .map((c) => c.encoderId.toLowerCase()) ?? [],
+            );
+            const rawEncoders = new Set((ffmpeg?.encoders ?? []).map((e) => e.toLowerCase()));
+            const hardwareAccels = (ffmpeg?.accelerationTypes ?? []).map((a) => a.toUpperCase());
+
+            // 1. Moteur d'accélération
+            const motorBadges: ResourceSheetBadge[] = [];
+            if (hardwareAccels.length > 0) {
+              motorBadges.push({ label: hardwareAccels.join(' · '), tone: 'success' });
+              if (gpus.length > 0 && gpus[0].name) {
+                motorBadges.push({ label: gpus[0].name, tone: 'neutral' });
+              }
+            } else {
+              motorBadges.push({ label: 'Encodage logiciel CPU', tone: 'neutral' });
+            }
+            items.push({
+              label: 'Moteur d’accélération',
+              badges: motorBadges,
+              detail:
+                hardwareAccels.length > 0
+                  ? 'Accélération matérielle active pour les encodages compatibles'
+                  : 'Traitements assurés par le processeur principal',
+            });
+
+            // 2. Codecs vidéo clés pris en charge
+            const codecBadges: ResourceSheetBadge[] = [];
+            // AV1
+            const av1Hw = ['av1_nvenc', 'av1_qsv', 'av1_vaapi'].some((id) => usableChecks.has(id));
+            const av1Sw = ['libsvtav1', 'libaom-av1'].some(
+              (id) => usableChecks.has(id) || rawEncoders.has(id),
+            );
+            if (av1Hw) codecBadges.push({ label: 'AV1 (Matériel)', tone: 'success' });
+            else if (av1Sw) codecBadges.push({ label: 'AV1 (CPU)', tone: 'neutral' });
+            else if (['av1_nvenc', 'av1_qsv', 'av1_vaapi', 'libsvtav1'].some((id) => detectedChecks.has(id)))
+              codecBadges.push({ label: 'AV1 (Détecté)', tone: 'warning' });
+
+            // HEVC / H.265
+            const hevcHw = ['hevc_nvenc', 'hevc_qsv', 'hevc_vaapi'].some((id) => usableChecks.has(id));
+            const hevcSw = usableChecks.has('libx265') || rawEncoders.has('libx265');
+            if (hevcHw) codecBadges.push({ label: 'HEVC / H.265 (Matériel)', tone: 'success' });
+            else if (hevcSw) codecBadges.push({ label: 'HEVC / H.265 (CPU)', tone: 'neutral' });
+            else if (['hevc_nvenc', 'hevc_qsv', 'hevc_vaapi', 'libx265'].some((id) => detectedChecks.has(id)))
+              codecBadges.push({ label: 'HEVC (Détecté)', tone: 'warning' });
+
+            // H.264
+            const h264Hw = ['h264_nvenc', 'h264_qsv', 'h264_vaapi'].some((id) => usableChecks.has(id));
+            const h264Sw = usableChecks.has('libx264') || rawEncoders.has('libx264');
+            if (h264Hw) codecBadges.push({ label: 'H.264 (Matériel)', tone: 'success' });
+            else if (h264Sw) codecBadges.push({ label: 'H.264 (CPU)', tone: 'neutral' });
+
+            if (codecBadges.length > 0) {
+              items.push({
+                label: 'Codecs vidéo pris en charge',
+                badges: codecBadges,
+              });
+            }
+
+            // 3. Outils déclarés
+            const toolBadges: ResourceSheetBadge[] = tools.map((t) => ({
+              label:
+                t.toolId.toLowerCase() === 'mkvtoolnix'
+                  ? 'MKVToolNix'
+                  : t.toolId.toLowerCase() === 'ffmpeg'
+                    ? 'FFmpeg'
+                    : t.toolId,
+              tone: 'success' as const,
+            }));
+            items.push({
+              label: 'Outils de traitement',
+              badges: toolBadges,
+              detail: `${tools.length} outil(s) déclaré(s) et opérationnel(s)`,
+            });
+
+            return items;
+          })(),
+      action: workerOff || !node ? undefined : { id: 'capabilities', label: 'Détails techniques' },
     },
     {
       id: 'identity',
@@ -271,6 +368,7 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
     subtitle: standalone
       ? 'Nœud autonome'
       : `Membre de ${input.clusterName ?? status?.clusterName ?? 'son cluster'}`,
+    headAction: node ? { id: 'settings', label: 'Consulter les réglages' } : null,
     notices,
     sections,
   };
