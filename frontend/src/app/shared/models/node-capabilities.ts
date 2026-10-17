@@ -31,6 +31,17 @@ export function nodeCapabilityFields(
         ),
       ].length,
     },
+    {
+      label: 'Encodeurs non validés',
+      value: [
+        ...new Set(
+          tools
+            .flatMap((tool) => tool.encoderChecks ?? [])
+            .filter((check) => check.status === 'detected')
+            .map((check) => check.encoderId),
+        ),
+      ].length,
+    },
   ];
 }
 
@@ -64,7 +75,7 @@ export function nodeCapabilityCards(
     }
     if (encoders.length) {
       sections.push({
-        title: 'Encodeurs vidéo détectés',
+        title: 'Encodeurs vidéo FFmpeg',
         items: encoders.map((name) => {
           const check = checks.get(name);
           return {
@@ -73,8 +84,8 @@ export function nodeCapabilityCards(
               check?.status === 'usable'
                 ? 'Utilisable · test réussi'
                 : check?.status === 'detected'
-                  ? 'Test non concluant'
-                  : 'Détecté · non vérifié',
+                  ? 'Encodeur FFmpeg présent, non validé'
+                  : 'Déclaré · non vérifié',
             tone: check?.status === 'usable' ? 'success' : check ? 'warning' : 'neutral',
           };
         }),
@@ -100,7 +111,7 @@ export function nodeCapabilityCards(
     if (usableCount)
       tags.push({ label: `${usableCount} encodeur(s) utilisable(s)`, tone: 'success' });
     if (detectedCount)
-      tags.push({ label: `${detectedCount} test(s) non concluant(s)`, tone: 'warning' });
+      tags.push({ label: `${detectedCount} non validé(s)`, tone: 'warning' });
     if (!tags.length)
       tags.push({ label: isPlugin ? 'Plugin déclaré' : 'Outil détecté', tone: 'neutral' });
 

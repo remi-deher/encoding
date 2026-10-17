@@ -14,7 +14,7 @@ Les outils et versions restent consultables dans la fiche du nœud (onglet Capac
 ## Règles d’affichage
 
 - Première pastille : le premier encodeur **vérifié par mire** (`encoderChecks` à `usable`, ou `accelerationTypes`), dans l’ordre NVENC, Quick Sync, VAAPI, soit la priorité par défaut des profils (0027).
-- Pastilles suivantes : autres accélérateurs vérifiés, puis ceux seulement **détectés** (« … détecté »), jamais utilisés en mode automatique.
+- Pastilles suivantes : autres accélérateurs vérifiés. Les encodeurs dont la mire échoue ne sont jamais présentés comme des accélérateurs utilisables (« … détecté » supprimé des pastilles d’accélérateurs) ; ils sont indiqués séparément (« encodeur FFmpeg présent, non validé »).
 - Aucun accélérateur matériel vérifié : « CPU ».
 - Sans fonction worker : « Non applicable ». Sans capacité déclarée : « Non déclaré ». Aucun CPU n’est supposé sans information.
 - Aucune charge CPU/GPU n’est affichée : l’API n’en fournit pas.

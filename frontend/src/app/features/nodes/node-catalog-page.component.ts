@@ -7,6 +7,8 @@ import {
   nodeHardwareLabel,
   nodeMemberSections,
   nodeOsFamily,
+  nodeUnvalidatedAccelerators,
+  nodeUnvalidatedAcceleratorBadges,
   OperatingSystemFamily,
   tidyProcessorName,
 } from '../../shared/models/node-hardware';
@@ -657,7 +659,21 @@ export class NodeCatalogPageComponent {
               {
                 label: 'Accélérateurs',
                 value: nodeAcceleratorBadges(node).join(' · '),
+                detail:
+                  nodeAcceleratorBadges(node)[0] === 'CPU'
+                    ? 'Aucun accélérateur matériel vérifié : encodage sur CPU.'
+                    : undefined,
               },
+              ...(nodeUnvalidatedAccelerators(node).length
+                ? [
+                    {
+                      label: 'Encodeurs non validés',
+                      value: nodeUnvalidatedAcceleratorBadges(node).join(' · '),
+                      detail:
+                        'Présents dans la compilation FFmpeg mais la mire a échoué (aucun matériel compatible détecté).',
+                    },
+                  ]
+                : []),
             ]
           : [
               {

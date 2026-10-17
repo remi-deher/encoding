@@ -6,6 +6,8 @@ import {
   nodeHardwareLabel,
   nodeMemberSections,
   nodeOsFamily,
+  nodeUnvalidatedAccelerators,
+  nodeUnvalidatedAcceleratorBadges,
 } from './node-hardware';
 
 function node(extra: Partial<NodeResponse> = {}): NodeResponse {
@@ -37,36 +39,62 @@ describe('nodeAcceleratorBadges', () => {
     expect(nodeAcceleratorBadges(node())).toEqual(['Non déclaré']);
   });
 
-  it('puts the preferred verified accelerator first and marks detected-only ones', () => {
-    const badges = nodeAcceleratorBadges(
-      node({
-        capabilities: [
-          ffmpeg(
-            [
-              ['h264_vaapi', 'usable'],
-              ['h264_qsv', 'usable'],
-              ['hevc_nvenc', 'detected'],
-            ],
-            ['qsv', 'vaapi'],
-          ),
-        ],
-      }),
-    );
-    expect(badges).toEqual(['Quick Sync', 'VAAPI', 'NVENC détecté']);
+  it('puts the preferred verified accelerator first and ignores detected-only ones', () => {
+    const nodeObj = node({
+      capabilities: [
+        ffmpeg(
+          [
+            ['h264_vaapi', 'usable'],
+            ['h264_qsv', 'usable'],
+            ['hevc_nvenc', 'detected'],
+          ],
+          ['qsv', 'vaapi'],
+        ),
+      ],
+    });
+    const badges = nodeAcceleratorBadges(nodeObj);
+    expect(badges).toEqual(['Quick Sync', 'VAAPI']);
+    expect(nodeUnvalidatedAccelerators(nodeObj)).toEqual(['NVENC']);
+    expect(nodeUnvalidatedAcceleratorBadges(nodeObj)).toEqual([
+      'NVENC (encodeur FFmpeg présent, non validé)',
+    ]);
   });
 
   it('falls back to CPU when no hardware encoder is verified', () => {
-    const badges = nodeAcceleratorBadges(
-      node({
-        capabilities: [
-          ffmpeg([
-            ['h264_qsv', 'detected'],
-            ['libx264', 'usable'],
-          ]),
-        ],
-      }),
-    );
-    expect(badges).toEqual(['CPU', 'Quick Sync détecté']);
+    const nodeObj = node({
+      capabilities: [
+        ffmpeg([
+          ['h264_qsv', 'detected'],
+          ['libx264', 'usable'],
+        ]),
+      ],
+    });
+    const badges = nodeAcceleratorBadges(nodeObj);
+    expect(badges).toEqual(['CPU']);
+    expect(nodeUnvalidatedAccelerators(nodeObj)).toEqual(['Quick Sync']);
+    expect(nodeUnvalidatedAcceleratorBadges(nodeObj)).toEqual([
+      'Quick Sync (encodeur FFmpeg présent, non validé)',
+    ]);
+  });
+
+  it('displays only CPU for instance with failed hardware mire despite NVENC, QSV and VAAPI in FFmpeg', () => {
+    const fireproNode = node({
+      capabilities: [
+        ffmpeg([
+          ['libx264', 'usable'],
+          ['h264_nvenc', 'detected'],
+          ['h264_qsv', 'detected'],
+          ['h264_vaapi', 'detected'],
+        ]),
+      ],
+    });
+    expect(nodeAcceleratorBadges(fireproNode)).toEqual(['CPU']);
+    expect(nodeUnvalidatedAccelerators(fireproNode)).toEqual(['NVENC', 'Quick Sync', 'VAAPI']);
+    expect(nodeUnvalidatedAcceleratorBadges(fireproNode)).toEqual([
+      'NVENC (encodeur FFmpeg présent, non validé)',
+      'Quick Sync (encodeur FFmpeg présent, non validé)',
+      'VAAPI (encodeur FFmpeg présent, non validé)',
+    ]);
   });
 });
 

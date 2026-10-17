@@ -25,12 +25,37 @@ function accelerationOf(encoderId: string): string | null {
 }
 
 /**
- * Accélérateurs d'un nœud : le premier encodeur vérifié par mire, puis les autres vérifiés,
- * puis ceux seulement détectés (jamais utilisés en mode automatique). CPU quand rien n'est vérifié.
+ * Accélérateurs d'un nœud : le premier encodeur vérifié par mire, puis les autres vérifiés.
+ * Repli sur CPU quand aucun encodeur matériel n'est vérifié.
+ * Les encodeurs seulement présents dans la compilation FFmpeg (mire échouée) ne sont
+ * jamais présentés comme des accélérateurs utilisables.
  */
-export function nodeAcceleratorBadges(node: NodeResponse): string[] {
+export function nodeAcceleratorBadges(
+  node: Pick<NodeResponse, 'roles' | 'capabilities'>,
+): string[] {
   if (!node.roles.includes('worker')) return ['Non applicable'];
   if (!node.capabilities.length) return ['Non déclaré'];
+  const usable = new Set<string>();
+  for (const tool of node.capabilities) {
+    for (const check of tool.encoderChecks ?? []) {
+      const acceleration = accelerationOf(check.encoderId);
+      if (acceleration && check.status === 'usable') usable.add(acceleration);
+    }
+    for (const acceleration of tool.accelerationTypes) {
+      if (ACCELERATION_LABELS[acceleration] && acceleration !== 'cpu') usable.add(acceleration);
+    }
+  }
+  const verified = ACCELERATION_ORDER.filter((item) => usable.has(item));
+  return verified.length ? verified.map((item) => ACCELERATION_LABELS[item]) : ['CPU'];
+}
+
+/**
+ * Familles d'accélérateurs présentes dans FFmpeg mais dont la mire a échoué sur ce matériel.
+ */
+export function nodeUnvalidatedAccelerators(
+  node: Pick<NodeResponse, 'roles' | 'capabilities'>,
+): string[] {
+  if (!node.roles.includes('worker') || !node.capabilities.length) return [];
   const usable = new Set<string>();
   const detected = new Set<string>();
   for (const tool of node.capabilities) {
@@ -42,12 +67,20 @@ export function nodeAcceleratorBadges(node: NodeResponse): string[] {
       if (ACCELERATION_LABELS[acceleration] && acceleration !== 'cpu') usable.add(acceleration);
     }
   }
-  const verified = ACCELERATION_ORDER.filter((item) => usable.has(item));
   const pending = ACCELERATION_ORDER.filter((item) => !usable.has(item) && detected.has(item));
-  return [
-    ...(verified.length ? verified.map((item) => ACCELERATION_LABELS[item]) : ['CPU']),
-    ...pending.map((item) => `${ACCELERATION_LABELS[item]} détecté`),
-  ];
+  return pending.map((item) => ACCELERATION_LABELS[item]);
+}
+
+/**
+ * Libellés explicites pour les accélérateurs non validés.
+ * Exemple : « NVENC (encodeur FFmpeg présent, non validé) ».
+ */
+export function nodeUnvalidatedAcceleratorBadges(
+  node: Pick<NodeResponse, 'roles' | 'capabilities'>,
+): string[] {
+  return nodeUnvalidatedAccelerators(node).map(
+    (item) => `${item} (encodeur FFmpeg présent, non validé)`,
+  );
 }
 
 export type OperatingSystemFamily = 'linux' | 'windows' | 'macos' | 'unknown';
@@ -100,7 +133,7 @@ export function nodeAcceleratorChips(node: NodeResponse): ResourceCardChip[] {
       Object.keys(ACCELERATION_LABELS).find((key) => ACCELERATION_LABELS[key] === item) ?? ''
     ] ?? 'neutral';
   return nodeAcceleratorBadges(node)
-    .filter((item) => !item.endsWith(' détecté') && item !== 'CPU')
+    .filter((item) => item !== 'CPU')
     .map((item) => ({ label: item, tone: toneOf(item) }));
 }
 
@@ -119,9 +152,7 @@ function acceleratorSection(node: NodeResponse): ResourceCardSection {
     return { label, hint: 'Non applicable : la fonction worker n’est pas activée.' };
   if (!node.capabilities.length)
     return { label, hint: 'Non déclaré : cet agent n’a pas encore remonté ses capacités.' };
-  const [primary, ...others] = nodeAcceleratorBadges(node).filter(
-    (item) => !item.endsWith(' détecté'),
-  );
+  const [primary, ...others] = nodeAcceleratorBadges(node);
   const toneOf = (item: string): ResourceCardTone =>
     ACCELERATION_TONES[
       Object.keys(ACCELERATION_LABELS).find((key) => ACCELERATION_LABELS[key] === item) ?? ''

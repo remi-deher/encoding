@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadModel } from './model-loader.mjs';
-const { nodeAcceleratorBadges, nodeHardwareLabel } = await loadModel('node-hardware');
+const {
+  nodeAcceleratorBadges,
+  nodeHardwareLabel,
+  nodeUnvalidatedAccelerators,
+  nodeUnvalidatedAcceleratorBadges,
+} = await loadModel('node-hardware');
 
 const node = (extra = {}) => ({ roles: ['worker'], capabilities: [], ...extra });
 const ffmpeg = (checks, accelerationTypes = []) => ({
@@ -20,36 +25,62 @@ test('aucune capacité déclarée : pas de CPU inventé', () => {
   assert.deepEqual(nodeAcceleratorBadges(node()), ['Non déclaré']);
 });
 
-test('l’accélérateur vérifié le plus prioritaire passe en premier, les détectés sont signalés', () => {
-  const badges = nodeAcceleratorBadges(
-    node({
-      capabilities: [
-        ffmpeg(
-          [
-            ['h264_vaapi', 'usable'],
-            ['h264_qsv', 'usable'],
-            ['hevc_nvenc', 'detected'],
-          ],
-          ['qsv', 'vaapi'],
-        ),
-      ],
-    }),
-  );
-  assert.deepEqual(badges, ['Quick Sync', 'VAAPI', 'NVENC détecté']);
+test('l’accélérateur vérifié le plus prioritaire passe en premier, les détectés ne sont pas annoncés', () => {
+  const nodeObj = node({
+    capabilities: [
+      ffmpeg(
+        [
+          ['h264_vaapi', 'usable'],
+          ['h264_qsv', 'usable'],
+          ['hevc_nvenc', 'detected'],
+        ],
+        ['qsv', 'vaapi'],
+      ),
+    ],
+  });
+  const badges = nodeAcceleratorBadges(nodeObj);
+  assert.deepEqual(badges, ['Quick Sync', 'VAAPI']);
+  assert.deepEqual(nodeUnvalidatedAccelerators(nodeObj), ['NVENC']);
+  assert.deepEqual(nodeUnvalidatedAcceleratorBadges(nodeObj), [
+    'NVENC (encodeur FFmpeg présent, non validé)',
+  ]);
 });
 
-test('repli CPU quand aucun encodeur matériel n’est vérifié', () => {
-  const badges = nodeAcceleratorBadges(
-    node({
-      capabilities: [
-        ffmpeg([
-          ['h264_qsv', 'detected'],
-          ['libx264', 'usable'],
-        ]),
-      ],
-    }),
-  );
-  assert.deepEqual(badges, ['CPU', 'Quick Sync détecté']);
+test('repli CPU quand aucun encodeur matériel n’est vérifié, encodeurs non validés indiqués séparément', () => {
+  const nodeObj = node({
+    capabilities: [
+      ffmpeg([
+        ['h264_qsv', 'detected'],
+        ['libx264', 'usable'],
+      ]),
+    ],
+  });
+  const badges = nodeAcceleratorBadges(nodeObj);
+  assert.deepEqual(badges, ['CPU']);
+  assert.deepEqual(nodeUnvalidatedAccelerators(nodeObj), ['Quick Sync']);
+  assert.deepEqual(nodeUnvalidatedAcceleratorBadges(nodeObj), [
+    'Quick Sync (encodeur FFmpeg présent, non validé)',
+  ]);
+});
+
+test('fiche AMD FirePro V4900 : seul CPU est annoncé, NVENC/QSV/VAAPI détectés dans FFmpeg sont séparés', () => {
+  const fireproNode = node({
+    capabilities: [
+      ffmpeg([
+        ['libx264', 'usable'],
+        ['h264_nvenc', 'detected'],
+        ['h264_qsv', 'detected'],
+        ['h264_vaapi', 'detected'],
+      ]),
+    ],
+  });
+  assert.deepEqual(nodeAcceleratorBadges(fireproNode), ['CPU']);
+  assert.deepEqual(nodeUnvalidatedAccelerators(fireproNode), ['NVENC', 'Quick Sync', 'VAAPI']);
+  assert.deepEqual(nodeUnvalidatedAcceleratorBadges(fireproNode), [
+    'NVENC (encodeur FFmpeg présent, non validé)',
+    'Quick Sync (encodeur FFmpeg présent, non validé)',
+    'VAAPI (encodeur FFmpeg présent, non validé)',
+  ]);
 });
 
 test('matériel : inventaire absent puis complet', () => {
