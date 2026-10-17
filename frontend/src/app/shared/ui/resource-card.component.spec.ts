@@ -12,10 +12,19 @@ describe('ResourceCardComponent', () => {
   }
 
   it('shows title, status and badges', () => {
-    const { element } = render({ statusTone: 'success', badges: ['Serveur', 'Worker'] });
+    const { element } = render({
+      statusTone: 'success',
+      badges: ['Serveur', 'Worker'],
+      acceleratorBadges: [{ label: 'NVENC', tone: 'lime' }],
+      osFamily: 'linux',
+      osLabel: 'Ubuntu 24.04',
+    });
     expect(element.querySelector('.resource-card-title')!.textContent).toContain('encoding-51');
     expect(element.textContent).toContain('En ligne');
-    expect(element.querySelectorAll('.resource-card-badge').length).toBe(2);
+    expect(element.querySelectorAll('.resource-card-badge').length).toBe(3);
+    expect(element.querySelector('.resource-card-badge_accelerator')!.textContent).toContain('NVENC');
+    expect(element.querySelector('.resource-card-os-icon')).toBeTruthy();
+    expect(element.querySelector('.resource-card-os-icon')!.getAttribute('data-os')).toBe('linux');
   });
 
   it('shows at most three tags, highlighted ones first, and counts the rest', () => {

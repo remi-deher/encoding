@@ -1,5 +1,12 @@
 import { NodeResponse } from './cluster';
-import { nodeAcceleratorBadges, nodeHardwareLabel } from './node-hardware';
+import {
+  detectOsFamily,
+  nodeAcceleratorBadges,
+  nodeAcceleratorChips,
+  nodeHardwareLabel,
+  nodeMemberSections,
+  nodeOsFamily,
+} from './node-hardware';
 
 function node(extra: Partial<NodeResponse> = {}): NodeResponse {
   return {
@@ -84,5 +91,67 @@ describe('nodeHardwareLabel', () => {
     expect(label).toBe(
       'Linux x64 · Intel Core i5-9500T · 6 cœurs · 32 Go de RAM · GPU : Intel UHD Graphics 630',
     );
+  });
+});
+
+describe('detectOsFamily and nodeOsFamily', () => {
+  it('detects linux family correctly', () => {
+    expect(detectOsFamily('Ubuntu 24.04 LTS')).toBe('linux');
+    expect(detectOsFamily('Debian GNU/Linux 12')).toBe('linux');
+    expect(detectOsFamily('Linux 6.8.0-generic')).toBe('linux');
+    expect(nodeOsFamily(node({ inventory: { operatingSystem: 'Ubuntu 24.04.5 LTS', architecture: 'x64', processorCount: 8, memoryMb: 16384 } }))).toBe('linux');
+  });
+
+  it('detects windows and macos families', () => {
+    expect(detectOsFamily('Microsoft Windows 11 Pro')).toBe('windows');
+    expect(detectOsFamily('Darwin 23.5.0')).toBe('macos');
+    expect(detectOsFamily('macOS Sonoma 14.5')).toBe('macos');
+    expect(detectOsFamily(null)).toBe('unknown');
+    expect(detectOsFamily('')).toBe('unknown');
+    expect(detectOsFamily('FreeBSD 14.0')).toBe('unknown');
+  });
+});
+
+describe('nodeAcceleratorChips', () => {
+  it('returns empty array when worker has no accelerators or only CPU', () => {
+    expect(nodeAcceleratorChips(node())).toEqual([]);
+    expect(nodeAcceleratorChips(node({ capabilities: [ffmpeg([['libx264', 'usable']])] }))).toEqual([]);
+  });
+
+  it('returns chips with appropriate tone for verified hardware accelerators', () => {
+    const chips = nodeAcceleratorChips(
+      node({
+        capabilities: [
+          ffmpeg(
+            [
+              ['h264_qsv', 'usable'],
+              ['h264_vaapi', 'usable'],
+            ],
+            ['qsv', 'vaapi'],
+          ),
+        ],
+      }),
+    );
+    expect(chips).toEqual([
+      { label: 'Quick Sync', tone: 'blue' },
+      { label: 'VAAPI', tone: 'purple' },
+    ]);
+  });
+});
+
+describe('nodeMemberSections options', () => {
+  it('allows omitting the accelerator section when accelerators are in badges', () => {
+    const sections = nodeMemberSections(
+      node({
+        status: 'online',
+        maxConcurrentTasks: 2,
+        capabilities: [ffmpeg([['libx264', 'usable']])],
+      }),
+      { activeTasks: 1, libraryAccess: 'Toutes' },
+      { includeAccelerator: false },
+    );
+    expect(sections.length).toBe(2);
+    expect(sections[0].label).toBe('Matériel déclaré');
+    expect(sections[1].label).toBe('Traitements');
   });
 });

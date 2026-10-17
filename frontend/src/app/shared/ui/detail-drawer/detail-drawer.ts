@@ -95,15 +95,17 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 
     .drawer-panel {
       height: 100%;
-      min-height: 100dvh;
-      max-height: 100dvh;
+      min-height: 100%;
+      max-height: 100%;
       display: flex;
       flex-direction: column;
+      box-sizing: border-box;
       background: var(--surface-container-lowest);
     }
 
     .drawer-header {
-      min-height: 72px;
+      flex: 0 0 auto;
+      min-height: 64px;
       padding: var(--space-4) var(--space-5);
       display: flex;
       align-items: center;

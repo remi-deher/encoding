@@ -3,12 +3,16 @@ import { ContextBannerComponent } from '../../shared/ui/context-banner.component
 import {
   formatMemory,
   nodeAcceleratorBadges,
+  nodeAcceleratorChips,
   nodeHardwareLabel,
   nodeMemberSections,
+  nodeOsFamily,
+  OperatingSystemFamily,
   tidyProcessorName,
 } from '../../shared/models/node-hardware';
 import {
   ResourceCardAction,
+  ResourceCardChip,
   ResourceCardComponent,
   ResourceCardSection,
 } from '../../shared/ui/resource-card.component';
@@ -154,6 +158,9 @@ interface MemberCard {
   readonly statusLabel: string;
   readonly statusTone: StatusTone;
   readonly badges: readonly string[];
+  readonly acceleratorBadges: readonly ResourceCardChip[];
+  readonly osFamily: OperatingSystemFamily;
+  readonly osLabel: string;
   readonly meta: string;
   readonly sections: readonly ResourceCardSection[];
 }
@@ -1156,11 +1163,18 @@ export class NodeCatalogPageComponent {
         statusLabel: NODE_LIFECYCLE_LABELS[lifecycle],
         statusTone: NODE_LIFECYCLE_TONES[lifecycle],
         badges: node.roles.map((role) => NODE_ROLE_LABELS[role]),
+        acceleratorBadges: nodeAcceleratorChips(node),
+        osFamily: nodeOsFamily(node),
+        osLabel: node.inventory?.operatingSystem ?? 'Système d’exploitation inconnu',
         meta: `Dernier signal : ${record.lastSignal}`,
-        sections: nodeMemberSections(node, {
-          activeTasks: this.activityKnown() ? (this.activeTasks()[node.id] ?? 0) : null,
-          libraryAccess: record.libraryAccess,
-        }),
+        sections: nodeMemberSections(
+          node,
+          {
+            activeTasks: this.activityKnown() ? (this.activeTasks()[node.id] ?? 0) : null,
+            libraryAccess: record.libraryAccess,
+          },
+          { includeAccelerator: false },
+        ),
       };
     }),
   );

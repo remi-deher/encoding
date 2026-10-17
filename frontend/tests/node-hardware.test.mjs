@@ -156,3 +156,42 @@ test('carte : sans matériel déclaré, le dit explicitement', () => {
   const hardware = nodeMemberSections(node(), { activeTasks: null, libraryAccess: 'x' })[1];
   assert.match(hardware.hint, /Non renseigné/);
 });
+
+const { detectOsFamily, nodeAcceleratorChips } = await loadModel('node-hardware');
+
+test('détection de la famille de système d’exploitation', () => {
+  assert.equal(detectOsFamily('Ubuntu 24.04.5 LTS'), 'linux');
+  assert.equal(detectOsFamily('Debian GNU/Linux 12 (bookworm)'), 'linux');
+  assert.equal(detectOsFamily('Microsoft Windows Server 2022'), 'windows');
+  assert.equal(detectOsFamily('Darwin Kernel Version 23.4.0'), 'macos');
+  assert.equal(detectOsFamily(null), 'unknown');
+  assert.equal(detectOsFamily(''), 'unknown');
+});
+
+test('pastilles accélérateur matériel sans CPU', () => {
+  const chips = nodeAcceleratorChips(
+    node({
+      capabilities: [
+        ffmpeg([
+          ['h264_nvenc', 'usable'],
+          ['h264_qsv', 'usable'],
+        ]),
+      ],
+    }),
+  );
+  assert.deepEqual(chips, [
+    { label: 'NVENC', tone: 'lime' },
+    { label: 'Quick Sync', tone: 'blue' },
+  ]);
+});
+
+test('sections membre : omission possible de la section accélérateur', () => {
+  const sections = nodeMemberSections(
+    node({ status: 'online', maxConcurrentTasks: 2 }),
+    { activeTasks: 0, libraryAccess: 'x' },
+    { includeAccelerator: false },
+  );
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].label, 'Matériel déclaré');
+  assert.equal(sections[1].label, 'Traitements');
+});

@@ -38,6 +38,42 @@
   margin-top: -4px;
 }
 
+.resource-card-os-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: var(--radius-md);
+  background: var(--surface-container-highest);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+
+  .os-svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  &[data-os='linux'] {
+    color: #f59e0b;
+    background: color-mix(in srgb, #f59e0b 12%, var(--surface-container-low));
+    border-color: color-mix(in srgb, #f59e0b 24%, transparent);
+  }
+
+  &[data-os='windows'] {
+    color: #0284c7;
+    background: color-mix(in srgb, #0284c7 12%, var(--surface-container-low));
+    border-color: color-mix(in srgb, #0284c7 24%, transparent);
+  }
+
+  &[data-os='macos'] {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--text-primary) 8%, var(--surface-container-low));
+    border-color: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  }
+}
+
 .resource-card-identity {
   display: grid;
   gap: var(--space-2);
@@ -83,6 +119,34 @@
   color: var(--text-secondary);
   font-size: var(--font-label);
   font-weight: 600;
+
+  &.resource-card-badge_accelerator {
+    border: 1px solid var(--border-subtle);
+    font-weight: 700;
+
+    &[data-tone='lime'] {
+      background: color-mix(in srgb, var(--tone-lime) 18%, var(--surface));
+      color: color-mix(in srgb, var(--tone-lime) 75%, var(--text-primary));
+      border-color: color-mix(in srgb, var(--tone-lime) 35%, transparent);
+    }
+
+    &[data-tone='blue'] {
+      background: color-mix(in srgb, var(--tone-blue) 18%, var(--surface));
+      color: color-mix(in srgb, var(--tone-blue) 75%, var(--text-primary));
+      border-color: color-mix(in srgb, var(--tone-blue) 35%, transparent);
+    }
+
+    &[data-tone='purple'] {
+      background: color-mix(in srgb, var(--tone-purple) 18%, var(--surface));
+      color: color-mix(in srgb, var(--tone-purple) 75%, var(--text-primary));
+      border-color: color-mix(in srgb, var(--tone-purple) 35%, transparent);
+    }
+
+    &[data-tone='neutral'] {
+      background: var(--surface-container-high);
+      color: var(--text-secondary);
+    }
+  }
 }
 
 .resource-card-meter {
