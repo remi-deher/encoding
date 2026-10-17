@@ -1,8 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Encoding.Api.Auth;
+using Encoding.Api.Infrastructure;
+using Encoding.Api.Infrastructure.Data;
 using Encoding.Contracts.Auth;
 using Encoding.Contracts.Nodes;
 using Microsoft.AspNetCore.Authorization;
@@ -11,6 +14,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.DataProtection;
 // Encoding.Api et Encoding.NodeAgent exposent chacun un Program : un type de l’assemblage API désigne le point d’entrée à héberger.
 using ApiAssembly = Encoding.Api.Auth.AuthOptions;
 
@@ -202,7 +206,10 @@ internal static class AuthScenarios
         Check(await admin.StatusAsync(post, "/api/v1/cluster", new { name = "Autre" }) == HttpStatusCode.Conflict, "A cluster cannot be created twice.");
         Check(await admin.StatusAsync(put, "/api/v1/cluster", new { name = "Atelier" }) == HttpStatusCode.OK, "A cluster can be renamed.");
         var joinedClusterId = Guid.NewGuid();
-        var localClusterJoin = new { clusterId = joinedClusterId, clusterName = "Cluster d'accueil" };
+        var joinedNodeId = Guid.NewGuid();
+        var joinedClusterName = "Cluster d'accueil";
+        var bootstrap = await CreateClusterBootstrapAsync(factory, joinedClusterId, joinedClusterName, joinedNodeId);
+        var localClusterJoin = new { clusterId = joinedClusterId, clusterName = joinedClusterName, nodeId = joinedNodeId, bootstrap };
         Check(await anonymous.StatusAsync(post, "/api/v1/cluster/join", localClusterJoin, csrf: false) == HttpStatusCode.Unauthorized,
             "The local server cannot adopt a cluster identity without its container secret.");
         Check(await anonymous.StatusAsync(post, "/api/v1/cluster/join", localClusterJoin, csrf: false, localSecret: LocalSecret) == HttpStatusCode.OK,
@@ -260,6 +267,37 @@ internal static class AuthScenarios
         Console.WriteLine("PASS: setup, roles, CSRF header, lockout, session revocation and last-administrator guard over HTTP.");
 
         await PairingAsync(factory, anonymous, admin, viewer);
+    }
+
+    private static async Task<Encoding.Contracts.Cluster.ClusterJoinBootstrap> CreateClusterBootstrapAsync(
+        WebApplicationFactory<ApiAssembly> factory, Guid clusterId, string clusterName, Guid nodeId)
+    {
+        var keyDirectory = Path.Combine(Path.GetTempPath(), "auth-bootstrap-keys-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(keyDirectory);
+        try
+        {
+            await using var source = await TestDatabase.CreateSqliteAsync("auth-cluster-bootstrap");
+            await DatabaseMigrator.ApplyAsync(source.Db, Harness.RepositoryRoot(), CancellationToken.None);
+            var identityRepository = new Encoding.Api.Infrastructure.ClusterIdentityRepository(source.Db);
+            await identityRepository.AdoptAsync(clusterId, clusterName, CancellationToken.None);
+
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["PluginSettings:KeyDirectory"] = keyDirectory })
+                .Build();
+            using var rootIdentity = new Encoding.Api.Infrastructure.ClusterPeerIdentityStore(configuration, new EphemeralDataProtectionProvider());
+            using var clusterDataKey = new Encoding.Api.Infrastructure.ClusterDataKeyStore(clusterId, RandomNumberGenerator.GetBytes(32));
+            var admissions = new Encoding.Api.Infrastructure.ClusterPeerAdmissionRepository(source.Db, identityRepository, rootIdentity, clusterDataKey);
+            await admissions.EnsureRootAdmissionAsync(clusterId, CancellationToken.None);
+
+            var joiningIdentity = factory.Services.GetRequiredService<Encoding.Api.Infrastructure.ClusterPeerIdentityStore>();
+            await admissions.CreateDirectApprovalGrantAsync(nodeId, joiningIdentity.PeerId, joiningIdentity.PublicKey, CancellationToken.None);
+            return await admissions.GetBootstrapForNodeAsync(nodeId, CancellationToken.None)
+                ?? throw new InvalidOperationException("A signed cluster bootstrap should be available for an approved peer.");
+        }
+        finally
+        {
+            if (Directory.Exists(keyDirectory)) Directory.Delete(keyDirectory, recursive: true);
+        }
     }
 
     private static async Task PairingAsync(WebApplicationFactory<ApiAssembly> factory, Client anonymous, Client admin, Client viewer)
@@ -425,6 +463,7 @@ internal static class AuthScenarios
             "GET {*path:nonfile}",
             "GET /api/v1/auth/status",
             "GET /api/v1/cluster",
+            "GET /api/v1/cluster/reconciliation/local-identity",
             "GET /health/live",
             "* /health/ready",
             "POST /api/v1/auth/login",
@@ -435,6 +474,7 @@ internal static class AuthScenarios
             "POST /api/v1/nodes/enroll",
             "POST /api/v1/nodes/enrollment-requests",
             "POST /api/v1/nodes/{nodeId:guid}/leave",
+            "GET /api/v1/nodes/{nodeId:guid}/cluster-bootstrap",
             "PUT /api/v1/nodes/{nodeId:guid}/heartbeat",
         };
         var runtime = anonymous.Where(item => item.Contains("/api/v1/runtime/nodes/{nodeId:guid}")).ToArray();
