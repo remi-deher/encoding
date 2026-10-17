@@ -383,7 +383,7 @@ export function clusterJoinSteps(data: JoinPresentation): readonly GuidedStep[] 
           ]
         : [],
       note: data.localServerActive
-        ? 'Après approbation, ce nœud devient worker du cluster d’accueil et son serveur local s’arrête. La configuration et les bibliothèques locales ne sont pas importées automatiquement. Un changement en cours peut être annulé avant l’approbation.'
+        ? 'Après approbation, le serveur local reste actif. Les configurations et états convergent avec le cluster par le maillage SQLite. Les fichiers médias et résultats ne sont pas répliqués et doivent rester accessibles selon les accès configurés. La configuration locale n’est pas importée automatiquement. Un changement en cours peut être annulé avant l’approbation.'
         : 'Le cluster d’accueil doit approuver votre demande. Les accès aux bibliothèques et les capacités de ce nœud restent nécessaires pour recevoir des traitements.',
       actions: [
         { id: 'back', label: 'Modifier l’adresse' },

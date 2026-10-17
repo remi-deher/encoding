@@ -136,18 +136,37 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     public async Task<Guid?> RetryAsync(Guid id, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
-        var next = Guid.NewGuid();
-        await using var cmd = Sql.Command("""
-   INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,retry_of,detail)
-   SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,'En attente du moteur d’exécution.'
-   FROM executions WHERE id=@id AND state='failed' ON CONFLICT(retry_of) DO NOTHING RETURNING id
-   """, c, tx); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("next", next);
-        if (await cmd.ExecuteScalarAsync(ct) is not Guid created) return null;
-        await AddEvent(c, tx, created, Guid.NewGuid(), 0, "queued", "Nouvelle tentative demandée.", ct);
-        await using(var work=Sql.Command("INSERT INTO execution_work(execution_id,library_id,media_path,media_key) SELECT @next,library_id,media_path,media_key FROM execution_work WHERE execution_id=@id",c,tx))
-        { work.Parameters.AddWithValue("next",created); work.Parameters.AddWithValue("id",id); await work.ExecuteNonQueryAsync(ct); }
-
+        var created=await RetryInTransactionAsync(id,null,null,"Nouvelle tentative demandée.",c,tx,ct);
+        if(created is null) return null;
         await tx.CommitAsync(ct); return created;
+    }
+
+    internal static async Task<Guid?> RetryInTransactionAsync(Guid id,RuntimeHandoffSelector? selector,Guid? previousWorker,string detail,
+        DbConnection c,DbTransaction tx,CancellationToken ct)
+    {
+        var next=Guid.NewGuid();
+        await using(var cmd=Sql.Command("""
+          INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,retry_of,detail)
+          SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,@detail
+          FROM executions WHERE id=@id AND state='failed' ON CONFLICT(retry_of) DO NOTHING RETURNING id
+          """,c,tx))
+        {
+            cmd.Parameters.AddWithValue("id",id);cmd.Parameters.AddWithValue("next",next);cmd.Parameters.AddWithValue("detail",detail);
+            if(await cmd.ScalarGuidAsync(ct) is not {} created) return null;
+            next=created;
+        }
+        await AddEvent(c,tx,next,Guid.NewGuid(),0,"queued",detail,ct);
+        await using(var work=Sql.Command("""
+          INSERT INTO execution_work(execution_id,library_id,media_path,media_key,handoff_selector,previous_worker_node_id)
+          SELECT @next,library_id,media_path,media_key,@selector,@previous FROM execution_work WHERE execution_id=@id
+          """,c,tx))
+        {
+            work.Parameters.AddWithValue("next",next);work.Parameters.AddWithValue("id",id);
+            work.Parameters.AddWithValue("selector",SqlKind.Json,selector is null?DBNull.Value:JsonSerializer.Serialize(selector,Json));
+            work.Parameters.AddWithValue("previous",SqlKind.Uuid,(object?)previousWorker??DBNull.Value);
+            if(await work.ExecuteNonQueryAsync(ct)==0) throw new InvalidOperationException("L’exécution d’origine ne possède pas de contexte de média à relancer.");
+        }
+        return next;
     }
     // Called by the future orchestrator after its lease and output validation checks.
     public async Task<bool> RecordAsync(Guid id, RecordExecutionProgress update, CancellationToken ct)

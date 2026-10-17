@@ -4,7 +4,7 @@
 
 Le codec de sortie, l’encodeur FFmpeg et sa cible de qualité sont des paramètres distincts. Le catalogue partagé `VideoEncoderCatalog` décrit les encodeurs connus, leur codec, leur accélération, leur mode et leur plage de qualité ainsi que leurs presets. La sélection des arguments FFmpeg reste dans l’adaptateur d’exécution média.
 
-Un profil d’encodage contient une cible par encodeur. Il possède un brouillon à révision croissante et des versions publiées immuables stockés dans PostgreSQL. Le profil intégré « Équilibré » constitue le réglage initial et reste en lecture seule ; l’utilisateur peut créer un profil personnalisé.
+Un profil d’encodage contient une cible par encodeur. Il possède un brouillon à révision croissante et des versions publiées immuables stockés dans SQLite et réconciliés entre serveurs. Le profil intégré « Équilibré » constitue le réglage initial et reste en lecture seule ; l’utilisateur peut créer un profil personnalisé.
 
 Lorsqu’un profil est choisi dans un bloc d’encodage vidéo, sa version publiée est copiée dans la définition du flow. Les archives restent autonomes et la publication ultérieure d’un profil ne change pas les flows existants. Le backend vérifie les encodeurs, codecs, plages de qualité, presets et priorités de chaque instantané.
 

@@ -15,7 +15,7 @@ public sealed class DatabaseHealthCheck(DbDataSource dataSource) : IHealthCheck
             await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
             await using var command = Sql.Command("SELECT 1", connection);
             await command.ExecuteScalarAsync(cancellationToken);
-            return HealthCheckResult.Healthy("PostgreSQL répond.");
+            return HealthCheckResult.Healthy("SQLite répond.");
         }
         catch (DbException)
         {

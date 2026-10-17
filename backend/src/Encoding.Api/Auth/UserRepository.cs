@@ -13,7 +13,6 @@ public enum UserChangeResult { Updated, NotFound, LastAdministrator }
 public sealed class UserRepository(DbDataSource dataSource)
 {
     private const string Columns = "id, username, role, is_active, created_at";
-    private const string SetupLock = "SELECT pg_advisory_xact_lock(hashtext('encoding.users'))";
 
     public static string RoleName(UserRole role) => role == UserRole.Admin ? "admin" : "viewer";
     public static UserRole ParseRole(string role) => role == "admin" ? UserRole.Admin : UserRole.Viewer;
@@ -29,7 +28,6 @@ public sealed class UserRepository(DbDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var @lock = Sql.Command(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
         await using (var exists = Sql.Command("SELECT EXISTS(SELECT 1 FROM users)", connection, transaction))
             if ((await exists.ScalarBoolAsync(ct))) return null;
         var user = await InsertAsync(connection, transaction, username, passwordHash, UserRole.Admin, ct);
@@ -128,7 +126,6 @@ public sealed class UserRepository(DbDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var @lock = Sql.Command(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
         if (!await ExistsAsync(connection, transaction, id, ct)) return UserChangeResult.NotFound;
         if ((role != UserRole.Admin || !isActive) && await IsLastActiveAdministratorAsync(connection, transaction, id, ct)) return UserChangeResult.LastAdministrator;
         await using var update = Sql.Command("UPDATE users SET role = @role, is_active = @active, updated_at = clock_timestamp() WHERE id = @id", connection, transaction);
@@ -145,7 +142,6 @@ public sealed class UserRepository(DbDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using (var @lock = Sql.Command(SetupLock, connection, transaction)) await @lock.ExecuteNonQueryAsync(ct);
         if (!await ExistsAsync(connection, transaction, id, ct)) return UserChangeResult.NotFound;
         if (await IsLastActiveAdministratorAsync(connection, transaction, id, ct)) return UserChangeResult.LastAdministrator;
         await using var delete = Sql.Command("DELETE FROM users WHERE id = @id", connection, transaction);

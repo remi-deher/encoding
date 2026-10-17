@@ -20,15 +20,13 @@ Limites : 100 flows sélectionnés, 1 000 documents, 20 Mio compressés et déco
 
 POST /api/v1/media-executions reçoit bibliothèque, chemin relatif et version publiée. Le tableau fournit cette action via le formulaire commun. Les montages et accès des bibliothèques restent explicitement configurés.
 
-Les serveurs attribuent les travaux depuis PostgreSQL avec verrous transactionnels et SKIP LOCKED, sans serveur permanent. Le worker doit être présent, avoir une place disponible, les outils et encodeurs requis, les versions exactes des plugins et un accès direct ou par transfert éligible.
+Chaque serveur attribue uniquement les travaux créés dans sa base SQLite locale, avec des transactions d’écriture immédiate. L’historique réconcilié n’est pas une file de tâches commune et ne crée pas de double attribution entre serveurs. Le worker doit être présent, avoir une place disponible, les outils et encodeurs requis, les versions exactes des plugins et un accès direct ou par transfert éligible.
 
-Le bail dure 60 secondes, renouvelé toutes les 15 secondes. Une réservation unique porte sur bibliothèque/chemin ; chaque reprise incrémente l’époque. Les étapes, transferts, renouvellements et publications vérifient cette époque et l’expiration. Checkpoint et événement sont enregistrés dans la même transaction.
+Le bail dure 60 secondes, renouvelé toutes les 15 secondes. Une réservation unique porte sur bibliothèque/chemin ; les étapes, transferts, renouvellements et publications vérifient l’époque et l’expiration. Checkpoint et événement sont enregistrés dans la même transaction. Quand un worker attribué perd son bail, sa tentative passe en erreur et libère la réservation ; elle n’est pas réattribuée sous le même identifiant. Seuls un relais ou une attente explicitement enregistrés, sans worker affecté, peuvent continuer sous le même identifiant.
 
 Le moteur suit une seule sortie à chaque étape. Les convergences sont séquentielles. Une sortie non raccordée termine le parcours ; une erreur non traitée échoue. Les terminaux supportent réussite, inchangé, échec et report. Un report termine la tentative et en crée une nouvelle, différée de 1 à 1 440 minutes. L’annulation arrête les processus ; une annulation abandonnée est clôturée après expiration.
 
-Reprise après perte d’un worker : tout worker éligible disposant de son propre accès valide (direct, ou transfert depuis un nœud en ligne) reprend l’exécution ; le nœud d’origine n’est exigé que pour un relais explicite (0021). Une erreur d’outil sur un bloc sans sortie « error » reliée, ou un checkpoint refusé alors que le bail est valide, fait passer l’exécution à « failed » au lieu de la rejouer.
-
-Les handlers Base réexécutables reprennent depuis le dernier checkpoint. Un script ou plugin interrompu avant son checkpoint a un effet incertain : échec et relance explicite, sans répétition automatique de l’effet.
+Après perte du worker, la tentative échoue et n’est pas reprise automatiquement sur un autre worker. Une relance manuelle ou autorisée par le bloc `nodes-retry-on-worker-loss` crée une nouvelle exécution depuis l’entrée du flow, avec un nouvel identifiant et un espace de sortie isolé. Le nombre de relances du bloc est borné de 1 à 10 et la cible peut désigner un worker, un groupe, des étiquettes ou tout autre worker éligible. La relance automatique est refusée si une étape du précédent essai est déclarée non idempotente ; un opérateur peut alors décider explicitement de relancer. Les handlers Base réexécutables ne reprennent donc pas implicitement au dernier checkpoint. Un script ou plugin interrompu avant son checkpoint a un effet incertain : échec et relance explicite, sans répétition automatique de l’effet.
 
 ## Outils et intégrité
 

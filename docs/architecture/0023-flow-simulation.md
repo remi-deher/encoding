@@ -28,7 +28,7 @@ Bornes : 512 Mio par fichier, deux lectures simultanées par serveur, deux minut
 
 Le bouton **Tester le flow** ouvre le drawer commun. Il capture le document courant, sans sauvegarde ni publication. Le profil utilise le formulaire de configuration partagé ; nom, taille, durée, codec/résolution, pistes audio/sous-titres, contexte et variables sont modifiables. L’import alimente ce profil. Les métadonnées après une étape et variables produites se renseignent en JSON, avec le profil courant prérempli.
 
-Le parcours est une liste repliable ordonnée avec sortie, décision/hypothèse, comparaisons et contexte avant/après. La poursuite rejoue le même document depuis son entrée avec les résultats fictifs déjà renseignés. Une nouvelle simulation de profil réinitialise ces résultats ; rouvrir le testeur capture les dernières modifications du flow. Profils/résultats restent dans la session de l’éditeur, sans stockage PostgreSQL ni sauvegarde de médias importés.
+Le parcours est une liste repliable ordonnée avec sortie, décision/hypothèse, comparaisons et contexte avant/après. La poursuite rejoue le même document depuis son entrée avec les résultats fictifs déjà renseignés. Une nouvelle simulation de profil réinitialise ces résultats ; rouvrir le testeur capture les dernières modifications du flow. Profils/résultats restent dans la session de l’éditeur, sans persistance côté serveur ni sauvegarde de médias importés.
 
 Le composant partagé `ComponentConfigurationForm` possède désormais un état `busy` optionnel ; les contrôles et soumissions sont suspendus pendant une requête. Changer uniquement cet état ou le résultat d’un test de connexion conserve les saisies du formulaire. Les autres usages gardent leur état par défaut.
 

@@ -37,7 +37,7 @@ public static class OperationsEndpoints
     public static void MapOperationsEndpoints(this WebApplication app)
     {
         var options = app.Services.GetRequiredService<OperationsOptions>();
-        // Vivacité : le processus répond. Aucune dépendance externe, pour qu’un orchestrateur ne redémarre pas un serveur à cause de PostgreSQL.
+        // Vivacité : le processus répond. Aucun contrôle de base ou de pair, pour qu’un orchestrateur ne redémarre pas un nœud isolé.
         app.MapGet("/health/live", () => Results.Ok(new { status = "ok" })).AllowAnonymous().WithTags("Health");
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {

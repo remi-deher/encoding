@@ -114,8 +114,9 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             w.handoff_selector::text,w.previous_worker_node_id,w.source_node_id,w.plugin_configuration_snapshot,
             CASE WHEN w.wait_probe_due THEN (SELECT x.spec::text FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting') END
           FROM execution_work w JOIN executions e ON e.id=w.execution_id JOIN libraries l ON l.id=w.library_id
-          WHERE e.state IN ('queued','running') AND l.is_active AND w.available_at<=clock_timestamp()
-          AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp())
+          WHERE (e.state='queued' OR e.state='running' AND w.worker_node_id IS NULL)
+          AND l.is_active AND w.available_at<=clock_timestamp()
+          AND w.lease_until IS NULL
           AND NOT EXISTS(SELECT 1 FROM library_processing_settings p WHERE p.library_id=l.id AND p.max_concurrent_tasks IS NOT NULL
             AND p.max_concurrent_tasks<=(SELECT count(*) FROM execution_work aw JOIN executions ae ON ae.id=aw.execution_id WHERE aw.library_id=l.id AND aw.lease_until>clock_timestamp() AND ae.state IN ('running','cancelling')))
           AND NOT EXISTS(SELECT 1 FROM library_node_processing_limits p WHERE p.library_id=l.id AND p.node_id=@worker
@@ -178,8 +179,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                     await using var r=await access.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
                     source=r.GetGuid(0); root=r.IsDBNull(1)?null:r.GetString(1);
                 }
-                // Only an explicit relay pins the original source; a plain recovery after a lost worker lets any worker
-                // with a valid access of its own (direct or transfer) resume the execution (0015).
+                // An explicit relay keeps the original library-access node pinned. A fresh assignment after a wait
+                // or a flow retry uses the receiving worker's own library access.
                 if(item.Source is {} originalSource && item.Selector is not null)
                 {
                     // A relay does not move ownership of the library or reinterpret the source path.

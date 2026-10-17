@@ -1,8 +1,8 @@
 # 0038 — Modèle cluster et nœud : nœud autonome, rattachement, relations
 
-Statut : acceptée par Rémi (2026-10-15) ; le point 1 est remplacé par [0045](0045-standalone-node-and-explicit-cluster.md) pour le modèle cluster/nœud (sections 1 à 7 et décisions ci-dessous), la synchronisation entre clusters (9) et l'évitement des doublons (9.1) ; le stockage (8) reste en discussion. Rien n'est encore implémenté.
+Statut : acceptée par Rémi (2026-10-15) ; le point 1 est remplacé par [0045](0045-standalone-node-and-explicit-cluster.md). Le stockage du point 8 est précisé par [0043](0043-sqlite-and-data-access-abstraction.md) et [0049](0049-multi-server-shared-cluster.md). Le maillage entre serveurs d'un même cluster est engagé en 0049 ; les relations entre clusters restent distinctes.
 
-Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; un nœud serveur+worker qui rejoint un cluster devient worker seul, son serveur local s’arrête (3, précisé en 0039) ; approbation à chaque rattachement et, entre clusters liés, des deux côtés (4). Le stockage (PostgreSQL ou SQLite) et la synchronisation entre clusters sont traités dans les sections 8 et 9.
+Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; approbation à chaque rattachement et, entre clusters liés, des deux côtés (4). La règle initiale du point 3 — arrêt du serveur local — est remplacée par 0049. Le stockage est traité par 0043 et 0049 ; la synchronisation entre clusters reste décrite aux sections 9 et 9.1.
 
 ## Plan proposé par Rémi
 
@@ -15,16 +15,16 @@ Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; u
 
 ## Situation actuelle (code)
 
-- Un cluster est une base PostgreSQL avec ses volumes d'artefacts, identifiée par un identifiant propre (`/api/v1/cluster`). Un serveur de plus rejoint en pointant vers la même base.
+- Un cluster possède un identifiant propre (`/api/v1/cluster`) ; chaque serveur garde sa base SQLite locale et réconcilie les domaines prévus avec ses pairs selon 0049.
 - Un nœud porte une identité locale (`node-identity.json` : id, jeton, cluster) et des rôles serveur / worker. Un worker rejoint un cluster par enrôlement (fenêtre, clé de jumelage approuvée, acceptation automatique) ; il le trouve par DNS-SD ou par `Cluster__ApiBaseUrl`.
-- Avec l'image unique (0036, 0037), le nœud local est enrôlé d'office à son propre serveur. Un nœud est rattaché à un seul cluster ; en changer exige de réinitialiser son identité.
+- Avec l'image unique (0036, 0037), le nœud local est enrôlé d'office à son propre serveur. Un nœud est rattaché à un seul cluster ; en changer exige de réinitialiser son identité. Après rattachement, son serveur local reste actif et sert aussi l'interface de gestion du cluster.
 - Les bibliothèques sont des définitions du cluster ; chaque nœud déclare son accès (direct, non pris en charge, transfert).
 
 ## Points à trancher
 
 1. **Nœud autonome : cluster implicite à un nœud, ou état « sans cluster » distinct ?** Recommandation : cluster implicite à un nœud, créé à l'installation avec le nom convivial choisi. Pas d'état spécial, même code que pour tout cluster ; « autonome » signifie alors « seul dans son cluster », et « rejoindre » fusionne ce nœud dans un autre cluster.
-2. **Où vit l'état d'un cluster quand un nœud le quitte ?** La base PostgreSQL n'appartient pas à un nœud : un nœud qui quitte laisse sa base (archivée, jamais supprimée sans action explicite). À définir : qui héberge PostgreSQL d'un cluster à plusieurs nœuds (externe, ou porté par un nœud désigné), sans réintroduire de coordinateur central permanent (AGENTS.md).
-3. **Rôles au rattachement.** Un nœud serveur + worker qui en rejoint un autre : devient-il worker seul (son serveur local s'éteint), ou serveur du cluster d'accueil (connecté à sa base) ? Le premier est un jumelage ; le second demande les accès à la base distante.
+2. **Où vit l'état d'un cluster quand un nœud le quitte ?** La base SQLite appartient à l'installation et reste locale ; les événements qu'elle contient sont conservés avec elle. Les domaines réconciliables sont diffusés aux autres serveurs selon 0049.
+3. **Rôles au rattachement (décidé par 0049).** Le serveur local reste actif, adopte l'identité du cluster d'accueil et rejoint son maillage. Les données réconciliées convergent progressivement ; les baux et états de travail locaux ne sont pas fusionnés.
 4. **Basculer « automatiquement ».** Qui déclenche, avec quelle autorisation ? Recommandation : jamais sans approbation du cluster d'accueil ; pour un transfert entre clusters liés, approbation des deux côtés. Les baux et tâches en cours sont drainés avant la bascule (reprise standard).
 5. **Bibliothèques au rattachement.** Les siennes sont désactivées (pas supprimées) et exportables ; collisions d'identifiants et de chemins à traiter ; les chemins médias doivent exister de façon cohérente sur les nœuds du cluster d'accueil (accès direct ou transfert).
 6. **Relations entre clusters : deux fonctions distinctes.** Le transfert de nœuds approuvé des deux côtés ; le partage de bibliothèques. Pour ce dernier, choisir entre : (a) les nœuds du cluster B peuvent servir de workers pour une bibliothèque de A, A restant propriétaire des tâches et du registre, ou (b) réplication de la définition de bibliothèque. Recommandation : (a), qui préserve « une seule tâche à la fois sur un média » et un seul registre par bibliothèque.
@@ -40,9 +40,9 @@ Décisions de Rémi déjà prises : nœud autonome = cluster à un nœud (1) ; u
 
 Une seule tâche à la fois sur un média, baux et reprise après perte d'un nœud, sortie temporaire validée avant publication, routes fermées par défaut, retrait d'un nœud sans réactivation implicite (0017, 0031), secrets jamais envoyés à un autre cluster que celui qu'un administrateur a choisi.
 
-## 8. Stockage (en discussion)
+## 8. Stockage (décision précisée par 0043 et 0049)
 
-Rémi souhaite à terme retirer la dépendance à PostgreSQL. Le code actuel en dépend fortement (37 fichiers, 281 commandes SQL, 31 migrations ; verrous `FOR UPDATE`, `SKIP LOCKED`, verrous consultatifs, `jsonb`, horloge du serveur). Galera (MariaDB) a été évalué : quorum de 3 nœuds, conflits de certification sur les baux, même réécriture que SQLite avec un serveur externe en plus. Direction recommandée : une couche de stockage commune, SQLite embarqué pour le nœud autonome et le cluster d'un seul serveur, une base externe interchangeable pour plusieurs serveurs. La décision reste à confirmer.
+Le stockage est SQLite local par serveur. Les serveurs actifs gardent chacun leur base locale, le serveur local reste actif après rattachement et l'identité du cluster est alignée. Les configurations et états durables sont réconciliés par le maillage ; voir 0043 et 0049 pour les exceptions et l'éventualité de convergence.
 
 ## 9. Synchronisation entre clusters (demande de Rémi)
 
@@ -54,7 +54,7 @@ Principe proposé : **la cohérence forte reste à l'intérieur d'un cluster, la
 - Les **états et l'historique** (exécutions terminées, journaux, instantanés avant/après, définitions de bibliothèques et de flows publiés) sont répliqués de façon asynchrone, sans consensus.
 - **Chaque enregistrement a un cluster propriétaire** (celui qui l'a produit) et n'est modifiable que là ; les autres clusters en tiennent une copie en lecture. Les conflits d'écriture disparaissent par construction. Les modifications partagées (par exemple une bibliothèque commune) ont un propriétaire unique à un instant donné, transférable avec approbation.
 - Mécanisme : journal de changements append-only par cluster (identifiant d'origine, numéro de séquence), tiré par les clusters liés avec un curseur, application idempotente, reprise après coupure. Aucun quorum : chaque cluster fonctionne seul et rattrape son retard au retour du lien.
-- Transport : HTTPS authentifié par la relation approuvée entre les deux clusters (4) ; indépendant du moteur de base de données, donc compatible avec PostgreSQL comme avec SQLite.
+- Transport : HTTPS authentifié par la relation approuvée entre les deux clusters (4) ; le stockage reste SQLite local, comme décrit dans 0043 et 0049.
 
 Limite à assumer : sans quorum, aucun mécanisme ne peut garantir à la fois la bascule automatique et l'absence de traitement en double après une coupure entre deux clusters. Deux traitements simultanés d'un même média restent sans danger pour les données tant que la source est préservée et que chaque exécution publie dans son propre dossier (0015, 0030) : ils coûtent du calcul, pas de l'intégrité. Recommandation : propriété d'une bibliothèque à un seul cluster à la fois, reprise par l'autre cluster sur action explicite ou sur délai configuré, avec le remplacement de la source désactivé dans les deux cas.
 

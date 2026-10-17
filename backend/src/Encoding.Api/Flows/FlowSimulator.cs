@@ -77,6 +77,8 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                 }
                 else if (node.Component.PluginId == "base" && id == "base-execute-processing" && context.Plan.Count == 0 && !Flag("forceProcessing"))
                 { output = "skipped"; detail = "Aucun traitement planifié : étape ignorée."; }
+                else if (node.Component.PluginId == "nodes" && id == RuntimeRetryPolicy.ComponentId)
+                { output = "success"; detail = "Règle de relance bornée activée pour les pertes de worker."; }
                 else if (node.Component.PluginId == "base" && Text("processingMode", "direct") == "plan")
                 {
                     if (variables.TryGetValue("plan.tool", out var selected) && (FlowMediaValues.IsFfmpegPlan(id) != (selected.GetString() == "ffmpeg")))

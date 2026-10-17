@@ -15,7 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Http.Json;
-using Npgsql;
+using Encoding.Api.Infrastructure.Data.Sqlite;
 
 namespace Encoding.Runtime.Tests;
 
@@ -159,7 +159,7 @@ internal static class FlowSimulationScenarios
         builder.Logging.ClearProviders(); builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddSingleton(registry); builder.Services.AddSingleton(validator);
         builder.Services.AddSingleton<FlowSimulator>(); builder.Services.AddSingleton<FlowMetadataImporter>();
-        await using var unusedDatabase = NpgsqlDataSource.Create("Host=127.0.0.1;Database=unused;Username=unused;Password=unused");
+        await using var unusedDatabase = new SqliteDataSource("Data Source=:memory:");
         builder.Services.AddSingleton(new PluginConfigurationRepository(unusedDatabase, new EphemeralDataProtectionProvider()));
         await using var app = builder.Build(); app.MapFlowSimulationEndpoints(); await app.StartAsync();
         using var client = new HttpClient { BaseAddress = new Uri(app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single()) };

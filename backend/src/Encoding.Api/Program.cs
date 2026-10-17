@@ -13,7 +13,6 @@ using Encoding.Api.Plugins;
 using Encoding.Contracts.Nodes;
 using Encoding.Core.Nodes;
 using Encoding.Contracts.Libraries;
-using Npgsql;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Encoding.Api.Infrastructure.PeerCluster;
@@ -21,13 +20,10 @@ using DotNext.Net.Cluster.Consensus.Raft.Http;
 using DotNext.Net.Cluster.Consensus.Raft;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 
-if (args.FirstOrDefault() == DatabaseTransferCommand.Name)
-    Environment.Exit(await DatabaseTransferCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
 if (args.FirstOrDefault() == PeerAuthorityDatabaseCommand.Name)
     Environment.Exit(await PeerAuthorityDatabaseCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
 if (args.FirstOrDefault() is { } peerCommand && PeerOperationsCommand.Names.Contains(peerCommand))
     Environment.Exit(await PeerOperationsCommand.RunAsync(peerCommand, args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
-
 var builder = WebApplication.CreateBuilder(args);
 builder.AddOperations();
 var peerClusterOptions = builder.AddPeerCluster();
@@ -37,14 +33,12 @@ Directory.CreateDirectory(pluginKeyDirectory);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(pluginKeyDirectory))
     .SetApplicationName("Encoding.PluginSettings");
-var connectionString = builder.Configuration.GetConnectionString("Cluster")
-    ?? throw new InvalidOperationException("La chaîne de connexion 'Cluster' est obligatoire.");
 var offlineAfterSeconds = builder.Configuration.GetValue("NodePresence:OfflineAfterSeconds", 30);
 if (offlineAfterSeconds <= 0)
 {
     throw new InvalidOperationException("NodePresence:OfflineAfterSeconds doit être supérieur à zéro.");
 }
-var localDatabase = DatabaseProvider.Create(builder.Configuration, connectionString);
+var localDatabase = DatabaseProvider.CreateRuntime(builder.Configuration);
 builder.Services.AddSingleton(new PeerLocalDatabase(localDatabase));
 builder.Services.AddSingleton<System.Data.Common.DbDataSource>(services => peerClusterOptions.Enabled
     ? new PeerDataSource(services.GetRequiredService<PeerDatabaseCoordinator>()) : localDatabase);
@@ -97,8 +91,13 @@ builder.Services.AddSingleton<LibraryProcessingRepository>();
 builder.Services.AddHostedService<LibraryMonitoringService>();
 builder.Services.AddSingleton<LibraryNodeAccessRepository>();
 builder.Services.AddSingleton<ClusterIdentityRepository>();
+builder.Services.AddSingleton<ClusterReconciliationRepository>();
+builder.Services.AddSingleton<ClusterEntityReconciliation>();
 builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
+builder.Services.AddHttpClient("ClusterReconciliation", client => client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHostedService<ClusterReconciliationService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -194,6 +193,7 @@ app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();
 app.MapClusterEndpoints();
 app.MapPeerClusterEndpoints();
+app.MapClusterReconciliationEndpoints();
 app.MapNodeEndpoints();
 app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();

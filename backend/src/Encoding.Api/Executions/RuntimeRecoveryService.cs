@@ -1,12 +1,19 @@
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Nodes;
 using System.Data.Common;
+using System.Text.Json;
 using Encoding.Contracts.Executions;
+using Encoding.Contracts.Flows;
+using Encoding.Contracts.Nodes;
 
 namespace Encoding.Api.Executions;
 
 public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<RuntimeRecoveryService> logger,
-    Encoding.Api.Nodes.NodePresenceOptions? presence = null, Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null) : BackgroundService
+    NodeGroupRepository? nodeGroups = null, RuntimeEligibility? eligibility = null, NodePresenceOptions? presence = null,
+    Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null) : BackgroundService
 {
+    private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
+    private readonly TimeSpan offlineAfter=presence?.OfflineAfter??TimeSpan.FromSeconds(30);
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         while(!ct.IsCancellationRequested)
@@ -15,22 +22,176 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             {
                 using var lease = assignment?.AcquireLease(ct);
                 if (assignment is not null && lease is null) { await Task.Delay(TimeSpan.FromSeconds(1), ct); continue; }
-                await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
-                await RuntimeRepository.FailUnavailableSourcesAsync(c, tx, presence?.OfflineAfter ?? TimeSpan.FromSeconds(30), ct);
-                var expired=new List<(Guid Id,Guid? Worker,int Revision)>();
-                await using(var cmd=Sql.Command("SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id WHERE e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()) LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED",c,tx))
-                await using(var r=await cmd.ExecuteReaderAsync(ct))
-                { while(await r.ReadAsync(ct)) expired.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2))); }
-                foreach(var item in expired)
-                {
-                    await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"cancelled",item.Worker,null,"Annulation terminée après expiration du bail ; la source est conservée."),c,tx,ct);
-                    await RuntimeRepository.ReleaseAsync(item.Id,c,tx,ct);
-                }
-                await tx.CommitAsync(ct);
+                await ProcessOnceAsync(ct);
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
             catch(Exception exception) { logger.LogWarning("Reprise du registre momentanément indisponible : {Type}.",exception.GetType().Name); }
             try { await Task.Delay(TimeSpan.FromSeconds(1),ct); } catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
         }
+    }
+
+    /// <summary>
+    /// Closes cancelled work and fails an attempt whose assigned worker lost its lease.
+    /// Only an explicit relay or wait (worker_node_id = NULL) may be claimed again under
+    /// the same execution ID. A failed attempt must be retried as a new execution.
+    /// </summary>
+    public async Task<int> ProcessOnceAsync(CancellationToken ct)
+    {
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        await RuntimeRepository.FailUnavailableSourcesAsync(c, tx, offlineAfter, ct);
+        var expired=new List<(Guid Id,Guid? Worker,int Revision,string State,int Attempt,string Flow,bool HasNonIdempotentStep)>();
+        await using(var cmd=Sql.Command("""
+          SELECT e.id,e.node_id,e.revision,e.state,e.attempt,e.flow_definition::text,
+            EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id AND NOT s.idempotent)
+          FROM executions e JOIN execution_work w ON w.execution_id=e.id
+          WHERE (e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()))
+             OR (e.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until IS NOT NULL AND w.lease_until<=clock_timestamp())
+          ORDER BY e.updated_at LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED
+          """,c,tx))
+        await using(var r=await cmd.ExecuteReaderAsync(ct))
+        { while(await r.ReadAsync(ct)) expired.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetInt32(4),r.GetString(5),r.GetBoolean(6))); }
+        foreach(var item in expired)
+        {
+            var cancelled=item.State=="cancelling";
+            var detail=cancelled
+                ? "Annulation terminée après expiration du bail ; la source est conservée."
+                : item.HasNonIdempotentStep
+                    ? "Le worker a perdu sa connexion pendant une étape à effet externe. Le résultat est incertain ; la tâche est en erreur et nécessite une relance explicite."
+                : "Le worker a perdu sa connexion pendant cette tentative. La tâche est en erreur ; une relance doit créer une nouvelle tentative.";
+            if(await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,cancelled?"cancelled":"failed",item.Worker,null,detail),c,tx,ct))
+            {
+                await RuntimeRepository.ReleaseAsync(item.Id,c,tx,ct);
+                if(!cancelled && !item.HasNonIdempotentStep && item.Worker is {} previous)
+                {
+                    try
+                    {
+                        var flow=JsonSerializer.Deserialize<FlowDefinition>(item.Flow,new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                        var policy=flow is null?null:RuntimeRetryPolicy.Resolve(flow);
+                        if(policy is not null && item.Attempt<=policy.MaximumRetries)
+                        {
+                            var child=await ExecutionRepository.RetryInTransactionAsync(item.Id,policy.Selector,previous,
+                                $"Nouvelle tentative {item.Attempt+1} créée par la règle du flow après perte du worker.",c,tx,ct);
+                            if(child is not null) logger.LogInformation("L’exécution {ExecutionId} crée la tentative bornée {RetryId} après perte du worker {WorkerId}.",item.Id,child,previous);
+                        }
+                    }
+                    catch(ArgumentException exception)
+                    {
+                        logger.LogWarning("La règle de relance du flow de {ExecutionId} est invalide : {Type}.",item.Id,exception.GetType().Name);
+                    }
+                }
+            }
+        }
+        await tx.CommitAsync(ct);
+        return expired.Count+await FailUnavailableTargetsAsync(ct);
+    }
+
+    private async Task<int> FailUnavailableTargetsAsync(CancellationToken ct)
+    {
+        if(nodeGroups is null || eligibility is null) return 0;
+        var targets=new List<(Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,
+            Guid Library,Guid? Source,string? Checkpoint)>();
+        await using(var c=await dataSource.OpenConnectionAsync(ct))
+        await using(var cmd=Sql.Command("""
+          SELECT e.id,e.node_id,e.revision,e.state,e.flow_definition::text,w.handoff_selector::text,
+            w.previous_worker_node_id,w.library_id,w.source_node_id,
+            (SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1)
+          FROM executions e JOIN execution_work w ON w.execution_id=e.id
+          WHERE w.worker_node_id IS NULL AND w.handoff_selector IS NOT NULL AND w.available_at<=clock_timestamp()
+            AND ((e.state='running' AND w.handoff_pending) OR (e.state='queued' AND e.retry_of IS NOT NULL))
+          ORDER BY e.updated_at LIMIT 100
+          """,c))
+        await using(var r=await cmd.ExecuteReaderAsync(ct))
+        { while(await r.ReadAsync(ct)) targets.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetString(4),r.GetString(5),r.IsDBNull(6)?null:r.GetGuid(6),r.GetGuid(7),r.IsDBNull(8)?null:r.GetGuid(8),r.IsDBNull(9)?null:r.GetString(9))); }
+
+        var failed=0;
+        foreach(var item in targets)
+        {
+            var flow=JsonSerializer.Deserialize<FlowDefinition>(item.Flow,Json);
+            var selector=JsonSerializer.Deserialize<RuntimeHandoffSelector>(item.Selector,Json);
+            var checkpoint=item.Checkpoint is null?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(item.Checkpoint,Json);
+            if(flow is null || selector is null || await HasEligibleWorkerAsync(item,flow,selector,checkpoint,ct)) continue;
+
+            await using var c=await dataSource.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
+            var detail="Aucun worker en ligne ne correspond à la destination de ce relais ou de cette relance ; l’exécution échoue.";
+            if(await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",item.Actor,null,detail),c,tx,ct))
+            {
+                await RuntimeRepository.ReleaseAsync(item.Id,c,tx,ct);
+                await tx.CommitAsync(ct);
+                failed++;
+                logger.LogInformation("L’exécution {ExecutionId} est en erreur : aucun worker ne satisfait sa cible.",item.Id);
+            }
+        }
+        return failed;
+    }
+
+    private async Task<bool> HasEligibleWorkerAsync(
+        (Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,Guid Library,Guid? Source,string? Checkpoint) item,
+        FlowDefinition flow,RuntimeHandoffSelector selector,RuntimeCheckpoint? checkpoint,CancellationToken ct)
+    {
+        var candidates=new List<(Guid Id,NodeToolCapability[] Capabilities,int Capacity,bool ScheduleEnabled,string? Timezone,string? Slots)>();
+        await using(var c=await dataSource.OpenConnectionAsync(ct))
+        await using(var cmd=Sql.Command("""
+          SELECT n.id,n.capabilities::text,
+            COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=n.id),n.max_concurrent_tasks),
+            COALESCE((SELECT p.schedule_enabled FROM node_processing_settings p WHERE p.node_id=n.id),false),
+            (SELECT p.schedule_timezone FROM node_processing_settings p WHERE p.node_id=n.id AND p.schedule_enabled),
+            (SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=n.id AND p.schedule_enabled)
+          FROM cluster_nodes n WHERE n.deleted_at IS NULL AND n.accepts_work AND 'worker'=ANY(n.roles)
+            AND NOT n.draining AND NOT n.quarantined AND n.incompatible_reason IS NULL
+            AND n.last_seen_at>clock_timestamp()-@offline
+          """,c))
+        {
+            cmd.Parameters.AddWithValue("offline",offlineAfter);
+            await using var r=await cmd.ExecuteReaderAsync(ct);
+            while(await r.ReadAsync(ct)) candidates.Add((r.GetGuid(0),JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(1),Json)??[],r.GetInt32(2),r.GetBoolean(3),
+                r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5)));
+        }
+        var entry=checkpoint?.NextNodeId??flow.Nodes.Single(node=>node.Component.PluginId=="base" && node.Component.ComponentId.StartsWith("base-input-",StringComparison.Ordinal)).Id;
+        var needsWrite=eligibility!.RequiresWriteAccess(flow,entry,checkpoint is not null);
+        foreach(var candidate in candidates)
+        {
+            if(candidate.Id==item.Previous || candidate.Capacity<=0) continue;
+            var identity=await nodeGroups!.GetNodeIdentityAsync(candidate.Id,ct);
+            if(!selector.Accepts(candidate.Id,item.Previous??Guid.Empty,identity)) continue;
+            if(candidate.ScheduleEnabled && candidate.Timezone is not null && candidate.Slots is not null
+                && !new NodeSchedule(true,candidate.Timezone,candidate.Slots).IsOpen(DateTimeOffset.UtcNow)) continue;
+            if(!eligibility.CanRun(flow,candidate.Capabilities,candidate.Id,entry,checkpoint is not null,checkpoint?.Context,identity)) continue;
+            await using var c=await dataSource.OpenConnectionAsync(ct);
+            await using(var active=Sql.Command("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@worker AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')",c))
+            {
+                active.Parameters.AddWithValue("worker",candidate.Id);
+                if(Convert.ToInt32(await active.ExecuteScalarAsync(ct),System.Globalization.CultureInfo.InvariantCulture)>=candidate.Capacity) continue;
+            }
+            await using(var access=Sql.Command("""
+              SELECT EXISTS(
+                SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
+                LEFT JOIN library_node_accesses s ON s.library_id=a.library_id AND s.node_id=a.transfer_source_node_id
+                LEFT JOIN cluster_nodes sn ON sn.id=s.node_id
+                WHERE a.library_id=@library AND a.node_id=@worker AND a.is_enabled AND a.can_read
+                  AND ((a.mode='direct' AND a.local_path IS NOT NULL AND (NOT @write OR a.can_write))
+                    OR (a.mode='transfer' AND s.mode='direct' AND s.is_enabled AND s.can_read AND (NOT @write OR s.can_write)
+                        AND sn.deleted_at IS NULL AND sn.last_seen_at>clock_timestamp()-@offline))
+                  AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline)
+              """,c))
+            {
+                access.Parameters.AddWithValue("library",item.Library);access.Parameters.AddWithValue("worker",candidate.Id);
+                access.Parameters.AddWithValue("write",needsWrite);access.Parameters.AddWithValue("offline",offlineAfter);
+                if(!await access.ScalarBoolAsync(ct)) continue;
+            }
+            if(item.Source is {} originalSource)
+            {
+                await using var original=Sql.Command("""
+                  SELECT EXISTS(SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
+                    WHERE a.library_id=@library AND a.node_id=@source AND a.mode='direct' AND a.is_enabled AND a.can_read
+                      AND (NOT @write OR a.can_write) AND a.local_path IS NOT NULL AND n.deleted_at IS NULL
+                      AND n.last_seen_at>clock_timestamp()-@offline)
+                  """,c);
+                original.Parameters.AddWithValue("library",item.Library);original.Parameters.AddWithValue("source",originalSource);
+                original.Parameters.AddWithValue("write",needsWrite);original.Parameters.AddWithValue("offline",offlineAfter);
+                if(!await original.ScalarBoolAsync(ct)) continue;
+            }
+            return true;
+        }
+        return false;
     }
 }

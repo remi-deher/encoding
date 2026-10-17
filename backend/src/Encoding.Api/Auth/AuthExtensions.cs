@@ -9,6 +9,7 @@ namespace Encoding.Api.Auth;
 public static class AuthExtensions
 {
     public const string AnonymousPolicy = "anonymous-protocol";
+    public const string ClusterMeshPolicy = "cluster-mesh";
     public const string AdministratorPolicy = "Administrator";
 
     public static IServiceCollection AddClusterAuthentication(this IServiceCollection services, IConfiguration configuration)
@@ -34,6 +35,9 @@ public static class AuthExtensions
             limiter.AddPolicy(AnonymousPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
                 http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = options.AnonymousRequestsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            limiter.AddPolicy(ClusterMeshPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
+                http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 1200, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
         if (configuration.GetValue("Auth:TrustForwardedHeaders", false))
         {

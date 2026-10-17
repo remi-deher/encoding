@@ -5,6 +5,8 @@ using System.Text.Json;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Infrastructure;
+using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Infrastructure.Data.Sqlite;
 using Encoding.Api.Libraries;
 using Encoding.Api.Nodes;
 using Encoding.Api.Plugins;
@@ -17,37 +19,33 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
-using NpgsqlTypes;
 using static Encoding.Plugins.Tests.Support;
 
 namespace Encoding.Plugins.Tests;
 
-/// <summary>Webhook d’import → demande durable → découverte → exécution, sur un vrai PostgreSQL isolé dans un schéma.</summary>
+/// <summary>Webhook d’import → demande durable → découverte → exécution, avec une base SQLite isolée.</summary>
 internal static class TriggerTests
 {
     private const string Secret = "webhook-secret-for-tests";
 
-    public static async Task RunAsync(string connection)
+    public static async Task RunAsync()
     {
         var schema = "plugins_" + Guid.NewGuid().ToString("N");
         var directory = Path.Combine(Path.GetTempPath(), schema);
         Directory.CreateDirectory(directory);
-        await using (var admin = NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"CREATE SCHEMA {schema}").ExecuteNonQueryAsync();
-        await using var db = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder(connection) { SearchPath = schema }.ConnectionString);
         try
         {
+            await using var db = new SqliteDataSource($"Data Source={Path.Combine(directory, "cluster.db")};Pooling=False");
             await DatabaseMigrator.ApplyAsync(db, Path.GetFullPath("backend"), CancellationToken.None);
             await ScenarioAsync(db, directory);
         }
         finally
         {
-            await using (var admin = NpgsqlDataSource.Create(connection)) await admin.CreateCommand($"DROP SCHEMA IF EXISTS {schema} CASCADE").ExecuteNonQueryAsync();
             Directory.Delete(directory, true);
         }
     }
 
-    private static async Task ScenarioAsync(NpgsqlDataSource db, string directory)
+    private static async Task ScenarioAsync(System.Data.Common.DbDataSource db, string directory)
     {
         var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
         var validator = new FlowDefinitionValidator(registry);
@@ -185,15 +183,15 @@ internal static class TriggerTests
         return new(id, null, new(plugin.Id, plugin.Version, component.Id, component.Version, component.ConfigurationSchema.Version), configuration);
     }
 
-    private static async Task<long> Count(NpgsqlDataSource db) => await ScalarAsync(db, "SELECT count(*) FROM integration_trigger_requests");
+    private static async Task<long> Count(System.Data.Common.DbDataSource db) => await ScalarAsync(db, "SELECT count(*) FROM integration_trigger_requests");
 
-    private static async Task<string> State(NpgsqlDataSource db)
+    private static async Task<string> State(System.Data.Common.DbDataSource db)
     {
         await using var command = db.CreateCommand("SELECT state FROM integration_trigger_requests ORDER BY requested_at DESC LIMIT 1");
         return (string)(await command.ExecuteScalarAsync())!;
     }
 
-    private static async Task<long> ScalarAsync(NpgsqlDataSource db, string sql, Guid? id = null)
+    private static async Task<long> ScalarAsync(System.Data.Common.DbDataSource db, string sql, Guid? id = null)
     {
         await using var command = db.CreateCommand(sql);
         if (id is not null) command.Parameters.AddWithValue("id", id.Value);

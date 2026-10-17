@@ -346,18 +346,16 @@ public sealed class NodeRepository(DbDataSource dataSource, PeerClusterOptions? 
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    public enum ModeRequestResult { Accepted, NotFound, LastServer, SingleServerStorage }
+    public enum ModeRequestResult { Accepted, NotFound, LastServer }
 
     /// <summary>
     /// Enregistre le mode voulu d'un nœud ; le nœud l'applique à son prochain signal de présence. Refuse de retirer la fonction
-    /// serveur du dernier nœud serveur en ligne (les changements de mode sont sérialisés par un verrou consultatif).
+    /// serveur du dernier nœud serveur en ligne (les transactions SQLite sérialisent les changements de mode).
     /// </summary>
     public async Task<ModeRequestResult> RequestModeAsync(Guid nodeId, bool server, bool worker, TimeSpan offlineAfter, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(ct);
-        await using (var lockCommand = Sql.Command("SELECT pg_advisory_xact_lock(hashtext('cluster_node_mode'))", c, tx))
-            await lockCommand.ExecuteNonQueryAsync(ct);
         string[] roles;
         await using (var select = Sql.Command("SELECT roles FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL FOR UPDATE", c, tx))
         {
@@ -365,13 +363,7 @@ public sealed class NodeRepository(DbDataSource dataSource, PeerClusterOptions? 
             if (Sql.ToStringArray(await select.ExecuteScalarAsync(ct)) is not { } current) return ModeRequestResult.NotFound;
             roles = current;
         }
-        // Standalone SQLite permits one server; Raft peers keep independent replicated SQLite databases.
-        if (server && !roles.Contains("server") && Sql.IsSqlite(dataSource) && peers is not { Enabled: true })
-        {
-            await using var existing = Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id <> @id AND deleted_at IS NULL AND 'server' = ANY(roles))", c, tx);
-            existing.Parameters.AddWithValue("id", nodeId);
-            if (await existing.ScalarBoolAsync(ct)) return ModeRequestResult.SingleServerStorage;
-        }
+
         if (roles.Contains("server") && !server)
         {
             await using var others = Sql.Command("""

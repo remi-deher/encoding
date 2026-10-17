@@ -145,7 +145,6 @@ public static class NodeEndpoints
             {
                 NodeRepository.ModeRequestResult.NotFound => Results.NotFound(),
                 NodeRepository.ModeRequestResult.LastServer => Results.Conflict(new { title = "Ce nœud est le dernier serveur en ligne : sa fonction serveur ne peut pas être retirée." }),
-                NodeRepository.ModeRequestResult.SingleServerStorage => Results.Conflict(new { title = "Ce cluster utilise SQLite, qui n'admet qu'un seul serveur : migrez d'abord vers PostgreSQL." }),
                 _ => Results.Accepted()
             };
         }).WithName("RequestNodeMode");

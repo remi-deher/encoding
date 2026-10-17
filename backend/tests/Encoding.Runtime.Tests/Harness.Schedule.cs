@@ -1,6 +1,5 @@
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Contracts.Nodes;
-using Npgsql;
 
 namespace Encoding.Runtime.Tests;
 

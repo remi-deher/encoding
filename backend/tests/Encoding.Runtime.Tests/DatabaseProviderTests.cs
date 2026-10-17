@@ -1,11 +1,12 @@
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Infrastructure.Data.Sqlite;
+using Encoding.Api.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
-/// <summary>Architecture 0043 : choix du fournisseur à l'installation.</summary>
+/// <summary>Architecture 0043 : le serveur démarre uniquement sur SQLite local.</summary>
 public sealed class DatabaseProviderTests
 {
     private static IConfiguration Config(string? provider, string? connection)
@@ -16,18 +17,42 @@ public sealed class DatabaseProviderTests
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
     }
 
+    [Fact]
+    public void SqliteIsTheDefaultWhenNoConnectionStringIsConfigured()
+    {
+        using var source = DatabaseProvider.CreateRuntime(Config(null, null));
+        Assert.IsType<SqliteDataSource>(source);
+        Assert.Contains("cluster.db", source.ConnectionString, StringComparison.Ordinal);
+    }
+
     [Theory]
-    [InlineData(null, "Host=db;Database=encoding", "postgres")]
-    [InlineData(null, "Data Source=/var/lib/encoding-node/cluster.db", "sqlite")]
-    [InlineData(null, null, "postgres")]
-    [InlineData("sqlite", "Host=db", "sqlite")]
-    [InlineData("postgres", "Data Source=x.db", "postgres")]
-    public void ProviderIsExplicitOrInferredFromTheConnectionString(string? provider, string? connection, string expected) =>
-        Assert.Equal(expected, DatabaseProvider.Name(Config(provider, connection)));
+    [InlineData("other", "Data Source=x.db")]
+    [InlineData("sqlite", "Host=db;Database=encoding")]
+    [InlineData(null, "Server=db;Database=encoding")]
+    public void RuntimeRejectsNonSqliteConfiguration(string? provider, string? connection) =>
+        Assert.Throws<InvalidOperationException>(() => DatabaseProvider.CreateRuntime(Config(provider, connection)));
 
     [Fact]
-    public void UnknownProviderIsRejected() =>
-        Assert.Throws<InvalidOperationException>(() => DatabaseProvider.Name(Config("mysql", null)));
+    public async Task FreshSqliteInstallationAppliesTheCurrentSchemaAndIsRestartSafe()
+    {
+        await using var database = await TestDatabase.CreateSqliteAsync("fresh-install");
+        var contentRoot = Harness.RepositoryRoot();
+
+        await DatabaseMigrator.ApplyAsync(database.Db, contentRoot, CancellationToken.None);
+        var firstStatus = await DatabaseMigrator.StatusAsync(database.Db, contentRoot, CancellationToken.None);
+        Assert.Empty(firstStatus.Pending);
+        Assert.Empty(firstStatus.Unknown);
+        Assert.Equal("0036_cluster_reconciliation", firstStatus.Latest);
+        await using (var identity = database.Db.CreateCommand("SELECT count(*) FROM cluster_identity"))
+            Assert.Equal(1L, await identity.ExecuteScalarAsync());
+
+        await DatabaseMigrator.ApplyAsync(database.Db, contentRoot, CancellationToken.None);
+        var restartStatus = await DatabaseMigrator.StatusAsync(database.Db, contentRoot, CancellationToken.None);
+        Assert.Equal(firstStatus.Applied, restartStatus.Applied);
+        Assert.Equal(firstStatus.Pending, restartStatus.Pending);
+        Assert.Equal(firstStatus.Unknown, restartStatus.Unknown);
+        Assert.Equal(firstStatus.Latest, restartStatus.Latest);
+    }
 
     [Fact]
     public async Task SqliteCreatesItsDirectoryOnFirstUse()

@@ -6,7 +6,7 @@ using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Infrastructure.Operations;
 
-/// <summary>Construit la page <c>/metrics</c> : état du cluster lu dans PostgreSQL (identique sur chaque serveur) et mesures du processus local.</summary>
+/// <summary>Construit la page <c>/metrics</c> : état du cluster dans SQLite et mesures du processus local.</summary>
 public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenceOptions presence, IHostEnvironment environment,
     PeerConsensusService? peers = null, PeerDatabaseCoordinator? database = null,
     PeerIdentityStore? identity = null, PeerObservations? observations = null, PeerClusterOptions? peerOptions = null,
@@ -22,7 +22,7 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
         try { await WriteClusterAsync(writer, cancellationToken); }
         catch (DbException)
         {
-            writer.Gauge("encoding_database_up", "1 si PostgreSQL répond.", 0);
+            writer.Gauge("encoding_database_up", "1 si la base locale répond.", 0);
         }
         WriteProcess(writer);
         WriteRetention(writer);
@@ -58,7 +58,7 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
     private async Task WriteClusterAsync(PrometheusWriter writer, CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        writer.Gauge("encoding_database_up", "1 si PostgreSQL répond.", 1);
+        writer.Gauge("encoding_database_up", "1 si la base locale répond.", 1);
 
         var nodes = await Rows(connection, """
             SELECT CASE WHEN last_seen_at >= clock_timestamp() - make_interval(secs => @offline) THEN 'online' ELSE 'offline' END, count(*)
@@ -73,7 +73,7 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
 
         writer.Gauge("encoding_executions_oldest_queued_age_seconds", "Ancienneté de la plus ancienne exécution en file.",
             await Scalar(connection, "SELECT COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - min(queued_at)), 0) FROM executions WHERE state = 'queued'", ct));
-        writer.Gauge("encoding_execution_leases_expired", "Exécutions en cours dont le bail a expiré et attendent une reprise.",
+        writer.Gauge("encoding_execution_leases_expired", "Exécutions en cours dont le bail a expiré et attendent leur clôture en erreur.",
             await Scalar(connection, "SELECT count(*) FROM execution_work w JOIN executions e ON e.id = w.execution_id WHERE e.state IN ('running','cancelling') AND (w.lease_until IS NULL OR w.lease_until <= clock_timestamp())", ct));
         writer.Gauge("encoding_media_reservations_active", "Médias actuellement réservés par un bail valide.",
             await Scalar(connection, "SELECT count(*) FROM media_reservations WHERE lease_until > clock_timestamp()", ct));

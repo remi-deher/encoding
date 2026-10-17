@@ -10,7 +10,6 @@
     <PackageReference Include="Haukcode.Mdns" Version="1.0.21" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
-    <PackageReference Include="Npgsql" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Encoding.Contracts\Encoding.Contracts.csproj" />
@@ -18,7 +17,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Update="Flows\Catalog\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\..\migrations\*.sql" Link="migrations\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\migrations\sqlite\*.sql" Link="migrations\sqlite\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

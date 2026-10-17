@@ -1,6 +1,6 @@
 # Backend
 
-Socle API ASP.NET Core sur .NET 10 et PostgreSQL partagé. L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`. Les décisions d’architecture sont décrites dans [`../docs/architecture/`](../docs/architecture/).
+Socle API ASP.NET Core sur .NET 10, avec SQLite local par serveur. Les serveurs d'un cluster réconcilient progressivement leurs données via le maillage décrit dans [`0049`](../docs/architecture/0049-multi-server-shared-cluster.md). L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`.
 
 Le mode optionnel **pair à pair** permet aussi une base SQLite ou PostgreSQL indépendante par serveur, avec état métier répliqué par Raft. Configuration, jointure, sauvegarde/restauration, rotation et contraintes de version : [guide d’exploitation](../docs/operations/peer-cluster-preview.md).
 
@@ -13,7 +13,7 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-L’interface Angular et l’API sont servies par le même conteneur : ouvrir `http://localhost:4201` pour l’application ou `http://localhost:5080` pour l’API. PostgreSQL est disponible sur `localhost:5432`. La gestion du nœud passe par **Nœuds → Ce nœud et son cluster**, avec la session du serveur. L’agent écoute uniquement en boucle locale dans le conteneur ; le relais utilise le secret créé automatiquement par le lanceur, sans réglage CORS ni `WORKER_UI_ORIGINS` et sans port 8081 à publier. Les données d’identité du worker sont persistées dans le volume `encoding-node-data`. Hors lanceur, configurer le même fichier `Node__LocalEnrollmentSecretFile` pour le serveur et l’agent du même hôte ; sans secret, les routes de l’agent restent fermées.
+L’interface Angular et l’API sont servies par le même conteneur : ouvrir `http://localhost:4201` pour l’application ou `http://localhost:5080` pour l’API. Le fichier SQLite local est conservé dans le volume `encoding-node-data` avec l’identité du nœud. La gestion du nœud passe par **Nœuds → Ce nœud et son cluster**, avec la session du serveur. L’agent écoute uniquement en boucle locale dans le conteneur ; le relais utilise le secret créé automatiquement par le lanceur, sans réglage CORS ni `WORKER_UI_ORIGINS` et sans port 8081 à publier. Hors lanceur, configurer le même fichier `Node__LocalEnrollmentSecretFile` pour le serveur et l’agent du même hôte ; sans secret, les routes de l’agent restent fermées.
 
 ## Encodage matériel (Intel, AMD, NVIDIA)
 
@@ -37,7 +37,7 @@ docker logs encoding 2>&1 | grep -i "encodage matériel"
 
 Attendu : `vainfo` liste `VAProfileH264Main` et `VAProfileHEVCMain` avec `VAEntrypointEncSlice`, FFmpeg termine sans erreur.
 
-Les migrations SQL versionnées (`NNNN_nom.sql`, numéro unique, empreinte enregistrée) s’appliquent au démarrage, sous verrou PostgreSQL ; ne jamais modifier une migration publiée, en ajouter une. Pour ne lancer que la base : `docker compose up -d postgres`. Les identifiants PostgreSQL Compose sont réservés au développement local.
+Les migrations SQLite versionnées (`NNNN_nom.sql`, numéro unique, empreinte enregistrée) s’appliquent au démarrage dans une transaction d’écriture immédiate ; ne jamais modifier une migration publiée, en ajouter une. Le service n’a pas de dépendance à un serveur de base externe.
 
 Le worker découvre les clusters annoncés en DNS-SD/mDNS (`_encoding._tcp`). Le service prend aussi en charge une adresse bootstrap `Cluster:ApiBaseUrl`, utilisée ici pour la découverte dans le réseau Compose où le multicast peut être indisponible. Pour un worker sur un autre hôte, définissez `CLUSTER_ADVERTISED_API_BASE_URL` avec une URL HTTPS joignable depuis ces machines, puis publiez le port API sur l’interface réseau prévue. Le réglage de développement lie volontairement l’API à la boucle locale.
 
@@ -101,7 +101,7 @@ La migration 0019 ajoute les modèles partagés. `POST /api/v1/templates/from-fl
 
 La migration 0009 ajoute les versions immuables et la file de sauvegardes. GET /api/v1/flows liste les flows ; GET /api/v1/flows/{id} et /versions/{version} lisent leurs documents ; PUT /api/v1/flows/{id} publie une version validée avec expectedVersion. Un conflit concurrent reçoit HTTP 409. La création d’exécution exige une version enregistrée.
 
-FlowBackups__Directory configure le dossier JSON. Compose monte encoding-flow-backups dans /var/lib/encoding/flow-backups, séparément de PostgreSQL. Les erreurs sont visibles dans backupStatus et retentées. En cluster multi-hôte, monter un dossier commun durable sur tous les serveurs consommateurs. Voir [0014](../docs/architecture/0014-flow-version-storage-and-backups.md) pour la récupération et les limites.
+FlowBackups__Directory configure le dossier JSON. Compose monte encoding-flow-backups dans /var/lib/encoding/flow-backups, séparément de la base. Les erreurs sont visibles dans backupStatus et retentées. En maillage SQLite, chaque serveur recrée ses propres fichiers depuis les définitions réconciliées ; le volume de sauvegarde reste local et doit être sauvegardé indépendamment. Voir [0014](../docs/architecture/0014-flow-version-storage-and-backups.md) pour la récupération et les limites.
 
 
 ## Runtime, brouillons et restauration

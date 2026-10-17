@@ -11,7 +11,7 @@ public sealed class SqliteClusterTests
 {
     private static async Task<TestDatabase> NewAsync()
     {
-        var database = await TestDatabase.CreateAsync(null, "sqlcluster", "sqlite");
+        var database = await TestDatabase.CreateSqliteAsync("sqlcluster");
         await DatabaseMigrator.ApplyAsync(database.Db, Harness.RepositoryRoot(), CancellationToken.None);
         return database;
     }
@@ -29,15 +29,23 @@ public sealed class SqliteClusterTests
     }
 
     [Fact]
-    public async Task ASecondServerIsRefusedOnASqliteCluster()
+    public async Task ASecondServerCanBeEnabledOnAnSqliteCluster()
     {
         await using var database = await NewAsync();
         var server = Guid.NewGuid(); var worker = Guid.NewGuid();
         await InsertNodeAsync(database, server, "server,worker");
         await InsertNodeAsync(database, worker, "worker");
         var repository = new NodeRepository(database.Db);
-        Assert.Equal(NodeRepository.ModeRequestResult.SingleServerStorage, await repository.RequestModeAsync(worker, true, true, TimeSpan.FromMinutes(5), CancellationToken.None));
-        Assert.Equal(NodeRepository.ModeRequestResult.Accepted, await repository.RequestModeAsync(worker, false, true, TimeSpan.FromMinutes(5), CancellationToken.None));
+        Assert.Equal(NodeRepository.ModeRequestResult.Accepted, await repository.RequestModeAsync(worker, true, true, TimeSpan.FromMinutes(5), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LastServerCannotLeaveServerMode()
+    {
+        await using var database = await NewAsync();
+        var server = Guid.NewGuid();
+        await InsertNodeAsync(database, server, "server,worker");
+        var repository = new NodeRepository(database.Db);
         Assert.Equal(NodeRepository.ModeRequestResult.LastServer, await repository.RequestModeAsync(server, false, true, TimeSpan.FromMinutes(5), CancellationToken.None));
     }
 

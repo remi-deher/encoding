@@ -75,9 +75,11 @@ public sealed class WorkerEnrollmentService(
 
         var node = await response.Content.ReadFromJsonAsync<NodeResponse>(jsonOptions.Value.SerializerOptions, cancellationToken)
             ?? throw new HttpRequestException("Le serveur n’a pas retourné la confirmation de l’enrôlement.");
+        if (!IsLocalCluster(cluster))
+            await AdoptLocalClusterIdentityAsync(cluster, cancellationToken);
         await identityStore.MarkEnrolledAsync(cancellationToken);
         logger.LogInformation("Le worker {NodeId} a rejoint le cluster {ClusterId}.", node.Id, cluster.Id);
-        await CompleteSwitchAsync(cluster.ApiBaseUrl, cancellationToken);
+        await CompleteSwitchAsync(cancellationToken);
         return node;
     }
 
@@ -141,15 +143,15 @@ public sealed class WorkerEnrollmentService(
     }
 
     /// <summary>
-    /// Seconde phase d'un changement de cluster (0040), une fois le nouveau cluster confirmé : l'ancien est prévenu (au mieux) et son identité oubliée,
-    /// puis le serveur local s'arrête si le cluster d'accueil n'est pas celui du conteneur. Sans changement en cours, seul l'arrêt du serveur s'applique.
+    /// Seconde phase d'un changement de cluster (0040), une fois le nouveau cluster confirmé : l'ancien est prévenu (au mieux) et son identité oubliée.
+    /// Le serveur reste actif sur chaque nœud ; sa base SQLite locale réconcilie les données du cluster avec les pairs (0049).
     /// </summary>
-    public async Task CompleteSwitchAsync(string joinedApiBaseUrl, CancellationToken cancellationToken)
+    public async Task CompleteSwitchAsync(CancellationToken cancellationToken)
     {
         var previous = await identityStore.CommitSwitchAsync(cancellationToken);
         if (previous is { HasCredentials: true } && await NotifyLeaveAsync(previous, cancellationToken) == System.Net.HttpStatusCode.Conflict)
             logger.LogWarning("L'ancien cluster {ClusterName} n'a pas retiré ce nœud (traitement en cours) ; ses tâches seront reprises à l'expiration des baux.", previous.ClusterName);
-        await RetireLocalServerAsync(joinedApiBaseUrl, cancellationToken);
+        await KeepLocalServerActiveAsync(cancellationToken);
     }
 
     /// <summary>
@@ -170,14 +172,19 @@ public sealed class WorkerEnrollmentService(
         return abandoned;
     }
 
-    /// <summary>Un nœud serveur+worker qui rejoint un autre cluster devient worker seul : son serveur local s'arrête, sa base et ses bibliothèques restent intactes (0039).</summary>
-    public async Task RetireLocalServerAsync(string joinedApiBaseUrl, CancellationToken cancellationToken)
+    /// <summary>Un nœud rattaché conserve son serveur local actif ; le maillage réconcilie sa copie SQLite du cluster (0049).</summary>
+    public async Task KeepLocalServerActiveAsync(CancellationToken cancellationToken)
     {
-        if (launcher is null || IsLocalUrl(joinedApiBaseUrl)) return;
+        if (launcher is null) return;
         var current = await launcher.GetAsync(cancellationToken);
-        if (current is not { Server: true }) return;
-        await launcher.SetAsync(new NodeMode(false, true), cancellationToken);
-        logger.LogInformation("Le serveur local est arrêté : ce nœud est désormais un worker du cluster rejoint.");
+        if (current is null)
+        {
+            logger.LogWarning("Le lanceur local ne répond pas ; le mode serveur n'a pas pu être vérifié après le rattachement.");
+            return;
+        }
+        if (current.Server) return;
+        await launcher.SetAsync(new NodeMode(true, current.Worker), cancellationToken);
+        logger.LogInformation("Le serveur local reste actif après le rattachement ; vérifiez que sa base est celle du cluster rejoint.");
     }
 
     /// <summary>Vrai pour le serveur du même conteneur : l'agent est configuré avec un secret local et le cluster est joignable en boucle locale.</summary>
@@ -188,6 +195,23 @@ public sealed class WorkerEnrollmentService(
         && options.ClusterApiBaseUrl is not null
         && string.Equals(apiBaseUrl, options.ClusterApiBaseUrl, StringComparison.OrdinalIgnoreCase)
         && LocalEnrollment.IsLoopback(apiBaseUrl);
+
+    /// <summary>Après approbation distante, aligne l'identité annoncée par le serveur local pour que les pairs mDNS partagent le même clusterId.</summary>
+    private async Task AdoptLocalClusterIdentityAsync(DiscoveredCluster cluster, CancellationToken cancellationToken)
+    {
+        if (options.LocalEnrollmentSecretFile is null || options.ClusterApiBaseUrl is not { } localApiUrl || !LocalEnrollment.IsLoopback(localApiUrl)) return;
+        var secret = LocalEnrollment.Read(options.LocalEnrollmentSecretFile);
+        if (string.IsNullOrEmpty(secret)) throw new HttpRequestException("Le secret local est indisponible pour synchroniser l'identité du serveur.");
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(localApiUrl), "api/v1/cluster/join"))
+        {
+            Content = JsonContent.Create(new { clusterId = cluster.Id, clusterName = cluster.Name })
+        };
+        message.Headers.Add(LocalEnrollment.HeaderName, secret);
+        using var response = await client.SendAsync(message, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Le nœud a rejoint {cluster.Name}, mais le serveur local n'a pas adopté son identité de cluster (HTTP {(int)response.StatusCode}).");
+    }
 
     public async Task<WorkerPairingResponse> CreatePairingKeyAsync(Guid clusterId, CancellationToken cancellationToken, bool leaveCurrent = false)
     {

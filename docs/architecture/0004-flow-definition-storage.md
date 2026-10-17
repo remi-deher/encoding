@@ -7,9 +7,9 @@ Implémenté pour les versions validées ; voir 0014-flow-version-storage-and-ba
 ## Décision
 
 - Une définition de flow est un document JSON versionné, indépendant de `ngx-vflow` et des détails du canevas Angular.
-- PostgreSQL est la source de vérité partagée entre les nœuds serveur. Le document est conservé en `jsonb` et chaque version publiée est immuable ; les modifications créent une nouvelle version.
+- SQLite locale est le stockage de chaque serveur ; les définitions sont réconciliées entre pairs selon 0049. Le document est conservé en JSON et chaque version publiée est immuable ; les modifications créent une nouvelle version.
 - Le document décrit les métadonnées du flow, les identifiants et versions des plugins/composants, les configurations de nœuds et les connexions entre sorties et entrées typées. Les positions du canevas peuvent être conservées comme métadonnées de présentation et ne changent pas la sémantique d’exécution.
-- Une sauvegarde JSON distincte est conservée pour chaque version. Les fichiers sont écrits de façon atomique dans un dossier persistant configurable, séparé du stockage PostgreSQL. En déploiement multi-serveur, ce dossier doit être partagé et durable, ou les sauvegardes doivent être copiées vers un stockage de sauvegarde commun ; le disque éphémère d’un conteneur ne suffit pas.
+- Une sauvegarde JSON distincte est conservée pour chaque version. Les fichiers sont écrits de façon atomique dans un dossier persistant configurable, séparé de SQLite. Chaque serveur régénère localement les sauvegardes après réception des définitions réconciliées ; chaque dossier doit être sauvegardé indépendamment.
 - Les fichiers de sauvegarde sont des instantanés récupérables, pas une deuxième autorité d’écriture. Une restauration doit valider le document et sa version avant de recréer une définition en base. Les versions plus récentes en base ne sont pas modifiées par la restauration d’un ancien instantané sans action explicite.
 
 ## Conséquences

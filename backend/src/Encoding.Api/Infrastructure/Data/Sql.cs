@@ -1,8 +1,6 @@
 using System.Data.Common;
 using Encoding.Api.Infrastructure.Data.Sqlite;
 using Microsoft.Data.Sqlite;
-using Npgsql;
-using NpgsqlTypes;
 
 namespace Encoding.Api.Infrastructure.Data;
 
@@ -28,35 +26,22 @@ public static class Sql
     public static bool IsSqlite(DbDataSource dataSource) => dataSource is SqliteDataSource
         || dataSource is PeerDataSource peer && IsSqlite(peer.Inner);
 
-    public static DbParameter Parameter(string name, SqlKind kind, object? value, bool sqlite = false)
+    public static DbParameter Parameter(string name, SqlKind kind, object? value)
     {
-        if (sqlite) return new SqliteParameter(name, value ?? DBNull.Value);
-        var parameter = new NpgsqlParameter { ParameterName = name, Value = value ?? DBNull.Value };
-        switch (kind)
-        {
-            case SqlKind.Json: parameter.NpgsqlDbType = NpgsqlDbType.Jsonb; break;
-            case SqlKind.Bytes: parameter.NpgsqlDbType = NpgsqlDbType.Bytea; break;
-            case SqlKind.Text: parameter.NpgsqlDbType = NpgsqlDbType.Text; break;
-            case SqlKind.Integer: parameter.NpgsqlDbType = NpgsqlDbType.Integer; break;
-            case SqlKind.Decimal: parameter.NpgsqlDbType = NpgsqlDbType.Numeric; break;
-            case SqlKind.Uuid: parameter.NpgsqlDbType = NpgsqlDbType.Uuid; break;
-            case SqlKind.TextArray: parameter.NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text; break;
-        }
-        return parameter;
+        _ = kind;
+        return new SqliteParameter(name, value ?? DBNull.Value);
     }
 
     public static DbParameter AddWithValue(this DbParameterCollection parameters, string name, object? value)
     {
-        DbParameter parameter = parameters is SqliteParameterCollection
-            ? new SqliteParameter(name, value ?? DBNull.Value)
-            : new NpgsqlParameter { ParameterName = name, Value = value ?? DBNull.Value };
+        DbParameter parameter = new SqliteParameter(name, value ?? DBNull.Value);
         parameters.Add(parameter);
         return parameter;
     }
 
     public static DbParameter AddWithValue(this DbParameterCollection parameters, string name, SqlKind kind, object? value)
     {
-        var parameter = Parameter(name, kind, value, parameters is SqliteParameterCollection);
+        var parameter = Parameter(name, kind, value);
         parameters.Add(parameter);
         return parameter;
     }
@@ -106,10 +91,6 @@ public static class Sql
         return value is not null and not DBNull && Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    public static bool IsUniqueViolation(Exception exception) => exception switch
-    {
-        PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } => true,
-        SqliteException { SqliteErrorCode: 19, SqliteExtendedErrorCode: 2067 or 1555 } => true,
-        _ => false
-    };
+    public static bool IsUniqueViolation(Exception exception) =>
+        exception is SqliteException { SqliteErrorCode: 19, SqliteExtendedErrorCode: 2067 or 1555 };
 }

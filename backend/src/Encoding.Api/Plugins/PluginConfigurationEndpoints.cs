@@ -23,7 +23,7 @@ public static class PluginConfigurationEndpoints
             try
             {
                 var saved = await configurations.SaveGlobalAsync(plugin, request, ct);
-                return saved is null ? Results.Conflict(new { title = "La configuration a changé ailleurs." }) : Results.Ok(saved);
+                return saved is null ? Results.Problem("La configuration du plugin n’a pas pu être enregistrée.") : Results.Ok(saved);
             }
             catch (PluginConfigurationValidationException exception)
             {
@@ -63,7 +63,7 @@ public static class PluginConfigurationEndpoints
             try
             {
                 var saved = await configurations.SaveFlowAsync(flowId, plugin, request, ct);
-                return saved is null ? Results.Conflict(new { title = "La dérogation du flow a changé ailleurs." }) : Results.Ok(saved);
+                return saved is null ? Results.Problem("La dérogation du plugin n’a pas pu être enregistrée.") : Results.Ok(saved);
             }
             catch (PluginConfigurationValidationException exception)
             {

@@ -5,40 +5,55 @@ namespace Encoding.Api.Infrastructure;
 public sealed class ClusterDiscoveryPublisher(
     ClusterIdentityRepository identityRepository,
     IConfiguration configuration,
-    ILogger<ClusterDiscoveryPublisher> logger) : IHostedService, IDisposable
+    ILogger<ClusterDiscoveryPublisher> logger) : BackgroundService
 {
     private MdnsAdvertiser? advertiser;
+    private string? announcedIdentity;
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        try
+        while (!stoppingToken.IsCancellationRequested)
         {
-            var identity = await identityRepository.GetAsync(cancellationToken);
-            var configuredPort = configuration.GetValue("Cluster:DiscoveryPort", 8080);
-            if (configuredPort is < 1 or > 65535) throw new InvalidOperationException("Cluster:DiscoveryPort doit être compris entre 1 et 65535.");
-            var apiUrl = configuration["Cluster:AdvertisedApiBaseUrl"];
-            var properties = new Dictionary<string, string> { ["clusterId"] = identity.Id.ToString("D") };
-            if (!string.IsNullOrWhiteSpace(apiUrl)) properties["apiUrl"] = apiUrl;
-            var profile = new ServiceProfile(identity.Name, "_encoding._tcp", (ushort)configuredPort, properties);
-            advertiser = new MdnsAdvertiser(profile);
-            advertiser.Start();
-            logger.LogInformation("Le cluster {ClusterId} est annoncé sur le réseau local via DNS-SD.", identity.Id);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            logger.LogWarning(exception, "La découverte DNS-SD est indisponible ; les workers peuvent utiliser l’adresse directe du serveur.");
+            try
+            {
+                var identity = await identityRepository.GetAsync(stoppingToken);
+                var configuredPort = configuration.GetValue("Cluster:DiscoveryPort", 8080);
+                if (configuredPort is < 1 or > 65535) throw new InvalidOperationException("Cluster:DiscoveryPort doit être compris entre 1 et 65535.");
+                var apiUrl = configuration["Cluster:AdvertisedApiBaseUrl"];
+                var instanceName = configuration["Cluster:DiscoveryInstanceName"]?.Trim();
+                if (string.IsNullOrWhiteSpace(instanceName)) instanceName = Environment.MachineName;
+                var signature = $"{identity.Id:D}|{identity.Name}|{instanceName}|{configuredPort}|{apiUrl}";
+                if (!string.Equals(signature, announcedIdentity, StringComparison.Ordinal))
+                {
+                    advertiser?.Dispose();
+                    var properties = new Dictionary<string, string>
+                    {
+                        ["clusterId"] = identity.Id.ToString("D"),
+                        ["clusterName"] = identity.Name
+                    };
+                    if (!string.IsNullOrWhiteSpace(apiUrl)) properties["apiUrl"] = apiUrl;
+                    advertiser = new MdnsAdvertiser(new ServiceProfile(instanceName, "_encoding._tcp", (ushort)configuredPort, properties));
+                    advertiser.Start();
+                    announcedIdentity = signature;
+                    logger.LogInformation("Le cluster {ClusterId} est annoncé sur le réseau local via DNS-SD.", identity.Id);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception exception)
+            {
+                advertiser?.Dispose();
+                advertiser = null;
+                announcedIdentity = null;
+                logger.LogWarning(exception, "La découverte DNS-SD est indisponible ; les workers peuvent utiliser l’adresse directe du serveur.");
+            }
+            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
         }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        Dispose();
-        return Task.CompletedTask;
-    }
-
-    public void Dispose()
+    public override void Dispose()
     {
         advertiser?.Dispose();
         advertiser = null;
+        base.Dispose();
     }
 }

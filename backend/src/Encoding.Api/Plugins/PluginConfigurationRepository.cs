@@ -40,26 +40,26 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
     public async Task<PluginConfigurationResponse?> SaveGlobalAsync(
         PluginManifest plugin, SavePluginConfigurationRequest request, CancellationToken ct)
     {
-        var current = await ReadAsync("SELECT encrypted_values FROM plugin_configurations WHERE plugin_id=@id", "id", plugin.Id, ct);
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        var current = await ReadAsync("SELECT encrypted_values FROM plugin_configurations WHERE plugin_id=@id FOR UPDATE", connection, transaction, "id", plugin.Id, ct);
         var values = Merge(plugin.ConfigurationSchema, current, request.Values, request.ClearSecrets, flowOverride: false);
         var validation = Validate(plugin.ConfigurationSchema, values, requireRequired: true);
         if (validation is not null) throw new PluginConfigurationValidationException(validation);
         ValidateNodeDefaults(plugin, values, requireTarget: true);
         ValidatePathMappings(values);
 
-        await using var command = dataSource.CreateCommand("""
+        await using var command = Sql.Command("""
             INSERT INTO plugin_configurations(plugin_id,revision,encrypted_values)
-            SELECT @id,1,@values WHERE @expected=0
-              OR EXISTS(SELECT 1 FROM plugin_configurations WHERE plugin_id=@id AND revision=@expected)
+            VALUES(@id,1,@values)
             ON CONFLICT(plugin_id) DO UPDATE SET revision=plugin_configurations.revision+1,
               encrypted_values=EXCLUDED.encrypted_values,updated_at=clock_timestamp()
-            WHERE plugin_configurations.revision=@expected
             RETURNING revision
-            """);
+            """, connection, transaction);
         command.Parameters.AddWithValue("id", plugin.Id);
-        command.Parameters.AddWithValue("expected", request.ExpectedRevision);
         command.Parameters.AddWithValue("values", SqlKind.Bytes, Protect(values));
-        if (await command.ScalarInt32Async(ct) is not {} revision) return null;
+        var revision = await command.ScalarInt32Async(ct) ?? throw new InvalidOperationException("La configuration du plugin n’a pas été enregistrée.");
+        await transaction.CommitAsync(ct);
         return ToResponse(plugin, revision, values);
     }
 
@@ -76,15 +76,6 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
     public async Task<PluginConfigurationResponse?> SaveFlowAsync(
         Guid flowId, PluginManifest plugin, SavePluginConfigurationRequest request, CancellationToken ct)
     {
-        var current = await ReadAsync(
-            "SELECT encrypted_values FROM flow_plugin_configurations WHERE flow_id=@flow AND plugin_id=@plugin",
-            ("flow", (object)flowId), ("plugin", plugin.Id), ct);
-        var values = Merge(plugin.ConfigurationSchema, current, request.Values, request.ClearSecrets, flowOverride: true);
-        var validation = Validate(plugin.ConfigurationSchema, values, requireRequired: false);
-        if (validation is not null) throw new PluginConfigurationValidationException(validation);
-        ValidateNodeDefaults(plugin, values, requireTarget: false);
-        ValidatePathMappings(values);
-
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
         await using (var ensureFlow = Sql.Command("INSERT INTO flows(id) VALUES(@flow) ON CONFLICT DO NOTHING", connection, transaction))
@@ -92,24 +83,33 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
             ensureFlow.Parameters.AddWithValue("flow", flowId);
             await ensureFlow.ExecuteNonQueryAsync(ct);
         }
+        // Lock the parent row so concurrent first writes for this flow are serialized even when
+        // the plugin override does not exist yet. The last committed request wins.
+        await using (var flowLock = Sql.Command("SELECT id FROM flows WHERE id=@flow FOR UPDATE", connection, transaction))
+        {
+            flowLock.Parameters.AddWithValue("flow", flowId);
+            await flowLock.ExecuteScalarAsync(ct);
+        }
+        var current = await ReadAsync(
+            "SELECT encrypted_values FROM flow_plugin_configurations WHERE flow_id=@flow AND plugin_id=@plugin FOR UPDATE",
+            connection, transaction, ("flow", (object)flowId), ("plugin", plugin.Id), ct);
+        var values = Merge(plugin.ConfigurationSchema, current, request.Values, request.ClearSecrets, flowOverride: true);
+        var validation = Validate(plugin.ConfigurationSchema, values, requireRequired: false);
+        if (validation is not null) throw new PluginConfigurationValidationException(validation);
+        ValidateNodeDefaults(plugin, values, requireTarget: false);
+        ValidatePathMappings(values);
+
         await using var command = Sql.Command("""
             INSERT INTO flow_plugin_configurations(flow_id,plugin_id,revision,encrypted_values)
-            SELECT @flow,@plugin,1,@values WHERE @expected=0
-              OR EXISTS(SELECT 1 FROM flow_plugin_configurations WHERE flow_id=@flow AND plugin_id=@plugin AND revision=@expected)
+            VALUES(@flow,@plugin,1,@values)
             ON CONFLICT(flow_id,plugin_id) DO UPDATE SET revision=flow_plugin_configurations.revision+1,
               encrypted_values=EXCLUDED.encrypted_values,updated_at=clock_timestamp()
-            WHERE flow_plugin_configurations.revision=@expected
             RETURNING revision
             """, connection, transaction);
         command.Parameters.AddWithValue("flow", flowId);
         command.Parameters.AddWithValue("plugin", plugin.Id);
-        command.Parameters.AddWithValue("expected", request.ExpectedRevision);
         command.Parameters.AddWithValue("values", SqlKind.Bytes, Protect(values));
-        if (await command.ScalarInt32Async(ct) is not {} revision)
-        {
-            await transaction.RollbackAsync(ct);
-            return null;
-        }
+        var revision = await command.ScalarInt32Async(ct) ?? throw new InvalidOperationException("La dérogation du plugin n’a pas été enregistrée.");
         await transaction.CommitAsync(ct);
         return ToResponse(plugin, revision, values);
     }
@@ -152,6 +152,25 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
     {
         await using var command = dataSource.CreateCommand(sql);
         command.Parameters.AddWithValue(parameter, value);
+        var encrypted = await command.ExecuteScalarAsync(ct);
+        return encrypted is byte[] bytes ? Unprotect(bytes) : new(StringComparer.Ordinal);
+    }
+
+    private async Task<Dictionary<string, JsonElement>> ReadAsync(string sql, DbConnection connection, DbTransaction transaction,
+        string parameter, string value, CancellationToken ct)
+    {
+        await using var command = Sql.Command(sql, connection, transaction);
+        command.Parameters.AddWithValue(parameter, value);
+        var encrypted = await command.ExecuteScalarAsync(ct);
+        return encrypted is byte[] bytes ? Unprotect(bytes) : new(StringComparer.Ordinal);
+    }
+
+    private async Task<Dictionary<string, JsonElement>> ReadAsync(string sql, DbConnection connection, DbTransaction transaction,
+        (string Name, object Value) first, (string Name, object Value) second, CancellationToken ct)
+    {
+        await using var command = Sql.Command(sql, connection, transaction);
+        command.Parameters.AddWithValue(first.Name, first.Value);
+        command.Parameters.AddWithValue(second.Name, second.Value);
         var encrypted = await command.ExecuteScalarAsync(ct);
         return encrypted is byte[] bytes ? Unprotect(bytes) : new(StringComparer.Ordinal);
     }

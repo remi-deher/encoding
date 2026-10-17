@@ -131,19 +131,19 @@ internal static partial class Harness
             Check(!await Waits.ReportProbeAsync(id,b,new(probe.Epoch,"idle"),CancellationToken.None),"A probe cannot be reported twice.");
             Check(await ScalarAsync<string>("SELECT state FROM execution_waits WHERE execution_id=@id",("id",id))=="waiting","An unmet condition keeps waiting.");
             Check(await ReservationUntilAsync(id)=="unbounded" && await runtime.ClaimAsync(b,CancellationToken.None) is null,"After an unmet probe the media stays reserved and the worker is free.");
-            // Un bail de sonde perdu (worker disparu) rend la sonde à un autre worker.
+            // La perte du worker chargé d'une sonde échoue la tentative, comme toute autre tâche attribuée.
             await AgeWaitAsync(id,"due_at");
             await Waits.ProcessDueAsync(CancellationToken.None);
             var lost=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The next probe is due.");
             await ExpireAsync(id);
-            var again=await runtime.ClaimAsync(a,CancellationToken.None)??throw new InvalidOperationException("An expired probe lease is claimable again.");
-            Check(again.Probe is not null && again.Epoch>lost.Epoch,"A lost probe is re-issued under a new epoch.");
-            Check(await Waits.ReportProbeAsync(id,a,new(again.Epoch,"idle"),CancellationToken.None),"The met result is accepted.");
-            Check(await ScalarAsync<string>("SELECT state FROM execution_waits WHERE execution_id=@id",("id",id))=="met","A met condition resolves the wait.");
-            var next=await runtime.ClaimAsync(c,CancellationToken.None)??throw new InvalidOperationException("The resumed segment starts after the block: a worker without the plugin can continue.");
-            Check(next.Probe is null && next.Checkpoint?.NextNodeId=="end","The flow resumes after the wait block, whichever eligible worker is free.");
-            Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel probe fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
-            await ResetNodesAsync();
+            Check(await runtime.ClaimAsync(a,CancellationToken.None) is null,"An expired condition probe is not silently reassigned.");
+            var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="failed","A lost condition-probe worker fails the execution attempt.");
+            await Waits.ProcessDueAsync(CancellationToken.None);
+            Check(await ScalarAsync<string>("SELECT state FROM execution_waits WHERE execution_id=@id",("id",id))=="cancelled","Failure closes the durable wait.");
+            Check(await ReservationUntilAsync(id) is null,"Failure releases the media reservation.");
+            Check(lost.Probe is not null,"The expired assignment was the condition probe.");
         }
 
         public async Task WaitRunnerAndCancellationAsync()

@@ -11,7 +11,7 @@ public static class SessionAuthentication
     public const string CookieName = "encoding_session";
 }
 
-/// <summary>Authentifie une requête par le cookie de session opaque, validé dans PostgreSQL à chaque requête.</summary>
+/// <summary>Authentifie une requête par le cookie de session opaque, validé dans la base SQLite locale à chaque requête.</summary>
 public sealed class SessionAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,

@@ -8,7 +8,7 @@ public sealed record RetentionResult(int Candidates, int Purged, long BytesFreed
 
 /// <summary>
 /// Supprime du volume partagé les artefacts d’exécutions terminées depuis plus longtemps que la rétention.
-/// Les lignes PostgreSQL (historique, empreintes) sont conservées ; seule la marque <c>artifacts_purged_at</c> est ajoutée.
+/// Les lignes d’historique et empreintes restent dans la base locale ; seule la marque <c>artifacts_purged_at</c> est ajoutée.
 /// Les fichiers publiés dans les bibliothèques ne sont jamais concernés.
 /// </summary>
 public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactStore store, OperationsOptions options, ILogger<ArtifactRetention> logger,

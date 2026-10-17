@@ -10,7 +10,7 @@ La création réutilise le formulaire et sa confirmation partagés. Le rattachem
 
 Le contrôleur `LocalNodeController` orchestre les API authentifiées existantes. Les présentations, champs et étapes sont déclaratifs. Le navigateur ne contacte jamais directement l’agent. Aucun contrat backend ni mécanisme de jumelage n’est modifié.
 
-Une demande en cours est retrouvée depuis l’état de l’agent après fermeture ou rechargement. L’expiration ou l’annulation restitue l’état précédent ; la clé de jumelage et une déconnexion ne constituent jamais une confirmation de réussite. Le parcours indique qu’après approbation le serveur local peut s’arrêter, et que la configuration locale n’est pas importée automatiquement.
+Une demande en cours est retrouvée depuis l’état de l’agent après fermeture ou rechargement. L’expiration ou l’annulation restitue l’état précédent ; la clé de jumelage et une déconnexion ne constituent jamais une confirmation de réussite. Après approbation, le serveur local reste actif, adopte l’identité du cluster d’accueil et réconcilie ses données par le maillage 0049. La page Cluster peut être utilisée depuis chaque serveur membre ; les écritures convergent de façon éventuelle.
 
 Le cluster conserve ses demandes reçues, les méthodes avancées d’ajout, les réglages des membres et les actions groupées. Les membres utilisent le tableau partagé sur grand écran et sa présentation en cartes sur mobile. Les actions groupées utilisent la sélection et la confirmation communes du tableau.
 

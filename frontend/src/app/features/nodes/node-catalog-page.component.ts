@@ -317,9 +317,7 @@ export class NodeCatalogPageComponent {
     }),
   );
   protected readonly clusterName = computed(() =>
-    this.local.externalCluster()
-      ? (this.local.status()?.clusterName ?? 'Cluster d’accueil')
-      : (this.clusterIdentity()?.name ?? 'Cluster'),
+    this.clusterIdentity()?.name ?? this.local.status()?.clusterName ?? 'Cluster',
   );
   protected readonly clusterAddress = computed(
     () =>
@@ -345,7 +343,7 @@ export class NodeCatalogPageComponent {
     if (this.pageTab() === 'groups') return this.groupState();
     if (this.local.loading()) return 'loading';
     if (this.pageTab() === 'cluster' && !this.clusterIdentity()) return 'error';
-    return this.pageTab() === 'cluster' && !this.local.standalone() && !this.local.externalCluster()
+    return this.pageTab() === 'cluster' && !this.local.standalone()
       ? this.loadState()
       : 'ready';
   });
@@ -480,7 +478,7 @@ export class NodeCatalogPageComponent {
   protected readonly catalogMessage = computed(() => {
     if (this.pageTab() === 'groups') return this.groupMessage();
     return this.loadState() === 'error'
-      ? 'Impossible de joindre l’API du cluster. Vérifiez que le backend et PostgreSQL sont démarrés.'
+      ? 'Impossible de joindre l’API du cluster. Vérifiez que le serveur et sa base de données sont disponibles.'
       : 'Chargement des nœuds du cluster…';
   });
   protected readonly detailTitle = computed(

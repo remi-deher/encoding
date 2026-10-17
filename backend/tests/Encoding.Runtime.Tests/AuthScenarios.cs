@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Npgsql;
 // Encoding.Api et Encoding.NodeAgent exposent chacun un Program : un type de l’assemblage API désigne le point d’entrée à héberger.
 using ApiAssembly = Encoding.Api.Auth.AuthOptions;
 
@@ -202,6 +201,15 @@ internal static class AuthScenarios
         }
         Check(await admin.StatusAsync(post, "/api/v1/cluster", new { name = "Autre" }) == HttpStatusCode.Conflict, "A cluster cannot be created twice.");
         Check(await admin.StatusAsync(put, "/api/v1/cluster", new { name = "Atelier" }) == HttpStatusCode.OK, "A cluster can be renamed.");
+        var joinedClusterId = Guid.NewGuid();
+        var localClusterJoin = new { clusterId = joinedClusterId, clusterName = "Cluster d'accueil" };
+        Check(await anonymous.StatusAsync(post, "/api/v1/cluster/join", localClusterJoin, csrf: false) == HttpStatusCode.Unauthorized,
+            "The local server cannot adopt a cluster identity without its container secret.");
+        Check(await anonymous.StatusAsync(post, "/api/v1/cluster/join", localClusterJoin, csrf: false, localSecret: LocalSecret) == HttpStatusCode.OK,
+            "The local agent aligns the server identity after an approved join.");
+        using (var joined = await anonymous.SendAsync(get, "/api/v1/cluster"))
+            Check((await joined.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetGuid() == joinedClusterId,
+                "The local API publishes the adopted cluster identity.");
         Check(await viewer.StatusAsync(post, "/api/v1/local-node/leave") == HttpStatusCode.Forbidden, "A viewer cannot make this node leave its cluster.");
         Check(await viewer.StatusAsync(post, "/api/v1/local-node/enroll", new { clusterId = Guid.NewGuid() }) == HttpStatusCode.Forbidden, "A viewer cannot enroll this node elsewhere.");
         Check(await admin.StatusAsync(post, "/api/v1/local-node/leave") == HttpStatusCode.ServiceUnavailable, "Without a local worker function, the relay answers with a clear refusal.");
@@ -421,6 +429,8 @@ internal static class AuthScenarios
             "* /health/ready",
             "POST /api/v1/auth/login",
             "POST /api/v1/auth/setup",
+            "POST /api/v1/cluster/join",
+            "POST /api/v1/cluster/reconciliation/exchange",
             "POST /api/v1/integrations/{pluginId}/webhook",
             "POST /api/v1/nodes/enroll",
             "POST /api/v1/nodes/enrollment-requests",

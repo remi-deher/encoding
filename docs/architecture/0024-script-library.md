@@ -2,7 +2,7 @@
 
 ## Décision
 
-Les scripts réutilisables sont des ressources partagées du cluster, gérées dans la section **Librairies**. La page **Scripts** permet de créer et modifier un brouillon JavaScript ou Python, puis de publier des versions immuables. PostgreSQL est la source de référence commune aux serveurs.
+Les scripts réutilisables sont des ressources partagées du cluster, gérées dans la section **Librairies**. La page **Scripts** permet de créer et modifier un brouillon JavaScript ou Python, puis de publier des versions immuables dans SQLite local ; les modifications convergent entre serveurs par le maillage 0049.
 
 Un flow qui utilise un script conserve une référence `scriptId@version` à titre de provenance, ainsi qu’une copie du langage et du code dans sa configuration. Le moteur exécute cette copie. Une modification ultérieure du brouillon ou une nouvelle publication ne change donc pas un flow existant ; sa définition reste autonome pour les sauvegardes et les archives portables.
 
@@ -12,7 +12,7 @@ Le script choisi dans l’éditeur est copié dans la configuration du bloc. L�
 
 - Chaque script possède un brouillon avec une révision croissante.
 - L’enregistrement compare la révision attendue et retourne un conflit HTTP 409 si un autre utilisateur a modifié le brouillon.
-- La publication compare aussi cette révision, puis crée la prochaine version dans une transaction PostgreSQL.
+- La publication compare aussi cette révision, puis crée la prochaine version dans une transaction SQLite locale.
 - Les instantanés publiés ne sont pas modifiables et restent disponibles pour être copiés dans de nouveaux flows.
 - Les noms de brouillons sont uniques sans tenir compte de la casse.
 

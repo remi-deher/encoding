@@ -87,8 +87,7 @@ COPY --from=build /app/agent ./agent
 COPY --from=build /app/launcher ./launcher
 COPY --from=frontend-build /frontend/dist/frontend/browser ./api/wwwroot
 # Mode initial du nœud : serveur et worker. Un mode enregistré dans le dossier de données le remplace.
-# Base par défaut : SQLite dans le dossier de données (cluster à un seul serveur, architecture 0043). Une chaîne PostgreSQL
-# fournie par ConnectionStrings__Cluster la remplace ; le fournisseur est alors déduit (ou imposé par Database__Provider).
+# Base unique : SQLite local par nœud (architectures 0043/0049).
 # Encodage matériel : NVIDIA_* est lu par le NVIDIA Container Toolkit (ignoré sans GPU NVIDIA) ; ENCODING_GPU_DEVICE
 # (ex. /dev/dri/renderD129) et LIBVA_DRIVER_NAME (iHD, i965, radeonsi) restent libres pour forcer le choix sur l'hôte.
 ENV NVIDIA_VISIBLE_DEVICES=all \

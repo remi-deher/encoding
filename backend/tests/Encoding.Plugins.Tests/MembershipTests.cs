@@ -10,7 +10,7 @@ using static Encoding.Plugins.Tests.Support;
 
 namespace Encoding.Plugins.Tests;
 
-/// <summary>Rattachement d'un nœud à un cluster (0039) : départ, serveur local arrêté à l'arrivée ailleurs, cluster injoignable.</summary>
+/// <summary>Rattachement d'un nœud à un cluster : le serveur local reste actif, départ, changement en deux phases et cluster injoignable.</summary>
 internal static class MembershipTests
 {
     public static async Task RunAsync()
@@ -51,11 +51,15 @@ internal static class MembershipTests
             var enrollment = new WorkerEnrollmentService(options, store, new WorkerClusterDiscovery(options, NullLogger<WorkerClusterDiscovery>.Instance),
                 null!, NullLogger<WorkerEnrollmentService>.Instance, Microsoft.Extensions.Options.Options.Create(new Microsoft.AspNetCore.Http.Json.JsonOptions()), launcher);
 
-            // Arrivée dans un autre cluster : le serveur local s'arrête, le worker reste.
-            await enrollment.RetireLocalServerAsync(clusterUrl, CancellationToken.None);
-            Check(mode == new NodeMode(false, true), "A server+worker node that joins another cluster becomes a worker only.");
-            await enrollment.RetireLocalServerAsync(clusterUrl, CancellationToken.None);
-            Check(mode == new NodeMode(false, true), "Retiring the local server twice changes nothing.");
+            // Arrivée dans un autre cluster : le serveur local reste actif.
+            await enrollment.KeepLocalServerActiveAsync(CancellationToken.None);
+            Check(mode == new NodeMode(true, true), "A server+worker node keeps its local server when joining another cluster.");
+            await enrollment.KeepLocalServerActiveAsync(CancellationToken.None);
+            Check(mode == new NodeMode(true, true), "Keeping the local server active twice changes nothing.");
+
+            mode = new NodeMode(false, true);
+            await enrollment.KeepLocalServerActiveAsync(CancellationToken.None);
+            Check(mode == new NodeMode(true, true), "A worker-only node enables its local server when joining another cluster.");
 
             // Rattaché au cluster distant : le départ le prévient avec son jeton, efface l'identité et rend le serveur local.
             var joined = await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Cluster B", clusterUrl, CancellationToken.None);
@@ -63,7 +67,7 @@ internal static class MembershipTests
             leaveStatus = HttpStatusCode.Conflict;
             var busy = await Assert.ThrowsAsync<InvalidOperationException>(() => enrollment.LeaveAsync(CancellationToken.None));
             var stillJoined = await store.GetAsync(CancellationToken.None);
-            Check(stillJoined.IsEnrolled && stillJoined.Id == joined.Id && mode == new NodeMode(false, true), "A node busy with a task cannot leave: identity and mode are unchanged.");
+            Check(stillJoined.IsEnrolled && stillJoined.Id == joined.Id && mode == new NodeMode(true, true), "A node busy with a task cannot leave: identity and mode are unchanged.");
             Check(busy.Message.Contains("traite encore"), "The refusal explains that the node is still processing.");
 
             leaveStatus = HttpStatusCode.NoContent;
@@ -102,15 +106,15 @@ internal static class MembershipTests
             Check(restored.SwitchFailure is { } failure && failure.Contains("Cluster B") && leaves.Count == 0 && mode == new NodeMode(true, true),
                 "The reason is kept, the old cluster was never told to remove the node and the local server kept running.");
 
-            // Confirmation du nouveau cluster : l'ancien est prévenu, son identité oubliée, le serveur local s'arrête.
+            // Confirmation du nouveau cluster : l'ancien est prévenu, son identité oubliée, le serveur local reste actif.
             await store.BeginSwitchAsync(TimeSpan.FromMinutes(5), CancellationToken.None);
             var arrived = await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Cluster B", "http://127.0.0.1:2/", CancellationToken.None);
             await store.MarkEnrolledAsync(CancellationToken.None);
-            await enrollment.CompleteSwitchAsync("http://127.0.0.1:2/", CancellationToken.None);
+            await enrollment.CompleteSwitchAsync(CancellationToken.None);
             var done = await store.GetAsync(CancellationToken.None);
             Check(done.IsEnrolled && done.Id == arrived.Id && !done.IsSwitching, "After confirmation the node belongs to the new cluster only.");
             Check(leaves.Single().Path == $"/api/v1/nodes/{clusterA.Id:D}/leave" && leaves.Single().Token == clusterA.NodeToken, "The old cluster is told to remove the node, with the old token.");
-            Check(mode == new NodeMode(false, true), "The local server stops once the new cluster confirmed.");
+            Check(mode == new NodeMode(true, true), "The local server stays active once the new cluster is confirmed.");
 
             // Le code de vérification est le même des deux côtés et change avec l'identité.
             var code = NodeVerificationCode.FromToken(arrived.Id, arrived.NodeToken!);
@@ -120,9 +124,9 @@ internal static class MembershipTests
 
             // Cluster local du conteneur : rien à arrêter.
             mode = new NodeMode(true, true);
-            await enrollment.RetireLocalServerAsync(localUrl, CancellationToken.None);
+            await enrollment.KeepLocalServerActiveAsync(CancellationToken.None);
             Check(mode == new NodeMode(true, true), "Staying in the local cluster keeps the local server.");
-            Console.WriteLine("PASS: cluster membership (leave, two-phase switch, rollback, verification code, local server retirement).");
+            Console.WriteLine("PASS: cluster membership (leave, two-phase switch, rollback, verification code, local server availability).");
         }
         finally
         {

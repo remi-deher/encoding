@@ -3,14 +3,13 @@ using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
-/// <summary>Architecture 0043 : traduction du SQL commun PostgreSQL vers SQLite, sans base.</summary>
+/// <summary>Architecture 0043 : adaptation des requêtes aux fonctions SQLite, sans base.</summary>
 public sealed class SqliteTranslatorTests
 {
     [Fact]
-    public void RowLocksAndAdvisoryLocksDisappear()
+    public void RowLocksDisappear()
     {
         Assert.DoesNotContain("FOR UPDATE", SqliteTranslator.Translate("SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED"), StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("SELECT 1", SqliteTranslator.Translate("SELECT pg_advisory_xact_lock(hashtext('cluster_node_mode'))"));
     }
 
     [Fact]
@@ -55,7 +54,7 @@ public sealed class SqliteTranslatorTests
     }
 
     [Fact]
-    public void PostgresOnlySyntaxIsRewritten()
+    public void HistoricalSqlExpressionsAreTranslatedToSqlite()
     {
         Assert.DoesNotContain("::", SqliteTranslator.Translate("SELECT a::text, b::integer FROM t"), StringComparison.Ordinal);
         Assert.StartsWith("UPDATE execution_work AS w SET", SqliteTranslator.Translate("UPDATE execution_work w SET a = 1"), StringComparison.Ordinal);

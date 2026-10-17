@@ -1,9 +1,13 @@
+using Encoding.Api.Auth;
+using Encoding.Core.Nodes;
+
 namespace Encoding.Api.Infrastructure;
 
 using Encoding.Api.Infrastructure.PeerCluster;
 using System.Text.Json;
 
 public sealed record ClusterNameRequest(string Name);
+public sealed record ClusterJoinRequest(Guid ClusterId, string ClusterName);
 
 public static class ClusterEndpoints
 {
@@ -68,5 +72,25 @@ public static class ClusterEndpoints
                 ? Results.Ok(await repository.GetAsync(cancellationToken))
                 : Results.Conflict(new { title = "Ce nœud est autonome : créez d’abord un cluster." });
         }).WithTags("Cluster").WithName("RenameCluster");
+
+        // L'agent local peut aligner l'identité de sa base SQLite après l'approbation du cluster d'accueil.
+        app.MapPost(route + "/join", async (
+            ClusterJoinRequest request,
+            IConfiguration configuration,
+            HttpContext http,
+            ClusterIdentityRepository repository,
+            CancellationToken cancellationToken) =>
+        {
+            if (!LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting], http.Request.Headers[LocalEnrollment.HeaderName].ToString()))
+                return Results.Unauthorized();
+            if (request.ClusterId == Guid.Empty || !ClusterIdentityRepository.IsValidName(request.ClusterName))
+                return Results.BadRequest(new { title = "Identité du cluster invalide." });
+            await repository.AdoptAsync(request.ClusterId, request.ClusterName, cancellationToken);
+            return Results.Ok(await repository.GetAsync(cancellationToken));
+        })
+        .AllowAnonymous()
+        .RequireRateLimiting(AuthExtensions.AnonymousPolicy)
+        .WithTags("Cluster")
+        .WithName("AdoptJoinedClusterIdentity");
     }
 }

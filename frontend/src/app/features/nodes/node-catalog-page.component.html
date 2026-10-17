@@ -31,7 +31,6 @@
   [showToolbar]="
     pageTab() === 'cluster' &&
     !local.standalone() &&
-    !local.externalCluster() &&
     clusterIdentity() !== null
   "
   filterLabel="Membres du cluster actuel"
@@ -62,7 +61,7 @@
           Consulter les réglages
         </button>
       }
-    } @else if (!local.standalone() && clusterIdentity() && !local.externalCluster()) {
+    } @else if (!local.standalone() && clusterIdentity()) {
       @if (isAdmin()) {
         <button matButton="filled" type="button" (click)="addNode()">Ajouter un nœud</button>
         <button matButton="outlined" type="button" [matMenuTriggerFor]="clusterActions">
@@ -154,7 +153,6 @@
     @if (
       pageTab() === 'cluster' &&
       !local.standalone() &&
-      !local.externalCluster() &&
       clusterIdentity()
     ) {
       <app-summary-tiles label="Synthèse du cluster" [tiles]="summaryTiles()" />
@@ -203,16 +201,6 @@
         [cards]="autonomousCards"
         [collapsible]="false"
       />
-    } @else if (local.externalCluster()) {
-      <app-context-banner
-        label="Cluster d’accueil"
-        title="Ce nœud est rattaché à un autre serveur"
-        description="La fonction serveur locale peut s’arrêter après l’approbation. Consultez le cluster d’accueil pour gérer ses membres et les traitements."
-      >
-        @if (clusterAddress(); as address) {
-          <a banner-actions matButton="filled" [href]="address">Ouvrir le cluster</a>
-        }
-      </app-context-banner>
     } @else {
       @if (isAdmin() && enrollmentRows().length) {
         <app-context-banner

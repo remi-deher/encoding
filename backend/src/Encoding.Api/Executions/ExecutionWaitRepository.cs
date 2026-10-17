@@ -116,7 +116,7 @@ public sealed class ExecutionWaitRepository(DbDataSource dataSource,NodePresence
                 _=>false
             };
             if(met) { await ResolveAsync(item,"met",c,tx,ct); continue; }
-            // Une condition de plugin est évaluée par un worker : la sonde rend l'exécution réclamable ; un bail expiré la rend à nouveau réclamable.
+            // Une condition de plugin est évaluée par un worker. Si ce worker perd son bail, RuntimeRecovery échoue la tentative au lieu de réattribuer la sonde.
             var probe=item.Spec.Mode=="block";
             await using var next=Sql.Command("""
               UPDATE execution_waits SET next_check_at=LEAST(clock_timestamp()+make_interval(secs=>@poll),COALESCE(deadline,'infinity'::timestamptz)) WHERE execution_id=@id;

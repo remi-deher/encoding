@@ -11,7 +11,6 @@ using Encoding.Contracts.Flows;
 using Encoding.NodeAgent.Runtime;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
 
 namespace Encoding.Runtime.Tests;
 
@@ -156,82 +155,48 @@ internal static partial class Harness
             context=context with { Variables=new Dictionary<string,JsonElement>{["kept"]=J(7)} };
             await CompleteAsync(id,a,first,"entry",context); await CompleteAsync(id,a,first,"variable",context);
 
-            await ExpireAsync(id); // the worker running on node a stops renewing; node a stays reachable as the library access point.
-            await using(var lost=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=0 WHERE id=@id")){ lost.Parameters.AddWithValue("id",a); await lost.ExecuteNonQueryAsync(); }
-            Check(await runtime.ClaimAsync(a,CancellationToken.None) is null,"The lost worker cannot claim anything.");
-            // Vidange, quarantaine et incompatibilité de version (0041) : aucun de ces nœuds ne reprend l'exécution abandonnée.
-            foreach(var restriction in new[]{"draining=true","quarantined=true","incompatible_reason='protocole trop ancien'"})
-            {
-                await using(var set=db.CreateCommand($"UPDATE cluster_nodes SET {restriction} WHERE id=ANY(@ids)")){ set.Parameters.AddWithValue("ids",new[]{b,c}); await set.ExecuteNonQueryAsync(); }
-                Check(await runtime.ClaimAsync(b,CancellationToken.None) is null && await runtime.ClaimAsync(c,CancellationToken.None) is null,$"A node that is not accepting work ({restriction}) takes nothing.");
-                await using(var clear=db.CreateCommand("UPDATE cluster_nodes SET draining=false,quarantined=false,incompatible_reason=NULL WHERE id=ANY(@ids)")){ clear.Parameters.AddWithValue("ids",new[]{b,c}); await clear.ExecuteNonQueryAsync(); }
-            }
-            var claims=await Task.WhenAll(runtime.ClaimAsync(b,CancellationToken.None),runtime.ClaimAsync(c,CancellationToken.None));
-            Check(claims.Count(claim=>claim?.ExecutionId==id)==1,"Exactly one surviving worker takes over the abandoned execution.");
-            var taker=claims.Single(claim=>claim?.ExecutionId==id)!; var takerNode=claims[0]?.ExecutionId==id?b:c; var other=takerNode==b?c:b;
-            Check(taker.Epoch>first.Epoch && taker.Attempt==first.Attempt,"The takeover is the same attempt under a higher epoch.");
-            Check(taker.Checkpoint?.NextNodeId=="end" && taker.Checkpoint.Context.Variables["kept"].GetInt32()==7,"The new worker resumes from the last durable checkpoint, without repeating completed steps.");
-            Check(await runtime.RenewAsync(id,a,first.Epoch,CancellationToken.None) is null,"The lost worker is fenced when it comes back.");
-            Check(await runtime.StartStepAsync(id,a,new(first.Epoch,"end"),CancellationToken.None) is null,"A returning worker cannot start a step with the old epoch.");
-            Check(!await artifacts.AuthorizeAsync(id,a,first.Epoch,CancellationToken.None),"A returning worker cannot read artifacts with the old epoch.");
-            Check(!await new RuntimeTransferRepository(db).FinishAsync(id,a,new(first.Epoch,Guid.NewGuid(),first.Revision,"failed","Stale worker",null,null),CancellationToken.None),"A returning worker cannot finish the execution.");
-            Check(await runtime.ClaimAsync(other,CancellationToken.None) is null,"No other worker can take an execution that has a valid lease.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id AND lease_epoch=@epoch",("id",id),("epoch",taker.Epoch))==1,"A single reservation follows the new epoch.");
-
-            // The replacement worker is lost in turn.
             await ExpireAsync(id);
-            var third=await runtime.ClaimAsync(other,CancellationToken.None)??throw new InvalidOperationException("The remaining worker must take over.");
-            Check(third.ExecutionId==id && third.Epoch>taker.Epoch,"Epochs increase on every takeover.");
-            Check(await runtime.RenewAsync(id,takerNode,taker.Epoch,CancellationToken.None) is null,"The second lost worker is fenced as well.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE library_id=@library",("library",third.LibraryId!.Value))==1,"Only one execution holds the media at any time.");
-            await CompleteAsync(id,other,third,"end",context);
-            Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up the failover fixture.");
-            await ExpireAsync(id); await RecoverCancellationAsync(id);
-            // Losing the only direct source is terminal, even if its workers have a checkpoint.
-            await ResetNodesAsync();
-            var (unreachable, sourceLease, _) = await EnqueueAsync(flow);
-            await using (var offline = db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@id"))
-            { offline.Parameters.AddWithValue("id", a); await offline.ExecuteNonQueryAsync(); }
-            Check(await runtime.ClaimAsync(b, CancellationToken.None) is null, "No transfer worker takes over while the only direct source is offline.");
-            var failed = await executions.GetAsync(unreachable, CancellationToken.None);
-            Check(failed?.State == "failed" && failed.Detail?.Contains("source direct", StringComparison.OrdinalIgnoreCase) == true,
-                "An unavailable source immediately fails the execution with an explicit reason.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id", ("id", unreachable)) == 0,
-                "The failed task releases its media reservation.");
-            Check(await runtime.RenewAsync(unreachable, a, sourceLease.Epoch, CancellationToken.None) is null,
-                "The old worker cannot renew the failed task.");
-            await ResetNodesAsync();
-            Console.WriteLine("PASS: worker loss — lease expiry, single takeover, checkpoint resume, stale-epoch fencing and successive failures.");
+            var claims=await Task.WhenAll(runtime.ClaimAsync(a,CancellationToken.None),runtime.ClaimAsync(b,CancellationToken.None),runtime.ClaimAsync(c,CancellationToken.None));
+            Check(claims.All(claim=>claim is null),"An expired assigned task is not silently resumed by any worker.");
+            var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="failed","The interrupted attempt is published as failed.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id",("id",id))==0,"Failure releases the media reservation.");
+
+            await using(var lost=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=0 WHERE id=@id")){ lost.Parameters.AddWithValue("id",a); await lost.ExecuteNonQueryAsync(); }
+            var retryId=await executions.RetryAsync(id,CancellationToken.None)??throw new InvalidOperationException("An explicit retry must create a new execution.");
+            var retry=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The eligible surviving worker must claim the explicit retry.");
+            Check(retry.ExecutionId==retryId && retry.ExecutionId!=id && retry.Attempt==first.Attempt+1,"An explicit retry uses a new execution ID and increments the attempt number.");
+            Check(retry.Checkpoint is null && retry.EntryNodeId=="entry","A retry starts the flow again instead of resuming the interrupted checkpoint.");
+            Check(await runtime.RenewAsync(id,a,first.Epoch,CancellationToken.None) is null,"The disconnected worker is fenced after failure.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM execution_events WHERE execution_id=@id AND state='failed'",("id",id))==1,"The failed state remains in the execution history.");
+            Check(await executions.CancelAsync(retryId,CancellationToken.None),"Clean up the explicit retry.");await ExpireAsync(retryId);await RecoverCancellationAsync(retryId);
+            Console.WriteLine("PASS: worker loss fails the attempt; explicit retry creates a fresh execution from the flow entry.");
         }
 
-        /// <summary>Accès direct sur plusieurs nœuds : la perte du worker détenteur n'attend pas son retour, et son nœud, resté en ligne, ne fige pas la reprise.</summary>
-        public async Task DirectWorkerLossFailoverAsync()
+        public async Task BoundedFlowRetryAsync()
         {
             await ResetNodesAsync();
-            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
-            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
-            var library=Guid.NewGuid(); var id=Guid.NewGuid();
-            await using(var command=db.CreateCommand("""
-                INSERT INTO libraries(id,name) VALUES(@library,@name);
-                INSERT INTO library_node_accesses(library_id,node_id,mode,local_path,can_read,can_write) VALUES(@library,@a,'direct',@root,true,true),(@library,@b,'direct',@root,true,true);
-                """))
-            {
-                command.Parameters.AddWithValue("library",library); command.Parameters.AddWithValue("name",library.ToString()); command.Parameters.AddWithValue("root",directory);
-                command.Parameters.AddWithValue("a",a); command.Parameters.AddWithValue("b",b); await command.ExecuteNonQueryAsync();
-            }
-            Check(await runtime.EnqueueAsync(new(id,library,"direct-"+id.ToString("N")+".mkv",flow.Id,flow.Version),flow,CancellationToken.None),"Queue the direct-access fixture.");
-            var first=await runtime.ClaimAsync(a,CancellationToken.None)??throw new InvalidOperationException("The first worker must claim.");
-            Check(first.ExecutionId==id,"The first direct-access worker holds the execution.");
-
-            await ExpireAsync(id); // a is lost for good: it never renews and never comes back during this scenario.
-            await using(var offline=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@id")){ offline.Parameters.AddWithValue("id",a); await offline.ExecuteNonQueryAsync(); }
-            var taken=await runtime.ClaimAsync(b,CancellationToken.None);
-            Check(taken?.ExecutionId==id && taken.Epoch>first.Epoch,"Another worker with its own direct access resumes without waiting for the lost worker to return.");
-            Check(await runtime.RenewAsync(id,a,first.Epoch,CancellationToken.None) is null,"The lost worker is fenced when it comes back.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations WHERE execution_id=@id AND lease_epoch=@epoch",("id",id),("epoch",taken!.Epoch))==1,"A single reservation follows the new epoch.");
-            Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up the direct-access fixture.");
-            await ExpireAsync(id); await RecoverCancellationAsync(id);
-            Console.WriteLine("PASS: direct-access worker loss — resumed by another worker without the lost node.");
+            var entry=Node(registry,"entry","base-input-file");
+            var policy=Node(registry,"retry","nodes-retry-on-worker-loss");
+            var flow=Chain(entry,policy,Node(registry,"end","base-complete-flow"));
+            var(id,first,_)=await EnqueueAsync(flow);
+            await ExpireAsync(id);
+            var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="failed","The original lost attempt is recorded as failed.");
+            var retryId=await ScalarAsync<Guid>("SELECT id FROM executions WHERE retry_of=@id",("id",id));
+            Check(retryId!=Guid.Empty,"The flow policy creates a fresh attempt automatically.");
+            Check(await ScalarAsync<int>("SELECT attempt FROM executions WHERE id=@id",("id",retryId))==first.Attempt+1,"The automatic retry increments the attempt count.");
+            Check(await ScalarAsync<Guid>("SELECT previous_worker_node_id FROM execution_work WHERE execution_id=@id",("id",retryId))==a,"The failed worker is excluded from its automatic retry.");
+            await using(var unavailable=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=0 WHERE id=@id")){ unavailable.Parameters.AddWithValue("id",a); await unavailable.ExecuteNonQueryAsync(); }
+            var retry=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The retry must go to another eligible worker.");
+            Check(retry.ExecutionId==retryId && retry.Checkpoint is null && retry.EntryNodeId=="entry","A flow retry starts at its own entry with isolated artifacts.");
+            await ExpireAsync(retryId);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(retryId,CancellationToken.None))!.State=="failed","A second lost attempt also fails.");
+            Check(await ScalarAsync<long>("SELECT count(*) FROM executions WHERE retry_of=@id",("id",retryId))==0,"The flow's one-retry limit prevents an unbounded loop.");
+            Console.WriteLine("PASS: flow retry policy is opt-in, excludes the failed worker, starts a new execution, and obeys its retry limit.");
         }
 
         public async Task UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync()
@@ -246,6 +211,8 @@ internal static partial class Harness
             await ExpireAsync(id);
             Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,
                 "A new worker does not repeat a plugin step whose external side effect is uncertain.");
+            var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
             var result=await executions.GetAsync(id,CancellationToken.None)??throw new InvalidOperationException("The plugin execution remains observable.");
             Check(result.State=="failed" && result.Detail?.Contains("incertain",StringComparison.OrdinalIgnoreCase)==true,
                 "The execution fails with an explicit uncertain-side-effect reason and requires a deliberate retry.");
@@ -271,54 +238,5 @@ internal static partial class Harness
             return id;
         }
 
-        public async Task ServerLossFailoverAsync()
-        {
-            await ResetNodesAsync();
-            var secondDb=testDb.OpenAnother();
-            var secondConfigurations=new PluginConfigurationRepository(secondDb,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
-            var second=new RuntimeRepository(secondDb,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),secondConfigurations,new NodeGroupRepository(secondDb));
-            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"end","base-complete-flow"));
-            var ids=new List<Guid>(); for(var index=0;index<8;index++) ids.Add(await QueueAsync(flow));
-
-            // A server dies while it holds the row locks of a claim in progress.
-            // SQLite n'a ni verrous de lignes ni session serveur à tuer : un seul écrivain, voir l'architecture 0043.
-            var duringCrash=new List<Guid>();
-            if(!TestDatabase.IsSqlite)
-            {
-                int pid; NpgsqlConnection holder=(NpgsqlConnection)await secondDb.OpenConnectionAsync(); NpgsqlTransaction hold=await holder.BeginTransactionAsync();
-                await using(var backend=new NpgsqlCommand("SELECT pg_backend_pid()",holder,hold)) pid=(int)(await backend.ExecuteScalarAsync())!;
-                await using(var lockRow=new NpgsqlCommand("SELECT execution_id FROM execution_work WHERE execution_id=@id FOR UPDATE",holder,hold)){ lockRow.Parameters.AddWithValue("id",ids[0]); await lockRow.ExecuteScalarAsync(); }
-                for(var attempt=0;attempt<ids.Count+2;attempt++) if(await runtime.ClaimAsync(b,CancellationToken.None) is { } leased && ids.Contains(leased.ExecutionId)) duringCrash.Add(leased.ExecutionId);
-                Check(!duringCrash.Contains(ids[0]) && duringCrash.Distinct().Count()==duringCrash.Count,"Work locked by a server in the middle of a claim is skipped, never duplicated.");
-                await using(var kill=db.CreateCommand("SELECT pg_terminate_backend(@pid)")){ kill.Parameters.AddWithValue("pid",pid); Check((bool)(await kill.ExecuteScalarAsync())!,"Terminate the crashed server's connection."); }
-                try{ await holder.DisposeAsync(); }catch(Exception){ }
-            }
-            var recovered=await runtime.ClaimAsync(c,CancellationToken.None);
-            Check(recovered is not null && ids.Contains(recovered.ExecutionId),"After the crash the surviving server hands out the work that was locked.");
-
-            // Two live servers claim concurrently on behalf of different workers: each execution has exactly one owner.
-            var claimed=new List<RuntimeLease>(); if(recovered is not null) claimed.Add(recovered);
-            var remaining=ids.Count-duringCrash.Count-claimed.Count;
-            for(var round=0;round<ids.Count && remaining>0;round++)
-            {
-                var results=await Task.WhenAll(runtime.ClaimAsync(c,CancellationToken.None),second.ClaimAsync(b,CancellationToken.None),second.ClaimAsync(c,CancellationToken.None));
-                foreach(var lease in results.Where(lease=>lease is not null && ids.Contains(lease.ExecutionId))) { claimed.Add(lease!); remaining--; }
-            }
-            var owners=claimed.Select(lease=>lease.ExecutionId).Concat(duringCrash).ToList();
-            Check(owners.Count==ids.Count && owners.Distinct().Count()==ids.Count,"Every queued execution is leased exactly once across both servers.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM (SELECT execution_id FROM execution_work WHERE execution_id=ANY(@ids) GROUP BY execution_id HAVING count(*) FILTER(WHERE lease_until>clock_timestamp())>1) x",("ids",ids.ToArray()))==0,"No execution has two active leases.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM media_reservations m JOIN execution_work w ON w.execution_id=m.execution_id AND w.lease_epoch=m.lease_epoch WHERE m.execution_id=ANY(@ids)",("ids",ids.ToArray()))==ids.Count,"Each leased media holds one matching reservation.");
-
-            // A server dies after the access node published and before it could acknowledge the confirmation.
-            var item=await PublicationRequestedAsync(true);
-            var confirm=new ConfirmRuntimePublication(item.Lease.Epoch,Guid.NewGuid(),(await executions.GetAsync(item.Id,CancellationToken.None))!.Revision,$".encoding-results/{item.Id:D}/result.mkv",item.ResultSha,Replaced(item.Id));
-            Check(await new RuntimeTransferRepository(db).ConfirmAsync(item.Id,a,confirm,CancellationToken.None),"The first server records the replacement.");
-            Check(!await new RuntimeTransferRepository(secondDb).ConfirmAsync(item.Id,a,confirm,CancellationToken.None),"The agent's retry through the second server is rejected cleanly.");
-            Check(await ScalarAsync<long>("SELECT count(*) FROM source_replacements WHERE execution_id=@id",("id",item.Id))==1 && (await new SourceReplacementRepository(secondDb).GetAsync(item.Id,CancellationToken.None))?.State=="replaced",
-                "Any server reads the same single, durable replacement record.");
-            var rollbacks=await Task.WhenAll(new SourceReplacementRepository(db).RequestRollbackAsync(item.Id,CancellationToken.None),new SourceReplacementRepository(secondDb).RequestRollbackAsync(item.Id,CancellationToken.None));
-            Check(rollbacks.Count(result=>result=="ok")==1,"Two servers cannot both start a rollback.");
-            Console.WriteLine("PASS: server loss — locks released on crash, no double lease across servers, idempotent confirmation and single rollback.");
-        }
     }
 }

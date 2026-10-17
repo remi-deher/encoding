@@ -8,6 +8,13 @@ namespace Encoding.Api.Executions;
 
 public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefinitionValidator validator)
 {
+    public bool RequiresWriteAccess(FlowDefinition flow,string? nextNodeId=null,bool resumed=false)
+    {
+        var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
+        return entry is not null && RuntimeHandoffPolicy.Segment(flow,entry)
+            .Any(node=>registry.Resolve(node.Component)?.RequiresWriteAccess==true);
+    }
+
     /// <summary>Une sonde n'exécute qu'une condition de plugin : seule la capacité de ce plugin est requise.</summary>
     public bool CanProbe(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,string blockNodeId)
     {

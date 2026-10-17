@@ -14,6 +14,48 @@ public sealed record RuntimeHandoffSelector(string Mode, Guid? TargetNodeId = nu
                 && NodeLabelSelector.Matches(RequiredLabels, identity.EffectiveLabels));
 }
 
+/// <summary>Opt-in, bounded policy for starting a fresh attempt after an assigned worker is lost.</summary>
+public sealed record RuntimeRetryPolicy(int MaximumRetries, RuntimeHandoffSelector Selector)
+{
+    public const string ComponentId = "nodes-retry-on-worker-loss";
+
+    public static RuntimeRetryPolicy? Resolve(FlowDefinition flow)
+    {
+        var nodes = flow.Nodes.Where(node => node.Component.PluginId == "nodes" && node.Component.ComponentId == ComponentId).ToArray();
+        if (nodes.Length == 0) return null;
+        if (nodes.Length != 1) throw new ArgumentException("Un flow ne peut contenir qu’une seule règle de relance après perte du worker.");
+        var configuration = nodes[0].Configuration;
+        var retries = configuration.TryGetValue("maxRetries", out var maximum) && maximum.TryGetInt32(out var parsed) ? parsed : 1;
+        if (retries is < 1 or > 10) throw new ArgumentException("Le nombre de relances doit être compris entre 1 et 10.");
+        Guid? target = null;
+        if (configuration.TryGetValue("targetNodeId", out var node) && node.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(node.GetString()))
+        {
+            if (!Guid.TryParse(node.GetString(), out var id) || id == Guid.Empty)
+                throw new ArgumentException("L’identifiant du worker de relance est invalide.");
+            target = id;
+        }
+        Guid? group = null;
+        if (configuration.TryGetValue("targetGroupId", out var groupValue) && groupValue.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(groupValue.GetString()))
+        {
+            if (!Guid.TryParse(groupValue.GetString(), out var id) || id == Guid.Empty)
+                throw new ArgumentException("L’identifiant du groupe de relance est invalide.");
+            group = id;
+        }
+        var labels = configuration.TryGetValue("requiredLabels", out var labelValue) && labelValue.ValueKind == JsonValueKind.String
+            ? labelValue.GetString() : null;
+        if (!string.IsNullOrWhiteSpace(labels) && !NodeLabelSelector.IsValid(labels))
+            throw new ArgumentException("Le filtre d’étiquettes de relance est invalide.");
+        if (target is not null && (group is not null || !string.IsNullOrWhiteSpace(labels)))
+            throw new ArgumentException("Choisissez un worker précis ou un groupe/filtre d’étiquettes pour la relance.");
+        var selector = target is not null ? new RuntimeHandoffSelector("node", target)
+            : group is not null || !string.IsNullOrWhiteSpace(labels) ? new RuntimeHandoffSelector("selector", TargetGroupId: group, RequiredLabels: labels)
+            : new RuntimeHandoffSelector("eligible");
+        return new(retries, selector);
+    }
+}
+
 /// <summary>Shared interpretation of defaults, flow overrides and the explicit relay block.</summary>
 public static class RuntimeHandoffPolicy
 {

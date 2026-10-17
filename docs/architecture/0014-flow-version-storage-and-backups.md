@@ -12,15 +12,15 @@ Cette étape enregistre uniquement des versions validées. La conservation de br
 
 ## Sauvegarde séparée
 
-La publication écrit le travail de sauvegarde dans la même transaction PostgreSQL. Le service traite les travaux avec FOR UPDATE SKIP LOCKED : les serveurs peuvent consommer la même file sans choisir une deuxième autorité.
+La publication écrit le travail local de sauvegarde dans la même transaction SQLite. Chaque serveur recrée et traite sa file locale depuis les définitions réconciliées ; ces travaux ne sont pas une file commune.
 
-Chaque fichier est nommé {id}.v{version}.json dans FlowBackups:Directory. Compose utilise /var/lib/encoding/flow-backups, monté sur le volume encoding-flow-backups, séparé du volume PostgreSQL.
+Chaque fichier est nommé {id}.v{version}.json dans FlowBackups:Directory. Compose utilise /var/lib/encoding/flow-backups, monté sur le volume encoding-flow-backups, séparé du volume SQLite local.
 
 Le fichier contient le document portable, sans wrapper ni code d’interface. Une écriture utilise un fichier temporaire unique dans le même dossier, Flush avec synchronisation sur disque, puis un déplacement sans écrasement. Un fichier existant est comparé par SHA-256 au JSON canonique de la version en base. S’il diffère, il est conservé pour diagnostic et le travail passe en failed.
 
 Le statut pending/ready/failed est indépendant de la version. Un échec est retenté toutes les 30 secondes. Une sauvegarde réussie est revérifiée toutes les 10 minutes ; un fichier manquant est recréé depuis la version immuable. Les fichiers temporaires de l’écriture courante sont nettoyés ; aucune suppression des instantanés n’est programmée.
 
-En multi-serveur sur plusieurs machines, tous les consommateurs doivent monter le même dossier durable ou un système de fichiers partagé adéquat. Un volume Docker local ne remplace pas une réplication ou une sauvegarde du stockage de l’hôte.
+Avec le maillage SQLite, les définitions et les entrées de la file de sauvegarde sont réconciliées, mais le statut de sauvegarde reste propre à chaque serveur. Chaque serveur régénère et vérifie ses propres fichiers depuis les versions répliquées ; le même dossier n'a donc pas besoin d'être monté sur tous les hôtes. Un volume Docker local doit tout de même être sauvegardé si l'on veut conserver ce filet de sécurité indépendant de la base.
 
 ## Exécutions
 
@@ -36,7 +36,7 @@ Les valeurs optionnelles null des descripteurs sont normalisées vers l’absenc
 
 ## Récupération et limites
 
-Les fichiers JSON restent lisibles indépendamment de PostgreSQL. Après restauration du service et du catalogue, les versions peuvent être réimportées par PUT dans l’ordre croissant avec leur identité originale et expectedVersion correspondant à la version précédente. L’API valide chaque document ; elle refuse tout conflit avec une version existante. Aucun import automatique ou remplacement de versions existantes n’est effectué.
+Les fichiers JSON restent lisibles indépendamment de SQLite. Après restauration du service et du catalogue, les versions peuvent être réimportées par PUT dans l’ordre croissant avec leur identité originale et expectedVersion correspondant à la version précédente. L’API valide chaque document ; elle refuse tout conflit avec une version existante. Aucun import automatique ou remplacement de versions existantes n’est effectué.
 
 La restauration guidée, une archive de catalogue/plugin historique, la rétention des sauvegardes et les brouillons ne sont pas implémentés. Aucun média n’est traité ou remplacé par cette étape.
 
