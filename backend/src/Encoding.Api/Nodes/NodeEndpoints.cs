@@ -20,6 +20,7 @@ public static class NodeEndpoints
             ClusterIdentityRepository clusterIdentity,
             ClusterDataKeyStore dataKeyStore,
             ClusterPeerAdmissionRepository peerAdmissions,
+            ClusterReconciliationRepository reconciliationRepository,
             IConfiguration configuration,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
@@ -41,6 +42,8 @@ public static class NodeEndpoints
             {
                 if (request.ClusterPeerId is { } peerId && request.ClusterPeerPublicKey is { } publicKey)
                     await peerAdmissions.CreateDirectApprovalGrantAsync(node.Id, peerId, publicKey, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(request.ClusterPeerReconciliationUrl))
+                    await reconciliationRepository.AddPeerEndpointAsync(request.ClusterPeerReconciliationUrl, "enroll", cancellationToken);
                 return Results.Ok(node with { ClusterBootstrap = await peerAdmissions.GetBootstrapForNodeAsync(node.Id, cancellationToken) });
             }
             return windowOpen

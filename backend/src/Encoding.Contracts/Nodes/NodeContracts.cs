@@ -103,7 +103,9 @@ public sealed record NodeEnrollmentRequest(
     string NodeToken,
     NodeInventory? Inventory = null,
     Guid? ClusterPeerId = null,
-    string? ClusterPeerPublicKey = null);
+    string? ClusterPeerPublicKey = null,
+    string? DisplayName = null,
+    string? ClusterPeerReconciliationUrl = null);
 
 public sealed record CreateNodeEnrollmentRequest(NodeEnrollmentRequest Node, string PairingKey);
 
@@ -118,7 +120,8 @@ public sealed record PendingNodeEnrollmentResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset ExpiresAt,
     NodeInventory? Inventory = null,
-    string? VerificationCode = null);
+    string? VerificationCode = null,
+    string? DisplayName = null);
 
 public sealed record NodeActivityResponse(int Active,int Succeeded,int Failed,int Cancelled,DateTimeOffset? LastActivity,int SourceTasks);
 

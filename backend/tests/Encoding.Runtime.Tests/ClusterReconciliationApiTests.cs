@@ -89,6 +89,58 @@ public sealed class ClusterReconciliationApiTests
         }
     }
 
+    [Fact]
+    public async Task ExchangeRegistersAdvertisedPeerAndExchangesKnownPeers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "encoding-mesh-discovery-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var targetPath = Path.Combine(root, "target.db");
+        var targetConnectionString = $"Data Source={targetPath};Pooling=False";
+        try
+        {
+            await using var target = new SqliteDataSource(targetConnectionString);
+            var migrations = Harness.RepositoryRoot();
+            await DatabaseMigrator.ApplyAsync(target, migrations, CancellationToken.None);
+            var clusterId = Guid.NewGuid();
+            await new ClusterIdentityRepository(target).AdoptAsync(clusterId, "Media", CancellationToken.None);
+            var sourceProtection = new EphemeralDataProtectionProvider();
+            var sourceConfiguration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PluginSettings:KeyDirectory"] = Path.Combine(root, "source-keys")
+            }).Build();
+            using var sourceIdentity = new ClusterPeerIdentityStore(sourceConfiguration, sourceProtection);
+            await TrustPeerAsync(target, clusterId, sourceIdentity);
+
+            var request = new ClusterReconciliationExchangeRequest(
+                1,
+                clusterId,
+                new Dictionary<Guid, long>(),
+                [],
+                AdvertisedUrl: "http://peer-source:5080/",
+                KnownPeers: ["http://peer-gossip-1:5080/"]);
+            var requestBytes = JsonSerializer.SerializeToUtf8Bytes(request, JsonOptions);
+
+            await using var factory = CreateFactory(targetConnectionString, root);
+            using var client = factory.CreateClient();
+            using var response = await SendSignedAsync(client, requestBytes, sourceIdentity);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var repo = new ClusterReconciliationRepository(target);
+            var endpoints = await repo.GetPeerEndpointsAsync(CancellationToken.None);
+            Assert.Contains("http://peer-source:5080/", endpoints);
+            Assert.Contains("http://peer-gossip-1:5080/", endpoints);
+
+            var responseBytes = await response.Content.ReadAsByteArrayAsync();
+            var exchange = JsonSerializer.Deserialize<ClusterReconciliationExchangeResponse>(responseBytes, JsonOptions);
+            Assert.NotNull(exchange);
+            Assert.Contains("http://peer-source:5080/", exchange.KnownPeers ?? []);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static WebApplicationFactory<AuthOptions> CreateFactory(string connectionString, string dataDirectory) =>
         new WebApplicationFactory<AuthOptions>().WithWebHostBuilder(builder =>
         {

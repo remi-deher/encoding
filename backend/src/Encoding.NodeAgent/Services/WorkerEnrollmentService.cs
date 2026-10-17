@@ -18,7 +18,7 @@ public sealed class WorkerEnrollmentService(
     /// <summary>Délai laissé au cluster d'accueil pour approuver un changement de cluster : la clé de jumelage vit 10 minutes, avec une marge.</summary>
     public static readonly TimeSpan SwitchTimeout = TimeSpan.FromMinutes(12);
 
-    public async Task<NodeResponse> EnrollAsync(Guid clusterId, CancellationToken cancellationToken, bool leaveCurrent = false)
+    public async Task<NodeResponse> EnrollAsync(Guid clusterId, CancellationToken cancellationToken, bool leaveCurrent = false, string? displayName = null)
     {
         var cluster = discovery.List().FirstOrDefault(candidate => candidate.Id == clusterId)
             ?? throw new InvalidOperationException("Ce cluster n’est plus visible sur le réseau. Actualisez la découverte et réessayez.");
@@ -32,7 +32,8 @@ public sealed class WorkerEnrollmentService(
         if (identity.IsEnrolled)
             throw new InvalidOperationException("Ce worker est déjà rattaché à un cluster. Quittez-le d’abord, ou demandez à changer de cluster.");
 
-        var pending = await identityStore.SaveEnrollmentAsync(cluster.Id.ToString("D"), cluster.Name, cluster.ApiBaseUrl, cancellationToken);
+        var effectiveDisplayName = string.IsNullOrWhiteSpace(displayName) ? options.DisplayName : displayName.Trim();
+        var pending = await identityStore.SaveEnrollmentAsync(cluster.Id.ToString("D"), cluster.Name, cluster.ApiBaseUrl, cancellationToken, effectiveDisplayName);
         var capabilities = await capabilityProbe.DiscoverAsync(cancellationToken);
         var peerIdentity = await GetLocalPeerIdentityAsync(cancellationToken);
         var request = new NodeEnrollmentRequest(
@@ -44,7 +45,9 @@ public sealed class WorkerEnrollmentService(
             pending.NodeToken!,
             CreateInventory(),
             peerIdentity?.PeerId,
-            peerIdentity?.PublicKey);
+            peerIdentity?.PublicKey,
+            DisplayName: effectiveDisplayName,
+            ClusterPeerReconciliationUrl: peerIdentity?.AdvertisedUrl);
 
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(cluster.ApiBaseUrl), "api/v1/nodes/enroll"))
@@ -80,7 +83,7 @@ public sealed class WorkerEnrollmentService(
         var node = await response.Content.ReadFromJsonAsync<NodeResponse>(jsonOptions.Value.SerializerOptions, cancellationToken)
             ?? throw new HttpRequestException("Le serveur n’a pas retourné la confirmation de l’enrôlement.");
         if (!IsLocalCluster(cluster) && options.LocalEnrollmentSecretFile is not null)
-            await AdoptLocalClusterIdentityAsync(node.Id, cluster.Id, node.ClusterBootstrap, cancellationToken);
+            await AdoptLocalClusterIdentityAsync(node.Id, cluster.Id, node.ClusterBootstrap, cluster.ApiBaseUrl, cancellationToken);
         await identityStore.MarkEnrolledAsync(cancellationToken);
         logger.LogInformation("Le worker {NodeId} a rejoint le cluster {ClusterId}.", node.Id, cluster.Id);
         await CompleteSwitchAsync(cancellationToken);
@@ -238,10 +241,10 @@ public sealed class WorkerEnrollmentService(
             ?? throw new HttpRequestException("Le cluster n’a pas retourné sa preuve d’admission.");
         if (bootstrap.ClusterId != clusterId)
             throw new HttpRequestException("La preuve reçue appartient à un autre cluster que celui choisi.");
-        await AdoptLocalClusterIdentityAsync(nodeId, clusterId, bootstrap, cancellationToken);
+        await AdoptLocalClusterIdentityAsync(nodeId, clusterId, bootstrap, identity.ApiBaseUrl, cancellationToken);
     }
 
-    private async Task AdoptLocalClusterIdentityAsync(Guid nodeId, Guid expectedClusterId, ClusterJoinBootstrap? bootstrap, CancellationToken cancellationToken)
+    private async Task AdoptLocalClusterIdentityAsync(Guid nodeId, Guid expectedClusterId, ClusterJoinBootstrap? bootstrap, string? peerUrl, CancellationToken cancellationToken)
     {
         if (options.LocalEnrollmentSecretFile is null || options.ClusterApiBaseUrl is not { } localApiUrl || !LocalEnrollment.IsLoopback(localApiUrl)) return;
         var secret = LocalEnrollment.Read(options.LocalEnrollmentSecretFile);
@@ -251,7 +254,7 @@ public sealed class WorkerEnrollmentService(
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(localApiUrl), "api/v1/cluster/join"))
         {
-            Content = JsonContent.Create(new { clusterId = bootstrap.ClusterId, clusterName = bootstrap.ClusterName, nodeId, bootstrap })
+            Content = JsonContent.Create(new { clusterId = bootstrap.ClusterId, clusterName = bootstrap.ClusterName, nodeId, bootstrap, peerUrl })
         };
         message.Headers.Add(LocalEnrollment.HeaderName, secret);
         using var response = await client.SendAsync(message, cancellationToken);
@@ -259,7 +262,7 @@ public sealed class WorkerEnrollmentService(
             throw new HttpRequestException($"Le nœud a rejoint {bootstrap.ClusterName}, mais le serveur local n'a pas adopté son identité de cluster (HTTP {(int)response.StatusCode}).");
     }
 
-    public async Task<WorkerPairingResponse> CreatePairingKeyAsync(Guid clusterId, CancellationToken cancellationToken, bool leaveCurrent = false)
+    public async Task<WorkerPairingResponse> CreatePairingKeyAsync(Guid clusterId, CancellationToken cancellationToken, bool leaveCurrent = false, string? displayName = null)
     {
         var cluster = discovery.List().FirstOrDefault(candidate => candidate.Id == clusterId)
             ?? throw new InvalidOperationException("Ce cluster n’est plus visible sur le réseau. Actualisez la découverte et réessayez.");
@@ -272,7 +275,8 @@ public sealed class WorkerEnrollmentService(
         if (identity.IsEnrolled)
             throw new InvalidOperationException("Ce worker est déjà rattaché à un cluster. Quittez-le d’abord, ou demandez à changer de cluster.");
 
-        var pending = await identityStore.SavePairingAsync(cluster.Id.ToString("D"), cluster.Name, cluster.ApiBaseUrl, cancellationToken);
+        var effectiveDisplayName = string.IsNullOrWhiteSpace(displayName) ? options.DisplayName : displayName.Trim();
+        var pending = await identityStore.SavePairingAsync(cluster.Id.ToString("D"), cluster.Name, cluster.ApiBaseUrl, cancellationToken, effectiveDisplayName);
         var capabilities = await capabilityProbe.DiscoverAsync(cancellationToken);
         var peerIdentity = await GetLocalPeerIdentityAsync(cancellationToken);
         var request = new CreateNodeEnrollmentRequest(
@@ -285,7 +289,9 @@ public sealed class WorkerEnrollmentService(
                 pending.NodeToken!,
                 CreateInventory(),
                 peerIdentity?.PeerId,
-                peerIdentity?.PublicKey),
+                peerIdentity?.PublicKey,
+                DisplayName: effectiveDisplayName,
+                ClusterPeerReconciliationUrl: peerIdentity?.AdvertisedUrl),
             pending.PairingKey!);
 
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };

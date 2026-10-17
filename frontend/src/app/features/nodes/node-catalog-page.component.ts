@@ -64,6 +64,7 @@ import {
   clusterAddressForm,
   clusterJoinSteps,
   localNodeSheet,
+  reconciliationBannerPresentation,
 } from '../../shared/models/node-management';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -483,48 +484,12 @@ export class NodeCatalogPageComponent {
       : 'Chargement des nœuds du cluster…';
   });
   protected readonly reconciliationBanner = computed(() => {
-    const status = this.reconciliationStatus();
-    if (!status) {
-      return {
-        title: 'État de synchronisation indisponible',
-        description: 'Impossible de lire l’état du maillage entre les serveurs.',
-      };
-    }
-    if (!status.enabled) {
-      return {
-        title: 'Synchronisation entre serveurs inactive',
-        description:
-          `${status.disabledReason ?? 'Le rattachement du serveur au cluster n’est pas terminé.'} Sans ce maillage, chaque serveur ne voit que ses données locales.`,
-      };
-    }
-    const peers = status.peers.filter((peer) => peer.configured || peer.discovered);
-    if (!peers.length) {
-      const detail = status.discoveryAvailable
-        ? 'Aucun pair n’a été découvert. Vérifiez que mDNS est autorisé entre les serveurs ou configurez Cluster:Reconciliation:Peers__0 avec une adresse joignable.'
-        : `La découverte mDNS est indisponible${status.discoveryError ? ` (${status.discoveryError})` : ''}. Configurez Cluster:Reconciliation:Peers__0 avec une adresse joignable.`;
-      return { title: 'Aucun serveur pair détecté', description: detail };
-    }
-    const failed = peers.filter((peer) => peer.lastError);
-    if (failed.length) {
-      const firstError = failed[0].lastError;
-      return {
-        title: `Synchronisation en échec avec ${failed.length} serveur(s)`,
-        description: firstError
-          ? `${failed[0].url} — ${firstError}`
-          : 'Vérifiez que les serveurs sont approuvés dans le cluster et peuvent communiquer.',
-      };
-    }
-    const pending = peers.filter((peer) => !peer.lastSuccessAt).length;
-    if (pending) {
-      return {
-        title: 'Serveur(s) détecté(s), premier échange en attente',
-        description: `${pending} pair(s) n’a pas encore confirmé de réconciliation. Vérifiez sa disponibilité réseau et son admission au cluster.`,
-      };
-    }
-    return {
-      title: `Synchronisation active avec ${peers.length} serveur(s)`,
-      description: `Dernier échange réussi : ${new Date(Math.max(...peers.map((peer) => Date.parse(peer.lastSuccessAt!)))).toLocaleString()}.`,
-    };
+    const serversCount = this.nodes().filter((node) => node.roles.includes('server')).length;
+    return reconciliationBannerPresentation(
+      this.reconciliationStatus(),
+      serversCount,
+      this.loadState() === 'ready',
+    );
   });
   protected readonly detailTitle = computed(
     () => this.rawNode()?.displayName?.trim() || this.rawNode()?.name || 'Détails du nœud',

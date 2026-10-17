@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadModel } from './model-loader.mjs';
-const { localNodeSheet, formatLastSignal, clusterJoinSteps } = await loadModel('node-management');
+const { localNodeSheet, formatLastSignal, clusterJoinSteps, reconciliationBannerPresentation } = await loadModel('node-management');
 
 const NOW = Date.parse('2026-10-15T12:00:00Z');
 const status = {
@@ -140,4 +140,41 @@ test('cluster join step waiting highlights the verification code as heroCode', (
   assert.ok(waiting);
   assert.equal(waiting.heroCode?.code, 'R7EPDH');
   assert.equal(waiting.heroCode?.badge, 'En attente d’approbation');
+});
+
+test('reconciliationBannerPresentation returns Serveur unique when single server and 0 peers', () => {
+  const banner = reconciliationBannerPresentation({
+    enabled: true,
+    disabledReason: null,
+    discoveryAvailable: true,
+    discoveryError: null,
+    peers: [],
+  }, 1, true);
+  assert.equal(banner.title, 'Serveur unique');
+  assert.match(banner.description, /Ce cluster ne comporte qu’un seul serveur/);
+});
+
+test('reconciliationBannerPresentation warns about mDNS when multiple servers and 0 peers discovered', () => {
+  const banner = reconciliationBannerPresentation({
+    enabled: true,
+    disabledReason: null,
+    discoveryAvailable: true,
+    discoveryError: null,
+    peers: [],
+  }, 2, true);
+  assert.equal(banner.title, 'Aucun serveur pair détecté');
+  assert.match(banner.description, /Aucun pair n’a été découvert/);
+});
+
+test('reconciliationBannerPresentation displays active status when peers are connected', () => {
+  const banner = reconciliationBannerPresentation({
+    enabled: true,
+    disabledReason: null,
+    discoveryAvailable: true,
+    discoveryError: null,
+    peers: [
+      { url: 'http://node2:5080/', configured: false, discovered: true, lastAttemptAt: '2026-10-17T16:00:00Z', lastSuccessAt: '2026-10-17T16:00:00Z', lastError: null },
+    ],
+  }, 2, true);
+  assert.match(banner.title, /Synchronisation active avec 1 serveur/);
 });

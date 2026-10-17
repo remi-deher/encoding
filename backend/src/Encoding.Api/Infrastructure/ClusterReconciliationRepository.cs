@@ -207,6 +207,42 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         await transaction.CommitAsync(ct);
     }
 
+    public static string? TryNormalizePeerUrl(string? peerUrl)
+    {
+        if (string.IsNullOrWhiteSpace(peerUrl)) return null;
+        if (!Uri.TryCreate(peerUrl, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(uri.UserInfo) || uri.Query.Length > 0 || uri.Fragment.Length > 0)
+            return null;
+        return new Uri(uri.GetLeftPart(UriPartial.Authority) + "/").AbsoluteUri;
+    }
+
+    public async Task AddPeerEndpointAsync(string peerUrl, string source, CancellationToken ct)
+    {
+        var normalized = TryNormalizePeerUrl(peerUrl);
+        if (normalized is null) return;
+        await using var command = dataSource.CreateCommand("""
+            INSERT INTO cluster_sync_peer_endpoints (peer_url, source, added_at, last_seen_at)
+            VALUES (@peer_url, @source, (strftime('%Y-%m-%d %H:%M:%f','now') || '000Z'), (strftime('%Y-%m-%d %H:%M:%f','now') || '000Z'))
+            ON CONFLICT (peer_url) DO UPDATE SET last_seen_at = (strftime('%Y-%m-%d %H:%M:%f','now') || '000Z')
+            """);
+        command.Parameters.AddWithValue("peer_url", normalized);
+        command.Parameters.AddWithValue("source", source);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<string>> GetPeerEndpointsAsync(CancellationToken ct)
+    {
+        var result = new List<string>();
+        try
+        {
+            await using var command = dataSource.CreateCommand("SELECT peer_url FROM cluster_sync_peer_endpoints");
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) result.Add(reader.GetString(0));
+        }
+        catch (DbException) { }
+        return result;
+    }
+
     public async Task EnsureIdentityAsync(CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("INSERT INTO cluster_sync_identity(singleton, origin_id, next_sequence) VALUES (true, @origin, 0) ON CONFLICT (singleton) DO NOTHING");

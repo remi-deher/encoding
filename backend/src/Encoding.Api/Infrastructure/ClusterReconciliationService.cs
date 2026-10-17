@@ -98,10 +98,12 @@ public sealed class ClusterReconciliationService(
                 {
                     logger.LogWarning(exception, "La capture ou la projection des données du cluster sera retentée.");
                 }
-                var peerUrls = GetPeerUrls().ToArray();
+                var peerUrls = await GetPeerUrlsAsync(stoppingToken);
                 var configuredUrls = (configuration.GetSection("Cluster:Reconciliation:Peers").Get<string[]>() ?? [])
                     .Select(Normalize).Where(url => url is not null).Cast<string>();
-                var discoveredUrls = discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key);
+                var dynamicPeers = await repository.GetPeerEndpointsAsync(stoppingToken);
+                var discoveredUrls = discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key)
+                    .Concat(dynamicPeers.Select(Normalize).Where(url => url is not null).Cast<string>());
                 health.SetPeers(configuredUrls, discoveredUrls);
                 foreach (var peerUrl in peerUrls)
                 {
@@ -128,10 +130,12 @@ public sealed class ClusterReconciliationService(
         }
     }
 
-    private IEnumerable<string> GetPeerUrls()
+    private async Task<IReadOnlyList<string>> GetPeerUrlsAsync(CancellationToken ct)
     {
         var configured = configuration.GetSection("Cluster:Reconciliation:Peers").Get<string[]>() ?? [];
-        return configured.Concat(discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key))
+        var dynamicPeers = await repository.GetPeerEndpointsAsync(ct);
+        return configured.Concat(dynamicPeers)
+            .Concat(discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key))
             .Select(Normalize)
             .Where(url => url is not null && !string.Equals(url, advertisedApiBaseUrl, StringComparison.OrdinalIgnoreCase))
             .Cast<string>()
@@ -144,6 +148,7 @@ public sealed class ClusterReconciliationService(
         var remoteVector = await repository.GetPeerVectorAsync(peerUrl, ct);
         var localVector = await repository.GetVectorAsync(ct);
         var outgoing = (await repository.GetEventsAfterAsync(clusterId, remoteVector, ClusterReconciliationRepository.MaximumBatchSize, ct)).ToList();
+        var knownPeers = await repository.GetPeerEndpointsAsync(ct);
         byte[] requestBody;
         while (true)
         {
@@ -151,7 +156,9 @@ public sealed class ClusterReconciliationService(
                 ClusterReconciliationEndpoints.ProtocolVersion,
                 clusterId,
                 localVector,
-                outgoing);
+                outgoing,
+                advertisedApiBaseUrl,
+                knownPeers.Take(8).ToArray());
             requestBody = JsonSerializer.SerializeToUtf8Bytes(request, JsonOptions);
             if (requestBody.Length <= ClusterReconciliationSignature.MaximumBodyBytes) break;
             if (outgoing.Count == 0) throw new InvalidOperationException("Le vecteur de réconciliation dépasse la taille maximale autorisée.");
@@ -200,6 +207,20 @@ public sealed class ClusterReconciliationService(
         await repository.ApplyIncomingAsync(exchange.Changes, ct);
         await entityReconciliation.ApplyPendingAsync(ct);
         await repository.SavePeerVectorAsync(peerUrl, exchange.KnownSequences, ct);
+        await repository.AddPeerEndpointAsync(peerUrl, "active", ct);
+        if (!string.IsNullOrWhiteSpace(exchange.AdvertisedUrl) && Normalize(exchange.AdvertisedUrl) is { } advUrl
+            && !string.Equals(advUrl, advertisedApiBaseUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            await repository.AddPeerEndpointAsync(advUrl, "exchange", ct);
+        }
+        if (exchange.KnownPeers is { Count: > 0 })
+        {
+            foreach (var peer in exchange.KnownPeers)
+            {
+                if (Normalize(peer) is { } normPeer && !string.Equals(normPeer, advertisedApiBaseUrl, StringComparison.OrdinalIgnoreCase))
+                    await repository.AddPeerEndpointAsync(normPeer, "gossip", ct);
+            }
+        }
         if (outgoing.Count > 0 || exchange.Changes.Count > 0)
             logger.LogDebug("Réconciliation avec {PeerUrl} : {Sent} événements envoyés, {Received} reçus.", peerUrl, outgoing.Count, exchange.Changes.Count);
     }
@@ -214,6 +235,7 @@ public sealed class ClusterReconciliationService(
         if (Normalize(url) is { } normalized && !string.Equals(normalized, advertisedApiBaseUrl, StringComparison.OrdinalIgnoreCase))
         {
             discoveredPeers[normalized] = foundCluster;
+            _ = repository.AddPeerEndpointAsync(normalized, "mdns", CancellationToken.None);
             logger.LogDebug("Pair Encoding découvert : {PeerUrl}, cluster {ClusterId}.", normalized, foundCluster);
         }
     }
