@@ -160,6 +160,7 @@ app-shell {
       overflow-y: auto;
       display: flex;
       flex-direction: column;
+      z-index: auto !important;
     }
   }
 }
@@ -390,7 +391,7 @@ app-shell {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  view-transition-name: page-transition-region;
+  z-index: auto !important;
 }
 
 .main-content {
