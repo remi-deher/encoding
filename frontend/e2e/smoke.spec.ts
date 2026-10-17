@@ -115,8 +115,11 @@ test('the first-run setup studio completes standalone onboarding and passes WCAG
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        setupRequired: false,
-        user: { id: '00000000-0000-0000-0000-000000000001', username: 'admin', role: 'admin' },
+        id: '00000000-0000-0000-0000-000000000001',
+        username: 'admin',
+        role: 'admin',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00Z',
       }),
     });
   });
