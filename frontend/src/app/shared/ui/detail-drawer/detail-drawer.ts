@@ -1,6 +1,15 @@
 import { MatButtonModule } from '@angular/material/button';
-import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, TemplateRef, input, output } from '@angular/core';
+import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  TemplateRef,
+  effect,
+  inject,
+  input,
+  output,
+} from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
 
 @Component({
@@ -85,34 +94,39 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     }
 
     .drawer-panel {
-      height: 100dvh;
+      height: 100%;
+      min-height: 100dvh;
+      max-height: 100dvh;
       display: flex;
       flex-direction: column;
       background: var(--surface-container-lowest);
     }
 
     .drawer-header {
-      min-height: 80px;
+      min-height: 72px;
       padding: var(--space-4) var(--space-5);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 20px;
+      gap: 16px;
       background: var(--surface-container-low);
     }
 
     .drawer-heading {
       flex: 1;
       min-width: 0;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
     }
 
     .drawer-heading h2 {
       margin: 0;
       color: var(--text-primary);
-      font-size: var(--font-display-sm);
+      font-size: clamp(18px, 2.2vw, 24px);
       font-weight: 700;
-      letter-spacing: -0.025em;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      word-break: normal;
+      overflow-wrap: break-word;
     }
 
     .drawer-heading p {
@@ -194,6 +208,9 @@ import { MatSidenavModule } from '@angular/material/sidenav';
   `,
 })
 export class DetailDrawerComponent {
+  private readonly doc = inject(DOCUMENT);
+  private readonly destroyRef = inject(DestroyRef);
+
   /** `standard` : tiroir de 560 px pour une fiche ; `wide` : jusqu'à 1 000 px pour un éditeur. */
   readonly size = input<'standard' | 'wide'>('wide');
   /** Avec un voile, un clic extérieur ferme le tiroir si celui-ci est dismissible. */
@@ -210,4 +227,23 @@ export class DetailDrawerComponent {
   readonly footerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly headerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly closed = output<void>();
+
+  constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.doc.body?.classList.remove('detail-drawer-open');
+      const sidebar = this.doc.querySelector('.application-sidebar');
+      if (sidebar) {
+        sidebar.removeAttribute('inert');
+      }
+    });
+
+    effect(() => {
+      const isModalOpen = this.modal() && this.opened();
+      this.doc.body?.classList.toggle('detail-drawer-open', isModalOpen);
+      const sidebar = this.doc.querySelector('.application-sidebar');
+      if (sidebar) {
+        sidebar.toggleAttribute('inert', isModalOpen);
+      }
+    });
+  }
 }
