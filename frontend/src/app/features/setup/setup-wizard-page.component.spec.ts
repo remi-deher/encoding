@@ -22,7 +22,14 @@ describe('SetupWizardPageComponent', () => {
       roles: ['server', 'worker'],
       maxConcurrentTasks: 2,
       automaticEnrollmentEnabled: true,
-      capabilities: [{ toolId: 'ffmpeg', version: '7.1', accelerationTypes: ['nvenc'], mediaTypes: ['video', 'audio'] }],
+      capabilities: [
+        {
+          toolId: 'ffmpeg',
+          version: '7.1',
+          accelerationTypes: ['nvenc'],
+          mediaTypes: ['video', 'audio'],
+        },
+      ],
       inventory: {
         processorCount: 16,
         memoryMb: 32768,
@@ -92,6 +99,32 @@ describe('SetupWizardPageComponent', () => {
     expect(el.textContent).toContain('NVIDIA GeForce RTX 3080');
     expect(el.textContent).toContain('Accélération GPU');
     expect(el.textContent).toContain('NVENC');
+  });
+
+  it('advances across steps when clicking Continuer and Suivant', () => {
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const continueBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Continuer'),
+    );
+    expect(continueBtn).toBeTruthy();
+    continueBtn!.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['currentStep']()).toBe(1);
+    expect(el.textContent).toContain('Comment souhaitez-vous utiliser cette machine ?');
+
+    const nextBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Suivant'),
+    );
+    expect(nextBtn).toBeTruthy();
+    nextBtn!.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['currentStep']()).toBe(2);
+    expect(el.textContent).toContain('Prêt à démarrer en mode autonome');
   });
 
   it('allows selecting operation modes', () => {

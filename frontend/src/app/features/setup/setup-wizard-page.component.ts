@@ -111,7 +111,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
           </ng-template>
 
           <!-- Étape 1 : Identification du nœud -->
-          <mat-step [completed]="currentStep() > 0 && isStep1Valid()">
+          <mat-step [completed]="isStep1Valid()">
             <ng-template matStepLabel>Identification</ng-template>
             <div class="step-content">
               <h2>Bienvenue sur Encoding</h2>
@@ -189,7 +189,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
           </mat-step>
 
           <!-- Étape 2 : Choix du mode de fonctionnement -->
-          <mat-step [completed]="currentStep() > 1 && isStep2Valid()">
+          <mat-step [completed]="isStep2Valid()">
             <ng-template matStepLabel>Mode de fonctionnement</ng-template>
             <div class="step-content">
               <h2>Comment souhaitez-vous utiliser cette machine ?</h2>
