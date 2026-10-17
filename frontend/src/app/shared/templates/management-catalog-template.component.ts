@@ -147,7 +147,7 @@ export class ManagementCatalogTemplateComponent {
   /** Largeur du tiroir : `standard` (560 px) pour une fiche, `wide` pour un éditeur. */
   readonly drawerSize = input<'standard' | 'wide'>('wide');
   /** Voile derrière le tiroir ; un clic dessus le ferme. */
-  readonly drawerModal = input(false);
+  readonly drawerModal = input(true);
   readonly detailClosed = output<void>();
   readonly actionClosed = output<void>();
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });

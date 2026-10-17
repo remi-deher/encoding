@@ -40,6 +40,7 @@ interface UserRow extends DataTableRow {
       title="Paramètres"
       filterLabel="Utilisateurs"
       searchLabel="Rechercher un utilisateur"
+      drawerSize="standard"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
       note="Un administrateur gère le cluster. Le rôle lecture seule consulte sans rien modifier. Les sessions d’un compte désactivé ou supprimé sont fermées immédiatement."

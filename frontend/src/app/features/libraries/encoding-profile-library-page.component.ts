@@ -123,7 +123,13 @@ interface EncoderGroup {
               <p>Les priorités les plus basses sont essayées en premier en mode automatique.</p>
             </div>
           </div>
-          @for (group of encoderGroups(); track group.codec) {
+          <app-category-tabs
+            label="Filtrer par famille de codec"
+            [options]="codecFilterOptions"
+            [selected]="selectedCodec()"
+            (selectedChange)="selectedCodec.set($event)"
+          />
+          @for (group of visibleEncoderGroups(); track group.codec) {
             <section class="codec-group" [attr.aria-label]="group.label">
               <h4>{{ group.label }}</h4>
               @for (encoder of group.encoders; track encoder.id) {
@@ -363,6 +369,13 @@ export class EncodingProfileLibraryPageComponent {
     { key: 'encoderCount', label: 'Encodeurs', sortable: true },
     { key: 'state', label: 'État', sortable: true },
   ];
+  protected readonly codecFilterOptions: readonly CategoryTabOption[] = [
+    { value: 'all', label: 'Tous les codecs' },
+    { value: 'hevc', label: 'H.265 / HEVC' },
+    { value: 'h264', label: 'H.264 / AVC' },
+    { value: 'av1', label: 'AV1' },
+  ];
+  protected readonly selectedCodec = signal<string>('all');
   protected readonly encoderGroups = computed<readonly EncoderGroup[]>(() => {
     const codecs = [
       { id: 'hevc', label: 'H.265 / HEVC' },
@@ -374,6 +387,12 @@ export class EncodingProfileLibraryPageComponent {
       label: codec.label,
       encoders: this.encoders().filter((encoder) => encoder.codec === codec.id),
     }));
+  });
+  protected readonly visibleEncoderGroups = computed<readonly EncoderGroup[]>(() => {
+    const codec = this.selectedCodec();
+    return codec === 'all'
+      ? this.encoderGroups()
+      : this.encoderGroups().filter((group) => group.codec === codec);
   });
   private readonly allRows = computed<readonly ProfileRow[]>(() =>
     this.profiles().map((profile) => ({

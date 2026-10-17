@@ -9,6 +9,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatTabsModule } from '@angular/material/tabs';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
 import {
@@ -42,25 +44,32 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     DataTableComponent,
     DetailDrawerComponent,
     DetailFieldListComponent,
+    MatFormFieldModule,
+    MatInputModule,
     MatTabsModule,
     PageHeaderComponent,
     ExecutionPipelineLogsComponent,
   ],
   template: `
-    <app-page-header [title]="title()" [actions]="pageActions()" />
+    <app-page-header
+      [title]="title()"
+      [description]="sectionDescription()"
+      [actions]="pageActions()"
+    >
+      <span page-metadata class="execution-count-pill">{{ countText() }}</span>
+    </app-page-header>
 
-    <section class="monitor-panel" aria-labelledby="execution-panel-heading">
-      <div class="monitor-panel-heading">
-        <div>
-          <h2 id="execution-panel-heading">Suivi des exécutions</h2>
-          <p>{{ sectionDescription() }}</p>
-        </div>
-        <span class="execution-count">{{ countText() }}</span>
-      </div>
-
+    <section class="monitor-panel" [attr.aria-label]="title()">
       @if (feedback()) {
         <p class="execution-feedback" role="status">{{ feedback() }}</p>
       }
+
+      <div class="monitor-toolbar">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="monitor-search-field">
+          <mat-label>Rechercher un média, une bibliothèque, un flow ou un worker</mat-label>
+          <input matInput type="search" [value]="searchQuery()" (input)="onSearchInput($event)" />
+        </mat-form-field>
+      </div>
 
       <mat-tab-group
         class="execution-tabs"
@@ -74,7 +83,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
           <div class="tab-content">
             <app-data-table
               [columns]="queueColumns()"
-              [rows]="queueRows()"
+              [rows]="filteredQueueRows()"
               [selectable]="true"
               [selectionActions]="selectionActions()"
               [rowOpenable]="true"
@@ -93,7 +102,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
           <div class="tab-content">
             <app-data-table
               [columns]="activeColumns()"
-              [rows]="activeRows()"
+              [rows]="filteredActiveRows()"
               [selectable]="true"
               [selectionActions]="selectionActions()"
               [rowOpenable]="true"
@@ -112,7 +121,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
           <div class="tab-content">
             <app-data-table
               [columns]="errorColumns()"
-              [rows]="errorRows()"
+              [rows]="filteredErrorRows()"
               [rowActions]="errorActions()"
               [selectable]="true"
               [selectionActions]="selectionActions()"
@@ -133,7 +142,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
           <div class="tab-content">
             <app-data-table
               [columns]="cancelledColumns()"
-              [rows]="cancelledRows()"
+              [rows]="filteredCancelledRows()"
               [selectable]="true"
               [selectionActions]="selectionActions()"
               [rowOpenable]="true"
@@ -152,7 +161,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
           <div class="tab-content">
             <app-data-table
               [columns]="historyColumns()"
-              [rows]="historyRows()"
+              [rows]="filteredHistoryRows()"
               [selectable]="true"
               [selectionActions]="selectionActions()"
               [rowOpenable]="true"
@@ -172,12 +181,33 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
 
     <app-detail-drawer
       [opened]="selectedExecution() !== null"
+      [modal]="true"
       [title]="detailTitle()"
       [description]="detailDescription()"
       [content]="executionDetailTemplate()"
       (closed)="selectedId.set(null); executionOpened.emit(null)"
     >
       <ng-template #executionDetail>
+        @if (selectedExecution(); as exec) {
+          <div class="execution-hero-comparison" aria-label="Comparaison média et worker">
+            <div class="comparison-card">
+              <span class="comparison-label">Taille source</span>
+              <strong class="comparison-value">{{ exec['beforeSize'] || '—' }}</strong>
+            </div>
+            <div class="comparison-arrow" aria-hidden="true">→</div>
+            <div class="comparison-card">
+              <span class="comparison-label">Taille finale</span>
+              <strong class="comparison-value">{{ exec['afterSize'] || '—' }}</strong>
+            </div>
+            <div class="comparison-card">
+              <span class="comparison-label">Worker & Progression</span>
+              <strong class="comparison-value">
+                {{ exec['node'] || '—' }} · {{ exec['progress'] || '—' }}
+              </strong>
+            </div>
+          </div>
+        }
+
         <mat-tab-group
           class="execution-detail-tabs"
           aria-label="Informations de l’exécution"
@@ -244,56 +274,49 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     </app-detail-drawer>
   `,
   styles: `
+    .execution-count-pill {
+      display: inline-flex;
+      align-items: center;
+      margin-top: var(--space-2);
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-container);
+      color: var(--text-secondary);
+      font-size: var(--font-label);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
     .monitor-panel {
       overflow: hidden;
       border-radius: var(--radius-2xl);
       background: var(--surface-container-low);
     }
 
-    .monitor-panel-heading {
-      min-height: 68px;
-      padding: var(--space-4) var(--space-5);
+    .monitor-toolbar {
+      padding: var(--space-4) var(--space-4) var(--space-2);
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-4);
-      background: var(--surface-container);
-      border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+      justify-content: flex-end;
     }
 
-    .monitor-panel-heading h2 {
-      margin: 0;
-      color: var(--text-primary);
-      font-size: var(--font-title-md);
-      font-weight: 700;
-      letter-spacing: -0.015em;
-    }
-
-    .monitor-panel-heading p {
-      margin: 5px 0 0;
-      color: var(--text-secondary);
-      font-size: var(--font-label);
-    }
-
-    .execution-count,
-    .tab-count {
-      color: var(--text-muted);
-      font-size: var(--font-label);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .execution-count {
-      flex: 0 0 auto;
+    .monitor-search-field {
+      width: min(380px, 100%);
     }
 
     .tab-count {
       margin-left: 6px;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-container);
+      color: var(--text-secondary);
+      font-size: var(--font-label);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
     }
 
     .execution-feedback {
       margin: var(--space-3) var(--space-4) 0;
       padding: 10px var(--space-3);
-      border: 1px solid var(--accent-soft);
       border-radius: var(--radius-md);
       background: var(--accent-soft);
       color: var(--accent-strong);
@@ -302,7 +325,51 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     }
 
     .tab-content {
-      padding-top: 14px;
+      padding-top: 12px;
+    }
+
+    .execution-hero-comparison {
+      margin-bottom: var(--space-4);
+      padding: var(--space-3);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+      border-radius: var(--radius-xl);
+      background: var(--surface-container);
+    }
+
+    .comparison-card {
+      flex: 1 1 130px;
+      min-width: 0;
+      padding: var(--space-3);
+      border-radius: var(--radius-lg);
+      background: var(--surface-container-lowest);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .comparison-label {
+      color: var(--text-muted);
+      font-size: var(--font-label);
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .comparison-value {
+      color: var(--text-primary);
+      font-size: var(--font-title-sm);
+      font-weight: 760;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+
+    .comparison-arrow {
+      color: var(--accent-strong);
+      font-weight: 800;
+      padding-inline: 2px;
     }
 
     .execution-detail-tabs {
@@ -340,9 +407,8 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
         min-width: 112px;
       }
 
-      .monitor-panel-heading {
-        align-items: flex-start;
-        padding: var(--space-4);
+      .comparison-arrow {
+        display: none;
       }
     }
   `,
@@ -386,10 +452,41 @@ export class ExecutionMonitorTemplateComponent {
   readonly errorAction = output<DataTableActionEvent>();
   readonly selectionAction = output<DataTableSelectionActionEvent>();
 
+  protected readonly searchQuery = signal('');
+  protected readonly filteredQueueRows = computed(() =>
+    this.filterRows(this.queueRows(), this.searchQuery()),
+  );
+  protected readonly filteredActiveRows = computed(() =>
+    this.filterRows(this.activeRows(), this.searchQuery()),
+  );
+  protected readonly filteredErrorRows = computed(() =>
+    this.filterRows(this.errorRows(), this.searchQuery()),
+  );
+  protected readonly filteredCancelledRows = computed(() =>
+    this.filterRows(this.cancelledRows(), this.searchQuery()),
+  );
+  protected readonly filteredHistoryRows = computed(() =>
+    this.filterRows(this.historyRows(), this.searchQuery()),
+  );
+
+  protected onSearchInput(event: Event): void {
+    this.searchQuery.set((event.target as HTMLInputElement).value);
+  }
+
+  private filterRows(rows: readonly DataTableRow[], rawQuery: string): readonly DataTableRow[] {
+    const query = rawQuery.trim().toLocaleLowerCase('fr');
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row['media'], row['library'], row['flow'], row['node'], row['detail'], row['state']]
+        .filter(Boolean)
+        .some((val) => String(val).toLocaleLowerCase('fr').includes(query)),
+    );
+  }
+
   protected readonly selectedIndex = computed(() =>
     EXECUTION_MONITOR_VIEWS.indexOf(this.selectedView()),
   );
-  private readonly selectedId = signal<string | null>(null);
+  protected readonly selectedId = signal<string | null>(null);
   protected readonly selectedExecution = computed(
     () =>
       [

@@ -7,6 +7,7 @@ export interface NavigationItem {
   readonly label: string;
   readonly path: string;
   readonly glyph: string;
+  readonly group?: string;
   readonly exact?: boolean;
   readonly adminOnly?: boolean;
   readonly visible?: boolean;
@@ -51,6 +52,7 @@ export function getPrimaryNavigationGroups(routes: Route[]): readonly Navigation
         label: metadata.label,
         path,
         glyph: metadata.glyph,
+        group: metadata.group,
         exact: metadata.exact,
         adminOnly: metadata.adminOnly,
         visible: metadata.visible,
@@ -76,6 +78,34 @@ export function getPrimaryNavigationGroups(routes: Route[]): readonly Navigation
     }));
 }
 
+export function getSearchableNavigationItems(routes: Route[]): readonly NavigationItem[] {
+  const baseItems = getPrimaryNavigationGroups(routes).flatMap((group) => group.items);
+  const extraDestinations: readonly NavigationItem[] = [
+    {
+      label: 'Ce nœud (Machine locale)',
+      path: '/nodes?tab=node',
+      glyph: '▣',
+      group: 'Infrastructure',
+      keywords: ['local', 'worker', 'serveur', 'matériel', 'gpu', 'agent'],
+    },
+    {
+      label: 'Cluster & Membres',
+      path: '/nodes?tab=cluster',
+      glyph: '▣',
+      group: 'Infrastructure',
+      keywords: ['cluster', 'membres', 'enrôlement', 'appairage', 'synchronisation'],
+    },
+    {
+      label: 'Groupes de nœuds',
+      path: '/nodes?tab=groups',
+      glyph: '▣',
+      group: 'Infrastructure',
+      keywords: ['groupes', 'étiquettes', 'labels', 'critères'],
+    },
+  ];
+  return [...baseItems, ...extraDestinations];
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-primary-navigation',
@@ -90,14 +120,9 @@ export class PrimaryNavigationComponent {
   readonly collapsed = input(false);
   readonly activeExecutionCount = input(0);
 
-  protected readonly groups = computed(() =>
+  protected readonly items = computed(() =>
     getPrimaryNavigationGroups(this.router.config)
-      .map((group) => ({
-        ...group,
-        items: group.items.filter(
-          (item) => item.visible !== false && (!item.adminOnly || this.auth.isAdmin()),
-        ),
-      }))
-      .filter((group) => group.items.length > 0),
+      .flatMap((group) => group.items)
+      .filter((item) => item.visible !== false && (!item.adminOnly || this.auth.isAdmin())),
   );
 }

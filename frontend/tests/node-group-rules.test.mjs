@@ -70,7 +70,12 @@ test('évaluation des critères de rôle, OS et architecture', () => {
 
 test('évaluation de la mémoire, CPU et concurrence minimale', () => {
   const node = makeNode({
-    inventory: { operatingSystem: 'linux', architecture: 'X64', processorCount: 8, memoryMb: 16384 },
+    inventory: {
+      operatingSystem: 'linux',
+      architecture: 'X64',
+      processorCount: 8,
+      memoryMb: 16384,
+    },
     maxConcurrentTasks: 2,
   });
   assert.equal(matchesGroupCriteria({ minimumMemoryMb: 16384 }, node), true);
@@ -89,9 +94,30 @@ test('évaluation des outils requis', () => {
 });
 
 test('filtrage d’une liste de nœuds par critères', () => {
-  const node1 = makeNode({ id: '1', roles: ['worker'], inventory: { operatingSystem: 'linux', architecture: 'X64', processorCount: 16, memoryMb: 32768 } });
-  const node2 = makeNode({ id: '2', roles: ['server'], inventory: { operatingSystem: 'windows', architecture: 'X64', processorCount: 4, memoryMb: 8192 } });
-  const matched = filterNodesByCriteria({ roles: ['worker'], operatingSystem: 'linux' }, [node1, node2]);
+  const node1 = makeNode({
+    id: '1',
+    roles: ['worker'],
+    inventory: {
+      operatingSystem: 'linux',
+      architecture: 'X64',
+      processorCount: 16,
+      memoryMb: 32768,
+    },
+  });
+  const node2 = makeNode({
+    id: '2',
+    roles: ['server'],
+    inventory: {
+      operatingSystem: 'windows',
+      architecture: 'X64',
+      processorCount: 4,
+      memoryMb: 8192,
+    },
+  });
+  const matched = filterNodesByCriteria({ roles: ['worker'], operatingSystem: 'linux' }, [
+    node1,
+    node2,
+  ]);
   assert.equal(matched.length, 1);
   assert.equal(matched[0].id, '1');
 });
@@ -123,7 +149,12 @@ test('extraction des options disponibles depuis l’inventaire des nœuds', () =
     capabilities: [{ toolId: 'ffmpeg' }, { toolId: 'ffprobe' }],
   });
   const node2 = makeNode({
-    inventory: { operatingSystem: 'Windows', architecture: 'Arm64', processorCount: 4, memoryMb: 4096 },
+    inventory: {
+      operatingSystem: 'Windows',
+      architecture: 'Arm64',
+      processorCount: 4,
+      memoryMb: 4096,
+    },
     capabilities: [{ toolId: 'ffmpeg' }, { toolId: 'mkvmerge' }],
   });
   assert.deepEqual(extractAvailableOperatingSystems([node1, node2]), ['Linux', 'Windows']);
