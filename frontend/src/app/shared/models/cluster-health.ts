@@ -1,6 +1,6 @@
 import { StatusTone } from '../ui/status-badge.component';
 import { LibraryNodeAccessResponse } from '../ui/library-node-access-types';
-import { LibraryResponse, NodeResponse } from './cluster';
+import { formatNodeLabel, LibraryResponse, NodeResponse } from './cluster';
 
 export type NodeLifecycleState = NonNullable<NodeResponse['lifecycle']>;
 
@@ -43,7 +43,7 @@ export function assessClusterHealth(
   const named = (state: NodeLifecycleState) =>
     states
       .filter((item) => item.state === state)
-      .map((item) => item.node.displayName?.trim() || item.node.name);
+      .map((item) => formatNodeLabel(item.node.name, item.node.displayName));
   const quarantined = named('quarantined');
   if (quarantined.length)
     issues.push('Quarantaine, identité probablement dupliquée : ' + quarantined.join(', '));

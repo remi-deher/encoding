@@ -30,10 +30,10 @@ public static class LocalNodeEndpoints
             RelayAsync(http, clients, HttpMethod.Post, "clusters", ct)).WithName("AddLocalNodeCluster");
         local.MapDelete("/clusters/{clusterId:guid}", (Guid clusterId, HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
             RelayAsync(http, clients, HttpMethod.Delete, "clusters/" + clusterId.ToString("D"), ct)).WithName("ForgetLocalNodeCluster");
-        local.MapPost("/enroll", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
-            RelayAsync(http, clients, HttpMethod.Post, "enroll", ct)).WithName("EnrollLocalNode");
-        local.MapPost("/pairing-key", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
-            RelayAsync(http, clients, HttpMethod.Post, "pairing-key", ct)).WithName("CreateLocalNodePairingKey");
+        local.MapPost("/enroll", (HttpContext http, IHttpClientFactory clients, LocalNodeRegistry registry, CancellationToken ct) =>
+            RelayWithDisplayNameAsync(http, clients, "enroll", registry, ct)).WithName("EnrollLocalNode");
+        local.MapPost("/pairing-key", (HttpContext http, IHttpClientFactory clients, LocalNodeRegistry registry, CancellationToken ct) =>
+            RelayWithDisplayNameAsync(http, clients, "pairing-key", registry, ct)).WithName("CreateLocalNodePairingKey");
         local.MapPost("/leave", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
             RelayAsync(http, clients, HttpMethod.Post, "leave", ct)).WithName("LeaveFromLocalNode");
     }
@@ -55,6 +55,39 @@ public static class LocalNodeEndpoints
         var attachedTo = status["clusterId"]?.GetValue<string>();
         status["standalone"] = identity.Standalone && Guid.TryParse(attachedTo, out var id) && id == identity.Id;
         return status.ToJsonString();
+    }
+
+    private static async Task<IResult> RelayWithDisplayNameAsync(HttpContext http, IHttpClientFactory clients, string path, LocalNodeRegistry registry, CancellationToken cancellationToken)
+    {
+        using var body = new StreamReader(http.Request.Body);
+        var content = await body.ReadToEndAsync(cancellationToken);
+        if (JsonNode.Parse(string.IsNullOrWhiteSpace(content) ? "{}" : content) is JsonObject obj)
+        {
+            var current = obj["displayName"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(current))
+            {
+                var resolved = await registry.ResolveDisplayNameAsync(cancellationToken);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                {
+                    obj["displayName"] = resolved;
+                    content = obj.ToJsonString();
+                }
+            }
+        }
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/worker/" + path)
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json")
+        };
+        try
+        {
+            using var response = await clients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            var text = await response.Content.ReadAsStringAsync(cancellationToken);
+            return Results.Content(text, "application/json", statusCode: (int)response.StatusCode);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return Results.Json(new { title = "La fonction worker de ce nœud ne répond pas. Activez-la depuis « Mode du nœud »." }, statusCode: (int)HttpStatusCode.ServiceUnavailable);
+        }
     }
 
     private static async Task<IResult> RelayAsync(HttpContext http, IHttpClientFactory clients, HttpMethod method, string path, CancellationToken cancellationToken, bool hideSecrets = false, Infrastructure.ClusterIdentityRepository? cluster = null)

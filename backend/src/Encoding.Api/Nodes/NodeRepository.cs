@@ -22,8 +22,8 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
     {
         var tokenHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(request.NodeToken));
         const string sql = """
-            INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, inventory, last_seen_at, node_token_hash)
-            SELECT @id, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp(), @node_token_hash
+            INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, inventory, last_seen_at, node_token_hash, display_name)
+            SELECT @id, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp(), @node_token_hash, @display_name
             WHERE @allow_new OR EXISTS (SELECT 1 FROM cluster_nodes WHERE id = @id AND deleted_at IS NULL AND node_token_hash = @node_token_hash)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
@@ -31,13 +31,15 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
                 capabilities = EXCLUDED.capabilities,
                 inventory = EXCLUDED.inventory,
-                last_seen_at = clock_timestamp()
+                last_seen_at = clock_timestamp(),
+                display_name = COALESCE(cluster_nodes.display_name, EXCLUDED.display_name)
             WHERE cluster_nodes.deleted_at IS NULL AND (cluster_nodes.node_token_hash IS NULL OR cluster_nodes.node_token_hash = EXCLUDED.node_token_hash)
             RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, inventory, display_name, labels
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = Sql.Command(sql, connection);
         AddNodeParameters(command, request);
+        command.Parameters.AddWithValue("display_name", (object?)request.DisplayName ?? DBNull.Value);
         command.Parameters.AddWithValue("node_token_hash", SqlKind.Bytes, tokenHash);
         command.Parameters.AddWithValue("allow_new", allowNewNode);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -79,9 +81,9 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         var nodeTokenHash = HashSecret(request.Node.NodeToken);
         const string sql = """
             INSERT INTO node_enrollment_requests
-                (node_id, pairing_key_hash, node_token_hash, peer_id, peer_public_key, name, roles, max_concurrent_tasks, capabilities, inventory, expires_at)
+                (node_id, pairing_key_hash, node_token_hash, peer_id, peer_public_key, name, roles, max_concurrent_tasks, capabilities, inventory, display_name, expires_at)
             VALUES
-                (@id, @pairing_key_hash, @node_token_hash, @peer_id, @peer_public_key, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp() + interval '10 minutes')
+                (@id, @pairing_key_hash, @node_token_hash, @peer_id, @peer_public_key, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, @display_name, clock_timestamp() + interval '10 minutes')
             ON CONFLICT (node_id) DO UPDATE SET
                 pairing_key_hash = EXCLUDED.pairing_key_hash,
                 node_token_hash = EXCLUDED.node_token_hash,
@@ -92,6 +94,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
                 capabilities = EXCLUDED.capabilities,
                 inventory = EXCLUDED.inventory,
+                display_name = COALESCE(EXCLUDED.display_name, node_enrollment_requests.display_name),
                 created_at = clock_timestamp(),
                 expires_at = EXCLUDED.expires_at
             WHERE node_enrollment_requests.node_token_hash = EXCLUDED.node_token_hash
@@ -106,6 +109,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
             request.Node.MaxConcurrentTasks,
             request.Node.Capabilities,
             request.Node.Inventory));
+        command.Parameters.AddWithValue("display_name", (object?)request.Node.DisplayName ?? DBNull.Value);
         command.Parameters.AddWithValue("pairing_key_hash", SqlKind.Bytes, pairingKeyHash);
         command.Parameters.AddWithValue("node_token_hash", SqlKind.Bytes, nodeTokenHash);
         command.Parameters.AddWithValue("peer_id", (object?)request.Node.ClusterPeerId ?? DBNull.Value);
@@ -116,7 +120,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
     public async Task<IReadOnlyList<PendingNodeEnrollmentResponse>> ListPendingPairingRequestsAsync(CancellationToken cancellationToken)
     {
         const string sql = """
-            SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at, inventory, node_token_hash, peer_public_key
+            SELECT node_id, name, roles, max_concurrent_tasks, capabilities, created_at, expires_at, inventory, node_token_hash, peer_public_key, display_name
             FROM node_enrollment_requests
             WHERE expires_at > clock_timestamp() AND NOT EXISTS(SELECT 1 FROM cluster_nodes n WHERE n.id=node_enrollment_requests.node_id AND n.deleted_at IS NOT NULL)
             ORDER BY created_at, node_id
@@ -129,12 +133,14 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         {
             var roles = reader.GetStringArray(2).Select(role => Enum.Parse<NodeRole>(role, true)).ToArray();
             var capabilities = JsonSerializer.Deserialize<IReadOnlyList<NodeToolCapability>>(reader.GetString(4), JsonOptions) ?? [];
+            var displayName = reader.IsDBNull(10) ? null : reader.GetString(10);
             requests.Add(new PendingNodeEnrollmentResponse(
                 reader.GetGuid(0), reader.GetString(1), roles, reader.GetInt32(3), capabilities,
                 new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(5), DateTimeKind.Utc)),
                 new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(6), DateTimeKind.Utc)),
                 ReadInventory(reader.GetString(7)),
-                NodeVerificationCode.FromTokenHash(reader.GetGuid(0), reader.GetFieldValue<byte[]>(8), reader.IsDBNull(9) ? null : reader.GetString(9))));
+                NodeVerificationCode.FromTokenHash(reader.GetGuid(0), reader.GetFieldValue<byte[]>(8), reader.IsDBNull(9) ? null : reader.GetString(9)),
+                displayName));
         }
         return requests;
     }
@@ -155,7 +161,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var requestPredicate = requestedNodeId.HasValue ? "node_id = @node_id" : "pairing_key_hash = @pairing_key_hash";
         var selectSql = $"""
-            SELECT node_id, node_token_hash, name, roles, max_concurrent_tasks, capabilities, inventory, peer_id, peer_public_key
+            SELECT node_id, node_token_hash, name, roles, max_concurrent_tasks, capabilities, inventory, peer_id, peer_public_key, display_name
             FROM node_enrollment_requests
             WHERE {requestPredicate} AND expires_at > clock_timestamp()
             FOR UPDATE
@@ -164,6 +170,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         byte[] nodeTokenHash;
         Guid? peerId;
         string? peerPublicKey;
+        string? displayName;
         NodeHeartbeatRequest heartbeat;
         await using (var selectCommand = Sql.Command(selectSql, connection, transaction))
         {
@@ -185,18 +192,20 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
                 ReadInventory(reader.GetString(6)));
             peerId = reader.IsDBNull(7) ? null : reader.GetGuid(7);
             peerPublicKey = reader.IsDBNull(8) ? null : reader.GetString(8);
+            displayName = reader.IsDBNull(9) ? null : reader.GetString(9);
         }
 
         const string enrollSql = """
-            INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, inventory, last_seen_at, node_token_hash)
-            VALUES (@id, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp(), @node_token_hash)
+            INSERT INTO cluster_nodes (id, name, roles, max_concurrent_tasks, capabilities, inventory, last_seen_at, node_token_hash, display_name)
+            VALUES (@id, @name, @roles, @max_concurrent_tasks, @capabilities, @inventory, clock_timestamp(), @node_token_hash, @display_name)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 roles = EXCLUDED.roles,
                 max_concurrent_tasks = EXCLUDED.max_concurrent_tasks,
                 capabilities = EXCLUDED.capabilities,
                 inventory = EXCLUDED.inventory,
-                last_seen_at = clock_timestamp()
+                last_seen_at = clock_timestamp(),
+                display_name = COALESCE(cluster_nodes.display_name, EXCLUDED.display_name)
             WHERE cluster_nodes.deleted_at IS NULL AND (cluster_nodes.node_token_hash IS NULL OR cluster_nodes.node_token_hash = EXCLUDED.node_token_hash)
             RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, inventory, display_name, labels
             """;
@@ -204,6 +213,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         await using (var enrollCommand = Sql.Command(enrollSql, connection, transaction))
         {
             AddNodeParameters(enrollCommand, nodeId, heartbeat);
+            enrollCommand.Parameters.AddWithValue("display_name", (object?)displayName ?? DBNull.Value);
             enrollCommand.Parameters.AddWithValue("node_token_hash", SqlKind.Bytes, nodeTokenHash);
             await using var reader = await enrollCommand.ExecuteReaderAsync(cancellationToken);
             node = await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, true) : null;
@@ -467,6 +477,19 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
           """);
         cmd.Parameters.AddWithValue("id",id); await using var r=await cmd.ExecuteReaderAsync(ct); await r.ReadAsync(ct);
         return new(r.GetInt32(0),r.GetInt32(1),r.GetInt32(2),r.GetInt32(3),r.IsDBNull(4)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(4),r.GetInt32(5));
+    }
+
+    public async Task<string?> GetActiveDisplayNameAsync(CancellationToken ct)
+    {
+        await using var cmd = dataSource.CreateCommand("""
+            SELECT display_name
+            FROM cluster_nodes
+            WHERE deleted_at IS NULL AND display_name IS NOT NULL AND trim(display_name) <> ''
+            ORDER BY last_seen_at DESC
+            LIMIT 1
+            """);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is string { Length: > 0 } s ? s : null;
     }
 
     private static void AddNodeParameters(DbCommand command, NodeEnrollmentRequest request)
