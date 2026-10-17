@@ -138,9 +138,10 @@ public sealed class LocalAgentAccessTests
             });
 
             using var client = server.CreateClient();
+            client.DefaultRequestHeaders.Add(Encoding.Api.Auth.ManagementAccessHandler.CsrfHeader, "1");
             using var leaveResponse = await client.PostAsync("/api/v1/local-node/leave", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
             Assert.Equal(HttpStatusCode.NoContent, leaveResponse.StatusCode);
-            Assert.Equal(0, (await leaveResponse.Content.ReadAsByteArrayAsync()).Length);
+            Assert.Empty(await leaveResponse.Content.ReadAsByteArrayAsync());
         }
         finally
         {
