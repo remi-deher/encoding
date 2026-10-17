@@ -1,10 +1,10 @@
 <app-management-catalog-template
   [title]="title()"
-  [detailOpen]="selectedNode() !== null"
+  [detailOpen]="pageTab() === 'groups' ? selectedGroupForDetail() !== null : selectedNode() !== null"
   [actionOpen]="pageTab() === 'groups' ? groupFormOpen() : local.flow() !== null || actionOpen()"
   [actionTitle]="
     pageTab() === 'groups'
-      ? groupForm().title
+      ? (groupEditing() ? 'Modifier le groupe' : 'Nouveau groupe de nœuds')
       : local.flow() === 'join'
         ? 'Rejoindre un cluster'
         : local.flow() === 'create'
@@ -13,20 +13,20 @@
   "
   [actionDescription]="
     pageTab() === 'groups'
-      ? groupForm().description
+      ? 'Configurez les membres manuels ou les critères dynamiques et étiquettes partagées.'
       : local.flow() === 'join'
         ? 'Rattacher ce nœud à un cluster existant.'
         : local.flow() === 'create'
           ? 'Ce nœud devient le premier membre du nouveau cluster.'
           : actionDescription()
   "
-  [detailTitle]="detailTitle()"
-  [detailDescription]="detailDescription()"
+  [detailTitle]="pageTab() === 'groups' ? (selectedGroupForDetail()?.name ?? 'Détails du groupe') : detailTitle()"
+  [detailDescription]="pageTab() === 'groups' ? 'Membres et critères résolus du groupe' : detailDescription()"
   [catalogState]="pageState()"
   [catalogMessage]="catalogMessage()"
-  drawerSize="standard"
+  [drawerSize]="pageTab() === 'groups' && groupFormOpen() ? 'wide' : 'standard'"
   [drawerModal]="true"
-  (detailClosed)="onDetailClosed()"
+  (detailClosed)="pageTab() === 'groups' ? closeGroupDetail() : onDetailClosed()"
   (actionClosed)="pageTab() === 'groups' ? closeGroupForm() : closeCreateNode()"
   [showToolbar]="
     pageTab() === 'cluster' &&
@@ -190,14 +190,38 @@
   </div>
   <div catalogue-table>
     @if (pageTab() === 'groups') {
-      <app-data-table
-        layout="resources"
-        [columns]="groupColumns"
-        [rows]="groupRows()"
-        [rowActions]="groupActions"
-        (rowAction)="onGroupAction($event)"
-        emptyMessage="Aucun groupe de nœuds."
-      />
+      <div class="groups-grid">
+        @if (filteredGroups().length === 0) {
+          <div class="groups-empty">
+            <span class="empty-icon" aria-hidden="true">🏷️</span>
+            @if (groupSearchQuery().trim()) {
+              <h3 class="empty-title">Aucun résultat</h3>
+              <p class="empty-desc">Aucun groupe ne correspond à « {{ groupSearchQuery() }} ».</p>
+            } @else {
+              <h3 class="empty-title">Aucun groupe de nœuds</h3>
+              <p class="empty-desc">
+                Les groupes permettent d’organiser vos serveurs et workers, d’attribuer des étiquettes partagées et de contraindre l’exécution des flows.
+              </p>
+              @if (isAdmin()) {
+                <button matButton="filled" type="button" (click)="createGroup()">
+                  Créer un groupe
+                </button>
+              }
+            }
+          </div>
+        } @else {
+          @for (group of filteredGroups(); track group.id) {
+            <app-node-group-card
+              [group]="group"
+              [nodes]="nodes()"
+              [isAdmin]="isAdmin()"
+              (open)="openGroupDetail(group)"
+              (edit)="editGroup(group)"
+              (delete)="confirmRemoveGroup(group)"
+            />
+          }
+        }
+      </div>
     } @else if (pageTab() === 'node') {
       <app-resource-sheet
         ariaLabel="Fiche du nœud local"
@@ -298,12 +322,20 @@
     }
   </ng-template>
   <ng-template #detailContent catalogue-detail>
-    <mat-tab-group
-      class="node-detail-tabs"
-      aria-label="Sections du nœud"
-      [selectedIndex]="selectedNodeTabIndex()"
-      (selectedIndexChange)="selectedNodeTabIndex.set($event)"
-    >
+    @if (pageTab() === 'groups') {
+      <app-node-group-detail
+        [group]="selectedGroupForDetail()"
+        [nodes]="nodes()"
+        [isAdmin]="isAdmin()"
+        (edit)="editGroup(selectedGroupForDetail()!)"
+      />
+    } @else {
+      <mat-tab-group
+        class="node-detail-tabs"
+        aria-label="Sections du nœud"
+        [selectedIndex]="selectedNodeTabIndex()"
+        (selectedIndexChange)="selectedNodeTabIndex.set($event)"
+      >
       <mat-tab label="Général">
         @if (generalSheet(); as sheet) {
           <app-resource-sheet
@@ -468,13 +500,15 @@
         </div>
       </mat-tab>
     </mat-tab-group>
+    }
   </ng-template>
   <ng-template #actionContent>
     @if (pageTab() === 'groups') {
-      <app-record-form
-        [data]="groupForm()"
+      <app-node-group-editor
+        [group]="groupEditing()"
+        [nodes]="nodes()"
         [busy]="groupBusy()"
-        (submitted)="saveGroup($event)"
+        (saved)="saveNodeGroup($event)"
         (cancelled)="closeGroupForm()"
       />
     } @else if (local.flow() === 'create') {
