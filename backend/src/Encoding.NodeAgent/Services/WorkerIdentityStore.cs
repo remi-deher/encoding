@@ -150,7 +150,8 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
         try
         {
             Directory.CreateDirectory(options.DataDirectory);
-            state = new WorkerIdentityState(Guid.NewGuid(), null, null, null, null, false);
+            var current = await LoadAsync(cancellationToken);
+            state = new WorkerIdentityState(Guid.NewGuid(), null, null, null, null, false, DisplayName: current.DisplayName);
             await SaveAsync(state, cancellationToken);
         }
         finally
@@ -173,7 +174,8 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
             if (current.IsSwitching) throw new InvalidOperationException("Un changement de cluster est déjà en cours.");
             state = new WorkerIdentityState(Guid.NewGuid(), null, null, null, null, false,
                 Previous: current with { Previous = null, SwitchDeadline = null, SwitchFailure = null },
-                SwitchDeadline: DateTimeOffset.UtcNow.Add(timeout));
+                SwitchDeadline: DateTimeOffset.UtcNow.Add(timeout),
+                DisplayName: current.DisplayName);
             await SaveAsync(state, cancellationToken);
         }
         finally
@@ -213,7 +215,7 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
             var current = await LoadAsync(cancellationToken);
             if (current.Previous is not null) state = current.Previous with { SwitchFailure = reason };
             else if (current.IsEnrolled || !current.HasCredentials) return false;
-            else state = new WorkerIdentityState(current.Id, null, null, null, null, false, SwitchFailure: reason);
+            else state = new WorkerIdentityState(current.Id, null, null, null, null, false, SwitchFailure: reason, DisplayName: current.DisplayName);
             await SaveAsync(state, cancellationToken);
             return true;
         }

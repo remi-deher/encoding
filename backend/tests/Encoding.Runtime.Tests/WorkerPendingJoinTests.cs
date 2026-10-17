@@ -154,4 +154,47 @@ public sealed class WorkerPendingJoinTests
         Assert.False(discovery.Forget(id));
         Assert.Equal("[]", (await File.ReadAllTextAsync(Path.Combine(directory, "known-clusters.json"))).Trim());
     }
+
+    [Fact]
+    public async Task BeginSwitchAndAbandonPreserveDisplayName()
+    {
+        var (_, store, _) = Build(NewDirectory());
+        await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Maison", "http://127.0.0.1:1/", CancellationToken.None, displayName: "Serveur Salon");
+        await store.MarkEnrolledAsync(CancellationToken.None);
+
+        var enrolled = await store.GetAsync(CancellationToken.None);
+        Assert.Equal("Serveur Salon", enrolled.DisplayName);
+
+        await store.BeginSwitchAsync(TimeSpan.FromMinutes(10), CancellationToken.None);
+        var switching = await store.GetAsync(CancellationToken.None);
+        Assert.True(switching.IsSwitching);
+        Assert.Equal("Serveur Salon", switching.DisplayName);
+
+        await store.AbandonPendingAsync("cluster injoignable", CancellationToken.None);
+        var abandoned = await store.GetAsync(CancellationToken.None);
+        Assert.Equal("Serveur Salon", abandoned.DisplayName);
+        Assert.Equal("cluster injoignable", abandoned.SwitchFailure);
+    }
+
+    [Fact]
+    public async Task CreatePairingKeyReturnsVerificationCodeAndPreservesDisplayName()
+    {
+        var (enrollment, store, discovery) = Build(NewDirectory());
+        // Set an existing enrolled identity with a display name
+        await store.SaveEnrollmentAsync(Guid.NewGuid().ToString("D"), "Maison", "http://127.0.0.1:1/", CancellationToken.None, displayName: "Mon Nœud 50");
+        await store.MarkEnrolledAsync(CancellationToken.None);
+
+        var (listener, url, id, _) = Cluster(HttpStatusCode.Accepted);
+        using var _ = listener;
+        await discovery.AddByAddressAsync(url, CancellationToken.None);
+
+        var response = await enrollment.CreatePairingKeyAsync(id, CancellationToken.None, leaveCurrent: true);
+
+        Assert.NotNull(response.PairingKey);
+        Assert.NotNull(response.VerificationCode);
+        Assert.Equal(6, response.VerificationCode.Length);
+
+        var identity = await store.GetAsync(CancellationToken.None);
+        Assert.Equal("Mon Nœud 50", identity.DisplayName);
+    }
 }

@@ -144,6 +144,14 @@ export class LocalNodeController {
               expiresAt: agent.status.pairingExpiresAt ?? '',
               verificationCode: agent.status.verificationCode,
             });
+          } else if (
+            agent.status?.verificationCode &&
+            this.pairing() &&
+            !this.pairing()?.verificationCode
+          ) {
+            this.pairing.update((p) =>
+              p ? { ...p, verificationCode: agent.status.verificationCode } : p,
+            );
           }
         }
         this.loading.set(false);
@@ -344,7 +352,14 @@ export class LocalNodeController {
       if (!this.target())
         this.target.set(
           this.clusters().find((cluster) => cluster.id.toLowerCase() === targetId!.toLowerCase()) ??
-            null,
+            (next.clusterId
+              ? {
+                  id: next.clusterId,
+                  name: next.clusterName ?? 'le cluster d’accueil',
+                  apiBaseUrl: '',
+                  discoveredAt: '',
+                }
+              : null),
         );
     }
     if (!targetId) return;
@@ -355,11 +370,9 @@ export class LocalNodeController {
       this.observedPending = false;
       this.joinIndex.set(3);
       this.notifications.show(`Ce nœud a rejoint ${next.clusterName ?? this.targetName()}.`);
-    } else if (sameTarget && (!next.isEnrolled || next.switching)) this.observedPending = true;
-    else if (
-      this.observedPending ||
-      (next.switchFailure && next.switchFailure !== this.status()?.switchFailure)
-    ) {
+    } else if (sameTarget && (!next.isEnrolled || next.switching)) {
+      this.observedPending = true;
+    } else if (this.observedPending) {
       this.submittedTargetId.set(null);
       this.pairing.set(null);
       this.observedPending = false;
