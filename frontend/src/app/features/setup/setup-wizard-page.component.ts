@@ -68,9 +68,20 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       }
 
       <div class="wizard-card">
-        <mat-stepper linear #stepper [selectedIndex]="currentStep()">
+        <mat-stepper linear #stepper [selectedIndex]="currentStep()" (selectionChange)="goToStep($event.selectedIndex)">
+          <ng-template matStepperIcon="done">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m5 12 4 4 10-10" />
+            </svg>
+          </ng-template>
+          <ng-template matStepperIcon="edit">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m5 12 4 4 10-10" />
+            </svg>
+          </ng-template>
+
           <!-- Étape 1 : Identification du nœud -->
-          <mat-step [completed]="isStep1Valid()">
+          <mat-step [completed]="currentStep() > 0 && isStep1Valid()">
             <ng-template matStepLabel>Identification</ng-template>
             <div class="step-content">
               <h2>Bienvenue sur Encoding</h2>
@@ -114,8 +125,8 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     <span class="info-value">{{ gpuInfo() }}</span>
                   </div>
                   <div class="info-item">
-                    <span class="info-label">Outils média</span>
-                    <span class="info-value">{{ toolsInfo() }}</span>
+                    <span class="info-label">Accélération GPU</span>
+                    <span class="info-value">{{ gpuAccelerationInfo() }}</span>
                   </div>
                 </div>
               </div>
@@ -135,7 +146,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
           </mat-step>
 
           <!-- Étape 2 : Choix du mode de fonctionnement -->
-          <mat-step [completed]="isStep2Valid()">
+          <mat-step [completed]="currentStep() > 1 && isStep2Valid()">
             <ng-template matStepLabel>Mode de fonctionnement</ng-template>
             <div class="step-content">
               <h2>Comment souhaitez-vous utiliser cette machine ?</h2>
@@ -237,7 +248,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
           </mat-step>
 
           <!-- Étape 3 : Finalisation selon le mode -->
-          <mat-step>
+          <mat-step [completed]="false">
             <ng-template matStepLabel>Finalisation</ng-template>
             <div class="step-content">
               <!-- Cas 3A : Autonome -->
@@ -336,11 +347,11 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 <h2>Rejoindre un cluster existant</h2>
                 <p class="step-desc">Sélectionnez un cluster détecté sur votre réseau ou saisissez l'adresse de son serveur principal.</p>
 
-                @if (localController.clusters().length > 0) {
+                @if (availableClusters().length > 0) {
                   <div class="discovered-clusters">
                     <span class="list-label">Clusters détectés automatiquement :</span>
                     <div class="cluster-cards-list">
-                      @for (cluster of localController.clusters(); track cluster.id) {
+                      @for (cluster of availableClusters(); track cluster.id) {
                         <div class="cluster-card">
                           <div class="cluster-info">
                             <strong>{{ cluster.name }}</strong>
@@ -388,10 +399,10 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     <h3>{{ target.name }}</h3>
                     <p class="target-url">{{ target.apiBaseUrl }} ({{ target.id }})</p>
 
-                    @if (localController.pairing(); as pairing) {
+                    @if (pairingCode(); as code) {
                       <div class="hero-code-box">
                         <span class="code-label">Code de confirmation à comparer</span>
-                        <div class="hero-digits">{{ pairing.verificationCode || '...' }}</div>
+                        <div class="hero-digits">{{ code }}</div>
                         <p class="code-helper">
                           Un administrateur du cluster <strong>{{ target.name }}</strong> doit valider ce code depuis sa page Nœuds.
                         </p>
@@ -830,11 +841,58 @@ export class SetupWizardPageComponent {
     return inv.gpus.map((g) => g.name).join(' · ');
   });
 
-  protected readonly toolsInfo = computed(() => {
-    const caps = this.localController.status()?.capabilities;
-    if (!caps || caps.length === 0) return 'Outils prêts (ffmpeg, mkvmerge)';
-    return caps.map((c) => `${c.toolId} ${c.version}`).join(' · ');
+  protected readonly gpuAccelerationInfo = computed(() => {
+    const status = this.localController.status();
+    if (!status) return 'Détection en cours…';
+    const caps = status.capabilities ?? [];
+    if (caps.length === 0) return 'Détection en cours…';
+
+    const ACCEL_DISPLAY: Readonly<Record<string, string>> = {
+      nvenc: 'NVENC',
+      qsv: 'QSV',
+      vaapi: 'VAAPI',
+      amf: 'AMF',
+      videotoolbox: 'VideoToolbox',
+      cuda: 'CUDA',
+      d3d11va: 'D3D11VA',
+    };
+
+    const supported = new Set<string>();
+    for (const tool of caps) {
+      for (const check of tool.encoderChecks ?? []) {
+        if (check.status === 'usable') {
+          const suffix = check.encoderId.split('_').pop() ?? '';
+          if (suffix && suffix !== 'cpu' && suffix !== 'process' && suffix !== 'general') {
+            supported.add(suffix.toLowerCase());
+          }
+        }
+      }
+      for (const accel of tool.accelerationTypes ?? []) {
+        if (accel && accel !== 'cpu' && accel !== 'process' && accel !== 'general') {
+          supported.add(accel.toLowerCase());
+        }
+      }
+    }
+
+    if (supported.size === 0) return 'Aucune (CPU)';
+
+    const preferredOrder = ['nvenc', 'qsv', 'vaapi', 'amf', 'videotoolbox'];
+    const ordered = [
+      ...preferredOrder.filter((id) => supported.has(id)),
+      ...Array.from(supported).filter((id) => !preferredOrder.includes(id)),
+    ];
+
+    return ordered.map((id) => ACCEL_DISPLAY[id] ?? id.toUpperCase()).join(' · ');
   });
+
+  protected readonly availableClusters = computed(() => this.localController.joinableClusters());
+
+  protected readonly pairingCode = computed(
+    () =>
+      this.localController.pairing()?.verificationCode ||
+      this.localController.status()?.verificationCode ||
+      null,
+  );
 
   protected isStep1Valid(): boolean {
     return true; // Nom facultatif avec valeur par défaut automatique
@@ -851,6 +909,10 @@ export class SetupWizardPageComponent {
 
   protected selectClusterAddress(url: string): void {
     this.clusterAddress.set(url);
+    const known = this.availableClusters().find((c) => c.apiBaseUrl === url);
+    if (known) {
+      this.localController.target.set(known);
+    }
     void this.verifyClusterAddress();
   }
 
@@ -861,6 +923,9 @@ export class SetupWizardPageComponent {
     this.busy.set(true);
     try {
       await this.localController.verifyAddress({ address: addr });
+      if (this.localController.error()) {
+        this.errorMessage.set(this.localController.error());
+      }
     } catch {
       this.errorMessage.set('La vérification de l’adresse a échoué. Vérifiez que le serveur est allumé.');
     } finally {
@@ -873,6 +938,9 @@ export class SetupWizardPageComponent {
     this.busy.set(true);
     try {
       await this.localController.sendRequest();
+      if (this.localController.error()) {
+        this.errorMessage.set(this.localController.error());
+      }
     } catch {
       this.errorMessage.set('L’envoi de la demande a échoué. Réessayez.');
     } finally {

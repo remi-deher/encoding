@@ -67,9 +67,11 @@ describe('SetupWizardPageComponent', () => {
             useValue: {
               status: statusSignal,
               clusters: signal([]),
+              joinableClusters: signal([]),
               target: signal(null),
               pairing: signal(null),
               busy: signal(false),
+              error: signal(''),
               verifyAddress: vi.fn(),
               sendRequest: vi.fn(),
             },
@@ -88,6 +90,8 @@ describe('SetupWizardPageComponent', () => {
     expect(el.textContent).toContain('AMD Ryzen 7 5800X');
     expect(el.textContent).toContain('32 Go');
     expect(el.textContent).toContain('NVIDIA GeForce RTX 3080');
+    expect(el.textContent).toContain('Accélération GPU');
+    expect(el.textContent).toContain('NVENC');
   });
 
   it('allows selecting operation modes', () => {

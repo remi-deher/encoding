@@ -37,7 +37,8 @@ export class LocalNodeController {
   private readonly notifications = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly refreshRequested = new Subject<void>();
-  readonly isAdmin = inject(AuthService).isAdmin;
+  private readonly auth = inject(AuthService);
+  readonly isAdmin = computed(() => this.auth.isAdmin() || this.auth.setupRequired());
   readonly identity = signal<ClusterIdentity | null>(null);
   readonly status = signal<LocalNodeStatus | null>(null);
   readonly mode = signal<NodeModeStatus | null>(null);
@@ -84,11 +85,21 @@ export class LocalNodeController {
       this.status() !== null &&
       !this.pending(),
   );
-  readonly joinableClusters = computed(() =>
-    this.clusters().filter(
-      (cluster) => cluster.id.toLowerCase() !== this.status()?.clusterId?.toLowerCase(),
-    ),
-  );
+  readonly joinableClusters = computed(() => {
+    const localClusterId = this.status()?.clusterId?.toLowerCase();
+    const localIdentityId = this.identity()?.id?.toLowerCase();
+    return this.clusters().filter((cluster) => {
+      if (cluster.source === 'configured') return false;
+      const id = cluster.id.toLowerCase();
+      if (localClusterId && id === localClusterId) return false;
+      if (localIdentityId && id === localIdentityId) return false;
+      try {
+        const host = new URL(cluster.apiBaseUrl).hostname.toLowerCase();
+        if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
+      } catch {}
+      return true;
+    });
+  });
   readonly targetName = computed(
     () => this.target()?.name ?? this.status()?.clusterName ?? 'le cluster d’accueil',
   );
@@ -127,6 +138,13 @@ export class LocalNodeController {
           this.clusters.set(agent.clusters);
           this.observeStatus(agent.status);
           this.status.set(agent.status);
+          if (agent.status?.pairingKey && !this.pairing()) {
+            this.pairing.set({
+              pairingKey: agent.status.pairingKey,
+              expiresAt: agent.status.pairingExpiresAt ?? '',
+              verificationCode: agent.status.verificationCode,
+            });
+          }
         }
         this.loading.set(false);
       });
@@ -195,12 +213,27 @@ export class LocalNodeController {
     await this.run(
       this.http.post<DiscoveredCluster>('/api/v1/local-node/clusters', { apiBaseUrl: address }),
       (cluster) => {
-        if (cluster.id.toLowerCase() === this.status()?.clusterId?.toLowerCase()) {
+        const localClusterId = this.status()?.clusterId?.toLowerCase();
+        const localIdentityId = this.identity()?.id?.toLowerCase();
+        if (
+          (localClusterId && cluster.id.toLowerCase() === localClusterId) ||
+          (localIdentityId && cluster.id.toLowerCase() === localIdentityId) ||
+          cluster.source === 'configured'
+        ) {
           this.error.set(
             'Cette adresse correspond au cluster actuel de ce nœud. Choisissez un autre cluster.',
           );
           return;
         }
+        try {
+          const host = new URL(cluster.apiBaseUrl).hostname.toLowerCase();
+          if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+            this.error.set(
+              'Cette adresse correspond au cluster local de cette machine. Choisissez un autre cluster distant.',
+            );
+            return;
+          }
+        } catch {}
         this.target.set(cluster);
         this.joinIndex.set(1);
         this.refresh();
