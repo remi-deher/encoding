@@ -8,7 +8,7 @@ using System.Text.Json;
 using Encoding.Contracts.Cluster;
 
 public sealed record ClusterNameRequest(string Name);
-public sealed record ClusterJoinRequest(Guid ClusterId, string ClusterName, Guid NodeId, ClusterJoinBootstrap? Bootstrap = null);
+public sealed record ClusterJoinRequest(Guid ClusterId, string ClusterName, Guid NodeId, ClusterJoinBootstrap? Bootstrap = null, string? PeerUrl = null);
 
 public static class ClusterEndpoints
 {
@@ -83,6 +83,7 @@ public static class ClusterEndpoints
             HttpContext http,
             ClusterIdentityRepository repository,
             ClusterPeerAdmissionRepository admissions,
+            ClusterReconciliationRepository reconciliationRepository,
             CancellationToken cancellationToken) =>
         {
             if (!LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting], http.Request.Headers[LocalEnrollment.HeaderName].ToString()))
@@ -98,6 +99,8 @@ public static class ClusterEndpoints
                 return Results.BadRequest(new { title = "La signature ou la clé de données du cluster est invalide." });
             }
             await repository.AdoptAsync(request.ClusterId, request.ClusterName, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(request.PeerUrl))
+                await reconciliationRepository.AddPeerEndpointAsync(request.PeerUrl, "bootstrap", cancellationToken);
             return Results.Ok(await repository.GetAsync(cancellationToken));
         })
         .AllowAnonymous()

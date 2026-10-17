@@ -65,6 +65,8 @@ public static class NodeHeartbeatValidator
         if (request.Id == Guid.Empty) errors["id"] = ["L’identifiant du nœud doit être un UUID non vide."];
         if (string.IsNullOrWhiteSpace(request.NodeToken) || request.NodeToken.Length is < 40 or > 256)
             errors["nodeToken"] = ["L’identité locale du nœud est invalide."];
+        if (request.DisplayName is { Length: > 128 })
+            errors["displayName"] = [$"Le nom d’affichage ne peut pas dépasser {LocalNodeRegistry.MaximumNameLength} caractères."];
         if ((request.ClusterPeerId is null) != string.IsNullOrWhiteSpace(request.ClusterPeerPublicKey)
             || request.ClusterPeerId == Guid.Empty)
             errors["clusterPeer"] = ["L’identité du serveur de cluster est incomplète."];
@@ -78,6 +80,11 @@ public static class NodeHeartbeatValidator
             {
                 errors["clusterPeerPublicKey"] = ["La clé publique du serveur est invalide."];
             }
+        }
+        if (!string.IsNullOrWhiteSpace(request.ClusterPeerReconciliationUrl)
+            && Encoding.Api.Infrastructure.ClusterReconciliationRepository.TryNormalizePeerUrl(request.ClusterPeerReconciliationUrl) is null)
+        {
+            errors["clusterPeerReconciliationUrl"] = ["L’adresse de réconciliation du serveur est invalide."];
         }
         return errors;
     }

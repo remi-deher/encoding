@@ -8,13 +8,17 @@ public sealed record ClusterReconciliationExchangeRequest(
     int ProtocolVersion,
     Guid ClusterId,
     IReadOnlyDictionary<Guid, long> KnownSequences,
-    IReadOnlyList<ClusterChangeEvent> Changes);
+    IReadOnlyList<ClusterChangeEvent> Changes,
+    string? AdvertisedUrl = null,
+    IReadOnlyList<string>? KnownPeers = null);
 
 public sealed record ClusterReconciliationExchangeResponse(
     int ProtocolVersion,
     Guid ClusterId,
     IReadOnlyDictionary<Guid, long> KnownSequences,
-    IReadOnlyList<ClusterChangeEvent> Changes);
+    IReadOnlyList<ClusterChangeEvent> Changes,
+    string? AdvertisedUrl = null,
+    IReadOnlyList<string>? KnownPeers = null);
 
 public static class ClusterReconciliationEndpoints
 {
@@ -30,7 +34,8 @@ public static class ClusterReconciliationEndpoints
         {
             if (!LocalEnrollment.Matches(configuration[LocalEnrollment.SecretFileSetting],
                     http.Request.Headers[LocalEnrollment.HeaderName].ToString())) return Results.Unauthorized();
-            return Results.Ok(new Encoding.Contracts.Cluster.ClusterPeerPublicIdentity(localIdentity.PeerId, localIdentity.PublicKey));
+            var advertisedUrl = ClusterReconciliationRepository.TryNormalizePeerUrl(configuration["Cluster:Reconciliation:AdvertisedApiBaseUrl"]);
+            return Results.Ok(new Encoding.Contracts.Cluster.ClusterPeerPublicIdentity(localIdentity.PeerId, localIdentity.PublicKey, advertisedUrl));
         })
         .AllowAnonymous()
         .RequireRateLimiting(AuthExtensions.AnonymousPolicy)
@@ -45,6 +50,7 @@ public static class ClusterReconciliationEndpoints
 
         app.MapPost("/api/v1/cluster/reconciliation/exchange", async (
             HttpContext http,
+            IConfiguration configuration,
             ClusterIdentityRepository identityRepository,
             ClusterPeerIdentityStore localIdentity,
             ClusterPeerAdmissionRepository peerAdmissions,
@@ -72,6 +78,26 @@ public static class ClusterReconciliationEndpoints
                 return Results.BadRequest(new { title = "Lot de réconciliation trop volumineux." });
 
             if (request.ClusterId != identity.Id) return Results.Conflict(new { title = "Les serveurs n’appartiennent pas au même cluster." });
+
+            var ownAdvertisedUrl = ClusterReconciliationRepository.TryNormalizePeerUrl(configuration["Cluster:Reconciliation:AdvertisedApiBaseUrl"]);
+            if (!string.IsNullOrWhiteSpace(request.AdvertisedUrl)
+                && ClusterReconciliationRepository.TryNormalizePeerUrl(request.AdvertisedUrl) is { } reqAdv
+                && !string.Equals(reqAdv, ownAdvertisedUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                await repository.AddPeerEndpointAsync(reqAdv, "exchange", ct);
+            }
+            if (request.KnownPeers is { Count: > 0 })
+            {
+                foreach (var peer in request.KnownPeers)
+                {
+                    if (ClusterReconciliationRepository.TryNormalizePeerUrl(peer) is { } normPeer
+                        && !string.Equals(normPeer, ownAdvertisedUrl, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await repository.AddPeerEndpointAsync(normPeer, "gossip", ct);
+                    }
+                }
+            }
+
             try
             {
                 await repository.ApplyIncomingAsync(request.Changes, ct);
@@ -83,7 +109,8 @@ public static class ClusterReconciliationEndpoints
 
             var vector = await repository.GetVectorAsync(ct);
             var changes = (await repository.GetEventsAfterAsync(identity.Id, request.KnownSequences, ClusterReconciliationRepository.MaximumBatchSize, ct)).ToList();
-            var responseBody = SerializeBoundedResponse(identity.Id, vector, changes);
+            var knownPeers = await repository.GetPeerEndpointsAsync(ct);
+            var responseBody = SerializeBoundedResponse(identity.Id, vector, changes, ownAdvertisedUrl, knownPeers);
             var responseTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
             http.Response.Headers[ClusterReconciliationSignature.PeerHeader] = localIdentity.PeerId.ToString("D");
             http.Response.Headers[ClusterReconciliationSignature.TimeHeader] = responseTime;
@@ -96,17 +123,19 @@ public static class ClusterReconciliationEndpoints
         .WithName("ExchangeClusterReconciliationEvents");
     }
 
-    private static byte[] SerializeBoundedResponse(Guid clusterId, IReadOnlyDictionary<Guid, long> vector, List<ClusterChangeEvent> changes)
+    private static byte[] SerializeBoundedResponse(Guid clusterId, IReadOnlyDictionary<Guid, long> vector, List<ClusterChangeEvent> changes, string? advertisedUrl, IReadOnlyList<string> knownPeers)
     {
         byte[] body;
+        var peerList = knownPeers.Take(8).ToArray();
         do
         {
-            body = JsonSerializer.SerializeToUtf8Bytes(new ClusterReconciliationExchangeResponse(ProtocolVersion, clusterId, vector, changes), JsonOptions);
+            body = JsonSerializer.SerializeToUtf8Bytes(new ClusterReconciliationExchangeResponse(ProtocolVersion, clusterId, vector, changes, advertisedUrl, peerList), JsonOptions);
             if (body.Length <= ClusterReconciliationSignature.MaximumBodyBytes) return body;
             if (changes.Count == 0) throw new InvalidOperationException("Le vecteur de réconciliation dépasse la taille maximale autorisée.");
             changes.RemoveAt(changes.Count - 1);
         } while (true);
     }
+
 
     private static async Task<byte[]?> ReadBoundedBodyAsync(HttpRequest request, CancellationToken ct)
     {

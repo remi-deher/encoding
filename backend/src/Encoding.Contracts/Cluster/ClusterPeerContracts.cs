@@ -1,6 +1,6 @@
 namespace Encoding.Contracts.Cluster;
 
-public sealed record ClusterPeerPublicIdentity(Guid PeerId, string PublicKey);
+public sealed record ClusterPeerPublicIdentity(Guid PeerId, string PublicKey, string? AdvertisedUrl = null);
 
 /// <summary>An approver-signed membership grant. The data key is wrapped for the admitted peer only.</summary>
 public sealed record ClusterPeerAdmissionGrant(

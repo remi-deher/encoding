@@ -18,6 +18,7 @@ export interface DiscoveredCluster {
 export interface LocalNodeStatus {
   readonly nodeId: string;
   readonly name: string;
+  readonly displayName?: string | null;
   readonly roles: readonly NodeRole[];
   readonly maxConcurrentTasks: number;
   readonly automaticEnrollmentEnabled: boolean;
