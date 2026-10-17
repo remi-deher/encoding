@@ -24,12 +24,21 @@ import {
   DataTableActionEvent,
 } from './data-table.component';
 
+export interface GuidedHeroCode {
+  readonly code: string;
+  readonly label?: string;
+  readonly helper?: string;
+  readonly badge?: string;
+  readonly tone?: 'accent' | 'warning' | 'neutral';
+}
+
 export interface GuidedStep {
   readonly id: string;
   readonly label: string;
   readonly description: string;
   readonly form?: RecordFormData;
   readonly cards?: readonly DetailCard[];
+  readonly heroCode?: GuidedHeroCode;
   readonly note?: string;
   readonly acknowledgement?: {
     readonly label: string;
@@ -77,7 +86,13 @@ export interface GuidedStep {
       <mat-progress-bar mode="indeterminate" aria-label="Vérification en cours" />
     }
     @if (error()) {
-      <p role="alert" class="error">{{ error() }}</p>
+      <div role="alert" class="error">
+        <svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" />
+          <path d="M12 8v4m0 4h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <span>{{ error() }}</span>
+      </div>
     }
     <mat-stepper
       [orientation]="handset() ? 'vertical' : orientation()"
@@ -92,7 +107,26 @@ export interface GuidedStep {
       @for (step of steps(); track step.id; let i = $index) {
         <mat-step [label]="step.label" [completed]="i < index()" [editable]="false">
           @if (i === index()) {
-            <p>{{ step.description }}</p>
+            <p class="step-description">{{ step.description }}</p>
+            @if (step.heroCode; as hero) {
+              <div
+                class="hero-code-container"
+                [class]="'hero-code-container hero-code-container_' + (hero.tone ?? 'accent')"
+              >
+                <div class="hero-code-header">
+                  <span class="hero-code-label">{{ hero.label ?? 'Code de vérification' }}</span>
+                  @if (hero.badge) {
+                    <span class="hero-code-badge">{{ hero.badge }}</span>
+                  }
+                </div>
+                <div class="hero-code-value-wrapper">
+                  <span class="hero-code-value" aria-label="Code de vérification">{{ hero.code }}</span>
+                </div>
+                @if (hero.helper) {
+                  <p class="hero-code-helper">{{ hero.helper }}</p>
+                }
+              </div>
+            }
             @if (step.choices; as choices) {
               <app-data-table
                 [layout]="handset() ? 'cards' : 'table'"
@@ -110,7 +144,13 @@ export interface GuidedStep {
               <app-detail-card-grid [cards]="step.cards!" [collapsible]="false" />
             }
             @if (step.note) {
-              <p role="note" class="note">{{ step.note }}</p>
+              <div role="note" class="note">
+                <svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" />
+                  <path d="M12 16v-4m0-4h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+                <span>{{ step.note }}</span>
+              </div>
             }
             @if (step.acknowledgement; as acknowledgement) {
               <mat-checkbox
@@ -153,9 +193,11 @@ export interface GuidedStep {
     </mat-stepper>
   `,
   styles: `
-    p {
+    .step-description {
+      margin: 0 0 var(--space-4);
       color: var(--text-secondary);
-      line-height: 1.6;
+      font-size: var(--font-body, 14px);
+      line-height: 1.55;
     }
     .actions {
       display: flex;
@@ -164,20 +206,115 @@ export interface GuidedStep {
       margin-top: var(--space-4);
     }
     .note {
-      padding: var(--space-3);
-      border-radius: var(--radius-md);
-      background: var(--surface-muted);
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      margin-block: var(--space-4);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-lg);
+      background: var(--surface-container);
+      border-inline-start: 4px solid var(--accent);
+      color: var(--text-primary);
+      font-size: var(--font-body, 14px);
+      line-height: 1.5;
     }
     .error {
-      padding: var(--space-3);
-      border-radius: var(--radius-md);
-      border-inline-start: 3px solid var(--danger);
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      margin-block: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-lg);
+      border-inline-start: 4px solid var(--danger);
       background: var(--danger-soft);
       color: var(--text-primary);
+      font-size: var(--font-body, 14px);
+      line-height: 1.5;
+    }
+    .callout-icon {
+      flex: 0 0 20px;
+      margin-top: 2px;
+      color: currentColor;
+    }
+    .note .callout-icon {
+      color: var(--accent);
+    }
+    .error .callout-icon {
+      color: var(--danger);
     }
     .acknowledgement {
       display: block;
       margin-block: var(--space-4);
+      font-size: var(--font-body, 14px);
+      font-weight: 500;
+    }
+    .hero-code-container {
+      margin-block: var(--space-2) var(--space-4);
+      padding: var(--space-4);
+      border-radius: var(--radius-xl);
+      background: var(--surface-container-high);
+      border: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: var(--space-2);
+    }
+    .hero-code-container_accent {
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface-container-high));
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+    }
+    .hero-code-container_warning {
+      background: color-mix(in srgb, var(--warning) 10%, var(--surface-container-high));
+      border-color: color-mix(in srgb, var(--warning) 40%, var(--border-subtle));
+    }
+    .hero-code-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+    }
+    .hero-code-label {
+      font-size: var(--font-label);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .hero-code-badge {
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      font-size: var(--font-label);
+      font-weight: 700;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+    .hero-code-container_warning .hero-code-badge {
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
+    .hero-code-value-wrapper {
+      padding: var(--space-2) var(--space-4);
+    }
+    .hero-code-value {
+      font-family: ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: var(--font-display-sm);
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      color: var(--text-primary);
+      text-indent: 0.22em;
+      user-select: all;
+    }
+    .hero-code-helper {
+      margin: 0;
+      font-size: var(--font-body);
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+    :host ::ng-deep .mat-step-header .mat-step-label {
+      font-size: var(--font-body, 14px);
+      font-weight: 600;
     }
   `,
 })

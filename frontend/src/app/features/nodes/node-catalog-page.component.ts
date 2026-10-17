@@ -1400,13 +1400,12 @@ export class NodeCatalogPageComponent {
         },
       ],
     };
-    const code = request.verificationCode ?? 'Code indisponible';
     const codeCard: DetailCard = {
       id: `enrollment-code-${request.id}`,
-      title: code,
-      subtitle: 'Code à comparer avec celui affiché sur le nœud demandeur',
-      icon: 'system',
-      tags: [{ label: 'Vérification requise', tone: 'warning' }],
+      title: 'Cluster d’accueil',
+      subtitle: 'Adresse de référence annoncée par ce cluster',
+      icon: 'server',
+      tags: [],
       sections: [
         {
           title: 'Vérification à deux écrans',
@@ -1434,6 +1433,15 @@ export class NodeCatalogPageComponent {
         id: 'verification',
         label: 'Vérification',
         description: 'Le code doit être identique sur les deux écrans.',
+        heroCode: request.verificationCode
+          ? {
+              code: request.verificationCode,
+              label: 'Code de vérification',
+              helper: 'Comparez avec le code affiché sur le nœud demandeur.',
+              badge: 'Vérification requise',
+              tone: 'warning',
+            }
+          : undefined,
         cards: [codeCard],
         note: request.verificationCode
           ? 'Confirmez uniquement si le code correspond exactement sur les deux nœuds.'

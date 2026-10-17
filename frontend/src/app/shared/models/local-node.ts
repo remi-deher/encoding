@@ -41,4 +41,5 @@ export interface LocalNodeStatus {
 export interface LocalNodePairing {
   readonly pairingKey: string;
   readonly expiresAt: string;
+  readonly verificationCode?: string | null;
 }

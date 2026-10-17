@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadModel } from './model-loader.mjs';
-const { localNodeSheet, formatLastSignal } = await loadModel('node-management');
+const { localNodeSheet, formatLastSignal, clusterJoinSteps } = await loadModel('node-management');
 
 const NOW = Date.parse('2026-10-15T12:00:00Z');
 const status = {
@@ -124,4 +124,20 @@ test('a member without a local server still shows its technical information from
   const [load, signal] = section(sheet, 'state').metrics;
   assert.equal(load.value, 'Indisponible');
   assert.match(signal.detail, /serveur du cluster/);
+});
+
+test('cluster join step waiting highlights the verification code as heroCode', () => {
+  const steps = clusterJoinSteps({
+    addressForm: { title: '', description: '', fields: [] },
+    target: { id: 'c1', name: 'Maison', apiBaseUrl: 'http://127.0.0.1:8080' },
+    status: { name: 'encoding-50', verificationCode: 'R7EPDH', pairingKey: 'KEY123' },
+    pairing: { verificationCode: 'R7EPDH', expiresAt: '2026-10-17T16:08:00Z', pairingKey: 'KEY123' },
+    clusters: [],
+    localServerActive: true,
+    canChoose: false,
+  });
+  const waiting = steps.find((s) => s.id === 'waiting');
+  assert.ok(waiting);
+  assert.equal(waiting.heroCode?.code, 'R7EPDH');
+  assert.equal(waiting.heroCode?.badge, 'En attente d’approbation');
 });
