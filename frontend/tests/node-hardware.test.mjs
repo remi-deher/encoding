@@ -88,7 +88,7 @@ test('le nom du processeur est nettoyé', () => {
   );
 });
 
-test('carte : CPU principal, accélérateurs seulement détectés repliés', () => {
+test('carte : CPU principal, aucun accélérateur non vérifié replié', () => {
   const [accelerator, hardware, processing] = nodeMemberSections(
     node({
       status: 'online',
@@ -105,8 +105,7 @@ test('carte : CPU principal, accélérateurs seulement détectés repliés', () 
     { activeTasks: 0, libraryAccess: 'À configurer' },
   );
   assert.equal(accelerator.primary.label, 'CPU');
-  assert.deepEqual(accelerator.folded.items, ['Quick Sync détecté', 'VAAPI détecté']);
-  assert.equal(accelerator.folded.summary, '+2 non vérifié(s)');
+  assert.equal(accelerator.folded, undefined);
   assert.deepEqual(
     hardware.facts.map((fact) => fact.label),
     ['OS', 'CPU', 'RAM', 'GPU'],

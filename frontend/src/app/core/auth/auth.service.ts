@@ -13,6 +13,7 @@ export class AuthService {
 
   readonly user = computed<CurrentUser | null>(() => this.state()?.user ?? null);
   readonly isAdmin = computed(() => this.user()?.role === 'admin');
+  readonly setupRequired = computed(() => this.state()?.setupRequired ?? false);
 
   /** Charge l’état d’authentification une fois ; `force` relit le serveur. */
   ensureLoaded(force = false): Promise<AuthStatus> {

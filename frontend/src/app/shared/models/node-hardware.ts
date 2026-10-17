@@ -90,7 +90,6 @@ function acceleratorSection(node: NodeResponse): ResourceCardSection {
   const [primary, ...others] = nodeAcceleratorBadges(node).filter(
     (item) => !item.endsWith(' détecté'),
   );
-  const pending = nodeAcceleratorBadges(node).filter((item) => item.endsWith(' détecté'));
   const toneOf = (item: string): ResourceCardTone =>
     ACCELERATION_TONES[
       Object.keys(ACCELERATION_LABELS).find((key) => ACCELERATION_LABELS[key] === item) ?? ''
@@ -103,14 +102,7 @@ function acceleratorSection(node: NodeResponse): ResourceCardSection {
     hint:
       primary === ACCELERATION_LABELS['cpu']
         ? 'Aucun accélérateur matériel vérifié : encodage sur CPU.'
-        : 'Vérifié par un encodage de test.',
-    folded: pending.length
-      ? {
-          summary: `+${pending.length} non vérifié(s)`,
-          items: pending,
-          hint: 'Détectés dans FFmpeg mais non vérifiés : jamais utilisés en mode automatique.',
-        }
-      : undefined,
+        : undefined,
   };
 }
 
