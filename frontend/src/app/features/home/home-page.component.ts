@@ -15,7 +15,7 @@ import {
 } from '../../shared/models/cluster-health';
 import { HealthBannerComponent } from '../../shared/ui/health-banner.component';
 import { MatrixCell, MatrixTableComponent } from '../../shared/ui/matrix-table.component';
-import { NodeResponse, NodeRole, NODE_ROLE_LABELS } from '../../shared/models/cluster';
+import { formatNodeLabel, NodeResponse, NodeRole, NODE_ROLE_LABELS } from '../../shared/models/cluster';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -168,7 +168,7 @@ export class HomePageComponent {
             : 'Hors ligne'
           : online.length + ' / ' + snapshot.nodes.length,
         detail: standalone
-          ? snapshot.nodes[0]?.displayName?.trim() || snapshot.nodes[0]?.name || 'État local'
+          ? (snapshot.nodes[0] ? formatNodeLabel(snapshot.nodes[0].name, snapshot.nodes[0].displayName) : 'État local')
           : snapshot.nodes.length - online.length + ' hors ligne',
       },
       {
@@ -206,7 +206,7 @@ export class HomePageComponent {
       : null;
   });
   protected readonly matrixRows = computed(() =>
-    this.nodes().map((node) => ({ id: node.id, label: node.displayName?.trim() || node.name })),
+    this.nodes().map((node) => ({ id: node.id, label: formatNodeLabel(node.name, node.displayName) })),
   );
   protected readonly matrixColumns = computed(() =>
     (this.state().snapshot?.libraries ?? []).map((library) => ({

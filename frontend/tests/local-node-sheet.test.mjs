@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadModel } from './model-loader.mjs';
 const { localNodeSheet, formatLastSignal, clusterJoinSteps, reconciliationBannerPresentation } = await loadModel('node-management');
+const { formatNodeLabel } = await loadModel('cluster');
 
 const NOW = Date.parse('2026-10-15T12:00:00Z');
 const status = {
@@ -177,4 +178,19 @@ test('reconciliationBannerPresentation displays active status when peers are con
     ],
   }, 2, true);
   assert.match(banner.title, /Synchronisation active avec 1 serveur/);
+});
+
+test('formatNodeLabel formats displayName (hostname) when distinct', () => {
+  assert.equal(formatNodeLabel('ENCODING-50', 'TRUENAS'), 'TRUENAS (ENCODING-50)');
+});
+
+test('formatNodeLabel returns single name when identical or case-insensitive match', () => {
+  assert.equal(formatNodeLabel('TRUENAS', 'TRUENAS'), 'TRUENAS');
+  assert.equal(formatNodeLabel('truenas', 'TRUENAS'), 'TRUENAS');
+});
+
+test('formatNodeLabel falls back gracefully when either name is missing', () => {
+  assert.equal(formatNodeLabel('ENCODING-50', null), 'ENCODING-50');
+  assert.equal(formatNodeLabel('', 'TRUENAS'), 'TRUENAS');
+  assert.equal(formatNodeLabel('', ''), 'Nœud inconnu');
 });

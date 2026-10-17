@@ -221,6 +221,7 @@ export class LocalNodeController {
       this.http.post<LocalNodePairing>('/api/v1/local-node/pairing-key', {
         clusterId: target.id,
         leaveCurrent: !!this.status()?.clusterId,
+        displayName: this.status()?.displayName ?? undefined,
       }),
       (pairing) => {
         this.pairing.set(pairing);

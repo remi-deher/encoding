@@ -15,7 +15,8 @@ public sealed record WorkerIdentityState(
     bool PairingPublished = false,
     WorkerIdentityState? Previous = null,
     DateTimeOffset? SwitchDeadline = null,
-    string? SwitchFailure = null)
+    string? SwitchFailure = null,
+    string? DisplayName = null)
 {
     /// <summary>Vrai tant qu'un changement de cluster attend la confirmation du cluster d'accueil : l'ancien rattachement reste intact (0040).</summary>
     public bool IsSwitching => Previous is not null;
@@ -64,7 +65,8 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
         string clusterId,
         string clusterName,
         string apiBaseUrl,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? displayName = null)
     {
         await gate.WaitAsync(cancellationToken);
         try
@@ -76,8 +78,9 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
                 state = await JsonSerializer.DeserializeAsync<WorkerIdentityState>(stream, JsonOptions, cancellationToken);
             }
             var token = state?.NodeToken ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            var effectiveDisplayName = displayName ?? state?.DisplayName;
             state = new WorkerIdentityState(state?.Id ?? Guid.NewGuid(), clusterId, clusterName, apiBaseUrl, token, false,
-                Previous: state?.Previous, SwitchDeadline: state?.SwitchDeadline);
+                Previous: state?.Previous, SwitchDeadline: state?.SwitchDeadline, DisplayName: effectiveDisplayName);
             await SaveAsync(state, cancellationToken);
             return state;
         }
@@ -91,7 +94,8 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
         string clusterId,
         string clusterName,
         string apiBaseUrl,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? displayName = null)
     {
         await gate.WaitAsync(cancellationToken);
         try
@@ -111,8 +115,9 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
                 && !string.IsNullOrWhiteSpace(state.PairingKey);
             var pairingKey = canReuseKey ? state!.PairingKey : Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
             var expiresAt = DateTimeOffset.UtcNow.AddMinutes(10);
+            var effectiveDisplayName = displayName ?? state?.DisplayName;
             state = new WorkerIdentityState(state?.Id ?? Guid.NewGuid(), clusterId, clusterName, apiBaseUrl, token, false, pairingKey, expiresAt,
-                Previous: state?.Previous, SwitchDeadline: state?.SwitchDeadline);
+                Previous: state?.Previous, SwitchDeadline: state?.SwitchDeadline, DisplayName: effectiveDisplayName);
             await SaveAsync(state, cancellationToken);
             return state;
         }

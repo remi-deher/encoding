@@ -103,3 +103,19 @@ export interface NodeProcessingSettings {
   readonly revision: number;
   readonly schedule: NodeSchedule;
 }
+
+/**
+ * Formate le nom d'un nœud en affichant son nom d'affichage et son nom d'hôte entre parenthèses
+ * lorsqu'ils sont tous deux présents et différents (ex. "TRUENAS (ENCODING-50)").
+ */
+export function formatNodeLabel(name: string, displayName?: string | null): string {
+  const host = name?.trim() ?? '';
+  const display = displayName?.trim();
+  if (display && host && !display.localeCompare(host, undefined, { sensitivity: 'accent' })) {
+    return display;
+  }
+  if (display && host) {
+    return `${display} (${host})`;
+  }
+  return display || host || 'Nœud inconnu';
+}

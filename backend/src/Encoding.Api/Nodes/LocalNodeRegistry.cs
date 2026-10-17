@@ -47,4 +47,22 @@ public sealed class LocalNodeRegistry(NodeRepository repository)
         }
         if (id is not null) await repository.SetDisplayNameIfUnsetAsync(id.Value, name, ct);
     }
+
+    public async Task<string?> ResolveDisplayNameAsync(CancellationToken ct)
+    {
+        string? name;
+        Guid? id;
+        lock (gate)
+        {
+            name = pendingName;
+            id = nodeId;
+        }
+        if (!string.IsNullOrWhiteSpace(name)) return name;
+        if (id.HasValue)
+        {
+            var node = await repository.FindByIdAsync(id.Value, ct);
+            if (!string.IsNullOrWhiteSpace(node?.DisplayName)) return node.DisplayName;
+        }
+        return await repository.GetActiveDisplayNameAsync(ct);
+    }
 }

@@ -21,6 +21,7 @@ import { firstValueFrom } from 'rxjs';
 import { ClusterApi, ClusterReconciliationHealthStatus } from '../../shared/services/cluster-api';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../../shared/models/auth';
 import {
+  formatNodeLabel,
   NodeRole,
   NodeResponse,
   LibraryResponse,
@@ -131,6 +132,7 @@ interface PendingNodeEnrollmentResponse {
   readonly createdAt: string;
   readonly expiresAt: string;
   readonly verificationCode?: string | null;
+  readonly displayName?: string | null;
 }
 
 interface PendingNodeEnrollmentRecord extends DataTableRow {
@@ -491,9 +493,10 @@ export class NodeCatalogPageComponent {
       this.loadState() === 'ready',
     );
   });
-  protected readonly detailTitle = computed(
-    () => this.rawNode()?.displayName?.trim() || this.rawNode()?.name || 'Détails du nœud',
-  );
+  protected readonly detailTitle = computed(() => {
+    const raw = this.rawNode();
+    return raw ? formatNodeLabel(raw.name, raw.displayName) : 'Détails du nœud';
+  });
   protected readonly detailDescription = computed(
     () => this.selectedNode()?.roleLabel ?? 'État observé par le cluster',
   );
@@ -1187,7 +1190,7 @@ export class NodeCatalogPageComponent {
       const record = this.toRecord(node);
       return {
         id: node.id,
-        title: node.displayName?.trim() || node.name,
+        title: formatNodeLabel(node.name, node.displayName),
         statusLabel: NODE_LIFECYCLE_LABELS[lifecycle],
         statusTone: NODE_LIFECYCLE_TONES[lifecycle],
         badges: node.roles.map((role) => NODE_ROLE_LABELS[role]),
@@ -1338,9 +1341,10 @@ export class NodeCatalogPageComponent {
     const request = this.selectedEnrollment();
     if (!request) return [];
 
+    const cardTitle = formatNodeLabel(request.name, request.displayName);
     const card: DetailCard = {
       id: `enrollment-${request.id}`,
-      title: request.name,
+      title: cardTitle,
       subtitle: 'Nœud demandeur',
       icon: 'server',
       status: { label: 'En attente', tone: 'warning' },
@@ -1349,6 +1353,9 @@ export class NodeCatalogPageComponent {
         {
           title: 'Configuration annoncée',
           items: [
+            ...(request.displayName && request.name && request.displayName !== request.name
+              ? [{ label: 'Nom d’hôte', description: request.name }]
+              : []),
             {
               label: 'Capacités',
               description: this.capabilitiesLabel(request.capabilities),
@@ -1441,7 +1448,7 @@ export class NodeCatalogPageComponent {
   protected readonly enrollmentRows = computed<readonly PendingNodeEnrollmentRecord[]>(() =>
     this.pendingEnrollments().map((request) => ({
       id: request.id,
-      name: request.name,
+      name: formatNodeLabel(request.name, request.displayName),
       verificationCode: request.verificationCode ?? '—',
       rolesLabel: request.roles.map((role) => NODE_ROLE_LABELS[role]).join(' · '),
       capabilitiesLabel: request.capabilities.length
@@ -1987,7 +1994,7 @@ export class NodeCatalogPageComponent {
     const worker = node.roles.includes('worker');
     return {
       id: node.id,
-      name: node.displayName?.trim() || node.name,
+      name: formatNodeLabel(node.name, node.displayName),
       roleFilter: `|${node.roles.join('|')}|`,
       roleLabel,
       libraryAccess: this.libraryAccessSummary(node.id),
