@@ -24,13 +24,12 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           sleep 60 # laisse les workflows Backend et Frontend s'enregistrer
-          # Les CI Backend et Frontend ont des filtres de chemins : un commit qui ne touche
-          # ni backend/ ni frontend/ n'a pas de check-runs. On se rabat alors sur les derniers
-          # commits de main qui ont modifié ces dossiers.
+          # La policy est un check de PR, pas un check CI de code. Seuls les jobs
+          # peer-alerts, build, image et frontend déterminent si la release peut partir.
           ci_shas="$SHA"
           for _ in $(seq 1 120); do
             runs="$(for s in $ci_shas; do gh api "repos/${GITHUB_REPOSITORY}/commits/${s}/check-runs?per_page=100" \
-              --jq '[.check_runs[] | select(.name != "wait-ci" and .name != "publish")]'; done | jq -s 'add')"
+              --jq '[.check_runs[] | select(.name == "peer-alerts" or .name == "build" or .name == "image" or .name == "frontend")]'; done | jq -s 'add')"
             if [ "$(jq length <<<"$runs")" -eq 0 ] && [ "$ci_shas" = "$SHA" ]; then
               ci_shas="$(for d in backend frontend; do gh api "repos/${GITHUB_REPOSITORY}/commits?sha=${SHA}&path=${d}&per_page=1" --jq '.[0].sha // empty'; done | sort -u | tr '\n' ' ')"
               [ -n "$ci_shas" ] || ci_shas="$SHA"
