@@ -1,0 +1,35 @@
+name: PR policy
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate the source and target branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if { [ "$BASE_REF" = "dev" ] && [ "$HEAD_REF" != "dev" ] && [ "$HEAD_REF" != "main" ]; } \
+            || { [ "$BASE_REF" = "main" ] && [ "$HEAD_REF" = "dev" ]; }; then
+            echo "Pull request autorisée : $HEAD_REF vers $BASE_REF."
+            exit 0
+          fi
+
+          echo "Seules les PR vers dev et les PR dev vers main sont autorisées."
+          gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --comment "PR fermée automatiquement : seules les PR vers dev et les PR de dev vers main sont autorisées."
+          exit 1
+
+      - name: Enable auto-merge for pull requests targeting dev
+        if: github.event.pull_request.base.ref == 'dev' && github.event.pull_request.draft == false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
