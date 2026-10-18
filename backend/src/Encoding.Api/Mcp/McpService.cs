@@ -752,11 +752,20 @@ public sealed class McpService(
         if (arguments.TryGetProperty("id", out var idProp) && idProp.TryGetGuid(out var existingId))
         {
             scriptId = existingId;
-            var expectedRev = arguments.TryGetProperty("expectedRevision", out var revProp) && revProp.TryGetInt32(out var r) ? r : 1;
-            var saved = await scripts.SaveDraftAsync(scriptId, new SaveFlowScriptDraftRequest(expectedRev, draft), ct);
-            return saved is not null
-                ? McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Brouillon de script mis à jour.", script = saved }, JsonOptions))
-                : McpCallToolResult.Text("Conflit de révision ou script introuvable.", isError: true);
+            var existing = await scripts.GetAsync(scriptId, ct);
+            if (existing is not null)
+            {
+                var expectedRev = arguments.TryGetProperty("expectedRevision", out var revProp) && revProp.TryGetInt32(out var r) ? r : existing.Summary.DraftRevision;
+                var saved = await scripts.SaveDraftAsync(scriptId, new SaveFlowScriptDraftRequest(expectedRev, draft), ct);
+                return saved is not null
+                    ? McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Brouillon de script mis à jour.", script = saved }, JsonOptions))
+                    : McpCallToolResult.Text("Conflit de révision ou script introuvable.", isError: true);
+            }
+            else
+            {
+                var created = await scripts.CreateAsync(scriptId, draft, ct);
+                return McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Script créé avec succès.", script = created }, JsonOptions));
+            }
         }
         else
         {
