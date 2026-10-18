@@ -20,7 +20,7 @@ public sealed class AiAuthenticationTests
         var sentinel = Path.Combine(fixture.DirectoryPath, "sentinel");
         File.WriteAllText(sentinel, "private-sentinel");
         var script = fixture.Configuration["AiTools:Executables:codex-cli"]!;
-        File.WriteAllText(script, "#!/bin/sh\nif cat '" + sentinel + "' 2>/dev/null; then exit 1; else printf 'isolated'; fi");
+        File.WriteAllText(script, "#!/bin/sh\nif [ ! -r /proc/self/stat ]; then exit 2; fi\nif cat '" + sentinel + "' 2>/dev/null; then exit 1; else printf 'isolated'; fi");
         var result = await production.RunAsync("codex-cli", ["exec"], CancellationToken.None);
         Assert.Equal(0, result.ExitCode);
         Assert.Equal("isolated", result.Output);
@@ -85,7 +85,7 @@ public sealed class AiAuthenticationTests
         if (OperatingSystem.IsWindows()) return;
         using var fixture = new AiCliTestProfile("""
             if [ "$1" != "exec" ]; then exit 1; fi
-            if [ -z "$CODEX_HOME" ] || [ -n "$OPENAI_API_KEY" ]; then exit 2; fi
+            if [ -z "$CODEX_HOME" ] || [ "$HOME" != "$CODEX_HOME" ] || [ "$XDG_CONFIG_HOME" != "$CODEX_HOME" ] || [ -n "$OPENAI_API_KEY" ]; then exit 2; fi
             cat >/dev/null
             printf 'Real CLI test result'
             """);

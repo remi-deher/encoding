@@ -86,8 +86,11 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
         foreach (var arg in args) start.ArgumentList.Add(arg);
         var inherited = start.Environment.ToDictionary(entry => entry.Key, entry => entry.Value, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         start.Environment.Clear();
-        foreach (var name in new[] { "PATH", "HOME", "USERPROFILE", "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "SYSTEMROOT", "WINDIR", "PATHEXT", "COMSPEC" })
+        foreach (var name in new[] { "PATH", "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "SYSTEMROOT", "WINDIR", "PATHEXT", "COMSPEC" })
             if (inherited.TryGetValue(name, out var value)) start.Environment[name] = value;
+        start.Environment["HOME"] = profile;
+        start.Environment["USERPROFILE"] = profile;
+        start.Environment["XDG_CONFIG_HOME"] = profile;
         start.Environment[id == "codex-cli" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"] = profile;
         var temporaryDirectory = Path.Combine(profile, "tmp");
         Directory.CreateDirectory(temporaryDirectory);
