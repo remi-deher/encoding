@@ -110,7 +110,7 @@ internal static class SubtitleScenarios
         var manage = baseManifest.Components.Single(item => item.Id == "base-subtitle-manage");
         var fonts = baseManifest.Components.Single(item => item.Id == "base-add-fonts");
         var input = baseManifest.Components.Single(item => item.Id == "base-input-file");
-        Check(baseManifest.Version == "1.5.0" && manage.Version == "1.4.0" && fonts.Version == "1.4.0"
+        Check(baseManifest.Version == "1.6.0" && manage.Version == "1.4.0" && fonts.Version == "1.4.0"
             && manage.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]) && fonts.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "Both blocks are declared in Base 1.4.0 with three outputs.");
         FlowDefinition Flow(params object[] _) => new(1, Guid.NewGuid(), 1, "Subtitles", "video", [
             new("input", null, new("base", "1.4.0", input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),

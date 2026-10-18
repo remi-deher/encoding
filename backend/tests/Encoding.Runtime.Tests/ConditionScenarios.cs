@@ -191,13 +191,20 @@ internal static class ConditionScenarios
         var deintComp = baseManifest.Components.Single(c => c.Id == "base-deinterlace-video");
         var commComp = baseManifest.Components.Single(c => c.Id == "base-remove-commentary");
 
+        Dictionary<string, JsonElement> Config(FlowComponentDescriptor comp, Dictionary<string, JsonElement>? overrides = null)
+        {
+            var dict = comp.ConfigurationSchema.Fields.Where(f => f.DefaultValue is not null).ToDictionary(f => f.Id, f => f.DefaultValue!.Value);
+            if (overrides is not null) foreach (var kv in overrides) dict[kv.Key] = kv.Value;
+            return dict;
+        }
+
         var flowFileFlows = new FlowDefinition(1, Guid.NewGuid(), 1, "FileFlows processing pipeline", "video", [
-            new("input", null, new("base", baseManifest.Version, input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),
-            new("crop", null, new("base", baseManifest.Version, cropComp.Id, cropComp.Version, 1), new Dictionary<string, JsonElement>()),
-            new("deint", null, new("base", baseManifest.Version, deintComp.Id, deintComp.Version, 1), new Dictionary<string, JsonElement>()),
-            new("lang", null, new("base", baseManifest.Version, langFilterComp.Id, langFilterComp.Version, 1), new Dictionary<string, JsonElement>()),
-            new("comm", null, new("base", baseManifest.Version, commComp.Id, commComp.Version, 1), new Dictionary<string, JsonElement>()),
-            new("guard", null, new("base", baseManifest.Version, sizeGuardComp.Id, sizeGuardComp.Version, 1), new Dictionary<string, JsonElement> { ["minReductionPercent"] = J(10) })
+            new("input", null, new("base", baseManifest.Version, input.Id, input.Version, 1), Config(input)),
+            new("crop", null, new("base", baseManifest.Version, cropComp.Id, cropComp.Version, 1), Config(cropComp)),
+            new("deint", null, new("base", baseManifest.Version, deintComp.Id, deintComp.Version, 1), Config(deintComp)),
+            new("lang", null, new("base", baseManifest.Version, langFilterComp.Id, langFilterComp.Version, 1), Config(langFilterComp)),
+            new("comm", null, new("base", baseManifest.Version, commComp.Id, commComp.Version, 1), Config(commComp)),
+            new("guard", null, new("base", baseManifest.Version, sizeGuardComp.Id, sizeGuardComp.Version, 1), Config(sizeGuardComp, new() { ["minReductionPercent"] = J(10) }))
         ], [
             new("e1", "input", "success", "crop"),
             new("e2", "crop", "cropped", "deint"),

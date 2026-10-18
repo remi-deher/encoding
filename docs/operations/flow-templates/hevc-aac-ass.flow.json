@@ -10,7 +10,7 @@
       "name": "Fichier vid\u00E9o",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-input-video",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -38,7 +38,7 @@
       "name": "Reporter : lecture en cours",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-defer-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -53,7 +53,7 @@
       "name": "Verrou de disque",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-disk-lock",
         "componentVersion": "1.5.0",
         "configurationSchemaVersion": 1
@@ -67,7 +67,7 @@
       "name": "Reporter : disque occup\u00E9",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-defer-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -82,7 +82,7 @@
       "name": "Noms de pistes d\u0027origine",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-track-names",
         "componentVersion": "1.3.0",
         "configurationSchemaVersion": 1
@@ -96,7 +96,7 @@
       "name": "Pr\u00E9parer le plan FFmpeg",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-prepare-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -111,7 +111,7 @@
       "name": "Vid\u00E9o HEVC",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-transcode-video",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -127,7 +127,7 @@
       "name": "Audio par r\u00E8gles",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-audio-rules",
         "componentVersion": "1.2.0",
         "configurationSchemaVersion": 1
@@ -142,7 +142,7 @@
       "name": "Ex\u00E9cuter le plan (une \u00E9criture)",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-execute-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -154,7 +154,7 @@
       "name": "Sous-titres ASS",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-subtitle-manage",
         "componentVersion": "1.4.0",
         "configurationSchemaVersion": 1
@@ -168,7 +168,7 @@
       "name": "Polices",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-add-fonts",
         "componentVersion": "1.4.0",
         "configurationSchemaVersion": 1
@@ -182,7 +182,7 @@
       "name": "Noms de pistes",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-track-names",
         "componentVersion": "1.3.0",
         "configurationSchemaVersion": 1
@@ -197,7 +197,7 @@
       "name": "Termin\u00E9",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-complete-flow",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -211,7 +211,7 @@
       "name": "\u00C9chec",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.5.0",
+        "pluginVersion": "1.6.0",
         "componentId": "base-complete-flow",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
