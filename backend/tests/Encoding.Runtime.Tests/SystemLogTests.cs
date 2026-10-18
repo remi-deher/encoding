@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.TestHost;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Infrastructure;
@@ -410,5 +411,36 @@ public sealed class SystemLogApiFactoryTests
         });
         using var client = factory.CreateClient();
         Assert.NotNull(factory.Services.GetService(typeof(Encoding.Core.Logging.SystemLogRingBuffer)));
+    }
+}
+
+public sealed class SystemLogStreamingRegressionTests
+{
+    [Fact(Timeout = 45000)]
+    public async Task StreamStillDeliversNamedEventsAfterIdleHeartbeat()
+    {
+        await using var db = await TestDatabase.CreateSqliteAsync("system-log-stream");
+        var builder = Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder();
+        Microsoft.AspNetCore.TestHost.WebHostBuilderExtensions.UseTestServer(builder.WebHost);
+        builder.Services.AddAuthorization(options => options.AddPolicy(Encoding.Api.Auth.AuthExtensions.AdministratorPolicy,
+            policy => policy.RequireAssertion(_ => true)));
+        builder.Services.AddSingleton(new SystemLogRingBuffer());
+        builder.Services.AddSingleton(new SystemLogStreamBroadcaster());
+        builder.Services.AddSingleton(new SystemLogRepository(db.Db));
+        await using var app = builder.Build();
+        app.MapSystemLogEndpoints();
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(35));
+        using var response = await client.GetAsync("/api/v1/system/logs/stream", HttpCompletionOption.ResponseHeadersRead, cancellation.Token);
+        response.EnsureSuccessStatusCode();
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cancellation.Token));
+        Assert.Equal(": heartbeat", await reader.ReadLineAsync(cancellation.Token));
+        Assert.Equal("", await reader.ReadLineAsync(cancellation.Token));
+        app.Services.GetRequiredService<SystemLogStreamBroadcaster>().Publish(new SystemLogEntry(
+            "after-heartbeat", DateTimeOffset.UtcNow, SystemLogLevel.Warning, "CLI", "Still connected"));
+        Assert.Equal("event: log", await reader.ReadLineAsync(cancellation.Token));
+        Assert.Contains("after-heartbeat", await reader.ReadLineAsync(cancellation.Token));
+        await cancellation.CancelAsync();
     }
 }

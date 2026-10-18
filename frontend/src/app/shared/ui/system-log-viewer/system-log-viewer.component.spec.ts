@@ -72,6 +72,35 @@ describe('SystemLogViewerComponent', () => {
     }).compileComponents();
   });
 
+  it('orders descending API history chronologically and ignores SSE replays', () => {
+    mockLogsService.getLogs.mockReturnValue(
+      of({ entries: [sampleErrorLog, sampleLog], totalBuffered: 2 }),
+    );
+    const fixture = TestBed.createComponent(SystemLogViewerComponent);
+    fixture.detectChanges();
+    expect(fixture.componentInstance['displayedEntries']().map((entry) => entry.id)).toEqual([
+      'log-1',
+      'log-2',
+    ]);
+    streamSubject.next(sampleLog);
+    expect(fixture.componentInstance['displayedEntries']()).toHaveLength(2);
+    fixture.destroy();
+  });
+
+  it('retains live entries received while the history request is pending', () => {
+    const history = new Subject<{ entries: readonly SystemLogEntry[]; totalBuffered: number }>();
+    mockLogsService.getLogs.mockReturnValue(history);
+    const fixture = TestBed.createComponent(SystemLogViewerComponent);
+    fixture.detectChanges();
+    streamSubject.next(sampleErrorLog);
+    history.next({ entries: [sampleLog], totalBuffered: 1 });
+    expect(fixture.componentInstance['displayedEntries']().map((entry) => entry.id)).toEqual([
+      'log-1',
+      'log-2',
+    ]);
+    fixture.destroy();
+  });
+
   it('renders toolbar, initial logs, and categories', () => {
     const fixture = TestBed.createComponent(SystemLogViewerComponent);
     fixture.detectChanges();

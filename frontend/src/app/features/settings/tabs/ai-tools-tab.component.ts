@@ -1,3 +1,5 @@
+import { CategoryTabsComponent } from '../../../shared/ui/category-tabs.component';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -32,6 +34,7 @@ import { AuthService } from '../../../core/auth/auth.service';
   host: { '(window:beforeunload)': 'beforeUnload($event)' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    CategoryTabsComponent,
     FormsModule,
     MatButtonModule,
     MatFormFieldModule,
@@ -75,30 +78,17 @@ import { AuthService } from '../../../core/auth/auth.service';
           </mat-form-field>
         </section>
         <div class="workspace">
-          <nav class="provider-list" aria-label="Fournisseurs IA">
-            @for (provider of providers; track provider.id) {
-              <button
-                matButton="text"
-                type="button"
-                class="provider-row"
-                [class.selected]="selectedProvider() === provider.id"
-                [attr.aria-pressed]="selectedProvider() === provider.id"
-                (click)="selectedProvider.set(provider.id)"
-              >
-                <span class="provider-name"
-                  >{{ provider.name }}
-                  @if (defaultProvider() === provider.id) {
-                    <span class="badge">Par défaut</span>
-                  }
-                </span>
-                <span class="provider-state">{{ clusterLabel(provider.id) }}</span>
-              </button>
-            }
-          </nav>
+          <app-category-tabs
+            label="Fournisseurs IA"
+            [options]="providerTabs()"
+            [selected]="selectedProvider()"
+            (selectedChange)="selectedProvider.set($event)"
+          />
           <section class="provider-sheet" aria-labelledby="provider-title">
             <header class="sheet-heading">
               <div>
                 <h3 id="provider-title">{{ selectedName() }}</h3>
+                <p class="help">{{ clusterLabel(selectedProvider()) }}</p>
                 <p>
                   Configuration de la connexion sur ce nœud. Les demandes du cluster peuvent
                   l’utiliser.
@@ -344,6 +334,12 @@ export class AiToolsTabComponent implements OnInit {
     this.tools().find((t) => t.id === this.selectedProvider()),
   );
   readonly defaultProvider = signal('ollama');
+  readonly providerTabs = computed(() =>
+    this.providers.map((provider) => ({
+      value: provider.id,
+      label: provider.name + (this.defaultProvider() === provider.id ? ' · par défaut' : ''),
+    })),
+  );
   readonly ollamaBaseUrl = signal('');
   readonly ollamaModel = signal('');
   readonly openAiBaseUrl = signal('');
@@ -460,11 +456,10 @@ export class AiToolsTabComponent implements OnInit {
         });
         ref.afterClosed().subscribe(() => this.refreshTools());
       },
-      error: () => {
+      error: (error: HttpErrorResponse) => {
         this.connecting.set(false);
-        this.notifications.show(
-          'La CLI n’a pas fourni de code de connexion. Vérifiez son installation et sa connexion réseau.',
-        );
+        this.notifications.show(this.authError(error));
+        this.refreshTools();
       },
     });
   }
@@ -478,12 +473,19 @@ export class AiToolsTabComponent implements OnInit {
         this.notifications.show('Connexion Claude enregistrée sur ce nœud.');
         this.refreshTools();
       },
-      error: () => {
+      error: (error: HttpErrorResponse) => {
         this.claudeToken.set('');
         this.connecting.set(false);
-        this.notifications.show('Le jeton Claude n’a pas pu être validé.');
+        this.notifications.show(this.authError(error));
+        this.refreshTools();
       },
     });
+  }
+  private authError(error: HttpErrorResponse): string {
+    const title: unknown = error.error?.title;
+    return typeof title === 'string' && title.trim()
+      ? title
+      : 'Impossible de joindre le service de connexion. Consultez les journaux système de ce nœud.';
   }
   revoke(id: string): void {
     if (!this.isAdmin()) return;

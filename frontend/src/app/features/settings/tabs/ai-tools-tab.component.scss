@@ -44,35 +44,8 @@ form {
 }
 .workspace {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
   gap: var(--space-4);
-}
-.provider-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.provider-row {
-  height: auto;
-  min-height: 80px;
-  border-radius: var(--radius-lg);
-  text-align: left;
-  justify-content: flex-start;
-  padding: var(--space-4);
-}
-.provider-row.selected {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.provider-name,
-.provider-state {
-  display: block;
-  white-space: normal;
-}
-.provider-state {
-  font-size: var(--font-label);
-  margin-top: var(--space-2);
-  color: var(--text-muted);
+  min-width: 0;
 }
 .provider-sheet {
   min-width: 0;
@@ -131,9 +104,6 @@ code {
   overflow-wrap: anywhere;
 }
 @media (max-width: 720px) {
-  .workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .default-provider {
     align-items: stretch;
     flex-direction: column;
@@ -141,10 +111,6 @@ code {
   .default-provider mat-form-field {
     min-width: 0;
     width: 100%;
-  }
-  .provider-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   footer button {
     width: 100%;
