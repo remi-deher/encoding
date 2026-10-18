@@ -14,8 +14,8 @@ internal static class ScriptToolsTests
         let missing = tools.run('ffprobe', ['-v', 'error', 'absent.mkv']);
         const made = tools.run('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=duration=1:size=64x64:rate=5', '-f', 'lavfi', '-i', 'sine=duration=1', '-shortest', '-y', 'made.mkv']);
         const info = tools.run('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', 'made.mkv']);
-        return { outputId: 'success', variables: { probeOk: probe.ok, version: probe.stdout.split('\n')[0], blocked, missingOk: missing.ok, missingExit: missing.exitCode,
-          madeOk: made.ok, streams: info.stdout.trim().split('\n').sort(), allowed: tools.allowed.length, ffprobePath: tools.path('ffprobe') !== null, curlPath: tools.path('curl') } };
+        return { outputId: 'success', variables: { probeOk: probe.ok, version: probe.stdout.split(/\r?\n/)[0], blocked, missingOk: missing.ok, missingExit: missing.exitCode,
+          madeOk: made.ok, streams: info.stdout.trim().split(/\r?\n/).sort(), allowed: tools.allowed.length, ffprobePath: tools.path('ffprobe') !== null, curlPath: tools.path('curl') } };
         """;
 
     private const string PythonCode = """
@@ -28,8 +28,8 @@ internal static class ScriptToolsTests
         missing = tools.run('ffprobe', ['-v', 'error', 'absent.mkv'])
         made = tools.run('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=duration=1:size=64x64:rate=5', '-f', 'lavfi', '-i', 'sine=duration=1', '-shortest', '-y', 'made.mkv'])
         info = tools.run('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', 'made.mkv'])
-        return {'outputId': 'success', 'variables': {'probeOk': probe['ok'], 'version': probe['stdout'].split('\n')[0], 'blocked': blocked, 'missingOk': missing['ok'], 'missingExit': missing['exitCode'],
-          'madeOk': made['ok'], 'streams': sorted(info['stdout'].strip().split('\n')), 'allowed': len(tools.allowed), 'ffprobePath': tools.path('ffprobe') is not None, 'curlPath': tools.path('curl')}}
+        return {'outputId': 'success', 'variables': {'probeOk': probe['ok'], 'version': probe['stdout'].splitlines()[0], 'blocked': blocked, 'missingOk': missing['ok'], 'missingExit': missing['exitCode'],
+          'madeOk': made['ok'], 'streams': sorted(info['stdout'].strip().splitlines()), 'allowed': len(tools.allowed), 'ffprobePath': tools.path('ffprobe') is not None, 'curlPath': tools.path('curl')}}
         """;
 
     public static async Task RunAsync()

@@ -1,0 +1,617 @@
+{
+  "contractVersion": 1,
+  "id": "audio",
+  "version": "1.0.0",
+  "name": "Audio",
+  "supportedHostContractVersions": [
+    1
+  ],
+  "components": [
+    {
+      "id": "audio-transcode",
+      "version": "1.0.0",
+      "name": "Encoder l’audio",
+      "description": "Convertit une piste audio et règle son débit et ses canaux.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "audioCodec",
+            "label": "Codec audio",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "aac",
+            "options": [
+              {
+                "value": "aac",
+                "label": "AAC"
+              },
+              {
+                "value": "opus",
+                "label": "Opus"
+              },
+              {
+                "value": "flac",
+                "label": "FLAC"
+              },
+              {
+                "value": "ac3",
+                "label": "AC-3"
+              }
+            ]
+          },
+          {
+            "id": "bitrateKbps",
+            "label": "Débit cible avec perte (kbit/s)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 192,
+            "min": 32,
+            "max": 1536,
+            "step": 32
+          },
+          {
+            "id": "channels",
+            "label": "Canaux",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "source",
+            "options": [
+              {
+                "value": "source",
+                "label": "Conserver"
+              },
+              {
+                "value": "2",
+                "label": "Stéréo"
+              },
+              {
+                "value": "6",
+                "label": "5.1"
+              },
+              {
+                "value": "8",
+                "label": "7.1"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "audio-normalize",
+      "version": "1.0.0",
+      "name": "Normaliser le volume",
+      "description": "Ajuste le niveau sonore de la piste sélectionnée.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "targetLoudness",
+            "label": "Niveau cible (LUFS)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": -16,
+            "min": -30,
+            "max": -5,
+            "step": 1
+          },
+          {
+            "id": "truePeak",
+            "label": "True peak maximal (dBTP)",
+            "type": "number",
+            "inline": true,
+            "defaultValue": -1.5,
+            "min": -9,
+            "max": 0,
+            "step": 0.1
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "audio-extract",
+      "version": "1.0.0",
+      "name": "Extraire une piste audio",
+      "description": "Copie ou convertit une piste audio dans un fichier séparé.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "audioCodec",
+            "label": "Mode de sortie",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "copy",
+            "options": [
+              {
+                "value": "copy",
+                "label": "Copie du codec source"
+              },
+              {
+                "value": "aac",
+                "label": "AAC"
+              },
+              {
+                "value": "flac",
+                "label": "FLAC"
+              },
+              {
+                "value": "opus",
+                "label": "Opus"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "audio-rules",
+      "version": "1.0.0",
+      "name": "Audio par règles",
+      "description": "Uniformise toutes les pistes audio : stéréo en AAC (une stéréo AC-3 est conservée), 2.1 et plus en AC-3 limité à 6 canaux, mono AAC conservé. La disposition des canaux et le LFE sont préservés ; une disposition inconnue n’est déduite que de pistes déclarées concordantes.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Des pistes ont été converties ou ajoutées au plan."
+        },
+        {
+          "id": "unchanged",
+          "label": "Déjà conforme",
+          "description": "Toutes les pistes respectent déjà les règles."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Une règle ne peut pas être appliquée sans risque (disposition inconnue ou non prise en charge). Le fichier d’origine n’est pas remplacé."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ],
+            "description": "Ajouter les conversions au plan, puis utiliser Exécuter le traitement ; ou les réaliser immédiatement."
+          },
+          {
+            "id": "keepStereoAc3",
+            "label": "Conserver la stéréo AC-3",
+            "type": "boolean",
+            "defaultValue": true
+          },
+          {
+            "id": "unknownLayout",
+            "label": "Disposition de canaux inconnue",
+            "type": "select",
+            "defaultValue": "infer",
+            "options": [
+              {
+                "value": "infer",
+                "label": "Déduire des pistes déclarées"
+              },
+              {
+                "value": "fail",
+                "label": "Refuser"
+              }
+            ]
+          },
+          {
+            "id": "sampleRate",
+            "label": "Fréquence d’échantillonnage (Hz, 0 pour conserver)",
+            "type": "number",
+            "defaultValue": 48000,
+            "min": 0,
+            "max": 192000,
+            "step": 1000
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "audio-add-track",
+      "version": "1.0.0",
+      "name": "Ajouter une piste audio",
+      "description": "Ajoute un fichier audio au conteneur MKV.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "sourceFile",
+            "label": "Fichier à ajouter",
+            "type": "text",
+            "required": true,
+            "description": "Référence à un fichier local ou à un résultat produit par le flow."
+          },
+          {
+            "id": "language",
+            "label": "Langue",
+            "type": "text",
+            "required": true,
+            "description": "Code de langue, par exemple fra ou eng."
+          },
+          {
+            "id": "trackName",
+            "label": "Nom de la piste",
+            "type": "text",
+            "required": false
+          },
+          {
+            "id": "defaultTrack",
+            "label": "Piste par défaut",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "audio-filter-languages",
+      "version": "1.0.0",
+      "name": "Filtrer les langues",
+      "description": "Ne conserve que les langues autorisées pour les pistes audio et les sous-titres, en supprimant les doublages inutiles.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "filtered",
+          "label": "Filtré",
+          "description": "Des pistes hors liste ont été retirées."
+        },
+        {
+          "id": "unchanged",
+          "label": "Inchangé",
+          "description": "Toutes les pistes étaient déjà conformes."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Erreur lors du filtrage des pistes."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "allowedAudioLanguages",
+            "label": "Langues audio autorisées",
+            "type": "text",
+            "defaultValue": "fra,fre,eng,jpn,und",
+            "description": "Codes langues ISO-639 séparés par des virgules (ex: fra,eng,jpn).",
+            "required": false
+          },
+          {
+            "id": "keepUndefinedAudio",
+            "label": "Garder audio sans langue (und)",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Préserver les pistes audio dont la langue n'est pas renseignée.",
+            "required": false
+          },
+          {
+            "id": "keepFirstAudioIfNoneMatch",
+            "label": "Garder première piste de secours",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Si aucune langue audio ne correspond, conserve la 1ère piste pour éviter un fichier muet.",
+            "required": false
+          },
+          {
+            "id": "allowedSubtitleLanguages",
+            "label": "Langues de sous-titres autorisées",
+            "type": "text",
+            "defaultValue": "fra,fre,eng",
+            "description": "Codes langues des sous-titres à conserver, séparés par des virgules.",
+            "required": false
+          },
+          {
+            "id": "keepForcedSubtitles",
+            "label": "Toujours garder sous-titres forcés",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Conserver les sous-titres forcés quelle que soit leur langue.",
+            "required": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvmerge",
+          "minimumVersion": "70.0.0",
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "audio-remove-commentary",
+      "version": "1.0.0",
+      "name": "Supprimer les commentaires",
+      "description": "Détecte et supprime les pistes audio et sous-titres de commentaires ou d’audiodescription (Director's Commentary, Audio Description, etc.).",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "removed",
+          "label": "Supprimé",
+          "description": "Pistes de commentaires ou d'audiodescription détectées et retirées."
+        },
+        {
+          "id": "unchanged",
+          "label": "Inchangé",
+          "description": "Aucune piste indésirable trouvée."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Erreur lors du retrait des pistes."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "removeAudioCommentary",
+            "label": "Supprimer commentaires audio",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Retirer les pistes audio identifiées comme commentaires du réalisateur ou de l'équipe.",
+            "required": false
+          },
+          {
+            "id": "removeSubtitleCommentary",
+            "label": "Supprimer sous-titres commentaires",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Retirer les sous-titres identifiés comme commentaires.",
+            "required": false
+          },
+          {
+            "id": "customKeywords",
+            "label": "Mots-clés personnalisés",
+            "type": "text",
+            "defaultValue": "",
+            "description": "Mots-clés additionnels séparés par virgules (en plus de commentary, director, visual impaired, etc.).",
+            "required": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvmerge",
+          "minimumVersion": "70.0.0",
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    }
+  ]
+}

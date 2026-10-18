@@ -67,17 +67,18 @@ internal static class AudioRuleScenarios
             && five["outputLayout"].GetString() == "5.1(side)" && five["sampleRate"].GetInt32() == 48000, "A plan step carries codec, channels, bitrate, layout and sample rate.");
         Check(!AudioRulePlanner.Plan(Streams(("eac3", 2, null, null)), options with { SampleRate = 0 }).Steps(null, options with { SampleRate = 0 }).Single().Configuration.ContainsKey("sampleRate"), "A zero sample rate keeps the source rate.");
 
+        var audioManifest = registry.Plugins.Single(item => item.Id == "audio");
+        var rules = audioManifest.Components.Single(item => item.Id == "audio-rules");
         var baseManifest = registry.Plugins.Single(item => item.Id == "base");
-        var rules = baseManifest.Components.Single(item => item.Id == "base-audio-rules");
         var input = baseManifest.Components.Single(item => item.Id == "base-input-file");
-        Check(baseManifest.Version == "1.6.0" && rules.Version == "1.2.0" && rules.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "The audio rules block is declared in Base 1.2.0 with its three outputs.");
+        Check(audioManifest.Version == "1.0.0" && rules.Version == "1.0.0" && rules.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "The audio rules block is declared in Audio 1.0.0 with its three outputs.");
         var wait = baseManifest.Components.Single(item => item.Id == "base-wait");
         Check(wait.CompatiblePluginVersions!.SequenceEqual(["1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0"]) && baseManifest.Components.Where(item => item.Id != "base-wait" && item.Version == "1.0.0").All(item => item.CompatiblePluginVersions!.Contains("1.1.0") && item.CompatiblePluginVersions!.Contains("1.2.0") && item.CompatiblePluginVersions!.Contains("1.3.0") && item.CompatiblePluginVersions!.Contains("1.4.0") && item.CompatiblePluginVersions!.Contains("1.5.0")),
             "Flows that reference Base 1.1.0 to 1.5.0 stay valid after the version bump.");
 
         FlowDefinition FlowWith() => new(1, Guid.NewGuid(), 1, "Audio rules", "video", [
             new("input", null, new("base", "1.2.0", input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),
-            new("rules", null, new("base", "1.2.0", rules.Id, rules.Version, 1), new Dictionary<string, JsonElement> { ["processingMode"] = J("direct") })],
+            new("rules", null, new("base", "1.2.0", "base-audio-rules", "1.2.0", 1), new Dictionary<string, JsonElement> { ["processingMode"] = J("direct") })],
             [new("edge", "input", "success", "rules")]);
         var worker = Guid.NewGuid();
         NodeToolCapability Ffmpeg(params string[] encoders) => new("ffmpeg", "7.0", ["video"], ["cpu"], encoders);

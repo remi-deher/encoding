@@ -123,7 +123,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 RuntimeHandoffSelector? handoff=null; RuntimeWait? wait=null;
                 try
                 {
-                    var id=node.Component.PluginId=="base"?node.Component.ComponentId:""; var c=node.Configuration;
+                    var id=node.Component.ComponentId; var c=node.Configuration;
                     if(id.StartsWith("base-input-",StringComparison.Ordinal)) { if(id!="base-input-file") await EnsureScanAsync(); }
                     else if(id=="base-variable")
                     {
@@ -186,7 +186,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     {
                         // Scheduling enforces these constraints before assigning the file to this worker.
                     }
-                    else if(node.Component.PluginId!="base")
+                    else if(node.Component.PluginId is not ("base" or "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" or "ai"))
                     {
                         await EnsureScanAsync();
                         var invocation=new FlowStepInvocation(1,started.InvocationId,lease.ExecutionId,lease.Attempt,client.NodeId,lease.Epoch,node.Id,node.Component,c,
@@ -197,7 +197,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         foreach(var change in response.VariableChanges) variables[change.Key]=change.Value;
                         if(response.CandidateArtifactId is { } candidate) await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate),[]),node.Id);
                     }
-                    else if(id=="base-track-names")
+                    else if(id is "base-track-names" or "subtitles-track-names")
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.TrackNamesAsync(c,context.CurrentMetadata!.Value,variables.TryGetValue("tracks.origin",out var saved)?saved:null,current,directory,node.Id,job.Token);
@@ -209,7 +209,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
-                    else if(id=="base-subtitle-manage")
+                    else if(id is "base-subtitle-manage" or "subtitles-manage")
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.SubtitleManageAsync(c,context.CurrentMetadata!.Value,current,directory,node.Id,job.Token);
@@ -220,7 +220,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
-                    else if(id=="base-add-fonts")
+                    else if(id is "base-add-fonts" or "subtitles-add-fonts")
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.AddFontsAsync(c,current,directory,node.Id,job.Token);
@@ -231,7 +231,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
-                    else if(id=="base-audio-rules")
+                    else if(id is "base-audio-rules" or "audio-rules")
                     {
                         await EnsureScanAsync();
                         var rules=AudioRuleOptions.From(c); var audioPlan=AudioRulePlanner.Plan(context.CurrentMetadata!.Value,rules);
@@ -246,7 +246,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         }
                         else await ApplyOutcomeAsync(await actions.FfmpegPlanAsync(steps,current,directory,node.Id,client.NodeId,job.Token),node.Id);
                     }
-                    else if(id=="base-auto-crop")
+                    else if(id is "base-auto-crop" or "video-auto-crop")
                     {
                         await EnsureScanAsync();
                         var duration=0.0;
@@ -298,7 +298,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         }
                         else output="no-crop";
                     }
-                    else if(id=="base-deinterlace-video")
+                    else if(id is "base-deinterlace-video" or "video-deinterlace")
                     {
                         await EnsureScanAsync();
                         var frames=int.Parse(MediaActions.Number(c,"detectionFrames",1000));
@@ -324,7 +324,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         }
                         else output="progressive";
                     }
-                    else if(id=="base-file-size-guard")
+                    else if(id is "base-file-size-guard" or "video-file-size-guard")
                     {
                         await EnsureFilesAsync();
                         var currentInfo=new FileInfo(current);
@@ -351,7 +351,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             }
                         }
                     }
-                    else if(id=="base-filter-languages")
+                    else if(id is "base-filter-languages" or "audio-filter-languages")
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.FilterLanguagesAsync(c,context.CurrentMetadata!.Value,current,directory,node.Id,job.Token);
@@ -362,7 +362,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome,node.Id);
                         }
                     }
-                    else if(id=="base-remove-commentary")
+                    else if(id is "base-remove-commentary" or "audio-remove-commentary")
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.RemoveCommentaryAsync(c,context.CurrentMetadata!.Value,current,directory,node.Id,job.Token);

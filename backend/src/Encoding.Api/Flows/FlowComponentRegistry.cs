@@ -114,8 +114,91 @@ public sealed class FlowComponentRegistry
         Plugins = manifests;
     }
 
-    public FlowComponentDescriptor? Resolve(FlowComponentReference reference) => components.GetValueOrDefault(reference);
-    public string? RuntimePluginVersion(FlowComponentReference reference)=>runtimeVersions.GetValueOrDefault(reference);
+    private static readonly Dictionary<string, (string PluginId, string ComponentId)> LegacyAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // AI plugin
+        ["base-ai-translate-subtitles"] = ("ai", "ai-translate-subtitles"),
+        ["base-ai-metadata-enricher"] = ("ai", "ai-metadata-enricher"),
+        // MKV plugin
+        ["base-remux-matroska"] = ("mkv", "mkv-remux-matroska"),
+        ["base-remove-tracks"] = ("mkv", "mkv-remove-tracks"),
+        ["base-extract-track"] = ("mkv", "mkv-extract-track"),
+        ["base-reorder-tracks"] = ("mkv", "mkv-reorder-tracks"),
+        ["base-edit-track-properties"] = ("mkv", "mkv-edit-track-properties"),
+        ["base-edit-matroska-metadata"] = ("mkv", "mkv-edit-matroska-metadata"),
+        ["base-extract-attachments"] = ("mkv", "mkv-extract-attachments"),
+        ["base-remove-attachments"] = ("mkv", "mkv-remove-attachments"),
+        ["base-extract-chapters"] = ("mkv", "mkv-extract-chapters"),
+        ["base-replace-chapters"] = ("mkv", "mkv-replace-chapters"),
+        // Images plugin
+        ["base-convert-image"] = ("images", "image-convert"),
+        ["base-resize-image"] = ("images", "image-resize"),
+        ["base-crop-image"] = ("images", "image-crop"),
+        // Probe plugin
+        ["base-probe-media"] = ("probe", "probe-media"),
+        ["base-probe-tracks"] = ("probe", "probe-tracks"),
+        ["base-probe-video"] = ("probe", "probe-video"),
+        ["base-probe-audio"] = ("probe", "probe-audio"),
+        ["base-inspect-media"] = ("probe", "probe-inspect-media"),
+        ["base-inspect-hdr"] = ("probe", "probe-inspect-hdr"),
+        ["base-inspect-track"] = ("probe", "probe-inspect-track"),
+        ["base-export-media-report"] = ("probe", "probe-export-report"),
+        // Video plugin
+        ["base-transcode-video"] = ("video", "video-transcode"),
+        ["base-resize-video"] = ("video", "video-resize"),
+        ["base-auto-crop"] = ("video", "video-auto-crop"),
+        ["base-deinterlace-video"] = ("video", "video-deinterlace"),
+        ["base-video-thumbnail"] = ("video", "video-thumbnail"),
+        ["base-verify-decoding"] = ("video", "video-verify-decoding"),
+        ["base-file-size-guard"] = ("video", "video-file-size-guard"),
+        // Audio plugin
+        ["base-transcode-audio"] = ("audio", "audio-transcode"),
+        ["base-normalize-audio"] = ("audio", "audio-normalize"),
+        ["base-extract-audio"] = ("audio", "audio-extract"),
+        ["base-audio-rules"] = ("audio", "audio-rules"),
+        ["base-add-audio-track"] = ("audio", "audio-add-track"),
+        ["base-filter-languages"] = ("audio", "audio-filter-languages"),
+        ["base-remove-commentary"] = ("audio", "audio-remove-commentary"),
+        // Subtitles plugin
+        ["base-extract-subtitles"] = ("subtitles", "subtitles-extract"),
+        ["base-subtitle-manage"] = ("subtitles", "subtitles-manage"),
+        ["base-add-fonts"] = ("subtitles", "subtitles-add-fonts"),
+        ["base-add-subtitle-track"] = ("subtitles", "subtitles-add-track"),
+        ["base-track-names"] = ("subtitles", "subtitles-track-names"),
+    };
+
+    public static bool TryGetLegacyAlias(string componentId, out (string PluginId, string ComponentId) target) =>
+        LegacyAliases.TryGetValue(componentId, out target);
+
+    public FlowComponentDescriptor? Resolve(FlowComponentReference reference)
+    {
+        if (components.TryGetValue(reference, out var descriptor))
+            return descriptor;
+
+        if (reference.PluginId == "base" && LegacyAliases.TryGetValue(reference.ComponentId, out var target))
+        {
+            var targetRef = FindReference(target.ComponentId, target.PluginId);
+            if (targetRef is not null && components.TryGetValue(targetRef, out var aliased))
+                return aliased;
+        }
+
+        return null;
+    }
+
+    public string? RuntimePluginVersion(FlowComponentReference reference)
+    {
+        if (runtimeVersions.TryGetValue(reference, out var v))
+            return v;
+
+        if (reference.PluginId == "base" && LegacyAliases.TryGetValue(reference.ComponentId, out var target))
+        {
+            var targetRef = FindReference(target.ComponentId, target.PluginId);
+            if (targetRef is not null && runtimeVersions.TryGetValue(targetRef, out var aliasedVersion))
+                return aliasedVersion;
+        }
+
+        return null;
+    }
 
     public FlowComponentReference? FindReference(string componentId, string? pluginId = null)
     {
@@ -134,6 +217,12 @@ public sealed class FlowComponentRegistry
                     comp.ConfigurationSchema.Version);
             }
         }
+
+        if (LegacyAliases.TryGetValue(componentId, out var target))
+        {
+            return FindReference(target.ComponentId, target.PluginId);
+        }
+
         return null;
     }
 }

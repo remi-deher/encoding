@@ -40,5 +40,13 @@ public static class AiToolEndpoints
             var success = service.RevokeAuth(id);
             return Results.Ok(new { revoked = success });
         }).WithName("RevokeAiToolAuth");
+
+        group.MapGet("/settings", (AiSettingsService service) =>
+            Results.Ok(service.GetSettings()))
+            .WithName("GetAiSettings");
+
+        group.MapPut("/settings", (AiSettingsUpdateRequest request, AiSettingsService service) =>
+            Results.Ok(service.UpdateSettings(request)))
+            .WithName("UpdateAiSettings");
     }
 }

@@ -48,3 +48,25 @@ public static class HardwareCapabilities
     public static bool RequiresHardwareAcceleration(IEnumerable<string>? capabilities) =>
         capabilities?.Any(c => ProtectedCapabilities.Contains(c)) ?? false;
 }
+
+/// <summary>Configuration globale de l'IA (fournisseur, URLs locales, clés d'API et modèles).</summary>
+public sealed record AiSettingsDto(
+    string DefaultProvider,
+    string OllamaBaseUrl,
+    string OllamaModel,
+    string OpenAiBaseUrl,
+    string OpenAiModel,
+    string? OpenAiApiKey,
+    int TimeoutSeconds = 120,
+    int SubtitleBatchSize = 80);
+
+/// <summary>Requête de mise à jour de la configuration de l'IA.</summary>
+public sealed record AiSettingsUpdateRequest(
+    string? DefaultProvider = null,
+    string? OllamaBaseUrl = null,
+    string? OllamaModel = null,
+    string? OpenAiBaseUrl = null,
+    string? OpenAiModel = null,
+    string? OpenAiApiKey = null,
+    int? TimeoutSeconds = null,
+    int? SubtitleBatchSize = null);

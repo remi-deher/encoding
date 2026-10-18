@@ -93,6 +93,102 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     iconUrl: '/plugins/conditions.svg',
   },
   {
+    id: 'ai',
+    name: 'Intelligence Artificielle',
+    family: 'base',
+    familyLabel: 'Noyau',
+    category: 'Génération & Traduction LLM',
+    version: '1.0.0',
+    components: 'Traduction de sous-titres, enrichissement des métadonnées, résumé de contenu',
+    runtime: 'Intégré (CLI / Ollama / OpenAI)',
+    configuration:
+      'Fournisseur actif, URL Ollama, clés API et modèles configurables dans Paramètres',
+    state: 'Actif par défaut',
+    iconUrl: '/plugins/ai.svg',
+  },
+  {
+    id: 'video',
+    name: 'Vidéo',
+    family: 'media',
+    familyLabel: 'Média',
+    category: 'Traitement vidéo',
+    version: '1.0.0',
+    components:
+      'Encodage HEVC/AV1/H.264, redimensionnement, recadrage automatique, désentrelacement, protection de taille',
+    runtime: 'FFmpeg (encodeurs CPU / GPU)',
+    configuration: 'Profils d’encodage et options par bloc',
+    state: 'Actif par défaut',
+    iconUrl: '/plugins/video.svg',
+  },
+  {
+    id: 'audio',
+    name: 'Audio',
+    family: 'media',
+    familyLabel: 'Média',
+    category: 'Traitement audio',
+    version: '1.0.0',
+    components:
+      'Encodage AAC/AC-3/E-AC-3/FLAC, normalisation R128/crête, règles de mixage 5.1/stéréo, filtrage des langues, suppression des commentaires',
+    runtime: 'FFmpeg',
+    configuration: 'Règles et options par bloc',
+    state: 'Actif par défaut',
+    iconUrl: '/plugins/audio.svg',
+  },
+  {
+    id: 'subtitles',
+    name: 'Sous-titres',
+    family: 'media',
+    familyLabel: 'Média',
+    category: 'Gestion des sous-titres',
+    version: '1.0.0',
+    components:
+      'Gestion SRT/ASS, polices intégrées, normalisation des noms de pistes MKV, extraction et synchronisation',
+    runtime: 'FFmpeg & MKVToolNix',
+    configuration: 'Options par bloc',
+    state: 'Actif par défaut',
+    iconUrl: '/plugins/subtitles.svg',
+  },
+  {
+    id: 'mkv',
+    name: 'Matroska & MKV',
+    family: 'media',
+    familyLabel: 'Média',
+    category: 'Conteneur MKV',
+    version: '1.0.0',
+    components: 'Remux MKV, pistes audio/sous-titres, métadonnées, chapitres, pièces jointes',
+    runtime: 'MKVToolNix (mkvmerge, mkvextract, mkvpropedit)',
+    configuration: 'Options par bloc',
+    state: 'Actif par défaut',
+    iconUrl: '/plugins/mkv.svg',
+  },
+  {
+    id: 'images',
+    name: 'Images',
+    family: 'media',
+    familyLabel: 'Média',
+    category: 'Traitement graphique',
+    version: '1.0.0',
+    components: 'Conversion de format, redimensionnement et recadrage d’images',
+    runtime: 'ImageMagick (magick / convert)',
+    configuration: 'Options par bloc',
+    state: 'Actif par défaut',
+    iconUrl: '/plugins/images.svg',
+  },
+  {
+    id: 'probe',
+    name: 'Sondes & Analyse',
+    family: 'media',
+    familyLabel: 'Média',
+    category: 'Inspection multimédia',
+    version: '1.0.0',
+    components:
+      'Sondes FFprobe (flux, vidéo, audio) et inspection MediaInfo (HDR, pistes, rapport JSON)',
+    runtime: 'FFprobe & MediaInfo',
+    configuration: 'Options par bloc',
+    state: 'Actif par défaut',
+    iconUrl: '/plugins/probe.svg',
+  },
+  {
     id: 'plex',
     name: 'Plex',
     family: 'media',
@@ -181,7 +277,9 @@ export class PluginCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
 
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Plugins & Outils');
+  protected readonly title = computed(
+    () => (this.routeData()['title'] as string) ?? 'Plugins & Outils',
+  );
   protected readonly activeTab = signal<ExtensionTab>('plugins');
   protected readonly clusterTools = signal<readonly ClusterTool[]>([]);
   protected readonly storeRepositories = signal<readonly StoreRepository[]>([]);

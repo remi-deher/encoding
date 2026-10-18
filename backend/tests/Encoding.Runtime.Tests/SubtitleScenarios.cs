@@ -106,16 +106,17 @@ internal static class SubtitleScenarios
         Check(SubtitlePlanner.SrtHasNoVisibleText("1\n00:00:01,000 --> 00:00:02,000\n<i> </i>\n\n2\n00:00:03,000 --> 00:00:04,000\n&nbsp;\n") && !SubtitlePlanner.SrtHasNoVisibleText("1\n00:00:01,000 --> 00:00:02,000\nBonjour\n"), "Visible text is detected in raw SRT.");
 
         // Catalogue et éligibilité.
+        var subsManifest = registry.Plugins.Single(item => item.Id == "subtitles");
+        var manage = subsManifest.Components.Single(item => item.Id == "subtitles-manage");
+        var fonts = subsManifest.Components.Single(item => item.Id == "subtitles-add-fonts");
         var baseManifest = registry.Plugins.Single(item => item.Id == "base");
-        var manage = baseManifest.Components.Single(item => item.Id == "base-subtitle-manage");
-        var fonts = baseManifest.Components.Single(item => item.Id == "base-add-fonts");
         var input = baseManifest.Components.Single(item => item.Id == "base-input-file");
-        Check(baseManifest.Version == "1.6.0" && manage.Version == "1.4.0" && fonts.Version == "1.4.0"
-            && manage.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]) && fonts.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "Both blocks are declared in Base 1.4.0 with three outputs.");
+        Check(subsManifest.Version == "1.0.0" && manage.Version == "1.0.0" && fonts.Version == "1.0.0"
+            && manage.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]) && fonts.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "Both blocks are declared in Subtitles 1.0.0 with three outputs.");
         FlowDefinition Flow(params object[] _) => new(1, Guid.NewGuid(), 1, "Subtitles", "video", [
             new("input", null, new("base", "1.4.0", input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),
-            new("subs", null, new("base", "1.4.0", manage.Id, manage.Version, 1), new Dictionary<string, JsonElement>()),
-            new("fonts", null, new("base", "1.4.0", fonts.Id, fonts.Version, 1), new Dictionary<string, JsonElement>())],
+            new("subs", null, new("base", "1.4.0", "base-subtitle-manage", "1.4.0", 1), new Dictionary<string, JsonElement>()),
+            new("fonts", null, new("base", "1.4.0", "base-add-fonts", "1.4.0", 1), new Dictionary<string, JsonElement>())],
             [new("a", "input", "success", "subs"), new("b", "subs", "success", "fonts")]);
         var worker = Guid.NewGuid();
         NodeToolCapability[] Caps(string baseVersion, params NodeToolCapability[] more) => [new("plugin/base", baseVersion, ["general"], []), new("ffprobe", "7.0", ["video"], []), .. more];

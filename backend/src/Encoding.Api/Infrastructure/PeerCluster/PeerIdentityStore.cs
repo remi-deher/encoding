@@ -47,24 +47,28 @@ public sealed class PeerIdentityStore : IDisposable
             var certificatePath = Path.Combine(dataDirectory, CertificateFileName);
             var metadataPath = Path.Combine(dataDirectory, MetadataFileName);
             PeerIdentity identity;
+            var keyStorageFlags = OperatingSystem.IsWindows()
+                ? X509KeyStorageFlags.Exportable
+                : X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet;
             if (File.Exists(certificatePath) && File.Exists(metadataPath))
             {
                 var metadata = JsonSerializer.Deserialize<IdentityMetadata>(File.ReadAllText(metadataPath))
                     ?? throw new InvalidOperationException("Les métadonnées de l’identité de pair sont illisibles.");
                 if (metadata.ClusterId != clusterId) throw new InvalidOperationException("L’identité de pair persistée appartient à un autre PeerCluster:ClusterId.");
-                var certificate = X509CertificateLoader.LoadPkcs12FromFile(certificatePath, pfxPassword,
-                    X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
+                var certificate = X509CertificateLoader.LoadPkcs12FromFile(certificatePath, pfxPassword, keyStorageFlags);
                 identity = new PeerIdentity(metadata.PeerId, metadata.ClusterId, certificate);
                 ValidateOwnCertificate(identity);
             }
             else
             {
-                if (File.Exists(certificatePath) || File.Exists(metadataPath))
-                    throw new InvalidOperationException("Les fichiers de l’identité de pair sont incomplets. Restaurer les deux depuis la même sauvegarde.");
-                identity = CreateIdentity(clusterId, certificateHost);
-                File.WriteAllBytes(certificatePath, identity.Certificate.Export(X509ContentType.Pkcs12, pfxPassword));
+                var created = CreateIdentity(clusterId, certificateHost);
+                File.WriteAllBytes(certificatePath, created.Certificate.Export(X509ContentType.Pkcs12, pfxPassword));
                 SetPrivateFilePermissions(certificatePath);
-                WriteMetadata(metadataPath, new IdentityMetadata(identity.PeerId, clusterId));
+                WriteMetadata(metadataPath, new IdentityMetadata(created.PeerId, clusterId));
+                created.Certificate.Dispose();
+                var certificate = X509CertificateLoader.LoadPkcs12FromFile(certificatePath, pfxPassword, keyStorageFlags);
+                identity = new PeerIdentity(created.PeerId, clusterId, certificate);
+                ValidateOwnCertificate(identity);
             }
             SetPrivateFilePermissions(lockFile);
             return new PeerIdentityStore(dataDirectory, identity, processLock);
@@ -123,7 +127,8 @@ public sealed class PeerIdentityStore : IDisposable
     public void ActivateRotation(string password, string approvedFingerprint)
     {
         var nextPath = Path.Combine(directory, "peer-identity.next.pfx");
-        using var certificate = X509CertificateLoader.LoadPkcs12FromFile(nextPath, password, X509KeyStorageFlags.EphemeralKeySet);
+        using var certificate = X509CertificateLoader.LoadPkcs12FromFile(nextPath, password,
+            OperatingSystem.IsWindows() ? X509KeyStorageFlags.Exportable : X509KeyStorageFlags.EphemeralKeySet);
         var next = new PeerIdentity(Identity.PeerId, Identity.ClusterId, certificate);
         ValidateOwnCertificate(next);
         if (next.Thumbprint != PeerIdentity.NormalizeThumbprint(approvedFingerprint))

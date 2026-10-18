@@ -31,9 +31,16 @@ public sealed class ToolCapabilityProbe(
             Directory.CreateDirectory(options.DataDirectory);
             var list = new List<NodeToolCapability>
             {
-                new("plugin/base", "1.5.0", ["general"], ["cpu"]),
-                new("plugin/nodes", "1.1.0", ["general"], []),
-                new("plugin/conditions", "1.0.0", ["general"], [])
+                new("plugin/base", "1.6.0", ["general"], ["cpu"]),
+                new("plugin/video", "1.0.0", ["general"], []),
+                new("plugin/audio", "1.0.0", ["general"], []),
+                new("plugin/subtitles", "1.0.0", ["general"], []),
+                new("plugin/mkv", "1.0.0", ["general"], []),
+                new("plugin/images", "1.0.0", ["general"], []),
+                new("plugin/probe", "1.0.0", ["general"], []),
+                new("plugin/ai", "1.0.0", ["general"], []),
+                new("plugin/nodes", "1.3.0", ["general"], []),
+                new("plugin/conditions", "1.2.0", ["general"], [])
             };
             // L'aide tools des scripts (0054) exige le même bac à sable que les scripts eux-mêmes.
             if (ProcessSandbox.IsAvailable) list.Add(new(ScriptTools.CapabilityId, ScriptTools.CapabilityVersion, ["general"], []));
