@@ -34,6 +34,7 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         }
         if (runtime.Find(id) is null) return new(id, "unconfigured", ErrorMessage: "Outil non installé.");
         if (!runtime.CanRun) return new(id, "failed", ErrorMessage: "Landlock est requis pour exécuter les outils IA sur ce nœud Linux.");
+        if (id == "claude-cli" && !runtime.HasClaudeToken) return new(id, "unconfigured");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         try

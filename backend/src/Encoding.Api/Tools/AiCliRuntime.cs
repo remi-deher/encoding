@@ -96,6 +96,10 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
         Directory.CreateDirectory(temporaryDirectory);
         start.Environment["TMPDIR"] = temporaryDirectory;
         start.Environment["NO_COLOR"] = "1";
+        start.Environment["CI"] = "1";
+        start.Environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1";
+        start.Environment["DISABLE_TELEMETRY"] = "1";
+        start.Environment["DISABLE_ERROR_REPORTING"] = "1";
         if (id == "claude-cli" && HasClaudeToken)
             start.Environment["CLAUDE_CODE_OAUTH_TOKEN"] = protector.Unprotect(await File.ReadAllTextAsync(Path.Combine(profile, "oauth-token.protected"), ct));
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Démarrage CLI impossible.");

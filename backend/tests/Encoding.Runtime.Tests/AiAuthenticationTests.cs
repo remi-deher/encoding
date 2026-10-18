@@ -59,12 +59,13 @@ public sealed class AiAuthenticationTests
         if (OperatingSystem.IsWindows()) return;
         using var fixture = new AiCliTestProfile("""
             if [ "$1 $2" = "auth status" ]; then
-              if [ "$CLAUDE_CODE_OAUTH_TOKEN" = "test-private-token" ]; then printf '{"loggedIn":true}'; exit 0; fi
+              if [ "$CLAUDE_CODE_OAUTH_TOKEN" = "test-private-token" ] && [ "$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" = "1" ]; then printf '{"loggedIn":true}'; exit 0; fi
               printf '{"loggedIn":false}'; exit 1
             fi
             exit 0
             """);
         using var service = new DeviceCodeAuthService(fixture.Runtime);
+        Assert.Equal("unconfigured", (await service.GetStatusAsync("claude-cli")).State);
         await service.SaveClaudeTokenAsync("test-private-token", CancellationToken.None);
         var saved = File.ReadAllText(Path.Combine(fixture.Runtime.Profile("claude-cli"), "oauth-token.protected"));
         Assert.DoesNotContain("test-private-token", saved);
@@ -75,6 +76,7 @@ public sealed class AiAuthenticationTests
         Assert.Equal("authorized", (await service.GetStatusAsync("claude-cli")).State);
         await service.RevokeAuthAsync("claude-cli", CancellationToken.None);
         Assert.False(fixture.Runtime.HasClaudeToken);
+        Assert.Equal("unconfigured", (await service.GetStatusAsync("claude-cli")).State);
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveClaudeTokenAsync("bad-token", CancellationToken.None));
         Assert.False(fixture.Runtime.HasClaudeToken);
     }
