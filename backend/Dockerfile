@@ -3,6 +3,14 @@
 # Le lanceur démarre et arrête le serveur et l'agent selon le mode du nœud (architecture 0036).
 ARG DOTNET_VERSION=10.0
 
+FROM node:24-bookworm-slim AS ai-cli-build
+ARG CODEX_CLI_VERSION=0.163.0
+ARG CLAUDE_CODE_VERSION=2.1.302
+RUN --mount=type=secret,id=proxy_ca,required=false \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm install --prefix /opt/encoding/ai-cli --omit=dev --no-audit --no-fund \
+      @openai/codex@${CODEX_CLI_VERSION} @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+
 FROM node:24-alpine AS frontend-build
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -42,6 +50,8 @@ RUN dotnet publish ./src/Encoding.Api/Encoding.Api.csproj --configuration Releas
  && dotnet publish ./src/Encoding.Launcher/Encoding.Launcher.csproj --configuration Release --output /app/launcher --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
+COPY --from=ai-cli-build /opt/encoding/ai-cli /opt/encoding/ai-cli
+ENV PATH="/opt/encoding/ai-cli/node_modules/.bin:${PATH}"
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=secret,id=proxy_ca,required=false \

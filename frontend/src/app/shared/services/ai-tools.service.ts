@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
+  AiClusterView,
   AiSettings,
   AiSettingsUpdateRequest,
   AiToolInfo,
@@ -18,6 +19,27 @@ import {
 })
 export class AiToolsService {
   private readonly http = inject(HttpClient);
+
+  forkSession(id: string): Observable<{ readonly id: string }> {
+    return this.http.post<{ readonly id: string }>(
+      `/api/v1/tools/ai/sessions/${encodeURIComponent(id)}/fork`,
+      {},
+    );
+  }
+
+  getCluster(): Observable<AiClusterView> {
+    return this.http.get<AiClusterView>('/api/v1/tools/ai/cluster');
+  }
+
+  saveClaudeToken(token: string): Observable<{ readonly saved: boolean }> {
+    return this.http.post<{ readonly saved: boolean }>('/api/v1/tools/ai/claude-cli/auth/token', {
+      token,
+    });
+  }
+
+  cancelAuth(toolId: string): Observable<unknown> {
+    return this.http.post(`/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/cancel`, {});
+  }
 
   listTools(): Observable<readonly AiToolInfo[]> {
     return this.http.get<readonly AiToolInfo[]>('/api/v1/tools/ai');
@@ -37,13 +59,6 @@ export class AiToolsService {
   getDeviceAuthStatus(toolId: string): Observable<DeviceAuthStatus> {
     return this.http.get<DeviceAuthStatus>(
       `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/device-code/status`,
-    );
-  }
-
-  completeAuth(toolId: string): Observable<{ readonly success: boolean }> {
-    return this.http.post<{ readonly success: boolean }>(
-      `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/complete`,
-      {},
     );
   }
 

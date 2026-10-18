@@ -1,219 +1,178 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-public sealed partial class DeviceCodeAuthService
+public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDisposable
 {
-    private readonly string credentialsBaseDirectory;
-    private readonly ConcurrentDictionary<string, ActiveSession> sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Session> sessions = new();
+    private readonly SemaphoreSlim gate = new(1);
 
-    public DeviceCodeAuthService(IConfiguration configuration)
-    {
-        var configuredPath = configuration["AiTools:CredentialsDirectory"];
-        credentialsBaseDirectory = !string.IsNullOrWhiteSpace(configuredPath)
-            ? configuredPath
-            : Path.Combine(AppContext.BaseDirectory, "Data", "credentials", "ai-tools");
-        Directory.CreateDirectory(credentialsBaseDirectory);
-    }
-
-    public IReadOnlyList<AiToolInfo> ListTools()
+    public async Task<IReadOnlyList<AiToolInfo>> ListToolsAsync(CancellationToken ct = default)
     {
         var result = new List<AiToolInfo>();
-        foreach (var (id, name, desc, exec, defaultUrl) in new[]
-        {
-            ("codex-cli", "OpenAI Codex / ChatGPT CLI", "Interface officielle pour ChatGPT / Codex.", "codex", "https://chatgpt.com/auth/device"),
-            ("claude-cli", "Anthropic Claude Code CLI", "Interface officielle pour Claude.", "claude", "https://claude.ai/auth")
-        })
-        {
-            var isInstalled = FindExecutable(exec) is not null;
-            var status = GetStatus(id);
-            result.Add(new AiToolInfo(
-                id,
-                name,
-                desc,
-                "ai-text",
-                isInstalled,
-                status,
-                ["ai-text-generation", "subtitles-translation"]));
-        }
+        foreach (var id in new[] { "codex-cli", "claude-cli" })
+            result.Add(new(id, id == "codex-cli" ? "Codex CLI" : "Claude Code", "Compte CLI sur ce nœud", "CLI",
+                runtime.Find(id) is not null, await GetStatusAsync(id, ct), ["ai-text-generation", "subtitles-translation"]));
         return result;
     }
 
-    public DeviceAuthStatus GetStatus(string toolId)
+    public async Task<DeviceAuthStatus> GetStatusAsync(string id, CancellationToken ct = default)
     {
-        var credFile = Path.Combine(credentialsBaseDirectory, toolId, "credentials.json");
-        if (File.Exists(credFile))
+        _ = AiCliRuntime.Executable(id);
+        if (sessions.TryGetValue(id, out var session))
         {
-            try
-            {
-                var content = File.ReadAllText(credFile);
-                var doc = JsonSerializer.Deserialize<JsonElement>(content);
-                var account = doc.TryGetProperty("account", out var acc) ? acc.GetString() : "Connecté";
-                var date = doc.TryGetProperty("authenticatedAt", out var auth) && auth.TryGetDateTimeOffset(out var dt)
-                    ? dt
-                    : File.GetLastWriteTimeUtc(credFile);
-                return new DeviceAuthStatus(toolId, "authorized", account, date);
-            }
-            catch
-            {
-                return new DeviceAuthStatus(toolId, "authorized", "Connecté", File.GetLastWriteTimeUtc(credFile));
-            }
+            if (session.State == "pending" && DateTimeOffset.UtcNow >= session.ExpiresAt)
+            { session.State = "expired"; session.Cancellation.Cancel(); }
+            if (session.State != "authorized") return new(id, session.State, ErrorMessage: session.Error);
         }
-
-        if (sessions.TryGetValue(toolId, out var session))
+        if (runtime.Find(id) is null) return new(id, "unconfigured", ErrorMessage: "Outil non installé.");
+        if (!runtime.CanRun) return new(id, "failed", ErrorMessage: "Landlock est requis pour exécuter les outils IA sur ce nœud Linux.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        try
         {
-            if (session.ExpiresAt < DateTimeOffset.UtcNow)
+            var status = await runtime.RunAsync(id, id == "codex-cli" ? ["login", "status"] : ["auth", "status"], timeout.Token);
+            if (status.ExitCode != 0) return new(id, "unconfigured");
+            if (id == "claude-cli")
             {
-                sessions.TryRemove(toolId, out _);
-                return new DeviceAuthStatus(toolId, "expired", ErrorMessage: "La session d’authentification a expiré.");
+                using var doc = JsonDocument.Parse(status.Output);
+                if (!doc.RootElement.TryGetProperty("loggedIn", out var loggedIn) || loggedIn.ValueKind != JsonValueKind.True)
+                    return new(id, "unconfigured");
             }
-            if (session.IsAuthorized)
-            {
-                return new DeviceAuthStatus(toolId, "authorized", session.AccountName ?? "Connecté", session.AuthorizedAt);
-            }
-            if (session.ErrorMessage is not null)
-            {
-                return new DeviceAuthStatus(toolId, "failed", ErrorMessage: session.ErrorMessage);
-            }
-            return new DeviceAuthStatus(toolId, "pending");
+            return new(id, "authorized");
         }
-
-        return new DeviceAuthStatus(toolId, "unconfigured");
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        { return new(id, "failed", ErrorMessage: "Impossible de vérifier la connexion CLI."); }
     }
 
-    public DeviceAuthStartResponse StartDeviceAuth(string toolId)
+    public async Task<DeviceAuthStartResponse> StartDeviceAuthAsync(string id, CancellationToken ct)
     {
-        if (sessions.TryGetValue(toolId, out var existing) && existing.ExpiresAt > DateTimeOffset.UtcNow && !existing.IsAuthorized)
+        if (id != "codex-cli") throw new ArgumentException("Claude utilise un jeton généré avec claude setup-token.");
+        if (runtime.Find(id) is null) throw new InvalidOperationException("Codex n’est pas installé sur ce nœud.");
+        if (!runtime.CanRun) throw new InvalidOperationException("Landlock est requis pour exécuter Codex sur ce nœud Linux.");
+        Session session;
+        await gate.WaitAsync(ct);
+        try
         {
-            return new DeviceAuthStartResponse(toolId, existing.Prompt);
+            if (!sessions.TryGetValue(id, out session!) || session.State != "pending" || session.ExpiresAt <= DateTimeOffset.UtcNow)
+            {
+                if (session is not null) session.Cancellation.Cancel();
+                session = new();
+                sessions[id] = session;
+                session.Run = RunLoginAsync(session);
+            }
         }
-
-        var defaultUrl = toolId switch
+        finally { gate.Release(); }
+        try { return new(id, await session.Prompt.Task.WaitAsync(TimeSpan.FromSeconds(30), ct)); }
+        catch (TimeoutException)
         {
-            "claude-cli" => "https://claude.ai/auth",
-            _ => "https://chatgpt.com/auth/device"
-        };
-
-        var userCode = GenerateUserCode();
-        var prompt = new DeviceAuthPrompt(userCode, defaultUrl, 900, 5);
-        var session = new ActiveSession(toolId, prompt, DateTimeOffset.UtcNow.AddSeconds(900));
-        sessions[toolId] = session;
-
-        // Tenter d'exécuter la CLI réelle si présente sur la machine
-        var exec = toolId switch
-        {
-            "claude-cli" => "claude",
-            _ => "codex"
-        };
-        var path = FindExecutable(exec);
-        if (path is not null)
-        {
-            _ = Task.Run(() => RunCliLoginProcessAsync(toolId, path, session));
+            session.State = "failed";
+            session.Error = "Codex n’a pas fourni de code de connexion.";
+            session.Cancellation.Cancel();
+            throw new InvalidOperationException(session.Error);
         }
-
-        return new DeviceAuthStartResponse(toolId, prompt);
     }
 
-    public bool CompleteAuthorization(string toolId, string? accountName = null)
-    {
-        var targetDir = Path.Combine(credentialsBaseDirectory, toolId);
-        Directory.CreateDirectory(targetDir);
-        var credFile = Path.Combine(targetDir, "credentials.json");
-
-        var account = accountName ?? (toolId == "claude-cli" ? "Compte Claude" : "Compte ChatGPT");
-        var now = DateTimeOffset.UtcNow;
-        var data = new
-        {
-            toolId,
-            account,
-            authenticatedAt = now
-        };
-        File.WriteAllText(credFile, JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
-
-        if (sessions.TryGetValue(toolId, out var session))
-        {
-            session.IsAuthorized = true;
-            session.AccountName = account;
-            session.AuthorizedAt = now;
-        }
-
-        return true;
-    }
-
-    public bool RevokeAuth(string toolId)
-    {
-        sessions.TryRemove(toolId, out _);
-        var targetDir = Path.Combine(credentialsBaseDirectory, toolId);
-        if (Directory.Exists(targetDir))
-        {
-            Directory.Delete(targetDir, true);
-            return true;
-        }
-        return false;
-    }
-
-    private async Task RunCliLoginProcessAsync(string toolId, string executablePath, ActiveSession session)
+    private async Task RunLoginAsync(Session session)
     {
         try
         {
-            var args = toolId == "claude-cli" ? ["auth", "login"] : new[] { "auth", "login", "--device-code" };
-            var psi = new ProcessStartInfo(executablePath)
+            var buffer = "";
+            var sync = new object();
+            var result = await runtime.RunAsync("codex-cli", ["login", "--device-auth"], session.Cancellation.Token, chunk =>
             {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-            foreach (var a in args) psi.ArgumentList.Add(a);
-            psi.Environment["XDG_CONFIG_HOME"] = Path.Combine(credentialsBaseDirectory, toolId);
+                lock (sync)
+                {
+                    buffer += chunk;
+                    if (buffer.Length > 16384) buffer = buffer[^16384..];
+                    var clean = AnsiSanitizer.Sanitize(buffer);
+                    var url = VerificationUrl().Match(clean);
+                    var code = UserCode().Match(clean);
+                    if (url.Success && code.Success)
+                        session.Prompt.TrySetResult(new(code.Value, url.Value, Math.Max(1, (int)(session.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds)));
+                }
+            });
+            session.State = result.ExitCode == 0 ? "authorized" : "failed";
+            if (result.ExitCode != 0) session.Error = "La connexion Codex a échoué. Relancez l’association.";
+        }
+        catch (OperationCanceledException) { session.State = "expired"; }
+        catch { session.State = "failed"; session.Error = "La connexion Codex n’a pas pu démarrer."; }
+        finally { session.Prompt.TrySetException(new InvalidOperationException(session.Error ?? "Aucun code disponible.")); }
+    }
 
-            using var proc = Process.Start(psi);
-            if (proc is null) return;
-
-            var outputTask = proc.StandardOutput.ReadToEndAsync();
-            var errorTask = proc.StandardError.ReadToEndAsync();
-
-            await Task.WhenAny(Task.Delay(TimeSpan.FromMinutes(15)), proc.WaitForExitAsync());
-            if (proc.HasExited && proc.ExitCode == 0)
+    public async Task SaveClaudeTokenAsync(string token, CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try
+        {
+            if (runtime.Find("claude-cli") is null) throw new InvalidOperationException("Claude Code n’est pas installé.");
+            var path = Path.Combine(runtime.Profile("claude-cli"), "oauth-token.protected");
+            var previous = File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
+            try
             {
-                CompleteAuthorization(toolId);
+                runtime.SaveClaudeToken(token);
+                sessions.TryRemove("claude-cli", out _);
+                if ((await GetStatusAsync("claude-cli", ct)).State != "authorized")
+                    throw new InvalidOperationException("Le jeton n’a pas été reconnu par Claude Code.");
+            }
+            catch
+            {
+                if (previous is null) runtime.DeleteClaudeToken();
+                else await File.WriteAllBytesAsync(path, previous, CancellationToken.None);
+                throw;
             }
         }
-        catch (Exception ex)
+        finally { gate.Release(); }
+    }
+
+    public async Task<bool> RevokeAuthAsync(string id, CancellationToken ct)
+    {
+        _ = AiCliRuntime.Executable(id);
+        await gate.WaitAsync(ct);
+        try
         {
-            session.ErrorMessage = ex.Message;
+            if (sessions.TryRemove(id, out var session))
+            { session.Cancellation.Cancel(); if (session.Run is not null) await session.Run; }
+            if (id == "claude-cli") runtime.DeleteClaudeToken();
+            if (runtime.Find(id) is not null)
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                var result = await runtime.RunAsync(id, id == "codex-cli" ? ["logout"] : ["auth", "logout"], timeout.Token);
+                if (result.ExitCode != 0) throw new InvalidOperationException("La CLI n’a pas confirmé la déconnexion.");
+            }
+            // Legacy markers are never accepted as proof of authentication.
+            File.Delete(Path.Combine(runtime.Profile(id), "credentials.json"));
+            return true;
+        }
+        finally { gate.Release(); }
+    }
+
+    public void Cancel(string id)
+    {
+        _ = AiCliRuntime.Executable(id);
+        if (sessions.TryGetValue(id, out var session) && session.State == "pending")
+        {
+            session.State = "expired";
+            session.Cancellation.Cancel();
         }
     }
 
-    private static string? FindExecutable(string executable)
+    [GeneratedRegex(@"https://(?:auth\.openai\.com|chatgpt\.com)/[a-zA-Z0-9/_-]*device[a-zA-Z0-9/_-]*")]
+    private static partial Regex VerificationUrl();
+    [GeneratedRegex(@"\b[A-Z0-9]{4}-[A-Z0-9]{4,5}\b")]
+    private static partial Regex UserCode();
+    public void Dispose() { foreach (var session in sessions.Values) session.Cancellation.Cancel(); }
+    private sealed class Session
     {
-        var name = OperatingSystem.IsWindows() ? executable + ".exe" : executable;
-        return (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(dir => Path.Combine(dir, name))
-            .FirstOrDefault(File.Exists);
-    }
-
-    private static string GenerateUserCode()
-    {
-        var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        var part1 = Random.Shared.GetItems(chars.ToCharArray(), 4);
-        var part2 = Random.Shared.GetItems(chars.ToCharArray(), 4);
-        return $"{new string(part1)}-{new string(part2)}";
-    }
-
-    private sealed class ActiveSession(string toolId, DeviceAuthPrompt prompt, DateTimeOffset expiresAt)
-    {
-        public string ToolId { get; } = toolId;
-        public DeviceAuthPrompt Prompt { get; } = prompt;
-        public DateTimeOffset ExpiresAt { get; } = expiresAt;
-        public bool IsAuthorized { get; set; }
-        public string? AccountName { get; set; }
-        public DateTimeOffset? AuthorizedAt { get; set; }
-        public string? ErrorMessage { get; set; }
+        public readonly DateTimeOffset ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15);
+        public readonly CancellationTokenSource Cancellation = new(TimeSpan.FromMinutes(15));
+        public readonly TaskCompletionSource<DeviceAuthPrompt> Prompt = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public volatile string State = "pending";
+        public string? Error;
+        public Task? Run;
     }
 }

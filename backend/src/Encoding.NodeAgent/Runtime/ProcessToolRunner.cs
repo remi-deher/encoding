@@ -1,3 +1,4 @@
+using Encoding.Core.Runtime;
 using System.Diagnostics;
 using System.Text;
 

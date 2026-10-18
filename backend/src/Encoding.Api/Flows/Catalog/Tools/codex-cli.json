@@ -6,9 +6,13 @@
   "category": "ai-text",
   "executable": "codex",
   "probe": {
-    "versionArgs": ["--version"],
+    "versionArgs": [
+      "--version"
+    ],
     "versionRegex": "codex(?:-cli)?\\s+v?(?<version>[0-9\\.]+)",
-    "smokeTestArgs": ["--help"]
+    "smokeTestArgs": [
+      "--help"
+    ]
   },
   "capabilitiesExposed": [
     "ai-text-generation",
@@ -16,7 +20,15 @@
   ],
   "auth": {
     "type": "device-code",
-    "loginCommand": ["codex", "auth", "login", "--device-code"],
-    "statusCommand": ["codex", "auth", "status"]
+    "loginCommand": [
+      "codex",
+      "login",
+      "--device-auth"
+    ],
+    "statusCommand": [
+      "codex",
+      "login",
+      "status"
+    ]
   }
 }

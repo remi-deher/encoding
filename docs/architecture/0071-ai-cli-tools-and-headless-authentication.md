@@ -1,157 +1,45 @@
-# 0071 — Intégration des outils IA en ligne de commande (CLIs), authentification headless et traitement dans les flows
+# 0071 — Outils IA, authentification réelle et sessions applicatives partagées
 
-Statut : décision d'architecture. Complète [0005](0005-media-tools-in-flow-components.md), [0015](0015-flow-runtime-and-portable-archives.md), [0019](0019-plugin-configuration.md), [0033](0033-flow-waits-and-time.md), [0054](0054-script-tools-helper.md), [0064](0064-custom-and-managed-media-tools.md) et la politique d'isolation matérielle [todo-hardware-accelerated-tools-policy.md](../operations/todo-hardware-accelerated-tools-policy.md).
+Statut : implémenté sur la branche `feat/cluster-ai-providers`. Remplace les commandes et le device flow générique initialement décrits ici. Complète 0049, 0054, 0064 et 0072.
 
----
+## Connexion des fournisseurs
 
-## 1. Contexte & Problématique
+Les comptes ne sont plus associés par un code généré par Encoding. Codex fournit le lien et le code à partir de `codex login --device-auth`. La sortie est suivie pendant l'exécution, avec nettoyage ANSI et extraction des instructions attendues. La session est bornée à quinze minutes, réutilisée tant qu'elle attend, annulable et arrêtée à expiration. L'état final est relu avec `codex login status`.
 
-Pour enrichir les flux de traitement multimédia (traduction et adaptation contextuelle de sous-titres SRT/ASS, transcription de dialogues, génération de résumés, détection de chapitres), les utilisateurs souhaitent mobiliser des modèles d'intelligence artificielle sans être obligés de souscrire à des abonnements d'API facturés au token, en exploitant leurs abonnements existants (ex. ChatGPT Plus, Claude Pro/Team).
+Claude utilise un jeton généré par l'administrateur sur son poste via `claude setup-token`. Encoding le protège avec ASP.NET Data Protection et le transmet uniquement au processus Claude via `CLAUDE_CODE_OAUTH_TOKEN`. `claude auth status` contrôle la reconnaissance locale des identifiants ; cela ne garantit ni la validité distante du jeton ni les quotas. Un remplacement refusé préserve le secret précédent.
 
-### Approche retenue : Outils CLI officiels
-Plutôt que d'avoir recours au scraping web ou à des passerelles d'émulation non officielles (sujettes aux blocages, captchas et violations de conditions d'utilisation), Encoding intègre les **outils officiels en ligne de commande (CLIs)** fournis par les éditeurs :
-- **Codex CLI / ChatGPT CLI** (authentification via compte ChatGPT).
-- **Claude Code CLI** (`claude`) (authentification via compte Anthropic Claude).
-- **Gemini CLI** (authentification Google / Google AI Studio).
+Les répertoires `CODEX_HOME` et `CLAUDE_CONFIG_DIR` sont propres à chaque fournisseur et réutilisés pour connexion, statut, inférence et déconnexion. Le répertoire est sous `AiTools:CredentialsDirectory`, ou par défaut sous `Node:DataDirectory/credentials/ai-tools`. Les secrets et les marqueurs d'essai restent locaux et hors du maillage. Un ancien fichier `credentials.json` n'est jamais une preuve de connexion.
 
-### Défis à résoudre
-1. **Environnement conteneurisé sans écran (Headless Docker)** : les serveurs d'encodage (NAS, serveurs dédiés, Proxmox, Unraid) ne disposent pas de navigateur web local pour valider une mire de connexion OAuth graphique.
-2. **Exécution automatisée en tâche de fond (Non-interactive batching)** : les CLIs interactives affichent des spinners, couleurs ANSI et demandes de confirmation incompatibles avec l'exécution automatisée d'un flow.
-3. **Persistance et sécurité des sessions sous Landlock** : stockage sécurisé des jetons de rafraîchissement sans compromettre le bac à sable du worker.
+Les commandes de production sont `codex exec` et `claude -p --output-format text`. Le prompt passe par stdin. Claude est appelé sans outils, sans serveurs MCP hérités, sans skills et sans sources de réglages projet/utilisateur. Codex désactive les outils shell et unified-exec, utilise le sandbox read-only et refuse les demandes d'approbation interactives. Les sorties sont bornées ; l'annulation et le délai maximal arrêtent l'arbre de processus. Aucune CLI absente ne produit de réponse simulée, et une génération de flow échouée ne retourne plus de flow synthétique comme résultat IA.
 
----
+Sur Linux, le lancement réutilise le confinement Landlock partagé avec les scripts du worker, déplacé sans changement de comportement dans `Encoding.Core.Runtime`. Le profil IA est accessible en écriture ; les exécutables, bibliothèques et certificats sont accessibles en lecture. Les données d'Encoding et les médias extérieurs au profil ne sont pas accordés. Le dossier d'installation npm se règle avec `AiTools:RuntimeDirectory` (défaut `/opt/encoding/ai-cli`). Sans Landlock, la CLI refuse de démarrer ; il n'y a pas de repli de production qui supprime cette protection. Landlock borne ici le système de fichiers, pas les domaines réseau.
 
-## 2. Décisions d'Architecture
+## Accès depuis tous les nœuds
 
-### Règle 1 : Modélisation des CLIs comme outils média déclaratifs (`tool.json`)
-Conformément à [0064](0064-custom-and-managed-media-tools.md), chaque CLI IA est déclarée dans le catalogue d'outils du worker via un descripteur déclaratif :
+Un serveur expose ses fournisseurs configurés ou ses identifiants CLI reconnus. Les autres serveurs peuvent acheminer leurs demandes vers lui. Les workers disposent aussi de `/api/v1/runtime/nodes/{nodeId}/ai/generate`, protégé par leur jeton de nœud existant. Un worker sans API locale peut consommer un fournisseur distant ; l'hébergement d'une connexion CLI dans cette implémentation nécessite la fonction serveur sur le nœud concerné.
 
-```json
-{
-  "$schema": "https://encoding.io/schemas/v1/tool.json",
-  "id": "codex-cli",
-  "name": "OpenAI Codex / ChatGPT CLI",
-  "description": "Interface en ligne de commande officielle pour ChatGPT / Codex.",
-  "category": "ai-text",
-  "executable": "codex",
-  "probe": {
-    "versionArgs": ["--version"],
-    "versionRegex": "codex(?:-cli)?\\s+v?(?<version>[0-9\\.]+)",
-    "smokeTestArgs": ["--help"]
-  },
-  "capabilitiesExposed": [
-    "ai-text-generation",
-    "subtitles-translation"
-  ],
-  "auth": {
-    "type": "device-code",
-    "loginCommand": ["codex", "auth", "login", "--device-code"],
-    "statusCommand": ["codex", "auth", "status"]
-  }
-}
-```
+Le transport IA réutilise la découverte du maillage et les identités RSA admises du cluster. `/api/v1/cluster/ai/exchange` ne dépend pas d'une session navigateur : chaque requête et réponse est signée et son contenu est chiffré/authentifié par AES-GCM avec la clé de données du cluster. L'identité, la fenêtre temporelle, le cluster et l'identifiant de réponse sont contrôlés. Ce canal n'offre aucune opération d'ajout ou de récupération de secrets.
 
-> **Rappel de sécurité (Accélération matérielle)** :  
-> Ces outils sont purement logiciels (CPU/Réseau). En vertu de [todo-hardware-accelerated-tools-policy.md](../operations/todo-hardware-accelerated-tools-policy.md), ils ne peuvent en aucun cas se substituer aux encodeurs matériels du conteneur (`ffmpeg` / NVENC / QSV / VA-API).
+Les adresses, modèles HTTP et secrets de connexion restent locaux au serveur d'exécution. Le moteur par défaut, le délai maximal et la taille des lots sont partagés via les registres du maillage. La réponse publique de configuration renvoie seulement `hasOpenAiApiKey`, jamais la clé.
 
----
+## Contexte et reprise
 
-### Règle 2 : Authentification Headless par Code Unique (Méthode A1 - Device Code Flow)
+Le contexte est celui d'Encoding, indépendant des sessions internes des CLIs : fournisseur, consignes système, demandes identifiées et tours terminés. Les contenus sont chiffrés et écrits dans les registres réconciliés avant de confirmer le succès au client. La limite d'un checkpoint est de 512 Kio ; une nouvelle session est nécessaire au-delà. Les artefacts média ne sont pas copiés dans ces checkpoints.
 
-Pour authentifier le worker Docker sans navigateur web local, le système implémente le flux **OAuth 2.0 Device Authorization Grant (RFC 8628)** :
+Chaque session a un coordinateur stable, inscrit dans son identifiant `peerId.sessionId`. Les requêtes reçues ailleurs sont acheminées vers lui. Il sérialise les tours, conserve la demande en attente et le délai de la tentative avant de l'envoyer. Une réponse déjà validée pour le même `requestId` est retournée sans nouvelle inférence ; réutiliser cet identifiant avec un autre prompt est refusé. Les tentatives ont également un identifiant durable propre à l'exécuteur, afin de ne pas relancer une tentative rejouée après redémarrage.
 
-```text
-┌─────────────────────────┐          ┌─────────────────────────┐          ┌─────────────────────────┐
-│     Interface Web       │          │      Worker Docker      │          │     Fournisseur IA      │
-│    (PC Administrateur)  │          │    (Serveur Headless)   │          │   (ChatGPT / Anthropic) │
-└────────────┬────────────┘          └────────────┬────────────┘          └────────────┬────────────┘
-             │                                    │                                    │
-             │ 1. Clic "Associer mon compte"      │                                    │
-             ├───────────────────────────────────>│                                    │
-             │                                    │ 2. Lance la CLI en mode device     │
-             │                                    ├───────────────────────────────────>│
-             │                                    │    (Reçoit URL + Code court)       │
-             │                                    │<───────────────────────────────────┤
-             │ 3. Affiche URL + Code court        │                                    │
-             │    (ex: "Ouvrez chatgpt.com/auth   │                                    │
-             │     et entrez le code ABCD-1234")  │                                    │
-             │<───────────────────────────────────┤                                    │
-             │                                    │                                    │
-             │ 4. L'admin ouvre l'URL et valide   │                                    │
-             │    le code sur son navigateur      │                                    │
-             ├────────────────────────────────────────────────────────────────────────>│
-             │                                    │                                    │
-             │                                    │ 5. Polling CLI en arrière-plan     │
-             │                                    ├───────────────────────────────────>│
-             │                                    │ 6. Jeton de session validé         │
-             │                                    │<───────────────────────────────────┤
-             │ 7. Statut "Connecté" avec succès   │                                    │
-             │<───────────────────────────────────┤                                    │
-```
+Si un exécuteur devient indisponible, le coordinateur essaie au maximum trois nœuds configurés pour le même fournisseur. Après une perte de transport ambiguë, il attend l'expiration de la tentative précédente avant d'en démarrer une autre. Si aucun fournisseur n'est disponible, la demande reste enregistrée en attente et peut être réessayée avec les mêmes identifiants. Au redémarrage du coordinateur, une tentative dont le délai n'est pas écoulé n'est pas immédiatement relancée.
 
-#### Modalités techniques :
-1. **Déclenchement depuis l'IHM Angular** : dans la page de gestion du nœud (section **Outils IA**), un bouton `Associer un compte` est disponible pour chaque CLI compatible.
-2. **Affichage du code** : l'API serveur démarre le processus d'authentification en boucle courte, intercepte l'URL d'autorisation et le code à usage unique (ex. `ABCD-1234`), et les affiche dans une modale Angular Material avec un bouton de copie rapide et lien cliquable.
-3. **Stockage persistant des sessions** :
-   - Les fichiers de configuration et jetons d'authentification générés par la CLI (ex. `~/.config/codex/` ou `~/.claude/`) sont redirigés vers le répertoire de données persistant du worker : `/data/credentials/ai-tools/<tool-id>/`.
-   - Ce dossier est persisté hors de l'image Docker, monté en lecture/écriture pour le compte de service du worker, et exclu des réplications non chiffrées.
+Si le coordinateur est indisponible, aucun autre serveur ne reprend silencieusement son identité : sans consensus, une partition réseau ne prouve pas sa disparition. L'administrateur peut créer explicitement une nouvelle session depuis le dernier checkpoint reçu, via `/api/v1/tools/ai/sessions/{id}/fork` ou depuis l'assistant de flows. Le fork conserve les tours validés et exclut la tentative sans résultat confirmé ; il attend son délai s'il en existe un. Le registre se réconcilie de façon éventuelle : un serveur isolé peut ne pas encore avoir le dernier checkpoint.
 
----
+Ce protocole évite de confirmer plusieurs fois le même tour applicatif. Il ne garantit pas une facturation exactement une fois chez un fournisseur : une requête déjà acceptée peut continuer à consommer du quota après une coupure. Les horloges des nœuds doivent être synchronisées. La réconciliation ne constitue pas une sauvegarde synchrone avant chaque réponse.
 
-### Règle 3 : Mode d'Exécution Non-Interactif en Flow
+## Interface et exploitation
 
-Lorsqu'un bloc de flow sollicite la CLI (ex. pour traduire des sous-titres) :
-1. **Drapeaux d'exécution stricts** :
-   - L'appel via `tools.run()` applique obligatoirement les drapeaux désactivant le terminal interactif :
-     - Codex CLI : `codex --non-interactive -p "<prompt>" --output-format text`
-     - Claude CLI : `claude -p "<prompt>" --output-format text`
-2. **Nettoyage de sortie** :
-   - Le moteur filtre les séquences d'échappement ANSI (couleurs, retours chariot de barres de progression) pour ne retenir que le flux de données textuel pur (`stdout`).
-3. **Codes d'erreur et quotas** :
-   - Si la CLI renvoie un code d'erreur de quota temporaire (ex. rate limit d'abonnement horaire) :
-     - Le composant ne marque pas l'exécution comme corrompue.
-     - Il peut emprunter la sortie dédiée `rate-limit` ou déclencher une attente automatique via le mécanisme de reprise [0033](0033-flow-waits-and-time.md) jusqu'à la réouverture de la fenêtre de requêtes.
+La page « IA & fournisseurs » distingue le moteur par défaut de la fiche sélectionnée. Une seule configuration est affichée ; les paramètres avancés sont repliés. Les boutons utilisent les variantes Material du socle et les secrets restent masqués. Le statut de configuration déclaré par un nœud n'est pas présenté comme une sonde distante du modèle. La liste montre les pairs répondants ; l'absence d'un pair n'efface pas sa configuration.
 
----
+Les actions de connexion, réglage et déconnexion requièrent l'administration. Les lectures restent soumises à l'authentification de gestion. Les sessions et leur contexte sont réservés aux administrateurs, aux workers authentifiés et aux pairs admis. Le bouton et l'endpoint de simulation sont supprimés. Les changements non enregistrés sont protégés au départ de la page et lors du changement d'onglet.
 
-### Règle 4 : Blocs de Flow Dédiés
+Voir [la procédure d'exploitation](../operations/ai-providers.md) pour les versions embarquées, les API, les limites et la validation.
 
-#### 1. `ai-translate-subtitles` (Traduction de sous-titres)
-- **Découpage intelligent (Chunking)** :
-  - Découpe le fichier source SRT ou ASS en paquets de 80 à 150 répliques pour respecter la fenêtre de contexte optimale de la CLI.
-  - Préserve strictement la numérotation des blocs, les horodatages (`00:01:23,456 --> 00:01:25,789`) et les balises d'effets ASS (`{\an8}`, `{\i1}`).
-- **Prompt système spécialisé** :
-  - Injecte une consigne stricte de fidélité au minutage et d'adaptation culturelle / tutoiement-vouvoiement cohérent.
-- **Validation syntaxique** :
-  - Re-parse le résultat traduit. Si une ligne temporelle est altérée, le bloc réessaie avec une température plus basse ou bascule sur la sortie `error`.
-
-#### 2. `ai-metadata-enricher` (Métadonnées & Chapitres)
-- Analyse les résumés ou pistes audio pour générer des tags thématiques ou nommer des chapitres automatiquement, utilisables par le plugin Plex ([0059](0059-plex-playback-guard-and-analysis.md)).
-
-#### 3. Scripts personnalisés (`base-script`)
-- Accessible directement aux scripts JavaScript/Python des utilisateurs via `tools.run()` :
-  ```javascript
-  const res = tools.run("codex-cli", [
-    "--non-interactive", 
-    "-p", 
-    "Résume en 3 phrases le contexte de cet épisode : " + dialoguesText
-  ]);
-  ```
-
----
-
-## 3. Sécurité et Confinement Landlock
-
-1. **Accès réseau contrôlé** :
-   - Contrairement aux outils de transcodage média locaux qui sont coupés du réseau par le profil Landlock (0015 & 0054), les outils de la catégorie `ai-text` / `ai-cli` sont autorisés à communiquer en sortie HTTPS (port 443) vers les domaines officiels déclarés dans leur manifeste (ex. `api.openai.com`, `chatgpt.com`, `anthropic.com`).
-2. **Isolation du système de fichiers** :
-   - La CLI n'a accès qu'à son répertoire de session `/data/credentials/ai-tools/<tool-id>/` et au répertoire temporaire de travail du job en cours.
-   - Aucun accès en lecture ou écriture aux bibliothèques multimédias sources ou aux clés de cluster.
-
----
-
-## 4. Conséquences et Bénéfices
-
-- **Autonomie financière** : L'utilisateur exploite pleinement son compte payant ChatGPT ou Claude sans surcoût d'API.
-- **Zéro maintenance de reverse engineering** : Aucune fragilité liée au scraping de code HTML de pages web.
-- **Expérience utilisateur fluide** : L'appairage par code unique (Device Code) prend moins de 30 secondes depuis n'importe quel smartphone ou navigateur.
+Sources : [Codex CLI](https://developers.openai.com/codex/cli/reference), [Claude CLI](https://code.claude.com/docs/en/cli-reference), [authentification Claude](https://code.claude.com/docs/en/authentication).

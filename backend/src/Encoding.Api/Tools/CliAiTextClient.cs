@@ -1,107 +1,29 @@
-using System.Diagnostics;
-using System.Text;
 using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-public sealed class CliAiTextClient(string toolId, string credentialsBaseDirectory) : IAiTextClient
+public sealed class CliAiTextClient(string toolId, AiCliRuntime runtime, int timeoutSeconds = 120) : IAiTextClient
 {
     public async Task<AiCompletionResult> GenerateTextAsync(AiPrompt prompt, CancellationToken ct = default)
     {
-        var execName = toolId switch
-        {
-            "claude-cli" => "claude",
-            "codex-cli" => "codex",
-            _ => null
-        };
-
-        var path = execName is not null ? FindExecutable(execName) : null;
-        if (path is null)
-        {
-            // Mode bouchonné/simulé lorsque la CLI n'est pas installée sur la machine hôte
-            return SimulateResponse(prompt);
-        }
-
+        if (runtime.Find(toolId) is null) return new(false, "", "Outil CLI non installé.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
-            var combinedPrompt = $"{prompt.SystemPrompt}\n\n{prompt.UserPrompt}";
-            var psi = new ProcessStartInfo(path)
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            if (toolId == "claude-cli")
-            {
-                psi.ArgumentList.Add("-p");
-                psi.ArgumentList.Add(combinedPrompt);
-                psi.ArgumentList.Add("--output-format");
-                psi.ArgumentList.Add("text");
-            }
-            else
-            {
-                psi.ArgumentList.Add("--non-interactive");
-                psi.ArgumentList.Add("-p");
-                psi.ArgumentList.Add(combinedPrompt);
-                psi.ArgumentList.Add("--output-format");
-                psi.ArgumentList.Add("text");
-            }
-
-            psi.Environment["XDG_CONFIG_HOME"] = Path.Combine(credentialsBaseDirectory, toolId);
-
-            using var proc = Process.Start(psi) ?? throw new InvalidOperationException($"Impossible de démarrer {execName}.");
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(120));
-
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync(cts.Token);
-            var stderrTask = proc.StandardError.ReadToEndAsync(cts.Token);
-
-            await proc.WaitForExitAsync(cts.Token);
-
-            var stdout = AnsiSanitizer.Sanitize(await stdoutTask);
-            var stderr = AnsiSanitizer.Sanitize(await stderrTask);
-
-            if (AnsiSanitizer.DetectRateLimit(stdout) || AnsiSanitizer.DetectRateLimit(stderr))
-            {
-                return new AiCompletionResult(false, string.Empty, "Limite de quota temporaire atteinte.", IsRateLimited: true);
-            }
-
-            if (proc.ExitCode != 0)
-            {
-                return new AiCompletionResult(false, string.Empty, string.IsNullOrWhiteSpace(stderr) ? $"Erreur code {proc.ExitCode}" : stderr);
-            }
-
-            return new AiCompletionResult(true, stdout);
+            var text = prompt.SystemPrompt + "\n\n" + prompt.UserPrompt;
+            string[] args = toolId == "claude-cli"
+                ? ["-p", "--output-format", "text", "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands"]
+                : ["exec", "--disable", "shell_tool", "--disable", "unified_exec", "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "-c", "approval_policy=\"never\"", "-"];
+            if (prompt.Model is { Length: > 0 }) args = [.. args[..^ (toolId == "codex-cli" ? 1 : 0)], "--model", prompt.Model, .. (toolId == "codex-cli" ? new[] { "-" } : Array.Empty<string>())];
+            var result = await runtime.RunAsync(toolId, args, timeout.Token, input: text);
+            if (AnsiSanitizer.DetectRateLimit(result.Output) || AnsiSanitizer.DetectRateLimit(result.Error))
+                return new(false, "", "Quota temporairement atteint.", true);
+            if (result.ExitCode != 0) return new(false, "", "L’outil IA a refusé la requête. Vérifiez la connexion et les quotas.");
+            return new(true, AnsiSanitizer.Sanitize(result.Output));
         }
-        catch (OperationCanceledException)
-        {
-            return new AiCompletionResult(false, string.Empty, "Délai d'attente dépassé (timeout 120s).");
-        }
-        catch (Exception ex)
-        {
-            return new AiCompletionResult(false, string.Empty, ex.Message);
-        }
-    }
-
-    private static string? FindExecutable(string executable)
-    {
-        var name = OperatingSystem.IsWindows() ? executable + ".exe" : executable;
-        return (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(dir => Path.Combine(dir, name))
-            .FirstOrDefault(File.Exists);
-    }
-
-    private static AiCompletionResult SimulateResponse(AiPrompt prompt)
-    {
-        // Simulation pour tests locaux sans binaire externe
-        if (prompt.UserPrompt.Contains("SRT", StringComparison.OrdinalIgnoreCase))
-        {
-            return new AiCompletionResult(true, "1\n00:00:01,000 --> 00:00:04,000\n[Traduction simulée]\n");
-        }
-
-        return new AiCompletionResult(true, "Réponse IA générée.");
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return new(false, "", "Délai maximal de la requête IA dépassé."); }
+        catch (OperationCanceledException) { throw; }
+        catch { return new(false, "", "L’exécution de l’outil IA a échoué."); }
     }
 }

@@ -1,20 +1,19 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { Subject } from 'rxjs';
 import { SettingsPageComponent } from './settings-page.component';
 
 describe('SettingsPageComponent', () => {
   async function setup() {
     await TestBed.configureTestingModule({
       imports: [SettingsPageComponent],
-      providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        provideRouter([]),
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
 
+    await TestBed.inject(Router).navigateByUrl('/');
     const fixture = TestBed.createComponent(SettingsPageComponent);
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement };
@@ -36,7 +35,7 @@ describe('SettingsPageComponent', () => {
   it('switches to Users subtab when clicked', async () => {
     const { fixture, element } = await setup();
     const component = fixture.componentInstance;
-    component['onSubTabChange']('users');
+    await component['onSubTabChange']('users');
     fixture.detectChanges();
 
     expect(element.querySelector('app-user-management-tab')).not.toBeNull();
@@ -46,7 +45,7 @@ describe('SettingsPageComponent', () => {
   it('switches to Integrations tab when selected', async () => {
     const { fixture, element } = await setup();
     const component = fixture.componentInstance;
-    component['onMainTabChange']('integrations');
+    await component['onMainTabChange']('integrations');
     fixture.detectChanges();
 
     expect(element.querySelector('app-mcp-server-tab')).not.toBeNull();
@@ -56,7 +55,7 @@ describe('SettingsPageComponent', () => {
   it('switches to System tab when selected', async () => {
     const { fixture, element } = await setup();
     const component = fixture.componentInstance;
-    component['onMainTabChange']('system');
+    await component['onMainTabChange']('system');
     fixture.detectChanges();
 
     expect(element.querySelector('app-system-tab')).not.toBeNull();
@@ -66,11 +65,38 @@ describe('SettingsPageComponent', () => {
   it('switches to System Logs subtab under System', async () => {
     const { fixture, element } = await setup();
     const component = fixture.componentInstance;
-    component['onMainTabChange']('system');
-    component['onSubTabChange']('logs');
+    await component['onMainTabChange']('system');
+    await component['onSubTabChange']('logs');
     fixture.detectChanges();
 
     expect(element.querySelector('app-system-log-viewer')).not.toBeNull();
     expect(element.textContent).toContain('Journaux système');
   });
+
+  it.each([false, true])(
+    'attend la confirmation avant de quitter les réglages modifiés (confirmation : %s)',
+    async (confirmed) => {
+      const { fixture, element } = await setup();
+      const component = fixture.componentInstance;
+      const decision = new Subject<boolean>();
+      vi.spyOn(component, 'hasUnsavedChanges').mockReturnValue(true);
+      const open = vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
+        afterClosed: () => decision,
+      } as unknown as MatDialogRef<unknown>);
+
+      const navigation = component['onMainTabChange']('system');
+      fixture.detectChanges();
+      expect(open).toHaveBeenCalledOnce();
+      expect(element.querySelector('app-api-token-tab')).not.toBeNull();
+      expect(element.querySelector('app-system-tab')).toBeNull();
+
+      decision.next(confirmed);
+      decision.complete();
+      await navigation;
+      fixture.detectChanges();
+
+      expect(element.querySelector('app-system-tab') !== null).toBe(confirmed);
+      expect(element.querySelector('app-api-token-tab') !== null).toBe(!confirmed);
+    },
+  );
 });

@@ -215,13 +215,22 @@ const applicationRoutes: Routes = [
         label: 'Plugins & Outils',
         glyph: '✣',
         order: 2,
-        keywords: ['plugins', 'outils', 'ffmpeg', 'mkvtoolnix', 'store', 'extensions', 'intégrations'],
+        keywords: [
+          'plugins',
+          'outils',
+          'ffmpeg',
+          'mkvtoolnix',
+          'store',
+          'extensions',
+          'intégrations',
+        ],
       },
       description: 'Gérez les plugins, les outils média et les dépôts configurés pour le cluster.',
     },
   },
   {
     path: 'settings',
+    canDeactivate: [unsavedChangesGuard],
     loadComponent: () =>
       import('./features/settings/settings-page.component').then(
         (module) => module.SettingsPageComponent,
@@ -236,7 +245,8 @@ const applicationRoutes: Routes = [
         adminOnly: true,
       },
       adminOnly: true,
-      description: 'Gérez les comptes utilisateurs, les jetons d’API pour l’IA, le serveur MCP et le système.',
+      description:
+        'Gérez les comptes utilisateurs, les jetons d’API pour l’IA, le serveur MCP et le système.',
     },
   },
 ];
