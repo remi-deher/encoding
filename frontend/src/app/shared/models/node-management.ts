@@ -268,11 +268,6 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
                 ?.filter((c) => c.status === 'usable')
                 .map((c) => c.encoderId.toLowerCase()) ?? [],
             );
-            const detectedChecks = new Set(
-              ffmpeg?.encoderChecks
-                ?.filter((c) => c.status === 'detected')
-                .map((c) => c.encoderId.toLowerCase()) ?? [],
-            );
             const rawEncoders = new Set((ffmpeg?.encoders ?? []).map((e) => e.toLowerCase()));
             const hardwareAccels = (ffmpeg?.accelerationTypes ?? []).map((a) => a.toUpperCase());
 
@@ -324,33 +319,7 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
               });
             }
 
-            // 3. Encodeurs non validés
-            const unvalidatedTypes = ['NVENC', 'Quick Sync', 'VAAPI'].filter((acc) => {
-              const key = acc === 'Quick Sync' ? 'qsv' : acc.toLowerCase();
-              return (
-                !usableChecks.has(`h264_${key}`) &&
-                !usableChecks.has(`hevc_${key}`) &&
-                !usableChecks.has(`av1_${key}`) &&
-                (detectedChecks.has(`h264_${key}`) ||
-                  detectedChecks.has(`hevc_${key}`) ||
-                  detectedChecks.has(`av1_${key}`))
-              );
-            });
-            if (unvalidatedTypes.length > 0) {
-              items.push({
-                label: 'Encodeurs non validés',
-                badges: unvalidatedTypes.map((type) => ({
-                  label: `${type} (non validé)`,
-                  tone: 'warning',
-                })),
-                detail:
-                  unvalidatedTypes.length > 1
-                    ? 'Encodeurs FFmpeg présents, non validés par le test de mire.'
-                    : 'Encodeur FFmpeg présent, non validé par le test de mire.',
-              });
-            }
-
-            // 4. Outils déclarés
+            // 3. Outils déclarés
             const toolBadges: ResourceSheetBadge[] = tools.map((t) => ({
               label:
                 t.toolId.toLowerCase() === 'mkvtoolnix'

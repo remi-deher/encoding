@@ -19,30 +19,34 @@ export interface ApiTokenSecretDialogData {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatDialogActions, MatDialogContent, MatDialogTitle],
   template: `
-    <h2 mat-dialog-title>Jeton d’API généré</h2>
+    <section class="app-dialog">
+      <h2 mat-dialog-title class="app-dialog-header">Jeton d’API généré</h2>
 
-    <mat-dialog-content class="secret-dialog-content">
-      <p class="warning-text">
-        ⚠️ <strong>Copiez ce jeton dès maintenant.</strong> Pour des raisons de sécurité, il ne sera plus jamais réaffiché.
-      </p>
+      <mat-dialog-content class="app-dialog-body secret-dialog-content">
+        <p class="warning-text">
+          ⚠️ <strong>Copiez ce jeton dès maintenant.</strong> Pour des raisons de sécurité, il ne sera plus jamais réaffiché.
+        </p>
 
-      <div class="secret-field">
-        <code class="secret-code">{{ data.secret }}</code>
-        <button matButton="tonal" type="button" (click)="copy()">
-          Copier
+        <div class="secret-field">
+          <code class="secret-code">{{ data.secret }}</code>
+          <button matButton="tonal" type="button" (click)="copy()">
+            Copier
+          </button>
+        </div>
+
+        @if (data.secret) {
+          <p class="sub-hint">
+            Utilisation : ajoutez l’en-tête HTTP <code>Authorization: Bearer {{ data.secret.slice(0, 16) }}…</code>
+          </p>
+        }
+      </mat-dialog-content>
+
+      <mat-dialog-actions class="app-dialog-footer" align="end">
+        <button matButton="filled" type="button" (click)="close()">
+          J’ai bien copié mon jeton
         </button>
-      </div>
-
-      <p class="sub-hint">
-        Utilisation : ajoutez l’en-tête HTTP <code>Authorization: Bearer {{ data.secret.slice(0, 16) }}…</code>
-      </p>
-    </mat-dialog-content>
-
-    <mat-dialog-actions align="end">
-      <button matButton="filled" type="button" (click)="close()">
-        J’ai bien copié mon jeton
-      </button>
-    </mat-dialog-actions>
+      </mat-dialog-actions>
+    </section>
   `,
   styles: `
     .secret-dialog-content {
@@ -99,8 +103,26 @@ export class ApiTokenSecretDialogComponent {
   private readonly notifications = inject(NotificationService);
 
   protected async copy(): Promise<void> {
+    const text = this.data?.secret;
+    if (!text) {
+      this.notifications.show('Aucun jeton à copier.');
+      return;
+    }
+
     try {
-      await navigator.clipboard.writeText(this.data.secret);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       this.notifications.show('Jeton copié dans le presse-papier.');
     } catch {
       this.notifications.show('Erreur lors de la copie du jeton.');

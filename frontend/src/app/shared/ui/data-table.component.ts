@@ -313,6 +313,15 @@ export interface DataTableListActionEvent {
                     />
                   }
                   <h3 class="data-card-title">
+                    @if (row['iconUrl']) {
+                      <img
+                        [src]="row['iconUrl']"
+                        alt=""
+                        class="resource-row-favicon"
+                        width="24"
+                        height="24"
+                      />
+                    }
                     @if (columns().length) {
                       <ng-container
                         [ngTemplateOutlet]="cellTpl"
@@ -335,20 +344,21 @@ export interface DataTableListActionEvent {
                         {{ rowOpenLabel() }} <span aria-hidden="true">→</span>
                       </button>
                     }
-                    @if (visibleRowActions(row).length === 1 && !rowOpenable()) {
-                      @let singleAction = visibleRowActions(row)[0];
-                      <button
-                        [matButton]="singleAction.tone === 'danger' ? 'filled' : 'outlined'"
-                        [class.data-card-action_danger]="singleAction.tone === 'danger'"
-                        type="button"
-                        [attr.aria-label]="
-                          rowActionLabel(singleAction, row) + ' ' + rowActionSubject(row)
-                        "
-                        (click)="requestRowAction(singleAction, row)"
-                      >
-                        {{ rowActionLabel(singleAction, row) }}
-                      </button>
-                    } @else if (visibleRowActions(row).length > 0) {
+                    @if (visibleRowActions(row).length > 0 && visibleRowActions(row).length <= 2 && !rowOpenable()) {
+                      @for (action of visibleRowActions(row); track action.id) {
+                        <button
+                          [matButton]="action.tone === 'danger' && action.id !== 'delete' ? 'filled' : 'outlined'"
+                          [class.data-card-action_danger]="action.tone === 'danger'"
+                          type="button"
+                          [attr.aria-label]="
+                            rowActionLabel(action, row) + ' ' + rowActionSubject(row)
+                          "
+                          (click)="requestRowAction(action, row)"
+                        >
+                          {{ rowActionLabel(action, row) }}
+                        </button>
+                      }
+                    } @else if (visibleRowActions(row).length > 2) {
                       <button
                         matIconButton
                         type="button"
@@ -546,6 +556,15 @@ export interface DataTableListActionEvent {
                 {{ column.label }}
               </th>
               <td mat-cell *matCellDef="let row" [attr.data-label]="column.label">
+                @if (isFirst && row['iconUrl']) {
+                  <img
+                    [src]="row['iconUrl']"
+                    alt=""
+                    class="table-row-favicon"
+                    width="20"
+                    height="20"
+                  />
+                }
                 <ng-container
                   [ngTemplateOutlet]="cellTpl"
                   [ngTemplateOutletContext]="{ column: column, row: row, isFirst: isFirst }"

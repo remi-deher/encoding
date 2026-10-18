@@ -87,6 +87,9 @@ export interface ResourceSheetNotice {
       <article class="sheet" [attr.aria-label]="ariaLabel()">
         <header class="sheet-head">
           <div class="sheet-head-content">
+            @if (iconUrl()) {
+              <img [src]="iconUrl()!" alt="" class="sheet-head-favicon" width="40" height="40" />
+            }
             <div class="sheet-head-titles">
               <h2>{{ title() }}</h2>
               @if (subtitle()) {
@@ -211,6 +214,7 @@ export class ResourceSheetComponent {
   readonly ariaLabel = input.required<string>();
   readonly title = input.required<string>();
   readonly subtitle = input<string>('');
+  readonly iconUrl = input<string | null>(null);
   readonly headAction = input<ResourceSheetHeadAction | null>(null);
   readonly notices = input<readonly ResourceSheetNotice[]>([]);
   readonly sections = input.required<readonly ResourceSheetSection[]>();

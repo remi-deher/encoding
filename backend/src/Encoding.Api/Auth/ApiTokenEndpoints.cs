@@ -23,7 +23,17 @@ public static class ApiTokenEndpoints
                 summary.Id, summary.Name, summary.TokenPrefix, summary.Role, summary.CreatedAt, summary.ExpiresAt, rawToken));
         }).WithName("CreateApiToken");
 
-        group.MapDelete("/{id:guid}", async (Guid id, ApiTokenRepository repository, CancellationToken ct) =>
+        group.MapDelete("/{id:guid}", async (Guid id, bool? permanent, ApiTokenRepository repository, CancellationToken ct) =>
+        {
+            if (permanent == true)
+            {
+                return await repository.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound();
+            }
+
+            return await repository.RevokeAsync(id, ct) ? Results.NoContent() : Results.NotFound();
+        }).WithName("RevokeOrDeleteApiToken");
+
+        group.MapPost("/{id:guid}/revoke", async (Guid id, ApiTokenRepository repository, CancellationToken ct) =>
             await repository.RevokeAsync(id, ct) ? Results.NoContent() : Results.NotFound())
             .WithName("RevokeApiToken");
     }
