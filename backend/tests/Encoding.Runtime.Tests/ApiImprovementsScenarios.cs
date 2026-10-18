@@ -264,6 +264,15 @@ internal static class ApiImprovementsScenarios
             Check(await customClient.StatusAsync(HttpMethod.Get, "/api/v1/tokens") == HttpStatusCode.Unauthorized,
                 "Revoked API token is immediately refused.");
 
+            // Suppression définitive du token
+            Check(await aiClient.StatusAsync(HttpMethod.Delete, $"/api/v1/tokens/{customTokenId}?permanent=true", csrf: false) == HttpStatusCode.NoContent,
+                "AI client permanently deletes API token.");
+            using (var listAfterDelete = await aiClient.SendAsync(HttpMethod.Get, "/api/v1/tokens"))
+            {
+                var list = await listAfterDelete.Content.ReadFromJsonAsync<List<ApiTokenResponse>>(Json);
+                Check(!list!.Any(t => t.Id == customTokenId), "Permanently deleted token is no longer listed.");
+            }
+
             // D. Cycle de vie des flows : création d'un brouillon, clonage, suppression brouillon, suppression flow
             var testFlowId = Guid.NewGuid();
             var starterDefinition = new FlowDefinition(

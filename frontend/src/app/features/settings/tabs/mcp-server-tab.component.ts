@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   input,
   signal,
@@ -98,7 +99,9 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
                 [value]="selectedTokenPrefix()"
                 (selectionChange)="selectedTokenPrefix.set($event.value)"
               >
-                <mat-option value="">-- Jeton fictif (à remplacer) --</mat-option>
+                @if (availableTokens().length === 0) {
+                  <mat-option value="" disabled>Aucun jeton actif</mat-option>
+                }
                 @for (token of availableTokens(); track token.id) {
                   <mat-option [value]="token.tokenPrefix">
                     {{ token.name }} ({{ token.tokenPrefix }}… · {{ token.role }})
@@ -466,7 +469,7 @@ export class McpServerTabComponent {
   });
 
   protected readonly effectiveToken = computed(() => {
-    const prefix = this.selectedTokenPrefix();
+    const prefix = this.selectedTokenPrefix() || this.availableTokens()[0]?.tokenPrefix;
     return prefix ? `${prefix}<secret>` : 'enc_pat_<votre_jeton>';
   });
 
@@ -548,6 +551,16 @@ export class McpServerTabComponent {
   });
 
   constructor() {
+    effect(() => {
+      const active = this.availableTokens();
+      const current = this.selectedTokenPrefix();
+      if (!current && active.length > 0) {
+        this.selectedTokenPrefix.set(active[0].tokenPrefix);
+      } else if (current && !active.some((t) => t.tokenPrefix === current)) {
+        this.selectedTokenPrefix.set(active[0]?.tokenPrefix ?? '');
+      }
+    });
+
     void this.loadTools();
     void this.pingServer();
   }

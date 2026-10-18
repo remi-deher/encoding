@@ -18,4 +18,8 @@ export class ApiTokenService {
   revoke(id: string): Observable<void> {
     return this.http.delete<void>(`/api/v1/tokens/${id}`);
   }
+
+  delete(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/v1/tokens/${id}?permanent=true`);
+  }
 }

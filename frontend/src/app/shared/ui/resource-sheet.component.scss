@@ -53,6 +53,15 @@
   gap: var(--space-4);
 }
 
+.sheet-head-favicon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md, 8px);
+  flex-shrink: 0;
+  object-fit: contain;
+  margin-top: 2px;
+}
+
 .sheet-head-titles {
   min-width: 0;
   flex: 1;
