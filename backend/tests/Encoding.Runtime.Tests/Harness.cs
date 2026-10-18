@@ -154,7 +154,7 @@ internal static partial class Harness
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(presenceOptions);
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton(flowRepo); builder.Services.AddSingleton(new FlowArchiveService(flowRepo, validator));
             builder.Services.AddSingleton(new FlowTemplateRepository(db));
-            builder.Services.AddSingleton(new PeerClusterOptions());
+            builder.Services.AddSingleton(PeerClusterOptions.From(new ConfigurationBuilder().Build(), directory));
             app=builder.Build();
             app.Use(async (context,next) =>
             {
