@@ -1,8 +1,17 @@
+using System.Text.Json;
+using Encoding.Api.Executions;
+using Encoding.Api.Flows;
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Libraries;
 using Encoding.Api.Logging;
+using Encoding.Api.Mcp;
+using Encoding.Api.Nodes;
+using Encoding.Api.Plugins;
 using Encoding.Contracts.Logging;
 using Encoding.Core.Logging;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -303,5 +312,80 @@ public sealed class SystemLogRepositoryTests
         var pruned = await repo.QueryAsync(new SystemLogFilterQuery());
         Assert.Single(pruned);
         Assert.Equal(id2, pruned[0].Id); // Keeps newest
+    }
+}
+
+public sealed class SystemLogMcpTests
+{
+    [Fact]
+    public async Task McpService_Exposes_And_Executes_GetSystemLogs()
+    {
+        await using var db = await TestDatabase.CreateSqliteAsync("mcp-system-logs");
+        var contentRoot = Harness.RepositoryRoot();
+        await DatabaseMigrator.ApplyAsync(db.Db, contentRoot, CancellationToken.None);
+
+        var ringBuffer = new SystemLogRingBuffer();
+        var repo = new SystemLogRepository(db.Db);
+
+        ringBuffer.Add(new SystemLogEntry(
+            Id: "log-mcp-1",
+            Timestamp: DateTimeOffset.UtcNow,
+            Level: SystemLogLevel.Warning,
+            Category: "Encoding.Tools.FFmpeg",
+            Message: "Hardware acceleration dropped back to CPU"));
+
+        var services = new ServiceCollection();
+        var config = new ConfigurationBuilder().Build();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddDataProtection();
+        services.AddHttpClient();
+        services.AddSingleton(db.Db);
+        services.AddSingleton<LibraryRepository>();
+        services.AddSingleton<FlowRepository>();
+        services.AddSingleton<FlowComponentRegistry>();
+        services.AddSingleton<FlowDefinitionValidator>();
+        services.AddSingleton<NodeRepository>();
+        services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(30)));
+        services.AddSingleton<ExecutionRepository>();
+        services.AddSingleton<FlowScriptRepository>();
+        services.AddSingleton<EncodingProfileRepository>();
+        services.AddSingleton<FlowTemplateRepository>();
+        services.AddSingleton<FlowComponentPackRepository>();
+        services.AddSingleton<PluginConfigurationRepository>();
+        services.AddSingleton<PluginConnectionTester>();
+        services.AddSingleton(ringBuffer);
+        services.AddSingleton(repo);
+        services.AddLogging();
+        services.AddSingleton<McpService>();
+
+        var sp = services.BuildServiceProvider();
+        var mcp = sp.GetRequiredService<McpService>();
+
+        // 1. tools/list contains get_system_logs
+        var listResult = await mcp.HandleMessageAsync(
+            new McpJsonRpcRequest("2.0", "tools/list", JsonDocument.Parse("1").RootElement),
+            new System.Security.Claims.ClaimsPrincipal(),
+            CancellationToken.None);
+
+        Assert.NotNull(listResult);
+        var listJson = JsonSerializer.Serialize(listResult);
+        Assert.Contains("get_system_logs", listJson);
+
+        // 2. tools/call get_system_logs returns the log
+        var callRequest = new McpJsonRpcRequest(
+            "2.0",
+            "tools/call",
+            JsonDocument.Parse("2").RootElement,
+            JsonDocument.Parse("""{"name": "get_system_logs", "arguments": {"min_level": "Warning"}}""").RootElement);
+
+        var callResult = await mcp.HandleMessageAsync(
+            callRequest,
+            new System.Security.Claims.ClaimsPrincipal(),
+            CancellationToken.None);
+
+        Assert.NotNull(callResult);
+        var callJson = JsonSerializer.Serialize(callResult);
+        Assert.Contains("log-mcp-1", callJson);
+        Assert.Contains("Hardware acceleration dropped back to CPU", callJson);
     }
 }

@@ -1,5 +1,7 @@
+using Encoding.Contracts.Logging;
 using Encoding.Core.Logging;
 using Encoding.Core.Nodes;
+using Microsoft.AspNetCore.Mvc;
 using Encoding.NodeAgent;
 using Encoding.NodeAgent.Services;
 using Encoding.NodeAgent.Runtime;
@@ -113,6 +115,22 @@ app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, Worker
         switchFailure = identity.SwitchFailure
     });
 });
+app.MapGet("/api/v1/worker/logs", (
+    [FromQuery] SystemLogLevel? minLevel,
+    [FromQuery] string? category,
+    [FromQuery] string? search,
+    [FromQuery] int? limit,
+    [FromQuery] DateTimeOffset? since,
+    SystemLogRingBuffer ringBuffer) =>
+{
+    var query = new SystemLogFilterQuery(
+        MinLevel: minLevel,
+        Category: category,
+        Search: search,
+        Limit: limit.GetValueOrDefault(100),
+        Since: since);
+    return Results.Ok(ringBuffer.Query(query));
+}).WithName("GetWorkerLogs");
 app.MapPost("/api/v1/worker/enroll", async (
     WorkerEnrollmentRequest request,
     WorkerEnrollmentService enrollment,

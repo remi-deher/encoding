@@ -4,11 +4,14 @@ using System.Text.RegularExpressions;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Libraries;
+using Encoding.Api.Logging;
 using Encoding.Api.Nodes;
 using Encoding.Api.Plugins;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
+using Encoding.Contracts.Logging;
 using Encoding.Contracts.Plugins;
+using Encoding.Core.Logging;
 
 namespace Encoding.Api.Mcp;
 
@@ -30,6 +33,8 @@ public sealed class McpService(
     FlowComponentPackRepository componentPacks,
     PluginConfigurationRepository pluginConfigurations,
     PluginConnectionTester pluginTester,
+    SystemLogRingBuffer ringBuffer,
+    SystemLogRepository systemLogs,
     ILogger<McpService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -61,6 +66,24 @@ public sealed class McpService(
                 {
                     state = new { type = "string", description = "Filtrer par état (queued, running, failed, completed)." },
                     limit = new { type = "integer", description = "Nombre maximal de résultats (défaut 50, max 200).", @default = 50 }
+                },
+                required = Array.Empty<string>()
+            }
+        ),
+
+        new(
+            "get_system_logs",
+            "Consulte les journaux système et nœuds récents pour analyser les incidents, pannes matérielles, erreurs de plugins ou avertissements du cluster.",
+            new
+            {
+                type = "object",
+                properties = new
+                {
+                    min_level = new { type = "string", description = "Sévérité minimale des logs retournés (Trace, Debug, Information, Warning, Error, Critical). Défaut: Warning.", @default = "Warning" },
+                    category = new { type = "string", description = "Préfixe de catégorie de log (ex. 'Encoding.NodeAgent', 'Encoding.Plugins')." },
+                    search = new { type = "string", description = "Recherche textuelle dans le message ou l'exception du log." },
+                    limit = new { type = "integer", description = "Nombre maximal d'entrées (défaut: 50, max: 200).", @default = 50 },
+                    node_id = new { type = "string", description = "Identifiant UUID optionnel du nœud concerné." }
                 },
                 required = Array.Empty<string>()
             }
@@ -474,6 +497,7 @@ public sealed class McpService(
             "get_libraries_overview" => await ToolGetLibrariesOverviewAsync(ct),
             "list_nodes" => await ToolListNodesAsync(ct),
             "list_executions" => await ToolListExecutionsAsync(arguments, ct),
+            "get_system_logs" => await ToolGetSystemLogsAsync(arguments, ct),
 
             // Flows
             "get_flow_schema" => ToolGetFlowSchema(),
@@ -1383,5 +1407,58 @@ public sealed class McpService(
         };
 
         return McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions), isError: !isValid);
+    }
+
+    private async Task<McpCallToolResult> ToolGetSystemLogsAsync(JsonElement arguments, CancellationToken ct)
+    {
+        var minLevelStr = arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("min_level", out var mlProp)
+            ? mlProp.GetString()
+            : "Warning";
+        var minLevel = Enum.TryParse<SystemLogLevel>(minLevelStr, true, out var parsedLevel)
+            ? parsedLevel
+            : SystemLogLevel.Warning;
+
+        var category = arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("category", out var catProp)
+            ? catProp.GetString()
+            : null;
+
+        var search = arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("search", out var sProp)
+            ? sProp.GetString()
+            : null;
+
+        var limit = arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("limit", out var lProp) && lProp.TryGetInt32(out var l)
+            ? Math.Clamp(l, 1, 200)
+            : 50;
+
+        Guid? nodeId = null;
+        if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("node_id", out var nProp) &&
+            Guid.TryParse(nProp.GetString(), out var parsedNodeId))
+        {
+            nodeId = parsedNodeId;
+        }
+
+        var filter = new SystemLogFilterQuery(minLevel, category, search, nodeId, limit);
+        var inMemory = ringBuffer.Query(filter);
+
+        if (filter.MinLevel >= SystemLogLevel.Warning || inMemory.Count < filter.Limit)
+        {
+            var dbEntries = await systemLogs.QueryAsync(filter, ct);
+            if (dbEntries.Count > 0)
+            {
+                var seenIds = new HashSet<string>(inMemory.Select(e => e.Id));
+                var combined = new List<SystemLogEntry>(inMemory);
+                foreach (var dbEntry in dbEntries)
+                {
+                    if (seenIds.Add(dbEntry.Id))
+                    {
+                        combined.Add(dbEntry);
+                    }
+                }
+                combined.Sort((a, b) => b.Timestamp.CompareTo(a.Timestamp));
+                return McpCallToolResult.Text(JsonSerializer.Serialize(combined.Take(filter.Limit).ToList(), JsonOptions));
+            }
+        }
+
+        return McpCallToolResult.Text(JsonSerializer.Serialize(inMemory, JsonOptions));
     }
 }
