@@ -20,6 +20,7 @@ using DotNext.Net.Cluster.Consensus.Raft.Http;
 using DotNext.Net.Cluster.Consensus.Raft;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 using Encoding.Api.Mcp;
+using Encoding.Api.Tools;
 
 if (args.FirstOrDefault() is McpCommand.Name or "--" + McpCommand.Name)
     Environment.Exit(await McpCommand.RunAsync(args[1..], Console.In, Console.Out, CancellationToken.None));
@@ -58,6 +59,8 @@ builder.Services.AddSingleton<ExecutionStreamBroadcaster>();
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
 builder.Services.AddSingleton<FlowDefinitionValidator>();
+builder.Services.AddSingleton<FlowCatalogPromptBuilder>();
+builder.Services.AddSingleton<FlowAiGeneratorService>();
 builder.Services.AddSingleton<FlowSimulator>();
 builder.Services.AddSingleton<FlowMetadataImporter>();
 builder.Services.AddSingleton<FlowRepository>();
@@ -71,6 +74,8 @@ builder.Services.AddSingleton<PluginConnectionTester>();
 builder.Services.AddSingleton<McpService>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();
 builder.Services.AddSingleton<IntegrationTriggerService>();
+builder.Services.AddSingleton<DeviceCodeAuthService>();
+builder.Services.AddSingleton<AiClientFactory>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<IntegrationTriggerService>());
 builder.Services.AddTransient<LocalAgentAuthenticationHandler>();
 builder.Services.AddHttpClient(Encoding.Api.Nodes.LocalNodeEndpoints.HttpClientName, (services, client) =>
@@ -190,6 +195,7 @@ app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
 app.MapEnrollmentWindowEndpoints();
 app.MapFlowEndpoints();
+app.MapFlowAiEndpoints();
 app.MapFlowScriptEndpoints();
 app.MapFlowTemplateEndpoints();
 app.MapFlowComponentPackEndpoints();
@@ -213,6 +219,7 @@ app.MapLocalNodeEndpoints();
 app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
 app.MapMcpEndpoints();
+app.MapAiToolEndpoints();
 app.MapOpenApiEndpoints();
 
 app.MapFallbackToFile("index.html").AllowAnonymous();
