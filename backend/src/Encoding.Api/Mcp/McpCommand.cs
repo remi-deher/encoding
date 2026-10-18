@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 
 namespace Encoding.Api.Mcp;
@@ -41,7 +40,7 @@ public static class McpCommand
 
         while (!ct.IsCancellationRequested)
         {
-            var line = await input.ReadLineAsync(ct);
+            var line = await input.ReadLineAsync();
             if (line is null) break; // EOF
             if (string.IsNullOrWhiteSpace(line)) continue;
 
@@ -49,7 +48,7 @@ public static class McpCommand
             {
                 using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "api/v1/mcp")
                 {
-                    Content = new StringContent(line, Encoding.UTF8, "application/json")
+                    Content = new StringContent(line, System.Text.Encoding.UTF8, "application/json")
                 };
 
                 using var response = await http.SendAsync(requestMessage, ct);
@@ -61,8 +60,8 @@ public static class McpCommand
                     var responseBody = await response.Content.ReadAsStringAsync(ct);
                     if (!string.IsNullOrWhiteSpace(responseBody))
                     {
-                        await output.WriteLineAsync(responseBody.AsMemory(), ct);
-                        await output.FlushAsync(ct);
+                        await output.WriteLineAsync(responseBody);
+                        await output.FlushAsync();
                     }
                 }
                 else
@@ -80,8 +79,8 @@ public static class McpCommand
                                 : $"Erreur HTTP du serveur Encoding ({response.StatusCode})."
                         }
                     };
-                    await output.WriteLineAsync(JsonSerializer.Serialize(errorResponse).AsMemory(), ct);
-                    await output.FlushAsync(ct);
+                    await output.WriteLineAsync(JsonSerializer.Serialize(errorResponse));
+                    await output.FlushAsync();
                 }
             }
             catch (Exception ex)
@@ -96,8 +95,8 @@ public static class McpCommand
                         message = $"Impossible de contacter l'API Encoding sur {baseUrl} : {ex.Message}"
                     }
                 };
-                await output.WriteLineAsync(JsonSerializer.Serialize(errorResponse).AsMemory(), ct);
-                await output.FlushAsync(ct);
+                await output.WriteLineAsync(JsonSerializer.Serialize(errorResponse));
+                await output.FlushAsync();
             }
         }
 

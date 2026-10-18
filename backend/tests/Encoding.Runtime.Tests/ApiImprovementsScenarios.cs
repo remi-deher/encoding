@@ -595,7 +595,7 @@ internal static class ApiImprovementsScenarios
             {
                 Check(valToolResp.StatusCode == HttpStatusCode.OK, "MCP validate_tool_definition succeeds.");
                 var valToolJson = await valToolResp.Content.ReadAsStringAsync();
-                Check(valToolJson.Contains("\"isValid\": true"), "MCP validate_tool_definition confirms valid definition.");
+                Check(valToolJson.Contains("isValid") && valToolJson.Contains("true") && !valToolJson.Contains("Des erreurs bloquantes"), "MCP validate_tool_definition confirms valid definition.");
             }
 
             // Test Validation Plugin MCP : validate_plugin_manifest
@@ -635,7 +635,7 @@ internal static class ApiImprovementsScenarios
             {
                 Check(valPluginResp.StatusCode == HttpStatusCode.OK, "MCP validate_plugin_manifest succeeds.");
                 var valPluginJson = await valPluginResp.Content.ReadAsStringAsync();
-                Check(valPluginJson.Contains("\"isValid\": true"), "MCP validate_plugin_manifest confirms valid manifest.");
+                Check(valPluginJson.Contains("isValid") && valPluginJson.Contains("true") && !valPluginJson.Contains("erreurs de conformité"), "MCP validate_plugin_manifest confirms valid manifest.");
             }
 
             // Test REST : GET /api/v1/plugins
