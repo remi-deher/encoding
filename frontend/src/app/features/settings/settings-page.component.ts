@@ -6,7 +6,6 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
@@ -32,7 +31,6 @@ export type SystemSubTab = 'overview' | 'logs';
   selector: 'app-settings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    MatButtonModule,
     AiToolsTabComponent,
     ApiTokenTabComponent,
     CategoryTabsComponent,
@@ -53,29 +51,18 @@ export type SystemSubTab = 'overview' | 'logs';
         (selectedChange)="onMainTabChange($event)"
       />
 
+      <p catalogue-summary class="settings-description">
+        Gérez les accès, les intégrations et le fonctionnement de votre installation.
+      </p>
       <div catalogue-table class="settings-content-wrapper">
         @switch (activeMainTab()) {
           @case ('security') {
-            <div class="subtab-bar">
-              <button
-                type="button"
-                class="subtab-btn"
-                matButton="text"
-                [class.is-active]="securityTab() === 'tokens'"
-                (click)="onSubTabChange('tokens')"
-              >
-                Jetons d’API
-              </button>
-              <button
-                type="button"
-                class="subtab-btn"
-                matButton="text"
-                [class.is-active]="securityTab() === 'users'"
-                (click)="onSubTabChange('users')"
-              >
-                Comptes utilisateurs
-              </button>
-            </div>
+            <app-category-tabs
+              label="Rubriques de sécurité"
+              [options]="securityTabs"
+              [selected]="securityTab()"
+              (selectedChange)="onSubTabChange($event)"
+            />
 
             @if (securityTab() === 'tokens') {
               <app-api-token-tab (tokensUpdated)="cachedTokens.set($event)" />
@@ -85,35 +72,12 @@ export type SystemSubTab = 'overview' | 'logs';
           }
 
           @case ('integrations') {
-            <div class="subtab-bar">
-              <button
-                type="button"
-                class="subtab-btn"
-                matButton="text"
-                [class.is-active]="integrationsTab() === 'mcp'"
-                (click)="onSubTabChange('mcp')"
-              >
-                Serveur MCP
-              </button>
-              <button
-                type="button"
-                class="subtab-btn"
-                matButton="text"
-                [class.is-active]="integrationsTab() === 'ai'"
-                (click)="onSubTabChange('ai')"
-              >
-                IA & fournisseurs
-              </button>
-              <button
-                type="button"
-                class="subtab-btn"
-                matButton="text"
-                [class.is-active]="integrationsTab() === 'webhooks'"
-                (click)="onSubTabChange('webhooks')"
-              >
-                Webhooks & Métriques
-              </button>
-            </div>
+            <app-category-tabs
+              label="Rubriques des intégrations"
+              [options]="integrationTabs"
+              [selected]="integrationsTab()"
+              (selectedChange)="onSubTabChange($event)"
+            />
 
             @if (integrationsTab() === 'mcp') {
               <app-mcp-server-tab [tokens]="cachedTokens()" />
@@ -125,26 +89,12 @@ export type SystemSubTab = 'overview' | 'logs';
           }
 
           @case ('system') {
-            <div class="subtab-bar">
-              <button
-                type="button"
-                class="subtab-btn"
-                matButton="text"
-                [class.is-active]="systemTab() === 'overview'"
-                (click)="onSubTabChange('overview')"
-              >
-                Santé & Apparence
-              </button>
-              <button
-                type="button"
-                class="subtab-btn"
-                matButton="text"
-                [class.is-active]="systemTab() === 'logs'"
-                (click)="onSubTabChange('logs')"
-              >
-                Journaux système
-              </button>
-            </div>
+            <app-category-tabs
+              label="Rubriques du système"
+              [options]="systemTabs"
+              [selected]="systemTab()"
+              (selectedChange)="onSubTabChange($event)"
+            />
 
             @if (systemTab() === 'overview') {
               <app-system-tab />
@@ -157,41 +107,14 @@ export type SystemSubTab = 'overview' | 'logs';
     </app-management-catalog-template>
   `,
   styles: `
-    .settings-content-wrapper {
-      margin-top: var(--space-2);
-      display: grid;
-      gap: var(--space-3);
-    }
-
-    .subtab-bar {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      padding-bottom: var(--space-2);
-      border-bottom: 1px solid var(--outline-variant);
-    }
-
-    .subtab-btn {
-      padding: var(--space-2) var(--space-4);
-      border-radius: var(--radius-pill);
-      border: none;
-      background: var(--surface-container-high);
+    .settings-description {
+      margin: 0;
       color: var(--text-secondary);
-      font-size: var(--font-label);
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
     }
-
-    .subtab-btn:hover {
-      background: var(--surface-container-highest);
-      color: var(--text-primary);
-    }
-
-    .subtab-btn.is-active {
-      background: var(--accent-soft);
-      color: var(--accent-strong);
-      font-weight: 600;
+    .settings-content-wrapper {
+      display: grid;
+      gap: var(--space-6);
+      min-width: 0;
     }
   `,
 })
@@ -225,6 +148,20 @@ export class SettingsPageComponent {
   protected readonly integrationsTab = signal<IntegrationsSubTab>('mcp');
   protected readonly systemTab = signal<SystemSubTab>('overview');
   protected readonly cachedTokens = signal<readonly ApiTokenResponse[]>([]);
+
+  protected readonly securityTabs: readonly CategoryTabOption[] = [
+    { value: 'tokens', label: 'Jetons d’API' },
+    { value: 'users', label: 'Comptes utilisateurs' },
+  ];
+  protected readonly integrationTabs: readonly CategoryTabOption[] = [
+    { value: 'mcp', label: 'Serveur MCP' },
+    { value: 'ai', label: 'IA & fournisseurs' },
+    { value: 'webhooks', label: 'Webhooks & Métriques' },
+  ];
+  protected readonly systemTabs: readonly CategoryTabOption[] = [
+    { value: 'overview', label: 'Santé & Apparence' },
+    { value: 'logs', label: 'Journaux système' },
+  ];
 
   protected readonly mainTabs: readonly CategoryTabOption[] = [
     { value: 'security', label: 'Accès & Sécurité' },
@@ -282,9 +219,7 @@ export class SettingsPageComponent {
     }
   }
 
-  protected async onSubTabChange(
-    subTab: SecuritySubTab | IntegrationsSubTab | SystemSubTab,
-  ): Promise<void> {
+  protected async onSubTabChange(subTab: string): Promise<void> {
     if (subTab !== 'ai' && !(await this.mayLeaveAi())) return;
     if (subTab === 'tokens' || subTab === 'users') {
       this.securityTab.set(subTab);

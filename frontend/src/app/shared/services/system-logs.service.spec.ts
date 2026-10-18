@@ -62,6 +62,22 @@ describe('SystemLogsService', () => {
     req.flush(mockResponse);
   });
 
+  it('accepts the bare array returned by existing server versions', () => {
+    service.getLogs().subscribe((res) => {
+      expect(Array.isArray(res.entries)).toBe(true);
+      expect(res.entries).toEqual([]);
+      expect(res.totalBuffered).toBe(0);
+    });
+    httpMock.expectOne('/api/v1/system/logs').flush([]);
+  });
+
+  it('rejects a malformed overview through the observable error channel', () => {
+    let error: unknown;
+    service.getLogs().subscribe({ error: (value) => (error = value) });
+    httpMock.expectOne('/api/v1/system/logs').flush({ entries: 'invalid' });
+    expect(error).toBeInstanceOf(Error);
+  });
+
   it('queries categories and unwraps the list', () => {
     service.getCategories().subscribe((categories) => {
       expect(categories).toEqual(['Encoding.Api', 'Encoding.Core']);
@@ -90,13 +106,19 @@ describe('SystemLogsService', () => {
     const originalEventSource = (globalThis as unknown as { EventSource?: unknown }).EventSource;
 
     let createdUrl = '';
+    let source: MockEventSource;
     class MockEventSource {
       onmessage: ((event: MessageEvent) => void) | null = null;
       onerror: ((error: unknown) => void) | null = null;
       closed = false;
+      listener: ((event: MessageEvent) => void) | null = null;
+      addEventListener(_type: string, listener: (event: MessageEvent) => void) {
+        this.listener = listener;
+      }
 
       constructor(url: string) {
         createdUrl = url;
+        source = this;
       }
 
       close() {
@@ -118,7 +140,17 @@ describe('SystemLogsService', () => {
       expect(createdUrl).toContain('minLevel=Error');
       expect(createdUrl).toContain('search=critical+issue');
 
+      const entry: SystemLogEntry = {
+        id: 'stream-1',
+        timestamp: '2026-10-19T00:00:00Z',
+        level: 'Error',
+        category: 'CLI',
+        message: 'Authentication failed',
+      };
+      source!.listener!(new MessageEvent('log', { data: JSON.stringify(entry) }));
+      expect(received).toEqual([entry]);
       sub.unsubscribe();
+      expect(source!.closed).toBe(true);
     } finally {
       (globalThis as unknown as { EventSource?: unknown }).EventSource = originalEventSource;
     }

@@ -60,7 +60,7 @@ test('provider settings remain focused, accessible and usable in both themes', a
   await expect(tab.getByRole('heading', { name: 'IA & fournisseurs' })).toBeVisible();
   await expect(tab.getByLabel('Adresse du serveur')).toBeVisible();
   await expect(tab.getByLabel('Clé API', { exact: true })).toHaveCount(0);
-  await tab.getByRole('button', { name: /OpenAI \/ API compatible/ }).click();
+  await tab.getByRole('tab', { name: /OpenAI \/ API compatible/ }).click();
   await expect(tab.getByLabel('Clé API', { exact: true })).toHaveAttribute('type', 'password');
   await expect(tab.getByLabel('Adresse du serveur')).toHaveCount(0);
   await expect(tab.getByRole('combobox', { name: 'Moteur du cluster' })).toContainText('Ollama');
@@ -111,7 +111,7 @@ test('Codex only shows the supplied code and closing cancels the attempt', async
   await page.goto('/settings?tab=ai');
   await page
     .locator('app-ai-tools-tab')
-    .getByRole('button', { name: /Codex CLI/ })
+    .getByRole('tab', { name: /Codex CLI/ })
     .click();
   await page.getByRole('button', { name: 'Associer mon compte', exact: true }).click();
   const dialog = page.getByRole('dialog');
@@ -123,4 +123,99 @@ test('Codex only shows the supplied code and closing cancels the attempt', async
   await expect(dialog.getByText(/Simuler/)).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Fermer', exact: true }).click();
   await expect.poll(() => cancelled).toBe(true);
+});
+
+test('settings navigation and system health use shared components in both themes', async ({
+  page,
+}, testInfo) => {
+  await page.route('**/api/v1/cluster', (route) =>
+    route.fulfill({
+      json: {
+        id: '00000000-0000-0000-0000-000000000001',
+        name: 'Cluster de test',
+        standalone: false,
+      },
+    }),
+  );
+  await page.route('**/health/details', (route) =>
+    route.fulfill({
+      json: {
+        status: 'healthy',
+        totalDurationMs: 4,
+        checks: [{ name: 'database', status: 'healthy', durationMs: 4 }],
+      },
+    }),
+  );
+  await page.goto('/settings?tab=system');
+  const settings = page.locator('app-settings-page');
+  await expect(settings.locator('app-resource-sheet')).toHaveCount(2);
+  await expect(settings.getByText('Cluster de test')).toBeVisible();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme,
+    );
+    const result = await new AxeBuilder({ page })
+      .include('app-settings-page')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(result.violations).toEqual([]);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`settings-${theme}.png`), fullPage: true });
+  }
+  await settings.getByRole('tab', { name: 'Santé & Apparence' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(settings.getByRole('tab', { name: 'Journaux système' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+});
+
+test('system logs display the actual array API response and named SSE events without console errors', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const entry = {
+    id: 'historical',
+    timestamp: '2026-10-19T00:00:00Z',
+    level: 'Warning',
+    category: 'Encoding.Api.Tools.DeviceCodeAuthService',
+    message: 'Codex timeout: outputReceived=false',
+  };
+  await page.route('**/api/v1/system/logs?*', (route) => route.fulfill({ json: [entry] }));
+  await page.route('**/api/v1/system/logs/categories', (route) =>
+    route.fulfill({ json: { categories: [entry.category] } }),
+  );
+  await page.route('**/api/v1/system/logs/stream', (route) =>
+    route.fulfill({
+      contentType: 'text/event-stream',
+      body: `event: log\ndata: ${JSON.stringify({ ...entry, id: 'live', message: 'CLI process exited' })}\n\n`,
+    }),
+  );
+  await page.goto('/settings?tab=logs');
+  const viewer = page.locator('app-system-log-viewer');
+  await expect(viewer.getByText(entry.message, { exact: true })).toBeVisible();
+  await expect(viewer.getByText('CLI process exited', { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Codex displays the server diagnostic instead of a generic network error', async ({
+  page,
+}) => {
+  const title =
+    'Codex a produit une sortie, mais aucune URL et aucun code compatibles n’ont été reconnus sous 30 secondes.';
+  await page.route('**/api/v1/tools/ai/codex-cli/auth/device-code/start', (route) =>
+    route.fulfill({ status: 409, json: { title } }),
+  );
+  await page.goto('/settings?tab=ai');
+  await page
+    .locator('app-ai-tools-tab')
+    .getByRole('tab', { name: /Codex CLI/ })
+    .click();
+  await page.getByRole('button', { name: 'Associer mon compte', exact: true }).click();
+  await expect(page.getByText(title, { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });

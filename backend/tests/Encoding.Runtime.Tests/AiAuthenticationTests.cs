@@ -94,3 +94,96 @@ public sealed class AiAuthenticationTests
         Assert.Equal("Real CLI test result", result.Content);
     }
 }
+
+public sealed class AiAuthenticationDiagnosticsTests
+{
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    public async Task ExitWithoutPromptIsNeverTreatedAsConnectedAndDoesNotLeakOutput(int exitCode)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new AiCliTestProfile($"printf 'private-token-do-not-log' >&2; exit {exitCode}");
+        var logger = new CaptureLogger();
+        using var service = new DeviceCodeAuthService(fixture.Runtime, logger);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartDeviceAuthAsync("codex-cli", CancellationToken.None));
+        Assert.Contains($"code {exitCode}", error.Message);
+        Assert.Equal("failed", (await service.GetStatusAsync("codex-cli")).State);
+        Assert.Contains(logger.Messages, item => item.Contains($"exit={exitCode}"));
+        Assert.DoesNotContain("private-token", string.Join("\n", logger.Messages));
+        Assert.DoesNotContain("private-token", error.Message);
+    }
+
+    [Fact]
+    public async Task PromptCanArriveInChunksWithAnsiEscapesAndIsNotLogged()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new AiCliTestProfile("""
+            printf '\033[32mhttps://auth.openai.com/codex/'
+            sleep 0.1
+            printf 'device\033[0m\nABCD-'
+            sleep 0.1
+            printf '23456\n'
+            sleep 0.2
+            """);
+        var logger = new CaptureLogger();
+        using var service = new DeviceCodeAuthService(fixture.Runtime, logger);
+        var response = await service.StartDeviceAuthAsync("codex-cli", CancellationToken.None);
+        Assert.Equal("ABCD-23456", response.Prompt.UserCode);
+        Assert.Contains(logger.Messages, item => item.Contains("prompt recognized"));
+        Assert.DoesNotContain("ABCD-23456", string.Join("\n", logger.Messages));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TimeoutDistinguishesSilentCliFromUnrecognizedOutput(bool hasOutput)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new AiCliTestProfile(hasOutput ? "printf 'private-unrecognized-output'; sleep 20" : "sleep 20");
+        var logger = new CaptureLogger();
+        var clock = new ManualClock();
+        using var service = new DeviceCodeAuthService(fixture.Runtime, logger, clock);
+        var attempt = service.StartDeviceAuthAsync("codex-cli", CancellationToken.None);
+        var timer = await clock.Created.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        if (hasOutput) await logger.FirstOutput.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        timer.Fire();
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => attempt);
+        Assert.Contains(hasOutput ? "a produit une sortie" : "aucune sortie", error.Message);
+        Assert.Equal("failed", (await service.GetStatusAsync("codex-cli")).State);
+        Assert.DoesNotContain("private-unrecognized-output", string.Join("\n", logger.Messages));
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        public readonly TaskCompletionSource<ManualTimer> Created = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new ManualTimer(callback, state);
+            Created.TrySetResult(timer);
+            return timer;
+        }
+    }
+    private sealed class ManualTimer(TimerCallback callback, object? state) : ITimer
+    {
+        public void Fire() => callback(state);
+        public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class CaptureLogger : Microsoft.Extensions.Logging.ILogger<DeviceCodeAuthService>
+    {
+        public readonly System.Collections.Concurrent.ConcurrentQueue<string> Messages = new();
+        public readonly TaskCompletionSource FirstOutput = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel level) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel level, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var message = formatter(state, exception);
+            Messages.Enqueue(message);
+            if (message.Contains("first output")) FirstOutput.TrySetResult();
+        }
+    }
+}

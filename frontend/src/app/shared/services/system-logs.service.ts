@@ -23,7 +23,17 @@ export class SystemLogsService {
     if (query.limit !== undefined) params = params.set('limit', query.limit.toString());
     if (query.since) params = params.set('since', query.since);
 
-    return this.http.get<SystemLogOverviewResponse>('/api/v1/system/logs', { params });
+    return this.http
+      .get<SystemLogOverviewResponse | readonly SystemLogEntry[]>('/api/v1/system/logs', { params })
+      .pipe(
+        map((response) => {
+          // Older nodes return a bare array. Arrays also have an `entries` method.
+          if (Array.isArray(response)) return { entries: response, totalBuffered: response.length };
+          const overview = response as SystemLogOverviewResponse;
+          if (!Array.isArray(overview.entries)) throw new Error('Réponse des journaux invalide.');
+          return overview;
+        }),
+      );
   }
 
   getCategories(nodeId?: string | null): Observable<readonly string[]> {
@@ -35,12 +45,15 @@ export class SystemLogsService {
       .pipe(map((res) => res.categories));
   }
 
-  createLogStream(filter?: {
-    minLevel?: SystemLogLevel;
-    category?: string;
-    search?: string;
-    nodeId?: string | null;
-  }): Observable<SystemLogEntry> {
+  createLogStream(
+    filter?: {
+      minLevel?: SystemLogLevel;
+      category?: string;
+      search?: string;
+      nodeId?: string | null;
+    },
+    onConnectionChange?: (connected: boolean) => void,
+  ): Observable<SystemLogEntry> {
     return new Observable<SystemLogEntry>((subscriber) => {
       const params = new URLSearchParams();
       if (filter?.minLevel) params.set('minLevel', filter.minLevel);
@@ -58,7 +71,7 @@ export class SystemLogsService {
 
       const eventSource = new EventSource(url, { withCredentials: true });
 
-      eventSource.onmessage = (event) => {
+      const receive = (event: MessageEvent) => {
         try {
           if (!event.data) return;
           const entry = JSON.parse(event.data) as SystemLogEntry;
@@ -68,12 +81,15 @@ export class SystemLogsService {
         }
       };
 
-      eventSource.onerror = () => {
-        // EventSource will automatically retry connecting.
-      };
+      eventSource.onopen = () => onConnectionChange?.(true);
+      eventSource.addEventListener('log', receive);
+      eventSource.onmessage = receive; // Compatibility with nodes emitting unnamed events.
+      eventSource.onerror = () =>
+        subscriber.error(new Error('Connexion aux journaux interrompue.'));
 
       return () => {
         eventSource.close();
+        onConnectionChange?.(false);
       };
     });
   }

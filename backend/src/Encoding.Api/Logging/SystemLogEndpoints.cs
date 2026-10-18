@@ -120,18 +120,22 @@ public static class SystemLogEndpoints
             await context.Response.Body.FlushAsync(ct);
 
             // 2. Boucle d'écoute temps réel avec heartbeat toutes les 15s
-            var enumerator = broadcaster.SubscribeAsync(filter, ct).GetAsyncEnumerator(ct);
+            using var streamCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var enumerator = broadcaster.SubscribeAsync(filter, streamCancellation.Token).GetAsyncEnumerator(streamCancellation.Token);
+            // Keep a single pending read across heartbeats.
+            Task<bool>? moveNextTask = null;
             try
             {
                 while (!ct.IsCancellationRequested)
                 {
-                    var moveNextTask = enumerator.MoveNextAsync().AsTask();
+                    moveNextTask ??= enumerator.MoveNextAsync().AsTask();
                     var timeoutTask = Task.Delay(TimeSpan.FromSeconds(15), ct);
 
                     var completed = await Task.WhenAny(moveNextTask, timeoutTask);
                     if (completed == moveNextTask)
                     {
                         var hasMore = await moveNextTask;
+                        moveNextTask = null;
                         if (!hasMore)
                             break;
 
@@ -154,6 +158,11 @@ public static class SystemLogEndpoints
             }
             finally
             {
+                await streamCancellation.CancelAsync();
+                if (moveNextTask is not null)
+                {
+                    try { await moveNextTask; } catch (OperationCanceledException) { }
+                }
                 await enumerator.DisposeAsync();
             }
         }).WithName("StreamSystemLogs");
