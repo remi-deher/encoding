@@ -19,36 +19,36 @@ jobs:
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch release after an approved dev-to-main merge
+      - name: Dispatch release after any dev-to-main merge
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           for _ in $(seq 1 18); do
             prs="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=all&base=main&head=${GITHUB_REPOSITORY_OWNER}:dev" \
-              | jq --arg sha "$HEAD_SHA" '[.[] | select(.head.sha == $sha) | {number, merged_at, labels: [.labels[].name]}]')"
+              | jq --arg sha "$HEAD_SHA" '[.[] | select(.head.sha == $sha) | {number, merged_at}]')"
             count="$(jq 'length' <<< "$prs")"
             if [ "$count" -eq 0 ]; then
               echo "Aucune PR dev vers main associée à ce run de policy."
               exit 0
             fi
 
-            pr="$(jq -c 'first(.[] | select(.labels | index("release-ready") != null)) // empty' <<< "$prs")"
+            pr="$(jq -c '.[0] // empty' <<< "$prs")"
             if [ -z "$pr" ]; then
-              echo "La PR dev vers main n'a pas l'approbation release-ready."
-              exit 0
+              echo "La PR dev vers main n'est pas associée au SHA attendu."
+              exit 1
             fi
 
             merged_at="$(jq -r '.merged_at // empty' <<< "$pr")"
             if [ -n "$merged_at" ]; then
-              echo "PR #$(jq -r '.number' <<< "$pr") fusionnée avec release-ready; lancement de Release sur main."
+              echo "PR #$(jq -r '.number' <<< "$pr") fusionnée de dev vers main; lancement de Release sur main."
               gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
               exit 0
             fi
 
             sleep 10
           done
-          echo "La PR approuvée n'a pas été fusionnée dans les 3 minutes; aucun dispatch."
+          echo "La PR dev vers main n'a pas été fusionnée dans les 3 minutes; aucun dispatch."
           exit 1
 
   wait-ci:
@@ -72,10 +72,10 @@ jobs:
             exit 0
           fi
 
-          approved_prs="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" \
-            --jq '[.[] | select(.base.ref == "main" and .head.ref == "dev" and .merged_at != null and ([.labels[].name] | index("release-ready") != null))]')"
-          if [ "$(jq length <<< "$approved_prs")" -eq 0 ]; then
-            echo "Aucune PR dev vers main fusionnée avec release-ready; publication refusée."
+          merged_prs="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" \
+            --jq '[.[] | select(.base.ref == "main" and .head.ref == "dev" and .merged_at != null)]')"
+          if [ "$(jq length <<< "$merged_prs")" -eq 0 ]; then
+            echo "Aucune PR dev vers main fusionnée associée à ce commit; publication refusée."
             echo green=false >> "$GITHUB_OUTPUT"
             exit 0
           fi
