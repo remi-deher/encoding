@@ -203,13 +203,17 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
         if (!restore && (current != request.ExpectedVersion || definition.Version != current + 1)) return null;
         if (skipUnchanged && current > 0)
         {
-            await using var unchanged = Sql.Command("SELECT (definition - 'version') = (@document::jsonb - 'version') FROM flow_versions WHERE flow_id=@id AND version=@version", connection, tx);
-            unchanged.Parameters.AddWithValue("id", definition.Id); unchanged.Parameters.AddWithValue("version", current);
-            unchanged.Parameters.AddWithValue("document", SqlKind.Json, json);
-            if (await unchanged.ScalarNullableBoolAsync(ct) is true)
+            await using var readLatest = Sql.Command("SELECT definition FROM flow_versions WHERE flow_id=@id AND version=@version", connection, tx);
+            readLatest.Parameters.AddWithValue("id", definition.Id); readLatest.Parameters.AddWithValue("version", current);
+            var existingJson = (string?)await readLatest.ExecuteScalarAsync(ct);
+            if (existingJson is not null)
             {
-                await ClearDraftAsync(request, connection, tx, ct);
-                return current;
+                var existingDef = JsonSerializer.Deserialize<FlowDefinition>(existingJson, JsonOptions);
+                if (existingDef is not null && JsonSerializer.Serialize(existingDef with { Version = current }, JsonOptions) == JsonSerializer.Serialize(definition with { Version = current }, JsonOptions))
+                {
+                    await ClearDraftAsync(request, connection, tx, ct);
+                    return current;
+                }
             }
         }
         await using var command = Sql.Command("""
