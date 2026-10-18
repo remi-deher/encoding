@@ -4276,7 +4276,7 @@
     },
     {
       "id": "base-ai-translate-subtitles",
-      "version": "1.0.0",
+      "version": "1.6.0",
       "name": "Traduction de sous-titres (IA)",
       "description": "Traduit les sous-titres d'une langue vers une autre à l'aide d'une IA (Codex CLI, Claude CLI, Ollama ou API) en préservant strictement les minutages et styles.",
       "kind": "action",
@@ -4355,7 +4355,7 @@
     },
     {
       "id": "base-ai-metadata-enricher",
-      "version": "1.0.0",
+      "version": "1.6.0",
       "name": "Enrichissement métadonnées (IA)",
       "description": "Génère des résumés contextuels, mots-clés ou chapitrage intelligent à partir des pistes et dialogues.",
       "kind": "action",
