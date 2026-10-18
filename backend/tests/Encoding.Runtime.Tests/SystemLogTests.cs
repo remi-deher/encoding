@@ -1,0 +1,265 @@
+using Encoding.Contracts.Logging;
+using Encoding.Core.Logging;
+using Microsoft.Extensions.Logging;
+using Xunit;
+
+namespace Encoding.Runtime.Tests;
+
+public sealed class SystemLogSanitizerTests
+{
+    [Fact]
+    public void Redacts_Bearer_Tokens()
+    {
+        var input = "Request headers: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xyz and more";
+        var sanitized = SystemLogSanitizer.Sanitize(input);
+        Assert.Contains("Bearer ***REDACTED***", sanitized);
+        Assert.DoesNotContain("eyJhbGci", sanitized);
+    }
+
+    [Fact]
+    public void Redacts_Personal_Access_Tokens()
+    {
+        var input = "Authenticating with personal access token enc_pat_3a8b4c2d1e0f987654321fedcba";
+        var sanitized = SystemLogSanitizer.Sanitize(input);
+        Assert.Contains("***REDACTED***", sanitized);
+        Assert.DoesNotContain("3a8b4c2d1e0f987654321fedcba", sanitized);
+    }
+
+    [Fact]
+    public void Redacts_Node_And_Container_Secrets()
+    {
+        var input = "Node paired with secret enc_sec_4f9a0c2e4b6d8a0f and node token enc_node_9988776655443322";
+        var sanitized = SystemLogSanitizer.Sanitize(input);
+        Assert.DoesNotContain("enc_sec_", sanitized);
+        Assert.DoesNotContain("enc_node_", sanitized);
+        Assert.Contains("***REDACTED***", sanitized);
+    }
+
+    [Fact]
+    public void Redacts_Passwords_And_Api_Keys_In_KeyValue_Formats()
+    {
+        var inputs = new[]
+        {
+            "Config: password=\"MySecretPassword!123\"",
+            "Plex connection: x-plex-token='plex_token_abc_xyz'",
+            "URL: https://sonarr.local/api/v3?api_key=sonarr_secret_api_key_456&mode=full",
+            "Payload: {\"secret\": \"super_top_secret_val\"}",
+            "Auth: token=session_token_7788"
+        };
+
+        foreach (var text in inputs)
+        {
+            var sanitized = SystemLogSanitizer.Sanitize(text);
+            Assert.Contains("***REDACTED***", sanitized);
+            Assert.DoesNotContain("MySecretPassword", sanitized);
+            Assert.DoesNotContain("plex_token_abc_xyz", sanitized);
+            Assert.DoesNotContain("sonarr_secret_api_key_456", sanitized);
+            Assert.DoesNotContain("super_top_secret_val", sanitized);
+            Assert.DoesNotContain("session_token_7788", sanitized);
+        }
+    }
+
+    [Fact]
+    public void Redacts_Private_Keys()
+    {
+        var input = """
+            -----BEGIN RSA PRIVATE KEY-----
+            MIIEowIBAAKCAQEA0Y8v...
+            some private key contents
+            -----END RSA PRIVATE KEY-----
+            """;
+        var sanitized = SystemLogSanitizer.Sanitize(input);
+        Assert.Contains("***REDACTED PRIVATE KEY***", sanitized);
+        Assert.DoesNotContain("MIIEowIBAAKCAQEA0Y8v", sanitized);
+    }
+
+    [Fact]
+    public void Redacts_Exceptions()
+    {
+        var ex = new InvalidOperationException("Failed with token enc_pat_998877aabbcc and password=admin",
+            new ArgumentException("Sub failure with secret='inner_secret_val'"));
+
+        var sanitized = SystemLogSanitizer.SanitizeException(ex);
+        Assert.NotNull(sanitized);
+        Assert.Contains("***REDACTED***", sanitized);
+        Assert.DoesNotContain("enc_pat_998877aabbcc", sanitized);
+        Assert.DoesNotContain("inner_secret_val", sanitized);
+    }
+}
+
+public sealed class SystemLogFilterPolicyTests
+{
+    [Fact]
+    public void Drops_Routine_Kestrel_200_Logs()
+    {
+        var category = "Microsoft.AspNetCore.Hosting.Diagnostics";
+        var message = "Request finished in 1.45ms 200 application/json";
+
+        var captured = SystemLogFilterPolicy.ShouldCapture(category, LogLevel.Information, message, allowRoutineDiagnostics: false);
+        Assert.False(captured);
+    }
+
+    [Fact]
+    public void Retains_Routine_Kestrel_Logs_When_Allowed()
+    {
+        var category = "Microsoft.AspNetCore.Hosting.Diagnostics";
+        var message = "Request finished in 1.45ms 200 application/json";
+
+        var captured = SystemLogFilterPolicy.ShouldCapture(category, LogLevel.Information, message, allowRoutineDiagnostics: true);
+        Assert.True(captured);
+    }
+
+    [Fact]
+    public void Drops_HealthCheck_Routine_Logs()
+    {
+        var category = "Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckMiddleware";
+        var message = "Health check Ping completed after 0.2ms with status Healthy";
+
+        var captured = SystemLogFilterPolicy.ShouldCapture(category, LogLevel.Information, message);
+        Assert.False(captured);
+    }
+
+    [Fact]
+    public void Drops_Raft_Consensus_Trace_And_Debug_Logs()
+    {
+        var category = "DotNext.Net.Cluster.Consensus.Raft.RaftCluster";
+        var message = "Heartbeat packet exchanged with peer";
+
+        Assert.False(SystemLogFilterPolicy.ShouldCapture(category, LogLevel.Debug, message));
+        Assert.False(SystemLogFilterPolicy.ShouldCapture(category, LogLevel.Trace, message));
+        Assert.True(SystemLogFilterPolicy.ShouldCapture(category, LogLevel.Information, message));
+    }
+
+    [Fact]
+    public void Never_Drops_Warnings_Errors_Or_Criticals()
+    {
+        var kestrelCategory = "Microsoft.AspNetCore.Hosting.Diagnostics";
+        var healthCategory = "Microsoft.AspNetCore.Diagnostics.HealthChecks";
+        var raftCategory = "DotNext.Net.Cluster.Consensus.Raft";
+
+        Assert.True(SystemLogFilterPolicy.ShouldCapture(kestrelCategory, LogLevel.Warning, "Connection reset"));
+        Assert.True(SystemLogFilterPolicy.ShouldCapture(healthCategory, LogLevel.Error, "Health check failed: Disk full"));
+        Assert.True(SystemLogFilterPolicy.ShouldCapture(raftCategory, LogLevel.Critical, "Consensus partition split"));
+    }
+}
+
+public sealed class SystemLogRingBufferTests
+{
+    [Fact]
+    public void RingBuffer_Keeps_Most_Recent_Entries_When_Overflowing()
+    {
+        var buffer = new SystemLogRingBuffer(capacity: 5);
+
+        for (var i = 1; i <= 10; i++)
+        {
+            buffer.Add(new SystemLogEntry(
+                Id: i.ToString(),
+                Timestamp: DateTimeOffset.UtcNow.AddSeconds(i),
+                Level: SystemLogLevel.Information,
+                Category: "App.Component",
+                Message: $"Message {i}"));
+        }
+
+        Assert.Equal(5, buffer.Count);
+        Assert.Equal(10, buffer.TotalWritten);
+
+        var query = buffer.Query(new SystemLogFilterQuery { Limit = 10 });
+        Assert.Equal(5, query.Count);
+
+        // Ordre antichronologique : du plus récent au plus ancien (10, 9, 8, 7, 6)
+        Assert.Equal("10", query[0].Id);
+        Assert.Equal("9", query[1].Id);
+        Assert.Equal("8", query[2].Id);
+        Assert.Equal("7", query[3].Id);
+        Assert.Equal("6", query[4].Id);
+    }
+
+    [Fact]
+    public void RingBuffer_Filters_By_MinLevel_Category_Search_And_Node()
+    {
+        var buffer = new SystemLogRingBuffer(capacity: 100);
+        var node1 = Guid.NewGuid();
+        var node2 = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        buffer.Add(new SystemLogEntry("1", now.AddMinutes(1), SystemLogLevel.Information, "Encoding.Probe", "Probe GPU started", NodeId: node1));
+        buffer.Add(new SystemLogEntry("2", now.AddMinutes(2), SystemLogLevel.Warning, "Encoding.Probe", "GPU NVENC throttled", NodeId: node1));
+        buffer.Add(new SystemLogEntry("3", now.AddMinutes(3), SystemLogLevel.Error, "Encoding.Plugins", "Plugin Python crashed", NodeId: node2));
+        buffer.Add(new SystemLogEntry("4", now.AddMinutes(4), SystemLogLevel.Information, "Encoding.Plugins", "Plugin loaded successfully", NodeId: node2));
+
+        // Filter by MinLevel Warning
+        var warnEntries = buffer.Query(new SystemLogFilterQuery { MinLevel = SystemLogLevel.Warning });
+        Assert.Equal(2, warnEntries.Count);
+        Assert.Contains(warnEntries, e => e.Id == "2");
+        Assert.Contains(warnEntries, e => e.Id == "3");
+
+        // Filter by Category
+        var probeEntries = buffer.Query(new SystemLogFilterQuery { Category = "Encoding.Probe" });
+        Assert.Equal(2, probeEntries.Count);
+        Assert.All(probeEntries, e => Assert.Equal("Encoding.Probe", e.Category));
+
+        // Filter by Search term
+        var searchEntries = buffer.Query(new SystemLogFilterQuery { Search = "crashed" });
+        Assert.Single(searchEntries);
+        Assert.Equal("3", searchEntries[0].Id);
+
+        // Filter by Node
+        var node1Entries = buffer.Query(new SystemLogFilterQuery { NodeId = node1 });
+        Assert.Equal(2, node1Entries.Count);
+        Assert.All(node1Entries, e => Assert.Equal(node1, e.NodeId));
+
+        // Categories
+        var categories = buffer.GetCategories();
+        Assert.Equal(2, categories.Count);
+        Assert.Contains("Encoding.Plugins", categories);
+        Assert.Contains("Encoding.Probe", categories);
+    }
+
+    [Fact]
+    public void RingBuffer_Handles_Concurrent_Writes_Safely()
+    {
+        var buffer = new SystemLogRingBuffer(capacity: 200);
+
+        Parallel.For(0, 1000, i =>
+        {
+            buffer.Add(new SystemLogEntry(
+                Id: i.ToString(),
+                Timestamp: DateTimeOffset.UtcNow,
+                Level: SystemLogLevel.Information,
+                Category: "App.Concurrency",
+                Message: $"Concurrent message {i}"));
+        });
+
+        Assert.Equal(200, buffer.Count);
+        Assert.Equal(1000, buffer.TotalWritten);
+        var results = buffer.Query(new SystemLogFilterQuery { Limit = 50 });
+        Assert.Equal(50, results.Count);
+    }
+}
+
+public sealed class SystemLogProviderTests
+{
+    [Fact]
+    public void SystemLogger_Captures_And_Sanitizes_Through_ILogger()
+    {
+        var ringBuffer = new SystemLogRingBuffer(capacity: 100);
+        var broadcaster = new SystemLogStreamBroadcaster();
+        var nodeId = Guid.NewGuid();
+        var nodeContext = new DefaultSystemLogNodeContext(nodeId, "Worker-01");
+
+        using var provider = new SystemLogProvider(ringBuffer, broadcaster, nodeContext);
+        var logger = provider.CreateLogger("Encoding.NodeAgent.Services.ToolCapabilityProbe");
+
+        logger.LogInformation("Sonde GPU terminée avec token enc_pat_1122334455667788");
+
+        var entries = ringBuffer.Query(new SystemLogFilterQuery { Limit = 10 });
+        Assert.Single(entries);
+        var entry = entries[0];
+        Assert.Equal("Encoding.NodeAgent.Services.ToolCapabilityProbe", entry.Category);
+        Assert.Equal(SystemLogLevel.Information, entry.Level);
+        Assert.Contains("***REDACTED***", entry.Message);
+        Assert.DoesNotContain("enc_pat_1122334455667788", entry.Message);
+        Assert.Equal(nodeId, entry.NodeId);
+        Assert.Equal("Worker-01", entry.NodeName);
+    }
+}

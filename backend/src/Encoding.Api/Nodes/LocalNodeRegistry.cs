@@ -13,6 +13,8 @@ public sealed class LocalNodeRegistry(NodeRepository repository)
     private Guid? nodeId;
     private string? pendingName;
 
+    public Guid? NodeId { get { lock (gate) return nodeId; } }
+
     public static string? NormalizeName(string? value)
     {
         var name = value?.Trim();

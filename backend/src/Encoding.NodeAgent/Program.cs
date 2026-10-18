@@ -1,3 +1,4 @@
+using Encoding.Core.Logging;
 using Encoding.Core.Nodes;
 using Encoding.NodeAgent;
 using Encoding.NodeAgent.Services;
@@ -16,6 +17,15 @@ var options = NodeAgentOptions.FromConfiguration(builder.Configuration);
 builder.WebHost.ConfigureKestrel(server => server.ListenLocalhost(options.LocalApiPort));
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<WorkerIdentityStore>();
+builder.Services.AddSingleton<ISystemLogNodeContext>(sp =>
+{
+    var identityStore = sp.GetRequiredService<WorkerIdentityStore>();
+    return new DefaultSystemLogNodeContext(() =>
+    {
+        return (identityStore.CurrentId, identityStore.CurrentDisplayName);
+    });
+});
+builder.Services.AddSystemLogging();
 builder.Services.AddSingleton<ProcessToolRunner>();
 builder.Services.AddSingleton<PluginProcessHost>();
 builder.Services.AddSingleton<IPublicationGuardInvoker,PluginPublicationGuardInvoker>();

@@ -21,6 +21,7 @@ using DotNext.Net.Cluster.Consensus.Raft;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 using Encoding.Api.Mcp;
 using Encoding.Api.Tools;
+using Encoding.Core.Logging;
 
 if (args.FirstOrDefault() is McpCommand.Name or "--" + McpCommand.Name)
     Environment.Exit(await McpCommand.RunAsync(args[1..], Console.In, Console.Out, CancellationToken.None));
@@ -51,6 +52,16 @@ builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
 builder.Services.AddSingleton<FirstLinkRepository>();
 builder.Services.AddSingleton<LocalNodeRegistry>();
+builder.Services.AddSingleton<ISystemLogNodeContext>(sp =>
+{
+    var registry = sp.GetService<LocalNodeRegistry>();
+    return new DefaultSystemLogNodeContext(() =>
+    {
+        var id = registry?.NodeId;
+        return (id, "Server");
+    });
+});
+builder.Services.AddSystemLogging();
 builder.Services.AddApiProblemDetails();
 builder.Services.AddClusterAuthentication(builder.Configuration);
 builder.Services.AddSingleton<ApiTokenRepository>();
