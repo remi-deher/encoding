@@ -5,6 +5,7 @@ using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Flows.Conditions;
 using Encoding.Contracts.Nodes;
+using Encoding.Contracts.Plugins;
 
 namespace Encoding.Runtime.Tests;
 
