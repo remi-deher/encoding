@@ -356,7 +356,7 @@ internal static class ApiImprovementsScenarios
             {
                 Check(callSchemaResp.StatusCode == HttpStatusCode.OK, "MCP tools/call get_flow_schema succeeds.");
                 var schemaJson = await callSchemaResp.Content.ReadAsStringAsync();
-                Check(schemaJson.Contains("availableComponents") && schemaJson.Contains("base-file"), "MCP get_flow_schema returns available components.");
+                Check(schemaJson.Contains("availableComponents") && schemaJson.Contains("base-input-file"), "MCP get_flow_schema returns available components.");
             }
 
             // D. Appel d'outil (tools/call : create_flow)
@@ -377,7 +377,7 @@ internal static class ApiImprovementsScenarios
                         publish = true,
                         nodes = new[]
                         {
-                            new { id = "n1", component = "base-file", name = "Entree" },
+                            new { id = "n1", component = "base-input-file", name = "Entree" },
                             new { id = "n2", component = "base-audio-rules", name = "Regles" }
                         },
                         connections = new[]

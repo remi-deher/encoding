@@ -552,7 +552,7 @@ public sealed class McpService(
             mediaType = "video",
             nodes = new object[]
             {
-                new { id = "entry", component = "base-file", name = "Entrée Fichier" },
+                new { id = "entry", component = "base-input-file", name = "Entrée Fichier" },
                 new { id = "audio_rules", component = "base-audio-rules", name = "Règles Audio" }
             },
             connections = new object[]

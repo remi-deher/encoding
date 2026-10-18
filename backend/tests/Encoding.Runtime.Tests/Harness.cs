@@ -138,28 +138,39 @@ internal static partial class Harness
                 command.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(Capabilities(true),Json));
                 command.Parameters.AddWithValue("token",SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Token))); await command.ExecuteNonQueryAsync();
             }
+            var presenceOptions = new NodePresenceOptions(TimeSpan.FromHours(1));
+            var flowRepo = new FlowRepository(db);
+            var workflowRepo = new LibraryWorkflowRepository(db, validator, presenceOptions);
             var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0"); builder.Logging.ClearProviders();
             builder.Services.AddSingleton<System.Data.Common.DbDataSource>(db); builder.Services.AddSingleton(runtime); builder.Services.AddSingleton(artifacts);
-            builder.Services.AddSingleton(new ExecutionWaitRepository(db,new NodePresenceOptions(TimeSpan.FromHours(1)))); builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
-            builder.Services.AddSingleton<LibraryProcessingRepository>(); builder.Services.AddSingleton<LibraryWorkflowRepository>();
-            builder.Services.AddSingleton(validator); builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromHours(1)));
-            builder.Services.AddSingleton(registry); builder.Services.AddSingleton<FlowRepository>(); builder.Services.AddSingleton<FlowArchiveService>();
+            builder.Services.AddSingleton(new ExecutionWaitRepository(db, presenceOptions)); builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
+            builder.Services.AddSingleton(new LibraryProcessingRepository(db)); builder.Services.AddSingleton(workflowRepo);
+            builder.Services.AddSingleton(validator); builder.Services.AddSingleton(presenceOptions);
+            builder.Services.AddSingleton(registry); builder.Services.AddSingleton(flowRepo); builder.Services.AddSingleton(new FlowArchiveService(flowRepo, validator));
             app=builder.Build();
             app.Use(async (context,next) =>
             {
-                if(context.Request.Path.Value?.EndsWith("/steps/complete",StringComparison.Ordinal)==true
-                    && Interlocked.Exchange(ref rejectNextCheckpoint,0)==1)
+                try
                 {
-                    context.Response.StatusCode=StatusCodes.Status409Conflict;
-                    return;
+                    if(context.Request.Path.Value?.EndsWith("/steps/complete",StringComparison.Ordinal)==true
+                        && Interlocked.Exchange(ref rejectNextCheckpoint,0)==1)
+                    {
+                        context.Response.StatusCode=StatusCodes.Status409Conflict;
+                        return;
+                    }
+                    if(context.Request.Path.Value?.EndsWith("/finish",StringComparison.Ordinal)==true
+                        && Interlocked.Exchange(ref rejectNextFinish,0)==1)
+                    {
+                        context.Response.StatusCode=StatusCodes.Status409Conflict;
+                        return;
+                    }
+                    await next();
                 }
-                if(context.Request.Path.Value?.EndsWith("/finish",StringComparison.Ordinal)==true
-                    && Interlocked.Exchange(ref rejectNextFinish,0)==1)
+                catch (Exception ex)
                 {
-                    context.Response.StatusCode=StatusCodes.Status409Conflict;
-                    return;
+                    Console.Error.WriteLine($"[HARNESS HTTP 500] {context.Request.Method} {context.Request.Path}: {ex}");
+                    throw;
                 }
-                await next();
             });
             app.MapRuntimeEndpoints(); app.MapFlowEndpoints();
             app.MapGet("/api/v1/executions/{id:guid}",async(Guid id)=>await executions.GetAsync(id,CancellationToken.None));
@@ -255,6 +266,8 @@ internal static partial class Harness
         {
             // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
             await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            Interlocked.Exchange(ref rejectNextCheckpoint, 0);
+            Interlocked.Exchange(ref rejectNextFinish, 0);
             await ResetNodesAsync();
             var library=Guid.NewGuid(); var id=Guid.NewGuid();
             await using var command=db.CreateCommand("""
@@ -435,7 +448,7 @@ internal static partial class Harness
             await Runner("conflict-checkpoint",out _).RunAsync(lease,client,deadline.Token);
 
             var result=await executions.GetAsync(id,CancellationToken.None)??throw new InvalidOperationException("The execution must remain observable.");
-            Check(result.State=="failed","A rejected checkpoint with a valid lease must finish as failed, not wait for lease expiry and retry.");
+            Check(result.State=="failed",$"A rejected checkpoint with a valid lease must finish as failed, not wait for lease expiry and retry. State: {result.State}, Detail: {result.Detail}");
             Check(result.Detail?.Contains("refusé",StringComparison.OrdinalIgnoreCase)==true,"The failed execution records the rejected cluster operation.");
             await using(var reservation=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id"))
             {
@@ -461,7 +474,7 @@ internal static partial class Harness
             await Runner("conflict-finish",out _).RunAsync(lease,client,deadline.Token);
 
             var result=await executions.GetAsync(id,CancellationToken.None)??throw new InvalidOperationException("The execution must remain observable.");
-            Check(result.State=="failed","A rejected final completion with a valid lease must finish as failed, not wait for lease expiry and retry.");
+            Check(result.State=="failed",$"A rejected final completion with a valid lease must finish as failed, not wait for lease expiry and retry. State: {result.State}, Detail: {result.Detail}");
             Check(result.Detail?.Contains("refusé",StringComparison.OrdinalIgnoreCase)==true,"The failed execution records the rejected cluster operation.");
             await using(var reservation=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id"))
             {
