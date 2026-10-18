@@ -81,10 +81,10 @@
       "id": "snapshot",
       "name": "Noms de pistes d\u0027origine",
       "component": {
-        "pluginId": "base",
-        "pluginVersion": "1.6.0",
-        "componentId": "base-track-names",
-        "componentVersion": "1.3.0",
+        "pluginId": "subtitles",
+        "pluginVersion": "1.0.0",
+        "componentId": "subtitles-track-names",
+        "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
       },
       "configuration": {
@@ -110,9 +110,9 @@
       "id": "video",
       "name": "Vid\u00E9o HEVC",
       "component": {
-        "pluginId": "base",
-        "pluginVersion": "1.6.0",
-        "componentId": "base-transcode-video",
+        "pluginId": "video",
+        "pluginVersion": "1.0.0",
+        "componentId": "video-transcode",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
       },
@@ -126,10 +126,10 @@
       "id": "audio",
       "name": "Audio par r\u00E8gles",
       "component": {
-        "pluginId": "base",
-        "pluginVersion": "1.6.0",
-        "componentId": "base-audio-rules",
-        "componentVersion": "1.2.0",
+        "pluginId": "audio",
+        "pluginVersion": "1.0.0",
+        "componentId": "audio-rules",
+        "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
       },
       "configuration": {
@@ -153,10 +153,10 @@
       "id": "subtitles",
       "name": "Sous-titres ASS",
       "component": {
-        "pluginId": "base",
-        "pluginVersion": "1.6.0",
-        "componentId": "base-subtitle-manage",
-        "componentVersion": "1.4.0",
+        "pluginId": "subtitles",
+        "pluginVersion": "1.0.0",
+        "componentId": "subtitles-manage",
+        "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
       },
       "configuration": {
@@ -167,10 +167,10 @@
       "id": "fonts",
       "name": "Polices",
       "component": {
-        "pluginId": "base",
-        "pluginVersion": "1.6.0",
-        "componentId": "base-add-fonts",
-        "componentVersion": "1.4.0",
+        "pluginId": "subtitles",
+        "pluginVersion": "1.0.0",
+        "componentId": "subtitles-add-fonts",
+        "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
       },
       "configuration": {
@@ -181,10 +181,10 @@
       "id": "names",
       "name": "Noms de pistes",
       "component": {
-        "pluginId": "base",
-        "pluginVersion": "1.6.0",
-        "componentId": "base-track-names",
-        "componentVersion": "1.3.0",
+        "pluginId": "subtitles",
+        "pluginVersion": "1.0.0",
+        "componentId": "subtitles-track-names",
+        "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
       },
       "configuration": {

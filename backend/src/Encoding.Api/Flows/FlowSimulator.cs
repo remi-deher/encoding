@@ -72,7 +72,7 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                     variables[Text("name")] = FlowVariableValue.Parse(Text("value"));
                     detail = $"Variable « {Text("name")} » définie.";
                 }
-                else if (node.Component.PluginId == "base" && id.StartsWith("base-probe-", StringComparison.Ordinal))
+                else if ((node.Component.PluginId is "base" or "probe") && (id.StartsWith("base-probe-", StringComparison.Ordinal) || id.StartsWith("probe-", StringComparison.Ordinal)))
                 {
                     variables[Text("resultVariable", "result")] = FlowMediaValues.Probe(id, context.CurrentMetadata!.Value,
                         c.TryGetValue("trackId", out var track) ? track.GetInt32() : 0);
@@ -96,7 +96,7 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                 { output = "success"; detail = "Règle de relance bornée activée pour les pertes de worker."; }
                 else if (node.Component.PluginId == "nodes" && id == "nodes-require-direct-access")
                 { output = "success"; detail = "Contrainte d’accès direct à la bibliothèque prise en compte pour l’attribution du segment."; }
-                else if (node.Component.PluginId == "base" && Text("processingMode", "direct") == "plan")
+                else if ((node.Component.PluginId is "base" or "video" or "audio" or "subtitles") && Text("processingMode", "direct") == "plan")
                 {
                     if (variables.TryGetValue("plan.tool", out var selected) && (FlowMediaValues.IsFfmpegPlan(id) != (selected.GetString() == "ffmpeg")))
                     { output = "error"; detail = "Outil du plan incompatible avec cette action."; }

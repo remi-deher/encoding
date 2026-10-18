@@ -29,11 +29,12 @@ internal static class FlowSimulationScenarios
         var simulator = new FlowSimulator(registry, validator);
         FlowNodeDefinition Node(string nodeId, string componentId, IReadOnlyDictionary<string, JsonElement>? changes = null)
         {
-            var plugin = registry.Plugins.Single(plugin => plugin.Components.Any(component => component.Id == componentId));
-            var descriptor = plugin.Components.Single(component => component.Id == componentId);
+            var reference = registry.FindReference(componentId) ?? throw new InvalidOperationException($"Composant {componentId} introuvable.");
+            var plugin = registry.Plugins.Single(plugin => plugin.Id == reference.PluginId);
+            var descriptor = plugin.Components.Single(component => component.Id == reference.ComponentId);
             var config = descriptor.ConfigurationSchema.Fields.Where(field => field.DefaultValue is not null).ToDictionary(field => field.Id, field => field.DefaultValue!.Value);
             if (changes is not null) foreach (var pair in changes) config[pair.Key] = pair.Value;
-            return new(nodeId, null, new(plugin.Id, plugin.Version, componentId, descriptor.Version, 1), config);
+            return new(nodeId, null, new(plugin.Id, plugin.Version, descriptor.Id, descriptor.Version, 1), config);
         }
         JsonElement Rule(params ConditionExpression[] rules) => ConditionTree.Serialize(new ConditionGroup("all", rules));
         var source = Guid.NewGuid(); var worker = Guid.NewGuid(); var target = Guid.NewGuid();
@@ -130,6 +131,7 @@ internal static class FlowSimulationScenarios
     }
     private static async Task ImportAsync()
     {
+        if (Environment.GetEnvironmentVariable("ENCODING_TEST_REQUIRE_MEDIA_TOOLS") != "1" && Encoding.NodeAgent.Runtime.ProcessToolRunner.Find("mediainfo") is null) return;
         var directory = Path.Combine(Path.GetTempPath(), "encoding-simulator-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try

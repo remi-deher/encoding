@@ -84,7 +84,7 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                 var message = ValidateField(field, value, flow.MediaType,allowIncompleteConditions);
                 if (message is not null) Issue("field.invalid", path + "/configuration/" + Pointer(field.Id), message);
             }
-            if (node.Component?.PluginId == "base" && node.Component.ComponentId == "base-transcode-video")
+            if ((node.Component?.PluginId is "base" or "video") && (node.Component.ComponentId is "base-transcode-video" or "video-transcode"))
             {
                 var profile = TryGetEncodingProfile(node.Configuration);
                 var codec = node.Configuration.TryGetValue("videoCodec", out var codecValue)

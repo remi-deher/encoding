@@ -1,0 +1,467 @@
+{
+  "contractVersion": 1,
+  "id": "probe",
+  "version": "1.0.0",
+  "name": "Sondes & Analyse média",
+  "supportedHostContractVersions": [
+    1
+  ],
+  "components": [
+    {
+      "id": "probe-media",
+      "version": "1.0.0",
+      "name": "Analyser le média",
+      "description": "Lit les métadonnées du scan courant : conteneur, durée, taille et débit.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "probe-tracks",
+      "version": "1.0.0",
+      "name": "Lister les pistes",
+      "description": "Lit les identifiants, types, codecs et langues des pistes.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "probe-video",
+      "version": "1.0.0",
+      "name": "Lire les caractéristiques vidéo",
+      "description": "Lit la résolution, la fréquence d’images et le format de pixels.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "probe-audio",
+      "version": "1.0.0",
+      "name": "Lire les caractéristiques audio",
+      "description": "Lit les canaux, la fréquence d’échantillonnage et le débit.",
+      "kind": "action",
+      "mediaType": "audio",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "probe-inspect-media",
+      "version": "1.0.0",
+      "name": "Lire le rapport technique complet",
+      "description": "Lit les caractéristiques techniques disponibles avec MediaInfo.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mediainfo",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "probe-inspect-hdr",
+      "version": "1.0.0",
+      "name": "Lire les caractéristiques HDR",
+      "description": "Lit le format HDR, la profondeur de couleur et les informations disponibles.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mediainfo",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "probe-inspect-track",
+      "version": "1.0.0",
+      "name": "Lire les caractéristiques d’une piste",
+      "description": "Lit les détails techniques de la piste sélectionnée.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1
+          },
+          {
+            "id": "resultVariable",
+            "label": "Variable de résultat",
+            "type": "text",
+            "required": true,
+            "description": "Nom de la variable accessible aux actions et conditions suivantes.",
+            "defaultValue": "mediaDetails"
+          },
+          {
+            "id": "refreshMetadata",
+            "label": "Actualiser les métadonnées",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mediainfo",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "probe-export-report",
+      "version": "1.0.0",
+      "name": "Exporter le rapport JSON",
+      "description": "Produit un rapport MediaInfo JSON comme résultat du flow.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
+      },
+      "requiredTools": [
+        {
+          "toolId": "mediainfo",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
+    }
+  ]
+}

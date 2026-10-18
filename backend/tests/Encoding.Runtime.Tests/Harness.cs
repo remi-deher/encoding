@@ -89,13 +89,21 @@ internal static partial class Harness
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
-        new("plugin/base", "1.6.0", ["general"], []), new("plugin/nodes", "1.3.0", ["general"], []),new("plugin/conditions","1.2.0",["general"],[]),
-        new("plugin/plex","1.1.0",["general"],["process"]),new("ffprobe", "7.0", ["video"], []), .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
+        new("plugin/base", "1.6.0", ["general"], []),
+        new("plugin/video", "1.0.0", ["general"], []),
+        new("plugin/audio", "1.0.0", ["general"], []),
+        new("plugin/subtitles", "1.0.0", ["general"], []),
+        new("plugin/nodes", "1.3.0", ["general"], []),
+        new("plugin/conditions", "1.2.0", ["general"], []),
+        new("plugin/plex", "1.1.0", ["general"], ["process"]),
+        new("ffprobe", "7.0", ["video"], []),
+        .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
 
     private static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)
     {
-        var plugin = registry.Plugins.Single(plugin => plugin.Components.Any(component => component.Id == componentId));
-        var component = plugin.Components.Single(component => component.Id == componentId);
+        var reference = registry.FindReference(componentId) ?? throw new InvalidOperationException($"Composant {componentId} introuvable.");
+        var plugin = registry.Plugins.Single(plugin => plugin.Id == reference.PluginId);
+        var component = plugin.Components.Single(component => component.Id == reference.ComponentId);
         var configuration = component.ConfigurationSchema.Fields.Where(field => field.DefaultValue is not null).ToDictionary(field => field.Id, field => field.DefaultValue!.Value);
         foreach (var pair in values ?? []) configuration[pair.Key] = pair.Value;
         return new(id, null, new(plugin.Id, plugin.Version, component.Id, component.Version, component.ConfigurationSchema.Version), configuration);
@@ -170,37 +178,19 @@ internal static partial class Harness
             app=builder.Build();
             app.Use(async (context,next) =>
             {
-                try
+                if(context.Request.Path.Value?.EndsWith("/steps/complete",StringComparison.Ordinal)==true
+                    && Interlocked.Exchange(ref rejectNextCheckpoint,0)==1)
                 {
-                    if(context.Request.Path.Value?.EndsWith("/steps/complete",StringComparison.Ordinal)==true
-                        && Interlocked.Exchange(ref rejectNextCheckpoint,0)==1)
-                    {
-                        context.Response.StatusCode=StatusCodes.Status409Conflict;
-                        return;
-                    }
-                    if(context.Request.Path.Value?.EndsWith("/finish",StringComparison.Ordinal)==true
-                        && Interlocked.Exchange(ref rejectNextFinish,0)==1)
-                    {
-                        context.Response.StatusCode=StatusCodes.Status409Conflict;
-                        return;
-                    }
-                    await next();
-                    if(context.Response.StatusCode >= 500)
-                    {
-                        Console.Error.WriteLine($"[HARNESS 500] {context.Request.Method} {context.Request.Path} -> {context.Response.StatusCode}");
-                    }
+                    context.Response.StatusCode=StatusCodes.Status409Conflict;
+                    return;
                 }
-                catch (Exception ex)
+                if(context.Request.Path.Value?.EndsWith("/finish",StringComparison.Ordinal)==true
+                    && Interlocked.Exchange(ref rejectNextFinish,0)==1)
                 {
-                    Console.Error.WriteLine($"[HARNESS EX] {context.Request.Method} {context.Request.Path}: {ex}");
-                    if(!context.Response.HasStarted)
-                    {
-                        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-                        context.Response.ContentType = "text/plain";
-                        await context.Response.WriteAsync($"EX: {ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}");
-                    }
-                    throw;
+                    context.Response.StatusCode=StatusCodes.Status409Conflict;
+                    return;
                 }
+                await next();
             });
             app.MapRuntimeEndpoints(); app.MapFlowEndpoints();
             app.MapGet("/api/v1/executions/{id:guid}",async(Guid id)=>await executions.GetAsync(id,CancellationToken.None));

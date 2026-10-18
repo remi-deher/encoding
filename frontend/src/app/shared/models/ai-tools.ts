@@ -53,3 +53,26 @@ export interface FlowAiResponse {
   readonly explanation?: string | null;
   readonly validationIssues?: readonly FlowValidationIssue[] | null;
 }
+
+export interface AiSettings {
+  readonly defaultProvider: string;
+  readonly ollamaBaseUrl: string;
+  readonly ollamaModel: string;
+  readonly openAiBaseUrl: string;
+  readonly openAiModel: string;
+  readonly openAiApiKey?: string | null;
+  readonly hasOpenAiApiKey?: boolean;
+  readonly timeoutSeconds: number;
+  readonly subtitleBatchSize: number;
+}
+
+export interface AiSettingsUpdateRequest {
+  readonly defaultProvider?: string;
+  readonly ollamaBaseUrl?: string;
+  readonly ollamaModel?: string;
+  readonly openAiBaseUrl?: string;
+  readonly openAiModel?: string;
+  readonly openAiApiKey?: string | null;
+  readonly timeoutSeconds?: number;
+  readonly subtitleBatchSize?: number;
+}

@@ -50,7 +50,12 @@ internal static class FlowV3Scenarios
         // Éligibilité : outils et versions de plugins exigés par le flow.
         var worker = Guid.NewGuid();
         NodeToolCapability[] Caps(string baseVersion, string plexVersion, bool mkv = true, bool ffmpeg = true) => [
-            new("plugin/base", baseVersion, ["general"], []), new("plugin/plex", plexVersion, ["general"], ["process"]), new("ffprobe", "7.0", ["video"], []),
+            new("plugin/base", baseVersion, ["general"], []),
+            new("plugin/video", "1.0.0", ["general"], []),
+            new("plugin/audio", "1.0.0", ["general"], []),
+            new("plugin/subtitles", "1.0.0", ["general"], []),
+            new("plugin/plex", plexVersion, ["general"], ["process"]),
+            new("ffprobe", "7.0", ["video"], []),
             .. ffmpeg ? new[] { new NodeToolCapability("ffmpeg", "7.0", ["video"], ["cpu"], ["libx265", "aac", "ac3"]) } : [],
             .. mkv ? new[] { new NodeToolCapability("mkvtoolnix", "81.0", ["video"], []) } : []];
         var baseVersion = registry.Plugins.Single(item => item.Id == "base").Version; var plexVersion = registry.Plugins.Single(item => item.Id == "plex").Version;

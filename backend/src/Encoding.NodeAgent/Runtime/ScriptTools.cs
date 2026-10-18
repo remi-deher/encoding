@@ -25,11 +25,21 @@ internal static class ScriptTools
           const cp = require('child_process'), path = require('path'), fs = require('fs');
           const allowed = __ALLOWED__;
           const cwd = process.cwd();
+          const extensions = process.platform === 'win32' ? (process.env.PATHEXT || '.EXE;.BAT;.CMD').split(';').map(e => e.toLowerCase()) : [''];
           const find = name => {
+            const hasExt = path.extname(name) !== '';
+            const names = hasExt || process.platform !== 'win32' ? [name] : [name, ...extensions.map(ext => name + ext)];
             for (const dir of (process.env.PATH || '').split(path.delimiter)) {
               if (!dir) continue;
-              const candidate = path.join(dir, name);
-              try { if (fs.statSync(candidate).isFile()) { fs.accessSync(candidate, fs.constants.X_OK); return candidate; } } catch (e) { }
+              for (const n of names) {
+                const candidate = path.join(dir, n);
+                try {
+                  if (fs.statSync(candidate).isFile()) {
+                    if (process.platform !== 'win32') fs.accessSync(candidate, fs.constants.X_OK);
+                    return candidate;
+                  }
+                } catch (e) { }
+              }
             }
             return null;
           };
@@ -58,15 +68,11 @@ internal static class ScriptTools
         """.Replace("__ALLOWED__", AllowedJson).Replace("__TIMEOUT__", DefaultToolTimeoutSeconds.ToString());
 
     public static string Python => """
-        import subprocess as _sp, os as _os, time as _time, sys as _sys
+        import subprocess as _sp, os as _os, time as _time, sys as _sys, shutil as _shutil
         class _Tools:
             allowed = tuple(__ALLOWED__)
             def _find(self, name):
-                for directory in (_os.environ.get('PATH') or '').split(_os.pathsep):
-                    candidate = _os.path.join(directory, name) if directory else None
-                    if candidate and _os.path.isfile(candidate) and _os.access(candidate, _os.X_OK):
-                        return candidate
-                return None
+                return _shutil.which(name)
             def path(self, name):
                 return self._find(name) if name in self.allowed else None
             def run(self, name, args=(), timeout_seconds=__TIMEOUT__, input=None):
