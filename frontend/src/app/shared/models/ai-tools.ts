@@ -34,21 +34,29 @@ export interface FlowAiGenerateRequest {
   readonly mediaType: string;
   readonly userPrompt: string;
   readonly provider?: string | null;
+  readonly sessionId?: string | null;
+  readonly requestId?: string | null;
 }
 
 export interface FlowAiRefactorRequest {
   readonly currentFlow: FlowDocument;
   readonly userPrompt: string;
   readonly provider?: string | null;
+  readonly sessionId?: string | null;
+  readonly requestId?: string | null;
 }
 
 export interface FlowAiExplainRequest {
   readonly flow: FlowDocument;
   readonly provider?: string | null;
+  readonly sessionId?: string | null;
+  readonly requestId?: string | null;
 }
 
 export interface FlowAiResponse {
   readonly success: boolean;
+  readonly sessionId?: string | null;
+  readonly requestId?: string | null;
   readonly flow?: FlowDocument | null;
   readonly explanation?: string | null;
   readonly validationIssues?: readonly FlowValidationIssue[] | null;
@@ -75,4 +83,14 @@ export interface AiSettingsUpdateRequest {
   readonly openAiApiKey?: string | null;
   readonly timeoutSeconds?: number;
   readonly subtitleBatchSize?: number;
+}
+
+export interface AiNodeAvailability {
+  readonly nodeId: string;
+  readonly name: string;
+  readonly providers: readonly string[];
+  readonly reachable: boolean;
+}
+export interface AiClusterView {
+  readonly nodes: readonly AiNodeAvailability[];
 }

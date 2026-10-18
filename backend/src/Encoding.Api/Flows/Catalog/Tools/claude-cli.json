@@ -6,17 +6,34 @@
   "category": "ai-text",
   "executable": "claude",
   "probe": {
-    "versionArgs": ["--version"],
+    "versionArgs": [
+      "--version"
+    ],
     "versionRegex": "claude(?:-code)?\\s+v?(?<version>[0-9\\.]+)",
-    "smokeTestArgs": ["--help"]
+    "smokeTestArgs": [
+      "--help"
+    ]
   },
   "capabilitiesExposed": [
     "ai-text-generation",
     "subtitles-translation"
   ],
   "auth": {
-    "type": "device-code",
-    "loginCommand": ["claude", "auth", "login"],
-    "statusCommand": ["claude", "auth", "status"]
+    "type": "oauth-token",
+    "loginCommand": [
+      "claude",
+      "auth",
+      "login"
+    ],
+    "statusCommand": [
+      "claude",
+      "auth",
+      "status"
+    ],
+    "setupCommand": [
+      "claude",
+      "setup-token"
+    ],
+    "tokenEnvironmentVariable": "CLAUDE_CODE_OAUTH_TOKEN"
   }
 }

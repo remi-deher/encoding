@@ -1,3 +1,4 @@
+using Encoding.Core.Runtime;
 using System.Text.Json;
 using Encoding.NodeAgent.Runtime;
 using static Encoding.Plugins.Tests.Support;

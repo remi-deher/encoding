@@ -1,3 +1,4 @@
+using Encoding.Core.Runtime;
 using Encoding.Contracts.Logging;
 using Encoding.Core.Logging;
 using Encoding.Core.Nodes;

@@ -41,7 +41,7 @@ public sealed class OpenAiCompatibleAiClient(HttpClient httpClient, string model
 
             if (!response.IsSuccessStatusCode)
             {
-                return new AiCompletionResult(false, string.Empty, $"Erreur API HTTP {(int)response.StatusCode}: {content}");
+                return new AiCompletionResult(false, string.Empty, $"Le fournisseur IA a refusé la requête (HTTP {(int)response.StatusCode}). Vérifiez la configuration et les quotas.");
             }
 
             using var doc = JsonDocument.Parse(content);

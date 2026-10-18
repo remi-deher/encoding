@@ -30,58 +30,17 @@ public sealed class AiToolTests
     }
 
     [Fact]
-    public void DeviceCodeAuthService_Lifecycle()
+    public async Task MissingCliNeverCreatesAnAuthorizationOrFakeCode()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "enc_ai_test_" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            var config = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["AiTools:CredentialsDirectory"] = tempDir
-                })
-                .Build();
-
-            var service = new DeviceCodeAuthService(config);
-
-            // 1. Initial status: unconfigured
-            var status = service.GetStatus("codex-cli");
-            Assert.Equal("unconfigured", status.State);
-
-            // 2. Start device auth
-            var start = service.StartDeviceAuth("codex-cli");
-            Assert.Equal("codex-cli", start.ToolId);
-            Assert.False(string.IsNullOrWhiteSpace(start.Prompt.UserCode));
-            Assert.Contains("chatgpt.com", start.Prompt.VerificationUri);
-
-            // 3. Status is now pending
-            var pendingStatus = service.GetStatus("codex-cli");
-            Assert.Equal("pending", pendingStatus.State);
-
-            // 4. Complete authorization
-            var completed = service.CompleteAuthorization("codex-cli", "mon-compte-chatgpt");
-            Assert.True(completed);
-
-            // 5. Status is now authorized
-            var authStatus = service.GetStatus("codex-cli");
-            Assert.Equal("authorized", authStatus.State);
-            Assert.Equal("mon-compte-chatgpt", authStatus.AccountName);
-
-            // 6. List tools shows authorized
-            var tools = service.ListTools();
-            var codex = tools.Single(t => t.Id == "codex-cli");
-            Assert.Equal("authorized", codex.AuthStatus.State);
-
-            // 7. Revoke
-            var revoked = service.RevokeAuth("codex-cli");
-            Assert.True(revoked);
-            var afterRevoke = service.GetStatus("codex-cli");
-            Assert.Equal("unconfigured", afterRevoke.State);
-        }
-        finally
-        {
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
-        }
+        using var fixture = new AiCliTestProfile();
+        var service = new DeviceCodeAuthService(fixture.Runtime);
+        Assert.Equal("unconfigured", (await service.GetStatusAsync("codex-cli")).State);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartDeviceAuthAsync("codex-cli", CancellationToken.None));
+        Directory.CreateDirectory(fixture.Runtime.Profile("codex-cli"));
+        File.WriteAllText(Path.Combine(fixture.Runtime.Profile("codex-cli"), "credentials.json"), "{}");
+        Assert.Equal("unconfigured", (await service.GetStatusAsync("codex-cli")).State);
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GetStatusAsync("../other"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.StartDeviceAuthAsync("claude-cli", CancellationToken.None));
     }
 
     [Fact]
@@ -97,36 +56,25 @@ public sealed class AiToolTests
     }
 
     [Fact]
-    public async Task CliAiTextClient_SimulatedResponse_WhenExecutableMissing()
+    public async Task CliAiTextClientFailsWhenExecutableMissing()
     {
-        var client = new CliAiTextClient("mock-ai-cli", Path.GetTempPath());
-        var res = await client.GenerateTextAsync(new AiPrompt("Système", "Traduire ce SRT : 1\n00:00:01,000 --> 00:00:04,000\nHello\n"));
-        Assert.True(res.Success);
-        Assert.Contains("Traduction", res.Content);
+        using var fixture = new AiCliTestProfile();
+        var result = await new CliAiTextClient("codex-cli", fixture.Runtime).GenerateTextAsync(new AiPrompt("System", "Hello"));
+        Assert.False(result.Success);
+        Assert.Empty(result.Content);
     }
 
     [Fact]
-    public async Task FlowAiGeneratorService_Generates_Valid_Flow()
+    public async Task FlowGenerationDoesNotReportSyntheticSuccessWhenCliIsMissing()
     {
-        var config = new ConfigurationBuilder().Build();
-        var registry = new FlowComponentRegistry(config);
+        using var fixture = new AiCliTestProfile();
+        var registry = new FlowComponentRegistry(fixture.Configuration);
         var validator = new FlowDefinitionValidator(registry);
-        var promptBuilder = new FlowCatalogPromptBuilder(registry);
-        var factory = new AiClientFactory(config, new MockHttpClientFactory());
-        var service = new FlowAiGeneratorService(factory, promptBuilder, validator, registry);
-
-        var promptText = promptBuilder.BuildSystemPrompt("video");
-        Assert.Contains("video-transcode", promptText);
-        Assert.Contains("RÈGLES D'OR", promptText);
-
-        var response = await service.GenerateFlowAsync(new FlowAiGenerateRequest("video", "Encoder en HEVC avec audio AAC"));
-        Assert.True(response.Success);
-        Assert.NotNull(response.Flow);
-        Assert.Equal("video", response.Flow.MediaType);
-        Assert.True(response.Flow.Nodes.Count >= 1);
-
-        var validationResult = validator.Validate(response.Flow);
-        Assert.True(validationResult.IsValid);
+        var factory = new AiClientFactory(fixture.Configuration, new MockHttpClientFactory(), cliRuntime: fixture.Runtime);
+        var service = new FlowAiGeneratorService(factory, new FlowCatalogPromptBuilder(registry), validator);
+        var response = await service.GenerateFlowAsync(new FlowAiGenerateRequest("video", "Encoder en HEVC"));
+        Assert.False(response.Success);
+        Assert.Null(response.Flow);
     }
 
     [Fact]
@@ -273,6 +221,20 @@ public sealed class AiToolTests
         {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         }
+    }
+
+    [Fact]
+    public void ApiKeyPersistsProtectedAndInvalidSettingsDoNotOverwriteSavedState()
+    {
+        using var profile = new AiCliTestProfile();
+        var service = new AiSettingsService(profile.Configuration);
+        service.UpdateSettings(new(OpenAiApiKey: "test-private-key"));
+        var saved = File.ReadAllText(Path.Combine(AiCliRuntime.ResolveRoot(profile.Configuration), "settings.json"));
+        Assert.DoesNotContain("test-private-key", saved);
+        Assert.Equal("test-private-key", new AiSettingsService(profile.Configuration).GetSettings().OpenAiApiKey);
+        Assert.Throws<ArgumentException>(() => service.UpdateSettings(new(TimeoutSeconds: 0)));
+        Assert.Equal(120, service.GetSettings().TimeoutSeconds);
+        Assert.Throws<ArgumentException>(() => service.UpdateSettings(new(DefaultProvider: "unknown")));
     }
 
     private sealed class MockHttpClientFactory : IHttpClientFactory

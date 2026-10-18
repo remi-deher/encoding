@@ -30,6 +30,12 @@ if (args.FirstOrDefault() == PeerAuthorityDatabaseCommand.Name)
     Environment.Exit(await PeerAuthorityDatabaseCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
 if (args.FirstOrDefault() is { } peerCommand && PeerOperationsCommand.Names.Contains(peerCommand))
     Environment.Exit(await PeerOperationsCommand.RunAsync(peerCommand, args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
+if (args.FirstOrDefault() == "--isolated-process")
+{
+    Environment.Exit(Encoding.Core.Runtime.ProcessSandbox.Run(args));
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.AddOperations();
 var peerClusterOptions = builder.AddPeerCluster();
@@ -87,6 +93,12 @@ builder.Services.AddSingleton<PluginConnectionTester>();
 builder.Services.AddSingleton<McpService>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();
 builder.Services.AddSingleton<IntegrationTriggerService>();
+builder.Services.AddSingleton<AiCliRuntime>();
+builder.Services.AddSingleton<AiClusterStore>();
+builder.Services.AddSingleton<AiClusterTransport>();
+builder.Services.AddSingleton<AiClusterService>();
+builder.Services.AddHttpClient("AiCluster", client => client.Timeout = Timeout.InfiniteTimeSpan)
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<DeviceCodeAuthService>();
 builder.Services.AddSingleton<AiSettingsService>();
 builder.Services.AddSingleton<AiClientFactory>();

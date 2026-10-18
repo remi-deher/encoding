@@ -23,6 +23,8 @@ public static class PeerRequestRouting
         { "Host", "Connection", "Keep-Alive", "Transfer-Encoding", "Upgrade", "Proxy-Authorization", "Cookie", "Set-Cookie", PrincipalHeader, ProtocolHeader, SchemaHeader };
 
     public static bool IsClusterRoute(PathString path) => path.StartsWithSegments("/api/v1")
+        && !path.StartsWithSegments("/api/v1/tools/ai")
+        && path != "/api/v1/cluster/ai/exchange"
         && !path.StartsWithSegments("/api/v1/auth") && !path.StartsWithSegments("/api/v1/local-node")
         && !path.StartsWithSegments("/api/v1/peer-cluster") && !path.StartsWithSegments("/api/v1/node-mode");
 

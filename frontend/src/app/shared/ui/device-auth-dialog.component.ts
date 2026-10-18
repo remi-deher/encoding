@@ -1,5 +1,14 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  OnInit,
+  inject,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { NotificationService } from '../services/notification.service';
+import { Subscription } from 'rxjs';
 import {
   MAT_DIALOG_DATA,
   MatDialogActions,
@@ -49,7 +58,7 @@ export interface DeviceAuthDialogData {
 
         <div class="code-box">
           <span class="code-value">{{ data.prompt.userCode }}</span>
-          <button mat-stroked-button type="button" (click)="copyCode()">
+          <button matButton="outlined" type="button" (click)="copyCode()">
             <mat-icon>{{ copied() ? 'check' : 'content_copy' }}</mat-icon>
             {{ copied() ? 'Copié !' : 'Copier le code' }}
           </button>
@@ -57,8 +66,7 @@ export interface DeviceAuthDialogData {
 
         <div class="action-link-box">
           <a
-            mat-flat-button
-            color="primary"
+            matButton="filled"
             [href]="data.prompt.verificationUri"
             target="_blank"
             rel="noopener noreferrer"
@@ -77,27 +85,31 @@ export interface DeviceAuthDialogData {
               <mat-icon>check_circle</mat-icon> Compte associé avec succès !
             </span>
           } @else {
-            <button mat-button type="button" (click)="checkStatus()">
+            <button
+              matButton="text"
+              type="button"
+              [disabled]="isChecking()"
+              (click)="checkStatus()"
+            >
               <mat-icon>refresh</mat-icon> J'ai validé le code
             </button>
           }
         </div>
+        @if (statusMessage()) {
+          <p role="status">{{ statusMessage() }}</p>
+        }
       </mat-dialog-content>
 
       <mat-dialog-actions align="end">
-        <button mat-button type="button" (click)="close()">Fermer</button>
-        @if (!isAuthorized()) {
-          <button mat-stroked-button type="button" (click)="simulateValidation()">
-            Simuler validation
-          </button>
-        }
+        <button matButton="text" type="button" (click)="close()">Fermer</button>
       </mat-dialog-actions>
     </section>
   `,
   styles: [
     `
       .device-auth-dialog {
-        min-width: 380px;
+        min-width: 0;
+        width: 100%;
         max-width: 520px;
       }
       .device-auth-body {
@@ -117,16 +129,17 @@ export interface DeviceAuthDialogData {
         align-items: center;
         justify-content: space-between;
         padding: 12px 16px;
-        background: var(--mat-sys-surface-container-high, #1e1e1e);
-        border: 1px solid var(--mat-sys-outline-variant, #333);
-        border-radius: 8px;
+        background: var(--surface-container-high);
+        border-radius: var(--radius-md);
+        flex-wrap: wrap;
+        gap: var(--space-3);
       }
       .code-value {
         font-family: monospace;
         font-size: 1.4rem;
         font-weight: 700;
         letter-spacing: 2px;
-        color: var(--mat-sys-primary, #64b5f6);
+        color: var(--mat-sys-primary);
       }
       .action-link-box {
         display: flex;
@@ -144,18 +157,43 @@ export interface DeviceAuthDialogData {
         display: flex;
         align-items: center;
         gap: 6px;
-        color: #4caf50;
+        color: var(--success);
         font-weight: 600;
       }
     `,
   ],
 })
-export class DeviceAuthDialogComponent {
+export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
   readonly data = inject<DeviceAuthDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject(MatDialogRef<DeviceAuthDialogComponent>);
   private readonly aiService = inject(AiToolsService);
   private readonly clipboard = inject(ClipboardService);
 
+  private readonly notifications = inject(NotificationService);
+  private polling?: ReturnType<typeof setInterval>;
+  private subscription?: Subscription;
+  private expiresAt = 0;
+  readonly expired = signal(false);
+  readonly statusMessage = signal('');
+  ngOnInit(): void {
+    this.expiresAt = Date.now() + this.data.prompt.expiresInSeconds * 1000;
+    this.polling = setInterval(
+      () => this.checkStatus(),
+      Math.max(2, this.data.prompt.intervalSeconds) * 1000,
+    );
+    this.checkStatus();
+  }
+  ngOnDestroy(): void {
+    clearInterval(this.polling);
+    this.subscription?.unsubscribe();
+    if (!this.isAuthorized())
+      this.aiService.cancelAuth(this.data.toolId).subscribe({
+        error: () =>
+          this.notifications.show(
+            'La tentative expirera automatiquement si son annulation n’a pas pu être confirmée.',
+          ),
+      });
+  }
   readonly copied = signal(false);
   readonly isChecking = signal(false);
   readonly isAuthorized = signal(false);
@@ -167,28 +205,34 @@ export class DeviceAuthDialogComponent {
   }
 
   checkStatus(): void {
+    if (this.isChecking() || this.isAuthorized() || this.expired()) return;
+    if (Date.now() >= this.expiresAt) {
+      this.expired.set(true);
+      this.statusMessage.set('Le code a expiré. Fermez puis relancez l’association.');
+      clearInterval(this.polling);
+      return;
+    }
     this.isChecking.set(true);
-    this.aiService.getDeviceAuthStatus(this.data.toolId).subscribe({
+    this.subscription = this.aiService.getDeviceAuthStatus(this.data.toolId).subscribe({
       next: (status) => {
         this.isChecking.set(false);
         if (status.state === 'authorized') {
           this.isAuthorized.set(true);
-          setTimeout(() => this.dialogRef.close({ success: true }), 1200);
+          clearInterval(this.polling);
+          this.notifications.show('Compte associé sur ce nœud.');
+          this.dialogRef.close({ success: true });
+        } else if (status.state === 'failed' || status.state === 'expired') {
+          this.expired.set(true);
+          this.statusMessage.set(
+            status.errorMessage || 'La connexion a échoué ou a expiré. Relancez l’association.',
+          );
+          clearInterval(this.polling);
         }
       },
-      error: () => this.isChecking.set(false),
-    });
-  }
-
-  simulateValidation(): void {
-    this.isChecking.set(true);
-    this.aiService.completeAuth(this.data.toolId).subscribe({
-      next: () => {
+      error: () => {
         this.isChecking.set(false);
-        this.isAuthorized.set(true);
-        setTimeout(() => this.dialogRef.close({ success: true }), 1000);
+        this.statusMessage.set('Vérification indisponible. Nouvelle tentative automatique.');
       },
-      error: () => this.isChecking.set(false),
     });
   }
 

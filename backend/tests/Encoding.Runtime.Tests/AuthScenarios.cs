@@ -93,6 +93,7 @@ internal static class AuthScenarios
             builder.UseSetting("FlowBackups:Directory", Path.Combine(directory, "backups"));
             builder.UseSetting("Runtime:ArtifactDirectory", Path.Combine(directory, "artifacts"));
             builder.UseSetting("PluginSettings:KeyDirectory", Path.Combine(directory, "keys"));
+            builder.UseSetting("AiTools:CredentialsDirectory", Path.Combine(directory, "ai-tools"));
             foreach (var (key, value) in settings) builder.UseSetting(key, value);
             // Les tâches de fond (mDNS, surveillance, sauvegardes) ne participent pas à ces scénarios.
             builder.ConfigureServices(services =>
@@ -170,6 +171,16 @@ internal static class AuthScenarios
             Check((await setup.Content.ReadFromJsonAsync<CurrentUserResponse>(Json))!.Role == UserRole.Admin, "The first account is an administrator.");
         }
         Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("autre", AdminPassword), csrf: false) == HttpStatusCode.Conflict, "Setup cannot run twice.");
+        using (var savedAi = await admin.SendAsync(HttpMethod.Put, "/api/v1/tools/ai/settings", new Encoding.Contracts.Tools.AiSettingsUpdateRequest(OpenAiApiKey: "private-ai-http-test-key")))
+        {
+            Check(savedAi.IsSuccessStatusCode, "An administrator can configure AI on a fresh standalone server.");
+            var text = await savedAi.Content.ReadAsStringAsync();
+            Check(!text.Contains("private-ai-http-test-key") && text.Contains("\"hasOpenAiApiKey\":true"), "Saving AI settings never echoes the secret.");
+        }
+        using (var readAi = await admin.SendAsync(HttpMethod.Get, "/api/v1/tools/ai/settings"))
+            Check(!(await readAi.Content.ReadAsStringAsync()).Contains("private-ai-http-test-key"), "Reading AI settings never returns the secret.");
+        Check(await admin.StatusAsync(post, "/api/v1/tools/ai/codex-cli/auth/complete") is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed,
+            "There is no endpoint to simulate AI authorization.");
         var concurrent = await Task.WhenAll(Enumerable.Range(0, 1).Select(_ => anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("racer", AdminPassword), csrf: false)));
         Check(concurrent.All(code => code == HttpStatusCode.Conflict), "A later setup attempt never creates a second administrator.");
 
@@ -468,6 +479,7 @@ internal static class AuthScenarios
             "POST /api/v1/auth/setup",
             "POST /api/v1/cluster/join",
             "POST /api/v1/cluster/reconciliation/exchange",
+            "POST /api/v1/cluster/ai/exchange",
             "POST /api/v1/integrations/{pluginId}/webhook",
             "POST /api/v1/nodes/enroll",
             "POST /api/v1/nodes/enrollment-requests",

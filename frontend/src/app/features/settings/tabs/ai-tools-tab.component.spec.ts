@@ -2,6 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { of } from 'rxjs';
+import { signal } from '@angular/core';
+import { AuthService } from '../../../core/auth/auth.service';
 import { AiToolsTabComponent } from './ai-tools-tab.component';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -9,6 +11,7 @@ import { AiSettings, AiToolInfo } from '../../../shared/models/ai-tools';
 
 describe('AiToolsTabComponent', () => {
   let aiServiceMock: {
+    getCluster: ReturnType<typeof vi.fn>;
     listTools: ReturnType<typeof vi.fn>;
     getSettings: ReturnType<typeof vi.fn>;
     updateSettings: ReturnType<typeof vi.fn>;
@@ -46,6 +49,7 @@ describe('AiToolsTabComponent', () => {
 
   async function setup() {
     aiServiceMock = {
+      getCluster: vi.fn().mockReturnValue(of({ nodes: [] })),
       listTools: vi.fn().mockReturnValue(of(sampleTools)),
       getSettings: vi.fn().mockReturnValue(of(sampleSettings)),
       updateSettings: vi.fn().mockReturnValue(of(sampleSettings)),
@@ -60,6 +64,7 @@ describe('AiToolsTabComponent', () => {
     await TestBed.configureTestingModule({
       imports: [AiToolsTabComponent],
       providers: [
+        { provide: AuthService, useValue: { isAdmin: signal(true) } },
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: AiToolsService, useValue: aiServiceMock },
@@ -79,6 +84,26 @@ describe('AiToolsTabComponent', () => {
     expect(component.defaultProvider()).toBe('ollama');
     expect(component.hasOpenAiApiKey()).toBe(true);
     expect(component.tools().length).toBe(1);
+  });
+
+  it('sélectionner une fiche ne change pas le moteur par défaut', async () => {
+    const { component, fixture } = await setup();
+    component.selectedProvider.set('claude-cli');
+    fixture.detectChanges();
+    expect(component.defaultProvider()).toBe('ollama');
+    expect(fixture.nativeElement.textContent).not.toContain('Simuler');
+    expect(fixture.nativeElement.querySelectorAll('input[name="ollamaModel"]').length).toBe(0);
+  });
+
+  it('préserve les modifications pendant une actualisation des connexions', async () => {
+    const { component } = await setup();
+    expect(component.hasUnsavedChanges()).toBe(false);
+    component.ollamaModel.set('unsaved-model');
+    component.openAiApiKey.set('unsaved-private-key');
+    component.refreshTools();
+    expect(component.hasUnsavedChanges()).toBe(true);
+    expect(component.ollamaModel()).toBe('unsaved-model');
+    expect(component.openAiApiKey()).toBe('unsaved-private-key');
   });
 
   it('enregistre les paramètres modifiés via updateSettings', async () => {
