@@ -132,6 +132,19 @@ import { MediaType } from '../../../shared/models/media-type';
         }
 
         <button
+          matButton="outlined"
+          type="button"
+          class="tool-btn"
+          [disabled]="disabled() || saving()"
+          (click)="aiAssistantRequested.emit()"
+          matTooltip="Assistant IA : générer, modifier ou expliquer le flow"
+          aria-label="Ouvrir l'assistant IA"
+        >
+          <span class="btn-icon" aria-hidden="true">✨</span>
+          <span>Assistant IA</span>
+        </button>
+
+        <button
           matButton="text"
           type="button"
           class="toggle-btn"
@@ -508,6 +521,7 @@ export class FlowCommandBarComponent {
   readonly validateRequested = output<void>();
   readonly simulateRequested = output<void>();
   readonly packCreationRequested = output<void>();
+  readonly aiAssistantRequested = output<void>();
   readonly togglePalette = output<void>();
   readonly toggleInspector = output<void>();
   readonly toggleTray = output<void>();

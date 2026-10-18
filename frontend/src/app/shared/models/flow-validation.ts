@@ -90,13 +90,15 @@ export interface FlowSummary {
   readonly updatedAt: string;
 }
 
+export interface FlowValidationIssue {
+  readonly code: string;
+  readonly path: string;
+  readonly message: string;
+}
+
 export interface FlowValidationResult {
   readonly isValid: boolean;
-  readonly issues: readonly {
-    readonly code: string;
-    readonly path: string;
-    readonly message: string;
-  }[];
+  readonly issues: readonly FlowValidationIssue[];
 }
 
 /** Resolve only exact component/schema versions and explicitly declared plugin compatibility. */

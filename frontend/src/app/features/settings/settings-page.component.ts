@@ -14,15 +14,17 @@ import { McpServerTabComponent } from './tabs/mcp-server-tab.component';
 import { SystemTabComponent } from './tabs/system-tab.component';
 import { UserManagementTabComponent } from './tabs/user-management-tab.component';
 import { WebhooksTabComponent } from './tabs/webhooks-tab.component';
+import { AiToolsTabComponent } from './tabs/ai-tools-tab.component';
 
 export type SettingsMainTab = 'security' | 'integrations' | 'system';
 export type SecuritySubTab = 'tokens' | 'users';
-export type IntegrationsSubTab = 'mcp' | 'webhooks';
+export type IntegrationsSubTab = 'mcp' | 'webhooks' | 'ai';
 
 @Component({
   selector: 'app-settings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    AiToolsTabComponent,
     ApiTokenTabComponent,
     CategoryTabsComponent,
     ManagementCatalogTemplateComponent,
@@ -86,6 +88,14 @@ export type IntegrationsSubTab = 'mcp' | 'webhooks';
               <button
                 type="button"
                 class="subtab-btn"
+                [class.is-active]="integrationsTab() === 'ai'"
+                (click)="onSubTabChange('ai')"
+              >
+                Outils IA & CLIs
+              </button>
+              <button
+                type="button"
+                class="subtab-btn"
                 [class.is-active]="integrationsTab() === 'webhooks'"
                 (click)="onSubTabChange('webhooks')"
               >
@@ -95,6 +105,8 @@ export type IntegrationsSubTab = 'mcp' | 'webhooks';
 
             @if (integrationsTab() === 'mcp') {
               <app-mcp-server-tab [tokens]="cachedTokens()" />
+            } @else if (integrationsTab() === 'ai') {
+              <app-ai-tools-tab />
             } @else {
               <app-webhooks-tab />
             }
@@ -181,9 +193,9 @@ export class SettingsPageComponent {
     if (tab === 'tokens' || tab === 'users') {
       this.activeMainTab.set('security');
       this.securityTab.set(tab);
-    } else if (tab === 'mcp' || tab === 'webhooks') {
+    } else if (tab === 'mcp' || tab === 'webhooks' || tab === 'ai') {
       this.activeMainTab.set('integrations');
-      this.integrationsTab.set(tab);
+      this.integrationsTab.set(tab as IntegrationsSubTab);
     } else if (tab === 'system') {
       this.activeMainTab.set('system');
     }

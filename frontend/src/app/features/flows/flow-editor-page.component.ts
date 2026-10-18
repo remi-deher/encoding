@@ -20,6 +20,8 @@ import {
   signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
+import { FlowAiAssistantDialogComponent } from './editor/flow-ai-assistant-dialog.component';
 import {
   GENERIC_FILE_INPUT,
   MEDIA_INPUT_COMPONENTS,
@@ -164,6 +166,7 @@ export class FlowEditorPageComponent {
   private readonly editorRouter = inject(Router);
   private readonly packApi = inject(FlowComponentPacks);
   private readonly pageTitleService = inject(PageTitle);
+  private readonly dialog = inject(MatDialog);
 
   // Workbench shell state
   protected readonly paletteOpen = signal(true);
@@ -981,6 +984,52 @@ export class FlowEditorPageComponent {
         position: { x: 0, y: 0 },
       };
     });
+  }
+
+  protected async openAiAssistant(): Promise<void> {
+    const currentDoc = await this.currentFlowDocument();
+    const dialogRef = this.dialog.open(FlowAiAssistantDialogComponent, {
+      data: {
+        mediaType: this.flowMediaType(),
+        currentFlow: currentDoc,
+      },
+    });
+
+    dialogRef.afterClosed().subscribe((result: { flow?: FlowDocument } | undefined) => {
+      if (result?.flow) {
+        void this.loadAiFlow(result.flow);
+      }
+    });
+  }
+
+  private async currentFlowDocument(): Promise<FlowDocument | null> {
+    try {
+      return await this.serverValidation.document(
+        this.validationFlowId,
+        this.storedVersion() + 1,
+        this.flowTitle(),
+        this.flowMediaType(),
+        this.nodes(),
+        this.connections(),
+        this.componentPacks(),
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  private async loadAiFlow(definition: FlowDocument): Promise<void> {
+    try {
+      const plugins = await this.serverValidation.catalog();
+      this.savedName.set(definition.name);
+      this.flowMediaType.set(definition.mediaType);
+      const nodes = this.mapDefinitionNodes(definition, plugins);
+      this.updateGraphCounters(definition, nodes);
+      this.setGraph(nodes, definition.connections);
+      this.notifications.show('Flow généré par l\'IA appliqué avec succès !');
+    } catch {
+      this.notifications.show('Erreur lors de l\'application du flow généré.');
+    }
   }
 
   private updateGraphCounters(definition: FlowDocument, nodes: readonly FlowGraphNode[]): void {
