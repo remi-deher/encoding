@@ -1,0 +1,22 @@
+{
+  "$schema": "https://encoding.io/schemas/v1/tool.json",
+  "id": "codex-cli",
+  "name": "OpenAI Codex / ChatGPT CLI",
+  "description": "Interface en ligne de commande officielle pour ChatGPT / Codex.",
+  "category": "ai-text",
+  "executable": "codex",
+  "probe": {
+    "versionArgs": ["--version"],
+    "versionRegex": "codex(?:-cli)?\\s+v?(?<version>[0-9\\.]+)",
+    "smokeTestArgs": ["--help"]
+  },
+  "capabilitiesExposed": [
+    "ai-text-generation",
+    "subtitles-translation"
+  ],
+  "auth": {
+    "type": "device-code",
+    "loginCommand": ["codex", "auth", "login", "--device-code"],
+    "statusCommand": ["codex", "auth", "status"]
+  }
+}

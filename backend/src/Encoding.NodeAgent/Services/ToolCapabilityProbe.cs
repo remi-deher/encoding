@@ -43,7 +43,8 @@ public sealed class ToolCapabilityProbe(
                 ("ffmpeg", ["ffmpeg"], ["-version"]), ("ffprobe", ["ffprobe"], ["-version"]),
                 ("mkvtoolnix", ["mkvmerge"], ["--version"]), ("mediainfo", ["mediainfo"], ["--Version"]),
                 ("imagemagick", ["magick", "convert"], ["-version"]), ("python", ["python3", "python"], ["--version"]),
-                ("javascript", ["node"], ["--version"])
+                ("javascript", ["node"], ["--version"]),
+                ("codex-cli", ["codex", "codex-cli"], ["--version"]), ("claude-cli", ["claude", "claude-cli"], ["--version"])
             })
             {
                 if (id is "python" or "javascript" && !ProcessSandbox.IsAvailable) continue;
