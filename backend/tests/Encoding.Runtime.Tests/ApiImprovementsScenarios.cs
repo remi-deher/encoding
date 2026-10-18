@@ -388,9 +388,9 @@ internal static class ApiImprovementsScenarios
                 }
             }))
             {
-                Check(createFlowResp.StatusCode == HttpStatusCode.OK, "MCP create_flow succeeds.");
+                Check(createFlowResp.StatusCode == HttpStatusCode.OK, $"MCP create_flow succeeds. Status: {(int)createFlowResp.StatusCode}, Body: {await createFlowResp.Content.ReadAsStringAsync()}");
                 var createdJson = await createFlowResp.Content.ReadAsStringAsync();
-                Check(createdJson.Contains("Flow créé et publié"), "MCP create_flow creates and publishes flow.");
+                Check(createdJson.Contains("Flow créé et publié"), $"MCP create_flow creates and publishes flow. Response: {createdJson}");
             }
 
             // E. Appel d'outil (tools/call : delete_flow)

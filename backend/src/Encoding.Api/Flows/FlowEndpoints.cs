@@ -256,9 +256,9 @@ public static class FlowEndpoints
             ? n.Trim()
             : "Nouveau Flow";
 
-        var mediaType = element.TryGetProperty("mediaType", out var mtProp) && mtProp.GetString() is { Length: > 0 } mt
-            ? mt.Trim().ToLowerInvariant()
-            : "video";
+        var mediaType = (element.TryGetProperty("mediaType", out var mtProp) && mtProp.GetString() is { Length: > 0 } mt
+            ? mt
+            : (element.TryGetProperty("type", out var tProp) && tProp.GetString() is { Length: > 0 } t ? t : "video")).Trim().ToLowerInvariant();
 
         var nodes = new List<FlowNodeDefinition>();
         if (element.TryGetProperty("nodes", out var nodesProp) && nodesProp.ValueKind == JsonValueKind.Array)
@@ -304,6 +304,14 @@ public static class FlowEndpoints
                 }
 
                 var configuration = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+                var descriptor = registry.Resolve(componentRef);
+                if (descriptor is not null)
+                {
+                    foreach (var field in descriptor.ConfigurationSchema.Fields)
+                    {
+                        if (field.DefaultValue is { } defVal) configuration[field.Id] = defVal.Clone();
+                    }
+                }
                 if (node.TryGetProperty("configuration", out var cfg) && cfg.ValueKind == JsonValueKind.Object)
                 {
                     foreach (var prop in cfg.EnumerateObject())
