@@ -1,3 +1,6 @@
+using Encoding.Api.Infrastructure;
+using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Logging;
 using Encoding.Contracts.Logging;
 using Encoding.Core.Logging;
 using Microsoft.Extensions.Logging;
@@ -261,5 +264,44 @@ public sealed class SystemLogProviderTests
         Assert.DoesNotContain("enc_pat_1122334455667788", entry.Message);
         Assert.Equal(nodeId, entry.NodeId);
         Assert.Equal("Worker-01", entry.NodeName);
+    }
+}
+
+public sealed class SystemLogRepositoryTests
+{
+    [Fact]
+    public async Task Inserts_Queries_And_Prunes_Logs()
+    {
+        await using var db = await TestDatabase.CreateSqliteAsync("system-logs-repo");
+        var contentRoot = Harness.RepositoryRoot();
+        await DatabaseMigrator.ApplyAsync(db.Db, contentRoot, CancellationToken.None);
+
+        var repo = new SystemLogRepository(db.Db);
+
+        var id1 = Guid.NewGuid().ToString("N");
+        var id2 = Guid.NewGuid().ToString("N");
+        var now = DateTimeOffset.UtcNow;
+
+        await repo.InsertAsync(new SystemLogEntry(id1, now.AddMinutes(-10), SystemLogLevel.Warning, "Encoding.Tools", "Tool Warning"));
+        await repo.InsertAsync(new SystemLogEntry(id2, now, SystemLogLevel.Error, "Encoding.Plugins", "Plugin Error", Exception: "System.Exception: fail"));
+
+        var all = await repo.QueryAsync(new SystemLogFilterQuery());
+        Assert.Equal(2, all.Count);
+        Assert.Equal(id2, all[0].Id); // Newest first
+
+        var errorOnly = await repo.QueryAsync(new SystemLogFilterQuery { MinLevel = SystemLogLevel.Error });
+        Assert.Single(errorOnly);
+        Assert.Equal(id2, errorOnly[0].Id);
+
+        var categories = await repo.GetCategoriesAsync();
+        Assert.Equal(2, categories.Count);
+        Assert.Contains("Encoding.Plugins", categories);
+        Assert.Contains("Encoding.Tools", categories);
+
+        // Test Pruning
+        await repo.PruneAsync(maxRows: 1);
+        var pruned = await repo.QueryAsync(new SystemLogFilterQuery());
+        Assert.Single(pruned);
+        Assert.Equal(id2, pruned[0].Id); // Keeps newest
     }
 }

@@ -19,6 +19,7 @@ using Encoding.Api.Infrastructure.PeerCluster;
 using DotNext.Net.Cluster.Consensus.Raft.Http;
 using DotNext.Net.Cluster.Consensus.Raft;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
+using Encoding.Api.Logging;
 using Encoding.Api.Mcp;
 using Encoding.Api.Tools;
 using Encoding.Core.Logging;
@@ -52,6 +53,10 @@ builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
 builder.Services.AddSingleton<FirstLinkRepository>();
 builder.Services.AddSingleton<LocalNodeRegistry>();
+builder.Services.AddSingleton<SystemLogRepository>();
+builder.Services.AddSingleton<SystemLogDbSink>();
+builder.Services.AddSingleton<ISystemLogSink>(sp => sp.GetRequiredService<SystemLogDbSink>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemLogDbSink>());
 builder.Services.AddSingleton<ISystemLogNodeContext>(sp =>
 {
     var registry = sp.GetService<LocalNodeRegistry>();
@@ -219,6 +224,7 @@ app.MapRuntimeEndpoints();
 app.MapSourceReplacementEndpoints();
 
 app.MapOperationsEndpoints();
+app.MapSystemLogEndpoints();
 
 app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();
