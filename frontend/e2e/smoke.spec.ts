@@ -47,7 +47,7 @@ test('the search command palette opens from the topbar and navigates to encoding
   await combobox.press('Enter');
 
   await expect(page).toHaveURL(/\/libraries\/encoding-profiles$/);
-  await expect(page.getByRole('heading', { name: /Librairies/ }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Profils d’encodage/ }).first()).toBeVisible();
   await expect(page.getByRole('tab', { name: /Profils d’encodage/ })).toHaveAttribute(
     'aria-selected',
     'true',
