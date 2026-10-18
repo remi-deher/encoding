@@ -755,7 +755,7 @@ public sealed class McpService(
             var existing = await scripts.GetAsync(scriptId, ct);
             if (existing is not null)
             {
-                var expectedRev = arguments.TryGetProperty("expectedRevision", out var revProp) && revProp.TryGetInt32(out var r) ? r : existing.Summary.DraftRevision;
+                var expectedRev = arguments.TryGetProperty("expectedRevision", out var revProp) && revProp.TryGetInt32(out var r) ? r : existing.Script.DraftRevision;
                 var saved = await scripts.SaveDraftAsync(scriptId, new SaveFlowScriptDraftRequest(expectedRev, draft), ct);
                 return saved is not null
                     ? McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Brouillon de script mis à jour.", script = saved }, JsonOptions))
@@ -844,7 +844,7 @@ public sealed class McpService(
             var existing = await profiles.GetAsync(profileId, ct);
             if (existing is not null)
             {
-                var expectedRev = arguments.TryGetProperty("expectedRevision", out var revProp) && revProp.TryGetInt32(out var r) ? r : existing.Summary.DraftRevision;
+                var expectedRev = arguments.TryGetProperty("expectedRevision", out var revProp) && revProp.TryGetInt32(out var r) ? r : existing.Profile.DraftRevision;
                 var saved = await profiles.SaveDraftAsync(profileId, new SaveEncodingProfileDraftRequest(expectedRev, draft), ct);
                 return saved is not null
                     ? McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Brouillon de profil d'encodage mis à jour.", profile = saved }, JsonOptions))
