@@ -223,8 +223,8 @@ const applicationRoutes: Routes = [
   {
     path: 'settings',
     loadComponent: () =>
-      import('./features/settings/user-management-page.component').then(
-        (module) => module.UserManagementPageComponent,
+      import('./features/settings/settings-page.component').then(
+        (module) => module.SettingsPageComponent,
       ),
     data: {
       title: 'Paramètres',
@@ -236,7 +236,7 @@ const applicationRoutes: Routes = [
         adminOnly: true,
       },
       adminOnly: true,
-      description: 'Gérez les comptes utilisateurs et leurs rôles.',
+      description: 'Gérez les comptes utilisateurs, les jetons d’API pour l’IA, le serveur MCP et le système.',
     },
   },
 ];

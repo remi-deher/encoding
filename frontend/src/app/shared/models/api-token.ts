@@ -1,0 +1,22 @@
+export interface ApiTokenResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly tokenPrefix: string;
+  readonly role: 'admin' | 'viewer';
+  readonly isActive: boolean;
+  readonly createdAt: string;
+  readonly expiresAt?: string | null;
+  readonly lastUsedAt?: string | null;
+  readonly revokedAt?: string | null;
+}
+
+export interface CreateApiTokenRequest {
+  readonly name: string;
+  readonly role: 'admin' | 'viewer';
+  readonly expiresAt?: string | null;
+}
+
+export interface CreatedApiTokenResponse {
+  readonly token: ApiTokenResponse;
+  readonly secret: string;
+}
