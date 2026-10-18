@@ -81,4 +81,25 @@ public sealed class AiToolTests
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         }
     }
+
+    [Fact]
+    public void AnsiSanitizer_StripsCodes_And_DetectsRateLimits()
+    {
+        var rawWithAnsi = "\x1B[32mSuccès!\x1B[0m\r\nTexte propre.";
+        var sanitized = AnsiSanitizer.Sanitize(rawWithAnsi);
+        Assert.Equal("Succès!\nTexte propre.", sanitized);
+
+        Assert.True(AnsiSanitizer.DetectRateLimit("Error: rate limit reached, please try again in 30s."));
+        Assert.True(AnsiSanitizer.DetectRateLimit("HTTP 429 Too Many Requests"));
+        Assert.False(AnsiSanitizer.DetectRateLimit("Traduction effectuée avec succès."));
+    }
+
+    [Fact]
+    public async Task CliAiTextClient_SimulatedResponse_WhenExecutableMissing()
+    {
+        var client = new CliAiTextClient("codex-cli", Path.GetTempPath());
+        var res = await client.GenerateTextAsync(new AiPrompt("Système", "Traduire ce SRT : 1\n00:00:01,000 --> 00:00:04,000\nHello\n"));
+        Assert.True(res.Success);
+        Assert.Contains("Traduction", res.Content);
+    }
 }

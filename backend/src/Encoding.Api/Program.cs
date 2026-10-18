@@ -73,6 +73,7 @@ builder.Services.AddSingleton<McpService>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();
 builder.Services.AddSingleton<IntegrationTriggerService>();
 builder.Services.AddSingleton<DeviceCodeAuthService>();
+builder.Services.AddSingleton<AiClientFactory>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<IntegrationTriggerService>());
 builder.Services.AddTransient<LocalAgentAuthenticationHandler>();
 builder.Services.AddHttpClient(Encoding.Api.Nodes.LocalNodeEndpoints.HttpClientName, (services, client) =>
