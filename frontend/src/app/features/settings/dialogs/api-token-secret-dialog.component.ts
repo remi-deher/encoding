@@ -7,6 +7,7 @@ import {
   MatDialogTitle,
 } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
+import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 
 export interface ApiTokenSecretDialogData {
@@ -101,6 +102,7 @@ export class ApiTokenSecretDialogComponent {
   protected readonly data = inject<ApiTokenSecretDialogData>(MAT_DIALOG_DATA);
   protected readonly dialogRef = inject(MatDialogRef<ApiTokenSecretDialogComponent>);
   private readonly notifications = inject(NotificationService);
+  private readonly clipboardService = inject(ClipboardService);
 
   protected async copy(): Promise<void> {
     const text = this.data?.secret;
@@ -109,22 +111,10 @@ export class ApiTokenSecretDialogComponent {
       return;
     }
 
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
+    const success = await this.clipboardService.copy(text);
+    if (success) {
       this.notifications.show('Jeton copié dans le presse-papier.');
-    } catch {
+    } else {
       this.notifications.show('Erreur lors de la copie du jeton.');
     }
   }
