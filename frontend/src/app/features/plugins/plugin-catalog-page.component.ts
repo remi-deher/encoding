@@ -26,6 +26,16 @@ import {
   ResourceSheetSection,
 } from '../../shared/ui/resource-sheet.component';
 
+import { MatButtonModule } from '@angular/material/button';
+import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
+import { ClusterExtensionsService } from '../../shared/services/cluster-extensions.service';
+import {
+  ClusterTool,
+  ExtensionTab,
+  StorePackage,
+  StoreRepository,
+} from '../../shared/models/cluster-extensions';
+
 type PluginFamily = 'base' | 'cluster' | 'media' | 'automation';
 
 interface PluginRecord extends DataTableRow {
@@ -149,19 +159,60 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
     ComponentConfigurationFormComponent,
     FlowComponentListComponent,
     MatTabsModule,
+    MatButtonModule,
+    ContextBannerComponent,
   ],
   templateUrl: './plugin-catalog-page.component.html',
+  styleUrl: './plugin-catalog-page.component.scss',
 })
 export class PluginCatalogPageComponent {
   private readonly flowValidation = inject(FlowValidation);
   private readonly configurationApi = inject(PluginConfigurationApi);
+  private readonly extensionsService = inject(ClusterExtensionsService);
   private readonly notifications = inject(NotificationService);
   private readonly route = inject(ActivatedRoute);
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
 
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Plugins');
+  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Plugins & Outils');
+  protected readonly activeTab = signal<ExtensionTab>('plugins');
+  protected readonly clusterTools = signal<readonly ClusterTool[]>([]);
+  protected readonly storeRepositories = signal<readonly StoreRepository[]>([]);
+  protected readonly storePackages = signal<readonly StorePackage[]>([]);
+  protected readonly selectedStoreCategory = signal('all');
+
+  protected readonly extensionTabs = computed<readonly CategoryTabOption[]>(() => [
+    { value: 'plugins', label: 'Plugins', count: PLUGIN_RECORDS.length },
+    { value: 'tools', label: 'Outils média', count: this.clusterTools().length || 6 },
+    { value: 'store', label: 'Store & Dépôts', count: this.storePackages().length || 4 },
+  ]);
+
+  protected readonly storeCategoryOptions = computed<readonly CategoryTabOption[]>(() => [
+    { value: 'all', label: 'Tous', count: this.storePackages().length },
+    {
+      value: 'subtitles',
+      label: 'Sous-titres',
+      count: this.storePackages().filter((p) => p.category === 'subtitles').length,
+    },
+    {
+      value: 'audio',
+      label: 'Audio',
+      count: this.storePackages().filter((p) => p.category === 'audio').length,
+    },
+    {
+      value: 'tools',
+      label: 'Outils Média',
+      count: this.storePackages().filter((p) => p.category === 'tools').length,
+    },
+  ]);
+
+  protected readonly filteredStorePackages = computed(() => {
+    const cat = this.selectedStoreCategory();
+    const pkgs = this.storePackages();
+    return cat === 'all' ? pkgs : pkgs.filter((p) => p.category === cat);
+  });
+
   protected readonly selectedFamily = signal('all');
   protected readonly selectedPlugin = signal<PluginRecord | null>(null);
   private readonly pluginCatalog = signal<readonly FlowPluginCatalog[]>([]);
@@ -312,6 +363,56 @@ export class PluginCatalogPageComponent {
       .catch(() =>
         this.notifications.show('Le catalogue de configuration des plugins est indisponible.'),
       );
+
+    void this.extensionsService
+      .listTools()
+      .then((tools) => this.clusterTools.set(tools))
+      .catch(() => {});
+
+    void this.extensionsService
+      .listRepositories()
+      .then((repos) => this.storeRepositories.set(repos))
+      .catch(() => {});
+
+    void this.extensionsService
+      .listPackages()
+      .then((pkgs) => this.storePackages.set(pkgs))
+      .catch(() => {});
+  }
+
+  protected onExtensionTabChange(tab: string): void {
+    this.activeTab.set(tab as ExtensionTab);
+  }
+
+  protected onStoreCategoryChange(cat: string): void {
+    this.selectedStoreCategory.set(cat);
+  }
+
+  protected async testTool(tool: ClusterTool): Promise<void> {
+    try {
+      const res = await this.extensionsService.testToolConformance(tool.id);
+      this.notifications.show(res.message);
+    } catch {
+      this.notifications.show(`Échec du test de conformité pour ${tool.name}.`);
+    }
+  }
+
+  protected installPackage(pkg: StorePackage): void {
+    this.notifications.show(
+      `Le paquet '${pkg.name}' (${pkg.version}) est programmé pour déploiement sur le cluster.`,
+    );
+  }
+
+  protected addCustomRepository(): void {
+    this.notifications.show(
+      'Pour ajouter un dépôt : saisissez une URL HTTP/HTTPS exposant un fichier repository.json conforme.',
+    );
+  }
+
+  protected triggerZipUpload(): void {
+    this.notifications.show(
+      'Sideloading : Sélectionnez une archive .zip contenant plugin.json ou tool.json validé.',
+    );
   }
 
   protected onFamilyChange(family: string): void {

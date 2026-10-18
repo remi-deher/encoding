@@ -209,15 +209,15 @@ const applicationRoutes: Routes = [
         (module) => module.PluginCatalogPageComponent,
       ),
     data: {
-      title: 'Plugins',
+      title: 'Plugins & Outils',
       navigation: {
         group: 'Ressources',
-        label: 'Plugins',
+        label: 'Plugins & Outils',
         glyph: '✣',
         order: 2,
-        keywords: ['intégrations'],
+        keywords: ['plugins', 'outils', 'ffmpeg', 'mkvtoolnix', 'store', 'extensions', 'intégrations'],
       },
-      description: 'Consultez les intégrations et composants disponibles pour vos flows.',
+      description: 'Gérez les plugins, les outils média et les dépôts configurés pour le cluster.',
     },
   },
   {
