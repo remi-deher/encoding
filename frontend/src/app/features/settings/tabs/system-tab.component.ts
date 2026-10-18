@@ -9,7 +9,6 @@ import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { ThemeService } from '../../../core/theme/theme.service';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { ContextBannerComponent } from '../../../shared/ui/context-banner.component';
 
 interface HealthCheckEntry {
   readonly name: string;
@@ -35,33 +34,25 @@ interface ClusterIdentityResponse {
 @Component({
   selector: 'app-system-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    ContextBannerComponent,
-    MatButtonModule,
-  ],
+  imports: [MatButtonModule],
   template: `
-    <app-context-banner
-      label="Système et exploitation"
-      title="Santé du cluster et préférences"
-      description="Consultez l’état de santé des composants vitaux (base SQLite, migrations, sauvegardes de flows, stockage), configurez le thème de l’interface et inspectez l’identité du cluster."
-    >
-      <div banner-actions>
-        <button matButton="tonal" type="button" [disabled]="refreshing()" (click)="refreshAll()">
-          {{ refreshing() ? 'Actualisation…' : 'Actualiser la santé' }}
-        </button>
+    <div class="tab-header">
+      <div class="tab-titles">
+        <h2>Système & Santé</h2>
+        <p>Thème d’affichage, identité du cluster et diagnostics d’exploitation.</p>
       </div>
-    </app-context-banner>
+      <button matButton="tonal" type="button" [disabled]="refreshing()" (click)="refreshAll()">
+        {{ refreshing() ? 'Actualisation…' : 'Actualiser la santé' }}
+      </button>
+    </div>
 
     <div class="system-grid">
       <!-- Section Thème & Affichage -->
       <section class="system-card theme-card">
         <div class="card-header">
-          <span class="card-eyebrow">Interface utilisateur</span>
-          <h2>Thème visuel & Apparence</h2>
+          <span class="card-eyebrow">Affichage</span>
+          <h3>Thème visuel</h3>
         </div>
-        <p class="card-desc">
-          L’interface applique le design system <strong>Material Design 3 Expressive</strong> avec adaptation automatique des contrastes et des conteneurs tonaux.
-        </p>
 
         <div class="theme-options">
           <button
@@ -73,7 +64,7 @@ interface ClusterIdentityResponse {
             <span class="theme-icon" aria-hidden="true">☀️</span>
             <div class="theme-text">
               <strong>Thème clair</strong>
-              <span>Surfaces lumineuses et tons neutres</span>
+              <span>Surfaces lumineuses</span>
             </div>
           </button>
 
@@ -86,7 +77,7 @@ interface ClusterIdentityResponse {
             <span class="theme-icon" aria-hidden="true">🌙</span>
             <div class="theme-text">
               <strong>Thème sombre</strong>
-              <span>Contraste doux pour environnements sombres</span>
+              <span>Contraste doux reposant</span>
             </div>
           </button>
         </div>
@@ -96,7 +87,7 @@ interface ClusterIdentityResponse {
       <section class="system-card cluster-id-card">
         <div class="card-header">
           <span class="card-eyebrow">Topologie</span>
-          <h2>Identité du cluster</h2>
+          <h3>Identité du cluster</h3>
         </div>
 
         @if (cluster(); as cl) {
@@ -110,29 +101,23 @@ interface ClusterIdentityResponse {
               <code class="prop-v mono">{{ cl.id }}</code>
             </div>
             <div class="prop-item">
-              <span class="prop-k">Mode de fonctionnement</span>
+              <span class="prop-k">Mode</span>
               <span class="prop-v">
-                {{ cl.standalone ? 'Nœud autonome (mono-serveur)' : 'Cluster multi-serveurs maillé (0049)' }}
-              </span>
-            </div>
-            <div class="prop-item">
-              <span class="prop-k">Jeton racine cluster</span>
-              <span class="prop-v">
-                {{ cl.hasClusterToken ? 'Généré et actif' : 'Non configuré' }}
+                {{ cl.standalone ? 'Autonome (mono-serveur)' : 'Cluster maillé (0049)' }}
               </span>
             </div>
           </div>
         } @else {
-          <p class="loading-state">Chargement de l’identité…</p>
+          <p class="loading-state">Chargement…</p>
         }
       </section>
 
-      <!-- Section Santé des Composants (Health Checks) -->
+      <!-- Section Diagnostics de Santé -->
       <section class="system-card health-card">
         <div class="card-header">
           <div class="header-titles">
-            <span class="card-eyebrow">Observabilité</span>
-            <h2>Vérifications de santé (/health/details)</h2>
+            <span class="card-eyebrow">Santé (/health/details)</span>
+            <h3>Composants d’exploitation</h3>
           </div>
           @if (health(); as h) {
             <span
@@ -141,8 +126,7 @@ interface ClusterIdentityResponse {
               [class.is-degraded]="h.status === 'degraded'"
               [class.is-unhealthy]="h.status === 'unhealthy'"
             >
-              {{ h.status === 'healthy' ? 'Tous les voyants sont au vert' : h.status }}
-              ({{ h.totalDurationMs }} ms)
+              {{ h.status === 'healthy' ? 'Opérationnel' : h.status }} ({{ h.totalDurationMs }} ms)
             </span>
           }
         </div>
@@ -158,7 +142,7 @@ interface ClusterIdentityResponse {
               <p class="check-sub">{{ checkDescription(check.name) }}</p>
             </article>
           } @empty {
-            <p class="loading-state">Chargement des diagnostics de santé…</p>
+            <p class="loading-state">Vérification en cours…</p>
           }
         </div>
       </section>
@@ -167,16 +151,37 @@ interface ClusterIdentityResponse {
   styles: `
     :host {
       display: grid;
-      gap: var(--space-4);
+      gap: var(--space-3);
+    }
+
+    .tab-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      padding: var(--space-2) 0;
+    }
+
+    .tab-titles h2 {
+      margin: 0;
+      font-size: var(--font-title);
+      color: var(--text-primary);
+    }
+
+    .tab-titles p {
+      margin: var(--space-1) 0 0 0;
+      font-size: var(--font-body-sm);
+      color: var(--text-secondary);
     }
 
     .system-grid {
       display: grid;
-      gap: var(--space-4);
+      gap: var(--space-3);
     }
 
     .system-card {
-      padding: var(--space-5);
+      padding: var(--space-4);
       border-radius: var(--radius-xl);
       background: var(--surface-container);
       display: grid;
@@ -191,24 +196,17 @@ interface ClusterIdentityResponse {
       font-weight: 700;
     }
 
-    .card-header h2 {
+    .card-header h3 {
       margin: 0;
-      font-size: var(--font-title);
+      font-size: var(--font-body);
+      font-weight: 600;
       color: var(--text-primary);
-    }
-
-    .card-desc {
-      margin: 0;
-      font-size: var(--font-body-sm);
-      color: var(--text-secondary);
-      line-height: 1.4;
     }
 
     .theme-options {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: var(--space-3);
-      margin-top: var(--space-1);
     }
 
     .theme-choice-btn {
@@ -234,7 +232,7 @@ interface ClusterIdentityResponse {
     }
 
     .theme-icon {
-      font-size: 24px;
+      font-size: 22px;
     }
 
     .theme-text {
@@ -243,7 +241,7 @@ interface ClusterIdentityResponse {
     }
 
     .theme-text strong {
-      font-size: var(--font-body);
+      font-size: var(--font-body-sm);
       color: var(--text-primary);
     }
 
@@ -254,7 +252,7 @@ interface ClusterIdentityResponse {
 
     .cluster-props {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: var(--space-3);
     }
 
@@ -274,7 +272,7 @@ interface ClusterIdentityResponse {
     }
 
     .prop-v {
-      font-size: var(--font-body);
+      font-size: var(--font-body-sm);
       color: var(--text-primary);
       font-weight: 600;
     }
@@ -285,11 +283,11 @@ interface ClusterIdentityResponse {
 
     .prop-v.mono {
       font-family: ui-monospace, 'JetBrains Mono', monospace;
-      font-size: var(--font-body-sm);
+      font-size: 11px;
     }
 
     .health-badge {
-      padding: var(--space-1) var(--space-3);
+      padding: 2px 10px;
       border-radius: var(--radius-pill);
       font-size: var(--font-label);
       font-weight: 600;
@@ -312,16 +310,16 @@ interface ClusterIdentityResponse {
 
     .checks-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: var(--space-3);
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: var(--space-2);
     }
 
     .check-box {
-      padding: var(--space-3) var(--space-4);
+      padding: var(--space-2) var(--space-3);
       border-radius: var(--radius-lg);
       background: var(--surface-container-high);
       display: grid;
-      gap: var(--space-1);
+      gap: 2px;
     }
 
     .check-top {
@@ -331,8 +329,8 @@ interface ClusterIdentityResponse {
     }
 
     .check-dot {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: var(--success);
     }
@@ -353,7 +351,7 @@ interface ClusterIdentityResponse {
     .loading-state {
       margin: 0;
       color: var(--text-secondary);
-      padding: var(--space-2);
+      font-size: var(--font-body-sm);
     }
   `,
 })
@@ -390,9 +388,9 @@ export class SystemTabComponent {
     const map: Record<string, string> = {
       database: 'Base SQLite locale (0043)',
       migrations: 'Schéma & Migrations (0041)',
-      cluster: 'Maillage & Consensus (0049)',
+      cluster: 'Maillage consensus (0049)',
       'flow-backups': 'Sauvegardes de flows (0014)',
-      'artifact-storage': 'Stockage temporaire artefacts',
+      'artifact-storage': 'Stockage temporaire',
       'backup-storage': 'Stockage des sauvegardes',
     };
     return map[name] ?? name;
@@ -400,13 +398,13 @@ export class SystemTabComponent {
 
   protected checkDescription(name: string): string {
     const map: Record<string, string> = {
-      database: 'Fichier SQLite local, transactions WAL sans partage NFS.',
-      migrations: 'État d’application des migrations de schéma du serveur.',
-      cluster: 'Connexions actives entre pairs et quorum consensus.',
-      'flow-backups': 'Répertoire de versions immuables JSON persistantes.',
-      'artifact-storage': 'Espace disque suffisant pour les flux d’encodage.',
-      'backup-storage': 'Espace disque suffisant pour les sauvegardes de flows.',
+      database: 'Fichier SQLite local sans partage NFS.',
+      migrations: 'Schéma de base de données à jour.',
+      cluster: 'Pairs connectés et quorum.',
+      'flow-backups': 'Sauvegardes immuables JSON.',
+      'artifact-storage': 'Espace pour l’encodage.',
+      'backup-storage': 'Espace pour les sauvegardes.',
     };
-    return map[name] ?? 'Composant d’exploitation opérationnel.';
+    return map[name] ?? 'Composant opérationnel.';
   }
 }

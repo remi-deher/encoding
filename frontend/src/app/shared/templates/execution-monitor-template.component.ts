@@ -547,12 +547,22 @@ export class ExecutionMonitorTemplateComponent {
     const execution = this.selectedExecution();
     return execution
       ? [
-          { section: 'Exécution', label: 'Identifiant', value: execution['id'] ?? '—' },
+          {
+            section: 'Exécution',
+            label: 'Identifiant',
+            value: execution['id'] ?? '—',
+            copiable: Boolean(execution['id']),
+          },
           { section: 'Exécution', label: 'État', value: execution['state'] ?? '—' },
           { section: 'Exécution', label: 'Progression', value: execution['progress'] ?? '—' },
           { section: 'Média', label: 'Taille avant', value: execution['beforeSize'] ?? '—' },
           { section: 'Média', label: 'Taille après', value: execution['afterSize'] ?? '—' },
-          { section: 'Média', label: 'Résultat publié', value: execution['publishedPath'] ?? '—' },
+          {
+            section: 'Média',
+            label: 'Résultat publié',
+            value: execution['publishedPath'] ?? '—',
+            copiable: Boolean(execution['publishedPath'] && execution['publishedPath'] !== '—'),
+          },
           { section: 'Exécution', label: 'Étape ou résultat', value: execution['detail'] ?? '—' },
           {
             section: 'Source et traitement',

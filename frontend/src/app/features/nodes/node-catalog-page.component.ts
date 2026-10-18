@@ -3,7 +3,6 @@ import { ContextBannerComponent } from '../../shared/ui/context-banner.component
 import {
   formatMemory,
   nodeAcceleratorBadges,
-  nodeAcceleratorChips,
   nodeHardwareLabel,
   nodeMemberSections,
   nodeOsFamily,
@@ -1192,7 +1191,7 @@ export class NodeCatalogPageComponent {
         statusLabel: NODE_LIFECYCLE_LABELS[lifecycle],
         statusTone: NODE_LIFECYCLE_TONES[lifecycle],
         badges: node.roles.map((role) => NODE_ROLE_LABELS[role]),
-        acceleratorBadges: nodeAcceleratorChips(node),
+        acceleratorBadges: [],
         osFamily: nodeOsFamily(node),
         osLabel: node.inventory?.operatingSystem ?? 'Système d’exploitation inconnu',
         meta: `Dernier signal : ${record.lastSignal}`,

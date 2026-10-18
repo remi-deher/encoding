@@ -5,7 +5,6 @@
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
   filterLabel="Filtrer"
-  note="Les plugins et outils sont gérés au niveau du cluster et synchronisés sur l'ensemble des nœuds membres."
 >
   <app-category-tabs
     catalogue-navigation
@@ -14,22 +13,6 @@
     [selected]="activeTab()"
     (selectedChange)="onExtensionTabChange($event)"
   />
-
-  <ng-container catalogue-summary>
-    @if (activeTab() === 'tools') {
-      <app-context-banner
-        label="Suite média du cluster"
-        title="Outils de référence et conformité matérielle"
-        description="Le nœud initiateur définit les outils disponibles pour le cluster. La version de référence FFmpeg (Stock v7.1) est préservée sur chaque nœud pour garantir les sondes matérielles (CPU/GPU) et le heartbeat. Les outils personnalisés sont testés par mire synthétique."
-      />
-    } @else if (activeTab() === 'store') {
-      <app-context-banner
-        label="Distribution décentralisée"
-        title="Store de plugins et dépôts communautaires"
-        description="Le dépôt officiel d'Encoding est certifié et verrouillé par défaut. Vous pouvez connecter des dépôts tiers sécurisés (repository.json) ou importer directement un paquet .zip sans dépendance externe."
-      />
-    }
-  </ng-container>
 
   <div catalogue-filters>
     @if (activeTab() === 'plugins') {

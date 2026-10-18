@@ -49,7 +49,7 @@ const applicationRoutes: Routes = [
         (module) => module.EncodingProfileLibraryPageComponent,
       ),
     data: {
-      title: 'Librairies',
+      title: 'Profils d’encodage',
       navigation: {
         group: 'Ressources',
         label: 'Profils d’encodage',
@@ -68,7 +68,7 @@ const applicationRoutes: Routes = [
         (module) => module.ScriptLibraryPageComponent,
       ),
     data: {
-      title: 'Librairies',
+      title: 'Scripts',
       navigation: {
         group: 'Ressources',
         label: 'Scripts',
@@ -87,7 +87,7 @@ const applicationRoutes: Routes = [
         (module) => module.ComponentPackLibraryPageComponent,
       ),
     data: {
-      title: 'Librairies',
+      title: 'Packs de composants',
       navigation: {
         group: 'Ressources',
         label: 'Packs de composants',
@@ -106,7 +106,7 @@ const applicationRoutes: Routes = [
         (module) => module.FlowTemplateLibraryPageComponent,
       ),
     data: {
-      title: 'Librairies',
+      title: 'Modèles de flow',
       navigation: {
         group: 'Ressources',
         label: 'Modèles',
@@ -125,15 +125,15 @@ const applicationRoutes: Routes = [
         (module) => module.LibraryCatalogPageComponent,
       ),
     data: {
-      title: 'Librairies',
+      title: 'Bibliothèques',
       navigation: {
         group: 'Ressources',
-        label: 'Librairies',
+        label: 'Bibliothèques',
         glyph: '◇',
         order: 1,
         keywords: ['médias', 'bibliothèques'],
       },
-      description: 'Gérez les ressources partagées du cluster.',
+      description: 'Gérez les bibliothèques multimédias et les points d’accès des nœuds.',
     },
   },
   {

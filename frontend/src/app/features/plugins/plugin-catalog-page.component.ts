@@ -27,7 +27,6 @@ import {
 } from '../../shared/ui/resource-sheet.component';
 
 import { MatButtonModule } from '@angular/material/button';
-import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
 import { ClusterExtensionsService } from '../../shared/services/cluster-extensions.service';
 import {
   ClusterTool,
@@ -160,7 +159,6 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
     FlowComponentListComponent,
     MatTabsModule,
     MatButtonModule,
-    ContextBannerComponent,
   ],
   templateUrl: './plugin-catalog-page.component.html',
   styleUrl: './plugin-catalog-page.component.scss',

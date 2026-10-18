@@ -336,12 +336,12 @@ export class LibraryCatalogPageComponent {
     }
   }
 
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Librairies');
+  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Bibliothèques');
 
   protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Médias' },
+    { value: 'media', label: 'Bibliothèques' },
     { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles' },
+    { value: 'templates', label: 'Modèles de flow' },
     { value: 'packs', label: 'Packs de composants' },
     { value: 'encoding', label: 'Profils d’encodage' },
   ];

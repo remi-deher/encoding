@@ -1,6 +1,5 @@
 <app-execution-monitor-template
   title="Tâches"
-  sectionDescription="Une vue distincte pour chaque étape de vie d’une exécution."
   [countText]="countText()"
   [queueCount]="trackingState().data?.queuedCount ?? 0"
   [activeCount]="trackingState().data?.activeCount ?? 0"
@@ -23,7 +22,6 @@
   [historyColumns]="historyColumns"
   [historyRows]="historyExecutions()"
   [feedback]="feedback()"
-  note="Suivi persistant · actualisation toutes les 5 secondes · jusqu’à 200 exécutions récentes affichées."
   [artifactRows]="artifactsState().rows"
   [artifactFeedback]="artifactsState().message"
   (artifactDownload)="downloadArtifact($event)"

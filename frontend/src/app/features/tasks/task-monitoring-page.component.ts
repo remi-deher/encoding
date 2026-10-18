@@ -7,6 +7,7 @@ import {
 } from '../../shared/services/execution-tracking';
 import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
 import { formatFileSize } from '../../shared/models/file-size';
+import { formatRelativeTime } from '../../shared/models/date-format';
 import { joinBadges, mediaBadges } from '../../shared/models/media-badges';
 import { NotificationService } from '../../shared/services/notification.service';
 import { ExecutionDetailPolling } from '../../shared/services/execution-detail-polling';
@@ -207,7 +208,7 @@ export class TaskMonitoringPageComponent {
     { key: 'flow', label: 'Flow', sortable: true },
     { key: 'state', label: 'État', sortable: true },
     { key: 'detail', label: 'Disponibilité', sortable: true },
-    { key: 'queuedAt', label: 'Ajoutée à la file', sortable: true },
+    { key: 'queuedAt', label: 'Ajoutée', sortable: true },
   ];
   protected readonly activeColumns: readonly DataTableColumn[] = [
     { key: 'media', label: 'Média', sortable: true },
@@ -224,14 +225,14 @@ export class TaskMonitoringPageComponent {
     { key: 'flow', label: 'Flow', sortable: true },
     { key: 'node', label: 'Worker', sortable: true },
     { key: 'detail', label: 'Erreur', sortable: true },
-    { key: 'finishedAt', label: 'Échouée le', sortable: true },
+    { key: 'finishedAt', label: 'Échouée', sortable: true },
   ];
   protected readonly cancelledColumns: readonly DataTableColumn[] = [
     { key: 'media', label: 'Média', sortable: true },
     { key: 'flow', label: 'Flow', sortable: true },
     { key: 'node', label: 'Worker', sortable: true },
     { key: 'detail', label: 'Détail', sortable: true },
-    { key: 'finishedAt', label: 'Annulée le', sortable: true },
+    { key: 'finishedAt', label: 'Annulée', sortable: true },
     { key: 'duration', label: 'Durée', sortable: true },
   ];
   protected readonly historyColumns: readonly DataTableColumn[] = [
@@ -240,7 +241,7 @@ export class TaskMonitoringPageComponent {
     { key: 'library', label: 'Bibliothèque', sortable: true },
     { key: 'flow', label: 'Flow', sortable: true },
     { key: 'node', label: 'Worker', sortable: true },
-    { key: 'finishedAt', label: 'Terminée le', sortable: true },
+    { key: 'finishedAt', label: 'Terminée', sortable: true },
     { key: 'duration', label: 'Durée', sortable: true },
   ];
   protected readonly errorActions: readonly DataTableRowAction[] = [
@@ -340,6 +341,6 @@ export class TaskMonitoringPageComponent {
       });
   }
   private date(value: string | null): string {
-    return value ? new Date(value).toLocaleString('fr-FR') : '—';
+    return formatRelativeTime(value);
   }
 }

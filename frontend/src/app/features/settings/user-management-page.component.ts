@@ -43,7 +43,6 @@ interface UserRow extends DataTableRow {
       drawerSize="standard"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
-      note="Un administrateur gère le cluster. Le rôle lecture seule consulte sans rien modifier. Les sessions d’un compte désactivé ou supprimé sont fermées immédiatement."
       [catalogState]="state()"
       [actionOpen]="formOpen()"
       [actionTitle]="resetTarget() ? 'Réinitialiser le mot de passe' : 'Nouvel utilisateur'"
