@@ -255,13 +255,13 @@ internal static class ApiImprovementsScenarios
             {
                 BearerToken = customPlaintextToken
             };
-            Check(await customClient.StatusAsync(HttpMethod.Get, "/api/v1/auth/status") == HttpStatusCode.OK,
+            Check(await customClient.StatusAsync(HttpMethod.Get, "/api/v1/tokens") == HttpStatusCode.OK,
                 "Custom API token authenticates successfully.");
 
             // Révocation du token
             Check(await aiClient.StatusAsync(HttpMethod.Delete, $"/api/v1/tokens/{customTokenId}", csrf: false) == HttpStatusCode.NoContent,
                 "AI client revokes API token.");
-            Check(await customClient.StatusAsync(HttpMethod.Get, "/api/v1/auth/status") == HttpStatusCode.Unauthorized,
+            Check(await customClient.StatusAsync(HttpMethod.Get, "/api/v1/tokens") == HttpStatusCode.Unauthorized,
                 "Revoked API token is immediately refused.");
 
             // D. Cycle de vie des flows : création d'un brouillon, clonage, suppression brouillon, suppression flow

@@ -186,6 +186,7 @@ internal static partial class Harness
             Check((await repository.SaveAsync(new(1,changed),CancellationToken.None))?.Definition.Version==2,"A meaningful edit creates exactly one new version.");
             Check(await repository.SaveAsync(new(1,changed with { Version=3 },null),CancellationToken.None) is null,"A stale editor cannot overwrite a newer version.");
             using var client=new HttpClient { BaseAddress=new Uri(app.Urls.Single()) };
+            client.DefaultRequestHeaders.Add("X-Encoding-Csrf", "1");
             using var response=await client.PutAsJsonAsync($"/api/v1/flows/{flow.Id}",new SaveFlowRequest(2,changed with { Version=3 }));
             Check(response.IsSuccessStatusCode && (await response.Content.ReadFromJsonAsync<FlowVersionResponse>())?.Definition.Version==2,"The API returns the exact existing version for an unchanged request.");
             var importId=Guid.NewGuid(); var imported=flow with { Id=importId };
@@ -250,8 +251,8 @@ internal static partial class Harness
         }
         private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
         {
-            // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
-            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued or running must not be claimed here.
+            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state IN ('queued', 'running', 'active'); UPDATE execution_work SET lease_until=NULL; DELETE FROM media_reservations; DELETE FROM disk_locks;")) await leftovers.ExecuteNonQueryAsync();
             await ResetNodesAsync();
             var library=Guid.NewGuid(); var id=Guid.NewGuid();
             await using var command=db.CreateCommand("""

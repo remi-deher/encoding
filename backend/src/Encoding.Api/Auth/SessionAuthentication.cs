@@ -48,7 +48,7 @@ public sealed class SessionAuthenticationHandler(
                         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(tokenIdentity), SessionAuthentication.Scheme));
                     }
                 }
-                if (authOptions.Enabled) return AuthenticateResult.Fail("Jeton API invalide, révoqué ou expiré.");
+                return AuthenticateResult.Fail("Jeton API invalide, révoqué ou expiré.");
             }
         }
 
