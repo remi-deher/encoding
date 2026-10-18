@@ -127,6 +127,60 @@ public sealed class AiToolTests
         Assert.True(validationResult.IsValid);
     }
 
+    [Fact]
+    public void SubtitleChunker_Parses_Chunks_And_Reassembles()
+    {
+        var srt = """
+            1
+            00:00:01,000 --> 00:00:03,500
+            Hello world!
+
+            2
+            00:00:04,000 --> 00:00:06,000
+            How are you?
+
+            3
+            00:00:07,000 --> 00:00:09,000
+            I am fine, thank you.
+            """;
+
+        var entries = Encoding.Api.Flows.Subtitles.SubtitleChunker.ParseSrt(srt);
+        Assert.Equal(3, entries.Count);
+        Assert.Equal("Hello world!", entries[0].Text);
+        Assert.Equal("00:00:01,000 --> 00:00:03,500", entries[0].Timecode);
+
+        var chunks = Encoding.Api.Flows.Subtitles.SubtitleChunker.ChunkEntries(entries, 2);
+        Assert.Equal(2, chunks.Count);
+        Assert.Equal(2, chunks[0].Count);
+        Assert.Single(chunks[1]);
+
+        var promptChunk = Encoding.Api.Flows.Subtitles.SubtitleChunker.FormatChunkForPrompt(chunks[0]);
+        Assert.Contains("Hello world!", promptChunk);
+        Assert.Contains("00:00:01,000 --> 00:00:03,500", promptChunk);
+
+        var translated = Encoding.Api.Flows.Subtitles.SubtitleChunker.ReassembleSrt([
+            "1\n00:00:01,000 --> 00:00:03,500\nBonjour le monde !\n\n2\n00:00:04,000 --> 00:00:06,000\nComment allez-vous ?",
+            "3\n00:00:07,000 --> 00:00:09,000\nJe vais bien, merci."
+        ]);
+
+        Assert.Contains("Bonjour le monde !", translated);
+        Assert.Contains("Comment allez-vous ?", translated);
+        Assert.Contains("Je vais bien, merci.", translated);
+    }
+
+    [Fact]
+    public void FlowComponentRegistry_Registers_AiComponents()
+    {
+        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var translateComp = registry.FindReference("base-ai-translate-subtitles");
+        Assert.NotNull(translateComp);
+        Assert.Equal("base", translateComp.PluginId);
+
+        var enrichComp = registry.FindReference("base-ai-metadata-enricher");
+        Assert.NotNull(enrichComp);
+        Assert.Equal("base", enrichComp.PluginId);
+    }
+
     private sealed class MockHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new();
