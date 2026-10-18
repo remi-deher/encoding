@@ -2,12 +2,18 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-public sealed class AiClientFactory(IConfiguration configuration, IHttpClientFactory httpClientFactory)
+public sealed class AiClientFactory(
+    IConfiguration configuration,
+    IHttpClientFactory httpClientFactory,
+    AiSettingsService? settingsService = null)
 {
+    private readonly AiSettingsService settingsService = settingsService ?? new AiSettingsService(configuration);
+
     public IAiTextClient CreateClient(string? preferredProvider = null)
     {
+        var settings = settingsService.GetSettings();
         var provider = preferredProvider
-            ?? configuration["AiTools:DefaultProvider"]
+            ?? settings.DefaultProvider
             ?? "codex-cli";
 
         var credDir = configuration["AiTools:CredentialsDirectory"]
@@ -15,8 +21,8 @@ public sealed class AiClientFactory(IConfiguration configuration, IHttpClientFac
 
         if (provider.Equals("ollama", StringComparison.OrdinalIgnoreCase))
         {
-            var url = configuration["AiTools:Ollama:BaseUrl"] ?? "http://127.0.0.1:11434/v1/";
-            var model = configuration["AiTools:Ollama:Model"] ?? "llama3.2";
+            var url = !string.IsNullOrWhiteSpace(settings.OllamaBaseUrl) ? settings.OllamaBaseUrl : "http://127.0.0.1:11434/v1/";
+            var model = !string.IsNullOrWhiteSpace(settings.OllamaModel) ? settings.OllamaModel : "llama3.2";
             var client = httpClientFactory.CreateClient("AiClient");
             client.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
             return new OpenAiCompatibleAiClient(client, model);
@@ -24,9 +30,9 @@ public sealed class AiClientFactory(IConfiguration configuration, IHttpClientFac
 
         if (provider.Equals("openai", StringComparison.OrdinalIgnoreCase))
         {
-            var url = configuration["AiTools:OpenAi:BaseUrl"] ?? "https://api.openai.com/v1/";
-            var model = configuration["AiTools:OpenAi:Model"] ?? "gpt-4o-mini";
-            var key = configuration["AiTools:OpenAi:ApiKey"];
+            var url = !string.IsNullOrWhiteSpace(settings.OpenAiBaseUrl) ? settings.OpenAiBaseUrl : "https://api.openai.com/v1/";
+            var model = !string.IsNullOrWhiteSpace(settings.OpenAiModel) ? settings.OpenAiModel : "gpt-4o-mini";
+            var key = settings.OpenAiApiKey ?? configuration["AiTools:OpenAi:ApiKey"];
             var client = httpClientFactory.CreateClient("AiClient");
             client.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
             return new OpenAiCompatibleAiClient(client, model, key);

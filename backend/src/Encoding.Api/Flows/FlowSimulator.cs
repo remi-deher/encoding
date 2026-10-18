@@ -72,7 +72,7 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                     variables[Text("name")] = FlowVariableValue.Parse(Text("value"));
                     detail = $"Variable « {Text("name")} » définie.";
                 }
-                else if (node.Component.PluginId == "base" && id.StartsWith("base-probe-", StringComparison.Ordinal))
+                else if ((node.Component.PluginId is "base" or "probe") && (id.StartsWith("base-probe-", StringComparison.Ordinal) || id.StartsWith("probe-", StringComparison.Ordinal)))
                 {
                     variables[Text("resultVariable", "result")] = FlowMediaValues.Probe(id, context.CurrentMetadata!.Value,
                         c.TryGetValue("trackId", out var track) ? track.GetInt32() : 0);

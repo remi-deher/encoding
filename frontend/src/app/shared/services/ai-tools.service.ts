@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
+  AiSettings,
+  AiSettingsUpdateRequest,
   AiToolInfo,
   DeviceAuthStartResponse,
   DeviceAuthStatus,
@@ -61,5 +63,13 @@ export class AiToolsService {
 
   explainFlow(request: FlowAiExplainRequest): Observable<FlowAiResponse> {
     return this.http.post<FlowAiResponse>('/api/v1/flows/ai/explain', request);
+  }
+
+  getSettings(): Observable<AiSettings> {
+    return this.http.get<AiSettings>('/api/v1/tools/ai/settings');
+  }
+
+  updateSettings(request: AiSettingsUpdateRequest): Observable<AiSettings> {
+    return this.http.put<AiSettings>('/api/v1/tools/ai/settings', request);
   }
 }

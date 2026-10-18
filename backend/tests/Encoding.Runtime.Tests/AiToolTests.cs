@@ -174,13 +174,105 @@ public sealed class AiToolTests
     public void FlowComponentRegistry_Registers_AiComponents()
     {
         var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
-        var translateComp = registry.FindReference("base-ai-translate-subtitles");
+        var translateComp = registry.FindReference("ai-translate-subtitles");
         Assert.NotNull(translateComp);
-        Assert.Equal("base", translateComp.PluginId);
+        Assert.Equal("ai", translateComp.PluginId);
 
-        var enrichComp = registry.FindReference("base-ai-metadata-enricher");
+        var enrichComp = registry.FindReference("ai-metadata-enricher");
         Assert.NotNull(enrichComp);
-        Assert.Equal("base", enrichComp.PluginId);
+        Assert.Equal("ai", enrichComp.PluginId);
+
+        // Legacy aliases
+        var legacyTranslate = registry.FindReference("base-ai-translate-subtitles");
+        Assert.NotNull(legacyTranslate);
+        Assert.Equal("ai", legacyTranslate.PluginId);
+    }
+
+    [Fact]
+    public void FlowComponentRegistry_Loads_Modular_Plugins()
+    {
+        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+
+        // Plugins exist
+        var pluginIds = registry.Plugins.Select(p => p.Id).ToHashSet();
+        Assert.Contains("base", pluginIds);
+        Assert.Contains("ai", pluginIds);
+        Assert.Contains("mkv", pluginIds);
+        Assert.Contains("images", pluginIds);
+        Assert.Contains("probe", pluginIds);
+
+        // MKV
+        var remux = registry.FindReference("mkv-remux-matroska");
+        Assert.NotNull(remux);
+        Assert.Equal("mkv", remux.PluginId);
+        var legacyRemux = registry.FindReference("base-remux-matroska");
+        Assert.NotNull(legacyRemux);
+        Assert.Equal("mkv", legacyRemux.PluginId);
+
+        // Images
+        var convert = registry.FindReference("image-convert");
+        Assert.NotNull(convert);
+        Assert.Equal("images", convert.PluginId);
+        var legacyConvert = registry.FindReference("base-convert-image");
+        Assert.NotNull(legacyConvert);
+        Assert.Equal("images", legacyConvert.PluginId);
+
+        // Probe
+        var probe = registry.FindReference("probe-media");
+        Assert.NotNull(probe);
+        Assert.Equal("probe", probe.PluginId);
+        var legacyProbe = registry.FindReference("base-probe-media");
+        Assert.NotNull(legacyProbe);
+        Assert.Equal("probe", legacyProbe.PluginId);
+    }
+
+    [Fact]
+    public void AiSettingsService_Lifecycle()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "enc_ai_settings_test_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["AiTools:CredentialsDirectory"] = tempDir,
+                    ["AiTools:DefaultProvider"] = "codex-cli"
+                })
+                .Build();
+
+            var service = new AiSettingsService(config);
+            var initial = service.GetSettings();
+            Assert.Equal("codex-cli", initial.DefaultProvider);
+
+            var updated = service.UpdateSettings(new AiSettingsUpdateRequest(
+                DefaultProvider: "ollama",
+                OllamaBaseUrl: "http://192.168.1.100:11434/v1/",
+                OllamaModel: "qwen2.5-coder:7b",
+                TimeoutSeconds: 60
+            ));
+
+            Assert.Equal("ollama", updated.DefaultProvider);
+            Assert.Equal("http://192.168.1.100:11434/v1/", updated.OllamaBaseUrl);
+            Assert.Equal("qwen2.5-coder:7b", updated.OllamaModel);
+            Assert.Equal(60, updated.TimeoutSeconds);
+
+            // Recharger une nouvelle instance depuis le même dossier pour vérifier la persistance
+            var reloadedService = new AiSettingsService(config);
+            var reloaded = reloadedService.GetSettings();
+            Assert.Equal("ollama", reloaded.DefaultProvider);
+            Assert.Equal("http://192.168.1.100:11434/v1/", reloaded.OllamaBaseUrl);
+            Assert.Equal("qwen2.5-coder:7b", reloaded.OllamaModel);
+            Assert.Equal(60, reloaded.TimeoutSeconds);
+
+            // Créer un client depuis la factory
+            var factory = new AiClientFactory(config, new MockHttpClientFactory(), reloadedService);
+            var client = factory.CreateClient();
+            Assert.NotNull(client);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
     }
 
     private sealed class MockHttpClientFactory : IHttpClientFactory
