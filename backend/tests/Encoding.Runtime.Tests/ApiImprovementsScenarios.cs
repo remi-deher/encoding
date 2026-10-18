@@ -468,9 +468,9 @@ internal static class ApiImprovementsScenarios
                 }
             }))
             {
-                Check(createScriptResp.StatusCode == HttpStatusCode.OK, "MCP save_script succeeds.");
+                Check(createScriptResp.StatusCode == HttpStatusCode.OK, $"MCP save_script succeeds. Status: {(int)createScriptResp.StatusCode}, Body: {await createScriptResp.Content.ReadAsStringAsync()}");
                 var scriptJson = await createScriptResp.Content.ReadAsStringAsync();
-                Check(scriptJson.Contains("Script cr") && scriptJson.Contains("succ"), "MCP save_script creates draft.");
+                Check((scriptJson.Contains("Script cr") || scriptJson.Contains(@"Script cr\u00E9\u00E9")) && (scriptJson.Contains("succ") || scriptJson.Contains(@"succ\u00E8s")), $"MCP save_script creates draft. Response: {scriptJson}");
             }
 
             using (var publishScriptResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new

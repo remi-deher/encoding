@@ -837,18 +837,29 @@ public sealed class McpService(
 
         var draft = new EncodingProfileDraft(name.Trim(), desc.Trim(), targets);
 
+        Guid profileId;
         if (arguments.TryGetProperty("id", out var idProp) && idProp.TryGetGuid(out var existingId))
         {
-            var expectedRev = arguments.TryGetProperty("expectedRevision", out var revProp) && revProp.TryGetInt32(out var r) ? r : 1;
-            var saved = await profiles.SaveDraftAsync(existingId, new SaveEncodingProfileDraftRequest(expectedRev, draft), ct);
-            return saved is not null
-                ? McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Brouillon de profil d'encodage mis à jour.", profile = saved }, JsonOptions))
-                : McpCallToolResult.Text("Conflit de révision ou profil introuvable / intégré.", isError: true);
+            profileId = existingId;
+            var existing = await profiles.GetAsync(profileId, ct);
+            if (existing is not null)
+            {
+                var expectedRev = arguments.TryGetProperty("expectedRevision", out var revProp) && revProp.TryGetInt32(out var r) ? r : existing.Summary.DraftRevision;
+                var saved = await profiles.SaveDraftAsync(profileId, new SaveEncodingProfileDraftRequest(expectedRev, draft), ct);
+                return saved is not null
+                    ? McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Brouillon de profil d'encodage mis à jour.", profile = saved }, JsonOptions))
+                    : McpCallToolResult.Text("Conflit de révision ou profil introuvable / intégré.", isError: true);
+            }
+            else
+            {
+                var created = await profiles.CreateAsync(profileId, draft, ct);
+                return McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Profil d'encodage créé.", profile = created }, JsonOptions));
+            }
         }
         else
         {
-            var newId = Guid.NewGuid();
-            var created = await profiles.CreateAsync(newId, draft, ct);
+            profileId = Guid.NewGuid();
+            var created = await profiles.CreateAsync(profileId, draft, ct);
             return McpCallToolResult.Text(JsonSerializer.Serialize(new { message = "Profil d'encodage créé.", profile = created }, JsonOptions));
         }
     }
