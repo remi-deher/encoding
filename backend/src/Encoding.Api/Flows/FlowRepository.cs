@@ -266,22 +266,9 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
         clearDraft.Parameters.AddWithValue("id", id);
         await clearDraft.ExecuteNonQueryAsync(ct);
 
-        await using var checkVersions = Sql.Command("SELECT count(*) FROM flow_versions WHERE flow_id = @id", connection, tx);
-        checkVersions.Parameters.AddWithValue("id", id);
-        var versionCount = Convert.ToInt64(await checkVersions.ExecuteScalarAsync(ct));
-
-        if (currentVersion == 0 && versionCount == 0)
-        {
-            await using var removeFlow = Sql.Command("DELETE FROM flows WHERE id = @id", connection, tx);
-            removeFlow.Parameters.AddWithValue("id", id);
-            await removeFlow.ExecuteNonQueryAsync(ct);
-        }
-        else
-        {
-            await using var softDelete = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id", connection, tx);
-            softDelete.Parameters.AddWithValue("id", id);
-            await softDelete.ExecuteNonQueryAsync(ct);
-        }
+        await using var softDelete = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id", connection, tx);
+        softDelete.Parameters.AddWithValue("id", id);
+        await softDelete.ExecuteNonQueryAsync(ct);
 
         await tx.CommitAsync(ct);
         return (FlowDeleteResult.Deleted, null);
@@ -307,7 +294,7 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
 
         if (currentVersion == 0 && versionCount == 0)
         {
-            await using var removeFlow = Sql.Command("DELETE FROM flows WHERE id = @id", connection, tx);
+            await using var removeFlow = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id", connection, tx);
             removeFlow.Parameters.AddWithValue("id", id);
             await removeFlow.ExecuteNonQueryAsync(ct);
         }

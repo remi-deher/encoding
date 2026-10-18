@@ -133,7 +133,7 @@ internal static partial class Harness
             artifacts=new(db,config); executions=new(db);
             foreach(var id in new[]{a,b,c})
             {
-                await using var command=db.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at,node_token_hash) VALUES(@id,@name,ARRAY['worker'],10,@caps,clock_timestamp(),@token)");
+                await using var command=db.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at,node_token_hash) VALUES(@id,@name,ARRAY['worker'],100,@caps,clock_timestamp(),@token)");
                 command.Parameters.AddWithValue("id",id); command.Parameters.AddWithValue("name",id.ToString());
                 command.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(Capabilities(true),Json));
                 command.Parameters.AddWithValue("token",SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Token))); await command.ExecuteNonQueryAsync();
@@ -188,7 +188,9 @@ internal static partial class Harness
             using var client=new HttpClient { BaseAddress=new Uri(app.Urls.Single()) };
             client.DefaultRequestHeaders.Add("X-Encoding-Csrf", "1");
             using var response=await client.PutAsJsonAsync($"/api/v1/flows/{flow.Id}",new SaveFlowRequest(2,changed with { Version=3 }));
-            Check(response.IsSuccessStatusCode && (await response.Content.ReadFromJsonAsync<FlowVersionResponse>())?.Definition.Version==2,"The API returns the exact existing version for an unchanged request.");
+            var flowResponseContent = await response.Content.ReadAsStringAsync();
+            var flowResponse = response.IsSuccessStatusCode ? JsonSerializer.Deserialize<FlowVersionResponse>(flowResponseContent, FlowRepository.JsonOptions) : null;
+            Check(response.IsSuccessStatusCode && flowResponse?.Definition.Version==2,$"The API returns the exact existing version for an unchanged request. HTTP {(int)response.StatusCode}: {flowResponseContent}");
             var importId=Guid.NewGuid(); var imported=flow with { Id=importId };
             Check(await repository.SaveManyAsync([new(0,imported),new(1,imported with {Version=2})],false,CancellationToken.None)
                 && (await repository.VersionsAsync(importId,CancellationToken.None)).Count==2,"Archive imports preserve historical versions even with identical contents.");
@@ -251,8 +253,8 @@ internal static partial class Harness
         }
         private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
         {
-            // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued or running must not be claimed here.
-            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state IN ('queued', 'running', 'active'); UPDATE execution_work SET lease_until=NULL; DELETE FROM media_reservations; DELETE FROM disk_locks;")) await leftovers.ExecuteNonQueryAsync();
+            // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
+            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
             await ResetNodesAsync();
             var library=Guid.NewGuid(); var id=Guid.NewGuid();
             await using var command=db.CreateCommand("""

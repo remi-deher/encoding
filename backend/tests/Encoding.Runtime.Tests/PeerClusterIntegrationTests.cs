@@ -28,8 +28,7 @@ public sealed class PeerClusterIntegrationTests
         var directory = Path.Combine(Path.GetTempPath(), "encoding-peer-integration-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var clusterId = Guid.NewGuid();
-        var ports = Enumerable.Range(0, 6).Select(_ => ReservePort()).Distinct().ToArray();
-        if (ports.Length != 6) throw new InvalidOperationException("Could not allocate six unique test ports.");
+        var ports = ReservePorts(6);
         await using var network = new PeerTestNetwork(ports[3..]);
         var processes = new PeerProcess[3];
         var clients = new HttpClient[3];
@@ -512,11 +511,23 @@ public sealed class PeerClusterIntegrationTests
         throw new TimeoutException($"Le pair survivant n’a pas signalé la perte du quorum Raft : {JsonSerializer.Serialize(latest)}");
     }
 
-    private static int ReservePort()
+    private static int[] ReservePorts(int count)
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
+        var listeners = new List<TcpListener>(count);
+        try
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var listener = new TcpListener(IPAddress.Any, 0);
+                listener.Start();
+                listeners.Add(listener);
+            }
+            return listeners.Select(l => ((IPEndPoint)l.LocalEndpoint).Port).ToArray();
+        }
+        finally
+        {
+            foreach (var listener in listeners) listener.Dispose();
+        }
     }
 
     private static string TestIdentityPassword(int index) => Convert.ToBase64String(
