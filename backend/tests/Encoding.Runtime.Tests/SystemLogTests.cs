@@ -389,3 +389,26 @@ public sealed class SystemLogMcpTests
         Assert.Contains("Hardware acceleration dropped back to CPU", callJson);
     }
 }
+
+public sealed class SystemLogApiFactoryTests
+{
+    /// <summary>Garde-fou : l'enregistrement du fournisseur de logs ne doit ni bloquer ni créer d'ambiguïté DI au démarrage de l'API.</summary>
+    [Fact(Timeout = 60000)]
+    public async Task Api_Host_Starts_With_System_Logging()
+    {
+        await Task.Yield();
+        using var factory = new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Encoding.Api.Auth.AuthOptions>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
+            builder.UseSetting("Logging:LogLevel:Default", "Error");
+            builder.UseSetting("Auth:Enabled", "false");
+            builder.ConfigureServices(services =>
+            {
+                foreach (var descriptor in services.Where(item => item.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)).ToArray())
+                    services.Remove(descriptor);
+            });
+        });
+        using var client = factory.CreateClient();
+        Assert.NotNull(factory.Services.GetService(typeof(Encoding.Core.Logging.SystemLogRingBuffer)));
+    }
+}

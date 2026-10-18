@@ -17,9 +17,12 @@ public static class SystemLogServiceExtensions
             configure?.Invoke(options);
             var ringBuffer = sp.GetRequiredService<SystemLogRingBuffer>();
             var broadcaster = sp.GetRequiredService<SystemLogStreamBroadcaster>();
-            var nodeContext = sp.GetService<ISystemLogNodeContext>();
-            var sink = sp.GetService<ISystemLogSink>();
-            return new SystemLogProvider(ringBuffer, broadcaster, nodeContext, sink, options);
+            return new SystemLogProvider(
+                ringBuffer,
+                broadcaster,
+                () => sp.GetService<ISystemLogNodeContext>(),
+                () => sp.GetService<ISystemLogSink>(),
+                options);
         });
         services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<SystemLogProvider>());
         return services;

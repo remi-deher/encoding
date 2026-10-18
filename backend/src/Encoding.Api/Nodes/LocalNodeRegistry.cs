@@ -6,7 +6,7 @@ namespace Encoding.Api.Nodes;
 /// Retient le nœud local de ce serveur (celui de l'image unique, enrôlé d'office, architecture 0037) pour lui donner
 /// le nom convivial choisi à l'installation, quel que soit l'ordre entre l'enrôlement de l'agent et la création du premier administrateur.
 /// </summary>
-public sealed class LocalNodeRegistry(NodeRepository repository)
+public sealed class LocalNodeRegistry(NodeRepository repository, LocalNodeLogContext? logContext = null)
 {
     public const int MaximumNameLength = 128;
     private readonly object gate = new();
@@ -30,6 +30,7 @@ public sealed class LocalNodeRegistry(NodeRepository repository)
         lock (gate)
         {
             nodeId = id;
+            if (logContext is not null) logContext.NodeId = id;
             name = pendingName;
             pendingName = null;
         }

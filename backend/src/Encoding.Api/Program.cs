@@ -53,19 +53,16 @@ builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
 builder.Services.AddSingleton<FirstLinkRepository>();
 builder.Services.AddSingleton<LocalNodeRegistry>();
-builder.Services.AddSingleton<SystemLogRepository>();
-builder.Services.AddSingleton<SystemLogDbSink>();
-builder.Services.AddSingleton<ISystemLogSink>(sp => sp.GetRequiredService<SystemLogDbSink>());
+// Instances créées hors conteneur : le fournisseur de logs est résolu pendant l'initialisation de ILoggerFactory.
+var systemLogRepository = new SystemLogRepository(new PeerLocalDatabase(localDatabase));
+var systemLogSink = new SystemLogDbSink(systemLogRepository);
+builder.Services.AddSingleton(systemLogRepository);
+builder.Services.AddSingleton(systemLogSink);
+builder.Services.AddSingleton<ISystemLogSink>(systemLogSink);
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemLogDbSink>());
-builder.Services.AddSingleton<ISystemLogNodeContext>(sp =>
-{
-    var registry = sp.GetService<LocalNodeRegistry>();
-    return new DefaultSystemLogNodeContext(() =>
-    {
-        var id = registry?.NodeId;
-        return (id, "Server");
-    });
-});
+var localNodeLogContext = new LocalNodeLogContext();
+builder.Services.AddSingleton(localNodeLogContext);
+builder.Services.AddSingleton<ISystemLogNodeContext>(localNodeLogContext);
 builder.Services.AddSystemLogging();
 builder.Services.AddApiProblemDetails();
 builder.Services.AddClusterAuthentication(builder.Configuration);

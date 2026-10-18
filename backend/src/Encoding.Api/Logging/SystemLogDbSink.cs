@@ -12,16 +12,14 @@ namespace Encoding.Api.Logging;
 public sealed class SystemLogDbSink : ISystemLogSink, IHostedService, IAsyncDisposable
 {
     private readonly SystemLogRepository _repository;
-    private readonly ILogger<SystemLogDbSink> _logger;
     private readonly Channel<SystemLogEntry> _channel;
     private readonly CancellationTokenSource _cts = new();
     private Task? _processingTask;
     private int _writesSinceLastPrune;
 
-    public SystemLogDbSink(SystemLogRepository repository, ILogger<SystemLogDbSink> logger)
+    public SystemLogDbSink(SystemLogRepository repository)
     {
         _repository = repository;
-        _logger = logger;
         _channel = Channel.CreateBounded<SystemLogEntry>(new BoundedChannelOptions(5000)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
@@ -58,7 +56,7 @@ public sealed class SystemLogDbSink : ISystemLogSink, IHostedService, IAsyncDisp
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erreur lors de l'arrêt du service de persistance des logs");
+                Console.Error.WriteLine($"[SystemLogDbSink] Erreur lors de l'arrêt du service de persistance des logs: {ex.Message}");
             }
         }
     }
@@ -89,8 +87,8 @@ public sealed class SystemLogDbSink : ISystemLogSink, IHostedService, IAsyncDisp
                 }
                 catch (Exception ex)
                 {
-                    // Ne doit pas interrompre la boucle
-                    _logger.LogError(ex, "Erreur lors de la persistance SQLite du log système {LogId}", entry.Id);
+                    // Ne doit pas interrompre la boucle ni recurser dans ILogger
+                    Console.Error.WriteLine($"[SystemLogDbSink] Erreur lors de la persistance SQLite du log système {entry.Id}: {ex.Message}");
                 }
             }
         }
