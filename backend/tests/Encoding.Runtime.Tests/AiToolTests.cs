@@ -102,4 +102,33 @@ public sealed class AiToolTests
         Assert.True(res.Success);
         Assert.Contains("Traduction", res.Content);
     }
+
+    [Fact]
+    public async Task FlowAiGeneratorService_Generates_Valid_Flow()
+    {
+        var config = new ConfigurationBuilder().Build();
+        var registry = new FlowComponentRegistry(config);
+        var validator = new FlowDefinitionValidator(registry);
+        var promptBuilder = new FlowCatalogPromptBuilder(registry);
+        var factory = new AiClientFactory(config, new MockHttpClientFactory());
+        var service = new FlowAiGeneratorService(factory, promptBuilder, validator, registry);
+
+        var promptText = promptBuilder.BuildSystemPrompt("video");
+        Assert.Contains("base-transcode-video", promptText);
+        Assert.Contains("RÈGLES D'OR", promptText);
+
+        var response = await service.GenerateFlowAsync(new FlowAiGenerateRequest("video", "Encoder en HEVC avec audio AAC"));
+        Assert.True(response.Success);
+        Assert.NotNull(response.Flow);
+        Assert.Equal("video", response.Flow.MediaType);
+        Assert.True(response.Flow.Nodes.Count >= 1);
+
+        var validationResult = validator.Validate(response.Flow);
+        Assert.True(validationResult.IsValid);
+    }
+
+    private sealed class MockHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
+    }
 }
