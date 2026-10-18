@@ -189,7 +189,7 @@ internal static partial class Harness
             client.DefaultRequestHeaders.Add("X-Encoding-Csrf", "1");
             using var response=await client.PutAsJsonAsync($"/api/v1/flows/{flow.Id}",new SaveFlowRequest(2,changed with { Version=3 }));
             var flowResponseContent = await response.Content.ReadAsStringAsync();
-            var flowResponse = response.IsSuccessStatusCode ? JsonSerializer.Deserialize<FlowVersionResponse>(flowResponseContent, FlowRepository.JsonOptions) : null;
+            var flowResponse = response.IsSuccessStatusCode ? JsonSerializer.Deserialize<FlowVersionResponse>(flowResponseContent, Json) : null;
             Check(response.IsSuccessStatusCode && flowResponse?.Definition.Version==2,$"The API returns the exact existing version for an unchanged request. HTTP {(int)response.StatusCode}: {flowResponseContent}");
             var importId=Guid.NewGuid(); var imported=flow with { Id=importId };
             Check(await repository.SaveManyAsync([new(0,imported),new(1,imported with {Version=2})],false,CancellationToken.None)
