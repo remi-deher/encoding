@@ -50,3 +50,22 @@ public sealed record LibraryNodeAccessResponse(
 
 /// <summary>Définitions de bibliothèques d'un cluster, exportées avant de le quitter (0039). Format 1 : définitions seules, sans chemins d'accès des nœuds.</summary>
 public sealed record LibraryExport(int Format, DateTimeOffset ExportedAt, string ClusterName, IReadOnlyList<LibraryResponse> Libraries);
+
+public sealed record LibraryOverviewResponse(
+    Guid Id,
+    string Name,
+    bool IsActive,
+    DateTimeOffset CreatedAt,
+    string? FlowName,
+    int? FlowVersion,
+    Guid? FlowId,
+    int ConfiguredNodeCount,
+    int DirectAccessNodeCount,
+    bool WatchEnabled,
+    int ScanIntervalSeconds,
+    int TotalMediaCount,
+    int QueuedExecutionCount,
+    int RunningExecutionCount,
+    int CompletedExecutionCount,
+    int FailedExecutionCount);
+

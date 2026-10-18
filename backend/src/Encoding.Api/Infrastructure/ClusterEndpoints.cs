@@ -15,10 +15,12 @@ public static class ClusterEndpoints
     public static void MapClusterEndpoints(this WebApplication app)
     {
         const string route = "/api/v1/cluster";
-        app.MapGet(route, async (ClusterIdentityRepository repository, CancellationToken cancellationToken) =>
+        app.MapGet(route, async (ClusterIdentityRepository repository, IServiceProvider services, CancellationToken cancellationToken) =>
         {
             var identity = await repository.GetAsync(cancellationToken);
-            return Results.Ok(new { identity.Id, identity.Name, identity.Standalone });
+            var tokens = services.GetService<ApiTokenRepository>();
+            var hasClusterToken = tokens is not null && await tokens.HasClusterTokenAsync(cancellationToken);
+            return Results.Ok(new { identity.Id, identity.Name, identity.Standalone, hasClusterToken });
         }).AllowAnonymous().WithTags("Cluster").WithName("GetClusterIdentity");
 
         // Un nœud autonome devient un cluster en le nommant ; ensuite seul le nom change (architecture 0045).
@@ -37,7 +39,10 @@ public static class ClusterEndpoints
                 try
                 {
                     await peerConsensus!.ReplicateAsync(new PeerReplicatedStateCommand(Guid.NewGuid(), "cluster/name", JsonSerializer.SerializeToElement(request.Name.Trim())), cancellationToken);
-                    return Results.Ok(await repository.GetAsync(cancellationToken));
+                    var tokens = services.GetRequiredService<ApiTokenRepository>();
+                    var clusterToken = await tokens.EnsureClusterTokenAsync(cancellationToken);
+                    var created = await repository.GetAsync(cancellationToken);
+                    return Results.Ok(new { created.Id, created.Name, created.Standalone, clusterToken });
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -46,9 +51,13 @@ public static class ClusterEndpoints
             }
             var current = await repository.GetAsync(cancellationToken);
             await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);
-            return await repository.CreateAsync(request.Name, cancellationToken)
-                ? Results.Ok(await repository.GetAsync(cancellationToken))
-                : Results.Conflict(new { title = "Ce nœud fait déjà partie d’un cluster." });
+            if (!await repository.CreateAsync(request.Name, cancellationToken))
+                return Results.Conflict(new { title = "Ce nœud fait déjà partie d’un cluster." });
+
+            var tokenRepo = services.GetRequiredService<ApiTokenRepository>();
+            var generatedToken = await tokenRepo.EnsureClusterTokenAsync(cancellationToken);
+            var resultIdentity = await repository.GetAsync(cancellationToken);
+            return Results.Ok(new { resultIdentity.Id, resultIdentity.Name, resultIdentity.Standalone, clusterToken = generatedToken });
         }).WithTags("Cluster").WithName("CreateCluster");
 
         app.MapPut(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions, ClusterDataKeyStore dataKeyStore, IServiceProvider services, CancellationToken cancellationToken) =>

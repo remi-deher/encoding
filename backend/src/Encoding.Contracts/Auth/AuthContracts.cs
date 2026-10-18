@@ -32,3 +32,29 @@ public sealed record OpenEnrollmentWindowRequest(int Minutes);
 
 /// <summary>Mode « accepter la première liaison » (0040) : actif jusqu'à la première liaison acceptée ou jusqu'à son expiration.</summary>
 public sealed record FirstLinkResponse(bool IsActive, DateTimeOffset? ExpiresAt);
+
+public sealed record ApiTokenResponse(
+    Guid Id,
+    string Name,
+    string TokenPrefix,
+    string Role,
+    bool IsActive,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ExpiresAt,
+    DateTimeOffset? LastUsedAt,
+    DateTimeOffset? RevokedAt);
+
+public sealed record CreateApiTokenRequest(
+    string Name,
+    string? Role = "admin",
+    DateTimeOffset? ExpiresAt = null);
+
+public sealed record CreatedApiTokenResponse(
+    Guid Id,
+    string Name,
+    string TokenPrefix,
+    string Role,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ExpiresAt,
+    string Token);
+

@@ -30,7 +30,7 @@ internal static partial class Harness
         }
         private async Task ResetNodesAsync()
         {
-            await using var command=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp(),max_concurrent_tasks=10");
+            await using var command=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp(),max_concurrent_tasks=100,deleted_at=NULL; DELETE FROM node_processing_settings;");
             await command.ExecuteNonQueryAsync();
         }
 

@@ -1,4 +1,5 @@
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Infrastructure.PeerCluster;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Net.Http.Json;
@@ -133,33 +134,61 @@ internal static partial class Harness
             artifacts=new(db,config); executions=new(db);
             foreach(var id in new[]{a,b,c})
             {
-                await using var command=db.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at,node_token_hash) VALUES(@id,@name,ARRAY['worker'],10,@caps,clock_timestamp(),@token)");
+                await using var command=db.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at,node_token_hash) VALUES(@id,@name,ARRAY['worker'],100,@caps,clock_timestamp(),@token)");
                 command.Parameters.AddWithValue("id",id); command.Parameters.AddWithValue("name",id.ToString());
                 command.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(Capabilities(true),Json));
                 command.Parameters.AddWithValue("token",SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Token))); await command.ExecuteNonQueryAsync();
             }
-            var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0"); builder.Logging.ClearProviders();
+            var presenceOptions = new NodePresenceOptions(TimeSpan.FromHours(1));
+            var flowRepo = new FlowRepository(db);
+            var workflowRepo = new LibraryWorkflowRepository(db, validator, presenceOptions);
+            var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0");
+            builder.Logging.ClearProviders();
+            builder.Logging.AddSimpleConsole(o => { o.SingleLine = true; o.IncludeScopes = false; });
+            builder.Logging.SetMinimumLevel(LogLevel.Information);
+            builder.Services.AddApiProblemDetails();
+            builder.Services.ConfigureHttpJsonOptions(options => { options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase; });
             builder.Services.AddSingleton<System.Data.Common.DbDataSource>(db); builder.Services.AddSingleton(runtime); builder.Services.AddSingleton(artifacts);
-            builder.Services.AddSingleton(new ExecutionWaitRepository(db,new NodePresenceOptions(TimeSpan.FromHours(1)))); builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
-            builder.Services.AddSingleton<LibraryProcessingRepository>(); builder.Services.AddSingleton<LibraryWorkflowRepository>();
-            builder.Services.AddSingleton(validator); builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromHours(1)));
-            builder.Services.AddSingleton(registry); builder.Services.AddSingleton<FlowRepository>(); builder.Services.AddSingleton<FlowArchiveService>();
+            builder.Services.AddSingleton(new ExecutionWaitRepository(db, presenceOptions)); builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
+            builder.Services.AddSingleton(new LibraryProcessingRepository(db)); builder.Services.AddSingleton(workflowRepo);
+            builder.Services.AddSingleton(validator); builder.Services.AddSingleton(presenceOptions);
+            builder.Services.AddSingleton(registry); builder.Services.AddSingleton(flowRepo); builder.Services.AddSingleton(new FlowArchiveService(flowRepo, validator));
+            builder.Services.AddSingleton(new FlowTemplateRepository(db));
+            builder.Services.AddSingleton(PeerClusterOptions.From(new ConfigurationBuilder().Build(), directory));
             app=builder.Build();
             app.Use(async (context,next) =>
             {
-                if(context.Request.Path.Value?.EndsWith("/steps/complete",StringComparison.Ordinal)==true
-                    && Interlocked.Exchange(ref rejectNextCheckpoint,0)==1)
+                try
                 {
-                    context.Response.StatusCode=StatusCodes.Status409Conflict;
-                    return;
+                    if(context.Request.Path.Value?.EndsWith("/steps/complete",StringComparison.Ordinal)==true
+                        && Interlocked.Exchange(ref rejectNextCheckpoint,0)==1)
+                    {
+                        context.Response.StatusCode=StatusCodes.Status409Conflict;
+                        return;
+                    }
+                    if(context.Request.Path.Value?.EndsWith("/finish",StringComparison.Ordinal)==true
+                        && Interlocked.Exchange(ref rejectNextFinish,0)==1)
+                    {
+                        context.Response.StatusCode=StatusCodes.Status409Conflict;
+                        return;
+                    }
+                    await next();
+                    if(context.Response.StatusCode >= 500)
+                    {
+                        Console.Error.WriteLine($"[HARNESS 500] {context.Request.Method} {context.Request.Path} -> {context.Response.StatusCode}");
+                    }
                 }
-                if(context.Request.Path.Value?.EndsWith("/finish",StringComparison.Ordinal)==true
-                    && Interlocked.Exchange(ref rejectNextFinish,0)==1)
+                catch (Exception ex)
                 {
-                    context.Response.StatusCode=StatusCodes.Status409Conflict;
-                    return;
+                    Console.Error.WriteLine($"[HARNESS EX] {context.Request.Method} {context.Request.Path}: {ex}");
+                    if(!context.Response.HasStarted)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                        context.Response.ContentType = "text/plain";
+                        await context.Response.WriteAsync($"EX: {ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}");
+                    }
+                    throw;
                 }
-                await next();
             });
             app.MapRuntimeEndpoints(); app.MapFlowEndpoints();
             app.MapGet("/api/v1/executions/{id:guid}",async(Guid id)=>await executions.GetAsync(id,CancellationToken.None));
@@ -186,8 +215,11 @@ internal static partial class Harness
             Check((await repository.SaveAsync(new(1,changed),CancellationToken.None))?.Definition.Version==2,"A meaningful edit creates exactly one new version.");
             Check(await repository.SaveAsync(new(1,changed with { Version=3 },null),CancellationToken.None) is null,"A stale editor cannot overwrite a newer version.");
             using var client=new HttpClient { BaseAddress=new Uri(app.Urls.Single()) };
+            client.DefaultRequestHeaders.Add("X-Encoding-Csrf", "1");
             using var response=await client.PutAsJsonAsync($"/api/v1/flows/{flow.Id}",new SaveFlowRequest(2,changed with { Version=3 }));
-            Check(response.IsSuccessStatusCode && (await response.Content.ReadFromJsonAsync<FlowVersionResponse>())?.Definition.Version==2,"The API returns the exact existing version for an unchanged request.");
+            var flowResponseContent = await response.Content.ReadAsStringAsync();
+            var flowResponse = response.IsSuccessStatusCode ? JsonSerializer.Deserialize<FlowVersionResponse>(flowResponseContent, Json) : null;
+            Check(response.IsSuccessStatusCode && flowResponse?.Definition.Version==2,$"The API returns the exact existing version for an unchanged request. HTTP {(int)response.StatusCode}: {flowResponseContent}");
             var importId=Guid.NewGuid(); var imported=flow with { Id=importId };
             Check(await repository.SaveManyAsync([new(0,imported),new(1,imported with {Version=2})],false,CancellationToken.None)
                 && (await repository.VersionsAsync(importId,CancellationToken.None)).Count==2,"Archive imports preserve historical versions even with identical contents.");
@@ -252,6 +284,8 @@ internal static partial class Harness
         {
             // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
             await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            Interlocked.Exchange(ref rejectNextCheckpoint, 0);
+            Interlocked.Exchange(ref rejectNextFinish, 0);
             await ResetNodesAsync();
             var library=Guid.NewGuid(); var id=Guid.NewGuid();
             await using var command=db.CreateCommand("""
@@ -432,7 +466,7 @@ internal static partial class Harness
             await Runner("conflict-checkpoint",out _).RunAsync(lease,client,deadline.Token);
 
             var result=await executions.GetAsync(id,CancellationToken.None)??throw new InvalidOperationException("The execution must remain observable.");
-            Check(result.State=="failed","A rejected checkpoint with a valid lease must finish as failed, not wait for lease expiry and retry.");
+            Check(result.State=="failed",$"A rejected checkpoint with a valid lease must finish as failed, not wait for lease expiry and retry. State: {result.State}, Detail: {result.Detail}");
             Check(result.Detail?.Contains("refusé",StringComparison.OrdinalIgnoreCase)==true,"The failed execution records the rejected cluster operation.");
             await using(var reservation=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id"))
             {
@@ -458,7 +492,7 @@ internal static partial class Harness
             await Runner("conflict-finish",out _).RunAsync(lease,client,deadline.Token);
 
             var result=await executions.GetAsync(id,CancellationToken.None)??throw new InvalidOperationException("The execution must remain observable.");
-            Check(result.State=="failed","A rejected final completion with a valid lease must finish as failed, not wait for lease expiry and retry.");
+            Check(result.State=="failed",$"A rejected final completion with a valid lease must finish as failed, not wait for lease expiry and retry. State: {result.State}, Detail: {result.Detail}");
             Check(result.Detail?.Contains("refusé",StringComparison.OrdinalIgnoreCase)==true,"The failed execution records the rejected cluster operation.");
             await using(var reservation=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id"))
             {

@@ -13,6 +13,9 @@ public static class LibraryEndpoints
         libraries.MapGet("", async (LibraryRepository repository, CancellationToken cancellationToken) =>
             Results.Ok(await repository.ListAsync(cancellationToken)))
             .WithName("ListLibraries");
+        libraries.MapGet("/overview", async (LibraryRepository repository, CancellationToken cancellationToken) =>
+            Results.Ok(await repository.OverviewAsync(cancellationToken)))
+            .WithName("GetLibrariesOverview");
         libraries.MapGet("/export", async (LibraryRepository repository, Infrastructure.ClusterIdentityRepository cluster, HttpContext http, CancellationToken cancellationToken) =>
         {
             var identity = await cluster.GetAsync(cancellationToken);

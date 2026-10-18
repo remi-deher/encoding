@@ -135,6 +135,13 @@ public static class OpenApiEndpoints
                         name = "X-Node-Token",
                         description = "Jeton d’authentification des workers enrôlés.",
                     },
+                    ["bearerAuth"] = new
+                    {
+                        type = "http",
+                        scheme = "bearer",
+                        bearerFormat = "Token API Cluster",
+                        description = "Jeton d’authentification API cluster (ex. enc_pat_...). Valable sur n’importe quel nœud du cluster, dispense de cookie et d'en-tête anti-CSRF.",
+                    },
                 },
                 ["schemas"] = new Dictionary<string, object>
                 {
@@ -159,7 +166,10 @@ public static class OpenApiEndpoints
     private static object[] BuildSecurityRequirements(bool isAnonymous, bool allowsNode, bool safeMethod)
     {
         if (isAnonymous) return [];
-        var requirements = new List<object>();
+        var requirements = new List<object>
+        {
+            new Dictionary<string, string[]> { ["bearerAuth"] = [] }
+        };
         if (safeMethod)
         {
             requirements.Add(new Dictionary<string, string[]> { ["sessionCookie"] = [] });

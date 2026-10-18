@@ -19,7 +19,10 @@ using Encoding.Api.Infrastructure.PeerCluster;
 using DotNext.Net.Cluster.Consensus.Raft.Http;
 using DotNext.Net.Cluster.Consensus.Raft;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
+using Encoding.Api.Mcp;
 
+if (args.FirstOrDefault() is McpCommand.Name or "--" + McpCommand.Name)
+    Environment.Exit(await McpCommand.RunAsync(args[1..], Console.In, Console.Out, CancellationToken.None));
 if (args.FirstOrDefault() == PeerAuthorityDatabaseCommand.Name)
     Environment.Exit(await PeerAuthorityDatabaseCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
 if (args.FirstOrDefault() is { } peerCommand && PeerOperationsCommand.Names.Contains(peerCommand))
@@ -49,6 +52,8 @@ builder.Services.AddSingleton<FirstLinkRepository>();
 builder.Services.AddSingleton<LocalNodeRegistry>();
 builder.Services.AddApiProblemDetails();
 builder.Services.AddClusterAuthentication(builder.Configuration);
+builder.Services.AddSingleton<ApiTokenRepository>();
+builder.Services.AddSingleton<McpSessionManager>();
 builder.Services.AddSingleton<ExecutionStreamBroadcaster>();
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
@@ -63,6 +68,7 @@ builder.Services.AddSingleton<FlowComponentPackRepository>();
 builder.Services.AddSingleton<EncodingProfileRepository>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
 builder.Services.AddSingleton<PluginConnectionTester>();
+builder.Services.AddSingleton<McpService>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();
 builder.Services.AddSingleton<IntegrationTriggerService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<IntegrationTriggerService>());
@@ -181,6 +187,7 @@ app.UseStaticFiles();
 app.UseClusterAuthentication();
 app.UsePeerRequestRouting();
 app.MapAuthEndpoints();
+app.MapApiTokenEndpoints();
 app.MapEnrollmentWindowEndpoints();
 app.MapFlowEndpoints();
 app.MapFlowScriptEndpoints();
@@ -205,6 +212,7 @@ app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();
 app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
+app.MapMcpEndpoints();
 app.MapOpenApiEndpoints();
 
 app.MapFallbackToFile("index.html").AllowAnonymous();

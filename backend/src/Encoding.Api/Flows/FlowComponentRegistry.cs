@@ -116,4 +116,25 @@ public sealed class FlowComponentRegistry
 
     public FlowComponentDescriptor? Resolve(FlowComponentReference reference) => components.GetValueOrDefault(reference);
     public string? RuntimePluginVersion(FlowComponentReference reference)=>runtimeVersions.GetValueOrDefault(reference);
+
+    public FlowComponentReference? FindReference(string componentId, string? pluginId = null)
+    {
+        foreach (var manifest in Plugins)
+        {
+            if (pluginId is not null && !string.Equals(manifest.Id, pluginId, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var comp = manifest.Components.FirstOrDefault(c => string.Equals(c.Id, componentId, StringComparison.OrdinalIgnoreCase));
+            if (comp is not null)
+            {
+                return new FlowComponentReference(
+                    manifest.Id,
+                    manifest.Version,
+                    comp.Id,
+                    comp.Version,
+                    comp.ConfigurationSchema.Version);
+            }
+        }
+        return null;
+    }
 }
+

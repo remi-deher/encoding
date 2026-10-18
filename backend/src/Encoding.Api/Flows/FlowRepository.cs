@@ -19,7 +19,7 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
             FROM flows f LEFT JOIN flow_versions v ON v.flow_id=f.id AND v.version=f.current_version
             LEFT JOIN flow_drafts d ON d.flow_id=f.id LEFT JOIN flow_draft_backups db ON db.flow_id=d.flow_id AND db.revision=d.revision
             LEFT JOIN flow_backup_jobs b ON b.flow_id=v.flow_id AND b.version=v.version
-            WHERE d.flow_id IS NOT NULL OR v.flow_id IS NOT NULL
+            WHERE f.deleted_at IS NULL AND (d.flow_id IS NOT NULL OR v.flow_id IS NOT NULL)
             ORDER BY GREATEST(f.updated_at,d.updated_at) DESC,f.id
             """);
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -33,7 +33,8 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
         await using var command = dataSource.CreateCommand("""
             SELECT v.definition::text,b.status,v.created_at FROM flows f
             JOIN flow_versions v ON v.flow_id=f.id AND v.version=COALESCE(@version,f.current_version)
-            JOIN flow_backup_jobs b ON b.flow_id=v.flow_id AND b.version=v.version WHERE f.id=@id
+            JOIN flow_backup_jobs b ON b.flow_id=v.flow_id AND b.version=v.version
+            WHERE f.id=@id AND (@version IS NOT NULL OR f.deleted_at IS NULL)
             """);
         command.Parameters.AddWithValue("id",id);
         command.Parameters.AddWithValue("version",SqlKind.Integer,(object?)version ?? DBNull.Value);
@@ -44,7 +45,7 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
 
     public async Task<FlowDraftResponse?> DraftAsync(Guid id,CancellationToken ct)
     {
-        await using var command=dataSource.CreateCommand("SELECT d.definition::text,d.revision,f.current_version,d.updated_at,b.status FROM flow_drafts d JOIN flows f ON f.id=d.flow_id JOIN flow_draft_backups b ON b.flow_id=d.flow_id AND b.revision=d.revision WHERE f.id=@id");
+        await using var command=dataSource.CreateCommand("SELECT d.definition::text,d.revision,f.current_version,d.updated_at,b.status FROM flow_drafts d JOIN flows f ON f.id=d.flow_id JOIN flow_draft_backups b ON b.flow_id=d.flow_id AND b.revision=d.revision WHERE f.id=@id AND f.deleted_at IS NULL");
         command.Parameters.AddWithValue("id",id); await using var reader=await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? new(JsonSerializer.Deserialize<FlowDefinition>(reader.GetString(0),JsonOptions)!,reader.GetInt32(1),reader.GetInt32(2),reader.GetString(4),reader.GetFieldValue<DateTimeOffset>(3)) : null;
     }
@@ -202,13 +203,17 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
         if (!restore && (current != request.ExpectedVersion || definition.Version != current + 1)) return null;
         if (skipUnchanged && current > 0)
         {
-            await using var unchanged = Sql.Command("SELECT (definition - 'version') = (@document::jsonb - 'version') FROM flow_versions WHERE flow_id=@id AND version=@version", connection, tx);
-            unchanged.Parameters.AddWithValue("id", definition.Id); unchanged.Parameters.AddWithValue("version", current);
-            unchanged.Parameters.AddWithValue("document", SqlKind.Json, json);
-            if (await unchanged.ScalarNullableBoolAsync(ct) is true)
+            await using var readLatest = Sql.Command("SELECT definition FROM flow_versions WHERE flow_id=@id AND version=@version", connection, tx);
+            readLatest.Parameters.AddWithValue("id", definition.Id); readLatest.Parameters.AddWithValue("version", current);
+            var existingJson = (string?)await readLatest.ExecuteScalarAsync(ct);
+            if (existingJson is not null)
             {
-                await ClearDraftAsync(request, connection, tx, ct);
-                return current;
+                var existingDef = JsonSerializer.Deserialize<FlowDefinition>(existingJson, JsonOptions);
+                if (existingDef is not null && JsonSerializer.Serialize(existingDef with { Version = current }, JsonOptions) == JsonSerializer.Serialize(definition with { Version = current }, JsonOptions))
+                {
+                    await ClearDraftAsync(request, connection, tx, ct);
+                    return current;
+                }
             }
         }
         await using var command = Sql.Command("""
@@ -232,4 +237,105 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
             await clear.ExecuteNonQueryAsync(ct);
         }
     }
+
+    public async Task<(FlowDeleteResult Result, string? Reason)> DeleteFlowAsync(Guid id, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        await using var checkFlow = Sql.Command("SELECT current_version FROM flows WHERE id = @id AND deleted_at IS NULL", connection, tx);
+        checkFlow.Parameters.AddWithValue("id", id);
+        var currentVersionObj = await checkFlow.ExecuteScalarAsync(ct);
+        if (currentVersionObj is null or DBNull)
+            return (FlowDeleteResult.NotFound, null);
+        var currentVersion = Convert.ToInt32(currentVersionObj);
+
+        await using var checkAssign = Sql.Command("SELECT count(*) FROM library_flow_assignments WHERE flow_id = @id", connection, tx);
+        checkAssign.Parameters.AddWithValue("id", id);
+        var assignCount = Convert.ToInt64(await checkAssign.ExecuteScalarAsync(ct));
+        if (assignCount > 0)
+            return (FlowDeleteResult.Conflict, "Ce flow est actuellement assigné à une ou plusieurs bibliothèques.");
+
+        await using var checkExec = Sql.Command("""
+            SELECT count(*) FROM executions
+            WHERE json_extract(flow_definition, '$.id') = @idStr
+              AND state IN ('queued', 'running', 'active')
+            """, connection, tx);
+        checkExec.Parameters.AddWithValue("idStr", id.ToString("D"));
+        var activeExecCount = Convert.ToInt64(await checkExec.ExecuteScalarAsync(ct));
+        if (activeExecCount > 0)
+            return (FlowDeleteResult.Conflict, "Des exécutions sont actuellement en cours pour ce flow.");
+
+        await using var clearDraft = Sql.Command("DELETE FROM flow_drafts WHERE flow_id = @id", connection, tx);
+        clearDraft.Parameters.AddWithValue("id", id);
+        await clearDraft.ExecuteNonQueryAsync(ct);
+
+        await using var softDelete = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id", connection, tx);
+        softDelete.Parameters.AddWithValue("id", id);
+        await softDelete.ExecuteNonQueryAsync(ct);
+
+        await tx.CommitAsync(ct);
+        return (FlowDeleteResult.Deleted, null);
+    }
+
+    public async Task<bool> DeleteDraftAsync(Guid id, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        await using var clearDraft = Sql.Command("DELETE FROM flow_drafts WHERE flow_id = @id", connection, tx);
+        clearDraft.Parameters.AddWithValue("id", id);
+        var rows = await clearDraft.ExecuteNonQueryAsync(ct);
+        if (rows == 0) return false;
+
+        await using var checkVersions = Sql.Command("SELECT count(*) FROM flow_versions WHERE flow_id = @id", connection, tx);
+        checkVersions.Parameters.AddWithValue("id", id);
+        var versionCount = Convert.ToInt64(await checkVersions.ExecuteScalarAsync(ct));
+
+        await using var checkFlow = Sql.Command("SELECT current_version FROM flows WHERE id = @id", connection, tx);
+        checkFlow.Parameters.AddWithValue("id", id);
+        var currentVersion = Convert.ToInt32(await checkFlow.ExecuteScalarAsync(ct) ?? 0);
+
+        if (currentVersion == 0 && versionCount == 0)
+        {
+            await using var removeFlow = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id", connection, tx);
+            removeFlow.Parameters.AddWithValue("id", id);
+            await removeFlow.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return true;
+    }
+
+    public async Task<FlowDraftResponse?> CloneFlowAsync(Guid sourceId, string? newName, CancellationToken ct)
+    {
+        var draft = await DraftAsync(sourceId, ct);
+        var version = draft is null ? await GetAsync(sourceId, null, ct) : null;
+        if (draft is null && version is null) return null;
+
+        var baseDefinition = draft?.Definition ?? version!.Definition;
+        var newId = Guid.NewGuid();
+        var name = string.IsNullOrWhiteSpace(newName) ? $"{baseDefinition.Name} (copie)" : newName.Trim();
+        var cloned = baseDefinition with { Id = newId, Version = 1, Name = name };
+        return await SaveDraftAsync(new SaveFlowDraftRequest(0, cloned), ct);
+    }
+
+    public async Task<FlowDraftResponse?> CreateFromTemplateAsync(Guid templateId, string? newName, FlowTemplateRepository templates, CancellationToken ct)
+    {
+        var template = await templates.GetAsync(templateId, ct);
+        if (template is null) return null;
+
+        var newId = Guid.NewGuid();
+        var name = string.IsNullOrWhiteSpace(newName) ? template.Template.Name : newName.Trim();
+        var definition = template.Definition with { Id = newId, Version = 1, Name = name };
+        return await SaveDraftAsync(new SaveFlowDraftRequest(0, definition), ct);
+    }
 }
+
+public enum FlowDeleteResult
+{
+    Deleted,
+    NotFound,
+    Conflict
+}
+

@@ -35,6 +35,12 @@ internal static partial class Harness
             await Schedule(true,new string('0',NodeSchedule.SlotCount));
             Check(await runtime.RenewAsync(lease.ExecutionId,a,lease.Epoch,CancellationToken.None) is not null,"Closing the calendar does not interrupt running work.");
             await Schedule(false,new string('0',NodeSchedule.SlotCount));
+            await using(var clean=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE id=@id; UPDATE execution_work SET lease_until=NULL WHERE execution_id=@id; DELETE FROM node_processing_settings WHERE node_id=@a;"))
+            {
+                clean.Parameters.AddWithValue("id", lease.ExecutionId);
+                clean.Parameters.AddWithValue("a", a);
+                await clean.ExecuteNonQueryAsync();
+            }
         }
     }
 }

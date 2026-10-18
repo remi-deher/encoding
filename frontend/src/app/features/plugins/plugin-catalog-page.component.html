@@ -4,28 +4,169 @@
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
-  filterLabel="Famille de plugin"
-  note="Les manifestes Plex, Sonarr, Radarr et Jellyfin sont intégrés au catalogue. Leur exécution nécessite encore un processus plugin configuré sur le worker."
+  filterLabel="Filtrer"
+  note="Les plugins et outils sont gérés au niveau du cluster et synchronisés sur l'ensemble des nœuds membres."
 >
+  <app-category-tabs
+    catalogue-navigation
+    label="Sections"
+    [options]="extensionTabs()"
+    [selected]="activeTab()"
+    (selectedChange)="onExtensionTabChange($event)"
+  />
+
+  <ng-container catalogue-summary>
+    @if (activeTab() === 'tools') {
+      <app-context-banner
+        label="Suite média du cluster"
+        title="Outils de référence et conformité matérielle"
+        description="Le nœud initiateur définit les outils disponibles pour le cluster. La version de référence FFmpeg (Stock v7.1) est préservée sur chaque nœud pour garantir les sondes matérielles (CPU/GPU) et le heartbeat. Les outils personnalisés sont testés par mire synthétique."
+      />
+    } @else if (activeTab() === 'store') {
+      <app-context-banner
+        label="Distribution décentralisée"
+        title="Store de plugins et dépôts communautaires"
+        description="Le dépôt officiel d'Encoding est certifié et verrouillé par défaut. Vous pouvez connecter des dépôts tiers sécurisés (repository.json) ou importer directement un paquet .zip sans dépendance externe."
+      />
+    }
+  </ng-container>
+
   <div catalogue-filters>
-    <app-category-tabs
-      label="Famille de plugin"
-      [options]="familyOptions()"
-      [selected]="selectedFamily()"
-      (selectedChange)="onFamilyChange($event)"
-    />
+    @if (activeTab() === 'plugins') {
+      <app-category-tabs
+        label="Famille de plugin"
+        [options]="familyOptions()"
+        [selected]="selectedFamily()"
+        (selectedChange)="onFamilyChange($event)"
+      />
+    } @else if (activeTab() === 'store') {
+      <app-category-tabs
+        label="Catégorie du Store"
+        [options]="storeCategoryOptions()"
+        [selected]="selectedStoreCategory()"
+        (selectedChange)="onStoreCategoryChange($event)"
+      />
+    }
   </div>
 
-  <app-data-table
-    layout="resources"
-    catalogue-table
-    [columns]="columns"
-    [rows]="filteredPlugins()"
-    [rowOpenable]="true"
-    rowOpenLabel="Consulter"
-    (rowOpen)="onPluginOpen($event)"
-    emptyMessage="Aucun plugin ne correspond à cette famille."
-  />
+  <div catalogue-table>
+    @if (activeTab() === 'plugins') {
+      <app-data-table
+        layout="resources"
+        [columns]="columns"
+        [rows]="filteredPlugins()"
+        [rowOpenable]="true"
+        rowOpenLabel="Consulter"
+        (rowOpen)="onPluginOpen($event)"
+        emptyMessage="Aucun plugin ne correspond à cette famille."
+      />
+    } @else if (activeTab() === 'tools') {
+      <div class="tools-grid">
+        @for (tool of clusterTools(); track tool.id) {
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <span class="tool-icon" aria-hidden="true">
+                @switch (tool.id) {
+                  @case ('ffmpeg') { 🎞️ }
+                  @case ('mkvtoolnix') { 📦 }
+                  @case ('ffprobe') { 🔍 }
+                  @case ('mediainfo') { 📊 }
+                  @case ('imagemagick') { 🖼️ }
+                  @case ('python') { 🐍 }
+                  @default { ⚙️ }
+                }
+              </span>
+              <div class="tool-title-group">
+                <h3>{{ tool.name }}</h3>
+                <span class="tool-version">Version {{ tool.stockVersion }} ({{ tool.provider === 'stock' ? 'Référence intégrée' : 'Personnalisé' }})</span>
+              </div>
+              <span class="badge success">{{ tool.clusterReadiness }}</span>
+            </div>
+
+            <p class="tool-description">{{ tool.role }}</p>
+
+            <div class="tool-details">
+              <div><strong>Exécutables :</strong> {{ tool.executables.join(', ') }}</div>
+              <div><strong>Médias supportés :</strong> {{ tool.mediaTypes.join(', ') }}</div>
+              @if (tool.id === 'ffmpeg' && tool.encoders.length > 0) {
+                <div><strong>Encodeurs vérifiés :</strong> {{ tool.encoders.length }} (CPU, NVENC, QSV, VAAPI)</div>
+              }
+              <div><strong>Sonde système :</strong> {{ tool.probePreserved ? 'Préservée (/usr/bin)' : 'Personnalisée' }}</div>
+            </div>
+
+            <div class="tool-card-actions">
+              <button matButton="outlined" type="button" (click)="testTool(tool)">
+                Tester la conformité
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    } @else if (activeTab() === 'store') {
+      <div class="repositories-section">
+        <h3>Dépôts configurés pour le cluster</h3>
+        <div class="repos-list">
+          @for (repo of storeRepositories(); track repo.id) {
+            <div class="repo-item">
+              <div class="repo-info">
+                <span class="repo-name">{{ repo.name }}</span>
+                <span class="repo-url">{{ repo.url }}</span>
+              </div>
+              <div class="repo-badges">
+                @if (repo.isLocked) {
+                  <span class="badge accent">Verrouillé (Officiel)</span>
+                } @else {
+                  <span class="badge success">Actif</span>
+                }
+                <span class="badge">{{ repo.packagesCount }} paquets</span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="store-grid">
+        @for (pkg of filteredStorePackages(); track pkg.id) {
+          <div class="store-card">
+            <div class="store-card-header">
+              <span class="store-icon" aria-hidden="true">{{ pkg.icon }}</span>
+              <div class="store-title-group">
+                <h3>{{ pkg.name }}</h3>
+                <span class="store-author">Par {{ pkg.author }} • v{{ pkg.version }}</span>
+              </div>
+              <span class="badge" [class.accent]="pkg.kind === 'plugin'" [class.warning]="pkg.kind === 'tool'">
+                {{ pkg.categoryLabel }}
+              </span>
+            </div>
+
+            <p class="store-description">{{ pkg.description }}</p>
+
+            @if (pkg.requiredTools.length > 0) {
+              <div class="tool-details">
+                <div><strong>Dépendances requises :</strong> {{ pkg.requiredTools.join(', ') }}</div>
+              </div>
+            }
+
+            <div class="store-card-actions">
+              @if (pkg.installedVersion) {
+                @if (pkg.hasUpdate) {
+                  <button matButton="filled" type="button" (click)="installPackage(pkg)">
+                    Mettre à jour (v{{ pkg.version }})
+                  </button>
+                } @else {
+                  <span class="badge success">Déjà installé (v{{ pkg.installedVersion }})</span>
+                }
+              } @else {
+                <button matButton="filled" type="button" (click)="installPackage(pkg)">
+                  Installer sur le cluster
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </div>
 
   <ng-template #detailContent catalogue-detail>
     <mat-tab-group class="plugin-detail-tabs" aria-label="Détails du plugin">
