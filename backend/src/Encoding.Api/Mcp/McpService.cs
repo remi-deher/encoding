@@ -532,17 +532,18 @@ public sealed class McpService(
 
     private McpCallToolResult ToolGetFlowSchema()
     {
-        var available = components.List().Select(c => new
+        var available = components.Plugins.SelectMany(p => p.Components.Select(c => new
         {
-            componentId = c.Descriptor.ComponentId,
-            pluginId = c.Descriptor.PluginId,
-            name = c.Descriptor.Name,
-            description = c.Descriptor.Description,
-            category = c.Descriptor.Category.ToString(),
-            inputs = c.Descriptor.Inputs,
-            outputs = c.Descriptor.Outputs,
-            schema = c.Descriptor.ConfigurationSchema
-        }).ToList();
+            componentId = c.Id,
+            pluginId = p.Id,
+            name = c.Name,
+            description = c.Description,
+            category = c.Kind,
+            mediaType = c.MediaType,
+            supportedFlowMediaTypes = c.SupportedFlowMediaTypes,
+            outputs = c.Outputs,
+            schema = c.ConfigurationSchema
+        })).ToList();
 
         var example = new
         {
@@ -607,7 +608,7 @@ public sealed class McpService(
             var validation = validator.Validate(definition);
             if (!validation.IsValid)
             {
-                var errors = string.Join("; ", validation.Errors.Select(e => $"{e.Code}: {e.Message}"));
+                var errors = string.Join("; ", validation.Issues.Select(e => $"{e.Code}: {e.Message}"));
                 return McpCallToolResult.Text($"Validation échouée pour la publication du flow : {errors}", isError: true);
             }
 
@@ -626,7 +627,7 @@ public sealed class McpService(
             var validation = validator.ValidateDraft(definition);
             if (!validation.IsValid)
             {
-                var errors = string.Join("; ", validation.Errors.Select(e => $"{e.Code}: {e.Message}"));
+                var errors = string.Join("; ", validation.Issues.Select(e => $"{e.Code}: {e.Message}"));
                 return McpCallToolResult.Text($"Validation échouée pour le brouillon du flow : {errors}", isError: true);
             }
 
@@ -676,13 +677,12 @@ public sealed class McpService(
             return McpCallToolResult.Text("Paramètre 'flowId' (UUID) requis.", isError: true);
         }
 
-        var result = await flows.DeleteFlowAsync(flowId, ct);
-        return result switch
+        var (deleteResult, reason) = await flows.DeleteFlowAsync(flowId, ct);
+        return deleteResult switch
         {
-            FlowDeletionResult.Success => McpCallToolResult.Text($"Le flow {flowId} a été supprimé avec succès."),
-            FlowDeletionResult.NotFound => McpCallToolResult.Text($"Flow introuvable avec l'ID {flowId}.", isError: true),
-            FlowDeletionResult.AssignedToLibrary => McpCallToolResult.Text($"Impossible de supprimer le flow {flowId} car il est encore assigné à une ou plusieurs bibliothèques actives.", isError: true),
-            FlowDeletionResult.HasActiveExecutions => McpCallToolResult.Text($"Impossible de supprimer le flow {flowId} car des exécutions sont actuellement en cours.", isError: true),
+            FlowDeleteResult.Deleted => McpCallToolResult.Text($"Le flow {flowId} a été supprimé avec succès."),
+            FlowDeleteResult.NotFound => McpCallToolResult.Text($"Flow introuvable avec l'ID {flowId}.", isError: true),
+            FlowDeleteResult.Conflict => McpCallToolResult.Text($"Impossible de supprimer le flow {flowId} : {reason ?? "conflit"}", isError: true),
             _ => McpCallToolResult.Text("Erreur inconnue lors de la suppression du flow.", isError: true)
         };
     }

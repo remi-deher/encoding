@@ -1,3 +1,4 @@
+using Encoding.Api.Auth;
 using Encoding.Api.Flows;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Plugins;

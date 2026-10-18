@@ -34,7 +34,7 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
         command.Parameters.AddWithValue("hash", SqlKind.Bytes, hash);
         command.Parameters.AddWithValue("prefix", prefix);
         command.Parameters.AddWithValue("role", normalizedRole);
-        command.Parameters.AddWithValue("expires", SqlKind.Timestamp, (object?)expiresAt ?? DBNull.Value);
+        command.Parameters.AddWithValue("expires", (object?)expiresAt ?? DBNull.Value);
 
         await command.ExecuteNonQueryAsync(ct);
 
