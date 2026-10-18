@@ -1,7 +1,7 @@
 name: PR policy
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, edited, ready_for_review]
+    types: [opened, reopened, synchronize, edited, ready_for_review, labeled, unlabeled]
 permissions:
   contents: write
   pull-requests: write
@@ -33,3 +33,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
+
+      - name: Enable auto-merge for an approved release
+        if: >-
+          github.event.pull_request.base.ref == 'main' &&
+          github.event.pull_request.head.ref == 'dev' &&
+          github.event.pull_request.draft == false &&
+          contains(github.event.pull_request.labels.*.name, 'release-ready')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
+
+      - name: Disable auto-merge when release approval is removed
+        if: >-
+          github.event.action == 'unlabeled' &&
+          github.event.label.name == 'release-ready' &&
+          github.event.pull_request.base.ref == 'main' &&
+          github.event.pull_request.head.ref == 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json autoMergeRequest --jq '.autoMergeRequest != null')" = "true" ]; then
+            gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --disable-auto
+          fi
