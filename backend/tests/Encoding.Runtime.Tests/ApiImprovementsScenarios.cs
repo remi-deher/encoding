@@ -390,7 +390,7 @@ internal static class ApiImprovementsScenarios
             {
                 Check(createFlowResp.StatusCode == HttpStatusCode.OK, $"MCP create_flow succeeds. Status: {(int)createFlowResp.StatusCode}, Body: {await createFlowResp.Content.ReadAsStringAsync()}");
                 var createdJson = await createFlowResp.Content.ReadAsStringAsync();
-                Check(createdJson.Contains("Flow créé et publié"), $"MCP create_flow creates and publishes flow. Response: {createdJson}");
+                Check(createdJson.Contains("Flow créé et publié") || createdJson.Contains(@"Flow cr\u00E9\u00E9 et publi\u00E9"), $"MCP create_flow creates and publishes flow. Response: {createdJson}");
             }
 
             // E. Appel d'outil (tools/call : delete_flow)

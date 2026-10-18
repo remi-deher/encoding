@@ -7,7 +7,10 @@ namespace Encoding.Api.Mcp;
 
 public static class McpEndpoints
 {
-    internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     public static void MapMcpEndpoints(this WebApplication app)
     {
