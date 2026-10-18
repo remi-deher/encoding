@@ -28,7 +28,7 @@
       "requiredTools": [],
       "requiresMedia": false,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.0.0", "1.1.0", "1.2.0"]
+      "compatiblePluginVersions": ["1.0.0", "1.1.0"]
     },
     {
       "id": "conditions-video-codec",
@@ -74,7 +74,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0", "1.2.0"]
+      "compatiblePluginVersions": ["1.1.0"]
     },
     {
       "id": "conditions-audio-codec",
@@ -136,7 +136,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0", "1.2.0"]
+      "compatiblePluginVersions": ["1.1.0"]
     },
     {
       "id": "conditions-video-resolution",
@@ -185,7 +185,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0", "1.2.0"]
+      "compatiblePluginVersions": ["1.1.0"]
     },
     {
       "id": "conditions-audio-channels",
@@ -245,7 +245,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0", "1.2.0"]
+      "compatiblePluginVersions": ["1.1.0"]
     },
     {
       "id": "conditions-audio-language",
@@ -307,7 +307,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0", "1.2.0"]
+      "compatiblePluginVersions": ["1.1.0"]
     },
     {
       "id": "conditions-video-hdr",
@@ -353,7 +353,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.2.0"]
+      "compatiblePluginVersions": []
     },
     {
       "id": "conditions-video-bitdepth",
@@ -396,7 +396,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.2.0"]
+      "compatiblePluginVersions": []
     }
   ]
 }
