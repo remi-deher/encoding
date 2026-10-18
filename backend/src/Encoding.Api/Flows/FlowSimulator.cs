@@ -50,6 +50,21 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                     output = ConditionTree.Evaluate(tree, new(context with { Variables = variables }, file.SourceNodeId, worker, file.LibraryId, file.Name, "source"), observations.Add) ? "yes" : "no";
                     detail = output == "yes" ? "Conditions satisfaites avec les données courantes." : "Conditions non satisfaites avec les données courantes.";
                 }
+                else if (node.Component.PluginId == "conditions" && MediaConditionEvaluator.IsMediaCondition(id))
+                {
+                    if (context.CurrentMetadata is null)
+                    {
+                        if (request.Assumptions?.GetValueOrDefault(node.Id) is not { } result)
+                            return new("waiting", "Choisissez explicitement le résultat de cette condition (Oui / Non).", steps, node.Id);
+                        assumed = true; output = result.OutputId;
+                        detail = "Résultat supposé pour la simulation.";
+                    }
+                    else
+                    {
+                        output = MediaConditionEvaluator.Evaluate(id, c, context.CurrentMetadata);
+                        detail = output == "yes" ? "Condition satisfaite d’après les métadonnées." : "Condition non satisfaite d’après les métadonnées.";
+                    }
+                }
                 else if (node.Component.PluginId == "base" && id.StartsWith("base-input-", StringComparison.Ordinal))
                     detail = "Profil de test utilisé ; aucun fichier de bibliothèque n’est ouvert.";
                 else if (node.Component.PluginId == "base" && id == "base-variable")
@@ -79,6 +94,8 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                 { output = "skipped"; detail = "Aucun traitement planifié : étape ignorée."; }
                 else if (node.Component.PluginId == "nodes" && id == RuntimeRetryPolicy.ComponentId)
                 { output = "success"; detail = "Règle de relance bornée activée pour les pertes de worker."; }
+                else if (node.Component.PluginId == "nodes" && id == "nodes-require-direct-access")
+                { output = "success"; detail = "Contrainte d’accès direct à la bibliothèque prise en compte pour l’attribution du segment."; }
                 else if (node.Component.PluginId == "base" && Text("processingMode", "direct") == "plan")
                 {
                     if (variables.TryGetValue("plan.tool", out var selected) && (FlowMediaValues.IsFfmpegPlan(id) != (selected.GetString() == "ffmpeg")))

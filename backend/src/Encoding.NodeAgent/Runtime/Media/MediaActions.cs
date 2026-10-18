@@ -34,7 +34,7 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                 value=JsonSerializer.SerializeToElement(tracks.EnumerateArray().Where(track=>id!="base-inspect-hdr"||track.TryGetProperty("@type",out var type)&&type.GetString()=="Video").Skip(int.Parse(Number(config,"trackId"))).Take(1));
             return new(null,[],value);
         }
-        if(id is "base-transcode-video" or "base-transcode-audio" or "base-normalize-audio" or "base-resize-video" or "base-remux-media")
+        if(id is "base-transcode-video" or "base-transcode-audio" or "base-normalize-audio" or "base-resize-video" or "base-remux-media" or "base-auto-crop" or "base-deinterlace-video")
             return await FfmpegPlanAsync([new(id,config,node)],current,directory,node,workerId,ct);
         if(id=="base-verify-decoding")
         {
@@ -240,14 +240,128 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
         return new(file,[],JsonSerializer.SerializeToElement(missing));
     }
 
+    public async Task<CropCoordinates?> DetectCropAsync(string current,string directory,int samplePoints,int sampleDurationSeconds,int threshold,int roundMultiple,double durationSeconds,CancellationToken ct)
+    {
+        var points=new List<double>();
+        if(durationSeconds>10) points.AddRange([durationSeconds*0.1,durationSeconds*0.25,durationSeconds*0.5,durationSeconds*0.75,durationSeconds*0.9]);
+        else points.Add(0);
+
+        var lines=new List<string>();
+        foreach(var p in points.Take(Math.Max(1,samplePoints)))
+        {
+            var args=new List<string> { "-nostdin","-v","error","-ss",p.ToString("F2",CultureInfo.InvariantCulture),"-i",current,"-frames:v","25","-vf",$"cropdetect={threshold}:16:0","-f","null","-" };
+            var res=await tools.CheckedWithResultAsync("ffmpeg",args,directory,ct);
+            if(!string.IsNullOrWhiteSpace(res.Error))
+                lines.AddRange(res.Error.Split('\n',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        return CropDetector.CalculateConsensus(lines,roundMultiple);
+    }
+
+    public async Task<bool> DetectInterlacedAsync(string current,string directory,int frames,double thresholdPercent,CancellationToken ct)
+    {
+        var args=new List<string> { "-nostdin","-v","error","-i",current,"-frames:v",frames.ToString(CultureInfo.InvariantCulture),"-vf","idet","-f","null","-" };
+        var res=await tools.CheckedWithResultAsync("ffmpeg",args,directory,ct);
+        return DeinterlaceDetector.IsInterlaced(res.Error,thresholdPercent);
+    }
+
+    public async Task<MediaActionOutcome> FilterLanguagesAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,string current,string directory,string node,CancellationToken ct)
+    {
+        var audioLangs=Text(c,"allowedAudioLanguages").Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
+        var subLangs=Text(c,"allowedSubtitleLanguages").Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
+        var keepUnd=Flag(c,"keepUndefinedAudio",true);
+        var fallbackAudio=Flag(c,"keepFirstAudioIfNoneMatch",true);
+        var keepForced=Flag(c,"keepForcedSubtitles",true);
+
+        var streams=probe.GetProperty("streams");
+        var removeAudio=LanguageFilterPlanner.IdentifyTracksToRemove(streams,"audio",audioLangs,keepUnd,fallbackAudio,keepForced);
+        var removeSub=LanguageFilterPlanner.IdentifyTracksToRemove(streams,"subtitles",subLangs,keepUnd,fallbackAudio,keepForced);
+
+        var toRemove=new HashSet<int>(removeAudio.Concat(removeSub));
+        if(toRemove.Count==0) return new(null,[],JsonSerializer.SerializeToElement(new { filtered=false }));
+
+        var file=Output(directory,node,Path.GetExtension(current));
+        if(Path.GetExtension(current)==".mkv")
+        {
+            using var identification=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct));
+            var tracks=identification.RootElement.GetProperty("tracks").EnumerateArray().ToArray();
+            var keptAudio=tracks.Where(t=>t.GetProperty("type").GetString()=="audio"&&!toRemove.Contains(t.GetProperty("id").GetInt32()))
+                .Select(t=>t.GetProperty("id").GetInt32()).ToArray();
+            var keptSub=tracks.Where(t=>t.GetProperty("type").GetString()=="subtitles"&&!toRemove.Contains(t.GetProperty("id").GetInt32()))
+                .Select(t=>t.GetProperty("id").GetInt32()).ToArray();
+
+            var mergeArgs=new List<string> { "-o",file };
+            if(keptAudio.Length>0) mergeArgs.AddRange(["--audio-tracks",string.Join(',',keptAudio)]);
+            else mergeArgs.Add("--no-audio");
+            if(keptSub.Length>0) mergeArgs.AddRange(["--subtitle-tracks",string.Join(',',keptSub)]);
+            else mergeArgs.Add("--no-subtitles");
+            mergeArgs.Add(current);
+            await tools.CheckedAsync("mkvmerge",mergeArgs,directory,ct);
+        }
+        else
+        {
+            var args=new List<string> { "-nostdin","-y","-v","error","-i",current,"-map","0:v" };
+            foreach(var s in streams.EnumerateArray())
+            {
+                var idx=s.GetProperty("index").GetInt32();
+                if(!toRemove.Contains(idx)) args.AddRange(["-map","0:"+idx]);
+            }
+            args.AddRange(["-c","copy",file]);
+            await tools.CheckedAsync("ffmpeg",args,directory,ct);
+        }
+
+        return new(file,[],JsonSerializer.SerializeToElement(new { filtered=true,removedTracks=toRemove.ToArray() }));
+    }
+
+    public async Task<MediaActionOutcome> RemoveCommentaryAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,string current,string directory,string node,CancellationToken ct)
+    {
+        var checkAudio=Flag(c,"removeAudioCommentary",true);
+        var checkSub=Flag(c,"removeSubtitleCommentary",true);
+        var custom=Text(c,"customKeywords").Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries);
+
+        var streams=probe.GetProperty("streams");
+        var toRemove=CommentaryFilterPlanner.IdentifyCommentaryTracks(streams,checkAudio,checkSub,custom);
+        if(toRemove.Count==0) return new(null,[],JsonSerializer.SerializeToElement(new { removed=false }));
+
+        var file=Output(directory,node,Path.GetExtension(current));
+        if(Path.GetExtension(current)==".mkv")
+        {
+            using var identification=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct));
+            var tracks=identification.RootElement.GetProperty("tracks").EnumerateArray().ToArray();
+            var keptAudio=tracks.Where(t=>t.GetProperty("type").GetString()=="audio"&&!toRemove.Contains(t.GetProperty("id").GetInt32()))
+                .Select(t=>t.GetProperty("id").GetInt32()).ToArray();
+            var keptSub=tracks.Where(t=>t.GetProperty("type").GetString()=="subtitles"&&!toRemove.Contains(t.GetProperty("id").GetInt32()))
+                .Select(t=>t.GetProperty("id").GetInt32()).ToArray();
+
+            var mergeArgs=new List<string> { "-o",file };
+            if(keptAudio.Length>0) mergeArgs.AddRange(["--audio-tracks",string.Join(',',keptAudio)]);
+            if(keptSub.Length>0) mergeArgs.AddRange(["--subtitle-tracks",string.Join(',',keptSub)]);
+            mergeArgs.Add(current);
+            await tools.CheckedAsync("mkvmerge",mergeArgs,directory,ct);
+        }
+        else
+        {
+            var args=new List<string> { "-nostdin","-y","-v","error","-i",current,"-map","0:v" };
+            foreach(var s in streams.EnumerateArray())
+            {
+                var idx=s.GetProperty("index").GetInt32();
+                if(!toRemove.Contains(idx)) args.AddRange(["-map","0:"+idx]);
+            }
+            args.AddRange(["-c","copy",file]);
+            await tools.CheckedAsync("ffmpeg",args,directory,ct);
+        }
+
+        return new(file,[],JsonSerializer.SerializeToElement(new { removed=true,removedTracks=toRemove.ToArray() }));
+    }
+
     public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true)
     {
         var output=Output(directory,node,Path.GetExtension(current) is ".mp4" or ".mkv" or ".mka" or ".flac"?Path.GetExtension(current):".mkv");
         var input=new List<string> { "-nostdin","-y","-v","error" }; var args=new List<string> { "-c","copy" }; var videoFilters=new List<string>(); var hardwareMode="cpu";
         var resolutions=new List<ResolvedVideoEncoding>();
-        if(preserve || !plan.Any(p=>p.ComponentId is "base-transcode-video" or "base-transcode-audio" or "base-normalize-audio" or "base-resize-video")) args.AddRange(["-map","0"]);
+        if(preserve || !plan.Any(p=>p.ComponentId is "base-transcode-video" or "base-transcode-audio" or "base-normalize-audio" or "base-resize-video" or "base-auto-crop" or "base-deinterlace-video")) args.AddRange(["-map","0"]);
         else {
-            if(plan.Any(p=>p.ComponentId is "base-transcode-video" or "base-resize-video")) args.AddRange(["-map","0:v?"]);
+            if(plan.Any(p=>p.ComponentId is "base-transcode-video" or "base-resize-video" or "base-auto-crop" or "base-deinterlace-video")) args.AddRange(["-map","0:v?"]);
             foreach(var track in plan.Where(p=>p.ComponentId is "base-transcode-audio" or "base-normalize-audio").Select(p=>Number(p.Configuration,"trackId")).Distinct()) args.AddRange(["-map","0:a:"+track]);
         }
         foreach(var step in plan)
@@ -260,6 +374,26 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                     var codec=Text(c,"videoCodec","hevc");
                     var ffmpeg=(await capabilities.DiscoverAsync(ct)).FirstOrDefault(capability=>capability.ToolId=="ffmpeg")
                         ??throw new MediaToolException("FFmpeg",1);
+                    JsonElement? currentMetadata=null;
+                    try { currentMetadata=await scanner.ScanAsync(current,ct); } catch { }
+                    JsonElement? vStream=null; int sourceWidth=0, sourceHeight=0; string? sourcePixFmt=null;
+                    if(currentMetadata is { ValueKind: JsonValueKind.Object } metaObj && metaObj.TryGetProperty("streams",out var streamList) && streamList.ValueKind==JsonValueKind.Array)
+                    {
+                        foreach(var s in streamList.EnumerateArray())
+                        {
+                            if(s.TryGetProperty("codec_type",out var ctProp) && ctProp.GetString()=="video")
+                            {
+                                vStream=s;
+                                if(s.TryGetProperty("width",out var w) && w.TryGetInt32(out var widthVal)) sourceWidth=widthVal;
+                                if(s.TryGetProperty("height",out var h) && h.TryGetInt32(out var heightVal)) sourceHeight=heightVal;
+                                if(s.TryGetProperty("pix_fmt",out var pf) && pf.ValueKind==JsonValueKind.String) sourcePixFmt=pf.GetString();
+                                break;
+                            }
+                        }
+                    }
+                    var qualityTier=Text(c,"qualityTier","custom");
+                    var colorDepth=Text(c,"colorDepth","auto");
+                    var preserveHdr=Flag(c,"preserveHdr",true);
                     if(c.TryGetValue("encodingProfile",out var profileValue) && profileValue.ValueKind==JsonValueKind.Object)
                     {
                         var profile=profileValue.Deserialize<EncodingProfileSnapshot>(new JsonSerializerOptions(JsonSerializerDefaults.Web))
@@ -270,17 +404,21 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                             ??throw new MediaToolException("encodeur vidéo compatible avec le profil",1);
                         var encoder=resolved.Encoder;
                         var target=resolved.Target;
+                        var quality=MediaCodecPolicy.ResolveQuality(encoder,qualityTier,sourceWidth,sourceHeight,target.Quality);
                         hardwareMode=encoder.Acceleration;
                         if(hardwareMode=="vaapi") input.AddRange(["-vaapi_device",GpuDeviceSelector.RenderDevice()]);
-                        args.AddRange(["-c:v",encoder.Id,encoder.QualityOption,target.Quality.ToString(CultureInfo.InvariantCulture)]);
+                        args.AddRange(["-c:v",encoder.Id,encoder.QualityOption,quality.ToString(CultureInfo.InvariantCulture)]);
                         var preset=encoder.Presets.FirstOrDefault(candidate=>candidate.Id==target.Preset)?.Value;
                         if(!string.IsNullOrEmpty(encoder.PresetOption) && !string.IsNullOrEmpty(preset))
                             args.AddRange([encoder.PresetOption,preset]);
+                        var pixFmt=MediaCodecPolicy.ResolvePixelFormat(encoder,colorDepth,sourcePixFmt);
+                        if(!string.IsNullOrEmpty(pixFmt)) args.AddRange(["-pix_fmt",pixFmt]);
+                        if(preserveHdr) MediaCodecPolicy.ApplyHdrMetadata(args,vStream,encoder.Id);
                         // Older durable plans predate FlowNodeId. Keep them executable, but do not
                         // record a misleading resolution under the enclosing processing node.
                         if(step.FlowNodeId is { } flowNodeId)
                             resolutions.Add(new(flowNodeId,workerId,codec,encoder.Id,ffmpeg.Version,encoder.Acceleration,
-                                encoder.QualityMode,encoder.QualityOption,target.Quality,target.Preset,
+                                encoder.QualityMode,encoder.QualityOption,quality,target.Preset,
                                 string.IsNullOrEmpty(encoder.PresetOption)?null:encoder.PresetOption,preset,
                                 profile.Id,profile.Version,profile.Name,target.Priority,DateTimeOffset.UtcNow));
                     }
@@ -289,12 +427,21 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                         var hardware=Text(c,"hardwareAcceleration","cpu"); hardwareMode=hardware;
                         var available=ffmpeg.Encoders??[];
                         var encoder=MediaCodecPolicy.VideoEncoder(codec,hardware,available)??throw new MediaToolException("encodeur vidéo",1);
+                        var encDesc=VideoEncoderCatalog.Find(encoder);
+                        var fallbackQ=decimal.Parse(Number(c,"quality",23),CultureInfo.InvariantCulture);
+                        var quality=encDesc is not null?MediaCodecPolicy.ResolveQuality(encDesc,qualityTier,sourceWidth,sourceHeight,fallbackQ):fallbackQ;
                         if(hardware=="vaapi") input.AddRange(["-vaapi_device",GpuDeviceSelector.RenderDevice()]);
-                        args.AddRange(["-c:v",encoder,hardware=="cpu"?"-crf":hardware=="nvenc"?"-cq":hardware=="qsv"?"-global_quality":"-qp",Number(c,"quality",23)]);
+                        args.AddRange(["-c:v",encoder,hardware=="cpu"?"-crf":hardware=="nvenc"?"-cq":hardware=="qsv"?"-global_quality":"-qp",quality.ToString(CultureInfo.InvariantCulture)]);
                         var preset=Text(c,"preset","medium");
                         if(encoder=="libsvtav1") preset=preset=="slow"?"4":preset=="fast"?"10":"8";
                         if(hardware=="nvenc") preset=preset=="slow"?"p7":preset=="fast"?"p1":"p4";
                         if(hardware!="vaapi") args.AddRange(["-preset",preset]);
+                        if(encDesc is not null)
+                        {
+                            var pixFmt=MediaCodecPolicy.ResolvePixelFormat(encDesc,colorDepth,sourcePixFmt);
+                            if(!string.IsNullOrEmpty(pixFmt)) args.AddRange(["-pix_fmt",pixFmt]);
+                        }
+                        if(preserveHdr) MediaCodecPolicy.ApplyHdrMetadata(args,vStream,encoder);
                     }
                     break;
                 }
@@ -309,6 +456,16 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                     if(Number(c,"sampleRate")!="0") args.AddRange(["-ar:a:"+index,Number(c,"sampleRate")]); break;
                 case "base-normalize-audio": if(Path.GetExtension(current)==".flac") output=Output(directory,node,".mka"); args.AddRange(["-filter:a:"+Number(c,"trackId"),"loudnorm=I="+Number(c,"targetLoudness",-16)+":TP="+Number(c,"truePeak",-1),"-c:a:"+Number(c,"trackId"),"aac"]); break;
                 case "base-resize-video": videoFilters.Add("scale="+Number(c,"width",1920)+":"+Number(c,"height",1080)+":force_original_aspect_ratio=decrease"); if(!plan.Any(p=>p.ComponentId=="base-transcode-video")) args.AddRange(["-c:v","libx264"]); break;
+                case "base-auto-crop":
+                    var cropF=Text(c,"cropFilter");
+                    if(!string.IsNullOrEmpty(cropF)) videoFilters.Add(cropF);
+                    if(!plan.Any(p=>p.ComponentId=="base-transcode-video")) args.AddRange(["-c:v","libx264"]);
+                    break;
+                case "base-deinterlace-video":
+                    var deintAlgo=Text(c,"algorithm","bwdif");
+                    if(!string.IsNullOrEmpty(deintAlgo)) videoFilters.Add(deintAlgo);
+                    if(!plan.Any(p=>p.ComponentId=="base-transcode-video")) args.AddRange(["-c:v","libx264"]);
+                    break;
                 case "base-remux-media": output=Output(directory,node,"."+Text(c,"container","mkv")); break;
                 default: throw new IOException("Ce réglage ne fait pas partie d’un plan FFmpeg.");
             }

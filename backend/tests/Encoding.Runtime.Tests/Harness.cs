@@ -74,10 +74,22 @@ internal static partial class Harness
         Check(!validator.Validate(Chain(Node(registry, "entry", "base-input-file"), relay)).IsValid, "A relay requires a connected continuation.");
         var branch = flow with { Nodes = [.. flow.Nodes, Node(registry, "other", "base-variable", new() { ["name"] = J("x"), ["value"] = J("1") })], Connections = [.. flow.Connections, new("branch", "entry", "error", "other")] };
         Check(RuntimeHandoffPolicy.Segment(branch, "entry").Any(node => node.Id == "other"), "All possible branches within the segment are considered.");
+        var directBlock = Node(registry, "directAccess", "nodes-require-direct-access");
+        var directFlow = Chain(Node(registry, "entry", "base-input-file"), directBlock, relay,
+            Node(registry, "encode", "base-transcode-video"), Node(registry, "end", "base-complete-flow"));
+        Check(validator.Validate(directFlow).IsValid, "Direct access flow must be valid.");
+        Check(eligibility.RequiresDirectAccess(directFlow), "The first segment requires direct access.");
+        Check(!eligibility.RequiresDirectAccess(directFlow, "encode", true), "The segment after handoff does not require direct access.");
+        Check(!eligibility.PrefersDirectAccess(directFlow), "Default mode is strict, not prefer.");
+        var preferBlock = Node(registry, "preferAccess", "nodes-require-direct-access", new() { ["mode"] = J("prefer") });
+        var preferFlow = Chain(Node(registry, "entry", "base-input-file"), preferBlock, relay,
+            Node(registry, "encode", "base-transcode-video"), Node(registry, "end", "base-complete-flow"));
+        Check(!eligibility.RequiresDirectAccess(preferFlow), "Prefer mode does not strictly require direct access.");
+        Check(eligibility.PrefersDirectAccess(preferFlow), "Prefer mode sets PrefersDirectAccess.");
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
-        new("plugin/base", "1.5.0", ["general"], []), new("plugin/nodes", "1.2.0", ["general"], []),new("plugin/conditions","1.0.0",["general"],[]),
+        new("plugin/base", "1.6.0", ["general"], []), new("plugin/nodes", "1.3.0", ["general"], []),new("plugin/conditions","1.2.0",["general"],[]),
         new("plugin/plex","1.1.0",["general"],["process"]),new("ffprobe", "7.0", ["video"], []), .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
 
     private static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)
@@ -368,6 +380,44 @@ internal static partial class Harness
             await CompleteAsync(id,b,received,"end",context);
             var status=await runtime.RenewAsync(id,b,received.Epoch,CancellationToken.None);
             Check(await new RuntimeTransferRepository(db).FinishAsync(id,b,new(received.Epoch,Guid.NewGuid(),status!.Revision,"succeeded","Finished relay fixture",null,null,context.BeforeMetadata,context.CurrentMetadata),CancellationToken.None),"The receiver finishes the same execution.");
+        }
+        public async Task DirectAccessConstraintAsync()
+        {
+            var directBlock = Node(registry, "directAccess", "nodes-require-direct-access");
+            var relay = Node(registry, "relay", "nodes-handoff", new() { ["mode"] = J("node"), ["targetNodeId"] = J(b) });
+            var flow = Chain(Node(registry, "entry", "base-input-file"), directBlock, relay,
+                Node(registry, "end", "base-complete-flow"));
+            var fixture = await EnqueueAsync(flow);
+            var (id, lease, context) = fixture;
+            Check(lease.ExecutionId == id, "Worker A (direct access) claimed the first segment.");
+            await CompleteAsync(id, a, lease, "entry", context);
+            await CompleteAsync(id, a, lease, "directAccess", context);
+            await CompleteAsync(id, a, lease, "relay", context);
+            var received = await runtime.ClaimAsync(b, CancellationToken.None);
+            Check(received is not null && received.ExecutionId == id, "Worker B (transfer mode) claimed the second segment after handoff.");
+        }
+        public async Task DirectAccessRejectsTransferWorkerAsync()
+        {
+            await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
+            await ResetNodesAsync();
+            var library = Guid.NewGuid(); var id = Guid.NewGuid();
+            await using var command = db.CreateCommand("""
+                INSERT INTO libraries(id,name) VALUES(@library,@name);
+                INSERT INTO library_node_accesses(library_id,node_id,mode,local_path,can_read,can_write)
+                  VALUES(@library,@a,'direct',@root,true,true);
+                INSERT INTO library_node_accesses(library_id,node_id,mode,can_read,can_write,transfer_source_node_id)
+                  VALUES(@library,@b,'transfer',true,true,@a);
+                """);
+            command.Parameters.AddWithValue("library", library); command.Parameters.AddWithValue("name", library.ToString());
+            command.Parameters.AddWithValue("root", directory); command.Parameters.AddWithValue("a", a); command.Parameters.AddWithValue("b", b);
+            await command.ExecuteNonQueryAsync();
+            var directBlock = Node(registry, "directAccess", "nodes-require-direct-access");
+            var flow = Chain(Node(registry, "entry", "base-input-file"), directBlock, Node(registry, "end", "base-complete-flow"));
+            Check(await runtime.EnqueueAsync(new(id, library, "source.mkv", flow.Id, flow.Version), flow, CancellationToken.None), "Enqueue fixture.");
+            var bClaim = await runtime.ClaimAsync(b, CancellationToken.None);
+            Check(bClaim is null, "Worker B (transfer) must NOT be able to claim a segment requiring direct access.");
+            var aClaim = await runtime.ClaimAsync(a, CancellationToken.None);
+            Check(aClaim is not null && aClaim.ExecutionId == id, "Worker A (direct access) claims the segment requiring direct access.");
         }
         public async Task ConcurrentRelayAsync()
         {
