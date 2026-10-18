@@ -168,8 +168,9 @@ internal static partial class Harness
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[HARNESS HTTP 500] {context.Request.Method} {context.Request.Path}: {ex}");
-                    throw;
+                    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                    context.Response.ContentType = "text/plain";
+                    await context.Response.WriteAsync($"EX: {ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}");
                 }
             });
             app.MapRuntimeEndpoints(); app.MapFlowEndpoints();
