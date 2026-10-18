@@ -56,6 +56,14 @@ internal static class FlowSimulationScenarios
         Check(missing.Status == "failed" && missing.Steps[1].OutputId == "error", "Missing comparison data routes to error, not false.");
         Check(Run(basic with { Connections = [.. basic.Connections, new("cycle", "finish", "success", "entry")] }).Status == "invalid", "Invalid flows never simulate.");
 
+        var videoCodecNode = Node("vcodec", "conditions-video-codec", new Dictionary<string, JsonElement> { ["codec"] = J("h264") });
+        var flowVCodec = new FlowDefinition(1, Guid.NewGuid(), 1, "Simulate VCodec", "video", [input, videoCodecNode, finish],
+            [new("e1", "entry", "success", "vcodec"), new("e2", "vcodec", "yes", "finish"), new("e3", "vcodec", "no", "finish")]);
+        var vcodecYes = Run(flowVCodec);
+        Check(vcodecYes.Status == "completed" && vcodecYes.Steps[1].OutputId == "yes", "Dedicated video codec condition simulates deterministically with metadata.");
+        var vcodecNo = Run(flowVCodec, file with { Metadata = after });
+        Check(vcodecNo.Status == "completed" && vcodecNo.Steps[1].OutputId == "no", "Dedicated video codec condition simulates no for different codec.");
+
         var transform = Node("transform", "base-transcode-video", new Dictionary<string, JsonElement> { ["processingMode"] = J("direct") });
         var handoff = Node("handoff", "nodes-handoff", new Dictionary<string, JsonElement> { ["mode"] = J("inherit") });
         var variable = Node("variable", "base-variable", new Dictionary<string, JsonElement> { ["name"] = J("score"), ["value"] = J("42") });
@@ -89,6 +97,11 @@ internal static class FlowSimulationScenarios
             Connections = [new("a", "entry", "success", "selector"), new("b", "selector", "success", "finish")] };
         var selectorResult = Run(selectedConstraint, file with { WorkerNodeId = target }, new Dictionary<string, FlowSimulationAssumption> { ["selector"] = new("success") });
         Check(selectorResult.Status == "completed" && selectorResult.Steps[1].Detail.Contains("ne sont pas vérifiées"), "Group and label eligibility remains an explicit assumption in simulation.");
+        var directAccessFlow = basic with { Nodes = [input, Node("directAccess", "nodes-require-direct-access"), finish],
+            Connections = [new("a", "entry", "success", "directAccess"), new("b", "directAccess", "success", "finish")] };
+        var directAccessSim = Run(directAccessFlow);
+        Check(directAccessSim.Status == "completed" && directAccessSim.Steps[1].OutputId == "success"
+            && directAccessSim.Steps[1].Detail.Contains("accès direct"), "Direct access constraint simulation succeeds with detail.");
         var selectorRelay = simulator.Simulate(new(J(flow), file, assumptions), new Dictionary<string, JsonElement>
         {
             ["mode"] = J("selector"), ["targetGroupId"] = J(Guid.NewGuid().ToString()), ["requiredLabels"] = J("gpu=nvidia"),

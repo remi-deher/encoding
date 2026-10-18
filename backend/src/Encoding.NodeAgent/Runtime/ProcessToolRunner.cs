@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Encoding.NodeAgent.Runtime;
 
-public sealed record ToolResult(int ExitCode, string Output);
+public sealed record ToolResult(int ExitCode, string Output, string Error = "");
 public sealed class MediaToolException(string tool, int exitCode) : Exception($"L’outil {tool} a échoué (code {exitCode}).");
 
 public sealed class ProcessToolRunner
@@ -89,7 +89,7 @@ public sealed class ProcessToolRunner
             await process.WaitForExitAsync(deadline.Token);
             await errors;
             exitCode = process.ExitCode;
-            return new(process.ExitCode, await output);
+            return new(process.ExitCode, await output, errorLog.ToString());
         }
         finally
         {
@@ -108,10 +108,16 @@ public sealed class ProcessToolRunner
 
     public async Task<string> CheckedAsync(string executable, IEnumerable<string> args, string directory, CancellationToken ct)
     {
+        var result = await CheckedWithResultAsync(executable, args, directory, ct);
+        return result.Output;
+    }
+
+    public async Task<ToolResult> CheckedWithResultAsync(string executable, IEnumerable<string> args, string directory, CancellationToken ct)
+    {
         var result = await RunAsync(Find(executable) ?? throw new IOException($"Outil indisponible : {executable}."),
             args, directory, TimeSpan.FromHours(6), ct);
         if (result.ExitCode != 0 && !(result.ExitCode == 1 && executable is "mkvmerge" or "mkvextract" or "mkvpropedit"))
             throw new MediaToolException(executable, result.ExitCode);
-        return result.Output;
+        return result;
     }
 }

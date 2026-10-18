@@ -162,6 +162,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             }
             Guid source=item.Source??worker; string? root=null;
             var needsWrite=item.Flow.Nodes.Any(n=>components.Resolve(n.Component)!.RequiresWriteAccess);
+            var needsDirect=eligibility.RequiresDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
+            var prefersDirect=eligibility.PrefersDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
             if(item.Probe is null)
             {
                 await using(var access=Sql.Command("""
@@ -171,11 +173,18 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                   LEFT JOIN cluster_nodes sn ON sn.id=s.node_id
                   WHERE a.library_id=@library AND a.node_id=@worker AND a.is_enabled AND a.can_read
                   AND ((a.mode='direct' AND a.local_path IS NOT NULL AND (NOT @write OR a.can_write))
-                    OR (a.mode='transfer' AND s.mode='direct' AND s.is_enabled AND s.can_read AND (NOT @write OR s.can_write)
+                    OR (NOT @direct AND (NOT @prefer OR NOT EXISTS(
+                        SELECT 1 FROM library_node_accesses da JOIN cluster_nodes dn ON dn.id=da.node_id
+                        WHERE da.library_id=@library AND da.mode='direct' AND da.is_enabled AND da.can_read
+                          AND da.local_path IS NOT NULL AND (NOT @write OR da.can_write)
+                          AND dn.deleted_at IS NULL AND dn.last_seen_at>clock_timestamp()-@offline
+                          AND dn.accepts_work AND 'worker'=ANY(dn.roles)
+                      )) AND a.mode='transfer' AND s.mode='direct' AND s.is_enabled AND s.can_read AND (NOT @write OR s.can_write)
                         AND sn.deleted_at IS NULL AND sn.last_seen_at>clock_timestamp()-@offline))
                   """,c,tx))
                 {
                     access.Parameters.AddWithValue("offline",presence.OfflineAfter); access.Parameters.AddWithValue("library",item.Library); access.Parameters.AddWithValue("worker",worker); access.Parameters.AddWithValue("write",needsWrite);
+                    access.Parameters.AddWithValue("direct",needsDirect); access.Parameters.AddWithValue("prefer",prefersDirect);
                     await using var r=await access.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) continue;
                     source=r.GetGuid(0); root=r.IsDBNull(1)?null:r.GetString(1);
                 }

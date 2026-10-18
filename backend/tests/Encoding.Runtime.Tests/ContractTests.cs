@@ -8,6 +8,15 @@ public sealed class ContractTests
     public void RelayContractsSegmentEligibilityInheritanceAndOldAgentCompatibility() => Harness.RelayContracts();
 
     [Fact]
+    public async Task DirectAccessConstraintEnforcesDirectModeAndAllowsRelayToTransferWorker()
+    {
+        var (registry, validator, eligibility) = Harness.Services();
+        await using var harness = await Harness.Fixture.CreateAsync("Data Source=:memory:", registry, validator, eligibility);
+        await harness.DirectAccessRejectsTransferWorkerAsync();
+        await harness.DirectAccessConstraintAsync();
+    }
+
+    [Fact]
     public void FlowValidationRejectsInvalidGraphsAndIncompatibleComponents() => FlowValidationScenarios.Run();
 
     [Fact]

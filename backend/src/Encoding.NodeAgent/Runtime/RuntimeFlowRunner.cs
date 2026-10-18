@@ -165,6 +165,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         output=ConditionTree.Evaluate(tree,new(context with { Variables=variables },lease.SourceNodeId,client.NodeId,
                             lease.LibraryId,lease.MediaPath,sourceSha))?"yes":"no";
                     }
+                    else if(node.Component.PluginId=="conditions" && MediaConditionEvaluator.IsMediaCondition(node.Component.ComponentId))
+                    {
+                        if(context.CurrentMetadata is null) await EnsureScanAsync();
+                        output=MediaConditionEvaluator.Evaluate(node.Component.ComponentId,c,context.CurrentMetadata);
+                    }
                     else if(RuntimeWaitPolicy.IsWait(node)) { wait=RuntimeWaitPolicy.Resolve(node); output="resumed"; }
                     else if(RuntimeHandoffPolicy.IsHandoff(node))
                     {
@@ -177,7 +182,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         // This block declares an execution policy; retry decisions are made by the server after a lost lease.
                     }
                     else if(node.Component.PluginId=="nodes"
-                        && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability"))
+                        && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability" or "nodes-require-direct-access"))
                     {
                         // Scheduling enforces these constraints before assigning the file to this worker.
                     }
@@ -240,6 +245,133 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             context=context with { Plan=[..context.Plan,..steps] };
                         }
                         else await ApplyOutcomeAsync(await actions.FfmpegPlanAsync(steps,current,directory,node.Id,client.NodeId,job.Token),node.Id);
+                    }
+                    else if(id=="base-auto-crop")
+                    {
+                        await EnsureScanAsync();
+                        var duration=0.0;
+                        if(context.CurrentMetadata is { } meta && meta.TryGetProperty("format",out var fmt) && fmt.TryGetProperty("duration",out var durProp) && durProp.ValueKind==JsonValueKind.String && double.TryParse(durProp.GetString(),System.Globalization.CultureInfo.InvariantCulture,out var d))
+                            duration=d;
+
+                        var (w,h)=(0,0);
+                        if(context.CurrentMetadata is { } m && m.TryGetProperty("streams",out var str))
+                        {
+                            foreach(var s in str.EnumerateArray())
+                            {
+                                if(s.TryGetProperty("codec_type",out var ctProp) && ctProp.GetString()=="video")
+                                {
+                                    if(s.TryGetProperty("width",out var wP)) w=wP.GetInt32();
+                                    if(s.TryGetProperty("height",out var hP)) h=hP.GetInt32();
+                                    break;
+                                }
+                            }
+                        }
+
+                        var samplePoints=int.Parse(MediaActions.Number(c,"samplePoints",5));
+                        var sampleSecs=int.Parse(MediaActions.Number(c,"sampleDurationSeconds",2));
+                        var threshold=int.Parse(MediaActions.Number(c,"threshold",24));
+                        var roundMul=int.Parse(MediaActions.Number(c,"roundMultiple",2));
+
+                        var crop=await actions.DetectCropAsync(current,directory,samplePoints,sampleSecs,threshold,roundMul,duration,job.Token);
+                        if(crop is not null && crop.IsSignificant(w,h))
+                        {
+                            output="cropped";
+                            variables["video.crop"]=JsonSerializer.SerializeToElement(crop.ToFilter());
+                            variables["video.crop.w"]=JsonSerializer.SerializeToElement(crop.Width);
+                            variables["video.crop.h"]=JsonSerializer.SerializeToElement(crop.Height);
+                            variables["video.crop.x"]=JsonSerializer.SerializeToElement(crop.X);
+                            variables["video.crop.y"]=JsonSerializer.SerializeToElement(crop.Y);
+                            variables["video.crop.filter"]=JsonSerializer.SerializeToElement(crop.ToFilter());
+
+                            if(MediaActions.Text(c,"processingMode","plan")=="plan")
+                            {
+                                if(variables.TryGetValue("plan.tool",out var selected) && selected.GetString()!="ffmpeg")
+                                    throw new MediaToolException("outil du plan incompatible avec cette action",1);
+                                var stepCfg=new Dictionary<string,JsonElement>(c) { ["cropFilter"]=JsonSerializer.SerializeToElement(crop.ToFilter()) };
+                                context=context with { Plan=[..context.Plan,new RuntimePlanStep(id,stepCfg,node.Id)] };
+                            }
+                            else
+                            {
+                                var stepCfg=new Dictionary<string,JsonElement>(c) { ["cropFilter"]=JsonSerializer.SerializeToElement(crop.ToFilter()) };
+                                await ApplyOutcomeAsync(await actions.FfmpegPlanAsync([new(id,stepCfg,node.Id)],current,directory,node.Id,client.NodeId,job.Token),node.Id);
+                            }
+                        }
+                        else output="no-crop";
+                    }
+                    else if(id=="base-deinterlace-video")
+                    {
+                        await EnsureScanAsync();
+                        var frames=int.Parse(MediaActions.Number(c,"detectionFrames",1000));
+                        var thresholdPercent=double.Parse(MediaActions.Number(c,"interlaceThresholdPercent",10),System.Globalization.CultureInfo.InvariantCulture);
+                        var algo=MediaActions.Text(c,"algorithm","bwdif");
+
+                        var isInterlaced=await actions.DetectInterlacedAsync(current,directory,frames,thresholdPercent,job.Token);
+                        if(isInterlaced)
+                        {
+                            output="deinterlaced";
+                            variables["video.deinterlace"]=JsonSerializer.SerializeToElement(algo);
+
+                            if(MediaActions.Text(c,"processingMode","plan")=="plan")
+                            {
+                                if(variables.TryGetValue("plan.tool",out var selected) && selected.GetString()!="ffmpeg")
+                                    throw new MediaToolException("outil du plan incompatible avec cette action",1);
+                                context=context with { Plan=[..context.Plan,new RuntimePlanStep(id,c,node.Id)] };
+                            }
+                            else
+                            {
+                                await ApplyOutcomeAsync(await actions.FfmpegPlanAsync([new(id,c,node.Id)],current,directory,node.Id,client.NodeId,job.Token),node.Id);
+                            }
+                        }
+                        else output="progressive";
+                    }
+                    else if(id=="base-file-size-guard")
+                    {
+                        await EnsureFilesAsync();
+                        var currentInfo=new FileInfo(current);
+                        var sourceInfo=new FileInfo(original);
+                        var currentBytes=currentInfo.Exists?currentInfo.Length:0;
+                        var sourceBytes=sourceInfo.Exists?sourceInfo.Length:0;
+                        var minReduction=decimal.Parse(MediaActions.Number(c,"minReductionPercent",10),System.Globalization.CultureInfo.InvariantCulture);
+                        var (reduced,percentChange)=FileSizeGuard.Evaluate(sourceBytes,currentBytes,minReduction);
+
+                        variables["runtime.fileReductionPercent"]=JsonSerializer.SerializeToElement(percentChange);
+                        variables["runtime.currentSizeBytes"]=JsonSerializer.SerializeToElement(currentBytes);
+                        variables["runtime.sourceSizeBytes"]=JsonSerializer.SerializeToElement(sourceBytes);
+
+                        if(reduced) output="reduced";
+                        else
+                        {
+                            output="larger";
+                            if(MediaActions.Text(c,"actionOnFailure","branch")=="revert")
+                            {
+                                File.Copy(original,current,true);
+                                var sha=await SafeMediaPaths.DigestAsync(current,job.Token);
+                                context=context with { CurrentSha256=sha,Extension=Path.GetExtension(original),CurrentMetadata=context.BeforeMetadata };
+                                logger.LogInformation("Garde de taille {Node} : gain insuffisant ({Percent:F1}%), source d'origine restaurée.",node.Id,percentChange);
+                            }
+                        }
+                    }
+                    else if(id=="base-filter-languages")
+                    {
+                        await EnsureScanAsync();
+                        var outcome=await actions.FilterLanguagesAsync(c,context.CurrentMetadata!.Value,current,directory,node.Id,job.Token);
+                        if(outcome.Primary is null) output="unchanged";
+                        else
+                        {
+                            output="filtered";
+                            await ApplyOutcomeAsync(outcome,node.Id);
+                        }
+                    }
+                    else if(id=="base-remove-commentary")
+                    {
+                        await EnsureScanAsync();
+                        var outcome=await actions.RemoveCommentaryAsync(c,context.CurrentMetadata!.Value,current,directory,node.Id,job.Token);
+                        if(outcome.Primary is null) output="unchanged";
+                        else
+                        {
+                            output="removed";
+                            await ApplyOutcomeAsync(outcome,node.Id);
+                        }
                     }
                     else if(id=="base-execute-processing")
                     {

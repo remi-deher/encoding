@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Encoding.Contracts.Flows;
 
 public static class MediaCodecPolicy
@@ -32,6 +34,102 @@ public static class MediaCodecPolicy
                 return (descriptor, target);
         }
         return null;
+    }
+
+    public static decimal ResolveQuality(VideoEncoderDescriptor encoder, string tier, int width, int height, decimal fallbackQuality)
+    {
+        if (string.IsNullOrWhiteSpace(tier) || tier == "custom") return fallbackQuality;
+
+        var is4k = width >= 3200 || height >= 1800;
+        var is720pOrLess = (width > 0 && width < 1600) || (height > 0 && height < 900);
+
+        int baseline;
+        int delta4k = 3;
+        int deltaLow = -2;
+
+        if (encoder.Id == "libsvtav1")
+        {
+            baseline = tier switch
+            {
+                "transparent" => 24,
+                "high" => 28,
+                "balanced" => 30,
+                "compact" => 34,
+                _ => 30
+            };
+            delta4k = 4;
+            deltaLow = -3;
+        }
+        else if (encoder.Acceleration is "nvenc" or "qsv")
+        {
+            baseline = tier switch
+            {
+                "transparent" => 20,
+                "high" => 23,
+                "balanced" => 25,
+                "compact" => 28,
+                _ => 25
+            };
+        }
+        else // cpu (x264, x265) or vaapi
+        {
+            baseline = tier switch
+            {
+                "transparent" => 18,
+                "high" => 21,
+                "balanced" => 23,
+                "compact" => 26,
+                _ => 23
+            };
+        }
+
+        var resolved = baseline;
+        if (is4k) resolved += delta4k;
+        else if (is720pOrLess) resolved += deltaLow;
+
+        return Math.Clamp(resolved, encoder.QualityMinimum, encoder.QualityMaximum);
+    }
+
+    public static string? ResolvePixelFormat(VideoEncoderDescriptor encoder, string? colorDepth, string? sourcePixelFormat)
+    {
+        var depth = colorDepth?.Trim().ToLowerInvariant() ?? "auto";
+        var is10Bit = depth == "10-bit" || (depth == "auto" && encoder.Codec is "hevc" or "av1");
+        if (depth == "source")
+            is10Bit = sourcePixelFormat?.Contains("10", StringComparison.Ordinal) == true || sourcePixelFormat?.Contains("p010", StringComparison.Ordinal) == true;
+        else if (depth == "8-bit")
+            is10Bit = false;
+
+        if (encoder.Acceleration == "vaapi")
+            return null;
+
+        if (is10Bit)
+        {
+            if (encoder.Acceleration is "nvenc" or "qsv")
+                return "p010le";
+            return "yuv420p10le";
+        }
+
+        return "yuv420p";
+    }
+
+    public static void ApplyHdrMetadata(List<string> args, JsonElement? videoStream, string encoderId)
+    {
+        if (videoStream is not { ValueKind: JsonValueKind.Object } stream) return;
+
+        string? primaries = null, transfer = null, space = null;
+        if (stream.TryGetProperty("color_primaries", out var cp) && cp.ValueKind == JsonValueKind.String) primaries = cp.GetString();
+        if (stream.TryGetProperty("color_transfer", out var ct) && ct.ValueKind == JsonValueKind.String) transfer = ct.GetString();
+        if (stream.TryGetProperty("color_space", out var cs) && cs.ValueKind == JsonValueKind.String) space = cs.GetString();
+
+        var isHdr = transfer is "smpte2084" or "arib-std-b67" || primaries == "bt2020";
+        if (!isHdr) return;
+
+        if (!string.IsNullOrEmpty(primaries)) args.AddRange(["-color_primaries", primaries]);
+        if (!string.IsNullOrEmpty(transfer)) args.AddRange(["-color_trc", transfer]);
+        if (!string.IsNullOrEmpty(space)) args.AddRange(["-colorspace", space]);
+
+        if (encoderId == "libx265" && transfer == "smpte2084")
+            args.AddRange(["-x265-params", "hdr10=1:hdr10-opt=1:repeat-headers=1"]);
     }
 
     public static string? AudioEncoder(string codec,IReadOnlyList<string> available)=>
