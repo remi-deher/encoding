@@ -1,9 +1,9 @@
 name: Backend
 on:
   push:
-    paths: ['backend/**', 'docs/operations/peer-cluster-alerts.yml', '.github/workflows/backend.yml']
+    branches: [dev, main]
   pull_request:
-    paths: ['backend/**', 'docs/operations/peer-cluster-alerts.yml', '.github/workflows/backend.yml']
+    branches: [dev, main]
 jobs:
   peer-alerts:
     runs-on: ubuntu-latest

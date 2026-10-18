@@ -1,11 +1,9 @@
 name: Release
-# Publie l'image Docker unique (serveur, worker et lanceur) sur Docker Hub quand la CI de main est verte.
+# Publie l'image Docker unique après un merge validé de dev vers main.
 # Secrets requis (Settings > Secrets and variables > Actions) : DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
 on:
   push:
     branches: [main]
-    paths: ['backend/**', 'frontend/**', '.github/workflows/release.yml']
-  workflow_dispatch:
 concurrency:
   group: release
   cancel-in-progress: false
