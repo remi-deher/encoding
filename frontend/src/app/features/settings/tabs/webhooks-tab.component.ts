@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 
 @Component({
@@ -190,6 +191,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 })
 export class WebhooksTabComponent {
   private readonly notifications = inject(NotificationService);
+  private readonly clipboardService = inject(ClipboardService);
 
   protected readonly baseUrl = computed(() => {
     if (typeof window !== 'undefined' && window.location) {
@@ -199,10 +201,10 @@ export class WebhooksTabComponent {
   });
 
   protected async copyText(text: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text);
+    const success = await this.clipboardService.copy(text);
+    if (success) {
       this.notifications.show('Lien copié dans le presse-papier.');
-    } catch {
+    } else {
       this.notifications.show('Erreur lors de la copie.');
     }
   }
