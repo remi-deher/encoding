@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Encoding.Api.Tools;
 using Encoding.Contracts.Flows;
+using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Flows;
 

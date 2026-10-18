@@ -1,10 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  OnInit,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -66,7 +60,10 @@ import { DeviceAuthDialogComponent } from '../../../shared/ui/device-auth-dialog
               }
               <span class="meta-item">
                 <strong>Binaire système :</strong>
-                <span [class.text-success]="tool.isInstalled" [class.text-muted]="!tool.isInstalled">
+                <span
+                  [class.text-success]="tool.isInstalled"
+                  [class.text-muted]="!tool.isInstalled"
+                >
                   {{ tool.isInstalled ? 'Détecté sur l’hôte' : 'Simulé / Non installé' }}
                 </span>
               </span>
@@ -74,21 +71,11 @@ import { DeviceAuthDialogComponent } from '../../../shared/ui/device-auth-dialog
 
             <div class="card-actions">
               @if (tool.authStatus.state === 'authorized') {
-                <button
-                  mat-stroked-button
-                  color="warn"
-                  type="button"
-                  (click)="revoke(tool.id)"
-                >
+                <button mat-stroked-button color="warn" type="button" (click)="revoke(tool.id)">
                   <mat-icon>link_off</mat-icon> Déconnecter
                 </button>
               } @else {
-                <button
-                  mat-flat-button
-                  color="primary"
-                  type="button"
-                  (click)="startAuth(tool)"
-                >
+                <button mat-flat-button color="primary" type="button" (click)="startAuth(tool)">
                   <mat-icon>link</mat-icon> Associer mon compte
                 </button>
               }
@@ -101,119 +88,122 @@ import { DeviceAuthDialogComponent } from '../../../shared/ui/device-auth-dialog
         <mat-icon>verified_user</mat-icon>
         <div class="info-text">
           <strong>Règle d'isolation matérielle :</strong>
-          Ces outils exécutent des modèles de langage et de traduction sous CPU/Réseau. Ils ne peuvent en aucun cas remplacer les encodeurs matériels du conteneur (NVENC, QSV, VA-API).
+          Ces outils exécutent des modèles de langage et de traduction sous CPU/Réseau. Ils ne
+          peuvent en aucun cas remplacer les encodeurs matériels du conteneur (NVENC, QSV, VA-API).
         </div>
       </div>
     </div>
   `,
-  styles: [`
-    .tab-header {
-      margin-bottom: 24px;
-    }
-    .tab-titles h2 {
-      margin: 0 0 4px;
-      font-size: 1.3rem;
-      font-weight: 700;
-    }
-    .tab-titles p {
-      margin: 0;
-      color: var(--mat-sys-on-surface-variant);
-      font-size: 0.9rem;
-    }
-    .ai-tools-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .loading-box {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 24px;
-    }
-    .tool-card {
-      background: var(--mat-sys-surface-container, #1a1a1a);
-      border: 1px solid var(--mat-sys-outline-variant, #333);
-      border-radius: 12px;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-    }
-    .card-eyebrow {
-      text-transform: uppercase;
-      font-size: 0.75rem;
-      letter-spacing: 1px;
-      color: var(--mat-sys-primary, #64b5f6);
-    }
-    .header-titles h3 {
-      margin: 2px 0 0;
-      font-size: 1.15rem;
-      font-weight: 600;
-    }
-    .status-pill {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 12px;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-    .status-pill_success {
-      background: rgba(76, 175, 80, 0.2);
-      color: #81c784;
-    }
-    .status-pill_warning {
-      background: rgba(255, 152, 0, 0.2);
-      color: #ffb74d;
-    }
-    .status-pill_muted {
-      background: rgba(158, 158, 158, 0.15);
-      color: #9e9e9e;
-    }
-    .tool-description {
-      margin: 0;
-      color: var(--mat-sys-on-surface-variant);
-      font-size: 0.9rem;
-      line-height: 1.4;
-    }
-    .card-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      font-size: 0.85rem;
-      background: var(--mat-sys-surface-container-high, #222);
-      padding: 10px 14px;
-      border-radius: 8px;
-    }
-    .text-success {
-      color: #81c784;
-    }
-    .text-muted {
-      color: #9e9e9e;
-    }
-    .card-actions {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 4px;
-    }
-    .info-banner {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      padding: 16px;
-      background: var(--mat-sys-surface-container-low, #141414);
-      border-left: 4px solid var(--mat-sys-primary, #64b5f6);
-      border-radius: 6px;
-      color: var(--mat-sys-on-surface-variant);
-      font-size: 0.88rem;
-      line-height: 1.4;
-    }
-  `],
+  styles: [
+    `
+      .tab-header {
+        margin-bottom: 24px;
+      }
+      .tab-titles h2 {
+        margin: 0 0 4px;
+        font-size: 1.3rem;
+        font-weight: 700;
+      }
+      .tab-titles p {
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.9rem;
+      }
+      .ai-tools-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .loading-box {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 24px;
+      }
+      .tool-card {
+        background: var(--mat-sys-surface-container, #1a1a1a);
+        border: 1px solid var(--mat-sys-outline-variant, #333);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+      .card-eyebrow {
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 1px;
+        color: var(--mat-sys-primary, #64b5f6);
+      }
+      .header-titles h3 {
+        margin: 2px 0 0;
+        font-size: 1.15rem;
+        font-weight: 600;
+      }
+      .status-pill {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+      .status-pill_success {
+        background: rgba(76, 175, 80, 0.2);
+        color: #81c784;
+      }
+      .status-pill_warning {
+        background: rgba(255, 152, 0, 0.2);
+        color: #ffb74d;
+      }
+      .status-pill_muted {
+        background: rgba(158, 158, 158, 0.15);
+        color: #9e9e9e;
+      }
+      .tool-description {
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.9rem;
+        line-height: 1.4;
+      }
+      .card-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        font-size: 0.85rem;
+        background: var(--mat-sys-surface-container-high, #222);
+        padding: 10px 14px;
+        border-radius: 8px;
+      }
+      .text-success {
+        color: #81c784;
+      }
+      .text-muted {
+        color: #9e9e9e;
+      }
+      .card-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 4px;
+      }
+      .info-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 16px;
+        background: var(--mat-sys-surface-container-low, #141414);
+        border-left: 4px solid var(--mat-sys-primary, #64b5f6);
+        border-radius: 6px;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.88rem;
+        line-height: 1.4;
+      }
+    `,
+  ],
 })
 export class AiToolsTabComponent implements OnInit {
   private readonly aiService = inject(AiToolsService);

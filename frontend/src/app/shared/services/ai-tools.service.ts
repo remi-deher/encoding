@@ -28,26 +28,26 @@ export class AiToolsService {
   startDeviceAuth(toolId: string): Observable<DeviceAuthStartResponse> {
     return this.http.post<DeviceAuthStartResponse>(
       `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/device-code/start`,
-      {}
+      {},
     );
   }
 
   getDeviceAuthStatus(toolId: string): Observable<DeviceAuthStatus> {
     return this.http.get<DeviceAuthStatus>(
-      `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/device-code/status`
+      `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/device-code/status`,
     );
   }
 
   completeAuth(toolId: string): Observable<{ readonly success: boolean }> {
     return this.http.post<{ readonly success: boolean }>(
       `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/complete`,
-      {}
+      {},
     );
   }
 
   revokeAuth(toolId: string): Observable<{ readonly revoked: boolean }> {
     return this.http.delete<{ readonly revoked: boolean }>(
-      `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth`
+      `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth`,
     );
   }
 

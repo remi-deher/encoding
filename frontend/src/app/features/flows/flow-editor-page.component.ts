@@ -1026,9 +1026,9 @@ export class FlowEditorPageComponent {
       const nodes = this.mapDefinitionNodes(definition, plugins);
       this.updateGraphCounters(definition, nodes);
       this.setGraph(nodes, definition.connections);
-      this.notifications.show('Flow généré par l\'IA appliqué avec succès !');
+      this.notifications.show("Flow généré par l'IA appliqué avec succès !");
     } catch {
-      this.notifications.show('Erreur lors de l\'application du flow généré.');
+      this.notifications.show("Erreur lors de l'application du flow généré.");
     }
   }
 

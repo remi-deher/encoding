@@ -1,10 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  effect,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiTokenResponse } from '../../shared/models/api-token';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
@@ -34,10 +28,7 @@ export type IntegrationsSubTab = 'mcp' | 'webhooks' | 'ai';
     WebhooksTabComponent,
   ],
   template: `
-    <app-management-catalog-template
-      title="Paramètres"
-      [showToolbar]="false"
-    >
+    <app-management-catalog-template title="Paramètres" [showToolbar]="false">
       <app-category-tabs
         catalogue-navigation
         label="Domaines de configuration"
@@ -204,7 +195,12 @@ export class SettingsPageComponent {
   protected onMainTabChange(tab: string): void {
     if (tab === 'security' || tab === 'integrations' || tab === 'system') {
       this.activeMainTab.set(tab);
-      const sub = tab === 'security' ? this.securityTab() : tab === 'integrations' ? this.integrationsTab() : 'system';
+      const sub =
+        tab === 'security'
+          ? this.securityTab()
+          : tab === 'integrations'
+            ? this.integrationsTab()
+            : 'system';
       void this.router.navigate([], {
         relativeTo: this.route,
         queryParams: { tab: sub },

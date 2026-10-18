@@ -43,7 +43,8 @@ export interface DeviceAuthDialogData {
 
       <mat-dialog-content class="app-dialog-body device-auth-body">
         <p class="instruction">
-          Pour connecter votre compte sans clé API, ouvrez le lien officiel ci-dessous dans votre navigateur et saisissez votre code unique d'autorisation :
+          Pour connecter votre compte sans clé API, ouvrez le lien officiel ci-dessous dans votre
+          navigateur et saisissez votre code unique d'autorisation :
         </p>
 
         <div class="code-box">
@@ -93,59 +94,61 @@ export interface DeviceAuthDialogData {
       </mat-dialog-actions>
     </section>
   `,
-  styles: [`
-    .device-auth-dialog {
-      min-width: 380px;
-      max-width: 520px;
-    }
-    .device-auth-body {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding: 16px 0;
-    }
-    .instruction {
-      margin: 0;
-      color: var(--mat-sys-on-surface-variant);
-      font-size: 0.95rem;
-      line-height: 1.4;
-    }
-    .code-box {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 16px;
-      background: var(--mat-sys-surface-container-high, #1e1e1e);
-      border: 1px solid var(--mat-sys-outline-variant, #333);
-      border-radius: 8px;
-    }
-    .code-value {
-      font-family: monospace;
-      font-size: 1.4rem;
-      font-weight: 700;
-      letter-spacing: 2px;
-      color: var(--mat-sys-primary, #64b5f6);
-    }
-    .action-link-box {
-      display: flex;
-      justify-content: center;
-      margin: 8px 0;
-    }
-    .status-indicator {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      min-height: 36px;
-    }
-    .authorized-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: #4caf50;
-      font-weight: 600;
-    }
-  `],
+  styles: [
+    `
+      .device-auth-dialog {
+        min-width: 380px;
+        max-width: 520px;
+      }
+      .device-auth-body {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px 0;
+      }
+      .instruction {
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.95rem;
+        line-height: 1.4;
+      }
+      .code-box {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background: var(--mat-sys-surface-container-high, #1e1e1e);
+        border: 1px solid var(--mat-sys-outline-variant, #333);
+        border-radius: 8px;
+      }
+      .code-value {
+        font-family: monospace;
+        font-size: 1.4rem;
+        font-weight: 700;
+        letter-spacing: 2px;
+        color: var(--mat-sys-primary, #64b5f6);
+      }
+      .action-link-box {
+        display: flex;
+        justify-content: center;
+        margin: 8px 0;
+      }
+      .status-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 36px;
+      }
+      .authorized-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #4caf50;
+        font-weight: 600;
+      }
+    `,
+  ],
 })
 export class DeviceAuthDialogComponent {
   readonly data = inject<DeviceAuthDialogData>(MAT_DIALOG_DATA);

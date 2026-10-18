@@ -4271,8 +4271,7 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.4.0",
-        "1.5.0",
-        "1.6.0"
+        "1.5.0"
       ]
     },
     {
@@ -4352,9 +4351,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": [
-        "1.6.0"
-      ]
+      "compatiblePluginVersions": []
     },
     {
       "id": "base-ai-metadata-enricher",
@@ -4412,9 +4409,7 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": [
-        "1.6.0"
-      ]
+      "compatiblePluginVersions": []
     }
   ]
 }

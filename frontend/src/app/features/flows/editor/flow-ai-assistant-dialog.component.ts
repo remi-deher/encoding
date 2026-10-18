@@ -82,11 +82,7 @@ export interface FlowAiAssistantDialogData {
             <span class="suggestions-title">Suggestions rapides :</span>
             <div class="chips-row">
               @for (suggestion of suggestions; track suggestion) {
-                <button
-                  type="button"
-                  class="suggestion-chip"
-                  (click)="applySuggestion(suggestion)"
-                >
+                <button type="button" class="suggestion-chip" (click)="applySuggestion(suggestion)">
                   {{ suggestion }}
                 </button>
               }
@@ -105,7 +101,8 @@ export interface FlowAiAssistantDialogData {
           </mat-form-field>
         } @else {
           <p class="explain-intro">
-            L'IA va analyser l'ensemble des blocs, conditions et connexions de votre flow actuel pour en rédiger une synthèse pédagogique.
+            L'IA va analyser l'ensemble des blocs, conditions et connexions de votre flow actuel
+            pour en rédiger une synthèse pédagogique.
           </p>
         }
 
@@ -132,9 +129,7 @@ export interface FlowAiAssistantDialogData {
       </mat-dialog-content>
 
       <mat-dialog-actions align="end">
-        <button mat-button type="button" [disabled]="loading()" (click)="close()">
-          Annuler
-        </button>
+        <button mat-button type="button" [disabled]="loading()" (click)="close()">Annuler</button>
         <button
           mat-flat-button
           color="primary"
@@ -143,88 +138,96 @@ export interface FlowAiAssistantDialogData {
           (click)="submit()"
         >
           <mat-icon>{{ mode() === 'explain' ? 'visibility' : 'auto_fix_high' }}</mat-icon>
-          {{ mode() === 'explain' ? 'Expliquer' : mode() === 'refactor' ? 'Appliquer modifications' : 'Générer le flow' }}
+          {{
+            mode() === 'explain'
+              ? 'Expliquer'
+              : mode() === 'refactor'
+                ? 'Appliquer modifications'
+                : 'Générer le flow'
+          }}
         </button>
       </mat-dialog-actions>
     </section>
   `,
-  styles: [`
-    .flow-ai-dialog {
-      min-width: 440px;
-      max-width: 640px;
-    }
-    .flow-ai-body {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding: 16px 0;
-    }
-    .mode-tabs {
-      display: flex;
-      gap: 8px;
-      border-bottom: 1px solid var(--mat-sys-outline-variant, #333);
-      padding-bottom: 8px;
-    }
-    .mode-tabs button {
-      border-radius: 6px;
-    }
-    .active-tab {
-      background: var(--mat-sys-secondary-container, #2c3e50);
-      color: var(--mat-sys-on-secondary-container, #fff);
-    }
-    .suggestions-container {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .suggestions-title {
-      font-size: 0.85rem;
-      color: var(--mat-sys-on-surface-variant, #aaa);
-    }
-    .chips-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .suggestion-chip {
-      background: var(--mat-sys-surface-container, #222);
-      border: 1px solid var(--mat-sys-outline-variant, #444);
-      color: var(--mat-sys-on-surface, #ddd);
-      padding: 4px 10px;
-      border-radius: 16px;
-      font-size: 0.82rem;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .suggestion-chip:hover {
-      background: var(--mat-sys-surface-container-high, #333);
-    }
-    .prompt-field {
-      width: 100%;
-    }
-    .loading-state {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px;
-      background: var(--mat-sys-surface-container, #1f1f1f);
-      border-radius: 8px;
-      font-size: 0.9rem;
-    }
-    .error-box {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--mat-sys-error, #f44336);
-      font-size: 0.9rem;
-    }
-    .explanation-box {
-      padding: 12px 16px;
-      background: var(--mat-sys-surface-container-high, #222);
-      border-radius: 8px;
-      line-height: 1.5;
-    }
-  `],
+  styles: [
+    `
+      .flow-ai-dialog {
+        min-width: 440px;
+        max-width: 640px;
+      }
+      .flow-ai-body {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px 0;
+      }
+      .mode-tabs {
+        display: flex;
+        gap: 8px;
+        border-bottom: 1px solid var(--mat-sys-outline-variant, #333);
+        padding-bottom: 8px;
+      }
+      .mode-tabs button {
+        border-radius: 6px;
+      }
+      .active-tab {
+        background: var(--mat-sys-secondary-container, #2c3e50);
+        color: var(--mat-sys-on-secondary-container, #fff);
+      }
+      .suggestions-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .suggestions-title {
+        font-size: 0.85rem;
+        color: var(--mat-sys-on-surface-variant, #aaa);
+      }
+      .chips-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .suggestion-chip {
+        background: var(--mat-sys-surface-container, #222);
+        border: 1px solid var(--mat-sys-outline-variant, #444);
+        color: var(--mat-sys-on-surface, #ddd);
+        padding: 4px 10px;
+        border-radius: 16px;
+        font-size: 0.82rem;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .suggestion-chip:hover {
+        background: var(--mat-sys-surface-container-high, #333);
+      }
+      .prompt-field {
+        width: 100%;
+      }
+      .loading-state {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        background: var(--mat-sys-surface-container, #1f1f1f);
+        border-radius: 8px;
+        font-size: 0.9rem;
+      }
+      .error-box {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--mat-sys-error, #f44336);
+        font-size: 0.9rem;
+      }
+      .explanation-box {
+        padding: 12px 16px;
+        background: var(--mat-sys-surface-container-high, #222);
+        border-radius: 8px;
+        line-height: 1.5;
+      }
+    `,
+  ],
 })
 export class FlowAiAssistantDialogComponent {
   readonly data = inject<FlowAiAssistantDialogData>(MAT_DIALOG_DATA);
