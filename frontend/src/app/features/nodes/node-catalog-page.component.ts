@@ -120,6 +120,7 @@ import {
   SaveNodeGroupPayload,
 } from './components/node-group-editor.component';
 import { NodeGroupDetailComponent } from './components/node-group-detail.component';
+import { SystemLogViewerComponent } from '../../shared/ui/system-log-viewer/system-log-viewer.component';
 
 interface NodeLibraryRecord extends DataTableRow {
   readonly id: string;
@@ -209,6 +210,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     NodeGroupCardComponent,
     NodeGroupEditorComponent,
     NodeGroupDetailComponent,
+    SystemLogViewerComponent,
   ],
   templateUrl: './node-catalog-page.component.html',
   styleUrl: './node-catalog-page.component.scss',

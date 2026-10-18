@@ -160,26 +160,26 @@ L'interface web Angular intègre un visualiseur de logs moderne dans l'administr
 ## 3. Plan de Mise en Œuvre
 
 ### Phase 1 : Cœur Backend & Capture des Logs
-- [ ] Créer les modèles `SystemLogEntry` et `SystemLogLevel` dans `Encoding.Contracts.Logging` ou `Encoding.Core.Logging`.
-- [ ] Implémenter le service de masquage des secrets `SystemLogSanitizer`.
-- [ ] Implémenter le tampon circulaire thread-safe `SystemLogRingBuffer` (2 000 entrées) avec notification asynchrone.
-- [ ] Créer le fournisseur `SystemLogProvider : ILoggerProvider` et le brancher dans `Encoding.Api` et `Encoding.NodeAgent`.
-- [ ] Ajouter les tests unitaires de masquage, de débordement du tampon et de filtrage.
+- [x] Créer les modèles `SystemLogEntry` et `SystemLogLevel` dans `Encoding.Contracts.Logging` ou `Encoding.Core.Logging`.
+- [x] Implémenter le service de masquage des secrets `SystemLogSanitizer`.
+- [x] Implémenter le tampon circulaire thread-safe `SystemLogRingBuffer` (2 000 entrées) avec notification asynchrone.
+- [x] Créer le fournisseur `SystemLogProvider : ILoggerProvider` et le brancher dans `Encoding.Api` et `Encoding.NodeAgent`.
+- [x] Ajouter les tests unitaires de masquage, de débordement du tampon et de filtrage.
 
 ### Phase 2 : Persistance SQLite Bornée & Endpoints API
-- [ ] Créer la table SQLite locale `system_logs` et son repository de persistance asynchrone pour les niveaux `Warning` et supérieurs avec purge glissante.
-- [ ] Créer les endpoints `GET /api/v1/system/logs` et `GET /api/v1/system/logs/categories`.
-- [ ] Créer l'endpoint SSE `GET /api/v1/system/logs/stream` avec gestion du heartbeat et de l'annulation propre.
-- [ ] Sécuriser les routes avec `RequireAuthorization(ClusterRole.Admin)`.
-- [ ] Écrire les tests d'intégration d'API.
+- [x] Créer la table SQLite locale `system_logs` et son repository de persistance asynchrone pour les niveaux `Warning` et supérieurs avec purge glissante.
+- [x] Créer les endpoints `GET /api/v1/system/logs` et `GET /api/v1/system/logs/categories`.
+- [x] Créer l'endpoint SSE `GET /api/v1/system/logs/stream` avec gestion du heartbeat et de l'annulation propre.
+- [x] Sécuriser les routes avec `RequireAuthorization(ClusterRole.Admin)`.
+- [x] Écrire les tests d'intégration d'API.
 
 ### Phase 3 : Intégration MCP & Support Multi-Nœuds
-- [ ] Enregistrer l'outil `get_system_logs` dans le catalogue du serveur MCP interne (`McpToolsCatalog`).
-- [ ] Ajouter le relai de logs inter-nœuds pour permettre au serveur d'interroger les logs d'un worker distant.
-- [ ] Valider l'introspection autonome par les agents IA.
+- [x] Enregistrer l'outil `get_system_logs` dans le catalogue du serveur MCP interne (`McpToolsCatalog`).
+- [x] Ajouter le relai de logs inter-nœuds pour permettre au serveur d'interroger les logs d'un worker distant.
+- [x] Valider l'introspection autonome par les agents IA.
 
 ### Phase 4 : Interface Utilisateur Angular
-- [ ] Créer le service Angular `SystemLogsService` gérant la connexion SSE et le tampon d'affichage local.
-- [ ] Concevoir le composant `SystemLogViewerComponent` conforme à `UI_RULES.md` (barre de filtres, console sombre, badges, auto-scroll intelligent, pause/reprise, export).
-- [ ] Intégrer le composant dans la navigation d'administration (vue système générale et onglet par nœud).
-- [ ] Valider avec les tests unitaires Angular et le build de production.
+- [x] Créer le service Angular `SystemLogsService` gérant la connexion SSE et le tampon d'affichage local.
+- [x] Concevoir le composant `SystemLogViewerComponent` conforme à `UI_RULES.md` (barre de filtres, console sombre, badges, auto-scroll intelligent, pause/reprise, export).
+- [x] Intégrer le composant dans la navigation d'administration (vue système générale et onglet par nœud).
+- [x] Valider avec les tests unitaires Angular et le build de production.
