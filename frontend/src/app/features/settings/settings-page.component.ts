@@ -10,9 +10,12 @@ import { UserManagementTabComponent } from './tabs/user-management-tab.component
 import { WebhooksTabComponent } from './tabs/webhooks-tab.component';
 import { AiToolsTabComponent } from './tabs/ai-tools-tab.component';
 
+import { SystemLogViewerComponent } from '../../shared/ui/system-log-viewer/system-log-viewer.component';
+
 export type SettingsMainTab = 'security' | 'integrations' | 'system';
 export type SecuritySubTab = 'tokens' | 'users';
 export type IntegrationsSubTab = 'mcp' | 'webhooks' | 'ai';
+export type SystemSubTab = 'overview' | 'logs';
 
 @Component({
   selector: 'app-settings-page',
@@ -23,6 +26,7 @@ export type IntegrationsSubTab = 'mcp' | 'webhooks' | 'ai';
     CategoryTabsComponent,
     ManagementCatalogTemplateComponent,
     McpServerTabComponent,
+    SystemLogViewerComponent,
     SystemTabComponent,
     UserManagementTabComponent,
     WebhooksTabComponent,
@@ -104,7 +108,30 @@ export type IntegrationsSubTab = 'mcp' | 'webhooks' | 'ai';
           }
 
           @case ('system') {
-            <app-system-tab />
+            <div class="subtab-bar">
+              <button
+                type="button"
+                class="subtab-btn"
+                [class.is-active]="systemTab() === 'overview'"
+                (click)="onSubTabChange('overview')"
+              >
+                Santé & Apparence
+              </button>
+              <button
+                type="button"
+                class="subtab-btn"
+                [class.is-active]="systemTab() === 'logs'"
+                (click)="onSubTabChange('logs')"
+              >
+                Journaux système
+              </button>
+            </div>
+
+            @if (systemTab() === 'overview') {
+              <app-system-tab />
+            } @else {
+              <app-system-log-viewer />
+            }
           }
         }
       </div>
@@ -156,6 +183,7 @@ export class SettingsPageComponent {
   protected readonly activeMainTab = signal<SettingsMainTab>('security');
   protected readonly securityTab = signal<SecuritySubTab>('tokens');
   protected readonly integrationsTab = signal<IntegrationsSubTab>('mcp');
+  protected readonly systemTab = signal<SystemSubTab>('overview');
   protected readonly cachedTokens = signal<readonly ApiTokenResponse[]>([]);
 
   protected readonly mainTabs: readonly CategoryTabOption[] = [
@@ -187,8 +215,12 @@ export class SettingsPageComponent {
     } else if (tab === 'mcp' || tab === 'webhooks' || tab === 'ai') {
       this.activeMainTab.set('integrations');
       this.integrationsTab.set(tab as IntegrationsSubTab);
-    } else if (tab === 'system') {
+    } else if (tab === 'system' || tab === 'overview') {
       this.activeMainTab.set('system');
+      this.systemTab.set('overview');
+    } else if (tab === 'logs' || tab === 'system-logs') {
+      this.activeMainTab.set('system');
+      this.systemTab.set('logs');
     }
   }
 
@@ -200,7 +232,7 @@ export class SettingsPageComponent {
           ? this.securityTab()
           : tab === 'integrations'
             ? this.integrationsTab()
-            : 'system';
+            : this.systemTab();
       void this.router.navigate([], {
         relativeTo: this.route,
         queryParams: { tab: sub },
@@ -209,11 +241,13 @@ export class SettingsPageComponent {
     }
   }
 
-  protected onSubTabChange(subTab: SecuritySubTab | IntegrationsSubTab): void {
+  protected onSubTabChange(subTab: SecuritySubTab | IntegrationsSubTab | SystemSubTab): void {
     if (subTab === 'tokens' || subTab === 'users') {
       this.securityTab.set(subTab);
-    } else if (subTab === 'mcp' || subTab === 'webhooks') {
+    } else if (subTab === 'mcp' || subTab === 'webhooks' || subTab === 'ai') {
       this.integrationsTab.set(subTab);
+    } else if (subTab === 'overview' || subTab === 'logs') {
+      this.systemTab.set(subTab);
     }
     void this.router.navigate([], {
       relativeTo: this.route,

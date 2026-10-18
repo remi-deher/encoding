@@ -62,4 +62,15 @@ describe('SettingsPageComponent', () => {
     expect(element.querySelector('app-system-tab')).not.toBeNull();
     expect(element.textContent).toContain('Thème visuel');
   });
+
+  it('switches to System Logs subtab under System', async () => {
+    const { fixture, element } = await setup();
+    const component = fixture.componentInstance;
+    component['onMainTabChange']('system');
+    component['onSubTabChange']('logs');
+    fixture.detectChanges();
+
+    expect(element.querySelector('app-system-log-viewer')).not.toBeNull();
+    expect(element.textContent).toContain('Journaux système');
+  });
 });

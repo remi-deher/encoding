@@ -39,6 +39,9 @@ public sealed class WorkerIdentityStore(NodeAgentOptions options)
     private readonly string filePath = Path.Combine(options.DataDirectory, "node-identity.json");
     private WorkerIdentityState? state;
 
+    public Guid? CurrentId => state?.Id;
+    public string? CurrentDisplayName => state?.DisplayName ?? options.Name;
+
     public async Task<WorkerIdentityState> GetAsync(CancellationToken cancellationToken)
     {
         await gate.WaitAsync(cancellationToken);

@@ -1,0 +1,208 @@
+<section class="log-viewer" [attr.aria-label]="title()">
+  @if (showToolbar()) {
+    <header class="log-toolbar">
+      <div class="filter-group">
+        <!-- Niveaux de sévérité -->
+        <div class="level-chips" role="radiogroup" aria-label="Niveau minimum de log">
+          @for (lvl of levelOptions; track lvl.value) {
+            <button
+              type="button"
+              class="level-chip-btn"
+              [class.is-active]="selectedLevel() === lvl.value"
+              [attr.aria-checked]="selectedLevel() === lvl.value"
+              (click)="setLevel(lvl.value)"
+            >
+              {{ lvl.label }}
+            </button>
+          }
+        </div>
+
+        <!-- Catégorie -->
+        <select
+          class="category-select"
+          aria-label="Filtrer par catégorie"
+          [value]="selectedCategory()"
+          (change)="onCategoryChange($event)"
+        >
+          <option value="">Toutes les catégories</option>
+          @for (cat of availableCategories(); track cat) {
+            <option [value]="cat">{{ cat }}</option>
+          }
+        </select>
+
+        <!-- Recherche texte -->
+        <div class="search-field-wrapper">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input
+            type="search"
+            class="search-input"
+            placeholder="Rechercher…"
+            aria-label="Rechercher dans les messages"
+            [value]="searchText()"
+            (input)="onSearchInput($event)"
+          />
+          @if (searchText()) {
+            <button
+              type="button"
+              class="clear-search-btn"
+              aria-label="Effacer la recherche"
+              (click)="clearSearch()"
+            >
+              ✕
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="actions-group">
+        <!-- Bouton Pause / Reprise -->
+        <button
+          type="button"
+          class="pause-btn"
+          [class.is-paused]="isPaused()"
+          [attr.aria-pressed]="isPaused()"
+          (click)="togglePause()"
+        >
+          <span>{{ isPaused() ? '▶ Reprendre' : '⏸ Pause' }}</span>
+          @if (isPaused() && pendingCount() > 0) {
+            <span class="pending-pill">+{{ pendingCount() }}</span>
+          }
+        </button>
+
+        <button matButton="outlined" type="button" (click)="clearLogs()">
+          Effacer
+        </button>
+
+        <button
+          matButton="outlined"
+          type="button"
+          [disabled]="displayedEntries().length === 0"
+          (click)="copyLogs()"
+        >
+          Copier
+        </button>
+
+        <button
+          matButton="outlined"
+          type="button"
+          [disabled]="displayedEntries().length === 0"
+          [matMenuTriggerFor]="exportMenu"
+        >
+          Exporter ▾
+        </button>
+        <mat-menu #exportMenu="matMenu">
+          <button mat-menu-item (click)="exportTxt()">Format Texte (.txt)</button>
+          <button mat-menu-item (click)="exportJson()">Format JSON (.json)</button>
+        </mat-menu>
+      </div>
+    </header>
+  }
+
+  <!-- Console terminal -->
+  <div class="terminal-wrapper">
+    <div class="terminal-header">
+      <div class="terminal-status">
+        <span
+          class="status-indicator"
+          [class.is-paused]="isPaused()"
+          [class.is-disconnected]="!isConnected()"
+          aria-hidden="true"
+        ></span>
+        <span>
+          @if (isPaused()) {
+            En pause
+          } @else if (isConnected()) {
+            Flux direct actif
+          } @else {
+            Connexion…
+          }
+        </span>
+      </div>
+      <div>
+        <span>{{ displayedEntries().length }} entrée(s)</span>
+      </div>
+    </div>
+
+    <div
+      #terminalContainer
+      class="terminal-console"
+      role="log"
+      aria-live="polite"
+      tabindex="0"
+      (scroll)="onConsoleScroll()"
+    >
+      @if (displayedEntries().length === 0) {
+        <div class="empty-logs">
+          @if (isLoadingHistory()) {
+            Chargement des journaux système…
+          } @else {
+            Aucun journal système disponible avec ces critères.
+          }
+        </div>
+      } @else {
+        @for (entry of displayedEntries(); track entry.id) {
+          <div class="log-entry-row">
+            <div class="log-main-line">
+              <span class="log-time" [title]="entry.timestamp + ' (UTC)'">
+                {{ formatTime(entry.timestamp) }}
+              </span>
+
+              <span
+                class="log-badge"
+                [class]="levelBadge(entry.level).cssClass"
+              >
+                {{ levelBadge(entry.level).text }}
+              </span>
+
+              @if (entry.nodeName) {
+                <span class="log-node">@{{ entry.nodeName }}</span>
+              }
+
+              <span class="log-category">[{{ entry.category }}]</span>
+
+              <span class="log-msg">
+                @for (part of highlightParts(entry.message, searchText()); track $index) {
+                  @if (part.match) {
+                    <mark class="highlight-match">{{ part.text }}</mark>
+                  } @else {
+                    <span>{{ part.text }}</span>
+                  }
+                }
+              </span>
+            </div>
+
+            @if (entry.exception) {
+              <div>
+                <button
+                  type="button"
+                  class="log-exception-toggle"
+                  [attr.aria-expanded]="expandedStackTraces().has(entry.id)"
+                  (click)="toggleStackTrace(entry.id)"
+                >
+                  <span>{{ expandedStackTraces().has(entry.id) ? '▼' : '▶' }}</span>
+                  <span>Exception (trace de pile)</span>
+                </button>
+
+                @if (expandedStackTraces().has(entry.id)) {
+                  <pre class="log-stack-trace">{{ entry.exception }}</pre>
+                }
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+
+    @if (!autoScrollEnabled() && displayedEntries().length > 0) {
+      <button
+        type="button"
+        class="autoscroll-fab"
+        aria-label="Reprendre le défilement automatique"
+        (click)="scrollToBottom()"
+      >
+        <span>↓</span>
+        <span>Suivre le flux</span>
+      </button>
+    }
+  </div>
+</section>

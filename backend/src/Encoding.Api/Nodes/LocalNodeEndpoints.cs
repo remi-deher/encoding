@@ -36,6 +36,8 @@ public static class LocalNodeEndpoints
             RelayWithDisplayNameAsync(http, clients, "pairing-key", registry, ct)).WithName("CreateLocalNodePairingKey");
         local.MapPost("/leave", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
             RelayAsync(http, clients, HttpMethod.Post, "leave", ct)).WithName("LeaveFromLocalNode");
+        local.MapGet("/logs", (HttpContext http, IHttpClientFactory clients, CancellationToken ct) =>
+            RelayAsync(http, clients, HttpMethod.Get, "logs" + (http.Request.QueryString.Value ?? string.Empty), ct)).WithName("GetLocalWorkerLogs");
     }
 
     /// <summary>Retire la clé de jumelage et le code de vérification d'un état de nœud destiné à un lecteur.</summary>
