@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Libraries;
@@ -372,6 +373,52 @@ public sealed class McpService(
                 },
                 required = new[] { "pluginId" }
             }
+        ),
+
+        // --- 8. OUTILS MÉDIA & VALIDATION IA ---
+        new(
+            "list_media_tools",
+            "Liste tous les outils média reconnus par le cluster (FFmpeg, FFprobe, MKVToolNix, MediaInfo, ImageMagick, Python, JS), leurs sous-commandes et leurs rôles.",
+            new { type = "object", properties = new { }, required = Array.Empty<string>() }
+        ),
+        new(
+            "get_media_tool_info",
+            "Fournit la documentation détaillée d'un outil média : sous-commandes, catalogue des encodeurs vidéo/audio (CPU et accélérations matérielles NVENC/QSV/VAAPI), presets et règles d'invocation sécurisées pour l'IA.",
+            new
+            {
+                type = "object",
+                properties = new
+                {
+                    toolId = new { type = "string", description = "Identifiant de l'outil (ex: ffmpeg, ffprobe, mkvtoolnix, mediainfo, imagemagick, python, javascript)." }
+                },
+                required = new[] { "toolId" }
+            }
+        ),
+        new(
+            "validate_tool_definition",
+            "Valide un descripteur déclaratif tool.json pour l'intégration sécurisée d'un nouvel outil personnalisé au cluster (architecture 0064).",
+            new
+            {
+                type = "object",
+                properties = new
+                {
+                    definition = new { type = "object", description = "Objet tool.json contenant id, name, executable, probe et capabilitiesExposed." }
+                },
+                required = new[] { "definition" }
+            }
+        ),
+        new(
+            "validate_plugin_manifest",
+            "Valide la conformité d'un manifeste plugin.json (namespace strict, runtime Python Landlock, descriptions sémantiques des sorties et schémas) pour l'intégration IA (architectures 0062 et 0063).",
+            new
+            {
+                type = "object",
+                properties = new
+                {
+                    manifest = new { type = "object", description = "Objet plugin.json décrivant le plugin et ses composants." }
+                },
+                required = new[] { "manifest" }
+            }
         )
     ];
 
@@ -462,6 +509,12 @@ public sealed class McpService(
             "get_plugin_configuration" => await ToolGetPluginConfigurationAsync(arguments, ct),
             "save_plugin_configuration" => await ToolSavePluginConfigurationAsync(arguments, isAdmin, ct),
             "test_plugin_connection" => await ToolTestPluginConnectionAsync(arguments, ct),
+
+            // Outils média & validation IA
+            "list_media_tools" => ToolListMediaTools(),
+            "get_media_tool_info" => ToolGetMediaToolInfo(arguments),
+            "validate_tool_definition" => ToolValidateToolDefinition(arguments),
+            "validate_plugin_manifest" => ToolValidatePluginManifest(arguments),
 
             _ => McpCallToolResult.Text($"Outil introuvable : '{toolName}'", isError: true)
         };
@@ -983,5 +1036,331 @@ public sealed class McpService(
         var testResult = await pluginTester.TestAsync(plugin.Id, resolvedValues, ct);
 
         return McpCallToolResult.Text(JsonSerializer.Serialize(testResult, JsonOptions));
+    }
+
+    // --- 8. OUTILS MÉDIA & VALIDATION IA ---
+
+    private McpCallToolResult ToolListMediaTools()
+    {
+        var tools = new object[]
+        {
+            new
+            {
+                id = "ffmpeg",
+                name = "FFmpeg",
+                description = "Moteur multimédia complet pour l'encodage, le décodage, le transcodage, le filtrage et la normalisation audio/vidéo.",
+                executables = new[] { "ffmpeg" },
+                mediaTypes = new[] { "video", "audio", "subtitles", "general" },
+                commonOperations = new[] { "transcode_video", "transcode_audio", "normalize_audio_ebur128", "extract_track", "change_container", "create_thumbnail", "crop_detect" },
+                scriptUsage = "tools.run(\"ffmpeg\", [\"-hide_banner\", \"-i\", \"source.mkv\", ...])",
+                notes = "Outil de référence système conservé pour les sondes matérielles (0064). S'exécute sous Landlock sur les fichiers temporaires."
+            },
+            new
+            {
+                id = "ffprobe",
+                name = "FFprobe",
+                description = "Analyseur de flux et de conteneurs pour extraire les métadonnées techniques détaillées.",
+                executables = new[] { "ffprobe" },
+                mediaTypes = new[] { "video", "audio", "subtitles", "general" },
+                commonOperations = new[] { "probe_streams", "probe_format", "read_tags", "detect_codecs" },
+                scriptUsage = "tools.run(\"ffprobe\", [\"-v\", \"quiet\", \"-print_format\", \"json\", \"-show_format\", \"-show_streams\", \"file.mkv\"])",
+                notes = "Sortie JSON recommandée pour un parsing fiable par les scripts et l'IA."
+            },
+            new
+            {
+                id = "mkvtoolnix",
+                name = "MKVToolNix",
+                description = "Suite d'outils spécialisée pour le format Matroska (MKV) : multiplexage, extraction et modification de propriétés en place.",
+                executables = new[] { "mkvmerge", "mkvextract", "mkvpropedit" },
+                mediaTypes = new[] { "video", "audio", "subtitles" },
+                commonOperations = new[] { "remux_mkv", "extract_subtitles_ass", "extract_audio_raw", "edit_track_names", "set_default_track" },
+                scriptUsage = "tools.run(\"mkvmerge\", [\"-o\", \"output.mkv\", \"--no-audio\", \"input.mkv\"])",
+                notes = "Attention : mkvmerge renvoie 0 pour succès total et 1 en présence d'avertissements (considéré valide dans Encoding)."
+            },
+            new
+            {
+                id = "mediainfo",
+                name = "MediaInfo",
+                description = "Extracteur d'informations techniques approfondies (profils HDR, Dolby Vision, agencement de canaux audio).",
+                executables = new[] { "mediainfo" },
+                mediaTypes = new[] { "video", "audio", "general" },
+                commonOperations = new[] { "read_hdr_metadata", "read_audio_channels_layout", "export_json" },
+                scriptUsage = "tools.run(\"mediainfo\", [\"--Output=JSON\", \"file.mkv\"])",
+                notes = "Complément indispensable pour les métadonnées HDR10 / Dolby Vision."
+            },
+            new
+            {
+                id = "imagemagick",
+                name = "ImageMagick",
+                description = "Traitement, conversion et redimensionnement d'images, jaquettes et miniatures.",
+                executables = new[] { "magick", "convert" },
+                mediaTypes = new[] { "image" },
+                commonOperations = new[] { "resize", "crop", "convert_format", "optimize_poster" },
+                scriptUsage = "tools.run(\"magick\", [\"input.png\", \"-resize\", \"600x900\", \"output.jpg\"])",
+                notes = "Utilisé pour la génération et retouche de visuels."
+            },
+            new
+            {
+                id = "python",
+                name = "Python 3 Runtime",
+                description = "Moteur d'exécution pour les plugins d'intégration et scripts avancés.",
+                executables = new[] { "python3", "python" },
+                mediaTypes = new[] { "general" },
+                commonOperations = new[] { "run_plugin_process", "execute_custom_script" },
+                scriptUsage = "Utilise le SDK encoding_plugin_sdk.py pour communiquer avec le worker.",
+                notes = "S'exécute sous le bac à sable Landlock (0032). Aucun accès aux secrets du nœud."
+            },
+            new
+            {
+                id = "javascript",
+                name = "Node.js / JavaScript Runtime",
+                description = "Moteur de scripts légers et évaluation d'expressions conditionnelles.",
+                executables = new[] { "node" },
+                mediaTypes = new[] { "general" },
+                commonOperations = new[] { "evaluate_conditions", "lightweight_script" },
+                scriptUsage = "base-script avec moteur JavaScript.",
+                notes = "Confiné sous Landlock."
+            }
+        };
+
+        return McpCallToolResult.Text(JsonSerializer.Serialize(tools, JsonOptions));
+    }
+
+    private McpCallToolResult ToolGetMediaToolInfo(JsonElement arguments)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("toolId", out var idProp) || idProp.GetString() is not { Length: > 0 } toolId)
+            return McpCallToolResult.Text("Paramètre 'toolId' requis.", isError: true);
+
+        var id = toolId.Trim().ToLowerInvariant();
+
+        object? result = id switch
+        {
+            "ffmpeg" => new
+            {
+                id = "ffmpeg",
+                name = "FFmpeg",
+                executables = new[] { "ffmpeg" },
+                role = "Transcodage, filtrage et encodage vidéo/audio universel",
+                conformanceRequirements = new[]
+                {
+                    "Option -version renvoyant une version >= 5.1",
+                    "Option -hide_banner -encoders renvoyant la liste des encodeurs reconnus",
+                    "Smoke test synthétique CPU (1s mire de test encodée sans erreur)"
+                },
+                safeUsageGuidelines = new[]
+                {
+                    "Toujours utiliser -hide_banner et -nostats pour éviter de polluer les logs",
+                    "Spécifier -y pour écraser la sortie temporaire de travail",
+                    "Ne jamais interpoler de chemins sans guillemets ou dans un shell arbitraire",
+                    "Consulter VideoEncoderCatalog pour les options de qualité par encodeur"
+                },
+                supportedVideoEncoders = VideoEncoderCatalog.All.Select(e => new
+                {
+                    e.Id,
+                    e.Codec,
+                    e.Name,
+                    e.Acceleration,
+                    e.QualityMode,
+                    e.QualityOption,
+                    e.PresetOption,
+                    qualityRange = new { min = e.QualityMinimum, max = e.QualityMaximum, @default = e.DefaultQuality },
+                    presets = e.Presets.Select(p => new { p.Id, p.Name, p.Value })
+                }).ToList()
+            },
+            "ffprobe" => new
+            {
+                id = "ffprobe",
+                name = "FFprobe",
+                executables = new[] { "ffprobe" },
+                role = "Analyse et sondage de flux multimédia",
+                recommendedCommand = new[] { "ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", "{filePath}" },
+                expectedOutputFormat = "JSON structuré contenant les tableaux 'streams' (codec_name, width, height, channels, tags) et 'format' (duration, size, bit_rate)."
+            },
+            "mkvtoolnix" => new
+            {
+                id = "mkvtoolnix",
+                name = "MKVToolNix",
+                executables = new[] { "mkvmerge", "mkvextract", "mkvpropedit" },
+                subTools = new[]
+                {
+                    new { executable = "mkvmerge", purpose = "Remuxer des conteneurs, sélectionner/ordonner des flux et ajouter des pistes.", exitCodeRules = "Code 0 = Succès, Code 1 = Succès avec avertissements mineurs (valide), Code > 1 = Erreur critique." },
+                    new { executable = "mkvextract", purpose = "Extraire des pistes de sous-titres (ASS/SRT), pistes audio natives, chapitres ou pièces jointes.", exitCodeRules = "Code 0 = Succès." },
+                    new { executable = "mkvpropedit", purpose = "Modifier les métadonnées de pistes (titre, langue, flag 'default', flag 'forced') directement sur la copie de travail sans réécriture intégrale.", exitCodeRules = "Code 0 = Succès, Code 1 = Avertissements." }
+                }
+            },
+            "mediainfo" => new
+            {
+                id = "mediainfo",
+                name = "MediaInfo",
+                executables = new[] { "mediainfo" },
+                role = "Inspection avancée des métadonnées de diffusion et mastering",
+                recommendedCommand = new[] { "mediainfo", "--Output=JSON", "{filePath}" },
+                keyFields = new[] { "MasteringDisplay_ColorPrimaries", "MasteringDisplay_Luminance", "MaxCLL", "MaxFALL", "HDR_Format", "Format_Commercial_IfAny" }
+            },
+            "imagemagick" => new
+            {
+                id = "imagemagick",
+                name = "ImageMagick",
+                executables = new[] { "magick", "convert" },
+                role = "Conversion et retouche graphique d'affiches/miniatures",
+                typicalCommands = new[]
+                {
+                    "magick input.jpg -resize 300x450^ -gravity center -extent 300x450 poster.jpg",
+                    "magick input.png -strip -quality 85 output.webp"
+                }
+            },
+            _ => null
+        };
+
+        return result is not null
+            ? McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions))
+            : McpCallToolResult.Text($"Outil '{toolId}' non répertorié ou aucune documentation spécifique disponible.", isError: true);
+    }
+
+    private McpCallToolResult ToolValidateToolDefinition(JsonElement arguments)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("definition", out var defProp) || defProp.ValueKind != JsonValueKind.Object)
+            return McpCallToolResult.Text("Paramètre 'definition' (objet JSON décrivant tool.json) requis.", isError: true);
+
+        var errors = new List<string>();
+        var warnings = new List<string>();
+
+        // 1. Id
+        if (!defProp.TryGetProperty("id", out var idProp) || idProp.GetString() is not { Length: > 0 } id)
+            errors.Add("Le champ 'id' est obligatoire.");
+        else if (!Regex.IsMatch(id, "^[a-z0-9_-]+$"))
+            errors.Add($"L'identifiant '{id}' doit être en minuscules et ne contenir que des lettres, chiffres, tirets et underscores.");
+
+        // 2. Name
+        if (!defProp.TryGetProperty("name", out var nameProp) || string.IsNullOrWhiteSpace(nameProp.GetString()))
+            errors.Add("Le champ 'name' est obligatoire.");
+
+        // 3. Executable
+        if (!defProp.TryGetProperty("executable", out var execProp) || string.IsNullOrWhiteSpace(execProp.GetString()))
+            errors.Add("Le champ 'executable' est obligatoire.");
+
+        // 4. Probe
+        if (!defProp.TryGetProperty("probe", out var probeProp) || probeProp.ValueKind != JsonValueKind.Object)
+        {
+            errors.Add("Le champ 'probe' est obligatoire (objet décrivant la commande de version et la regex).");
+        }
+        else
+        {
+            if (!probeProp.TryGetProperty("versionArgs", out var vArgs) || vArgs.ValueKind != JsonValueKind.Array || vArgs.GetArrayLength() == 0)
+                errors.Add("Le champ 'probe.versionArgs' doit être un tableau non vide de chaînes (ex: ['--version']).");
+
+            if (!probeProp.TryGetProperty("versionRegex", out var vRegex) || vRegex.GetString() is not { Length: > 0 } regexStr)
+            {
+                errors.Add("Le champ 'probe.versionRegex' est obligatoire.");
+            }
+            else
+            {
+                try
+                {
+                    _ = new Regex(regexStr);
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"L'expression régulière 'probe.versionRegex' est invalide : {ex.Message}");
+                }
+            }
+        }
+
+        // 5. Capabilities
+        if (!defProp.TryGetProperty("capabilitiesExposed", out var capProp) || capProp.ValueKind != JsonValueKind.Array || capProp.GetArrayLength() == 0)
+            warnings.Add("Le champ 'capabilitiesExposed' est vide ou absent. L'outil n'annoncera aucune capacité au cluster.");
+
+        var isValid = errors.Count == 0;
+        var response = new
+        {
+            isValid,
+            errors,
+            warnings,
+            summary = isValid ? "Manifeste d'outil conforme aux spécifications de l'architecture 0064." : "Des erreurs bloquantes empêchent l'enregistrement de l'outil."
+        };
+
+        return McpCallToolResult.Text(JsonSerializer.Serialize(response, JsonOptions), isError: !isValid);
+    }
+
+    private McpCallToolResult ToolValidatePluginManifest(JsonElement arguments)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object || !arguments.TryGetProperty("manifest", out var manProp) || manProp.ValueKind != JsonValueKind.Object)
+            return McpCallToolResult.Text("Paramètre 'manifest' (objet JSON décrivant plugin.json) requis.", isError: true);
+
+        var errors = new List<string>();
+        var warnings = new List<string>();
+        var suggestions = new List<string>();
+
+        // 1. Id avec Namespace strict (0063)
+        if (!manProp.TryGetProperty("id", out var idProp) || idProp.GetString() is not { Length: > 0 } id)
+        {
+            errors.Add("Le champ 'id' est obligatoire.");
+        }
+        else
+        {
+            if (!id.Contains('.'))
+                errors.Add($"L'identifiant '{id}' doit respecter la règle de namespace strict '<namespace>.<plugin-name>' (ex: 'community.whisper').");
+            if (id.StartsWith("official.", StringComparison.OrdinalIgnoreCase))
+                warnings.Add("Le namespace 'official.' est réservé aux plugins du dépôt officiel Encoding.");
+        }
+
+        // 2. Version SemVer
+        if (!manProp.TryGetProperty("version", out var verProp) || verProp.GetString() is not { Length: > 0 } ver)
+            errors.Add("Le champ 'version' est obligatoire.");
+        else if (!Regex.IsMatch(ver, @"^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$"))
+            errors.Add($"La version '{ver}' n'est pas un SemVer valide (ex: 1.0.0 ou 1.2.3-beta).");
+
+        // 3. Runtime Python sous Landlock (0032)
+        if (manProp.TryGetProperty("runtime", out var rtProp) && rtProp.ValueKind == JsonValueKind.Object)
+        {
+            if (rtProp.TryGetProperty("type", out var typeProp) && typeProp.GetString() != "python3")
+                errors.Add("Le runtime du plugin doit être 'python3' pour s'exécuter sous le bac à sable Landlock (les exécutables .NET ou compilés arbitraires sont proscrits, architecture 0032).");
+            if (!rtProp.TryGetProperty("entrypoint", out var epProp) || string.IsNullOrWhiteSpace(epProp.GetString()))
+                errors.Add("Le champ 'runtime.entrypoint' (ex: 'main.py') est obligatoire.");
+        }
+
+        // 4. Composants et sémantique IA (0062)
+        if (!manProp.TryGetProperty("components", out var compsProp) || compsProp.ValueKind != JsonValueKind.Array || compsProp.GetArrayLength() == 0)
+        {
+            warnings.Add("Le plugin ne déclare aucun composant de flow dans 'components'.");
+        }
+        else
+        {
+            var compIndex = 0;
+            foreach (var comp in compsProp.EnumerateArray())
+            {
+                compIndex++;
+                var compId = comp.TryGetProperty("id", out var cId) ? cId.GetString() : $"composant_{compIndex}";
+
+                if (!comp.TryGetProperty("description", out var cDesc) || (cDesc.GetString() ?? "").Length < 10)
+                    suggestions.Add($"Composant '{compId}' : Fournir une description détaillée (> 10 caractères) pour aider l'IA à comprendre le rôle du bloc.");
+
+                if (comp.TryGetProperty("outputs", out var outsProp) && outsProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var outItem in outsProp.EnumerateArray())
+                    {
+                        var outId = outItem.TryGetProperty("id", out var oId) ? oId.GetString() : "?";
+                        if (!outItem.TryGetProperty("description", out var oDesc) || string.IsNullOrWhiteSpace(oDesc.GetString()))
+                            errors.Add($"Composant '{compId}', Sortie '{outId}' : La description sémantique est OBLIGATOIRE (règle 0062) pour éviter que l'IA n'inverse les branches de succès et d'échec.");
+                    }
+                }
+                else
+                {
+                    errors.Add($"Composant '{compId}' : Doit déclarer un tableau 'outputs' avec au moins une sortie.");
+                }
+            }
+        }
+
+        var isValid = errors.Count == 0;
+        var result = new
+        {
+            isValid,
+            errors,
+            warnings,
+            suggestions,
+            summary = isValid ? "Manifeste de plugin validé avec succès pour l'écosystème IA." : "Le manifeste comporte des erreurs de conformité bloquantes."
+        };
+
+        return McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions), isError: !isValid);
     }
 }

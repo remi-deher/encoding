@@ -530,6 +530,114 @@ internal static class ApiImprovementsScenarios
                 Check(profilesJson.Contains("Équilibré") || profilesJson.Contains("balanced") || profilesJson.Length > 10, "MCP list_encoding_profiles returns profiles.");
             }
 
+            // Test Outils média MCP : list_media_tools
+            using (var listMediaToolsResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "2.0",
+                id = 24,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "list_media_tools",
+                    arguments = new { }
+                }
+            }))
+            {
+                Check(listMediaToolsResp.StatusCode == HttpStatusCode.OK, "MCP list_media_tools succeeds.");
+                var mediaToolsJson = await listMediaToolsResp.Content.ReadAsStringAsync();
+                Check(mediaToolsJson.Contains("ffmpeg") && mediaToolsJson.Contains("mkvtoolnix") && mediaToolsJson.Contains("ffprobe"), "MCP list_media_tools returns canonical tools.");
+            }
+
+            // Test Outils média MCP : get_media_tool_info (ffmpeg)
+            using (var getToolInfoResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "2.0",
+                id = 25,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "get_media_tool_info",
+                    arguments = new { toolId = "ffmpeg" }
+                }
+            }))
+            {
+                Check(getToolInfoResp.StatusCode == HttpStatusCode.OK, "MCP get_media_tool_info succeeds.");
+                var toolInfoJson = await getToolInfoResp.Content.ReadAsStringAsync();
+                Check(toolInfoJson.Contains("supportedVideoEncoders") && toolInfoJson.Contains("safeUsageGuidelines"), "MCP get_media_tool_info returns encoders and guidelines.");
+            }
+
+            // Test Validation Tool MCP : validate_tool_definition
+            using (var valToolResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "2.0",
+                id = 26,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "validate_tool_definition",
+                    arguments = new
+                    {
+                        definition = new
+                        {
+                            id = "custom-whisper",
+                            name = "Whisper Custom",
+                            executable = "whisper",
+                            probe = new
+                            {
+                                versionArgs = new[] { "--version" },
+                                versionRegex = @"whisper\s+v(?<version>[0-9\.]+)"
+                            },
+                            capabilitiesExposed = new[] { "transcription" }
+                        }
+                    }
+                }
+            }))
+            {
+                Check(valToolResp.StatusCode == HttpStatusCode.OK, "MCP validate_tool_definition succeeds.");
+                var valToolJson = await valToolResp.Content.ReadAsStringAsync();
+                Check(valToolJson.Contains("\"isValid\": true"), "MCP validate_tool_definition confirms valid definition.");
+            }
+
+            // Test Validation Plugin MCP : validate_plugin_manifest
+            using (var valPluginResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "2.0",
+                id = 27,
+                method = "tools/call",
+                @params = new
+                {
+                    name = "validate_plugin_manifest",
+                    arguments = new
+                    {
+                        manifest = new
+                        {
+                            id = "community.flac-converter",
+                            version = "1.0.0",
+                            runtime = new { type = "python3", entrypoint = "main.py" },
+                            components = new object[]
+                            {
+                                new
+                                {
+                                    id = "convert-flac",
+                                    name = "Convertir FLAC",
+                                    description = "Convertit les pistes FLAC volumineuses en ALAC ou Opus.",
+                                    outputs = new object[]
+                                    {
+                                        new { id = "success", label = "Succès", description = "Piste audio convertie avec succès." },
+                                        new { id = "error", label = "Erreur", description = "Échec de lecture ou de conversion de la piste." }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }))
+            {
+                Check(valPluginResp.StatusCode == HttpStatusCode.OK, "MCP validate_plugin_manifest succeeds.");
+                var valPluginJson = await valPluginResp.Content.ReadAsStringAsync();
+                Check(valPluginJson.Contains("\"isValid\": true"), "MCP validate_plugin_manifest confirms valid manifest.");
+            }
+
             // Test REST : GET /api/v1/plugins
             using (var restPluginsResp = await aiClient.SendAsync(HttpMethod.Get, "/api/v1/plugins"))
             {
