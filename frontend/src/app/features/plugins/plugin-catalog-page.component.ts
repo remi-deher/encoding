@@ -48,6 +48,7 @@ interface PluginRecord extends DataTableRow {
   readonly runtime: string;
   readonly configuration: string;
   readonly state: string;
+  readonly iconUrl: string;
 }
 
 const PLUGIN_RECORDS: readonly PluginRecord[] = [
@@ -63,6 +64,7 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     runtime: 'Fourni par le serveur',
     configuration: 'Aucune connexion externe requise',
     state: 'Actif',
+    iconUrl: '/plugins/base.svg',
   },
   {
     id: 'nodes',
@@ -75,6 +77,7 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     runtime: 'Intégré au répartiteur et au worker',
     configuration: 'Cible par défaut, avec dérogations par flow et par bloc',
     state: 'Actif par défaut',
+    iconUrl: '/plugins/nodes.svg',
   },
   {
     id: 'conditions',
@@ -87,6 +90,7 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     runtime: 'Évaluation native sur les workers',
     configuration: 'Conditions définies sur chaque bloc',
     state: 'Actif par défaut',
+    iconUrl: '/plugins/conditions.svg',
   },
   {
     id: 'plex',
@@ -99,6 +103,7 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     runtime: 'Processus plugin livré avec l’image worker (déclaré dans Runtime:Plugins)',
     configuration: 'Connexion, correspondance des chemins et test de connexion',
     state: 'Catalogue intégré',
+    iconUrl: '/plugins/plex.svg',
   },
   {
     id: 'jellyfin',
@@ -111,6 +116,7 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     runtime: 'Processus plugin livré avec l’image worker (déclaré dans Runtime:Plugins)',
     configuration: 'Connexion, correspondance des chemins et test de connexion',
     state: 'Catalogue intégré',
+    iconUrl: '/plugins/jellyfin.svg',
   },
   {
     id: 'sonarr',
@@ -124,6 +130,7 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     configuration:
       'Connexion, correspondance des chemins, déclencheur d’import (webhook) et test de connexion',
     state: 'Catalogue intégré',
+    iconUrl: '/plugins/sonarr.svg',
   },
   {
     id: 'radarr',
@@ -137,6 +144,7 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     configuration:
       'Connexion, correspondance des chemins, déclencheur d’import (webhook) et test de connexion',
     state: 'Catalogue intégré',
+    iconUrl: '/plugins/radarr.svg',
   },
 ];
 
@@ -257,6 +265,7 @@ export class PluginCatalogPageComponent {
   protected readonly pluginSheet = computed<{
     readonly title: string;
     readonly subtitle: string;
+    readonly iconUrl?: string;
     readonly sections: readonly ResourceSheetSection[];
   } | null>(() => {
     const plugin = this.selectedPlugin();
@@ -320,6 +329,7 @@ export class PluginCatalogPageComponent {
     return {
       title: plugin.name,
       subtitle: `${plugin.familyLabel} · ${plugin.category}`,
+      iconUrl: plugin.iconUrl,
       sections,
     };
   });

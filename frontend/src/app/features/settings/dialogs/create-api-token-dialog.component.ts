@@ -31,56 +31,58 @@ export interface CreateApiTokenDialogResult {
     ReactiveFormsModule,
   ],
   template: `
-    <h2 mat-dialog-title>Générer un jeton d’API</h2>
+    <section class="app-dialog">
+      <h2 mat-dialog-title class="app-dialog-header">Générer un jeton d’API</h2>
 
-    <mat-dialog-content>
-      <form [formGroup]="form" class="token-form">
-        <mat-form-field appearance="outline">
-          <mat-label>Nom ou description du jeton</mat-label>
-          <input
-            matInput
-            formControlName="name"
-            placeholder="ex. Script backup, Prometheus, Claude Desktop"
-            maxlength="64"
-            required
-            autocomplete="off"
-          />
-          @if (form.controls.name.hasError('required')) {
-            <mat-error>Le nom du jeton est requis.</mat-error>
-          }
-        </mat-form-field>
+      <mat-dialog-content class="app-dialog-body">
+        <form [formGroup]="form" class="token-form">
+          <mat-form-field appearance="outline">
+            <mat-label>Nom ou description du jeton</mat-label>
+            <input
+              matInput
+              formControlName="name"
+              placeholder="ex. Script backup, Prometheus, Claude Desktop"
+              maxlength="64"
+              required
+              autocomplete="off"
+            />
+            @if (form.controls.name.hasError('required')) {
+              <mat-error>Le nom du jeton est requis.</mat-error>
+            }
+          </mat-form-field>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Rôle et permissions</mat-label>
-          <mat-select formControlName="role">
-            <mat-option value="admin">Administrateur (Lecture et écriture)</mat-option>
-            <mat-option value="viewer">Lecture seule (Consultation)</mat-option>
-          </mat-select>
-        </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Rôle et permissions</mat-label>
+            <mat-select formControlName="role">
+              <mat-option value="admin">Administrateur (Lecture et écriture)</mat-option>
+              <mat-option value="viewer">Lecture seule (Consultation)</mat-option>
+            </mat-select>
+          </mat-form-field>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Durée de validité</mat-label>
-          <mat-select formControlName="duration">
-            <mat-option value="never">Illimité (n’expire jamais)</mat-option>
-            <mat-option value="30">30 jours</mat-option>
-            <mat-option value="90">90 jours</mat-option>
-            <mat-option value="365">1 an</mat-option>
-          </mat-select>
-        </mat-form-field>
-      </form>
-    </mat-dialog-content>
+          <mat-form-field appearance="outline">
+            <mat-label>Durée de validité</mat-label>
+            <mat-select formControlName="duration">
+              <mat-option value="never">Illimité (n’expire jamais)</mat-option>
+              <mat-option value="30">30 jours</mat-option>
+              <mat-option value="90">90 jours</mat-option>
+              <mat-option value="365">1 an</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </form>
+      </mat-dialog-content>
 
-    <mat-dialog-actions align="end">
-      <button matButton="text" type="button" (click)="cancel()">Annuler</button>
-      <button
-        matButton="filled"
-        type="button"
-        [disabled]="form.invalid || submitting()"
-        (click)="submit()"
-      >
-        {{ submitting() ? 'Génération…' : 'Générer le jeton' }}
-      </button>
-    </mat-dialog-actions>
+      <mat-dialog-actions class="app-dialog-footer" align="end">
+        <button matButton="text" type="button" (click)="cancel()">Annuler</button>
+        <button
+          matButton="filled"
+          type="button"
+          [disabled]="form.invalid || submitting()"
+          (click)="submit()"
+        >
+          {{ submitting() ? 'Génération…' : 'Générer le jeton' }}
+        </button>
+      </mat-dialog-actions>
+    </section>
   `,
   styles: `
     .token-form {

@@ -131,6 +131,16 @@ export class ApiTokenTabComponent {
         confirmLabel: 'Révoquer définitivement',
       }),
     },
+    {
+      id: 'delete',
+      label: 'Supprimer',
+      tone: 'danger',
+      confirmation: (row) => ({
+        title: 'Supprimer ce jeton d’API ?',
+        message: `Le jeton « ${row['name']} » sera définitivement supprimé de la base de données.`,
+        confirmLabel: 'Supprimer définitivement',
+      }),
+    },
   ];
 
   protected readonly rows = computed<readonly ApiTokenRow[]>(() =>
@@ -206,7 +216,7 @@ export class ApiTokenTabComponent {
             width: '500px',
             data: {
               name: result.name,
-              secret: res.secret,
+              secret: res.token,
             },
           },
         );
@@ -225,6 +235,14 @@ export class ApiTokenTabComponent {
         await this.refresh();
       } catch {
         this.notifications.show('Échec de la révocation du jeton.');
+      }
+    } else if (event.actionId === 'delete') {
+      try {
+        await firstValueFrom(this.tokenService.delete(row.id));
+        this.notifications.show(`Le jeton « ${row.name} » a été supprimé.`);
+        await this.refresh();
+      } catch {
+        this.notifications.show('Échec de la suppression du jeton.');
       }
     }
   }

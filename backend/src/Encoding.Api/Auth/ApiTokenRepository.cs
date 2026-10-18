@@ -151,4 +151,15 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
         command.Parameters.AddWithValue("id", id);
         return await command.ExecuteNonQueryAsync(ct) > 0;
     }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var command = Sql.Command("""
+            DELETE FROM api_tokens
+            WHERE id = @id
+            """, connection);
+        command.Parameters.AddWithValue("id", id);
+        return await command.ExecuteNonQueryAsync(ct) > 0;
+    }
 }

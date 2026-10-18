@@ -17,6 +17,11 @@ export interface CreateApiTokenRequest {
 }
 
 export interface CreatedApiTokenResponse {
-  readonly token: ApiTokenResponse;
-  readonly secret: string;
+  readonly id: string;
+  readonly name: string;
+  readonly tokenPrefix: string;
+  readonly role: 'admin' | 'viewer';
+  readonly createdAt: string;
+  readonly expiresAt?: string | null;
+  readonly token: string;
 }
