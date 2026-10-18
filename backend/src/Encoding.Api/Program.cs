@@ -19,8 +19,10 @@ using Encoding.Api.Infrastructure.PeerCluster;
 using DotNext.Net.Cluster.Consensus.Raft.Http;
 using DotNext.Net.Cluster.Consensus.Raft;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
+using Encoding.Api.Logging;
 using Encoding.Api.Mcp;
 using Encoding.Api.Tools;
+using Encoding.Core.Logging;
 
 if (args.FirstOrDefault() is McpCommand.Name or "--" + McpCommand.Name)
     Environment.Exit(await McpCommand.RunAsync(args[1..], Console.In, Console.Out, CancellationToken.None));
@@ -51,6 +53,17 @@ builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
 builder.Services.AddSingleton<FirstLinkRepository>();
 builder.Services.AddSingleton<LocalNodeRegistry>();
+// Instances créées hors conteneur : le fournisseur de logs est résolu pendant l'initialisation de ILoggerFactory.
+var systemLogRepository = new SystemLogRepository(new PeerLocalDatabase(localDatabase));
+var systemLogSink = new SystemLogDbSink(systemLogRepository);
+builder.Services.AddSingleton(systemLogRepository);
+builder.Services.AddSingleton(systemLogSink);
+builder.Services.AddSingleton<ISystemLogSink>(systemLogSink);
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemLogDbSink>());
+var localNodeLogContext = new LocalNodeLogContext();
+builder.Services.AddSingleton(localNodeLogContext);
+builder.Services.AddSingleton<ISystemLogNodeContext>(localNodeLogContext);
+builder.Services.AddSystemLogging();
 builder.Services.AddApiProblemDetails();
 builder.Services.AddClusterAuthentication(builder.Configuration);
 builder.Services.AddSingleton<ApiTokenRepository>();
@@ -208,6 +221,7 @@ app.MapRuntimeEndpoints();
 app.MapSourceReplacementEndpoints();
 
 app.MapOperationsEndpoints();
+app.MapSystemLogEndpoints();
 
 app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();

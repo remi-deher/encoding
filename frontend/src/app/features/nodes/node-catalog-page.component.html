@@ -490,6 +490,16 @@
           </div>
         </div>
       </mat-tab>
+      <mat-tab label="Journaux">
+        @if (selectedNode(); as node) {
+          <div class="node-logs-tab">
+            <app-system-log-viewer
+              [nodeId]="node.id"
+              [title]="'Journaux de ' + node.name"
+            />
+          </div>
+        }
+      </mat-tab>
     </mat-tab-group>
     }
   </ng-template>

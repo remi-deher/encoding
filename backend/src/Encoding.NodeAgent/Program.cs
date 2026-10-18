@@ -1,4 +1,7 @@
+using Encoding.Contracts.Logging;
+using Encoding.Core.Logging;
 using Encoding.Core.Nodes;
+using Microsoft.AspNetCore.Mvc;
 using Encoding.NodeAgent;
 using Encoding.NodeAgent.Services;
 using Encoding.NodeAgent.Runtime;
@@ -16,6 +19,15 @@ var options = NodeAgentOptions.FromConfiguration(builder.Configuration);
 builder.WebHost.ConfigureKestrel(server => server.ListenLocalhost(options.LocalApiPort));
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<WorkerIdentityStore>();
+builder.Services.AddSingleton<ISystemLogNodeContext>(sp =>
+{
+    var identityStore = sp.GetRequiredService<WorkerIdentityStore>();
+    return new DefaultSystemLogNodeContext(() =>
+    {
+        return (identityStore.CurrentId, identityStore.CurrentDisplayName);
+    });
+});
+builder.Services.AddSystemLogging();
 builder.Services.AddSingleton<ProcessToolRunner>();
 builder.Services.AddSingleton<PluginProcessHost>();
 builder.Services.AddSingleton<IPublicationGuardInvoker,PluginPublicationGuardInvoker>();
@@ -103,6 +115,22 @@ app.MapGet("/api/v1/worker/status", async (NodeAgentOptions agentOptions, Worker
         switchFailure = identity.SwitchFailure
     });
 });
+app.MapGet("/api/v1/worker/logs", (
+    [FromQuery] SystemLogLevel? minLevel,
+    [FromQuery] string? category,
+    [FromQuery] string? search,
+    [FromQuery] int? limit,
+    [FromQuery] DateTimeOffset? since,
+    SystemLogRingBuffer ringBuffer) =>
+{
+    var query = new SystemLogFilterQuery(
+        MinLevel: minLevel,
+        Category: category,
+        Search: search,
+        Limit: limit.GetValueOrDefault(100),
+        Since: since);
+    return Results.Ok(ringBuffer.Query(query));
+}).WithName("GetWorkerLogs");
 app.MapPost("/api/v1/worker/enroll", async (
     WorkerEnrollmentRequest request,
     WorkerEnrollmentService enrollment,
