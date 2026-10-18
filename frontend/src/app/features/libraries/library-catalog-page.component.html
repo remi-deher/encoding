@@ -8,7 +8,6 @@
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
   (actionClosed)="closeCreateLibrary()"
-  note="Le serveur déclare chaque bibliothèque et décide quels nœuds y sont autorisés. Les réglages d’accès sont conservés par bibliothèque et par nœud."
 >
   <ng-template #pageActions>
     <a matButton="outlined" href="/api/v1/libraries/export" download="bibliotheques.json">
@@ -21,7 +20,7 @@
 
   <app-category-tabs
     catalogue-navigation
-    label="Type de librairie"
+    label="Ressources"
     [options]="librarySections"
     [selected]="selectedSection()"
     (selectedChange)="onSectionChanged($event)"

@@ -48,7 +48,6 @@ interface FlowTemplateRow extends DataTableRow {
       searchLabel="Rechercher un modèle"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
-      note="Un modèle est une copie immuable d’une version publiée. Créez-en un depuis le menu d’action d’un flow publié."
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
       [actionOpen]="actionOpen()"
@@ -62,7 +61,7 @@ interface FlowTemplateRow extends DataTableRow {
     >
       <app-category-tabs
         catalogue-navigation
-        label="Type de librairie"
+        label="Ressources"
         [options]="librarySections"
         selected="templates"
         (selectedChange)="onSectionChanged($event)"
@@ -119,11 +118,11 @@ export class FlowTemplateLibraryPageComponent {
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Librairies');
+  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Modèles de flow');
   protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Médias' },
+    { value: 'media', label: 'Bibliothèques' },
     { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles' },
+    { value: 'templates', label: 'Modèles de flow' },
     { value: 'packs', label: 'Packs de composants' },
     { value: 'encoding', label: 'Profils d’encodage' },
   ];

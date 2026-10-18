@@ -74,7 +74,8 @@
       pageTab() === 'cluster' &&
       !local.standalone() &&
       clusterIdentity() &&
-      loadState() === 'ready'
+      loadState() === 'ready' &&
+      reconciliationBanner().isAlert
     ) {
       <app-context-banner
         label="Synchronisation des serveurs"

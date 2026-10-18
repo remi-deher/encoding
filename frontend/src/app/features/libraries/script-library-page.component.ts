@@ -78,7 +78,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
 
       <app-category-tabs
         catalogue-navigation
-        label="Type de librairie"
+        label="Ressources"
         [options]="librarySections"
         selected="scripts"
         (selectedChange)="onSectionChanged($event)"
@@ -248,11 +248,11 @@ export class ScriptLibraryPageComponent {
   protected readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Librairies');
+  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Scripts');
   protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Médias' },
+    { value: 'media', label: 'Bibliothèques' },
     { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles' },
+    { value: 'templates', label: 'Modèles de flow' },
     { value: 'packs', label: 'Packs de composants' },
     { value: 'encoding', label: 'Profils d’encodage' },
   ];
