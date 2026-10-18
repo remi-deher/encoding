@@ -15,6 +15,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiTokenResponse } from '../../../shared/models/api-token';
 import { McpToolDefinition } from '../../../shared/models/mcp';
+import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { McpService } from '../../../shared/services/mcp.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 
@@ -23,27 +24,12 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 @Component({
   selector: 'app-mcp-server-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatTooltipModule,
-  ],
+  imports: [MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule],
   template: `
     <div class="tab-header">
       <div class="tab-titles">
         <h2>Serveur MCP</h2>
         <p>Connexion JSON-RPC standard pour Claude Desktop, Cursor, Antigravity ou CLI.</p>
-      </div>
-      <div class="tab-actions">
-        <span class="mcp-status-pill" [class.is-online]="isOnline()">
-          <span class="status-dot"></span>
-          {{ isOnline() ? 'Actif' : 'Hors ligne' }}
-        </span>
-        <button matButton="tonal" type="button" [disabled]="testing()" (click)="pingServer()">
-          {{ testing() ? 'Test en cours…' : 'Tester' }}
-        </button>
       </div>
     </div>
 
@@ -208,36 +194,6 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
       margin: var(--space-1) 0 0 0;
       font-size: var(--font-body-sm);
       color: var(--text-secondary);
-    }
-
-    .tab-actions {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-
-    .mcp-status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
-      padding: var(--space-1) var(--space-3);
-      border-radius: var(--radius-pill);
-      font-size: var(--font-label);
-      font-weight: 600;
-      background: var(--surface-container-highest);
-      color: var(--text-secondary);
-    }
-
-    .mcp-status-pill.is-online {
-      background: var(--success-soft);
-      color: var(--success);
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
     }
 
     .mcp-grid {
@@ -444,27 +400,22 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 export class McpServerTabComponent {
   private readonly mcpService = inject(McpService);
   private readonly notifications = inject(NotificationService);
+  private readonly clipboardService = inject(ClipboardService);
 
   readonly tokens = input<readonly ApiTokenResponse[]>([]);
 
-  protected readonly isOnline = signal(true);
-  protected readonly testing = signal(false);
   protected readonly selectedClient = signal<ClientPlatform>('claude');
   protected readonly selectedTokenPrefix = signal('');
   protected readonly searchQuery = signal('');
   protected readonly tools = signal<readonly McpToolDefinition[]>([]);
 
-  protected readonly availableTokens = computed(() =>
-    this.tokens().filter((t) => t.isActive),
-  );
+  protected readonly availableTokens = computed(() => this.tokens().filter((t) => t.isActive));
 
   protected readonly filteredTools = computed(() => {
     const q = this.searchQuery().trim().toLowerCase();
     if (!q) return this.tools();
     return this.tools().filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q),
+      (t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
     );
   });
 
@@ -562,7 +513,6 @@ export class McpServerTabComponent {
     });
 
     void this.loadTools();
-    void this.pingServer();
   }
 
   async loadTools(): Promise<void> {
@@ -574,29 +524,11 @@ export class McpServerTabComponent {
     }
   }
 
-  async pingServer(): Promise<void> {
-    this.testing.set(true);
-    try {
-      const ok = await firstValueFrom(this.mcpService.ping());
-      this.isOnline.set(ok);
-      if (ok) {
-        this.notifications.show('Le serveur MCP répond normalement.');
-      } else {
-        this.notifications.show('Le serveur MCP n’a pas répondu au ping.');
-      }
-    } catch {
-      this.isOnline.set(false);
-      this.notifications.show('Erreur de communication avec le serveur MCP.');
-    } finally {
-      this.testing.set(false);
-    }
-  }
-
   protected async copyConfigSnippet(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(this.configSnippet());
+    const ok = await this.clipboardService.copy(this.configSnippet());
+    if (ok) {
       this.notifications.show('Configuration copiée dans le presse-papier.');
-    } catch {
+    } else {
       this.notifications.show('Erreur lors de la copie.');
     }
   }
