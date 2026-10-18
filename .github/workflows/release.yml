@@ -2,17 +2,57 @@ name: Release
 # Publie l'image Docker unique après un merge validé de dev vers main.
 # Secrets requis (Settings > Secrets and variables > Actions) : DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  workflow_run:
+    workflows: [PR policy]
+    types: [completed]
 concurrency:
   group: release
   cancel-in-progress: false
 permissions:
+  actions: write
   contents: write
   checks: read
   pull-requests: read
 jobs:
+  dispatch-approved-release:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch release after an approved dev-to-main merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          for _ in $(seq 1 18); do
+            prs="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" \
+              --jq '[.[] | select(.base.ref == "main" and .head.ref == "dev") | {number, merged_at, labels: [.labels[].name]}]')"
+            count="$(jq 'length' <<< "$prs")"
+            if [ "$count" -eq 0 ]; then
+              echo "Aucune PR dev vers main associée à ce run de policy."
+              exit 0
+            fi
+
+            pr="$(jq -c 'first(.[] | select(.labels | index("release-ready") != null)) // empty' <<< "$prs")"
+            if [ -z "$pr" ]; then
+              echo "La PR dev vers main n'a pas l'approbation release-ready."
+              exit 0
+            fi
+
+            merged_at="$(jq -r '.merged_at // empty' <<< "$pr")"
+            if [ -n "$merged_at" ]; then
+              echo "PR #$(jq -r '.number' <<< "$pr") fusionnée avec release-ready; lancement de Release sur main."
+              gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+              exit 0
+            fi
+
+            sleep 10
+          done
+          echo "La PR approuvée n'a pas été fusionnée dans les 3 minutes; aucun dispatch."
+          exit 1
+
   wait-ci:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
@@ -23,6 +63,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
         run: |
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "La publication n'est autorisée que depuis main."
+            echo green=false >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          approved_prs="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" \
+            --jq '[.[] | select(.base.ref == "main" and .head.ref == "dev" and .merged_at != null and ([.labels[].name] | index("release-ready") != null))]')"
+          if [ "$(jq length <<< "$approved_prs")" -eq 0 ]; then
+            echo "Aucune PR dev vers main fusionnée avec release-ready; publication refusée."
+            echo green=false >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          existing_tags="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/tags" \
+            --jq '[.[] | select(.name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | length')"
+          if [ "$existing_tags" -gt 0 ]; then
+            echo "Ce commit possède déjà un tag de release; publication ignorée."
+            echo green=false >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           sleep 60 # laisse les workflows Backend et Frontend s'enregistrer
           # La policy est un check de PR, pas un check CI de code. Seuls les jobs
           # peer-alerts, build, image et frontend déterminent si la release peut partir.
