@@ -25,8 +25,8 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           for _ in $(seq 1 18); do
-            prs="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" \
-              --jq '[.[] | select(.base.ref == "main" and .head.ref == "dev") | {number, merged_at, labels: [.labels[].name]}]')"
+            prs="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=all&base=main&head=${GITHUB_REPOSITORY_OWNER}:dev" \
+              | jq --arg sha "$HEAD_SHA" '[.[] | select(.head.sha == $sha) | {number, merged_at, labels: [.labels[].name]}]')"
             count="$(jq 'length' <<< "$prs")"
             if [ "$count" -eq 0 ]; then
               echo "Aucune PR dev vers main associée à ce run de policy."
@@ -58,6 +58,9 @@ jobs:
     outputs:
       green: ${{ steps.wait.outputs.green }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - id: wait
         env:
           GH_TOKEN: ${{ github.token }}
@@ -77,9 +80,7 @@ jobs:
             exit 0
           fi
 
-          existing_tags="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/tags" \
-            --jq '[.[] | select(.name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | length')"
-          if [ "$existing_tags" -gt 0 ]; then
+          if git tag --points-at "$SHA" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Ce commit possède déjà un tag de release; publication ignorée."
             echo green=false >> "$GITHUB_OUTPUT"
             exit 0
