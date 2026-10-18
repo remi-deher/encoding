@@ -11,12 +11,8 @@ import {
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
-import { Subscription } from 'rxjs';
-import {
-  SystemLogEntry,
-  SystemLogFilterQuery,
-  SystemLogLevel,
-} from '../../models/system-logs';
+import { retry, Subscription, tap } from 'rxjs';
+import { SystemLogEntry, SystemLogFilterQuery, SystemLogLevel } from '../../models/system-logs';
 import { ClipboardService } from '../../services/clipboard.service';
 import { FileDownload } from '../../services/file-download';
 import { NotificationService } from '../../services/notification.service';
@@ -56,6 +52,7 @@ export class SystemLogViewerComponent implements OnInit, OnDestroy {
 
   private pendingBuffer: SystemLogEntry[] = [];
   private streamSub: Subscription | null = null;
+  private historySub: Subscription | null = null;
 
   readonly levelOptions: readonly { value: SystemLogLevel | 'All'; label: string }[] = [
     { value: 'All', label: 'Tous' },
@@ -72,6 +69,7 @@ export class SystemLogViewerComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.closeStream();
+    this.historySub?.unsubscribe();
   }
 
   loadCategories(): void {
@@ -130,7 +128,9 @@ export class SystemLogViewerComponent implements OnInit, OnDestroy {
     const text = this.serializeLogs();
     const copied = await this.clipboard.copy(text);
     if (copied) {
-      this.notifications.show(`${this.displayedEntries().length} log(s) copié(s) dans le presse-papier.`);
+      this.notifications.show(
+        `${this.displayedEntries().length} log(s) copié(s) dans le presse-papier.`,
+      );
     } else {
       this.notifications.show('Impossible de copier les logs dans le presse-papier.');
     }
@@ -230,8 +230,13 @@ export class SystemLogViewerComponent implements OnInit, OnDestroy {
 
   private reloadLogsAndStream(): void {
     this.closeStream();
+    this.historySub?.unsubscribe();
+    this.displayedEntries.set([]);
+    this.pendingBuffer = [];
+    this.pendingCount.set(0);
 
-    const minLevel = this.selectedLevel() === 'All' ? undefined : (this.selectedLevel() as SystemLogLevel);
+    const minLevel =
+      this.selectedLevel() === 'All' ? undefined : (this.selectedLevel() as SystemLogLevel);
     const category = this.selectedCategory() || undefined;
     const nodeId = this.nodeId() || undefined;
 
@@ -243,15 +248,22 @@ export class SystemLogViewerComponent implements OnInit, OnDestroy {
     };
 
     this.isLoadingHistory.set(true);
-    this.systemLogsService.getLogs(query).subscribe({
+    this.historySub = this.systemLogsService.getLogs(query).subscribe({
       next: (res) => {
-        this.displayedEntries.set(res.entries.slice(-this.maxBufferSize()));
+        const unique = new Map(
+          [...res.entries, ...this.displayedEntries()].map((entry) => [entry.id, entry]),
+        );
+        const entries = [...unique.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+        this.displayedEntries.set(entries.slice(-this.maxBufferSize()));
         this.isLoadingHistory.set(false);
         if (this.autoScrollEnabled()) {
           setTimeout(() => this.scrollToBottom(), 0);
         }
       },
       error: () => {
+        this.notifications.show(
+          'Impossible de charger les journaux système. Vérifiez votre accès administrateur.',
+        );
         this.isLoadingHistory.set(false);
       },
     });
@@ -259,31 +271,45 @@ export class SystemLogViewerComponent implements OnInit, OnDestroy {
     this.openStream({ minLevel, category, nodeId });
   }
 
-  private openStream(filter: { minLevel?: SystemLogLevel; category?: string; nodeId?: string }): void {
+  private openStream(filter: {
+    minLevel?: SystemLogLevel;
+    category?: string;
+    nodeId?: string;
+  }): void {
     this.isConnected.set(false);
-    this.streamSub = this.systemLogsService.createLogStream(filter).subscribe({
-      next: (entry) => {
-        this.isConnected.set(true);
-        if (this.isPaused()) {
-          this.pendingBuffer.push(entry);
-          this.pendingCount.set(this.pendingBuffer.length);
-        } else {
-          const current = this.displayedEntries();
-          const next = [...current, entry];
-          if (next.length > this.maxBufferSize()) {
-            this.displayedEntries.set(next.slice(-this.maxBufferSize()));
+    this.streamSub = this.systemLogsService
+      .createLogStream(filter, (connected) => this.isConnected.set(connected))
+      .pipe(tap({ error: () => this.isConnected.set(false) }), retry({ delay: 3000 }))
+      .subscribe({
+        next: (entry) => {
+          this.isConnected.set(true);
+          if (this.isPaused()) {
+            if (
+              this.pendingBuffer.some((item) => item.id === entry.id) ||
+              this.displayedEntries().some((item) => item.id === entry.id)
+            )
+              return;
+            this.pendingBuffer.push(entry);
+            this.pendingBuffer = this.pendingBuffer.slice(-this.maxBufferSize());
+            this.pendingCount.set(this.pendingBuffer.length);
           } else {
-            this.displayedEntries.set(next);
+            const current = this.displayedEntries();
+            if (current.some((item) => item.id === entry.id)) return;
+            const next = [...current, entry].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+            if (next.length > this.maxBufferSize()) {
+              this.displayedEntries.set(next.slice(-this.maxBufferSize()));
+            } else {
+              this.displayedEntries.set(next);
+            }
+            if (this.autoScrollEnabled()) {
+              setTimeout(() => this.scrollToBottom(), 0);
+            }
           }
-          if (this.autoScrollEnabled()) {
-            setTimeout(() => this.scrollToBottom(), 0);
-          }
-        }
-      },
-      error: () => {
-        this.isConnected.set(false);
-      },
-    });
+        },
+        error: () => {
+          this.isConnected.set(false);
+        },
+      });
   }
 
   private closeStream(): void {

@@ -1,12 +1,16 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDisposable
+public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<DeviceCodeAuthService>? logger = null, TimeProvider? timeProvider = null) : IDisposable
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+    private readonly ILogger<DeviceCodeAuthService> log = logger ?? NullLogger<DeviceCodeAuthService>.Instance;
     private readonly ConcurrentDictionary<string, Session> sessions = new();
     private readonly SemaphoreSlim gate = new(1);
 
@@ -35,7 +39,14 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDispo
         try
         {
             var status = await runtime.RunAsync(id, id == "codex-cli" ? ["login", "status"] : ["auth", "status"], timeout.Token);
-            if (status.ExitCode != 0) return new(id, "unconfigured");
+            if (status.ExitCode != 0)
+            {
+                log.Log(status.ExitCode == 1 ? LogLevel.Debug : LogLevel.Warning, "AI CLI status {Provider}: exit={ExitCode}, stdoutChars={OutputChars}, stderrChars={ErrorChars}",
+                    id, status.ExitCode, status.Output.Length, status.Error.Length);
+                // Exit 1 is the documented unauthenticated status. Other exits indicate a runtime failure.
+                return status.ExitCode == 1 ? new(id, "unconfigured") : new(id, "failed",
+                    ErrorMessage: $"La CLI a quitté avec le code {status.ExitCode}. Consultez les journaux système de ce nœud.");
+            }
             if (id == "claude-cli")
             {
                 using var doc = JsonDocument.Parse(status.Output);
@@ -45,7 +56,12 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDispo
             return new(id, "authorized");
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-        { return new(id, "failed", ErrorMessage: "Impossible de vérifier la connexion CLI."); }
+        {
+            log.LogWarning("AI CLI status {Provider}: failure={Failure}", id, ex.GetType().Name);
+            return new(id, "failed", ErrorMessage: ex is OperationCanceledException
+                ? "La CLI n’a pas répondu au contrôle de connexion sous 10 secondes."
+                : "Le contrôle de connexion CLI a échoué. Consultez les journaux système de ce nœud.");
+        }
     }
 
     public async Task<DeviceAuthStartResponse> StartDeviceAuthAsync(string id, CancellationToken ct)
@@ -66,11 +82,15 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDispo
             }
         }
         finally { gate.Release(); }
-        try { return new(id, await session.Prompt.Task.WaitAsync(TimeSpan.FromSeconds(30), ct)); }
+        try { return new(id, await session.Prompt.Task.WaitAsync(TimeSpan.FromSeconds(30), clock, ct)); }
         catch (TimeoutException)
         {
             session.State = "failed";
-            session.Error = "Codex n’a pas fourni de code de connexion.";
+            session.Error = session.HasOutput
+                ? "Codex a produit une sortie, mais aucune URL et aucun code compatibles n’ont été reconnus sous 30 secondes. Consultez les journaux système de ce nœud."
+                : "Codex n’a produit aucune sortie sous 30 secondes. Vérifiez son accès au service d’authentification depuis ce nœud.";
+            log.LogWarning("AI CLI auth {Attempt}: timeout after {ElapsedMs} ms, outputReceived={HasOutput}, urlRecognized={HasUrl}, codeRecognized={HasCode}",
+                session.Id, session.Timer.ElapsedMilliseconds, session.HasOutput, session.HasUrl, session.HasCode);
             session.Cancellation.Cancel();
             throw new InvalidOperationException(session.Error);
         }
@@ -78,6 +98,7 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDispo
 
     private async Task RunLoginAsync(Session session)
     {
+        log.LogInformation("AI CLI auth {Attempt}: starting codex login --device-auth", session.Id);
         try
         {
             var buffer = "";
@@ -86,20 +107,44 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDispo
             {
                 lock (sync)
                 {
+                    if (!session.HasOutput && !string.IsNullOrWhiteSpace(chunk))
+                    {
+                        session.HasOutput = true;
+                        log.LogInformation("AI CLI auth {Attempt}: first output after {ElapsedMs} ms", session.Id, session.Timer.ElapsedMilliseconds);
+                    }
                     buffer += chunk;
                     if (buffer.Length > 16384) buffer = buffer[^16384..];
                     var clean = AnsiSanitizer.Sanitize(buffer);
                     var url = VerificationUrl().Match(clean);
                     var code = UserCode().Match(clean);
-                    if (url.Success && code.Success)
-                        session.Prompt.TrySetResult(new(code.Value, url.Value, Math.Max(1, (int)(session.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds)));
+                    session.HasUrl |= url.Success;
+                    session.HasCode |= code.Success;
+                    if (url.Success && code.Success && session.Prompt.TrySetResult(new(code.Value, url.Value,
+                        Math.Max(1, (int)(session.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds))))
+                        log.LogInformation("AI CLI auth {Attempt}: prompt recognized after {ElapsedMs} ms", session.Id, session.Timer.ElapsedMilliseconds);
                 }
             });
-            session.State = result.ExitCode == 0 ? "authorized" : "failed";
-            if (result.ExitCode != 0) session.Error = "La connexion Codex a échoué. Relancez l’association.";
+            var promptRecognized = session.Prompt.Task.IsCompletedSuccessfully;
+            session.State = result.ExitCode == 0 && promptRecognized ? "authorized" : "failed";
+            if (session.State == "failed") session.Error =
+                $"Codex a terminé avec le code {result.ExitCode}" + (promptRecognized ? "." : " sans fournir d’URL et de code reconnus.") +
+                " Consultez les journaux système de ce nœud.";
+            log.Log(session.State == "authorized" ? LogLevel.Information : LogLevel.Warning,
+                "AI CLI auth {Attempt}: exit={ExitCode}, elapsedMs={ElapsedMs}, stdoutChars={OutputChars}, stderrChars={ErrorChars}, urlRecognized={HasUrl}, codeRecognized={HasCode}",
+                session.Id, result.ExitCode, session.Timer.ElapsedMilliseconds, result.Output.Length, result.Error.Length, session.HasUrl, session.HasCode);
         }
-        catch (OperationCanceledException) { session.State = "expired"; }
-        catch { session.State = "failed"; session.Error = "La connexion Codex n’a pas pu démarrer."; }
+        catch (OperationCanceledException)
+        {
+            if (session.State == "pending") session.State = "expired";
+            log.LogInformation("AI CLI auth {Attempt}: cancelled after {ElapsedMs} ms, state={State}", session.Id, session.Timer.ElapsedMilliseconds, session.State);
+        }
+        catch (Exception ex)
+        {
+            session.State = "failed";
+            session.Error = "Le processus Codex a échoué. Consultez les journaux système de ce nœud.";
+            // No exception message or raw CLI output: either can contain credentials.
+            log.LogWarning("AI CLI auth {Attempt}: failure={Failure}, elapsedMs={ElapsedMs}", session.Id, ex.GetType().Name, session.Timer.ElapsedMilliseconds);
+        }
         finally { session.Prompt.TrySetException(new InvalidOperationException(session.Error ?? "Aucun code disponible.")); }
     }
 
@@ -115,8 +160,13 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDispo
             {
                 runtime.SaveClaudeToken(token);
                 sessions.TryRemove("claude-cli", out _);
-                if ((await GetStatusAsync("claude-cli", ct)).State != "authorized")
-                    throw new InvalidOperationException("Le jeton n’a pas été reconnu par Claude Code.");
+                var status = await GetStatusAsync("claude-cli", ct);
+                if (status.State != "authorized")
+                {
+                    log.LogWarning("AI CLI Claude: token validation failed, state={State}, runtimeFailure={RuntimeFailure}", status.State, status.ErrorMessage is not null);
+                    throw new InvalidOperationException(status.ErrorMessage ?? "Le jeton n’a pas été reconnu par Claude Code.");
+                }
+                log.LogInformation("AI CLI Claude: token recognized by local status (no remote inference performed)");
             }
             catch
             {
@@ -168,6 +218,11 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime) : IDispo
     public void Dispose() { foreach (var session in sessions.Values) session.Cancellation.Cancel(); }
     private sealed class Session
     {
+        public readonly string Id = Guid.NewGuid().ToString("N");
+        public readonly Stopwatch Timer = Stopwatch.StartNew();
+        public volatile bool HasOutput;
+        public volatile bool HasUrl;
+        public volatile bool HasCode;
         public readonly DateTimeOffset ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15);
         public readonly CancellationTokenSource Cancellation = new(TimeSpan.FromMinutes(15));
         public readonly TaskCompletionSource<DeviceAuthPrompt> Prompt = new(TaskCreationOptions.RunContinuationsAsynchronously);

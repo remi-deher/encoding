@@ -46,3 +46,24 @@ Les checkpoints et les marqueurs locaux d'essai ne sont pas supprimés automatiq
 - Tests Angular de la page et de la fenêtre d'association ; Playwright sur ordinateur et mobile, thèmes clair/sombre et audit axe WCAG AA.
 
 Aucun compte personnel n'est associé par les tests. L'environnement cloud de développement ne fournit pas Landlock : les scénarios d'authentification utilisent un lanceur de test contrôlé ; un test distinct vérifie que le lanceur de production refuse ce cas. L'exécution réelle confinée des deux CLI et la construction complète de l'image restent à vérifier sur un hôte Linux compatible avant déploiement. Les capacités de traitement IA des blocs média au-delà de l'API de génération sont hors de cette modification.
+
+### Diagnostiquer une connexion CLI
+
+Dans **Paramètres → Système & Apparence → Journaux système**, filtrer la catégorie
+`Encoding.Api.Tools.DeviceCodeAuthService` sur le nœud où la connexion a été démarrée.
+Les tentatives Codex possèdent un identifiant de corrélation et indiquent le démarrage,
+la durée, le code de sortie, les tailles stdout/stderr et la reconnaissance de l’URL
+et du code. Les sorties brutes, codes de connexion et jetons ne sont pas journalisés.
+Les avertissements et erreurs restent dans l’historique local persistant.
+
+Le délai d’attente du premier code reste de 30 secondes. L’interface distingue une
+CLI silencieuse, une sortie sans invitation reconnue et une sortie prématurée du
+processus. Une sortie sans code avec un statut 0 ne valide pas une connexion.
+Pour Claude, un contrôle local qui échoue ou dépasse 10 secondes est affiché
+séparément d’un jeton non reconnu. Le contrôle local ne prouve pas l’accès au modèle
+ni la disponibilité du quota chez le fournisseur.
+
+Le lecteur de journaux accepte les réponses HTTP historiques sous forme de tableau
+ainsi que l’enveloppe `entries` pour les mises à jour progressives des nœuds. Le flux
+SSE écoute les événements nommés `log`, se reconnecte après interruption et déduplique
+les événements rejoués. Les journaux restent propres au nœud consulté.
