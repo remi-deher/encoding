@@ -149,7 +149,7 @@ public sealed class FlowAiGeneratorService(
         if (mediaType == "video")
         {
             nodes.Add(new("node_transcode", "Transcodage Adaptatif", transcodeRef, new Dictionary<string, JsonElement>()));
-            connections.Add(new("conn_1", "node_input", "output", "node_transcode"));
+            connections.Add(new("conn_1", "node_input", "success", "node_transcode"));
         }
 
         var title = string.IsNullOrWhiteSpace(userPrompt)

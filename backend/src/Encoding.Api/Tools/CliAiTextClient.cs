@@ -11,10 +11,11 @@ public sealed class CliAiTextClient(string toolId, string credentialsBaseDirecto
         var execName = toolId switch
         {
             "claude-cli" => "claude",
-            _ => "codex"
+            "codex-cli" => "codex",
+            _ => null
         };
 
-        var path = FindExecutable(execName);
+        var path = execName is not null ? FindExecutable(execName) : null;
         if (path is null)
         {
             // Mode bouchonné/simulé lorsque la CLI n'est pas installée sur la machine hôte

@@ -99,7 +99,7 @@ public sealed class AiToolTests
     [Fact]
     public async Task CliAiTextClient_SimulatedResponse_WhenExecutableMissing()
     {
-        var client = new CliAiTextClient("codex-cli", Path.GetTempPath());
+        var client = new CliAiTextClient("mock-ai-cli", Path.GetTempPath());
         var res = await client.GenerateTextAsync(new AiPrompt("Système", "Traduire ce SRT : 1\n00:00:01,000 --> 00:00:04,000\nHello\n"));
         Assert.True(res.Success);
         Assert.Contains("Traduction", res.Content);
