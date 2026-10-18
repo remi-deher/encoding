@@ -145,4 +145,55 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
         reader.GetGuid(0), reader.GetString(1),
         new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(2), DateTimeKind.Utc)),
         reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetBoolean(6), reader.FieldCount>7 && !reader.IsDBNull(7)?reader.GetString(7):null, reader.FieldCount>8 && !reader.IsDBNull(8)?reader.GetInt32(8):null);
+
+    public async Task<IReadOnlyList<LibraryOverviewResponse>> OverviewAsync(CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT l.id, l.name, l.is_active, l.created_at,
+                   (SELECT v.definition->>'name' FROM library_flow_assignments f JOIN flow_versions v ON v.flow_id=f.flow_id AND v.version=f.flow_version WHERE f.library_id=l.id),
+                   (SELECT f.flow_version FROM library_flow_assignments f WHERE f.library_id=l.id),
+                   (SELECT f.flow_id FROM library_flow_assignments f WHERE f.library_id=l.id),
+                   count(DISTINCT a.node_id) FILTER (WHERE a.is_enabled AND a.mode <> 'unsupported')::integer,
+                   count(DISTINCT a.node_id) FILTER (WHERE a.is_enabled AND a.mode = 'direct')::integer,
+                   COALESCE(p.watch_enabled, true),
+                   COALESCE(p.scan_interval_seconds, 3600),
+                   (SELECT count(*) FROM library_media m WHERE m.library_id = l.id)::integer,
+                   (SELECT count(*) FROM executions e WHERE e.library_name = l.name AND e.state = 'queued')::integer,
+                   (SELECT count(*) FROM executions e WHERE e.library_name = l.name AND e.state = 'running')::integer,
+                   (SELECT count(*) FROM executions e WHERE e.library_name = l.name AND e.state = 'completed')::integer,
+                   (SELECT count(*) FROM executions e WHERE e.library_name = l.name AND e.state = 'failed')::integer
+            FROM libraries l
+            LEFT JOIN library_node_accesses a ON a.library_id = l.id
+            LEFT JOIN library_processing_settings p ON p.library_id = l.id
+            WHERE NOT l.is_deleted
+            GROUP BY l.id, l.name, l.is_active, l.created_at, p.watch_enabled, p.scan_interval_seconds
+            ORDER BY l.name, l.id
+            """;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = Sql.Command(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var result = new List<LibraryOverviewResponse>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(new LibraryOverviewResponse(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetBoolean(2),
+                new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(3), DateTimeKind.Utc)),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                reader.IsDBNull(6) ? null : reader.GetGuid(6),
+                reader.GetInt32(7),
+                reader.GetInt32(8),
+                reader.GetBoolean(9),
+                reader.GetInt32(10),
+                reader.GetInt32(11),
+                reader.GetInt32(12),
+                reader.GetInt32(13),
+                reader.GetInt32(14),
+                reader.GetInt32(15)));
+        }
+        return result;
+    }
 }
+

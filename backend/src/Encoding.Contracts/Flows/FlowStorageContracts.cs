@@ -6,3 +6,5 @@ public sealed record FlowDraftImport(FlowDefinition Definition, int Revision = 1
 public sealed record FlowDraftResponse(FlowDefinition Definition, int DraftRevision, int PublishedVersion, string BackupStatus, DateTimeOffset CreatedAt);
 public sealed record FlowVersionResponse(FlowDefinition Definition, string BackupStatus, DateTimeOffset CreatedAt);
 public sealed record FlowSummary(Guid Id, string Name, string MediaType, int Version, int NodeCount, string BackupStatus, DateTimeOffset UpdatedAt, bool IsDraft = false);
+public sealed record CloneFlowRequest(string? Name = null);
+public sealed record CreateFlowFromTemplateRequest(string? Name = null);

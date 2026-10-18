@@ -50,8 +50,11 @@ public sealed class ManagementAccessHandler(NodeRepository nodes) : Authorizatio
         }
 
         // Le cookie SameSite=Strict est la première défense ; l’en-tête personnalisé impose en plus une requête same-origin.
-        if (http.Request.Headers[CsrfHeader] != "1") return;
+        // Les requêtes M2M authentifiées par jeton API (Bearer) ne sont pas vulnérables aux attaques CSRF de navigateur.
+        var isApiToken = context.User.FindFirst("auth_type")?.Value == "api_token";
+        if (!isApiToken && http.Request.Headers[CsrfHeader] != "1") return;
         if (context.User.IsInRole("admin") || endpoint?.Metadata.GetMetadata<ViewerAccessMetadata>() is not null)
             context.Succeed(requirement);
     }
 }
+

@@ -8,6 +8,15 @@ public static class PluginConfigurationEndpoints
     public static void MapPluginConfigurationEndpoints(this WebApplication app)
     {
         var plugins = app.MapGroup("/api/v1/plugins").WithTags("Plugins");
+        plugins.MapGet("", (FlowComponentRegistry catalog) =>
+            Results.Ok(catalog.Plugins.Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Version,
+                p.ConfigurationSchema,
+                componentsCount = p.Components.Count
+            }))).AllowViewer().WithName("ListPlugins");
         plugins.MapGet("/{pluginId}/configuration", async (string pluginId, FlowComponentRegistry catalog,
             PluginConfigurationRepository configurations, CancellationToken ct) =>
         {

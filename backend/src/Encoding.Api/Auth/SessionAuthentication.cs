@@ -25,6 +25,33 @@ public sealed class SessionAuthenticationHandler(
             && forwarded is ClaimsPrincipal principal)
             return AuthenticateResult.Success(new AuthenticationTicket(principal, SessionAuthentication.Scheme));
 
+        if (Request.Headers.Authorization.ToString() is { Length: > 0 } authHeader
+            && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var rawToken = authHeader["Bearer ".Length..].Trim();
+            if (!string.IsNullOrEmpty(rawToken))
+            {
+                var apiTokens = Context.RequestServices.GetService<ApiTokenRepository>();
+                if (apiTokens is not null)
+                {
+                    var tokenRecord = await apiTokens.ValidateTokenAsync(AuthService.TokenHash(rawToken), Context.RequestAborted);
+                    if (tokenRecord is not null)
+                    {
+                        var tokenIdentity = new ClaimsIdentity(
+                            [
+                                new Claim(ClaimTypes.NameIdentifier, tokenRecord.Id.ToString("D")),
+                                new Claim(ClaimTypes.Name, tokenRecord.Name),
+                                new Claim(ClaimTypes.Role, tokenRecord.Role),
+                                new Claim("auth_type", "api_token"),
+                            ],
+                            SessionAuthentication.Scheme);
+                        return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(tokenIdentity), SessionAuthentication.Scheme));
+                    }
+                }
+                if (authOptions.Enabled) return AuthenticateResult.Fail("Jeton API invalide, révoqué ou expiré.");
+            }
+        }
+
         if (Request.Cookies.TryGetValue(SessionAuthentication.CookieName, out var token) && !string.IsNullOrWhiteSpace(token))
         {
             var user = await users.ValidateSessionAsync(AuthService.TokenHash(token), authOptions, Context.RequestAborted);
