@@ -1,4 +1,6 @@
 using Encoding.Api.Auth;
+using Encoding.Api.Tools;
+using Encoding.Contracts.Tools;
 using Encoding.Api.Flows;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Libraries;
@@ -32,6 +34,9 @@ public static class RuntimeEndpoints
             if(!await runtime.AuthenticateAsync(node,context.HttpContext.Request.Headers["X-Node-Token"].ToString(),context.HttpContext.RequestAborted)) return Results.Unauthorized();
             return await next(context);
         });
+        group.MapPost("/ai/generate", async (AiGenerateRequest request, AiClusterService ai, CancellationToken ct) =>
+            Results.Ok(await ai.GenerateAsync(request.Provider, request.Prompt, ct)))
+            .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
         group.AddEndpointFilter(async (context, next) =>
         {
             var request = context.HttpContext.Request;

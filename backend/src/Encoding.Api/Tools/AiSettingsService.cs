@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
@@ -8,12 +9,14 @@ public sealed class AiSettingsService
     private readonly string settingsFilePath;
     private readonly object syncRoot = new();
     private AiSettingsDto cachedSettings;
+    private readonly IDataProtector protector;
 
-    public AiSettingsService(IConfiguration configuration)
+    public AiSettingsService(IConfiguration configuration, IDataProtectionProvider? protection = null)
     {
-        var credDir = configuration["AiTools:CredentialsDirectory"]
-            ?? Path.Combine(AppContext.BaseDirectory, "Data", "credentials", "ai-tools");
+        var credDir = AiCliRuntime.ResolveRoot(configuration);
 
+        protector = (protection ?? DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(credDir, ".keys"))))
+            .CreateProtector("Encoding.Ai.ApiKey.v1");
         settingsFilePath = Path.Combine(credDir, "settings.json");
         cachedSettings = LoadSettings(configuration);
     }
@@ -28,9 +31,16 @@ public sealed class AiSettingsService
 
     public AiSettingsDto UpdateSettings(AiSettingsUpdateRequest update)
     {
+        if (update.DefaultProvider is not null && update.DefaultProvider is not ("ollama" or "openai" or "codex-cli" or "claude-cli"))
+            throw new ArgumentException("Fournisseur IA inconnu.");
+        if (update.TimeoutSeconds is < 10 or > 600 || update.SubtitleBatchSize is < 5 or > 200)
+            throw new ArgumentException("Les limites IA sont invalides.");
+        foreach (var url in new[] { update.OllamaBaseUrl, update.OpenAiBaseUrl }.OfType<string>())
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo))
+                throw new ArgumentException("L’adresse du fournisseur doit être une URL HTTP(S) sans identifiants.");
         lock (syncRoot)
         {
-            cachedSettings = new AiSettingsDto(
+            var next = new AiSettingsDto(
                 DefaultProvider: !string.IsNullOrWhiteSpace(update.DefaultProvider) ? update.DefaultProvider : cachedSettings.DefaultProvider,
                 OllamaBaseUrl: !string.IsNullOrWhiteSpace(update.OllamaBaseUrl) ? update.OllamaBaseUrl : cachedSettings.OllamaBaseUrl,
                 OllamaModel: !string.IsNullOrWhiteSpace(update.OllamaModel) ? update.OllamaModel : cachedSettings.OllamaModel,
@@ -41,7 +51,8 @@ public sealed class AiSettingsService
                 SubtitleBatchSize: update.SubtitleBatchSize is > 0 ? update.SubtitleBatchSize.Value : cachedSettings.SubtitleBatchSize
             );
 
-            SaveSettings(cachedSettings);
+            SaveSettings(next);
+            cachedSettings = next;
             return cachedSettings;
         }
     }
@@ -54,7 +65,7 @@ public sealed class AiSettingsService
             {
                 var json = File.ReadAllText(settingsFilePath);
                 var loaded = JsonSerializer.Deserialize<AiSettingsDto>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                if (loaded is not null) return loaded;
+                if (loaded is not null) return loaded with { OpenAiApiKey = loaded.OpenAiApiKey is { } key && key.StartsWith("protected:", StringComparison.Ordinal) ? protector.Unprotect(key[10..]) : loaded.OpenAiApiKey };
             }
         }
         catch
@@ -76,26 +87,23 @@ public sealed class AiSettingsService
 
     private void SaveSettings(AiSettingsDto settings)
     {
-        try
+        var dir = Path.GetDirectoryName(settingsFilePath);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
         {
-            var dir = Path.GetDirectoryName(settingsFilePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
-            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions(JsonSerializerDefaults.Web)
-            {
-                WriteIndented = true
-            });
-
-            var tmp = settingsFilePath + ".tmp";
-            File.WriteAllText(tmp, json);
-            File.Move(tmp, settingsFilePath, overwrite: true);
+            Directory.CreateDirectory(dir);
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
-        catch
+
+        var json = JsonSerializer.Serialize(settings with { OpenAiApiKey = settings.OpenAiApiKey is { Length: > 0 } secret ? "protected:" + protector.Protect(secret) : null }, new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
-            // Erreur d'écriture ignorée pour ne pas planter le runtime
-        }
+            WriteIndented = true
+        });
+
+        var tmp = settingsFilePath + ".tmp";
+        var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        using (var stream = new FileStream(tmp, options))
+        using (var writer = new StreamWriter(stream)) writer.Write(json);
+        File.Move(tmp, settingsFilePath, overwrite: true);
     }
 }

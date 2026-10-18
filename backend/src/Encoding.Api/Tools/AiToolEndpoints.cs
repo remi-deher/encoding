@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Routing;
+using Encoding.Api.Auth;
 using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
@@ -10,43 +8,54 @@ public static class AiToolEndpoints
     public static void MapAiToolEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/v1/tools/ai").WithTags("AI Tools");
-
-        group.MapGet("/", (DeviceCodeAuthService service) =>
-            Results.Ok(service.ListTools()))
-            .WithName("ListAiTools");
-
-        group.MapGet("/{id}/status", (string id, DeviceCodeAuthService service) =>
-            Results.Ok(service.GetStatus(id)))
-            .WithName("GetAiToolStatus");
-
-        group.MapPost("/{id}/auth/device-code/start", (string id, DeviceCodeAuthService service) =>
+        group.MapGet("/", async (DeviceCodeAuthService service, CancellationToken ct) => Results.Ok(await service.ListToolsAsync(ct)));
+        group.MapGet("/cluster", async (AiClusterService service, CancellationToken ct) => Results.Ok(await service.ViewAsync(ct)));
+        group.MapGet("/{id}/status", async (string id, DeviceCodeAuthService service, CancellationToken ct) => await GuardAsync(async () => Results.Ok(await service.GetStatusAsync(id, ct))));
+        group.MapPost("/{id}/auth/device-code/start", async (string id, DeviceCodeAuthService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await service.StartDeviceAuthAsync(id, ct))))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapGet("/{id}/auth/device-code/status", async (string id, DeviceCodeAuthService service, CancellationToken ct) => await GuardAsync(async () => Results.Ok(await service.GetStatusAsync(id, ct))));
+        group.MapPost("/claude-cli/auth/token", async (ClaudeTokenRequest request, DeviceCodeAuthService service, CancellationToken ct) =>
+            await GuardAsync(async () => { await service.SaveClaudeTokenAsync(request.Token, ct); return Results.Ok(new { saved = true }); }))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapPost("/{id}/auth/cancel", (string id, DeviceCodeAuthService service) =>
         {
-            var res = service.StartDeviceAuth(id);
-            return Results.Ok(res);
-        }).WithName("StartAiToolDeviceAuth");
-
-        group.MapGet("/{id}/auth/device-code/status", (string id, DeviceCodeAuthService service) =>
-            Results.Ok(service.GetStatus(id)))
-            .WithName("GetAiToolDeviceAuthStatus");
-
-        group.MapPost("/{id}/auth/complete", (string id, DeviceCodeAuthService service, HttpContext http) =>
-        {
-            var success = service.CompleteAuthorization(id);
-            return Results.Ok(new { success });
-        }).WithName("CompleteAiToolAuth");
-
-        group.MapDelete("/{id}/auth", (string id, DeviceCodeAuthService service) =>
-        {
-            var success = service.RevokeAuth(id);
-            return Results.Ok(new { revoked = success });
-        }).WithName("RevokeAiToolAuth");
-
-        group.MapGet("/settings", (AiSettingsService service) =>
-            Results.Ok(service.GetSettings()))
-            .WithName("GetAiSettings");
-
-        group.MapPut("/settings", (AiSettingsUpdateRequest request, AiSettingsService service) =>
-            Results.Ok(service.UpdateSettings(request)))
-            .WithName("UpdateAiSettings");
+            service.Cancel(id);
+            return Results.Ok();
+        }).RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapDelete("/{id}/auth", async (string id, DeviceCodeAuthService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(new { revoked = await service.RevokeAuthAsync(id, ct) })))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapGet("/settings", async (AiClusterService service, CancellationToken ct) => PublicSettings(await service.GetSettingsAsync(ct)));
+        group.MapPut("/settings", async (AiSettingsUpdateRequest request, AiClusterService service, CancellationToken ct) =>
+            await GuardAsync(async () => PublicSettings(await service.UpdateSettingsAsync(request, ct))))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapGet("/sessions/{id}", async (string id, AiClusterService service, CancellationToken ct) =>
+            await GuardAsync(async () => await service.GetSessionAsync(id, ct) is { } state ? Results.Ok(state) : Results.NotFound()))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapPost("/sessions/{id}/fork", async (string id, AiClusterService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await service.ForkSessionAsync(id, ct))))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapPost("/generate", async (AiGenerateRequest request, AiClusterService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await service.GenerateAsync(request.Provider, request.Prompt, ct))))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy).RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
+        // Signed peer admission + AES-GCM payload are checked inside ReceiveAsync, independently of user sessions.
+        app.MapPost(AiClusterTransport.Path, async (HttpContext http, AiClusterTransport transport, AiClusterService service, CancellationToken ct) =>
+            await GuardAsync(() => transport.ReceiveAsync(http, service, ct)))
+            .AllowAnonymous().RequireRateLimiting(AuthExtensions.ClusterMeshPolicy);
+    }
+    private static IResult PublicSettings(AiSettingsDto settings) => Results.Ok(new
+    {
+        settings.DefaultProvider, settings.OllamaBaseUrl, settings.OllamaModel, settings.OpenAiBaseUrl,
+        settings.OpenAiModel, HasOpenAiApiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey), settings.TimeoutSeconds, settings.SubtitleBatchSize
+    });
+    private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)
+    {
+        try { return await action(); }
+        catch (ArgumentException ex) { return Results.BadRequest(new { title = ex.Message }); }
+        catch (InvalidOperationException ex) { return Results.Conflict(new { title = ex.Message }); }
+        catch (System.Security.Cryptography.CryptographicException) { return Results.BadRequest(new { title = "Message IA invalide." }); }
+        catch (System.Text.Json.JsonException) { return Results.BadRequest(new { title = "Message IA invalide." }); }
+        catch (FormatException) { return Results.BadRequest(new { title = "Message IA invalide." }); }
     }
 }

@@ -1,4 +1,15 @@
-import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
+import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiTokenResponse } from '../../shared/models/api-token';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
@@ -21,6 +32,7 @@ export type SystemSubTab = 'overview' | 'logs';
   selector: 'app-settings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    MatButtonModule,
     AiToolsTabComponent,
     ApiTokenTabComponent,
     CategoryTabsComponent,
@@ -48,6 +60,7 @@ export type SystemSubTab = 'overview' | 'logs';
               <button
                 type="button"
                 class="subtab-btn"
+                matButton="text"
                 [class.is-active]="securityTab() === 'tokens'"
                 (click)="onSubTabChange('tokens')"
               >
@@ -56,6 +69,7 @@ export type SystemSubTab = 'overview' | 'logs';
               <button
                 type="button"
                 class="subtab-btn"
+                matButton="text"
                 [class.is-active]="securityTab() === 'users'"
                 (click)="onSubTabChange('users')"
               >
@@ -75,6 +89,7 @@ export type SystemSubTab = 'overview' | 'logs';
               <button
                 type="button"
                 class="subtab-btn"
+                matButton="text"
                 [class.is-active]="integrationsTab() === 'mcp'"
                 (click)="onSubTabChange('mcp')"
               >
@@ -83,14 +98,16 @@ export type SystemSubTab = 'overview' | 'logs';
               <button
                 type="button"
                 class="subtab-btn"
+                matButton="text"
                 [class.is-active]="integrationsTab() === 'ai'"
                 (click)="onSubTabChange('ai')"
               >
-                Outils IA & CLIs
+                IA & fournisseurs
               </button>
               <button
                 type="button"
                 class="subtab-btn"
+                matButton="text"
                 [class.is-active]="integrationsTab() === 'webhooks'"
                 (click)="onSubTabChange('webhooks')"
               >
@@ -112,6 +129,7 @@ export type SystemSubTab = 'overview' | 'logs';
               <button
                 type="button"
                 class="subtab-btn"
+                matButton="text"
                 [class.is-active]="systemTab() === 'overview'"
                 (click)="onSubTabChange('overview')"
               >
@@ -120,6 +138,7 @@ export type SystemSubTab = 'overview' | 'logs';
               <button
                 type="button"
                 class="subtab-btn"
+                matButton="text"
                 [class.is-active]="systemTab() === 'logs'"
                 (click)="onSubTabChange('logs')"
               >
@@ -170,13 +189,34 @@ export type SystemSubTab = 'overview' | 'logs';
     }
 
     .subtab-btn.is-active {
-      background: var(--primary);
-      color: var(--on-primary, #ffffff);
+      background: var(--accent-soft);
+      color: var(--accent-strong);
       font-weight: 600;
     }
   `,
 })
 export class SettingsPageComponent {
+  private readonly aiTab = viewChild(AiToolsTabComponent);
+  private readonly dialog = inject(MatDialog);
+  hasUnsavedChanges(): boolean {
+    return this.aiTab()?.hasUnsavedChanges() ?? false;
+  }
+  private async mayLeaveAi(): Promise<boolean> {
+    if (!this.hasUnsavedChanges()) return true;
+    return (
+      (await firstValueFrom(
+        this.dialog
+          .open(ConfirmationDialogComponent, {
+            data: {
+              title: 'Quitter sans enregistrer ?',
+              message: 'Les modifications des paramètres IA seront perdues.',
+              confirmLabel: 'Quitter sans enregistrer',
+            },
+          })
+          .afterClosed(),
+      )) === true
+    );
+  }
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -224,7 +264,8 @@ export class SettingsPageComponent {
     }
   }
 
-  protected onMainTabChange(tab: string): void {
+  protected async onMainTabChange(tab: string): Promise<void> {
+    if (tab !== this.activeMainTab() && !(await this.mayLeaveAi())) return;
     if (tab === 'security' || tab === 'integrations' || tab === 'system') {
       this.activeMainTab.set(tab);
       const sub =
@@ -241,7 +282,10 @@ export class SettingsPageComponent {
     }
   }
 
-  protected onSubTabChange(subTab: SecuritySubTab | IntegrationsSubTab | SystemSubTab): void {
+  protected async onSubTabChange(
+    subTab: SecuritySubTab | IntegrationsSubTab | SystemSubTab,
+  ): Promise<void> {
+    if (subTab !== 'ai' && !(await this.mayLeaveAi())) return;
     if (subTab === 'tokens' || subTab === 'users') {
       this.securityTab.set(subTab);
     } else if (subTab === 'mcp' || subTab === 'webhooks' || subTab === 'ai') {

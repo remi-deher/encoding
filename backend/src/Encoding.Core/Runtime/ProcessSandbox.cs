@@ -2,10 +2,10 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
-namespace Encoding.NodeAgent.Runtime;
+namespace Encoding.Core.Runtime;
 
 /// <summary>Linux filesystem boundary for untrusted child processes. No insecure fallback.</summary>
-internal static class ProcessSandbox
+public static class ProcessSandbox
 {
     [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
     private static extern long Syscall(long number, nint first, nint second, nint third, nint fourth);

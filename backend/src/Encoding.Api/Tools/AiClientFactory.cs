@@ -5,23 +5,30 @@ namespace Encoding.Api.Tools;
 public sealed class AiClientFactory(
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory,
-    AiSettingsService? settingsService = null)
+    AiSettingsService? settingsService = null,
+    AiCliRuntime? cliRuntime = null,
+    IServiceProvider? services = null)
 {
     private readonly AiSettingsService settingsService = settingsService ?? new AiSettingsService(configuration);
 
     public IAiTextClient CreateClient(string? preferredProvider = null)
+    {
+        if (services is not null) return new ClusterClient(services.GetRequiredService<AiClusterService>(), preferredProvider);
+        return CreateLocalClient(preferredProvider);
+    }
+
+    public IAiTextClient CreateLocalClient(string? preferredProvider = null)
     {
         var settings = settingsService.GetSettings();
         var provider = preferredProvider
             ?? settings.DefaultProvider
             ?? "codex-cli";
 
-        var credDir = configuration["AiTools:CredentialsDirectory"]
-            ?? Path.Combine(AppContext.BaseDirectory, "Data", "credentials", "ai-tools");
 
         if (provider.Equals("ollama", StringComparison.OrdinalIgnoreCase))
         {
             var url = !string.IsNullOrWhiteSpace(settings.OllamaBaseUrl) ? settings.OllamaBaseUrl : "http://127.0.0.1:11434/v1/";
+            if (!new Uri(url).AbsolutePath.TrimEnd('/').EndsWith("/v1", StringComparison.Ordinal)) url = url.TrimEnd('/') + "/v1/";
             var model = !string.IsNullOrWhiteSpace(settings.OllamaModel) ? settings.OllamaModel : "llama3.2";
             var client = httpClientFactory.CreateClient("AiClient");
             client.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
@@ -43,6 +50,13 @@ public sealed class AiClientFactory(
             ? "claude-cli"
             : "codex-cli";
 
-        return new CliAiTextClient(toolId, credDir);
+        if (provider is not ("codex-cli" or "claude-cli" or "claude")) throw new ArgumentException("Fournisseur IA inconnu.");
+        return new CliAiTextClient(toolId, cliRuntime ?? new AiCliRuntime(configuration,
+            new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider()), settings.TimeoutSeconds);
+    }
+
+    private sealed class ClusterClient(AiClusterService cluster, string? provider) : IAiTextClient
+    {
+        public Task<AiCompletionResult> GenerateTextAsync(AiPrompt prompt, CancellationToken ct = default) => cluster.GenerateAsync(provider, prompt, ct);
     }
 }

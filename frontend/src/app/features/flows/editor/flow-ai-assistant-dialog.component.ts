@@ -120,6 +120,16 @@ export interface FlowAiAssistantDialogData {
           </div>
         }
 
+        @if (errorMessage() && sessionId()) {
+          <p>
+            Vous pouvez réessayer la demande, ou ouvrir une nouvelle session depuis le dernier
+            contexte sauvegardé. Une tentative sans résultat confirmé pourra consommer du quota à
+            nouveau.
+          </p>
+          <button matButton="tonal" type="button" [disabled]="loading()" (click)="recoverSession()">
+            Reprendre dans une nouvelle session
+          </button>
+        }
         @if (loading()) {
           <div class="loading-state">
             <mat-spinner diameter="24"></mat-spinner>
@@ -129,10 +139,11 @@ export interface FlowAiAssistantDialogData {
       </mat-dialog-content>
 
       <mat-dialog-actions align="end">
-        <button mat-button type="button" [disabled]="loading()" (click)="close()">Annuler</button>
+        <button matButton="text" type="button" [disabled]="loading()" (click)="close()">
+          Annuler
+        </button>
         <button
-          mat-flat-button
-          color="primary"
+          matButton="filled"
           type="button"
           [disabled]="loading() || (mode() !== 'explain' && !prompt().trim())"
           (click)="submit()"
@@ -240,6 +251,10 @@ export class FlowAiAssistantDialogComponent {
   readonly explanation = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
 
+  readonly sessionId = signal<string | null>(null);
+  private requestId: string = crypto.randomUUID();
+  private lastPrompt = '';
+
   readonly suggestions = [
     'Anime japonais (JP/FR + sous-titres ASS)',
     '4K HDR vers 1080p SDR HEVC',
@@ -249,8 +264,30 @@ export class FlowAiAssistantDialogComponent {
 
   setMode(newMode: 'generate' | 'refactor' | 'explain'): void {
     this.mode.set(newMode);
+    this.sessionId.set(null);
+    this.requestId = crypto.randomUUID();
     this.errorMessage.set(null);
     this.explanation.set(null);
+  }
+
+  recoverSession(): void {
+    const id = this.sessionId();
+    if (!id || this.loading()) return;
+    this.loading.set(true);
+    this.aiService.forkSession(id).subscribe({
+      next: (session) => {
+        this.sessionId.set(session.id);
+        this.requestId = crypto.randomUUID();
+        this.loading.set(false);
+        this.errorMessage.set(null);
+      },
+      error: () => {
+        this.loading.set(false);
+        this.errorMessage.set(
+          'Le checkpoint n’est pas encore disponible ou une tentative peut encore être active. Réessayez après expiration de son bail.',
+        );
+      },
+    });
   }
 
   applySuggestion(text: string): void {
@@ -258,6 +295,11 @@ export class FlowAiAssistantDialogComponent {
   }
 
   submit(): void {
+    if (this.loading()) return;
+    if (this.lastPrompt !== this.prompt()) {
+      this.requestId = crypto.randomUUID();
+      this.lastPrompt = this.prompt();
+    }
     this.loading.set(true);
     this.errorMessage.set(null);
     this.explanation.set(null);
@@ -266,16 +308,21 @@ export class FlowAiAssistantDialogComponent {
     if (currentMode === 'generate') {
       this.aiService
         .generateFlow({
+          sessionId: this.sessionId(),
+          requestId: this.requestId,
           mediaType: this.data.mediaType,
           userPrompt: this.prompt(),
         })
         .subscribe({
           next: (res) => {
+            this.sessionId.set(res.sessionId ?? this.sessionId());
+            if (res.requestId) this.requestId = res.requestId;
+            if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
             if (res.success && res.flow) {
               this.dialogRef.close({ flow: res.flow });
             } else {
-              this.errorMessage.set('Impossible de générer un flow valide.');
+              this.errorMessage.set(res.explanation || 'Impossible de générer un flow valide.');
             }
           },
           error: (err) => {
@@ -286,16 +333,23 @@ export class FlowAiAssistantDialogComponent {
     } else if (currentMode === 'refactor' && this.data.currentFlow) {
       this.aiService
         .refactorFlow({
+          sessionId: this.sessionId(),
+          requestId: this.requestId,
           currentFlow: this.data.currentFlow,
           userPrompt: this.prompt(),
         })
         .subscribe({
           next: (res) => {
+            this.sessionId.set(res.sessionId ?? this.sessionId());
+            if (res.requestId) this.requestId = res.requestId;
+            if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
             if (res.success && res.flow) {
               this.dialogRef.close({ flow: res.flow });
             } else {
-              this.errorMessage.set('Impossible d’appliquer les modifications au flow.');
+              this.errorMessage.set(
+                res.explanation || 'Impossible d’appliquer les modifications au flow.',
+              );
             }
           },
           error: (err) => {
@@ -306,12 +360,18 @@ export class FlowAiAssistantDialogComponent {
     } else if (currentMode === 'explain' && this.data.currentFlow) {
       this.aiService
         .explainFlow({
+          sessionId: this.sessionId(),
+          requestId: this.requestId,
           flow: this.data.currentFlow,
         })
         .subscribe({
           next: (res) => {
+            this.sessionId.set(res.sessionId ?? this.sessionId());
+            if (res.requestId) this.requestId = res.requestId;
+            if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
-            this.explanation.set(res.explanation ?? 'Explication non disponible.');
+            if (res.success) this.explanation.set(res.explanation ?? 'Explication non disponible.');
+            else this.errorMessage.set(res.explanation ?? 'Impossible de joindre le fournisseur.');
           },
           error: (err) => {
             this.loading.set(false);

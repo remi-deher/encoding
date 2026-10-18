@@ -119,6 +119,8 @@ Les règles de [UI_RULES.md](UI_RULES.md) sont obligatoires pour toute conceptio
 
 Les règles de [BACKEND_RULES.md](BACKEND_RULES.md) sont obligatoires pour toute conception ou modification du backend. Avant d’ajouter une fonctionnalité, rechercher et réutiliser les capacités communes existantes ; ne pas créer d’implémentation parallèle ou spécifique à un appelant. Toute évolution d’un contrat ou composant commun doit examiner ses usages et signaler son impact.
 
+Les fournisseurs IA sont accessibles aux autres nœuds par le transport signé et chiffré du maillage, sans répliquer les identifiants CLI. Encoding conserve un contexte applicatif chiffré, indépendant des sessions natives des fournisseurs ; la perte d'un exécuteur permet une tentative sur un autre nœud après expiration, la perte du coordinateur exige une reprise explicite depuis un checkpoint reçu. Voir [0071](docs/architecture/0071-ai-cli-tools-and-headless-authentication.md). Le confinement de processus Landlock est partagé dans `Encoding.Core.Runtime`, sans repli Linux non confiné.
+
 ## Règles absolues de tests et de CI
 
 Les règles de [TEST_RULES.md](TEST_RULES.md) sont obligatoires. Le lint doit être exécutable en local et dans GitHub Actions ; les tests doivent protéger les fonctionnalités, les contrats et les garanties du cluster. Les E2E légers doivent pouvoir s’exécuter en local, tandis que les scénarios longs et lourds sont exécutés dans GitHub Actions.
