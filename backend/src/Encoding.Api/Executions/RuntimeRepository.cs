@@ -485,7 +485,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             if(executionWorker!=resolution.WorkerId || string.IsNullOrWhiteSpace(resolution.FfmpegVersion)
                 || resolution.FfmpegVersion.Length>128 || resolution.ResolvedAt==default) return false;
             var node=flow.Nodes.SingleOrDefault(item=>item.Id==resolution.FlowNodeId);
-            if(node is null || node.Component.PluginId!="base" || node.Component.ComponentId!="base-transcode-video"
+            if(node is null || (node.Component.PluginId!="base" && node.Component.PluginId!="video")
+                || (node.Component.ComponentId!="base-transcode-video" && node.Component.ComponentId!="video-transcode")
                 || !node.Configuration.TryGetValue("encodingProfile",out var profileValue)
                 || profileValue.ValueKind!=JsonValueKind.Object) return false;
             var profile=profileValue.Deserialize<EncodingProfileSnapshot>(Json);

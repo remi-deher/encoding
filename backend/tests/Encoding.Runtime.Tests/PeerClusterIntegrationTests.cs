@@ -81,21 +81,31 @@ public sealed class PeerClusterIntegrationTests
 
             for (var index = 1; index < clients.Length; index++)
             {
-                using var add = await SendAdminAsync(clients[0], HttpMethod.Post,
-                    $"api/v1/peer-cluster/peers/{identities[index].PeerId:D}/membership", new { });
-                Assert.True(add.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.Conflict,
-                    $"Membership request returned {(int)add.StatusCode}: {await add.Content.ReadAsStringAsync()}\n{RelevantLogs(processes)}");
-                if (add.StatusCode == HttpStatusCode.Conflict)
+                HttpResponseMessage? add = null;
+                for (var attempt = 0; attempt < 10; attempt++)
                 {
-                    // A follower may briefly lead during a joint configuration; retry after the new membership settles.
-                    await WaitUntilAsync(async () =>
-                    {
-                        var status = await clients[0].GetFromJsonAsync<PeerConsensusStatus>("api/v1/peer-cluster/consensus");
-                        return status is { IsLeader: true };
-                    }, TimeSpan.FromSeconds(15), "leadership before retrying membership", processes);
-                    using var retry = await SendAdminAsync(clients[0], HttpMethod.Post,
+                    add?.Dispose();
+                    add = await SendAdminAsync(clients[0], HttpMethod.Post,
                         $"api/v1/peer-cluster/peers/{identities[index].PeerId:D}/membership", new { });
-                    Assert.Equal(HttpStatusCode.Accepted, retry.StatusCode);
+                    if (add.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.Conflict) break;
+                    await Task.Delay(500);
+                }
+                using (add)
+                {
+                    Assert.True(add!.StatusCode is HttpStatusCode.Accepted or HttpStatusCode.Conflict,
+                        $"Membership request returned {(int)add.StatusCode}: {await add.Content.ReadAsStringAsync()}\n{RelevantLogs(processes)}");
+                    if (add.StatusCode == HttpStatusCode.Conflict)
+                    {
+                        // A follower may briefly lead during a joint configuration; retry after the new membership settles.
+                        await WaitUntilAsync(async () =>
+                        {
+                            var status = await clients[0].GetFromJsonAsync<PeerConsensusStatus>("api/v1/peer-cluster/consensus");
+                            return status is { IsLeader: true };
+                        }, TimeSpan.FromSeconds(15), "leadership before retrying membership", processes);
+                        using var retry = await SendAdminAsync(clients[0], HttpMethod.Post,
+                            $"api/v1/peer-cluster/peers/{identities[index].PeerId:D}/membership", new { });
+                        Assert.Equal(HttpStatusCode.Accepted, retry.StatusCode);
+                    }
                 }
             }
 
@@ -171,7 +181,7 @@ public sealed class PeerClusterIntegrationTests
             var trustedClientIndex = Enumerable.Range(0, clients.Length).First(index => index != 0 && index != removedIndex);
             using var peerCertificate = X509CertificateLoader.LoadPkcs12FromFile(
                 Path.Combine(directory, $"peer-{trustedClientIndex}", "peer-data", "peer-identity.pfx"),
-                TestIdentityPassword(trustedClientIndex), X509KeyStorageFlags.EphemeralKeySet);
+                TestIdentityPassword(trustedClientIndex), OperatingSystem.IsWindows() ? X509KeyStorageFlags.Exportable : X509KeyStorageFlags.EphemeralKeySet);
             using var trustedPeerClient = new HttpClient(new HttpClientHandler
             {
                 ClientCertificates = { peerCertificate },

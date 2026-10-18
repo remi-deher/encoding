@@ -185,12 +185,15 @@ internal static class ConditionScenarios
         Check(droppedCommentary.Contains(2) && droppedCommentary.Contains(3) && droppedCommentary.Contains(4), "Commentary and descriptive tracks dropped.");
 
         // 6. Flow validation with ADR 0070 processing blocks
+        // 6. Flow validation with ADR 0070 processing blocks
         var baseManifest = registry.Plugins.Single(plugin => plugin.Id == "base");
-        var cropComp = baseManifest.Components.Single(c => c.Id == "base-auto-crop");
-        var sizeGuardComp = baseManifest.Components.Single(c => c.Id == "base-file-size-guard");
-        var langFilterComp = baseManifest.Components.Single(c => c.Id == "base-filter-languages");
-        var deintComp = baseManifest.Components.Single(c => c.Id == "base-deinterlace-video");
-        var commComp = baseManifest.Components.Single(c => c.Id == "base-remove-commentary");
+        var videoManifest = registry.Plugins.Single(plugin => plugin.Id == "video");
+        var audioManifest = registry.Plugins.Single(plugin => plugin.Id == "audio");
+        var cropComp = videoManifest.Components.Single(c => c.Id == "video-auto-crop");
+        var sizeGuardComp = videoManifest.Components.Single(c => c.Id == "video-file-size-guard");
+        var langFilterComp = audioManifest.Components.Single(c => c.Id == "audio-filter-languages");
+        var deintComp = videoManifest.Components.Single(c => c.Id == "video-deinterlace");
+        var commComp = audioManifest.Components.Single(c => c.Id == "audio-remove-commentary");
 
         Dictionary<string, JsonElement> Config(FlowComponentDescriptor comp, Dictionary<string, JsonElement>? overrides = null)
         {
@@ -201,11 +204,11 @@ internal static class ConditionScenarios
 
         var flowFileFlows = new FlowDefinition(1, Guid.NewGuid(), 1, "FileFlows processing pipeline", "video", [
             new("input", null, new("base", baseManifest.Version, input.Id, input.Version, 1), Config(input)),
-            new("crop", null, new("base", baseManifest.Version, cropComp.Id, cropComp.Version, 1), Config(cropComp)),
-            new("deint", null, new("base", baseManifest.Version, deintComp.Id, deintComp.Version, 1), Config(deintComp)),
-            new("lang", null, new("base", baseManifest.Version, langFilterComp.Id, langFilterComp.Version, 1), Config(langFilterComp)),
-            new("comm", null, new("base", baseManifest.Version, commComp.Id, commComp.Version, 1), Config(commComp)),
-            new("guard", null, new("base", baseManifest.Version, sizeGuardComp.Id, sizeGuardComp.Version, 1), Config(sizeGuardComp, new() { ["minReductionPercent"] = J(10) }))
+            new("crop", null, new("video", videoManifest.Version, cropComp.Id, cropComp.Version, 1), Config(cropComp)),
+            new("deint", null, new("video", videoManifest.Version, deintComp.Id, deintComp.Version, 1), Config(deintComp)),
+            new("lang", null, new("audio", audioManifest.Version, langFilterComp.Id, langFilterComp.Version, 1), Config(langFilterComp)),
+            new("comm", null, new("audio", audioManifest.Version, commComp.Id, commComp.Version, 1), Config(commComp)),
+            new("guard", null, new("video", videoManifest.Version, sizeGuardComp.Id, sizeGuardComp.Version, 1), Config(sizeGuardComp, new() { ["minReductionPercent"] = J(10) }))
         ], [
             new("e1", "input", "success", "crop"),
             new("e2", "crop", "cropped", "deint"),
@@ -218,6 +221,16 @@ internal static class ConditionScenarios
             new("e9", "comm", "unchanged", "guard")
         ]);
         Check(validator.Validate(flowFileFlows).IsValid, "FileFlows pipeline with all 5 new processing blocks validates.");
+
+        var legacyFlow = new FlowDefinition(1, Guid.NewGuid(), 1, "Legacy FileFlows pipeline", "video", [
+            new("input", null, new("base", "1.6.0", input.Id, input.Version, 1), Config(input)),
+            new("crop", null, new("base", "1.6.0", "base-auto-crop", "1.0.0", 1), Config(cropComp)),
+            new("deint", null, new("base", "1.6.0", "base-deinterlace-video", "1.0.0", 1), Config(deintComp)),
+            new("lang", null, new("base", "1.6.0", "base-filter-languages", "1.0.0", 1), Config(langFilterComp)),
+            new("comm", null, new("base", "1.6.0", "base-remove-commentary", "1.0.0", 1), Config(commComp)),
+            new("guard", null, new("base", "1.6.0", "base-file-size-guard", "1.0.0", 1), Config(sizeGuardComp, new() { ["minReductionPercent"] = J(10) }))
+        ], flowFileFlows.Connections);
+        Check(validator.Validate(legacyFlow).IsValid, "Legacy FileFlows pipeline with base-* aliases validates.");
     }
     private static void ExpectError(Action action,string message)
     {

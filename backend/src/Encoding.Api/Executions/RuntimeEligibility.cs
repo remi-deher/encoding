@@ -44,12 +44,25 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
         if(!validator.Validate(flow).IsValid) return false;
         var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
         var segment=entry is null?Array.Empty<FlowNodeDefinition>():RuntimeHandoffPolicy.Segment(flow,entry);
-        var planned=(context?.Plan??[]).Select((step,index)=>new FlowNodeDefinition("plan-"+index,null,
-            new("base","1.0.0",step.ComponentId,"1.0.0",1),step.Configuration));
+        var planned=(context?.Plan??[]).Select((step,index)=> {
+            var refTarget = registry.FindReference(step.ComponentId)
+                ?? new FlowComponentReference("base","1.0.0",step.ComponentId,"1.0.0",1);
+            return new FlowNodeDefinition("plan-"+index,null,refTarget,step.Configuration);
+        });
         foreach(var node in segment.Concat(planned))
         {
-            if(!capabilities.Any(c=>c.ToolId=="plugin/"+node.Component.PluginId && (c.Version==node.Component.PluginVersion
-                || c.Version==registry.RuntimePluginVersion(node.Component)))) return false;
+            var pluginId = node.Component.PluginId;
+            var componentId = node.Component.ComponentId;
+            var isAliased = FlowComponentRegistry.TryGetLegacyAlias(componentId, out var legacyTarget);
+            var targetPluginId = isAliased ? legacyTarget.PluginId : pluginId;
+
+            var matches = capabilities.Any(c =>
+                (c.ToolId == "plugin/" + pluginId && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component)))
+                || (isAliased && c.ToolId == "plugin/" + targetPluginId)
+                || (isAliased && c.ToolId == "plugin/base" && IsBaseVersionSatisfied(c.Version, componentId))
+                || (node.Component.PluginId is "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" or "ai" && c.ToolId == "plugin/base" && c.Version == "1.6.0"));
+
+            if (!matches) return false;
             if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node")
             {
                 if(node.Configuration.TryGetValue("targetNodeId",out var target) && target.ValueKind==System.Text.Json.JsonValueKind.String
@@ -102,7 +115,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 && !capabilities.Any(c=>c.ToolId=="script-tools")) return false;
             if(node.Component.ComponentId=="base-condition" && !capabilities.Any(c=>c.ToolId=="javascript")) return false;
             var encoders=capabilities.FirstOrDefault(c=>c.ToolId=="ffmpeg")?.Encoders??[];
-            if(node.Component.ComponentId=="base-transcode-video")
+            if(node.Component.ComponentId is "base-transcode-video" or "video-transcode")
             {
                 var codec=node.Configuration.TryGetValue("videoCodec",out var codecValue)?codecValue.GetString()!:"hevc";
                 if(node.Configuration.TryGetValue("encodingProfile",out var profileValue)
@@ -117,12 +130,25 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 }
                 else if(MediaCodecPolicy.VideoEncoder(codec,node.Configuration.TryGetValue("hardwareAcceleration",out var hw)?hw.GetString()!:"cpu",encoders) is null) return false;
             }
-            if(node.Component.ComponentId=="base-audio-rules" && (MediaCodecPolicy.AudioEncoder("aac",encoders) is null || MediaCodecPolicy.AudioEncoder("ac3",encoders) is null)) return false;
-            if(node.Component.ComponentId=="base-transcode-audio" && node.Configuration.TryGetValue("audioCodec",out var audio)
+            if((node.Component.ComponentId is "base-audio-rules" or "audio-rules") && (MediaCodecPolicy.AudioEncoder("aac",encoders) is null || MediaCodecPolicy.AudioEncoder("ac3",encoders) is null)) return false;
+            if((node.Component.ComponentId is "base-transcode-audio" or "audio-transcode") && node.Configuration.TryGetValue("audioCodec",out var audio)
                 && MediaCodecPolicy.AudioEncoder(audio.GetString()!,encoders) is null) return false;
         }
         // Every media execution records a source scan before completion, even if no transformation is selected.
         return capabilities.Any(c=>c.ToolId=="ffprobe");
     }
 
+    private static bool IsBaseVersionSatisfied(string actualVersion, string componentId)
+    {
+        if (!Version.TryParse(actualVersion, out var actual)) return true;
+        var minVersion = componentId switch
+        {
+            "base-audio-rules" => new Version(1, 2, 0),
+            "base-track-names" => new Version(1, 3, 0),
+            "base-subtitle-manage" or "base-add-fonts" => new Version(1, 4, 0),
+            "base-file-size-guard" or "base-auto-crop" or "base-deinterlace-video" or "base-filter-languages" or "base-remove-commentary" => new Version(1, 6, 0),
+            _ => new Version(1, 0, 0)
+        };
+        return actual >= minVersion;
+    }
 }

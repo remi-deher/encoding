@@ -85,13 +85,14 @@ internal static class TrackNameScenarios
         Check(TrackNameOptions.From(new Dictionary<string, JsonElement> { ["audioTemplate"] = J("{codec}") }) is { AudioTemplate: "{codec}", SingleDefaultAudio: true }, "Templates are read from the block configuration.");
         Check(TrackNaming.Snapshot(before.Identification).GetProperty("tracks").GetArrayLength() == 2, "The snapshot keeps audio and subtitle tracks only.");
 
+        var subsManifest = registry.Plugins.Single(item => item.Id == "subtitles");
+        var names = subsManifest.Components.Single(item => item.Id == "subtitles-track-names");
         var baseManifest = registry.Plugins.Single(item => item.Id == "base");
-        var names = baseManifest.Components.Single(item => item.Id == "base-track-names");
         var input = baseManifest.Components.Single(item => item.Id == "base-input-file");
-        Check(baseManifest.Version == "1.6.0" && names.Version == "1.3.0" && names.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "The block is declared in Base 1.3.0 with its three outputs.");
+        Check(subsManifest.Version == "1.0.0" && names.Version == "1.0.0" && names.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "The block is declared in Subtitles 1.0.0 with its three outputs.");
         FlowDefinition Flow() => new(1, Guid.NewGuid(), 1, "Track names", "video", [
             new("input", null, new("base", "1.3.0", input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),
-            new("names", null, new("base", "1.3.0", names.Id, names.Version, 1), new Dictionary<string, JsonElement>())], [new("edge", "input", "success", "names")]);
+            new("names", null, new("base", "1.3.0", "base-track-names", "1.3.0", 1), new Dictionary<string, JsonElement>())], [new("edge", "input", "success", "names")]);
         var worker = Guid.NewGuid();
         NodeToolCapability[] Caps(string baseVersion, params NodeToolCapability[] more) => [new("plugin/base", baseVersion, ["general"], []), new("ffprobe", "7.0", ["video"], []), .. more];
         Check(validator.Validate(Flow()).IsValid, "A flow with the track names block is valid.");

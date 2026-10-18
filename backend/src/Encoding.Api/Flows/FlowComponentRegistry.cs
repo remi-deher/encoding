@@ -143,7 +143,32 @@ public sealed class FlowComponentRegistry
         ["base-inspect-hdr"] = ("probe", "probe-inspect-hdr"),
         ["base-inspect-track"] = ("probe", "probe-inspect-track"),
         ["base-export-media-report"] = ("probe", "probe-export-report"),
+        // Video plugin
+        ["base-transcode-video"] = ("video", "video-transcode"),
+        ["base-resize-video"] = ("video", "video-resize"),
+        ["base-auto-crop"] = ("video", "video-auto-crop"),
+        ["base-deinterlace-video"] = ("video", "video-deinterlace"),
+        ["base-video-thumbnail"] = ("video", "video-thumbnail"),
+        ["base-verify-decoding"] = ("video", "video-verify-decoding"),
+        ["base-file-size-guard"] = ("video", "video-file-size-guard"),
+        // Audio plugin
+        ["base-transcode-audio"] = ("audio", "audio-transcode"),
+        ["base-normalize-audio"] = ("audio", "audio-normalize"),
+        ["base-extract-audio"] = ("audio", "audio-extract"),
+        ["base-audio-rules"] = ("audio", "audio-rules"),
+        ["base-add-audio-track"] = ("audio", "audio-add-track"),
+        ["base-filter-languages"] = ("audio", "audio-filter-languages"),
+        ["base-remove-commentary"] = ("audio", "audio-remove-commentary"),
+        // Subtitles plugin
+        ["base-extract-subtitles"] = ("subtitles", "subtitles-extract"),
+        ["base-subtitle-manage"] = ("subtitles", "subtitles-manage"),
+        ["base-add-fonts"] = ("subtitles", "subtitles-add-fonts"),
+        ["base-add-subtitle-track"] = ("subtitles", "subtitles-add-track"),
+        ["base-track-names"] = ("subtitles", "subtitles-track-names"),
     };
+
+    public static bool TryGetLegacyAlias(string componentId, out (string PluginId, string ComponentId) target) =>
+        LegacyAliases.TryGetValue(componentId, out target);
 
     public FlowComponentDescriptor? Resolve(FlowComponentReference reference)
     {

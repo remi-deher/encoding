@@ -116,7 +116,7 @@ public sealed class AiToolTests
         var service = new FlowAiGeneratorService(factory, promptBuilder, validator, registry);
 
         var promptText = promptBuilder.BuildSystemPrompt("video");
-        Assert.Contains("base-transcode-video", promptText);
+        Assert.Contains("video-transcode", promptText);
         Assert.Contains("RÈGLES D'OR", promptText);
 
         var response = await service.GenerateFlowAsync(new FlowAiGenerateRequest("video", "Encoder en HEVC avec audio AAC"));

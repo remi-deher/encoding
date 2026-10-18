@@ -17,9 +17,10 @@ internal static class FlowV3Template
     {
         FlowNodeDefinition Node(string id, string name, string plugin, string component, Dictionary<string, JsonElement>? values = null)
         {
-            var manifest = registry.Plugins.Single(item => item.Id == plugin);
-            var descriptor = manifest.Components.Single(item => item.Id == component);
-            return new(id, name, new(plugin, manifest.Version, descriptor.Id, descriptor.Version, descriptor.ConfigurationSchema.Version), values ?? []);
+            var reference = registry.FindReference(component, plugin) ?? throw new InvalidOperationException($"Composant {component} introuvable.");
+            var manifest = registry.Plugins.Single(item => item.Id == reference.PluginId);
+            var descriptor = manifest.Components.Single(item => item.Id == reference.ComponentId);
+            return new(id, name, new(reference.PluginId, manifest.Version, descriptor.Id, descriptor.Version, descriptor.ConfigurationSchema.Version), values ?? []);
         }
         var nodes = new List<FlowNodeDefinition>
         {
@@ -28,14 +29,14 @@ internal static class FlowV3Template
             Node("defer-playing", "Reporter : lecture en cours", "base", "base-defer-processing", new() { ["delayMinutes"] = J(10), ["reason"] = J("Lecture en cours dans Plex") }),
             Node("disk", "Verrou de disque", "base", "base-disk-lock", new() { ["disk"] = J("disque-1") }),
             Node("defer-disk", "Reporter : disque occupé", "base", "base-defer-processing", new() { ["delayMinutes"] = J(2), ["reason"] = J("Disque occupé par un autre traitement") }),
-            Node("snapshot", "Noms de pistes d'origine", "base", "base-track-names", new() { ["mode"] = J("snapshot") }),
+            Node("snapshot", "Noms de pistes d'origine", "subtitles", "subtitles-track-names", new() { ["mode"] = J("snapshot") }),
             Node("prepare", "Préparer le plan FFmpeg", "base", "base-prepare-processing", new() { ["tool"] = J("ffmpeg"), ["preserveUnchangedTracks"] = J(true) }),
-            Node("video", "Vidéo HEVC", "base", "base-transcode-video", new() { ["processingMode"] = J("plan"), ["encoderMode"] = J("automatic"), ["videoCodec"] = J("hevc") }),
-            Node("audio", "Audio par règles", "base", "base-audio-rules", new() { ["processingMode"] = J("plan"), ["unknownLayout"] = J("infer") }),
+            Node("video", "Vidéo HEVC", "video", "video-transcode", new() { ["processingMode"] = J("plan"), ["encoderMode"] = J("automatic"), ["videoCodec"] = J("hevc") }),
+            Node("audio", "Audio par règles", "audio", "audio-rules", new() { ["processingMode"] = J("plan"), ["unknownLayout"] = J("infer") }),
             Node("execute", "Exécuter le plan (une écriture)", "base", "base-execute-processing"),
-            Node("subtitles", "Sous-titres ASS", "base", "base-subtitle-manage", new() { ["styleProfile"] = J("crunchyroll") }),
-            Node("fonts", "Polices", "base", "base-add-fonts", new() { ["fontSet"] = J("Crunchyroll") }),
-            Node("names", "Noms de pistes", "base", "base-track-names", new() { ["mode"] = J("apply"), ["singleDefaultAudio"] = J(true) }),
+            Node("subtitles", "Sous-titres ASS", "subtitles", "subtitles-manage", new() { ["styleProfile"] = J("crunchyroll") }),
+            Node("fonts", "Polices", "subtitles", "subtitles-add-fonts", new() { ["fontSet"] = J("Crunchyroll") }),
+            Node("names", "Noms de pistes", "subtitles", "subtitles-track-names", new() { ["mode"] = J("apply"), ["singleDefaultAudio"] = J(true) }),
             Node("done", "Terminé", "base", "base-complete-flow", new() { ["result"] = J("success") }),
             Node("fail", "Échec", "base", "base-complete-flow", new() { ["result"] = J("failed"), ["message"] = J("Une étape du flow a échoué ; la source est intacte.") }),
         };

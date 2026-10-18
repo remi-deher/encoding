@@ -1,0 +1,388 @@
+{
+  "contractVersion": 1,
+  "id": "subtitles",
+  "version": "1.0.0",
+  "name": "Sous-titres",
+  "supportedHostContractVersions": [
+    1
+  ],
+  "components": [
+    {
+      "id": "subtitles-extract",
+      "version": "1.0.0",
+      "name": "Extraire les sous-titres",
+      "description": "Extrait les pistes de sous-titres sélectionnées dans leur format natif.",
+      "kind": "action",
+      "mediaType": "subtitles",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackIds",
+            "label": "Identifiants des pistes",
+            "type": "text",
+            "required": false,
+            "description": "Séparés par des virgules ; vide pour toutes les pistes de sous-titres."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "subtitles-manage",
+      "version": "1.0.0",
+      "name": "Gestion des sous-titres",
+      "description": "Convertit les SRT en ASS au profil de style proportionnel « Crunchyroll » (taille relative à la largeur affichée, référence 16:9), met à niveau les ASS simples, retire les doublons confirmés, déduit les pistes forcées par recouvrement de texte, nomme les pistes (« Français / ASS / Forcé ») et choisit le sous-titre français par défaut quand l’audio de référence ne l’est pas. Les pistes bitmap (PGS, VobSub) et les ASS avec styles ou placements personnalisés ne sont jamais modifiés. Les pistes non modifiées sont recopiées de la source : un seul mkvmerge écrit le nouveau fichier.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Les sous-titres ont été réassemblés dans un nouveau MKV."
+        },
+        {
+          "id": "unchanged",
+          "label": "Déjà conforme",
+          "description": "Rien à changer, ou le fichier n’est pas un MKV."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Une piste n’a pas pu être analysée sans risque (piste vide non confirmée, dimensions invalides, extraction impossible). Le fichier reste intact."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "styleProfile",
+            "label": "Profil de style",
+            "type": "select",
+            "defaultValue": "crunchyroll",
+            "options": [
+              {
+                "value": "crunchyroll",
+                "label": "Crunchyroll (proportionnel, lecture seule)"
+              },
+              {
+                "value": "none",
+                "label": "Aucun : ne pas toucher aux styles"
+              }
+            ],
+            "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices »."
+          },
+          {
+            "id": "convertSrt",
+            "label": "Convertir les SRT en ASS",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Applique le profil aux pistes SRT, WebVTT et mov_text."
+          },
+          {
+            "id": "upgradeAss",
+            "label": "Mettre à niveau les ASS simples",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Remplace l’en-tête et les quatre styles communs ; les événements sont conservés."
+          },
+          {
+            "id": "removeDuplicates",
+            "label": "Retirer les doublons",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Une piste dont le texte et les horaires (à 0,1 s près) sont inclus dans une autre piste de même langue et mêmes marqueurs est retirée."
+          },
+          {
+            "id": "inferForced",
+            "label": "Déduire les pistes forcées",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Une piste courte (10 % ou moins) dont le texte est à 90 % ou plus dans la plus complète de même langue est marquée forcée."
+          },
+          {
+            "id": "setTitles",
+            "label": "Nommer les pistes",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Désactivez-le si le bloc « Noms de pistes » nomme les pistes ensuite."
+          },
+          {
+            "id": "frenchDefault",
+            "label": "Sous-titre français par défaut",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Quand l’unique audio de référence n’est pas français, le sous-titre français (complet de préférence, non forcé) est marqué par défaut."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        },
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "subtitles-add-fonts",
+      "version": "1.0.0",
+      "name": "Polices",
+      "description": "Ajoute en pièces jointes les polices d’un jeu déclaré sur le nœud (dossier ENCODING_FONT_DIR, un sous-dossier par jeu) qui ne sont pas déjà dans le MKV. Jamais de chemin libre ; une police introuvable fait suivre la sortie « Erreur » sans toucher au fichier.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Les polices manquantes ont été ajoutées en pièces jointes."
+        },
+        {
+          "id": "unchanged",
+          "label": "Déjà conforme",
+          "description": "Toutes les polices demandées sont déjà dans le fichier, ou ce n’est pas un MKV."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Le jeu de polices ou une police est introuvable sur ce nœud."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "fontSet",
+            "label": "Jeu de polices",
+            "type": "text",
+            "defaultValue": "Crunchyroll",
+            "description": "Nom du sous-dossier du dossier de polices du nœud."
+          },
+          {
+            "id": "fonts",
+            "label": "Polices",
+            "type": "text",
+            "defaultValue": "TrebuchetMSBold.ttf, TrebuchetMSBoldItalic.ttf, ArialBold.ttf",
+            "description": "Noms de fichiers séparés par des virgules. Vide : toutes les polices (.ttf, .otf, .ttc) du jeu."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "subtitles-add-track",
+      "version": "1.0.0",
+      "name": "Ajouter des sous-titres",
+      "description": "Ajoute un fichier de sous-titres au conteneur MKV.",
+      "kind": "action",
+      "mediaType": "subtitles",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "sourceFile",
+            "label": "Fichier à ajouter",
+            "type": "text",
+            "required": true,
+            "description": "Référence à un fichier local ou à un résultat produit par le flow."
+          },
+          {
+            "id": "language",
+            "label": "Langue",
+            "type": "text",
+            "required": true,
+            "description": "Code de langue, par exemple fra ou eng."
+          },
+          {
+            "id": "trackName",
+            "label": "Nom de la piste",
+            "type": "text",
+            "required": false
+          },
+          {
+            "id": "forcedTrack",
+            "label": "Sous-titres forcés",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    },
+    {
+      "id": "subtitles-track-names",
+      "version": "1.0.0",
+      "name": "Noms de pistes",
+      "description": "Nomme les pistes audio et sous-titres d’un MKV avec un modèle (« Français (VFQ) / AC3 / 5.1 », « Anglais / PGS / Malentendant ») et garde une seule piste audio par défaut. Les titres d’origine (VFF, VFQ, Forcé, SDH…) peuvent être relevés avant que d’autres blocs ne renomment les pistes. Utilise mkvpropedit sur la copie de travail : le fichier n’est pas remuxé.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Les noms ont été appliqués, ou les titres d’origine relevés."
+        },
+        {
+          "id": "unchanged",
+          "label": "Déjà conforme",
+          "description": "Aucun nom ne change, ou le fichier n’est pas un MKV."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Les propriétés des pistes n’ont pas pu être lues ou modifiées."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "mode",
+            "label": "Opération",
+            "type": "select",
+            "defaultValue": "apply",
+            "options": [
+              {
+                "value": "apply",
+                "label": "Appliquer les noms"
+              },
+              {
+                "value": "snapshot",
+                "label": "Relever les titres d’origine"
+              }
+            ],
+            "description": "Placez « Relever » avant les blocs qui renomment ou convertissent des pistes ; « Appliquer » s’en sert ensuite pour garder la variante (VFF, VFQ) et les marqueurs."
+          },
+          {
+            "id": "audioTemplate",
+            "label": "Modèle des pistes audio",
+            "type": "text",
+            "defaultValue": "{language} {variant} / {codec} / {layout} / {flags}",
+            "description": "Jetons : {language}, {variant}, {codec}, {layout}, {flags}. Les segments séparés par « / » qui restent vides sont retirés."
+          },
+          {
+            "id": "subtitleTemplate",
+            "label": "Modèle des sous-titres",
+            "type": "text",
+            "defaultValue": "{language} {variant} / {codec} / {flags}",
+            "description": "Mêmes jetons ; {layout} reste vide."
+          },
+          {
+            "id": "singleDefaultAudio",
+            "label": "Une seule piste audio par défaut",
+            "type": "boolean",
+            "defaultValue": true
+          },
+          {
+            "id": "defaultAudioLanguage",
+            "label": "Langue de la piste audio par défaut",
+            "type": "text",
+            "description": "Code de langue (fr, en, ja…). Vide : conserver la piste déjà par défaut, sinon la première hors commentaire."
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": []
+    }
+  ]
+}

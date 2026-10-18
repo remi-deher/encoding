@@ -96,7 +96,7 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                 { output = "success"; detail = "Règle de relance bornée activée pour les pertes de worker."; }
                 else if (node.Component.PluginId == "nodes" && id == "nodes-require-direct-access")
                 { output = "success"; detail = "Contrainte d’accès direct à la bibliothèque prise en compte pour l’attribution du segment."; }
-                else if (node.Component.PluginId == "base" && Text("processingMode", "direct") == "plan")
+                else if ((node.Component.PluginId is "base" or "video" or "audio" or "subtitles") && Text("processingMode", "direct") == "plan")
                 {
                     if (variables.TryGetValue("plan.tool", out var selected) && (FlowMediaValues.IsFfmpegPlan(id) != (selected.GetString() == "ffmpeg")))
                     { output = "error"; detail = "Outil du plan incompatible avec cette action."; }
