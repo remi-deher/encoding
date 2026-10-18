@@ -15,6 +15,22 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             .Any(node=>registry.Resolve(node.Component)?.RequiresWriteAccess==true);
     }
 
+    public bool RequiresDirectAccess(FlowDefinition flow,string? nextNodeId=null,bool resumed=false)
+    {
+        var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
+        return entry is not null && RuntimeHandoffPolicy.Segment(flow,entry)
+            .Any(node=>node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-require-direct-access"
+                && (!node.Configuration.TryGetValue("mode",out var m) || m.ValueKind!=System.Text.Json.JsonValueKind.String || m.GetString()!="prefer"));
+    }
+
+    public bool PrefersDirectAccess(FlowDefinition flow,string? nextNodeId=null,bool resumed=false)
+    {
+        var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
+        return entry is not null && RuntimeHandoffPolicy.Segment(flow,entry)
+            .Any(node=>node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-require-direct-access"
+                && node.Configuration.TryGetValue("mode",out var m) && m.ValueKind==System.Text.Json.JsonValueKind.String && m.GetString()=="prefer");
+    }
+
     /// <summary>Une sonde n'exécute qu'une condition de plugin : seule la capacité de ce plugin est requise.</summary>
     public bool CanProbe(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,string blockNodeId)
     {

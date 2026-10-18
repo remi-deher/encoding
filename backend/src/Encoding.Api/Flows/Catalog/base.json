@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "base",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "name": "Base",
   "supportedHostContractVersions": [
     1
@@ -631,6 +631,40 @@
                 "label": "VAAPI"
               }
             ]
+          },
+          {
+            "id": "qualityTier",
+            "label": "Palier de qualité adaptatif",
+            "type": "select",
+            "defaultValue": "custom",
+            "description": "Adapte automatiquement la qualité selon la résolution (4K, 1080p, 720p) et l'encodeur sélectionné.",
+            "options": [
+              { "value": "custom", "label": "Personnalisé (selon profil ou valeur manuelle)" },
+              { "value": "transparent", "label": "Visuellement transparent (CRF 18 / 4K CRF 21)" },
+              { "value": "high", "label": "Haute qualité - Recommandé (CRF 21 / 4K CRF 24)" },
+              { "value": "balanced", "label": "Équilibré (CRF 23 / 4K CRF 26)" },
+              { "value": "compact", "label": "Compacité maximale (CRF 26 / 4K CRF 29)" }
+            ]
+          },
+          {
+            "id": "colorDepth",
+            "label": "Profondeur de couleur",
+            "type": "select",
+            "defaultValue": "auto",
+            "description": "Active le 10 bits pour HEVC/AV1 afin d'éliminer le banding (recommandé).",
+            "options": [
+              { "value": "auto", "label": "Automatique (10 bits pour HEVC/AV1)" },
+              { "value": "10-bit", "label": "10 bits (Main 10)" },
+              { "value": "source", "label": "Identique à la source" },
+              { "value": "8-bit", "label": "8 bits (Standard)" }
+            ]
+          },
+          {
+            "id": "preserveHdr",
+            "label": "Préserver les métadonnées HDR",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Injecte automatiquement les espaces colorimétriques BT.2020 et courbes SMPTE ST 2084 pour éviter l'image délavée."
           }
         ]
       },
@@ -648,7 +682,8 @@
         "1.1.0",
         "1.2.0",
         "1.3.0",
-        "1.4.0"
+        "1.4.0",
+        "1.5.0"
       ]
     },
     {
@@ -3729,6 +3764,434 @@
       "requiredTools": [],
       "requiresMedia": false,
       "requiresWriteAccess": false
+    },
+    {
+      "id": "base-auto-crop",
+      "version": "1.6.0",
+      "name": "Rognage automatique des bandes noires",
+      "description": "Détecte les bandes noires (letterboxing/pillarboxing) par échantillonnage FFmpeg et intègre le filtre de rognage au plan d’encodage ou l’applique directement.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "cropped",
+          "label": "Rogné",
+          "description": "Bandes noires détectées et rognage configuré."
+        },
+        {
+          "id": "no-crop",
+          "label": "Plein cadre",
+          "description": "Aucun rognage requis (image déjà pleine)."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "La sonde de détection a échoué."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode d’exécution",
+            "type": "select",
+            "defaultValue": "plan",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan (combiné au transcodage)"
+              },
+              {
+                "value": "direct",
+                "label": "Exécuter immédiatement"
+              }
+            ],
+            "description": "Le mode plan combine le filtre de rognage à base-transcode-video sans réécriture intermédiaire.",
+            "required": true
+          },
+          {
+            "id": "samplePoints",
+            "label": "Points d'échantillonnage",
+            "type": "number",
+            "defaultValue": 5,
+            "min": 1,
+            "max": 20,
+            "step": 1,
+            "description": "Nombre de segments temporels analysés sur la vidéo.",
+            "required": false
+          },
+          {
+            "id": "threshold",
+            "label": "Sensibilité cropdetect",
+            "type": "number",
+            "defaultValue": 24,
+            "min": 1,
+            "max": 100,
+            "step": 1,
+            "description": "Seuil de noirceur pour cropdetect (24 par défaut).",
+            "required": false
+          },
+          {
+            "id": "roundMultiple",
+            "label": "Arrondi de dimension",
+            "type": "number",
+            "defaultValue": 2,
+            "min": 2,
+            "max": 32,
+            "step": 2,
+            "description": "Multiple auquel arrondir la largeur et la hauteur (2 ou 16).",
+            "required": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": "6.0.0",
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": [
+        "1.5.0",
+        "1.4.0"
+      ]
+    },
+    {
+      "id": "base-file-size-guard",
+      "version": "1.6.0",
+      "name": "Garde de réduction de taille",
+      "description": "Compare la taille du fichier encodé à la taille de référence (source d'origine) et protège la bibliothèque contre les encodages grossissant inutilement le fichier.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music"
+      ],
+      "outputs": [
+        {
+          "id": "reduced",
+          "label": "Gain suffisant",
+          "description": "Le fichier a diminué d’au moins le pourcentage demandé."
+        },
+        {
+          "id": "larger",
+          "label": "Gain insuffisant",
+          "description": "Le fichier encodé est plus lourd ou n'atteint pas le seuil d'économie."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Impossible de lire la taille des fichiers."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "minReductionPercent",
+            "label": "Réduction minimale (%)",
+            "type": "number",
+            "defaultValue": 10,
+            "min": 0,
+            "max": 100,
+            "step": 1,
+            "description": "Pourcentage minimum de réduction requis (ex: 10 pour 10% d'économie).",
+            "required": true
+          },
+          {
+            "id": "actionOnFailure",
+            "label": "Action si gain insuffisant",
+            "type": "select",
+            "defaultValue": "branch",
+            "options": [
+              {
+                "value": "branch",
+                "label": "Emprunter la sortie alternative (Gain insuffisant)"
+              },
+              {
+                "value": "revert",
+                "label": "Restaurer le fichier original et emprunter la sortie"
+              }
+            ],
+            "description": "Permet de restaurer la source d'origine pour ne pas publier un fichier plus gros.",
+            "required": true
+          }
+        ]
+      },
+      "requiredTools": [],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": [
+        "1.5.0",
+        "1.4.0"
+      ]
+    },
+    {
+      "id": "base-filter-languages",
+      "version": "1.6.0",
+      "name": "Filtrer les langues",
+      "description": "Ne conserve que les langues autorisées pour les pistes audio et les sous-titres, en supprimant les doublages inutiles.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "filtered",
+          "label": "Filtré",
+          "description": "Des pistes hors liste ont été retirées."
+        },
+        {
+          "id": "unchanged",
+          "label": "Inchangé",
+          "description": "Toutes les pistes étaient déjà conformes."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Erreur lors du filtrage des pistes."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "allowedAudioLanguages",
+            "label": "Langues audio autorisées",
+            "type": "text",
+            "defaultValue": "fra,fre,eng,jpn,und",
+            "description": "Codes langues ISO-639 séparés par des virgules (ex: fra,eng,jpn).",
+            "required": false
+          },
+          {
+            "id": "keepUndefinedAudio",
+            "label": "Garder audio sans langue (und)",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Préserver les pistes audio dont la langue n'est pas renseignée.",
+            "required": false
+          },
+          {
+            "id": "keepFirstAudioIfNoneMatch",
+            "label": "Garder première piste de secours",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Si aucune langue audio ne correspond, conserve la 1ère piste pour éviter un fichier muet.",
+            "required": false
+          },
+          {
+            "id": "allowedSubtitleLanguages",
+            "label": "Langues de sous-titres autorisées",
+            "type": "text",
+            "defaultValue": "fra,fre,eng",
+            "description": "Codes langues des sous-titres à conserver, séparés par des virgules.",
+            "required": false
+          },
+          {
+            "id": "keepForcedSubtitles",
+            "label": "Toujours garder sous-titres forcés",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Conserver les sous-titres forcés quelle que soit leur langue.",
+            "required": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvmerge",
+          "minimumVersion": "70.0.0",
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": [
+        "1.5.0",
+        "1.4.0"
+      ]
+    },
+    {
+      "id": "base-deinterlace-video",
+      "version": "1.6.0",
+      "name": "Désentrelacement automatique",
+      "description": "Analyse les trames avec le filtre idet de FFmpeg et applique un désentrelacement bwdif ou yadif si le contenu est entrelacé.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "deinterlaced",
+          "label": "Désentrelacé",
+          "description": "Vidéo entrelacée détectée et filtre de désentrelacement appliqué ou ajouté au plan."
+        },
+        {
+          "id": "progressive",
+          "label": "Progressif",
+          "description": "Vidéo déjà progressive (aucun filtre ajouté)."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Échec de détection d'entrelacement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode d’exécution",
+            "type": "select",
+            "defaultValue": "plan",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan (combiné au transcodage)"
+              },
+              {
+                "value": "direct",
+                "label": "Exécuter immédiatement"
+              }
+            ],
+            "description": "Le mode plan applique le désentrelacement pendant l'encodage sans passe séparée.",
+            "required": true
+          },
+          {
+            "id": "algorithm",
+            "label": "Algorithme",
+            "type": "select",
+            "defaultValue": "bwdif",
+            "options": [
+              {
+                "value": "bwdif",
+                "label": "bwdif (Bob Weaver Deinterlacing - recommandé)"
+              },
+              {
+                "value": "yadif",
+                "label": "yadif (Yet Another Deinterlacing Filter)"
+              }
+            ],
+            "description": "Filtre FFmpeg de désentrelacement.",
+            "required": true
+          },
+          {
+            "id": "detectionFrames",
+            "label": "Trames analysées",
+            "type": "number",
+            "defaultValue": 1000,
+            "min": 100,
+            "max": 10000,
+            "step": 100,
+            "description": "Nombre de trames analysées pour la détection idet.",
+            "required": false
+          },
+          {
+            "id": "interlaceThresholdPercent",
+            "label": "Seuil d'entrelacement (%)",
+            "type": "number",
+            "defaultValue": 10,
+            "min": 1,
+            "max": 100,
+            "step": 1,
+            "description": "Pourcentage minimum de trames entrelacées pour activer le filtre (10% par défaut).",
+            "required": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": "6.0.0",
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": [
+        "1.5.0",
+        "1.4.0"
+      ]
+    },
+    {
+      "id": "base-remove-commentary",
+      "version": "1.6.0",
+      "name": "Supprimer les commentaires",
+      "description": "Détecte et supprime les pistes audio et sous-titres de commentaires ou d’audiodescription (Director's Commentary, Audio Description, etc.).",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "removed",
+          "label": "Supprimé",
+          "description": "Pistes de commentaires ou d'audiodescription détectées et retirées."
+        },
+        {
+          "id": "unchanged",
+          "label": "Inchangé",
+          "description": "Aucune piste indésirable trouvée."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Erreur lors du retrait des pistes."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "removeAudioCommentary",
+            "label": "Supprimer commentaires audio",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Retirer les pistes audio identifiées comme commentaires du réalisateur ou de l'équipe.",
+            "required": false
+          },
+          {
+            "id": "removeSubtitleCommentary",
+            "label": "Supprimer sous-titres commentaires",
+            "type": "boolean",
+            "defaultValue": true,
+            "description": "Retirer les sous-titres identifiés comme commentaires.",
+            "required": false
+          },
+          {
+            "id": "customKeywords",
+            "label": "Mots-clés personnalisés",
+            "type": "text",
+            "defaultValue": "",
+            "description": "Mots-clés additionnels séparés par virgules (en plus de commentary, director, visual impaired, etc.).",
+            "required": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvmerge",
+          "minimumVersion": "70.0.0",
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": [
+        "1.5.0",
+        "1.4.0"
+      ]
     }
   ]
 }

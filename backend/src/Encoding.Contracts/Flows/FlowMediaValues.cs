@@ -5,7 +5,8 @@ namespace Encoding.Contracts.Flows;
 public static class FlowMediaValues
 {
     public static bool IsFfmpegPlan(string id) => id is "base-transcode-video" or "base-transcode-audio"
-        or "base-normalize-audio" or "base-resize-video" or "base-remux-media";
+        or "base-normalize-audio" or "base-resize-video" or "base-remux-media"
+        or "base-auto-crop" or "base-deinterlace-video";
 
     public static JsonElement Probe(string id, JsonElement metadata, int trackId = 0)
     {

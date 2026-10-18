@@ -49,7 +49,7 @@ internal static class ConditionScenarios
         Check(ConditionTree.Validate(ConditionTree.Serialize(deep),"video") is not null,"Excessive nesting is rejected.");
         Check(ConditionTree.Validate(ConditionTree.Serialize(new ConditionGroup("all",Enumerable.Repeat<ConditionExpression>(Rule("file.extension","eq","mkv"),100).ToArray())),"video") is not null,"Excessive node counts are rejected.");
 
-        var manifest=registry.Plugins.Single(plugin=>plugin.Id=="conditions");var component=manifest.Components.Single();
+        var manifest=registry.Plugins.Single(plugin=>plugin.Id=="conditions");var component=manifest.Components.Single(c=>c.Id=="conditions-match");
         var presetJson=JsonSerializer.SerializeToElement(manifest,new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Check(presetJson.GetProperty("components")[0].GetProperty("configurationSchema").GetProperty("fields")[0].GetProperty("conditionPresets")[0].GetProperty("expression").GetProperty("kind").GetString()=="group","Catalog presets serialize as portable groups.");
         var input=registry.Plugins.Single(plugin=>plugin.Id=="base").Components.Single(component=>component.Id=="base-input-file");
@@ -59,11 +59,157 @@ internal static class ConditionScenarios
             new("condition",null,reference,new Dictionary<string,JsonElement>{["rules"]=document})],
             [new("edge","input","success","condition")]);
         Check(validator.Validate(flow).IsValid,"The flow validator accepts the structured tree.");
-        IReadOnlyList<NodeToolCapability> caps=[new("plugin/base","1.0.0",["general"],[]),new("plugin/conditions","1.0.0",["general"],[]),new("ffprobe","7.0",["video"],[])];
+        IReadOnlyList<NodeToolCapability> caps=[new("plugin/base","1.0.0",["general"],[]),new("plugin/conditions",manifest.Version,["general"],[]),new("ffprobe","7.0",["video"],[])];
         Check(eligibility.CanRun(flow,caps,worker),"Native conditions do not require JavaScript or a third-party process.");
         Check(!eligibility.CanRun(flow,caps.Where(cap=>cap.ToolId!="plugin/conditions").ToArray(),worker),"An old agent cannot execute the new plugin.");
         var draft=flow with { Nodes=[flow.Nodes[0],flow.Nodes[1] with { Configuration=new Dictionary<string,JsonElement>{["rules"]=ConditionTree.Serialize(new ConditionGroup("all",[]))} }] };
         Check(validator.ValidateDraft(draft).IsValid && !validator.Validate(draft).IsValid,"An incomplete draft cannot become an execution.");
+
+        // MediaConditionEvaluator tests on dedicated conditions
+        var configVideoCodec = new Dictionary<string, JsonElement> { ["codec"] = J("hevc") };
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-codec", configVideoCodec, after) == "yes", "Video codec HEVC matches after metadata.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-codec", configVideoCodec, before) == "no", "Video codec HEVC does not match before metadata.");
+        var configVideoCodecInvert = new Dictionary<string, JsonElement> { ["codec"] = J("hevc"), ["invert"] = J(true) };
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-codec", configVideoCodecInvert, after) == "no", "Invert video codec matches not HEVC.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-codec", configVideoCodecInvert, before) == "yes", "Invert video codec matches not HEVC on h264.");
+
+        var configAudioCodec = new Dictionary<string, JsonElement> { ["codec"] = J("aac"), ["scope"] = J("any") };
+        Check(MediaConditionEvaluator.Evaluate("conditions-audio-codec", configAudioCodec, after) == "yes", "Audio codec AAC matches.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-audio-codec", new Dictionary<string, JsonElement> { ["codec"] = J("eac3") }, after) == "no", "Audio codec EAC3 does not match.");
+
+        var configResolution = new Dictionary<string, JsonElement> { ["resolution"] = J("1080p"), ["operator"] = J("gte") };
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-resolution", configResolution, after) == "yes", "3840x2160 is at least 1080p.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-resolution", new Dictionary<string, JsonElement> { ["resolution"] = J("4k"), ["operator"] = J("eq") }, after) == "yes", "3840x2160 is exactly 4K.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-resolution", new Dictionary<string, JsonElement> { ["resolution"] = J("720p"), ["operator"] = J("lte") }, after) == "no", "3840x2160 is not <= 720p.");
+
+        var configChannels = new Dictionary<string, JsonElement> { ["channels"] = J("6"), ["operator"] = J("gte"), ["scope"] = J("first") };
+        Check(MediaConditionEvaluator.Evaluate("conditions-audio-channels", configChannels, after) == "yes", "6 channels is >= 6.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-audio-channels", new Dictionary<string, JsonElement> { ["channels"] = J("8"), ["operator"] = J("gte") }, after) == "no", "6 channels is not >= 8.");
+
+        var configLang = new Dictionary<string, JsonElement> { ["language"] = J("fra"), ["scope"] = J("any") };
+        Check(MediaConditionEvaluator.Evaluate("conditions-audio-language", configLang, after) == "yes", "Language fra is present.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-audio-language", new Dictionary<string, JsonElement> { ["language"] = J("eng") }, after) == "no", "Language eng is not present.");
+
+        // MediaConditionEvaluator tests on HDR and BitDepth
+        var hdrMetadata = J(new {
+            streams = new object[] {
+                new {
+                    codec_type = "video",
+                    codec_name = "hevc",
+                    width = 3840,
+                    height = 2160,
+                    pix_fmt = "yuv420p10le",
+                    color_transfer = "smpte2084",
+                    color_primaries = "bt2020",
+                    side_data_list = new object[] {
+                        new { side_data_type = "DOVI configuration record" },
+                        new { side_data_type = "Mastering display metadata" }
+                    }
+                }
+            }
+        });
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-hdr", new Dictionary<string, JsonElement> { ["format"] = J("dolby-vision") }, hdrMetadata) == "yes", "Dolby Vision detected from side data.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-hdr", new Dictionary<string, JsonElement> { ["format"] = J("hdr10") }, hdrMetadata) == "yes", "HDR10 transfer detected.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-hdr", new Dictionary<string, JsonElement> { ["format"] = J("any-hdr") }, hdrMetadata) == "yes", "Any HDR matches HDR file.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-hdr", new Dictionary<string, JsonElement> { ["format"] = J("sdr") }, hdrMetadata) == "no", "HDR file is not SDR.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-hdr", new Dictionary<string, JsonElement> { ["format"] = J("sdr") }, before) == "yes", "SDR video correctly identified as SDR.");
+
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-bitdepth", new Dictionary<string, JsonElement> { ["depth"] = J("10-bit") }, hdrMetadata) == "yes", "10-bit detected via yuv420p10le.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-bitdepth", new Dictionary<string, JsonElement> { ["depth"] = J("8-bit") }, hdrMetadata) == "no", "10-bit is not 8-bit.");
+        Check(MediaConditionEvaluator.Evaluate("conditions-video-bitdepth", new Dictionary<string, JsonElement> { ["depth"] = J("8-bit") }, before) == "yes", "Standard stream defaults to 8-bit.");
+
+        // Flow validation with dedicated condition components
+        var videoCodecComp = manifest.Components.Single(c => c.Id == "conditions-video-codec");
+        var videoCodecRef = new FlowComponentReference("conditions", manifest.Version, videoCodecComp.Id, videoCodecComp.Version, 1);
+        var hdrComp = manifest.Components.Single(c => c.Id == "conditions-video-hdr");
+        var hdrRef = new FlowComponentReference("conditions", manifest.Version, hdrComp.Id, hdrComp.Version, 1);
+        var flowVideoCodec = new FlowDefinition(1, Guid.NewGuid(), 1, "Video codec condition", "video", [
+            new("input", null, new("base", "1.0.0", input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),
+            new("cond", null, videoCodecRef, new Dictionary<string, JsonElement> { ["codec"] = J("hevc") }),
+            new("hdr", null, hdrRef, new Dictionary<string, JsonElement> { ["format"] = J("dolby-vision") })],
+            [new("edge1", "input", "success", "cond"), new("edge2", "cond", "yes", "hdr")]);
+        Check(validator.Validate(flowVideoCodec).IsValid, "Flow with dedicated conditions-video-codec and conditions-video-hdr is valid.");
+
+        // ADR 0070: FileFlows-inspired processing blocks unit tests
+        // 1. CropDetector
+        var cropLine = "[Parsed_cropdetect_0 @ 0x7f8] crop=1920:800:0:140 ts:10.000000";
+        var parsedCrop = CropDetector.ParseCropDetectLine(cropLine);
+        Check(parsedCrop is not null && parsedCrop.Width == 1920 && parsedCrop.Height == 800 && parsedCrop.X == 0 && parsedCrop.Y == 140, "Crop line parsed.");
+        Check(parsedCrop!.ToFilter() == "crop=1920:800:0:140", "Crop filter string matches.");
+        Check(parsedCrop.IsSignificant(1920, 1080), "Letterbox crop is significant on 1080p.");
+        Check(!new CropCoordinates(1916, 1076, 2, 2).IsSignificant(1920, 1080, 16), "Minor crop is insignificant.");
+        var consensus = CropDetector.CalculateConsensus([
+            "[crop] crop=1920:804:0:138",
+            "[crop] crop=1920:800:0:140",
+            "[crop] crop=1920:800:0:140"
+        ], roundMultiple: 2);
+        Check(consensus is not null && consensus.Width == 1920 && consensus.Height == 800, "Crop consensus median calculated.");
+
+        // 2. DeinterlaceDetector
+        var idetOut = "Multi frame detection: TFF: 400 BFF: 100 Progressive: 500 Undetermined: 0";
+        var parsedIdet = DeinterlaceDetector.ParseIdetOutput(idetOut);
+        Check(parsedIdet is not null && parsedIdet.Value.Tff == 400 && parsedIdet.Value.Progressive == 500, "Idet output parsed.");
+        Check(DeinterlaceDetector.IsInterlaced(idetOut, 10.0), "50% interlaced frames detected as interlaced.");
+        var progOut = "Multi frame detection: TFF: 10 BFF: 10 Progressive: 980 Undetermined: 0";
+        Check(!DeinterlaceDetector.IsInterlaced(progOut, 10.0), "2% interlaced frames detected as progressive.");
+
+        // 3. FileSizeGuard
+        var (red1, p1) = FileSizeGuard.Evaluate(1000, 800, 10m);
+        Check(red1 && p1 == 20m, "20% reduction meets 10% threshold.");
+        var (red2, p2) = FileSizeGuard.Evaluate(1000, 1050, 10m);
+        Check(!red2 && p2 == -5m, "File increase fails reduction guard.");
+
+        // 4. LanguageFilterPlanner
+        var multiLangStreams = J(new object[] {
+            new { codec_type = "audio", index = 1, tags = new { language = "fra" }, disposition = new { @default = 1 } },
+            new { codec_type = "audio", index = 2, tags = new { language = "eng" }, disposition = new { @default = 0 } },
+            new { codec_type = "audio", index = 3, tags = new { language = "ger" }, disposition = new { @default = 0 } },
+            new { codec_type = "subtitle", index = 4, tags = new { language = "ger" }, disposition = new { forced = 0 } },
+            new { codec_type = "subtitle", index = 5, tags = new { language = "ita" }, disposition = new { forced = 1 } }
+        });
+        var droppedAudio = LanguageFilterPlanner.IdentifyTracksToRemove(multiLangStreams, "audio", ["fra", "eng"], keepUndefined: true, keepFirstAudioFallback: true, keepForcedSubtitles: true);
+        Check(droppedAudio.Contains(3) && !droppedAudio.Contains(1) && !droppedAudio.Contains(2), "German audio dropped, French and English kept.");
+        var droppedSubs = LanguageFilterPlanner.IdentifyTracksToRemove(multiLangStreams, "subtitles", ["fra"], keepUndefined: true, keepFirstAudioFallback: true, keepForcedSubtitles: true);
+        Check(droppedSubs.Contains(4) && !droppedSubs.Contains(5), "German sub dropped, Italian forced sub kept.");
+
+        // 5. CommentaryFilterPlanner
+        var commentaryStreams = J(new object[] {
+            new { codec_type = "audio", index = 1, tags = new { title = "Film Français VFF" } },
+            new { codec_type = "audio", index = 2, tags = new { title = "Director's Commentary" } },
+            new { codec_type = "audio", index = 3, disposition = new { descriptions = 1 } },
+            new { codec_type = "subtitle", index = 4, tags = new { title = "Commentaires audio sous-titres" } }
+        });
+        var droppedCommentary = CommentaryFilterPlanner.IdentifyCommentaryTracks(commentaryStreams, checkAudio: true, checkSubtitles: true);
+        Check(!droppedCommentary.Contains(1), "Main audio track not dropped.");
+        Check(droppedCommentary.Contains(2) && droppedCommentary.Contains(3) && droppedCommentary.Contains(4), "Commentary and descriptive tracks dropped.");
+
+        // 6. Flow validation with ADR 0070 processing blocks
+        var baseManifest = registry.Plugins.Single(plugin => plugin.Id == "base");
+        var cropComp = baseManifest.Components.Single(c => c.Id == "base-auto-crop");
+        var sizeGuardComp = baseManifest.Components.Single(c => c.Id == "base-file-size-guard");
+        var langFilterComp = baseManifest.Components.Single(c => c.Id == "base-filter-languages");
+        var deintComp = baseManifest.Components.Single(c => c.Id == "base-deinterlace-video");
+        var commComp = baseManifest.Components.Single(c => c.Id == "base-remove-commentary");
+
+        var flowFileFlows = new FlowDefinition(1, Guid.NewGuid(), 1, "FileFlows processing pipeline", "video", [
+            new("input", null, new("base", baseManifest.Version, input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),
+            new("crop", null, new("base", baseManifest.Version, cropComp.Id, cropComp.Version, 1), new Dictionary<string, JsonElement>()),
+            new("deint", null, new("base", baseManifest.Version, deintComp.Id, deintComp.Version, 1), new Dictionary<string, JsonElement>()),
+            new("lang", null, new("base", baseManifest.Version, langFilterComp.Id, langFilterComp.Version, 1), new Dictionary<string, JsonElement>()),
+            new("comm", null, new("base", baseManifest.Version, commComp.Id, commComp.Version, 1), new Dictionary<string, JsonElement>()),
+            new("guard", null, new("base", baseManifest.Version, sizeGuardComp.Id, sizeGuardComp.Version, 1), new Dictionary<string, JsonElement> { ["minReductionPercent"] = J(10) })
+        ], [
+            new("e1", "input", "success", "crop"),
+            new("e2", "crop", "cropped", "deint"),
+            new("e3", "crop", "no-crop", "deint"),
+            new("e4", "deint", "deinterlaced", "lang"),
+            new("e5", "deint", "progressive", "lang"),
+            new("e6", "lang", "filtered", "comm"),
+            new("e7", "lang", "unchanged", "comm"),
+            new("e8", "comm", "removed", "guard"),
+            new("e9", "comm", "unchanged", "guard")
+        ]);
+        Check(validator.Validate(flowFileFlows).IsValid, "FileFlows pipeline with all 5 new processing blocks validates.");
     }
     private static void ExpectError(Action action,string message)
     {
