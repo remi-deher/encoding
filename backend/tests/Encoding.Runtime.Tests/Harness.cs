@@ -141,12 +141,19 @@ internal static partial class Harness
             var presenceOptions = new NodePresenceOptions(TimeSpan.FromHours(1));
             var flowRepo = new FlowRepository(db);
             var workflowRepo = new LibraryWorkflowRepository(db, validator, presenceOptions);
-            var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0"); builder.Logging.ClearProviders();
+            var builder=WebApplication.CreateBuilder(); builder.WebHost.UseUrls("http://127.0.0.1:0");
+            builder.Logging.ClearProviders();
+            builder.Logging.AddSimpleConsole(o => { o.SingleLine = true; o.IncludeScopes = false; });
+            builder.Logging.SetMinimumLevel(LogLevel.Information);
+            builder.Services.AddApiProblemDetails();
+            builder.Services.ConfigureHttpJsonOptions(options => { options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase; });
             builder.Services.AddSingleton<System.Data.Common.DbDataSource>(db); builder.Services.AddSingleton(runtime); builder.Services.AddSingleton(artifacts);
             builder.Services.AddSingleton(new ExecutionWaitRepository(db, presenceOptions)); builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
             builder.Services.AddSingleton(new LibraryProcessingRepository(db)); builder.Services.AddSingleton(workflowRepo);
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(presenceOptions);
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton(flowRepo); builder.Services.AddSingleton(new FlowArchiveService(flowRepo, validator));
+            builder.Services.AddSingleton(new FlowTemplateRepository(db));
+            builder.Services.AddSingleton(new PeerClusterOptions());
             app=builder.Build();
             app.Use(async (context,next) =>
             {
@@ -165,12 +172,21 @@ internal static partial class Harness
                         return;
                     }
                     await next();
+                    if(context.Response.StatusCode >= 500)
+                    {
+                        Console.Error.WriteLine($"[HARNESS 500] {context.Request.Method} {context.Request.Path} -> {context.Response.StatusCode}");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-                    context.Response.ContentType = "text/plain";
-                    await context.Response.WriteAsync($"EX: {ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}");
+                    Console.Error.WriteLine($"[HARNESS EX] {context.Request.Method} {context.Request.Path}: {ex}");
+                    if(!context.Response.HasStarted)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                        context.Response.ContentType = "text/plain";
+                        await context.Response.WriteAsync($"EX: {ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}");
+                    }
+                    throw;
                 }
             });
             app.MapRuntimeEndpoints(); app.MapFlowEndpoints();

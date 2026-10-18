@@ -237,6 +237,9 @@ public static class FlowEndpoints
 
     internal static FlowDefinition ParseFlowDefinition(JsonElement element, FlowComponentRegistry registry)
     {
+        if (element.TryGetProperty("definition", out var defProp) && defProp.ValueKind == JsonValueKind.Object)
+            element = defProp;
+
         var id = element.TryGetProperty("id", out var idProp) && idProp.TryGetGuid(out var parsedId) && parsedId != Guid.Empty
             ? parsedId
             : Guid.NewGuid();
