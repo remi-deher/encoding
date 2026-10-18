@@ -2,57 +2,20 @@ name: Release
 # Publie l'image Docker unique après un merge validé de dev vers main.
 # Secrets requis (Settings > Secrets and variables > Actions) : DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-  workflow_run:
-    workflows: [PR policy]
-    types: [completed]
 concurrency:
   group: release
   cancel-in-progress: false
 permissions:
-  actions: write
   contents: write
   checks: read
   pull-requests: read
 jobs:
-  dispatch-approved-release:
-    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dispatch release after any dev-to-main merge
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          for _ in $(seq 1 18); do
-            prs="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=all&base=main&head=${GITHUB_REPOSITORY_OWNER}:dev" \
-              | jq --arg sha "$HEAD_SHA" '[.[] | select(.head.sha == $sha) | {number, merged_at}]')"
-            count="$(jq 'length' <<< "$prs")"
-            if [ "$count" -eq 0 ]; then
-              echo "Aucune PR dev vers main associée à ce run de policy."
-              exit 0
-            fi
-
-            pr="$(jq -c '.[0] // empty' <<< "$prs")"
-            if [ -z "$pr" ]; then
-              echo "La PR dev vers main n'est pas associée au SHA attendu."
-              exit 1
-            fi
-
-            merged_at="$(jq -r '.merged_at // empty' <<< "$pr")"
-            if [ -n "$merged_at" ]; then
-              echo "PR #$(jq -r '.number' <<< "$pr") fusionnée de dev vers main; lancement de Release sur main."
-              gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
-              exit 0
-            fi
-
-            sleep 10
-          done
-          echo "La PR dev vers main n'a pas été fusionnée dans les 3 minutes; aucun dispatch."
-          exit 1
-
   wait-ci:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
