@@ -20,7 +20,7 @@ public sealed class AiAuthenticationTests
         var sentinel = Path.Combine(fixture.DirectoryPath, "sentinel");
         File.WriteAllText(sentinel, "private-sentinel");
         var script = fixture.Configuration["AiTools:Executables:codex-cli"]!;
-        File.WriteAllText(script, "#!/bin/sh\nif cat '" + sentinel + "' 2>/dev/null; then exit 1; else printf 'isolated'; fi");
+        File.WriteAllText(script, "#!/bin/sh\nif [ ! -r /proc/self/stat ]; then exit 2; fi\nif cat '" + sentinel + "' 2>/dev/null; then exit 1; else printf 'isolated'; fi");
         var result = await production.RunAsync("codex-cli", ["exec"], CancellationToken.None);
         Assert.Equal(0, result.ExitCode);
         Assert.Equal("isolated", result.Output);
@@ -59,12 +59,13 @@ public sealed class AiAuthenticationTests
         if (OperatingSystem.IsWindows()) return;
         using var fixture = new AiCliTestProfile("""
             if [ "$1 $2" = "auth status" ]; then
-              if [ "$CLAUDE_CODE_OAUTH_TOKEN" = "test-private-token" ]; then printf '{"loggedIn":true}'; exit 0; fi
+              if [ "$CLAUDE_CODE_OAUTH_TOKEN" = "test-private-token" ] && [ "$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" = "1" ]; then printf '{"loggedIn":true}'; exit 0; fi
               printf '{"loggedIn":false}'; exit 1
             fi
             exit 0
             """);
         using var service = new DeviceCodeAuthService(fixture.Runtime);
+        Assert.Equal("unconfigured", (await service.GetStatusAsync("claude-cli")).State);
         await service.SaveClaudeTokenAsync("test-private-token", CancellationToken.None);
         var saved = File.ReadAllText(Path.Combine(fixture.Runtime.Profile("claude-cli"), "oauth-token.protected"));
         Assert.DoesNotContain("test-private-token", saved);
@@ -75,6 +76,7 @@ public sealed class AiAuthenticationTests
         Assert.Equal("authorized", (await service.GetStatusAsync("claude-cli")).State);
         await service.RevokeAuthAsync("claude-cli", CancellationToken.None);
         Assert.False(fixture.Runtime.HasClaudeToken);
+        Assert.Equal("unconfigured", (await service.GetStatusAsync("claude-cli")).State);
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveClaudeTokenAsync("bad-token", CancellationToken.None));
         Assert.False(fixture.Runtime.HasClaudeToken);
     }
@@ -85,7 +87,7 @@ public sealed class AiAuthenticationTests
         if (OperatingSystem.IsWindows()) return;
         using var fixture = new AiCliTestProfile("""
             if [ "$1" != "exec" ]; then exit 1; fi
-            if [ -z "$CODEX_HOME" ] || [ -n "$OPENAI_API_KEY" ]; then exit 2; fi
+            if [ -z "$CODEX_HOME" ] || [ "$HOME" != "$CODEX_HOME" ] || [ "$XDG_CONFIG_HOME" != "$CODEX_HOME" ] || [ -n "$OPENAI_API_KEY" ]; then exit 2; fi
             cat >/dev/null
             printf 'Real CLI test result'
             """);
