@@ -1,40 +1,33 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { ContextBannerComponent } from '../../../shared/ui/context-banner.component';
 
 @Component({
   selector: 'app-webhooks-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    ContextBannerComponent,
-    MatButtonModule,
-  ],
+  imports: [MatButtonModule],
   template: `
-    <app-context-banner
-      label="Intégrations multimédia"
-      title="Webhooks entrants et déclencheurs d’import (0032)"
-      description="Les plugins d’intégration (Sonarr, Radarr, Plex, Jellyfin) s’exécutent dans un bac à sable isolé. Leurs déclencheurs d’import reçoivent les événements via des webhooks sécurisés par secret dédié."
-    />
+    <div class="tab-header">
+      <div class="tab-titles">
+        <h2>Webhooks & Intégrations</h2>
+        <p>Points d’entrée pour les déclencheurs Sonarr/Radarr et collecte Prometheus.</p>
+      </div>
+    </div>
 
     <div class="webhooks-grid">
       <!-- Section Sonarr & Radarr -->
       <section class="webhook-card">
         <div class="card-header">
           <div class="header-titles">
-            <span class="card-eyebrow">Déclencheurs d’import</span>
-            <h2>Sonarr & Radarr</h2>
+            <span class="card-eyebrow">Import automatique</span>
+            <h3>Déclencheurs Sonarr & Radarr (0032)</h3>
           </div>
           <span class="status-badge">Actif</span>
         </div>
 
-        <p class="card-desc">
-          Lorsqu'un média est téléchargé ou importé par Sonarr ou Radarr, le service peut notifier Encoding pour démarrer automatiquement le flow associé à la bibliothèque.
-        </p>
-
         <div class="config-guide">
           <div class="guide-item">
-            <span class="guide-label">URL du Webhook pour Sonarr :</span>
+            <span class="guide-label">Webhook Sonarr</span>
             <div class="copy-box">
               <code>{{ baseUrl() }}/api/v1/integrations/sonarr/webhook</code>
               <button matButton="tonal" type="button" (click)="copyText(baseUrl() + '/api/v1/integrations/sonarr/webhook')">
@@ -44,7 +37,7 @@ import { ContextBannerComponent } from '../../../shared/ui/context-banner.compon
           </div>
 
           <div class="guide-item">
-            <span class="guide-label">URL du Webhook pour Radarr :</span>
+            <span class="guide-label">Webhook Radarr</span>
             <div class="copy-box">
               <code>{{ baseUrl() }}/api/v1/integrations/radarr/webhook</code>
               <button matButton="tonal" type="button" (click)="copyText(baseUrl() + '/api/v1/integrations/radarr/webhook')">
@@ -53,12 +46,9 @@ import { ContextBannerComponent } from '../../../shared/ui/context-banner.compon
             </div>
           </div>
 
-          <div class="guide-item">
-            <span class="guide-label">Authentification :</span>
-            <p class="guide-text">
-              Configurez le mot de passe dans Sonarr/Radarr correspondant au <code>webhookSecret</code> défini dans la configuration du plugin sur la page <strong>Plugins & Outils</strong>, ou passez l’en-tête HTTP <code>X-Encoding-Webhook-Secret</code>.
-            </p>
-          </div>
+          <p class="guide-text">
+            Configurez dans Sonarr/Radarr le mot de passe correspondant au <code>webhookSecret</code> défini dans le plugin, ou passez l’en-tête HTTP <code>X-Encoding-Webhook-Secret</code>.
+          </p>
         </div>
       </section>
 
@@ -66,19 +56,15 @@ import { ContextBannerComponent } from '../../../shared/ui/context-banner.compon
       <section class="webhook-card">
         <div class="card-header">
           <div class="header-titles">
-            <span class="card-eyebrow">Supervision</span>
-            <h2>Alertes Prometheus & Métriques</h2>
+            <span class="card-eyebrow">Observabilité</span>
+            <h3>Métriques Prometheus</h3>
           </div>
           <span class="status-badge">Prêt</span>
         </div>
 
-        <p class="card-desc">
-          Le cluster expose des métriques de performance et des règles d’alerte standardisées pour Prometheus et Alertmanager.
-        </p>
-
         <div class="config-guide">
           <div class="guide-item">
-            <span class="guide-label">Endpoint de métriques :</span>
+            <span class="guide-label">Endpoint de métriques</span>
             <div class="copy-box">
               <code>{{ baseUrl() }}/metrics</code>
               <button matButton="tonal" type="button" (click)="copyText(baseUrl() + '/metrics')">
@@ -87,12 +73,9 @@ import { ContextBannerComponent } from '../../../shared/ui/context-banner.compon
             </div>
           </div>
 
-          <div class="guide-item">
-            <span class="guide-label">Règles d'alerte cluster :</span>
-            <p class="guide-text">
-              Les règles d’alerte (perte de quorum consensus, saturation des workers, partitions de réseau) sont validées par <code>promtool</code> et documentées dans <code>docs/operations/peer-cluster-alerts.yml</code>.
-            </p>
-          </div>
+          <p class="guide-text">
+            Règles d’alerte cluster documentées dans <code>docs/operations/peer-cluster-alerts.yml</code>.
+          </p>
         </div>
       </section>
     </div>
@@ -100,16 +83,32 @@ import { ContextBannerComponent } from '../../../shared/ui/context-banner.compon
   styles: `
     :host {
       display: grid;
-      gap: var(--space-4);
+      gap: var(--space-3);
+    }
+
+    .tab-header {
+      padding: var(--space-2) 0;
+    }
+
+    .tab-titles h2 {
+      margin: 0;
+      font-size: var(--font-title);
+      color: var(--text-primary);
+    }
+
+    .tab-titles p {
+      margin: var(--space-1) 0 0 0;
+      font-size: var(--font-body-sm);
+      color: var(--text-secondary);
     }
 
     .webhooks-grid {
       display: grid;
-      gap: var(--space-4);
+      gap: var(--space-3);
     }
 
     .webhook-card {
-      padding: var(--space-5);
+      padding: var(--space-4);
       border-radius: var(--radius-xl);
       background: var(--surface-container);
       display: grid;
@@ -131,9 +130,10 @@ import { ContextBannerComponent } from '../../../shared/ui/context-banner.compon
       gap: var(--space-2);
     }
 
-    .card-header h2 {
+    .card-header h3 {
       margin: 0;
-      font-size: var(--font-title);
+      font-size: var(--font-body);
+      font-weight: 600;
       color: var(--text-primary);
     }
 
@@ -146,17 +146,9 @@ import { ContextBannerComponent } from '../../../shared/ui/context-banner.compon
       font-weight: 600;
     }
 
-    .card-desc {
-      margin: 0;
-      font-size: var(--font-body-sm);
-      color: var(--text-secondary);
-      line-height: 1.4;
-    }
-
     .config-guide {
       display: grid;
       gap: var(--space-3);
-      margin-top: var(--space-2);
     }
 
     .guide-item {

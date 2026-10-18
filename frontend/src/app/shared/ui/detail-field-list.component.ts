@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, TemplateRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal, TemplateRef } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatTabsModule } from '@angular/material/tabs';
 
@@ -6,6 +6,8 @@ export interface DetailField {
   readonly section?: string;
   readonly label: string;
   readonly value: string | number | boolean;
+  readonly copiable?: boolean;
+  readonly copyValue?: string;
 }
 
 @Component({
@@ -24,7 +26,27 @@ export interface DetailField {
                 @for (field of section.fields; track field.label) {
                   <div>
                     <dt>{{ field.label }}</dt>
-                    <dd>{{ field.value }}</dd>
+                    <dd class="detail-value-wrapper">
+                      <span>{{ field.value }}</span>
+                      @if (field.copiable) {
+                        <button
+                          type="button"
+                          class="detail-copy-button"
+                          [attr.aria-label]="'Copier ' + field.label"
+                          (click)="copyToClipboard(fieldCopyValue(field))"
+                        >
+                          <svg viewBox="0 0 24 24" class="copy-icon" aria-hidden="true">
+                            <path
+                              fill="currentColor"
+                              d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+                            />
+                          </svg>
+                          @if (copiedField() === fieldCopyValue(field)) {
+                            <span class="copy-feedback">Copié</span>
+                          }
+                        </button>
+                      }
+                    </dd>
                   </div>
                 }
               </dl>
@@ -46,7 +68,27 @@ export interface DetailField {
             @for (field of section.fields; track field.label) {
               <div>
                 <dt>{{ field.label }}</dt>
-                <dd>{{ field.value }}</dd>
+                <dd class="detail-value-wrapper">
+                  <span>{{ field.value }}</span>
+                  @if (field.copiable) {
+                    <button
+                      type="button"
+                      class="detail-copy-button"
+                      [attr.aria-label]="'Copier ' + field.label"
+                      (click)="copyToClipboard(fieldCopyValue(field))"
+                    >
+                      <svg viewBox="0 0 24 24" class="copy-icon" aria-hidden="true">
+                        <path
+                          fill="currentColor"
+                          d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+                        />
+                      </svg>
+                      @if (copiedField() === fieldCopyValue(field)) {
+                        <span class="copy-feedback">Copié</span>
+                      }
+                    </button>
+                  }
+                </dd>
               </div>
             }
           </section>
@@ -160,6 +202,44 @@ export interface DetailField {
       overflow-wrap: anywhere;
       white-space: pre-line;
     }
+
+    .detail-value-wrapper {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .detail-copy-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 6px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-container-low);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 1;
+      transition: all 0.15s ease-in-out;
+
+      &:hover {
+        background: var(--surface-container);
+        color: var(--text-primary);
+        border-color: var(--border-default);
+      }
+    }
+
+    .copy-icon {
+      width: 14px;
+      height: 14px;
+    }
+
+    .copy-feedback {
+      font-weight: 600;
+      color: var(--color-success, #10b981);
+    }
   `,
 })
 export class DetailFieldListComponent {
@@ -168,6 +248,25 @@ export class DetailFieldListComponent {
   readonly tabbed = input(false);
   readonly tabsLabel = input('Sections du détail');
   readonly sectionTemplates = input<Readonly<Record<string, TemplateRef<unknown>>>>({});
+
+  protected readonly copiedField = signal<string | null>(null);
+
+  protected fieldCopyValue(field: DetailField): string {
+    return field.copyValue ?? String(field.value);
+  }
+
+  protected copyToClipboard(val: string): void {
+    if (!val || val === '—') return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(val);
+    }
+    this.copiedField.set(val);
+    setTimeout(() => {
+      if (this.copiedField() === val) {
+        this.copiedField.set(null);
+      }
+    }, 2000);
+  }
 
   protected readonly sections = computed(() => {
     const sections = new Map<string, DetailField[]>();

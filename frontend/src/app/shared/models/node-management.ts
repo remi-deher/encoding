@@ -571,6 +571,7 @@ export function clusterJoinSteps(data: JoinPresentation): readonly GuidedStep[] 
 export interface ReconciliationBannerPresentation {
   readonly title: string;
   readonly description: string;
+  readonly isAlert: boolean;
 }
 
 export function reconciliationBannerPresentation(
@@ -582,6 +583,7 @@ export function reconciliationBannerPresentation(
     return {
       title: 'État de synchronisation indisponible',
       description: 'Impossible de lire l’état du maillage entre les serveurs.',
+      isAlert: true,
     };
   }
   if (!status.enabled) {
@@ -589,6 +591,7 @@ export function reconciliationBannerPresentation(
       title: 'Synchronisation entre serveurs inactive',
       description:
         `${status.disabledReason ?? 'Le rattachement du serveur au cluster n’est pas terminé.'} Sans ce maillage, chaque serveur ne voit que ses données locales.`,
+      isAlert: true,
     };
   }
   const peers = status.peers.filter((peer) => peer.configured || peer.discovered);
@@ -598,12 +601,13 @@ export function reconciliationBannerPresentation(
         title: 'Serveur unique',
         description:
           'Ce cluster ne comporte qu’un seul serveur : les données sont conservées localement. La synchronisation maillée s’activera automatiquement dès qu’un second serveur rejoindra le cluster.',
+        isAlert: false,
       };
     }
     const detail = status.discoveryAvailable
       ? 'Aucun pair n’a été découvert. Vérifiez que mDNS est autorisé entre les serveurs ou configurez Cluster:Reconciliation:Peers__0 avec une adresse joignable.'
       : `La découverte mDNS est indisponible${status.discoveryError ? ` (${status.discoveryError})` : ''}. Configurez Cluster:Reconciliation:Peers__0 avec une adresse joignable.`;
-    return { title: 'Aucun serveur pair détecté', description: detail };
+    return { title: 'Aucun serveur pair détecté', description: detail, isAlert: true };
   }
   const failed = peers.filter((peer) => peer.lastError);
   if (failed.length) {
@@ -613,6 +617,7 @@ export function reconciliationBannerPresentation(
       description: firstError
         ? `${failed[0].url} — ${firstError}`
         : 'Vérifiez que les serveurs sont approuvés dans le cluster et peuvent communiquer.',
+      isAlert: true,
     };
   }
   const pending = peers.filter((peer) => !peer.lastSuccessAt).length;
@@ -620,10 +625,12 @@ export function reconciliationBannerPresentation(
     return {
       title: 'Serveur(s) détecté(s), premier échange en attente',
       description: `${pending} pair(s) n’a pas encore confirmé de réconciliation. Vérifiez sa disponibilité réseau et son admission au cluster.`,
+      isAlert: true,
     };
   }
   return {
     title: `Synchronisation active avec ${peers.length} serveur(s)`,
     description: `Dernier échange réussi : ${new Date(Math.max(...peers.map((peer) => Date.parse(peer.lastSuccessAt!)))).toLocaleString()}.`,
+    isAlert: false,
   };
 }

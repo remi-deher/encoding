@@ -45,7 +45,6 @@ interface PackRow extends DataTableRow {
       searchLabel="Rechercher un pack"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
-      note="Un pack est un fragment copié depuis une version publiée. Dans un flow, ses composants peuvent être dépliés et modifiés indépendamment du pack source."
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
       [detailOpen]="selectedPack() !== null"
@@ -55,7 +54,7 @@ interface PackRow extends DataTableRow {
     >
       <app-category-tabs
         catalogue-navigation
-        label="Type de librairie"
+        label="Ressources"
         [options]="librarySections"
         selected="packs"
         (selectedChange)="onSectionChanged($event)"
@@ -90,11 +89,11 @@ export class ComponentPackLibraryPageComponent {
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Librairies');
+  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Packs de composants');
   protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Médias' },
+    { value: 'media', label: 'Bibliothèques' },
     { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles' },
+    { value: 'templates', label: 'Modèles de flow' },
     { value: 'packs', label: 'Packs de composants' },
     { value: 'encoding', label: 'Profils d’encodage' },
   ];

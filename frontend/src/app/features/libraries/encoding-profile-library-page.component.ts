@@ -65,7 +65,6 @@ interface EncoderGroup {
       searchLabel="Rechercher un profil"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
-      note="Un profil associe chaque encodeur à sa propre cible de qualité. Le mode automatique choisit le premier encodeur compatible avec les capacités du worker."
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
       [actionOpen]="editorOpen()"
@@ -78,7 +77,7 @@ interface EncoderGroup {
       </ng-template>
       <app-category-tabs
         catalogue-navigation
-        label="Type de librairie"
+        label="Ressources"
         [options]="librarySections"
         selected="encoding"
         (selectedChange)="onSectionChanged($event)"
@@ -322,11 +321,11 @@ export class EncodingProfileLibraryPageComponent {
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Librairies');
+  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Profils d’encodage');
   protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Médias' },
+    { value: 'media', label: 'Bibliothèques' },
     { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles' },
+    { value: 'templates', label: 'Modèles de flow' },
     { value: 'packs', label: 'Packs de composants' },
     { value: 'encoding', label: 'Profils d’encodage' },
   ];

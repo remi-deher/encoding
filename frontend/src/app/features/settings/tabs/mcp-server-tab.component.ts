@@ -16,7 +16,6 @@ import { ApiTokenResponse } from '../../../shared/models/api-token';
 import { McpToolDefinition } from '../../../shared/models/mcp';
 import { McpService } from '../../../shared/services/mcp.service';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { ContextBannerComponent } from '../../../shared/ui/context-banner.component';
 
 type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 
@@ -24,7 +23,6 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
   selector: 'app-mcp-server-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    ContextBannerComponent,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
@@ -32,29 +30,29 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
     MatTooltipModule,
   ],
   template: `
-    <app-context-banner
-      label="Model Context Protocol"
-      title="Serveur MCP intégré (0061)"
-      description="Connectez n’importe quel assistant IA (Antigravity, Claude Desktop, Cursor) en HTTP/SSE ou stdio sans installer d’autre conteneur. L’IA peut inspecter, créer et piloter vos flows selon vos droits."
-    >
-      <div banner-actions class="banner-actions-row">
+    <div class="tab-header">
+      <div class="tab-titles">
+        <h2>Serveur MCP</h2>
+        <p>Connexion JSON-RPC standard pour Claude Desktop, Cursor, Antigravity ou CLI.</p>
+      </div>
+      <div class="tab-actions">
         <span class="mcp-status-pill" [class.is-online]="isOnline()">
           <span class="status-dot"></span>
-          {{ isOnline() ? 'Serveur MCP actif' : 'Vérification…' }}
+          {{ isOnline() ? 'Actif' : 'Hors ligne' }}
         </span>
         <button matButton="tonal" type="button" [disabled]="testing()" (click)="pingServer()">
-          {{ testing() ? 'Test en cours…' : 'Tester la connexion' }}
+          {{ testing() ? 'Test en cours…' : 'Tester' }}
         </button>
       </div>
-    </app-context-banner>
+    </div>
 
     <div class="mcp-grid">
-      <!-- Section 1 : Générateur de configuration -->
+      <!-- Section 1 : Configuration du client -->
       <section class="mcp-card config-generator-card">
         <div class="card-header">
           <div class="header-titles">
-            <span class="card-eyebrow">Connexion 1-clic</span>
-            <h2>Configuration pour votre client IA</h2>
+            <span class="card-eyebrow">Connexion</span>
+            <h3>Configuration client</h3>
           </div>
           <div class="client-tabs" role="tablist" aria-label="Clients MCP">
             <button
@@ -87,7 +85,7 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
               [class.is-active]="selectedClient() === 'stdio'"
               (click)="selectedClient.set('stdio')"
             >
-              Ligne de commande (stdio)
+              Stdio (CLI)
             </button>
           </div>
         </div>
@@ -95,12 +93,12 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
         <div class="card-body">
           <div class="token-selector-row">
             <mat-form-field appearance="outline" subscriptSizing="dynamic" class="token-field">
-              <mat-label>Jeton d’authentification inséré dans la config</mat-label>
+              <mat-label>Jeton inséré dans le snippet</mat-label>
               <mat-select
                 [value]="selectedTokenPrefix()"
                 (selectionChange)="selectedTokenPrefix.set($event.value)"
               >
-                <mat-option value="">-- Jeton fictif (à remplacer après copie) --</mat-option>
+                <mat-option value="">-- Jeton fictif (à remplacer) --</mat-option>
                 @for (token of availableTokens(); track token.id) {
                   <mat-option [value]="token.tokenPrefix">
                     {{ token.name }} ({{ token.tokenPrefix }}… · {{ token.role }})
@@ -119,20 +117,20 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
           </div>
 
           <p class="config-instructions">
-            <strong>Emplacement :</strong> {{ clientInstructions() }}
+            <strong>Fichier cible :</strong> {{ clientInstructions() }}
           </p>
         </div>
       </section>
 
-      <!-- Section 2 : Catalogue des outils disponibles -->
+      <!-- Section 2 : Outils exposés -->
       <section class="mcp-card tools-catalog-card">
         <div class="card-header">
           <div class="header-titles">
-            <span class="card-eyebrow">Outils exposés</span>
-            <h2>Outils MCP disponibles ({{ tools().length }})</h2>
+            <span class="card-eyebrow">Catalogue</span>
+            <h3>Outils disponibles ({{ tools().length }})</h3>
           </div>
           <mat-form-field appearance="outline" subscriptSizing="dynamic" class="tool-search-field">
-            <mat-label>Filtrer les outils</mat-label>
+            <mat-label>Filtrer</mat-label>
             <input
               matInput
               type="search"
@@ -176,7 +174,7 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
               }
             </article>
           } @empty {
-            <p class="empty-tools">Aucun outil ne correspond à votre recherche.</p>
+            <p class="empty-tools">Aucun outil ne correspond.</p>
           }
         </div>
       </section>
@@ -185,13 +183,34 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
   styles: `
     :host {
       display: grid;
-      gap: var(--space-4);
+      gap: var(--space-3);
     }
 
-    .banner-actions-row {
+    .tab-header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
       gap: var(--space-3);
+      padding: var(--space-2) 0;
+    }
+
+    .tab-titles h2 {
+      margin: 0;
+      font-size: var(--font-title);
+      color: var(--text-primary);
+    }
+
+    .tab-titles p {
+      margin: var(--space-1) 0 0 0;
+      font-size: var(--font-body-sm);
+      color: var(--text-secondary);
+    }
+
+    .tab-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
     }
 
     .mcp-status-pill {
@@ -224,11 +243,11 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
     }
 
     .mcp-card {
-      padding: var(--space-5);
+      padding: var(--space-4);
       border-radius: var(--radius-xl);
       background: var(--surface-container);
       display: grid;
-      gap: var(--space-4);
+      gap: var(--space-3);
     }
 
     .card-header {
@@ -247,9 +266,10 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
       font-weight: 700;
     }
 
-    .card-header h2 {
+    .card-header h3 {
       margin: 0;
-      font-size: var(--font-title);
+      font-size: var(--font-body);
+      font-weight: 600;
       color: var(--text-primary);
     }
 
@@ -260,7 +280,7 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
     }
 
     .client-tab-btn {
-      padding: var(--space-2) var(--space-3);
+      padding: var(--space-1) var(--space-3);
       border-radius: var(--radius-pill);
       border: 1px solid transparent;
       background: var(--surface-container-high);
@@ -287,19 +307,19 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
       justify-content: space-between;
       flex-wrap: wrap;
       gap: var(--space-3);
-      margin-bottom: var(--space-3);
+      margin-bottom: var(--space-2);
     }
 
     .token-field {
       flex: 1;
-      min-width: 280px;
+      min-width: 260px;
     }
 
     .snippet-container {
       border-radius: var(--radius-lg);
       background: var(--surface-container-lowest);
       border: 1px solid var(--outline-variant);
-      padding: var(--space-3) var(--space-4);
+      padding: var(--space-3);
       overflow-x: auto;
     }
 
@@ -313,21 +333,21 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 
     .config-instructions {
       margin: var(--space-2) 0 0 0;
-      font-size: var(--font-body-sm);
+      font-size: var(--font-label);
       color: var(--text-secondary);
     }
 
     .tools-list {
       display: grid;
-      gap: var(--space-3);
+      gap: var(--space-2);
     }
 
     .tool-item {
-      padding: var(--space-4);
+      padding: var(--space-3);
       border-radius: var(--radius-lg);
       background: var(--surface-container-high);
       display: grid;
-      gap: var(--space-2);
+      gap: var(--space-1);
     }
 
     .tool-item-header {
@@ -350,14 +370,14 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
     .tool-name {
       font-family: ui-monospace, 'JetBrains Mono', monospace;
       font-weight: 700;
-      font-size: var(--font-body);
+      font-size: var(--font-body-sm);
       color: var(--text-primary);
     }
 
     .role-badge {
       padding: 2px 8px;
       border-radius: var(--radius-pill);
-      font-size: var(--font-label);
+      font-size: 11px;
       font-weight: 600;
     }
 
@@ -375,28 +395,28 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
       margin: 0;
       font-size: var(--font-body-sm);
       color: var(--text-secondary);
-      line-height: 1.4;
+      line-height: 1.35;
     }
 
     .tool-props {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: var(--space-2);
-      margin-top: var(--space-1);
+      gap: var(--space-1);
+      margin-top: 2px;
     }
 
     .props-label {
-      font-size: var(--font-label);
+      font-size: 11px;
       font-weight: 600;
       color: var(--text-secondary);
     }
 
     .prop-chip {
-      padding: 1px 6px;
+      padding: 1px 5px;
       border-radius: var(--radius-sm);
       background: var(--surface-container-highest);
-      font-size: var(--font-label);
+      font-size: 11px;
       font-family: ui-monospace, monospace;
       color: var(--text-primary);
     }
@@ -407,13 +427,14 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 
     .prop-type {
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: 10px;
     }
 
     .empty-tools {
       text-align: center;
       color: var(--text-secondary);
-      padding: var(--space-4);
+      padding: var(--space-3);
+      font-size: var(--font-body-sm);
     }
   `,
 })
@@ -446,7 +467,7 @@ export class McpServerTabComponent {
 
   protected readonly effectiveToken = computed(() => {
     const prefix = this.selectedTokenPrefix();
-    return prefix ? `${prefix}<secret_complet>` : 'enc_pat_<votre_jeton_ici>';
+    return prefix ? `${prefix}<secret>` : 'enc_pat_<votre_jeton>';
   });
 
   protected readonly serverBaseUrl = computed(() => {
@@ -509,20 +530,20 @@ export class McpServerTabComponent {
         );
 
       case 'stdio':
-        return `# Exécution en ligne de commande locale ou Docker :\ndocker exec -i encoding-server dotnet /app/api/Encoding.Api.dll mcp \\\n  --url "${baseUrl}" \\\n  --token "${token}"`;
+        return `docker exec -i encoding-server dotnet /app/api/Encoding.Api.dll mcp \\\n  --url "${baseUrl}" \\\n  --token "${token}"`;
     }
   });
 
   protected readonly clientInstructions = computed(() => {
     switch (this.selectedClient()) {
       case 'claude':
-        return 'Collez ce bloc dans claude_desktop_config.json (%APPDATA%\\Claude\\ ou ~/Library/Application Support/Claude/).';
+        return 'claude_desktop_config.json (%APPDATA%\\Claude\\ ou ~/Library/Application Support/Claude/).';
       case 'cursor':
-        return 'Collez ce bloc dans votre fichier .cursor/mcp.json ou dans les paramètres Features > MCP de Cursor.';
+        return '.cursor/mcp.json ou paramètres Features > MCP de Cursor.';
       case 'antigravity':
-        return 'Déclarez ce serveur dans votre configuration antigravity mcp_servers ou connectez-le au sidecar.';
+        return 'Configuration Antigravity mcp_servers ou sidecar.';
       case 'stdio':
-        return 'À exécuter dans un terminal ayant accès au conteneur Docker Encoding.';
+        return 'Ligne de commande terminal.';
     }
   });
 

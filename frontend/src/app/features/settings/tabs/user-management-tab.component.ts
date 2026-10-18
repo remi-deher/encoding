@@ -15,7 +15,6 @@ import {
 } from '../../../shared/models/auth';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { UserAccounts } from '../../../shared/services/user-accounts';
-import { ContextBannerComponent } from '../../../shared/ui/context-banner.component';
 import {
   DataTableActionEvent,
   DataTableColumn,
@@ -40,23 +39,20 @@ interface UserRow extends DataTableRow {
   selector: 'app-user-management-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    ContextBannerComponent,
     DataTableComponent,
     MatButtonModule,
     RecordFormComponent,
   ],
   template: `
-    <app-context-banner
-      label="Sécurité et authentification"
-      title="Comptes utilisateurs et rôles"
-      description="Un administrateur gère le cluster. Le rôle lecture seule consulte sans rien modifier. Les sessions d’un compte désactivé ou supprimé sont fermées immédiatement."
-    >
-      <div banner-actions>
-        <button matButton="filled" type="button" (click)="newUser()">
-          Nouvel utilisateur
-        </button>
+    <div class="tab-header">
+      <div class="tab-titles">
+        <h2>Comptes utilisateurs</h2>
+        <p>Gérez les identifiants locaux et les rôles d’administration du cluster.</p>
       </div>
-    </app-context-banner>
+      <button matButton="filled" type="button" (click)="newUser()">
+        Nouvel utilisateur
+      </button>
+    </div>
 
     <app-data-table
       layout="resources"
@@ -82,7 +78,28 @@ interface UserRow extends DataTableRow {
   styles: `
     :host {
       display: grid;
-      gap: var(--space-4);
+      gap: var(--space-3);
+    }
+
+    .tab-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      padding: var(--space-2) 0;
+    }
+
+    .tab-titles h2 {
+      margin: 0;
+      font-size: var(--font-title);
+      color: var(--text-primary);
+    }
+
+    .tab-titles p {
+      margin: var(--space-1) 0 0 0;
+      font-size: var(--font-body-sm);
+      color: var(--text-secondary);
     }
 
     .user-form-drawer {
