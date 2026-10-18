@@ -429,7 +429,8 @@
   align-items: center;
 }
 
-.resource-row-favicon {
+.resource-row-favicon,
+.table-row-favicon {
   width: 24px;
   height: 24px;
   margin-inline-end: var(--space-2);
@@ -441,11 +442,7 @@
 .table-row-favicon {
   width: 20px;
   height: 20px;
-  margin-inline-end: var(--space-2);
-  border-radius: var(--radius-sm, 4px);
   vertical-align: middle;
-  flex-shrink: 0;
-  object-fit: contain;
 }
 
 .data-card-fields {
