@@ -20,6 +20,7 @@ using DotNext.Net.Cluster.Consensus.Raft.Http;
 using DotNext.Net.Cluster.Consensus.Raft;
 using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 using Encoding.Api.Mcp;
+using Encoding.Api.Tools;
 
 if (args.FirstOrDefault() is McpCommand.Name or "--" + McpCommand.Name)
     Environment.Exit(await McpCommand.RunAsync(args[1..], Console.In, Console.Out, CancellationToken.None));
@@ -71,6 +72,7 @@ builder.Services.AddSingleton<PluginConnectionTester>();
 builder.Services.AddSingleton<McpService>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();
 builder.Services.AddSingleton<IntegrationTriggerService>();
+builder.Services.AddSingleton<DeviceCodeAuthService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<IntegrationTriggerService>());
 builder.Services.AddTransient<LocalAgentAuthenticationHandler>();
 builder.Services.AddHttpClient(Encoding.Api.Nodes.LocalNodeEndpoints.HttpClientName, (services, client) =>
@@ -213,6 +215,7 @@ app.MapLocalNodeEndpoints();
 app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
 app.MapMcpEndpoints();
+app.MapAiToolEndpoints();
 app.MapOpenApiEndpoints();
 
 app.MapFallbackToFile("index.html").AllowAnonymous();

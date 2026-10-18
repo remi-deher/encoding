@@ -13,7 +13,7 @@ internal static class ScriptTools
     public const string CapabilityVersion = "1";
 
     /// <summary>Outils appelables par nom. Identiques pour JavaScript et Python.</summary>
-    public static readonly string[] AllowedTools = ["ffmpeg", "ffprobe", "mkvmerge", "mkvextract", "mkvpropedit", "mediainfo", "magick"];
+    public static readonly string[] AllowedTools = ["ffmpeg", "ffprobe", "mkvmerge", "mkvextract", "mkvpropedit", "mediainfo", "magick", "codex", "claude"];
 
     /// <summary>Durée maximale par défaut d'une commande, en secondes ; la durée du script reste bornée par timeoutSeconds.</summary>
     public const int DefaultToolTimeoutSeconds = 21600;
