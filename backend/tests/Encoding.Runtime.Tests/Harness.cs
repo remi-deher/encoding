@@ -1,4 +1,5 @@
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Infrastructure.PeerCluster;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Net.Http.Json;
