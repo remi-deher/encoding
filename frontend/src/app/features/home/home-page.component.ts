@@ -2,9 +2,8 @@ import {
   ExecutionTracking,
   INITIAL_EXECUTION_TRACKING,
 } from '../../shared/services/execution-tracking';
-import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
+import { HomeExecutions, INITIAL_HOME_EXECUTIONS } from './home-executions';
 import { DatePipe } from '@angular/common';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
 import {
@@ -15,7 +14,12 @@ import {
 } from '../../shared/models/cluster-health';
 import { HealthBannerComponent } from '../../shared/ui/health-banner.component';
 import { MatrixCell, MatrixTableComponent } from '../../shared/ui/matrix-table.component';
-import { formatNodeLabel, NodeResponse, NodeRole, NODE_ROLE_LABELS } from '../../shared/models/cluster';
+import {
+  formatNodeLabel,
+  NodeResponse,
+  NodeRole,
+  NODE_ROLE_LABELS,
+} from '../../shared/models/cluster';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -29,24 +33,22 @@ import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { Router, RouterLink } from '@angular/router';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
-import { MetricCardComponent } from '../../shared/ui/metric-card.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
-import { ExecutionCardComponent } from '../../shared/ui/execution-card.component';
+import { OverviewExecutionComponent } from './components/overview-execution.component';
 
 @Component({
   selector: 'app-home-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [HomeExecutions],
   imports: [
     MatButtonModule,
-    MatProgressBarModule,
     DatePipe,
     DetailDrawerComponent,
-    ExecutionCardComponent,
+    OverviewExecutionComponent,
     HealthBannerComponent,
     MatrixTableComponent,
-    MetricCardComponent,
     NgTemplateOutlet,
     PageHeaderComponent,
     RecordFormComponent,
@@ -92,52 +94,25 @@ export class HomePageComponent {
   protected readonly executionState = toSignal(this.executionTracking.state$, {
     initialValue: INITIAL_EXECUTION_TRACKING,
   });
-  protected readonly executionLabels = EXECUTION_STATE_LABELS;
-  protected readonly activeTasks = computed(
-    () =>
-      this.executionState().data?.executions?.filter(
-        (e) => e.state === 'running' || e.state === 'cancelling',
-      ) ?? [],
+  private readonly homeExecutions = inject(HomeExecutions);
+  protected readonly homeExecutionState = toSignal(this.homeExecutions.state$, {
+    initialValue: INITIAL_HOME_EXECUTIONS,
+  });
+  protected readonly activePreview = computed(() => this.homeExecutionState().active);
+  protected readonly publications = computed(() => this.homeExecutionState().publications);
+  protected readonly remainingActive = computed(() =>
+    Math.max(0, (this.executionState().data?.activeCount ?? 0) - this.activePreview().length),
   );
-  protected readonly recentExecutions = computed(() => {
-    const executions = this.executionState().data?.executions ?? [];
-    return executions
-      .slice()
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .slice(0, 5);
-  });
-  private readonly executionMetrics = computed(() => {
-    const data = this.executionState().data;
-    return [
-      {
-        label: 'Exécutions en cours',
-        value: data ? String(data.activeCount) : '—',
-        detail: this.standalone()
-          ? 'Traitements enregistrés sur ce nœud'
-          : 'Traitements enregistrés dans le cluster',
-      },
-      {
-        label: 'Dans la file',
-        value: data ? String(data.queuedCount) : '—',
-        detail: 'Exécutions en attente',
-      },
-      {
-        label: 'Terminées avec succès',
-        value: data ? String(data.succeededCount) : '—',
-        detail: 'Exécutions publiées',
-      },
-      {
-        label: 'En échec',
-        value: data ? String(data.failedCount) : '—',
-        detail: 'Exécutions à examiner',
-      },
-      {
-        label: 'En attente de reprise',
-        value: data?.deferredCount === undefined ? '—' : String(data.deferredCount),
-        detail: 'Exécutions suspendues',
-      },
-    ];
-  });
+  protected readonly failedCount = computed(() => this.executionState().data?.failedCount ?? 0);
+  protected readonly deferredCount = computed(
+    () => this.executionState().data?.deferredCount ?? null,
+  );
+  protected readonly count = (value: number | null | undefined): string =>
+    value == null ? '—' : String(value);
+  protected readonly formatNodeLabel = formatNodeLabel;
+  protected readonly clusterName = computed(
+    () => this.state().snapshot?.identity.name ?? 'Installation',
+  );
   private readonly overview = inject(ClusterOverview);
   protected readonly state = toSignal(this.overview.state$, {
     initialValue: INITIAL_CLUSTER_OVERVIEW,
@@ -147,50 +122,35 @@ export class HomePageComponent {
   );
   protected readonly observedAt = computed(() => this.state().snapshot?.observedAt ?? null);
   protected readonly metrics = computed(() => {
+    const data = this.executionState().data;
     const snapshot = this.state().snapshot;
-    if (!snapshot)
-      return [
-        { label: 'État de l’installation', value: '—', detail: 'Données indisponibles' },
-        { label: 'Worker local', value: '—', detail: 'Données indisponibles' },
-        { label: 'Bibliothèques configurées', value: '—', detail: 'Données indisponibles' },
-        ...this.executionMetrics(),
-      ];
-    const online = snapshot.nodes.filter((n) => n.status === 'online');
-    const workers = snapshot.nodes.filter((n) => n.roles.includes('worker'));
-    const onlineWorkers = online.filter((n) => n.roles.includes('worker'));
-    const standalone = snapshot.identity.standalone;
     return [
       {
-        label: standalone ? 'Ce nœud' : 'Nœuds en ligne',
-        value: standalone
-          ? online.length > 0
-            ? 'En ligne'
-            : 'Hors ligne'
-          : online.length + ' / ' + snapshot.nodes.length,
-        detail: standalone
-          ? (snapshot.nodes[0] ? formatNodeLabel(snapshot.nodes[0].name, snapshot.nodes[0].displayName) : 'État local')
-          : snapshot.nodes.length - online.length + ' hors ligne',
+        label: 'En cours',
+        value: this.count(data?.activeCount),
+        detail: 'Traitements en cours d’exécution',
+        view: 'active',
       },
       {
-        label: standalone ? 'Worker local' : 'Workers en ligne',
-        value: standalone
-          ? workers.length === 0
-            ? 'Non configuré'
-            : onlineWorkers.length > 0
-              ? 'En ligne'
-              : 'Hors ligne'
-          : onlineWorkers.length + ' / ' + workers.length,
-        detail: standalone
-          ? 'Fonction de traitement sur cette installation'
-          : 'Présence observée, disponibilité de traitement non mesurée',
+        label: 'En attente',
+        value: this.count(data?.queuedCount),
+        detail: 'Dans la file de traitement',
+        view: 'queue',
+      },
+      {
+        label: 'Terminés',
+        value: this.count(data?.succeededCount),
+        detail: 'Total des exécutions réussies',
+        view: 'history',
       },
       {
         label: 'Bibliothèques actives',
-        value:
-          snapshot.libraries.filter((l) => l.isActive).length + ' / ' + snapshot.libraries.length,
-        detail: standalone ? 'Configuration locale' : 'Configuration enregistrée dans le cluster',
+        value: snapshot
+          ? snapshot.libraries.filter((l) => l.isActive).length + ' / ' + snapshot.libraries.length
+          : '—',
+        detail: 'Bibliothèques configurées',
+        view: null,
       },
-      ...this.executionMetrics(),
     ];
   });
   protected readonly nodes = computed(() => this.state().snapshot?.nodes ?? []);
@@ -206,7 +166,10 @@ export class HomePageComponent {
       : null;
   });
   protected readonly matrixRows = computed(() =>
-    this.nodes().map((node) => ({ id: node.id, label: formatNodeLabel(node.name, node.displayName) })),
+    this.nodes().map((node) => ({
+      id: node.id,
+      label: formatNodeLabel(node.name, node.displayName),
+    })),
   );
   protected readonly matrixColumns = computed(() =>
     (this.state().snapshot?.libraries ?? []).map((library) => ({
@@ -239,5 +202,6 @@ export class HomePageComponent {
   protected refresh(): void {
     this.overview.refresh();
     this.executionTracking.refresh();
+    this.homeExecutions.refresh();
   }
 }
