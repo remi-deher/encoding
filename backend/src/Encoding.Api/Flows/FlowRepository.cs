@@ -15,12 +15,12 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
         await using var command = dataSource.CreateCommand("""
             SELECT f.id,COALESCE(d.definition,v.definition)->>'name',COALESCE(d.definition,v.definition)->>'mediaType',f.current_version,
                    jsonb_array_length(COALESCE(d.definition,v.definition)->'nodes'),CASE WHEN d.flow_id IS NOT NULL THEN COALESCE(db.status,'pending') ELSE COALESCE(b.status,'pending') END,
-                   GREATEST(f.updated_at,d.updated_at),d.flow_id IS NOT NULL
+                   GREATEST(f.updated_at,COALESCE(d.updated_at,f.updated_at)),d.flow_id IS NOT NULL
             FROM flows f LEFT JOIN flow_versions v ON v.flow_id=f.id AND v.version=f.current_version
             LEFT JOIN flow_drafts d ON d.flow_id=f.id LEFT JOIN flow_draft_backups db ON db.flow_id=d.flow_id AND db.revision=d.revision
             LEFT JOIN flow_backup_jobs b ON b.flow_id=v.flow_id AND b.version=v.version
             WHERE f.deleted_at IS NULL AND (d.flow_id IS NOT NULL OR v.flow_id IS NOT NULL)
-            ORDER BY GREATEST(f.updated_at,d.updated_at) DESC,f.id
+            ORDER BY GREATEST(f.updated_at,COALESCE(d.updated_at,f.updated_at)) DESC,f.id
             """);
         await using var reader = await command.ExecuteReaderAsync(ct);
         var result = new List<FlowSummary>();
