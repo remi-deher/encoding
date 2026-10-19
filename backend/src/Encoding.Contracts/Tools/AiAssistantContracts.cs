@@ -78,7 +78,14 @@ public sealed record AiAssistantMessageResponse(
     string? Content,
     string? ErrorMessage,
     IReadOnlyList<AiAssistantSource> Sources, AiTurnModelSelection? Selection = null,
-    string? ActualModel = null, Guid? ExecutorNodeId = null);
+    string? ActualModel = null, Guid? ExecutorNodeId = null,
+    AiAssistantActionProposal? ActionProposal = null);
+
+public sealed record AiAssistantActionProposal(
+    string Action,
+    string ConfirmationToken,
+    string Summary,
+    DateTimeOffset ExpiresAt);
 
 public sealed record AiAssistantActivity(
     Guid RequestId,
@@ -90,7 +97,9 @@ public sealed record AiAssistantActivity(
     long? DurationMilliseconds,
     string? ErrorCategory,
     string Operation = "assistant",
-    IReadOnlyList<string>? Tools = null);
+    IReadOnlyList<string>? Tools = null,
+    string? Progress = null,
+    string? ProgressDetail = null);
 
 // Only exchanged over the authenticated, encrypted peer transport; never accepted from a public HTTP body.
 public sealed record AiAssistantForwardRequest(AiAssistantMessageRequest Request, Guid OwnerId, bool IsAdmin);
