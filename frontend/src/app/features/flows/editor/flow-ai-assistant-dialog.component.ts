@@ -18,6 +18,7 @@ import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { FlowDocument } from '../../../shared/models/flow-validation';
 import { FlowSimulation } from '../../../shared/services/flow-simulation';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { createUuid } from '../../../shared/utils/uuid';
 
 export interface FlowAiAssistantDialogData {
   readonly mediaType: string;
@@ -437,7 +438,7 @@ export class FlowAiAssistantDialogComponent {
   readonly errorMessage = signal<string | null>(null);
 
   readonly sessionId = signal<string | null>(null);
-  private requestId: string = crypto.randomUUID();
+  private requestId: string = createUuid();
   private lastPrompt = '';
 
   readonly suggestions = [
@@ -450,7 +451,7 @@ export class FlowAiAssistantDialogComponent {
   setMode(newMode: 'generate' | 'refactor' | 'explain'): void {
     this.mode.set(newMode);
     this.sessionId.set(null);
-    this.requestId = crypto.randomUUID();
+    this.requestId = createUuid();
     this.errorMessage.set(null);
     this.explanation.set(null);
     this.proposal.set(null);
@@ -486,7 +487,7 @@ export class FlowAiAssistantDialogComponent {
     this.recordProposalDecision('rejected');
     this.proposal.set(null);
     this.errorMessage.set(null);
-    this.requestId = crypto.randomUUID();
+    this.requestId = createUuid();
     this.lastPrompt = '';
   }
 
@@ -513,7 +514,7 @@ export class FlowAiAssistantDialogComponent {
     this.aiService.forkSession(id).subscribe({
       next: (session) => {
         this.sessionId.set(session.id);
-        this.requestId = crypto.randomUUID();
+        this.requestId = createUuid();
         this.loading.set(false);
         this.errorMessage.set(null);
       },
@@ -533,7 +534,7 @@ export class FlowAiAssistantDialogComponent {
   submit(): void {
     if (this.loading()) return;
     if (this.lastPrompt !== this.prompt()) {
-      this.requestId = crypto.randomUUID();
+      this.requestId = createUuid();
       this.lastPrompt = this.prompt();
     }
     this.loading.set(true);
@@ -555,7 +556,7 @@ export class FlowAiAssistantDialogComponent {
           next: (res) => {
             this.sessionId.set(res.sessionId ?? this.sessionId());
             if (res.requestId) this.requestId = res.requestId;
-            if (res.success) this.requestId = crypto.randomUUID();
+            if (res.success) this.requestId = createUuid();
             this.loading.set(false);
             if (res.success && res.flow) {
               this.proposalRequestId.set(res.requestId ?? null);
@@ -581,7 +582,7 @@ export class FlowAiAssistantDialogComponent {
           next: (res) => {
             this.sessionId.set(res.sessionId ?? this.sessionId());
             if (res.requestId) this.requestId = res.requestId;
-            if (res.success) this.requestId = crypto.randomUUID();
+            if (res.success) this.requestId = createUuid();
             this.loading.set(false);
             if (res.success && res.flow) {
               this.proposalRequestId.set(res.requestId ?? null);
@@ -608,7 +609,7 @@ export class FlowAiAssistantDialogComponent {
           next: (res) => {
             this.sessionId.set(res.sessionId ?? this.sessionId());
             if (res.requestId) this.requestId = res.requestId;
-            if (res.success) this.requestId = crypto.randomUUID();
+            if (res.success) this.requestId = createUuid();
             this.loading.set(false);
             if (res.success) this.explanation.set(res.explanation ?? 'Explication non disponible.');
             else this.errorMessage.set(res.explanation ?? 'Impossible de joindre le fournisseur.');

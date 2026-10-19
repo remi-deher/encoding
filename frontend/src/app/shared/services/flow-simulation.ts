@@ -3,6 +3,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { FlowDocument } from '../models/flow-validation';
 import { FlowComponentConfiguration } from '../models/flow-component';
+import { createUuid } from '../utils/uuid';
 import {
   SimulationAssumption,
   SimulationFile,
@@ -28,8 +29,8 @@ export class FlowSimulation {
       ],
     },
     variables: {},
-    sourceNodeId: crypto.randomUUID(),
-    workerNodeId: crypto.randomUUID(),
+    sourceNodeId: createUuid(),
+    workerNodeId: createUuid(),
   };
   readonly profile = signal<FlowComponentConfiguration>(simulationProfile(this.file));
   readonly result = signal<SimulationResult | null>(null);

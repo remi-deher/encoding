@@ -46,6 +46,7 @@ import {
 } from '../../shared/models/flow-component';
 import { FlowGraphEditorComponent } from '../../shared/ui/flow-graph-editor.component';
 import { FlowSimulation } from '../../shared/services/flow-simulation';
+import { createUuid } from '../../shared/utils/uuid';
 import { FlowTemplates } from '../../shared/services/flow-templates';
 import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import {
@@ -261,7 +262,7 @@ export class FlowEditorPageComponent {
   private readonly validationFlowId =
     this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)
       ? this.flowId
-      : crypto.randomUUID();
+      : createUuid();
 
   private readonly savedGraph = signal<string | null>(null);
   private readonly savedDocumentKey = signal<string | null>(null);
@@ -627,7 +628,7 @@ export class FlowEditorPageComponent {
       return sourceNodeId ? [{ ...port, sourceNodeId }] : [];
     });
     const instance: FlowComponentPackInstance = {
-      id: crypto.randomUUID(),
+      id: createUuid(),
       packId: pack.pack.id,
       packVersion: 1,
       name: pack.pack.name,
