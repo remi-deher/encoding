@@ -14,6 +14,10 @@ Ouvrir **Paramètres → Intégrations → IA & fournisseurs** sur le serveur qu
 
 Choisir le moteur par défaut puis enregistrer. Les nœuds répondants et leurs fournisseurs sont listés sous la configuration. Les connexions déclarées ne garantissent ni le quota disponible ni la réponse du modèle.
 
+Dans **Usages et modèles**, l’assistant et les opérations sur les flows peuvent hériter du moteur par défaut ou choisir un fournisseur distinct. Le modèle est celui configuré pour cette connexion. La règle **local uniquement** impose Ollama sur une adresse de boucle locale et interdit le routage vers un autre nœud ou fournisseur. Sans cette règle, les questions, les ressources jointes et les résultats des outils de lecture peuvent être transmis au fournisseur sélectionné ; vérifiez le fournisseur effectif avant d’y joindre des données sensibles.
+
+L’assistant propose des outils MCP explicitement sélectionnés par l’utilisateur : liste des flows, détails d’un flow sélectionné, nœuds, exécutions récentes et vue des bibliothèques. Trois outils au maximum sont exécutés par tour et la taille cumulée du contexte est bornée. Ils réutilisent les handlers MCP existants et sont en lecture seule. Une génération ou modification de flow reste une proposition : **Appliquer à l’éditeur** et **Rejeter** enregistrent la décision dans l’activité. La publication et le lancement d’un traitement ne sont pas des actions disponibles dans l’assistant.
+
 Sur Linux, Landlock doit être disponible. Le lancement refuse explicitement de s'exécuter sans confinement. Pour une installation CLI hors image, configurer au besoin `AiTools:RuntimeDirectory` pour accorder en lecture le répertoire d'installation ; la fonction serveur doit pouvoir exécuter l'outil. Les binaires peuvent être choisis par `AiTools:Executables:codex-cli` et `AiTools:Executables:claude-cli`.
 
 ## Demande et reprise
@@ -38,6 +42,8 @@ La réponse contient `sessionId` et `requestId`, y compris quand aucun exécuteu
 Une tentative est bornée par le délai configuré, entre 10 et 600 secondes. Un remplacement ambigu attend le délai précédent, avec une marge de cinq secondes ; au maximum trois exécuteurs sont essayés par appel. Si le coordinateur redémarre, attendre l'expiration du bail affiché avant de réessayer. Un échec peut avoir consommé du quota chez le fournisseur.
 
 Les checkpoints et les marqueurs locaux d'essai ne sont pas supprimés automatiquement : définir leur politique de rétention avant une utilisation intensive. Les checkpoints transitent chiffrés dans le journal du maillage ; les secrets de connexion n'y transitent pas.
+
+Les conversations, les instantanés de contexte utilisés pour rendre une reprise idempotente et l’activité IA sont également conservés chiffrés dans le registre répliqué. Aucun nettoyage automatique configurable n’est actuellement appliqué aux conversations ou aux activités. L’interruption d’une demande arrête l’attente locale lorsqu’elle est contrôlable ; un fournisseur distant peut avoir déjà accepté le travail. L’activité indique alors que le résultat distant reste incertain et la reprise attend l’expiration du bail.
 
 ## Vérifications de la branche
 
