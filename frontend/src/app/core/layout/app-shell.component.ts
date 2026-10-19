@@ -48,6 +48,7 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
   templateUrl: './app-shell.component.html',
   host: {
     '(document:keydown)': 'onGlobalSearchShortcut($event)',
+    '(window:resize)': 'onWindowResize()',
   },
 })
 export class AppShellComponent {
@@ -122,20 +123,18 @@ export class AppShellComponent {
     this.navigationEnd().url.startsWith('/ai/assistant'),
   );
   protected readonly showAssistantBubble = computed(
-    () =>
-      Boolean(this.currentUser()) &&
-      !this.authMode() &&
-      !this.workspaceMode() &&
-      !this.assistantRouteActive(),
+    () => Boolean(this.currentUser()) && !this.authMode() && !this.assistantRouteActive(),
   );
   protected readonly assistantWidgetMounted = signal(false);
   protected readonly assistantPanelOpen = signal(false);
   protected readonly assistantLauncherPosition = signal(this.readAssistantLauncherPosition());
   protected readonly assistantLauncherDragging = signal(false);
-  private readonly assistantLauncher =
-    viewChild<ElementRef<HTMLButtonElement>>('assistantLauncher');
-  private readonly assistantCloseButton =
-    viewChild<ElementRef<HTMLButtonElement>>('assistantCloseButton');
+  private readonly assistantLauncher = viewChild('assistantLauncher', {
+    read: ElementRef<HTMLButtonElement>,
+  });
+  private readonly assistantCloseButton = viewChild('assistantCloseButton', {
+    read: ElementRef<HTMLButtonElement>,
+  });
   private focusReturnElement: HTMLElement | null = null;
   private assistantDrag: {
     readonly pointerId: number;
@@ -221,8 +220,8 @@ export class AppShellComponent {
   private setAssistantLauncherPosition(left: number, top: number, persist: boolean): void {
     const button = this.assistantLauncher()?.nativeElement;
     const margin = 16;
-    const maxLeft = Math.max(margin, window.innerWidth - (button?.offsetWidth ?? 160) - margin);
-    const maxTop = Math.max(margin, window.innerHeight - (button?.offsetHeight ?? 48) - margin);
+    const maxLeft = Math.max(margin, window.innerWidth - (button?.offsetWidth ?? 56) - margin);
+    const maxTop = Math.max(margin, window.innerHeight - (button?.offsetHeight ?? 56) - margin);
     const grid = AppShellComponent.assistantLauncherGrid;
     const snap = (value: number, max: number) =>
       Math.min(max, Math.max(margin, Math.round((value - margin) / grid) * grid + margin));
@@ -260,7 +259,7 @@ export class AppShellComponent {
       )
         return { left: position.left, top: position.top };
     } catch {
-      // Fall back to the default bottom-left position.
+      // Fall back to the default bottom-right position.
     }
     return null;
   }
@@ -351,6 +350,7 @@ export class AppShellComponent {
   }
 
   protected onGlobalSearchShortcut(event: KeyboardEvent): void {
+    if (event.defaultPrevented) return;
     if (event.key === 'Escape' && this.assistantPanelOpen()) {
       event.preventDefault();
       this.closeAssistantPanel();

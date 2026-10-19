@@ -171,57 +171,85 @@
       <main id="main-content" class="main-content" tabindex="-1">
         <router-outlet />
       </main>
-      @if (showAssistantBubble()) {
-        <button
-          class="assistant-launcher"
-          matButton="filled"
-          type="button"
-          [hidden]="assistantPanelOpen()"
-          [class.is-dragging]="assistantLauncherDragging()"
-          [style.left.px]="assistantLauncherPosition()?.left ?? null"
-          [style.top.px]="assistantLauncherPosition()?.top ?? null"
-          [style.right]="assistantLauncherPosition() ? 'auto' : null"
-          [style.bottom]="assistantLauncherPosition() ? 'auto' : null"
-          #assistantLauncher
-          aria-label="Ouvrir l’assistant IA"
-          aria-description="Glissez pour déplacer. Alt plus les flèches déplace par pas de grille."
-          aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"
-          aria-controls="assistant-widget-panel"
-          [attr.aria-expanded]="assistantPanelOpen()"
-          (pointerdown)="startAssistantLauncherDrag($event)"
-          (pointermove)="moveAssistantLauncher($event)"
-          (pointerup)="finishAssistantLauncherDrag($event)"
-          (pointercancel)="finishAssistantLauncherDrag($event)"
-          (keydown)="onAssistantLauncherKeydown($event)"
-          (click)="onAssistantLauncherClick($event)"
-        >
-          <span aria-hidden="true">✦</span> Assistant
-        </button>
-      }
-      @if (assistantWidgetMounted()) {
-        <aside
-          id="assistant-widget-panel"
-          class="assistant-widget-panel"
-          [class.is-open]="assistantPanelOpen() && showAssistantBubble()"
-          [attr.inert]="assistantPanelOpen() && showAssistantBubble() ? null : ''"
-          [attr.aria-hidden]="!(assistantPanelOpen() && showAssistantBubble())"
-          aria-label="Panneau de l’assistant IA"
-        >
-          <header class="assistant-widget-header">
-            <h2>Assistant IA</h2>
-            <button
-              matButton="text"
-              type="button"
-              #assistantCloseButton
-              aria-label="Fermer le panneau de l’assistant"
-              (click)="closeAssistantPanel()"
-            >
-              Fermer
-            </button>
-          </header>
-          <app-ai-assistant-page [panelMode]="true" />
-        </aside>
-      }
     </mat-sidenav-content>
   </mat-sidenav-container>
+  @if (showAssistantBubble()) {
+    <button
+      class="assistant-launcher"
+      mat-fab
+      type="button"
+      [hidden]="assistantPanelOpen()"
+      [class.is-dragging]="assistantLauncherDragging()"
+      [style.left.px]="assistantLauncherPosition()?.left ?? null"
+      [style.top.px]="assistantLauncherPosition()?.top ?? null"
+      [style.right]="assistantLauncherPosition() ? 'auto' : null"
+      [style.bottom]="assistantLauncherPosition() ? 'auto' : null"
+      #assistantLauncher
+      aria-label="Ouvrir l’assistant IA"
+      aria-description="Glissez pour déplacer. Alt plus les flèches déplace par pas de grille."
+      aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"
+      aria-controls="assistant-widget-panel"
+      [attr.aria-expanded]="assistantPanelOpen()"
+      (pointerdown)="startAssistantLauncherDrag($event)"
+      (pointermove)="moveAssistantLauncher($event)"
+      (pointerup)="finishAssistantLauncherDrag($event)"
+      (pointercancel)="finishAssistantLauncherDrag($event)"
+      (keydown)="onAssistantLauncherKeydown($event)"
+      (click)="onAssistantLauncherClick($event)"
+    >
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="currentColor">
+        <path d="m12 2 2.8 7.2L22 12l-7.2 2.8L12 22l-2.8-7.2L2 12l7.2-2.8Z" />
+      </svg>
+    </button>
+  }
+  @if (assistantWidgetMounted()) {
+    <aside
+      id="assistant-widget-panel"
+      class="assistant-widget-panel"
+      [class.is-open]="assistantPanelOpen() && showAssistantBubble()"
+      [attr.inert]="assistantPanelOpen() && showAssistantBubble() ? null : ''"
+      [attr.aria-hidden]="!(assistantPanelOpen() && showAssistantBubble())"
+      aria-label="Panneau de l’assistant IA"
+    >
+      <header class="assistant-widget-header">
+        <h2>✦ Assistant</h2>
+        <a
+          mat-icon-button
+          aria-label="Ouvrir la conversation dans Assistant"
+          routerLink="/ai/assistant"
+          [queryParams]="widget.conversationId() ? { conversation: widget.conversationId() } : {}"
+          ><svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            aria-hidden="true"
+          >
+            <path d="M14 4h6v6m0-6-9 9M10 4H4v16h16v-6" /></svg
+        ></a>
+        <button
+          mat-icon-button
+          type="button"
+          #assistantCloseButton
+          aria-label="Fermer le panneau de l’assistant"
+          (click)="closeAssistantPanel()"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="M5 12h14" />
+          </svg>
+        </button>
+      </header>
+      <app-ai-assistant-page #widget [panelMode]="true" />
+    </aside>
+  }
 </div>

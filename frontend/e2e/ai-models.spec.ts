@@ -119,7 +119,11 @@ test('backend models and reasoning drive each turn while old turns retain observ
   const assistant = page.locator('app-ai-assistant-page').first();
   const model = assistant.getByRole('combobox', { name: 'Modèle', exact: true });
   await expect(model).toContainText('Modèle fourni A');
+  await assistant.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await expect(page.getByRole('option', { name: 'Ollama', exact: true })).toHaveCount(0);
+  await page.getByRole('option', { name: 'Claude', exact: true }).click();
   await model.click();
+  await expect(page.getByRole('option', { name: /Modèle fourni A/ })).toHaveCount(0);
   await page.getByRole('option', { name: /Modèle fourni B/ }).click();
   const reasoning = assistant.getByRole('combobox', { name: 'Effort de raisonnement' });
   await expect(reasoning).toContainText('Moyen');
@@ -136,9 +140,12 @@ test('backend models and reasoning drive each turn while old turns retain observ
     nodeId,
   });
   await expect(model).toBeDisabled();
+  await expect(assistant.getByRole('combobox', { name: 'Type', exact: true })).toBeDisabled();
   await expect(reasoning).toBeDisabled();
   release!();
   await expect(assistant.getByText('Nouvelle réponse', { exact: true })).toBeVisible();
+  for (const details of await assistant.locator('details.response-details').all())
+    await details.locator('summary').click();
   await expect(
     assistant.getByText('Modèle utilisé : confirmed-model-a', { exact: true }),
   ).toBeVisible();
@@ -146,11 +153,18 @@ test('backend models and reasoning drive each turn while old turns retain observ
     assistant.getByText('Modèle utilisé : confirmed-model-b', { exact: true }),
   ).toBeVisible();
   await expect(model).toBeEnabled();
+  for (const details of await assistant.locator('details.response-details').all())
+    await details.locator('summary').click();
   const result = await new AxeBuilder({ page })
     .include('app-ai-assistant-page')
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .analyze();
-  expect(result.violations).toEqual([]);
+  expect(
+    result.violations.map((violation) => ({
+      id: violation.id,
+      nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })),
+    })),
+  ).toEqual([]);
   await model.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('assistant-models.png'), fullPage: true });
   expect(
@@ -194,7 +208,8 @@ test('unavailable catalog blocks a new turn and refresh preserves the selected c
   await page.route('**/api/v1/tools/ai/assistant/options?refresh=true', (route) =>
     route.fulfill({ json: { defaultProvider: 'codex-cli', models } }),
   );
-  await assistant.getByRole('button', { name: 'Actualiser les modèles' }).click();
+  await assistant.getByRole('button', { name: 'Options de la conversation' }).click();
+  await page.getByRole('menuitem', { name: 'Actualiser les modèles' }).click();
   await expect(assistant.getByRole('combobox', { name: 'Modèle', exact: true })).toContainText(
     'Modèle fourni A',
   );
@@ -279,7 +294,12 @@ test('administrators disable discovered models through the backend policy', asyn
     .include('app-ai-model-catalog')
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .analyze();
-  expect(result.violations).toEqual([]);
+  expect(
+    result.violations.map((violation) => ({
+      id: violation.id,
+      nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })),
+    })),
+  ).toEqual([]);
 });
 
 test('network retries keep the selected model and request id while validation errors unlock selection', async ({
@@ -296,6 +316,8 @@ test('network retries keep the selected model and request id while validation er
   await page.goto(`/ai/assistant?conversation=${conversationId}`);
   const assistant = page.locator('app-ai-assistant-page').first();
   const model = assistant.getByRole('combobox', { name: 'Modèle', exact: true });
+  await assistant.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await page.getByRole('option', { name: 'Claude', exact: true }).click();
   await model.click();
   await page.getByRole('option', { name: /Modèle fourni B/ }).click();
   await assistant.getByRole('textbox', { name: 'Votre question' }).fill('Question à reprendre');
@@ -315,4 +337,143 @@ test('network retries keep the selected model and request id while validation er
     nodeId,
   });
   await expect(assistant.getByRole('textbox', { name: 'Votre question' })).toBeEnabled();
+});
+
+test('floating launcher follows scrolling and compact chat preserves conversation without changing the page', async ({
+  page,
+}, testInfo) => {
+  await page.route('**/api/v1/tools/ai/assistant/activity', (route) =>
+    route.fulfill({
+      json: Array.from({ length: 60 }, (_, index) => ({
+        requestId: `request-${index}`,
+        provider: 'codex-cli',
+        status: 'succeeded',
+        startedAt: '2030-01-01T00:00:00Z',
+        updatedAt: '2030-01-01T00:00:00Z',
+        durationMilliseconds: 300,
+        errorCategory: null,
+        conversationId: null,
+      })),
+    }),
+  );
+  await page.route('**/api/v1/nodes', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: nodeId,
+          name: 'Salon',
+          roles: ['worker'],
+          maxConcurrentTasks: 1,
+          capabilities: [],
+          status: 'online',
+          lastSeenAt: '2030-01-01T00:00:00Z',
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/v1/tools/ai/assistant/messages', (route) => {
+    const request = route.request().postDataJSON();
+    expect(request).toMatchObject({
+      resourceType: 'node',
+      resourceId: nodeId,
+      provider: 'claude-cli',
+      model: 'server-model-b',
+      reasoningEffort: 'medium',
+    });
+    return route.fulfill({
+      json: {
+        success: true,
+        conversation: {
+          ...conversation,
+          provider: request.provider,
+          model: request.model,
+          reasoningEffort: request.reasoningEffort,
+        },
+        requestId: request.requestId,
+        content: 'Réponse du widget',
+        sources: [source],
+        selection: {
+          provider: request.provider,
+          model: request.model,
+          reasoningEffort: request.reasoningEffort,
+          nodeId,
+        },
+      },
+    });
+  });
+  await page.goto('/ai/activity');
+  const launcher = page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true });
+  await expect(launcher).toBeVisible();
+  const before = (await launcher.boundingBox())!;
+  expect(before.width).toBeLessThanOrEqual(60);
+  const scroller = page.locator('mat-sidenav-content.page-transition-region');
+  await scroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(600);
+  const after = (await launcher.boundingBox())!;
+  expect(Math.abs(before.y - after.y)).toBeLessThan(1);
+  expect(after.y + after.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await launcher.click();
+  const widget = page.locator('#assistant-widget-panel');
+  await expect(widget).toBeVisible();
+  expect((await widget.boundingBox())!.height).toBeLessThanOrEqual(520);
+  await widget.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await page.getByRole('option', { name: 'Claude', exact: true }).click();
+  await widget.getByRole('button', { name: 'Joindre une ressource' }).click();
+  await widget.getByRole('combobox', { name: 'Type de ressource' }).click();
+  await page.getByRole('option', { name: 'Nœud', exact: true }).click();
+  await widget.getByRole('combobox', { name: 'Ressource', exact: true }).click();
+  await page.getByRole('option', { name: 'Salon · online', exact: true }).click();
+  await widget.getByRole('textbox', { name: 'Votre question' }).fill('Analyser ce nœud');
+  await widget.getByRole('textbox', { name: 'Votre question' }).press('Enter');
+  await expect(widget.getByText('Réponse du widget', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/ai\/activity$/);
+  await widget.getByRole('textbox', { name: 'Votre question' }).fill('Brouillon conservé');
+  await page.getByRole('button', { name: 'Fermer le panneau de l’assistant' }).click();
+  await expect(launcher).toBeFocused();
+  await launcher.click();
+  await expect(widget.getByRole('textbox', { name: 'Votre question' })).toHaveValue(
+    'Brouillon conservé',
+  );
+  await expect(widget.getByText('Réponse du widget', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('floating-chat.png'), fullPage: true });
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme,
+    );
+    const result = await new AxeBuilder({ page })
+      .include('#assistant-widget-panel')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(
+      result.violations.map((violation) => ({
+        id: violation.id,
+        nodes: violation.nodes.map((node) => ({
+          target: node.target,
+          summary: node.failureSummary,
+        })),
+      })),
+    ).toEqual([]);
+  }
+  await page.getByRole('button', { name: 'Fermer le panneau de l’assistant' }).click();
+  await launcher.focus();
+  await page.keyboard.press('Alt+ArrowUp');
+  expect((await launcher.boundingBox())!.y).toBeLessThan(after.y);
+  const moved = (await launcher.boundingBox())!;
+  await page.reload();
+  await expect(launcher).toBeVisible();
+  await expect
+    .poll(async () => Math.abs((await launcher.boundingBox())!.y - moved.y))
+    .toBeLessThan(1);
+  await page.setViewportSize({ width: 360, height: 640 });
+  await expect
+    .poll(async () => {
+      const rect = (await launcher.boundingBox())!;
+      return (
+        rect.x >= 0 && rect.x + rect.width <= 360 && rect.y >= 0 && rect.y + rect.height <= 640
+      );
+    })
+    .toBeTruthy();
 });

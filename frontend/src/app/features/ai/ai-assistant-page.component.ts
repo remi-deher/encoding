@@ -1,5 +1,18 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
+import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatMenuModule } from '@angular/material/menu';
+import { AiConversationComposerComponent } from './components/ai-conversation-composer.component';
+import { aiEffortLabel, aiModelKey } from './components/ai-model-selection';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
+  afterNextRender,
+  afterRenderEffect,
+  DestroyRef,
+  ElementRef,
+  viewChild,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -20,7 +33,6 @@ import {
   AiAssistantConversationDetail,
   AiAssistantSource,
   AiAssistantToolCall,
-  AiAssistantModelOption,
   AiAssistantOptions,
   AiTurnModelSelection,
 } from '../../shared/models/ai-tools';
@@ -31,7 +43,6 @@ import { AiToolsService } from '../../shared/services/ai-tools.service';
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { ExecutionTracking } from '../../shared/services/execution-tracking';
 import { FlowValidation } from '../../shared/services/flow-validation';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { AuthService } from '../../core/auth/auth.service';
 import { createUuid } from '../../shared/utils/uuid';
 
@@ -53,7 +64,10 @@ interface AssistantResourceOption {
     MatInputModule,
     MatProgressSpinnerModule,
     MatSelectModule,
-    PageHeaderComponent,
+    AiConversationComposerComponent,
+    MatSidenavModule,
+    MatChipsModule,
+    MatMenuModule,
     RouterLink,
   ],
   templateUrl: './ai-assistant-page.component.html',
@@ -68,6 +82,17 @@ export class AiAssistantPageComponent implements OnDestroy {
   private readonly executionTracking = inject(ExecutionTracking);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly compact = toSignal(
+    inject(BreakpointObserver)
+      .observe('(max-width: 760px)')
+      .pipe(map((state) => state.matches)),
+    { initialValue: false },
+  );
+  protected readonly historyOpen = signal(false);
+  protected readonly toolsOpen = signal(false);
+  private readonly followTail = signal(true);
+  private readonly messageThread = viewChild<ElementRef<HTMLElement>>('messageThread');
   protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly flows = signal<readonly FlowSummary[]>([]);
@@ -76,6 +101,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly libraries = signal<readonly LibraryResponse[]>([]);
   protected readonly conversations = signal<readonly AiAssistantConversation[]>([]);
   protected readonly detail = signal<AiAssistantConversationDetail | null>(null);
+  readonly conversationId = computed(() => this.detail()?.conversation.id ?? null);
   protected readonly assistantOptions = signal<AiAssistantOptions | null>(null);
   protected readonly selectedModelKey = signal('');
   protected readonly selectedReasoningEffort = signal<string | null>(null);
@@ -207,17 +233,45 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.loadLibraries();
     this.loadConversations();
     this.loadAssistantOptions();
-    this.route.queryParamMap.subscribe((params) => {
-      const id = params.get('conversation');
-      if (!id) {
-        if (this.detail()) this.detail.set(null);
-        return;
-      }
-      if (this.detail()?.conversation.id !== id) this.openConversation(id, false);
+    afterNextRender(() => {
+      if (this.panelMode()) return;
+      this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+        const id = params.get('conversation');
+        if (!id) {
+          if (this.detail()) this.detail.set(null);
+          return;
+        }
+        if (this.detail()?.conversation.id !== id) this.openConversation(id, false);
+      });
+    });
+    afterRenderEffect(() => {
+      this.detail();
+      this.pendingPrompt();
+      this.sending();
+      const thread = this.messageThread()?.nativeElement;
+      if (thread && this.followTail()) thread.scrollTop = thread.scrollHeight;
     });
   }
 
+  protected onThreadScroll(): void {
+    const thread = this.messageThread()?.nativeElement;
+    if (thread)
+      this.followTail.set(thread.scrollHeight - thread.clientHeight - thread.scrollTop < 80);
+  }
+
+  protected selectType(provider: string): void {
+    if (this.sending() || this.hasPendingRequest()) return;
+    const options =
+      this.assistantOptions()?.models.filter((option) => option.provider === provider) ?? [];
+    const selected = options.find((option) => option.isDefault) ?? options[0];
+    if (selected) this.selectModel(this.modelOptionKey(selected));
+  }
+
   protected startNewConversation(): void {
+    if (this.sending()) return;
+    this.selectedResourceId.set('');
+    this.historyOpen.set(false);
+    this.followTail.set(true);
     this.detail.set(null);
     this.errorMessage.set(null);
     this.prompt.set('');
@@ -231,6 +285,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.contextPickerOpen.set(false);
     this.contextSearch.set('');
     this.selectDefaultModel();
+    if (this.panelMode()) return;
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { conversation: null },
@@ -238,27 +293,8 @@ export class AiAssistantPageComponent implements OnDestroy {
     });
   }
 
-  protected modelOptionKey(
-    option: Pick<AiAssistantModelOption, 'provider' | 'model' | 'nodeId'>,
-  ): string {
-    return `${option.provider}\n${option.model ?? ''}\n${option.nodeId ?? ''}`;
-  }
-
-  protected effortLabel(effort: string): string {
-    return (
-      (
-        {
-          none: 'Aucun',
-          minimal: 'Minimal',
-          low: 'Faible',
-          medium: 'Moyen',
-          high: 'Élevé',
-          xhigh: 'Très élevé',
-          max: 'Maximum',
-        } as Record<string, string>
-      )[effort] ?? effort
-    );
-  }
+  protected readonly modelOptionKey = aiModelKey;
+  protected readonly effortLabel = aiEffortLabel;
 
   protected selectModel(key: string): void {
     this.selectedModelKey.set(key);
@@ -287,7 +323,12 @@ export class AiAssistantPageComponent implements OnDestroy {
   }
 
   protected addResourceToContext(resource: AssistantResourceOption): void {
-    if (this.isSourceAttached(resource) || this.updatingSources() || this.hasPendingRequest())
+    if (
+      this.isSourceAttached(resource) ||
+      this.updatingSources() ||
+      this.hasPendingRequest() ||
+      this.sending()
+    )
       return;
     const current = this.detail()?.conversation;
     if (!current) return;
@@ -529,6 +570,8 @@ export class AiAssistantPageComponent implements OnDestroy {
   }
 
   protected openConversation(id: string, updateUrl = true): void {
+    this.historyOpen.set(false);
+    this.followTail.set(true);
     if (this.loadingDetail()) return;
     if (this.pendingPollTimer !== null) clearTimeout(this.pendingPollTimer);
     this.loadingDetail.set(true);
@@ -563,6 +606,8 @@ export class AiAssistantPageComponent implements OnDestroy {
             );
           }
         } else {
+          this.requestPrompt = '';
+          this.requestId = '';
           this.pendingPrompt.set(null);
           this.hasPendingRequest.set(false);
           this.resumingRequest.set(false);
@@ -597,6 +642,9 @@ export class AiAssistantPageComponent implements OnDestroy {
           nodeId: selectedModel.nodeId,
         }
       : activeConversation;
+    this.followTail.set(true);
+    this.contextPickerOpen.set(false);
+    this.toolsOpen.set(false);
     this.sending.set(true);
     this.cancelling.set(false);
     this.pendingPrompt.set(message);
@@ -736,7 +784,7 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   protected removeConversationSource(source: AiAssistantSource): void {
     const current = this.detail()?.conversation;
-    if (!current || this.updatingSources() || this.hasPendingRequest()) return;
+    if (!current || this.updatingSources() || this.hasPendingRequest() || this.sending()) return;
     const sources = this.conversationSources(current);
     if (sources.length <= 1) return;
     this.updateConversationSources(sources.filter((candidate) => candidate !== source));
@@ -838,6 +886,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   }
 
   private setConversationUrl(id: string): void {
+    if (this.panelMode()) return;
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { conversation: id },
