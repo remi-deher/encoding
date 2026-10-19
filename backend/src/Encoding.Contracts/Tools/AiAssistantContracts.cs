@@ -28,8 +28,9 @@ public sealed record AiAssistantMessageRequest(
     Guid RequestId,
     string UserPrompt,
     string? ConversationId = null,
-    Guid? FlowId = null,
-    int? FlowVersion = null);
+    string? ResourceType = null,
+    Guid? ResourceId = null,
+    int? ResourceVersion = null);
 
 public sealed record AiAssistantMessageResponse(
     bool Success,

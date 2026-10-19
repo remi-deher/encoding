@@ -11,10 +11,22 @@ import {
   AiAssistantConversation,
   AiAssistantConversationDetail,
 } from '../../shared/models/ai-tools';
+import { ExecutionResponse } from '../../shared/models/execution';
+import { NodeResponse } from '../../shared/models/cluster';
 import { FlowSummary } from '../../shared/models/flow-validation';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
+import { ClusterApi } from '../../shared/services/cluster-api';
+import { ExecutionTracking } from '../../shared/services/execution-tracking';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
+
+type AssistantResourceType = 'flow' | 'execution' | 'node';
+
+interface AssistantResourceOption {
+  readonly id: string;
+  readonly label: string;
+  readonly version?: number;
+}
 
 @Component({
   selector: 'app-ai-assistant-page',
@@ -35,29 +47,77 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 export class AiAssistantPageComponent {
   private readonly aiTools = inject(AiToolsService);
   private readonly flowValidation = inject(FlowValidation);
+  private readonly clusterApi = inject(ClusterApi);
+  private readonly executionTracking = inject(ExecutionTracking);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
   protected readonly flows = signal<readonly FlowSummary[]>([]);
+  protected readonly executions = signal<readonly ExecutionResponse[]>([]);
+  protected readonly nodes = signal<readonly NodeResponse[]>([]);
   protected readonly conversations = signal<readonly AiAssistantConversation[]>([]);
   protected readonly detail = signal<AiAssistantConversationDetail | null>(null);
-  protected readonly selectedFlowId = signal('');
+  protected readonly selectedResourceType = signal<AssistantResourceType>('flow');
+  protected readonly selectedResourceId = signal('');
   protected readonly prompt = signal('');
   protected readonly loadingFlows = signal(true);
+  protected readonly loadingExecutions = signal(true);
+  protected readonly loadingNodes = signal(true);
   protected readonly loadingConversations = signal(true);
   protected readonly loadingDetail = signal(false);
   protected readonly sending = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly pendingPrompt = signal<string | null>(null);
-  protected readonly selectedFlow = computed(
-    () => this.flows().find((flow) => flow.id === this.selectedFlowId()) ?? null,
+  protected readonly resourceOptions = computed<readonly AssistantResourceOption[]>(() => {
+    switch (this.selectedResourceType()) {
+      case 'flow':
+        return this.flows().map((flow) => ({
+          id: flow.id,
+          label: `${flow.name} · version ${flow.version}`,
+          version: flow.version,
+        }));
+      case 'execution':
+        return this.executions().map((execution) => ({
+          id: execution.id,
+          label: `${execution.media} · ${execution.state} · ${execution.id.slice(0, 8)}`,
+        }));
+      case 'node':
+        return this.nodes().map((node) => ({
+          id: node.id,
+          label: `${node.displayName || node.name} · ${node.lifecycle ?? node.status}`,
+        }));
+    }
+  });
+  protected readonly selectedResource = computed(
+    () =>
+      this.resourceOptions().find((resource) => resource.id === this.selectedResourceId()) ?? null,
   );
+  protected readonly loadingSelectedResource = computed(() => {
+    switch (this.selectedResourceType()) {
+      case 'flow':
+        return this.loadingFlows();
+      case 'execution':
+        return this.loadingExecutions();
+      case 'node':
+        return this.loadingNodes();
+    }
+  });
+  protected readonly resourceDisclosure = computed(() => {
+    switch (this.selectedResourceType()) {
+      case 'flow':
+        return 'La définition de flow publiée et votre question seront transmises.';
+      case 'execution':
+        return 'L’état, les événements, le pipeline et les journaux de commande disponibles seront transmis.';
+      case 'node':
+        return 'La présence, les rôles, les capacités déclarées et les informations matérielles du nœud seront transmises.';
+    }
+  });
   protected readonly canSend = computed(
     () =>
       !this.sending() &&
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
-      (Boolean(this.detail()) || Boolean(this.selectedFlow())),
+      (Boolean(this.detail()) || Boolean(this.selectedResource())),
   );
 
   private requestPrompt = '';
@@ -65,6 +125,8 @@ export class AiAssistantPageComponent {
 
   constructor() {
     this.loadFlows();
+    this.loadExecutions();
+    this.loadNodes();
     this.loadConversations();
     this.route.queryParamMap.subscribe((params) => {
       const id = params.get('conversation');
@@ -97,7 +159,8 @@ export class AiAssistantPageComponent {
     this.aiTools.getAssistantConversation(id).subscribe({
       next: (detail) => {
         this.detail.set(detail);
-        this.selectedFlowId.set(detail.conversation.source.resourceId);
+        this.selectedResourceType.set(detail.conversation.source.kind);
+        this.selectedResourceId.set(detail.conversation.source.resourceId);
         this.loadingDetail.set(false);
         if (updateUrl) this.setConversationUrl(id);
       },
@@ -117,7 +180,7 @@ export class AiAssistantPageComponent {
     }
 
     const activeConversation = this.detail()?.conversation ?? null;
-    const selectedFlow = this.selectedFlow();
+    const selectedResource = this.selectedResource();
     this.sending.set(true);
     this.pendingPrompt.set(message);
     this.errorMessage.set(null);
@@ -126,8 +189,9 @@ export class AiAssistantPageComponent {
         requestId: this.requestId,
         userPrompt: message,
         conversationId: activeConversation?.id,
-        flowId: activeConversation ? undefined : (selectedFlow?.id ?? undefined),
-        flowVersion: activeConversation ? undefined : (selectedFlow?.version ?? undefined),
+        resourceType: activeConversation ? undefined : this.selectedResourceType(),
+        resourceId: activeConversation ? undefined : (selectedResource?.id ?? undefined),
+        resourceVersion: activeConversation ? undefined : (selectedResource?.version ?? undefined),
       })
       .subscribe({
         next: (response) => {
@@ -175,6 +239,31 @@ export class AiAssistantPageComponent {
         this.loadingFlows.set(false);
       },
       error: () => this.loadingFlows.set(false),
+    });
+  }
+
+  protected selectResourceType(type: AssistantResourceType): void {
+    this.selectedResourceType.set(type);
+    this.selectedResourceId.set('');
+  }
+
+  private loadExecutions(): void {
+    this.executionTracking.overview({ limit: 100 }).subscribe({
+      next: (overview) => {
+        this.executions.set(overview.executions);
+        this.loadingExecutions.set(false);
+      },
+      error: () => this.loadingExecutions.set(false),
+    });
+  }
+
+  private loadNodes(): void {
+    this.clusterApi.listNodes().subscribe({
+      next: (nodes) => {
+        this.nodes.set(nodes);
+        this.loadingNodes.set(false);
+      },
+      error: () => this.loadingNodes.set(false),
     });
   }
 

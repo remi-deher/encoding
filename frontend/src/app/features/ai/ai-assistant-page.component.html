@@ -1,6 +1,6 @@
 <app-page-header
   title="Assistant"
-  description="Posez une question sur un flow publié. La version consultée reste attachée à la conversation."
+  description="Posez une question sur un flow publié, une exécution ou un nœud. La ressource consultée reste attachée à la conversation."
 >
   <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
 </app-page-header>
@@ -47,7 +47,7 @@
           <h2>{{ current.conversation.title }}</h2>
           <p>Contexte attaché : {{ current.conversation.source.label }}</p>
         </div>
-        <a matButton="text" [routerLink]="current.conversation.source.href">Ouvrir le flow</a>
+        <a matButton="text" [routerLink]="current.conversation.source.href">Ouvrir la ressource</a>
       </header>
       <div class="message-list" aria-live="polite">
         @for (turn of current.turns; track turn.requestId) {
@@ -75,27 +75,53 @@
       </div>
     } @else {
       <div class="new-conversation">
-        <h2>Quelle question avez-vous sur un flow ?</h2>
-        <p>Choisissez un flow publié. L’assistant consultera cette version en lecture seule.</p>
-        @if (loadingFlows()) {
-          <p class="muted" role="status">Chargement des flows…</p>
-        } @else if (flows().length === 0) {
+        <h2>Quel contexte consulter ?</h2>
+        <p>
+          Choisissez une ressource accessible en lecture. Le contexte restera attaché à cet échange.
+        </p>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Type de ressource</mat-label>
+          <mat-select
+            name="resourceType"
+            [ngModel]="selectedResourceType()"
+            (ngModelChange)="selectResourceType($event)"
+          >
+            <mat-option value="flow">Flow publié</mat-option>
+            <mat-option value="execution">Exécution</mat-option>
+            <mat-option value="node">Nœud</mat-option>
+          </mat-select>
+        </mat-form-field>
+        @if (loadingSelectedResource()) {
+          <p class="muted" role="status">Chargement des ressources…</p>
+        } @else if (resourceOptions().length === 0) {
           <div class="empty-state">
-            <p>Aucun flow publié n’est disponible pour le contexte de l’assistant.</p>
-            <a matButton="text" routerLink="/flows">Parcourir les flows</a>
+            <p>Aucune ressource de ce type n’est disponible pour le contexte de l’assistant.</p>
+            @switch (selectedResourceType()) {
+              @case ('flow') {
+                <a matButton="text" routerLink="/flows">Parcourir les flows</a>
+              }
+              @case ('execution') {
+                <a matButton="text" routerLink="/tasks">Parcourir les exécutions</a>
+              }
+              @case ('node') {
+                <a matButton="text" routerLink="/nodes">Parcourir les nœuds</a>
+              }
+            }
           </div>
         } @else {
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Flow publié</mat-label>
-            <mat-select name="flow" [(ngModel)]="selectedFlowId">
-              @for (flow of flows(); track flow.id) {
-                <mat-option [value]="flow.id">
-                  {{ flow.name }} · version {{ flow.version }}
-                </mat-option>
+            <mat-label>Ressource</mat-label>
+            <mat-select name="resourceId" [(ngModel)]="selectedResourceId">
+              @for (resource of resourceOptions(); track resource.id) {
+                <mat-option [value]="resource.id">{{ resource.label }}</mat-option>
               }
             </mat-select>
           </mat-form-field>
         }
+        <p class="data-disclosure">
+          {{ resourceDisclosure() }} Votre question et ces informations seront transmises au
+          fournisseur IA configuré par défaut, qui peut être externe à votre installation.
+        </p>
       </div>
     }
 
@@ -112,7 +138,7 @@
           rows="3"
           maxlength="4000"
           [(ngModel)]="prompt"
-          [disabled]="sending() || (loadingFlows() && !detail())"
+          [disabled]="sending() || (loadingSelectedResource() && !detail())"
         ></textarea>
         <mat-hint align="end">{{ prompt().length }}/4000</mat-hint>
       </mat-form-field>
@@ -121,9 +147,9 @@
       </button>
     </form>
     <p class="privacy-note">
-      Votre question et la définition du flow sont transmises au fournisseur IA par défaut, qui peut
-      être externe à votre installation. La conversation reste privée à votre compte ; l’assistant
-      ne peut pas modifier ni publier le flow.
+      Votre question et les données de la ressource sont transmises au fournisseur IA par défaut,
+      qui peut être externe à votre installation. La conversation reste privée à votre compte ;
+      l’assistant ne peut modifier aucune ressource.
     </p>
   </section>
 </div>

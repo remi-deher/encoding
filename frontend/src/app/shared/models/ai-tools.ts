@@ -97,7 +97,7 @@ export interface AiClusterView {
 }
 
 export interface AiAssistantSource {
-  readonly kind: string;
+  readonly kind: 'flow' | 'execution' | 'node';
   readonly resourceId: string;
   readonly label: string;
   readonly href: string;
@@ -128,8 +128,9 @@ export interface AiAssistantMessageRequest {
   readonly requestId: string;
   readonly userPrompt: string;
   readonly conversationId?: string | null;
-  readonly flowId?: string | null;
-  readonly flowVersion?: number | null;
+  readonly resourceType?: 'flow' | 'execution' | 'node' | null;
+  readonly resourceId?: string | null;
+  readonly resourceVersion?: number | null;
 }
 
 export interface AiAssistantMessageResponse {

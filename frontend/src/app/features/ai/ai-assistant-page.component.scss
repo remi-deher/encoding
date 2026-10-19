@@ -196,6 +196,13 @@
   margin-top: var(--space-3);
 }
 
+.data-disclosure {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-label);
+  line-height: 1.5;
+}
+
 @media (max-width: 760px) {
   .assistant-layout {
     grid-template-columns: minmax(0, 1fr);
