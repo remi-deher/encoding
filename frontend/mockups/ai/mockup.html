@@ -1,0 +1,201 @@
+<div class="prototype">
+  <span>MAQUETTE INTERACTIVE · Données de démonstration</span><app-theme-toggle />
+</div>
+<div class="shell">
+  <aside class="rail" aria-label="Application">
+    <strong class="brand">e<span>encoding</span></strong
+    ><span class="muted">ESPACE DE TRAVAIL</span>
+    <p>Vue d’ensemble</p>
+    <p>Bibliothèques</p>
+    <p>Flows</p>
+    <p>Exécutions</p>
+    <p>Nœuds</p>
+    <div class="rail-active">✦ Intelligence artificielle</div>
+    <div class="rail-bottom">
+      Cluster Maison<br /><app-status-badge label="Démonstration" tone="neutral" />
+    </div>
+  </aside>
+  <main>
+    <header class="page-heading">
+      <div>
+        <div class="eyebrow">VOTRE CLUSTER, EN CONVERSATION</div>
+        <h1>Intelligence artificielle</h1>
+        <p>Comprendre, concevoir et améliorer vos traitements.</p>
+      </div>
+      <app-status-badge label="Conversations privées" tone="accent" />
+    </header>
+    <app-category-tabs
+      label="Espace IA"
+      [options]="tabs"
+      [selected]="tab()"
+      (selectedChange)="tab.set($event)"
+    />
+    @if (tab() === 'assistant') {
+      <div class="workspace">
+        <aside class="history">
+          <button matButton="filled" (click)="reset()">＋ Nouvelle conversation</button>
+          <h2>Conversations</h2>
+          <span class="muted">AUJOURD’HUI</span
+          ><button matButton="tonal" class="history-item" (click)="started.set(true)">
+            Optimiser mon flow HEVC
+          </button>
+          <p class="muted">Flow · HEVC + AAC/AC3 + ASS</p>
+          <span class="muted">Vos échanges restent privés.<br />Retrouvez-les à votre retour.</span>
+        </aside>
+        <section class="chat" aria-label="Assistant">
+          <div class="chat-toolbar">
+            <strong>✦ Assistant Encoding</strong
+            ><app-status-badge label="Mode démonstration" tone="neutral" />
+          </div>
+          <div class="messages" aria-live="polite">
+            @if (!started()) {
+              <div class="welcome">
+                <div class="spark">✦</div>
+                <h2>Que souhaitez-vous<br />améliorer aujourd’hui ?</h2>
+                <p>
+                  Partez d’une question. Ajoutez une ressource<br />pour obtenir une réponse adaptée
+                  à votre cluster.
+                </p>
+              </div>
+              <div class="suggestions">
+                @for (suggestion of suggestions; track suggestion) {
+                  <button matButton="tonal" (click)="prompt.set(suggestion)">
+                    {{ suggestion }} ↗
+                  </button>
+                }
+              </div>
+            } @else {
+              <div class="bubble user">Comment optimiser mon flow HEVC sans perdre le HDR ?</div>
+              <article class="answer">
+                <span class="eyebrow">✦ ENCODING · EXEMPLE DE RÉPONSE</span>
+                <h2>Préserver la qualité, étape par étape.</h2>
+                <p>
+                  Le bloc de transcodage peut préserver les métadonnées HDR. Vérifiez le profil de
+                  qualité et les capacités de l’encodeur choisi avant de lancer le traitement.
+                </p>
+                <div class="recommendation">
+                  <strong>Point de départ</strong>
+                  <p>
+                    Inspecter le bloc Transcodage vidéo et comparer les métadonnées source et sortie
+                    sur un fichier de test.
+                  </p>
+                </div>
+                <p class="muted">Source illustrative : flow HEVC + AAC/AC3 + ASS · v3</p>
+              </article>
+            }
+            @for (message of messages(); track $index) {
+              <div class="bubble user">{{ message }}</div>
+              <p class="demo-response">
+                Message simulé. Aucune requête n’est envoyée à un fournisseur IA.
+              </p>
+            }
+          </div>
+          <form class="composer" (ngSubmit)="send()">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"
+              ><mat-label>Votre message à l’assistant</mat-label
+              ><textarea
+                matInput
+                name="message"
+                rows="3"
+                [ngModel]="prompt()"
+                (ngModelChange)="prompt.set($event)"
+              ></textarea>
+            </mat-form-field>
+            <div class="compose-actions">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic"
+                ><mat-label>Modèle</mat-label
+                ><mat-select [ngModel]="model()" (ngModelChange)="model.set($event)" name="model">
+                  @for (provider of providers; track provider) {
+                    <mat-option [value]="provider">{{ provider }}</mat-option>
+                  }
+                </mat-select></mat-form-field
+              ><button matButton="filled" type="submit" [disabled]="!prompt().trim()">
+                Envoyer ↑
+              </button>
+            </div>
+            <small>Les propositions sont à vérifier avant application.</small>
+          </form>
+        </section>
+        <aside class="context">
+          <div class="eyebrow">CONTEXTE DE TRAVAIL</div>
+          <h2>Une réponse ancrée<br />dans vos ressources.</h2>
+          <p>L’assistant s’appuie sur les éléments attachés à cette conversation.</p>
+          <mat-chip-set aria-label="Ressources attachées">
+            @if (context()) {
+              <mat-chip (removed)="context.set(false)"
+                >Flow · HEVC · v3<button matChipRemove aria-label="Retirer le flow du contexte">
+                  ×
+                </button></mat-chip
+              >
+            }</mat-chip-set
+          ><button matButton="tonal" [disabled]="context()" (click)="context.set(true)">
+            ＋ Ajouter le flow de démo</button
+          ><mat-accordion
+            ><mat-expansion-panel
+              ><mat-expansion-panel-header
+                ><mat-panel-title
+                  >Ce que l’IA peut consulter</mat-panel-title
+                ></mat-expansion-panel-header
+              >
+              <p>
+                Les ressources attachées et leurs informations applicatives. Aucun média n’est
+                transmis dans cette maquette.
+              </p></mat-expansion-panel
+            ></mat-accordion
+          >
+          <div class="context-note">
+            <strong>Vous gardez la main</strong>
+            <p>
+              Les actions sensibles demandent une confirmation explicite dans le parcours final.
+            </p>
+          </div>
+        </aside>
+      </div>
+    }
+    @if (tab() === 'providers') {
+      <section class="secondary">
+        <div class="eyebrow">CONNEXIONS DU CLUSTER</div>
+        <h2>Vos fournisseurs IA</h2>
+        <p>Une vue commune des connexions ; les identifiants restent sur leur nœud.</p>
+        <div class="provider-grid">
+          @for (provider of providers; track provider) {
+            <article>
+              <app-status-badge label="Exemple · connecté" tone="success" />
+              <h2>{{ provider }}</h2>
+              <p>Nœud Maison · Configuration illustrative</p>
+              <button
+                matButton="tonal"
+                (click)="
+                  notice.show(
+                    'Maquette : la configuration utilisera le parcours existant des paramètres IA.'
+                  )
+                "
+              >
+                Configurer
+              </button>
+            </article>
+          }
+        </div>
+        <p class="muted">Quotas : indisponibles dans la démonstration. Aucun pourcentage estimé.</p>
+      </section>
+    }
+    @if (tab() === 'activity') {
+      <section class="secondary">
+        <div class="eyebrow">SUIVI DES DEMANDES</div>
+        <h2>Activité récente</h2>
+        <article class="activity">
+          <div>
+            <strong>Explication du flow HEVC</strong>
+            <p>Codex CLI · Exemple de demande terminée</p>
+          </div>
+          <app-status-badge label="Réussie · exemple" tone="success" /><button
+            matButton="tonal"
+            (click)="tab.set('assistant'); started.set(true)"
+          >
+            Ouvrir la conversation
+          </button>
+        </article>
+      </section>
+    }
+  </main>
+</div>
