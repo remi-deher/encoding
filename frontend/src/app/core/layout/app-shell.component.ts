@@ -7,10 +7,12 @@ import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
@@ -124,15 +126,34 @@ export class AppShellComponent {
   );
   protected readonly assistantWidgetMounted = signal(false);
   protected readonly assistantPanelOpen = signal(false);
+  private readonly assistantLauncher =
+    viewChild<ElementRef<HTMLButtonElement>>('assistantLauncher');
+  private readonly assistantCloseButton =
+    viewChild<ElementRef<HTMLButtonElement>>('assistantCloseButton');
+  private focusReturnElement: HTMLElement | null = null;
 
   protected toggleAssistantPanel(): void {
+    if (this.assistantPanelOpen()) {
+      this.closeAssistantPanel();
+      return;
+    }
+    this.focusReturnElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!this.assistantWidgetMounted()) this.assistantWidgetMounted.set(true);
-    this.assistantPanelOpen.update((open) => !open);
+    this.assistantPanelOpen.set(true);
     if (this.isCompactNavigation()) this.navigationOpened.set(false);
+    setTimeout(() => this.assistantCloseButton()?.nativeElement.focus());
   }
 
   protected closeAssistantPanel(): void {
     this.assistantPanelOpen.set(false);
+    setTimeout(() => {
+      const target = this.focusReturnElement?.isConnected
+        ? this.focusReturnElement
+        : this.assistantLauncher()?.nativeElement;
+      target?.focus();
+      this.focusReturnElement = null;
+    });
   }
 
   private readonly auth = inject(AuthService);
@@ -197,6 +218,11 @@ export class AppShellComponent {
   }
 
   protected onGlobalSearchShortcut(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.assistantPanelOpen()) {
+      event.preventDefault();
+      this.closeAssistantPanel();
+      return;
+    }
     if (
       event.key.toLocaleLowerCase() === 'k' &&
       (event.metaKey || event.ctrlKey) &&

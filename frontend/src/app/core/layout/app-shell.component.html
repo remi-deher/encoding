@@ -177,7 +177,10 @@
           matButton="filled"
           type="button"
           [hidden]="assistantPanelOpen()"
+          #assistantLauncher
           aria-label="Ouvrir l’assistant IA"
+          aria-controls="assistant-widget-panel"
+          [attr.aria-expanded]="assistantPanelOpen()"
           (click)="toggleAssistantPanel()"
         >
           <span aria-hidden="true">✦</span> Assistant
@@ -185,6 +188,7 @@
       }
       @if (assistantWidgetMounted()) {
         <aside
+          id="assistant-widget-panel"
           class="assistant-widget-panel"
           [class.is-open]="assistantPanelOpen() && showAssistantBubble()"
           [attr.inert]="assistantPanelOpen() && showAssistantBubble() ? null : ''"
@@ -196,6 +200,7 @@
             <button
               matButton="text"
               type="button"
+              #assistantCloseButton
               aria-label="Fermer le panneau de l’assistant"
               (click)="closeAssistantPanel()"
             >
