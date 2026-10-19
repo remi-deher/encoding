@@ -251,10 +251,13 @@ export class AiAssistantPageComponent implements OnDestroy {
         resourceType: activeConversation ? undefined : this.selectedResourceType(),
         resourceId: activeConversation ? undefined : (selectedResource?.id ?? undefined),
         resourceVersion: activeConversation ? undefined : (selectedResource?.version ?? undefined),
-        toolCalls: this.selectedReadTools().map((name) => ({
-          name,
-          ...(name === 'get_flow' ? { flowId: selectedResource?.id ?? null } : {}),
-        }) as AiAssistantToolCall),
+        toolCalls: this.selectedReadTools().map(
+          (name) =>
+            ({
+              name,
+              ...(name === 'get_flow' ? { flowId: selectedResource?.id ?? null } : {}),
+            }) as AiAssistantToolCall,
+        ),
       })
       .subscribe({
         next: (response) => {

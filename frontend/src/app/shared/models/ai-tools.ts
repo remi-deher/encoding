@@ -152,7 +152,8 @@ export interface AiAssistantMessageRequest {
 }
 
 export interface AiAssistantToolCall {
-  readonly name: 'list_flows' | 'get_flow' | 'list_nodes' | 'list_executions' | 'get_libraries_overview';
+  readonly name:
+    'list_flows' | 'get_flow' | 'list_nodes' | 'list_executions' | 'get_libraries_overview';
   readonly flowId?: string | null;
   readonly state?: 'queued' | 'running' | 'failed' | 'completed' | null;
   readonly limit?: number | null;
@@ -179,7 +180,14 @@ export interface AiAssistantActivity {
   readonly requestId: string;
   readonly conversationId: string | null;
   readonly provider: string;
-  readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'proposal-ready' | 'applied-to-editor' | 'rejected';
+  readonly status:
+    | 'running'
+    | 'succeeded'
+    | 'failed'
+    | 'cancelled'
+    | 'proposal-ready'
+    | 'applied-to-editor'
+    | 'rejected';
   readonly startedAt: string;
   readonly updatedAt: string;
   readonly durationMilliseconds: number | null;

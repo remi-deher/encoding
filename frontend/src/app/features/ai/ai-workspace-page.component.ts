@@ -153,8 +153,7 @@ const PROVIDERS = [
                 <li>
                   <span
                     ><strong>{{ operationName(item.operation) }}</strong> ·
-                    {{ providerName(item.provider) }} ·
-                    {{ activityStatus(item.status) }}</span
+                    {{ providerName(item.provider) }} · {{ activityStatus(item.status) }}</span
                   >
                   <time [dateTime]="item.updatedAt">{{ item.updatedAt | date: 'short' }}</time>
                   <a [routerLink]="['/ai/activity']" [queryParams]="{ request: item.requestId }"
@@ -492,12 +491,14 @@ export class AiWorkspacePageComponent {
 
   protected operationName(operation?: string): string {
     return (
-      ({
-        assistant: 'Assistant',
-        'flow-generation': 'Génération de flow',
-        'flow-refactor': 'Modification de flow',
-        'flow-explain': 'Explication de flow',
-      } as Record<string, string>)[operation ?? 'assistant'] ?? 'Opération IA'
+      (
+        {
+          assistant: 'Assistant',
+          'flow-generation': 'Génération de flow',
+          'flow-refactor': 'Modification de flow',
+          'flow-explain': 'Explication de flow',
+        } as Record<string, string>
+      )[operation ?? 'assistant'] ?? 'Opération IA'
     );
   }
 

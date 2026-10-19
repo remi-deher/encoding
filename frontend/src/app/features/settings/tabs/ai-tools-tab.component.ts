@@ -199,10 +199,13 @@ export class AiToolsTabComponent implements OnInit {
       return;
     }
     if (
-      (this.assistantLocalOnly() && (this.assistantProvider() ?? this.defaultProvider()) !== 'ollama') ||
+      (this.assistantLocalOnly() &&
+        (this.assistantProvider() ?? this.defaultProvider()) !== 'ollama') ||
       (this.flowLocalOnly() && (this.flowProvider() ?? this.defaultProvider()) !== 'ollama')
     ) {
-      this.notifications.show('Le mode local uniquement exige Ollama comme moteur effectif pour cet usage.');
+      this.notifications.show(
+        'Le mode local uniquement exige Ollama comme moteur effectif pour cet usage.',
+      );
       return;
     }
     this.savingSettings.set(true);

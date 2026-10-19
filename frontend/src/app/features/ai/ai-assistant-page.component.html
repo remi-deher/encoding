@@ -206,9 +206,18 @@
 
     <mat-form-field class="read-tool-picker" appearance="outline" subscriptSizing="dynamic">
       <mat-label>Outils de lecture pour ce message</mat-label>
-      <mat-select name="readTools" multiple [ngModel]="selectedReadTools()" (ngModelChange)="setSelectedReadTools($event)">
+      <mat-select
+        name="readTools"
+        multiple
+        [ngModel]="selectedReadTools()"
+        (ngModelChange)="setSelectedReadTools($event)"
+      >
         @for (tool of readTools; track tool.name) {
-          <mat-option [value]="tool.name" [disabled]="tool.name === 'get_flow' && selectedResourceType() !== 'flow'">{{ tool.label }}</mat-option>
+          <mat-option
+            [value]="tool.name"
+            [disabled]="tool.name === 'get_flow' && selectedResourceType() !== 'flow'"
+            >{{ tool.label }}</mat-option
+          >
         }
       </mat-select>
       <mat-hint>Jusqu’à trois outils MCP en lecture seule ; les résultats seront cités.</mat-hint>
@@ -239,9 +248,9 @@
       }
     </form>
     <p class="privacy-note">
-      Votre question, les données des ressources et les résultats des outils sélectionnés sont transmis au fournisseur affecté à cet
-      usage, qui peut être externe à votre installation. La conversation reste privée à votre
-      compte ; l’assistant ne peut modifier aucune ressource.
+      Votre question, les données des ressources et les résultats des outils sélectionnés sont
+      transmis au fournisseur affecté à cet usage, qui peut être externe à votre installation. La
+      conversation reste privée à votre compte ; l’assistant ne peut modifier aucune ressource.
     </p>
   </section>
 </div>

@@ -194,7 +194,9 @@ export interface FlowAiAssistantDialogData {
                       @for (step of result.steps; track $index) {
                         <li>
                           {{ step.name }} — {{ step.detail }}
-                          @if (step.assumed) { <span>(résultat supposé)</span> }
+                          @if (step.assumed) {
+                            <span>(résultat supposé)</span>
+                          }
                         </li>
                       }
                     </ol>
@@ -468,12 +470,16 @@ export class FlowAiAssistantDialogComponent {
   }
 
   simulationStatus(status: string): string {
-    return ({
-      completed: 'Simulation terminée',
-      waiting: 'Simulation en attente d’une hypothèse',
-      failed: 'Échec simulé',
-      invalid: 'Flow invalide pour la simulation',
-    } as Record<string, string>)[status] ?? 'État de simulation inconnu';
+    return (
+      (
+        {
+          completed: 'Simulation terminée',
+          waiting: 'Simulation en attente d’une hypothèse',
+          failed: 'Échec simulé',
+          invalid: 'Flow invalide pour la simulation',
+        } as Record<string, string>
+      )[status] ?? 'État de simulation inconnu'
+    );
   }
 
   discardProposal(): void {
@@ -488,7 +494,10 @@ export class FlowAiAssistantDialogComponent {
     const requestId = this.proposalRequestId();
     if (!requestId) return;
     this.aiService.recordFlowProposalDecision(requestId, decision).subscribe({
-      error: () => this.notifications.show('La décision est appliquée, mais son suivi IA n’a pas pu être mis à jour.'),
+      error: () =>
+        this.notifications.show(
+          'La décision est appliquée, mais son suivi IA n’a pas pu être mis à jour.',
+        ),
     });
     this.proposalRequestId.set(null);
   }
