@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -30,7 +30,11 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
         </div>
       } @else {
         @for (item of items(); track item.requestId) {
-          <article class="activity-row">
+          <article
+            class="activity-row"
+            [class.is-selected]="selectedRequestId() === item.requestId"
+            [id]="'activity-' + item.requestId"
+          >
             <div>
               <h2>{{ providerName(item.provider) }} · {{ statusName(item.status) }}</h2>
               <p>
@@ -48,6 +52,12 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
               [routerLink]="['/ai/assistant']"
               [queryParams]="{ conversation: item.conversationId }"
               >Ouvrir la conversation</a
+            >
+            <a
+              matButton="text"
+              [routerLink]="['/ai/activity']"
+              [queryParams]="{ request: item.requestId }"
+              >Lien vers la demande</a
             >
           </article>
         }
@@ -74,6 +84,10 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
       align-items: center;
       gap: var(--space-3);
     }
+    .activity-row.is-selected {
+      outline: 2px solid var(--accent-strong);
+      outline-offset: 2px;
+    }
     h2,
     p {
       margin: 0;
@@ -96,11 +110,16 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 })
 export class AiActivityPageComponent {
   private readonly api = inject(AiToolsService);
+  private readonly route = inject(ActivatedRoute);
   protected readonly items = signal<readonly AiAssistantActivity[]>([]);
+  protected readonly selectedRequestId = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal(false);
 
   constructor() {
+    this.route.queryParamMap.subscribe((params) =>
+      this.selectedRequestId.set(params.get('request')),
+    );
     this.refresh();
   }
 
