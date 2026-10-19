@@ -193,7 +193,7 @@ import { aiEffortLabel, aiModelKey, aiTypeLabel } from './ai-model-selection';
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      color: var(--text-muted);
+      color: var(--text-secondary);
     }
     .model-chevron {
       flex: 0 0 auto;
