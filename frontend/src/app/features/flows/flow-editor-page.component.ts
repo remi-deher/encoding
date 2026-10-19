@@ -995,10 +995,18 @@ export class FlowEditorPageComponent {
       },
     });
 
-    dialogRef.afterClosed().subscribe((result: { flow?: FlowDocument } | undefined) => {
-      if (result?.flow) {
-        void this.loadAiFlow(result.flow);
+    dialogRef.afterClosed().subscribe(async (result: { flow?: FlowDocument } | undefined) => {
+      if (!result?.flow) return;
+      if (currentDoc) {
+        const latestDoc = await this.currentFlowDocument();
+        if (!latestDoc || JSON.stringify(latestDoc) !== JSON.stringify(currentDoc)) {
+          this.notifications.show(
+            'Le flow a changé depuis la création de la proposition. Elle n’a pas été appliquée ; relancez l’assistant depuis l’état actuel.',
+          );
+          return;
+        }
       }
+      await this.loadAiFlow(result.flow);
     });
   }
 
