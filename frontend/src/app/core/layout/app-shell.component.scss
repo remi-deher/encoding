@@ -50,6 +50,9 @@ button.assistant-launcher {
   touch-action: none;
   cursor: grab;
   box-shadow: var(--elevation-2);
+  transition:
+    opacity 150ms ease,
+    visibility 0s;
   &[hidden] {
     display: none;
   }
@@ -60,6 +63,14 @@ button.assistant-launcher {
   &.is-dragging {
     cursor: grabbing;
     user-select: none;
+  }
+  &.is-panel-open {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 130ms ease,
+      visibility 0s linear 220ms;
   }
 }
 .assistant-widget-panel {
@@ -73,10 +84,26 @@ button.assistant-launcher {
   border-radius: var(--radius-xl);
   background: var(--surface-container-lowest);
   box-shadow: var(--elevation-2);
-  display: none;
+  display: flex;
+  flex-direction: column;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(var(--assistant-panel-scale-x, 0.15), var(--assistant-panel-scale-y, 0.11));
+  transform-origin: var(--assistant-panel-origin-x, 100%) var(--assistant-panel-origin-y, 100%);
+  transition:
+    opacity 160ms ease,
+    transform 240ms var(--motion-emphasized),
+    visibility 0s linear 240ms;
   &.is-open {
-    display: flex;
-    flex-direction: column;
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+    transition:
+      opacity 170ms ease,
+      transform 240ms var(--motion-emphasized),
+      visibility 0s;
   }
   > app-ai-assistant-page {
     flex: 1;
@@ -100,6 +127,13 @@ button.assistant-launcher {
   button.assistant-launcher {
     right: var(--space-4);
     bottom: max(var(--space-4), env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.assistant-launcher,
+  .assistant-widget-panel {
+    transition: none;
   }
 }
 

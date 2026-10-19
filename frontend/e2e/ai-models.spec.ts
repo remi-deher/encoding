@@ -141,7 +141,9 @@ test('backend models and reasoning drive each turn while old turns retain observ
     nodeId,
   });
   await expect(model).toBeDisabled();
-  await expect(assistant.getByRole('combobox', { name: 'Fournisseur IA', exact: true })).toBeDisabled();
+  await expect(
+    assistant.getByRole('combobox', { name: 'Fournisseur IA', exact: true }),
+  ).toBeDisabled();
   await expect(reasoning).toBeDisabled();
   release!();
   await expect(assistant.getByText('Nouvelle réponse', { exact: true })).toBeVisible();
@@ -418,7 +420,13 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   await launcher.click();
   const widget = page.locator('#assistant-widget-panel');
   await expect(widget).toBeVisible();
-  expect((await widget.boundingBox())!.height).toBeLessThanOrEqual(520);
+  await expect
+    .poll(() => widget.evaluate((panel) => panel.getBoundingClientRect().width))
+    .toBeGreaterThan(300);
+  const panelBounds = (await widget.boundingBox())!;
+  expect(panelBounds.height).toBeLessThanOrEqual(520);
+  expect(Math.abs(panelBounds.x + panelBounds.width - (after.x + after.width))).toBeLessThan(1);
+  expect(Math.abs(panelBounds.y + panelBounds.height + 16 - after.y)).toBeLessThan(1);
   await widget.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
   await widget.getByRole('button', { name: 'Joindre une ressource' }).click();
