@@ -257,7 +257,7 @@ public sealed class AiClusterTests
         Assert.True(first!.Success, first.ErrorMessage);
         Assert.Equal("resolved-test-model", first.ActualModel);
         await Assert.ThrowsAsync<ArgumentException>(() => assistant.SendAsync(request with { Model = "other-model" }, user, Ct));
-        var second = await remoteAssistant.SendAsync(new(Guid.NewGuid(), "second question", ConversationId: first.Conversation.Id,
+        var second = await assistant.SendAsync(new(Guid.NewGuid(), "second question", ConversationId: first.Conversation.Id,
             Provider: "openai", Model: "other-model", NodeId: mesh.Second.Identity.PeerId), user, Ct);
         Assert.True(second!.Success, second.ErrorMessage);
         var detail = await assistant.GetAsync(first.Conversation.Id, user, Ct);
@@ -271,14 +271,14 @@ public sealed class AiClusterTests
         Assert.Equal("other-model", (await assistant.GetAsync(first.Conversation.Id, user, Ct))!.Conversation.Model);
 
         await Assert.ThrowsAsync<ArgumentException>(() => assistant.SendAsync(request with { ConversationId = first.Conversation.Id, Model = "other-model" }, user, Ct));
-        await Assert.ThrowsAsync<ArgumentException>(() => remoteAssistant.SendAsync(new(Guid.NewGuid(), "invalid effort", ConversationId: first.Conversation.Id,
+        await Assert.ThrowsAsync<ArgumentException>(() => assistant.SendAsync(new(Guid.NewGuid(), "invalid effort", ConversationId: first.Conversation.Id,
             Provider: "openai", Model: "other-model", ReasoningEffort: "high", NodeId: mesh.Second.Identity.PeerId), user, Ct));
         mesh.Factory.BlockInferences = true;
         var cancelledRequest = Guid.NewGuid();
-        var sending = remoteAssistant.SendAsync(new(cancelledRequest, "third question", ConversationId: first.Conversation.Id,
+        var sending = assistant.SendAsync(new(cancelledRequest, "third question", ConversationId: first.Conversation.Id,
             Provider: "openai", Model: "other-model", NodeId: mesh.Second.Identity.PeerId), user, Ct);
         await mesh.Factory.InferenceStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.True(await remoteAssistant.CancelRequestAsync(cancelledRequest, user, Ct));
+        Assert.True(await assistant.CancelRequestAsync(cancelledRequest, user, Ct));
         Assert.False((await sending)!.Success);
         Assert.Equal(2, (await assistant.GetAsync(first.Conversation.Id, user, Ct))!.Turns.Count);
 
