@@ -40,8 +40,10 @@ public sealed class AiSettingsService
             : update.AssistantProvider ?? cachedSettings.AssistantProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
         var effectiveFlowProvider = update.FlowProvider == "default" ? update.DefaultProvider ?? cachedSettings.DefaultProvider
             : update.FlowProvider ?? cachedSettings.FlowProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
-        if (update.AssistantLocalOnly == true && effectiveAssistantProvider != "ollama"
-            || update.FlowLocalOnly == true && effectiveFlowProvider != "ollama")
+        var assistantLocalOnly = update.AssistantLocalOnly ?? cachedSettings.AssistantLocalOnly;
+        var flowLocalOnly = update.FlowLocalOnly ?? cachedSettings.FlowLocalOnly;
+        if (assistantLocalOnly && effectiveAssistantProvider != "ollama"
+            || flowLocalOnly && effectiveFlowProvider != "ollama")
             throw new ArgumentException("Le mode local uniquement exige Ollama comme fournisseur effectif.");
         if (update.TimeoutSeconds is < 10 or > 600 || update.SubtitleBatchSize is < 5 or > 200)
             throw new ArgumentException("Les limites IA sont invalides.");

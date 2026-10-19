@@ -226,6 +226,10 @@ public sealed class AiToolTests
             Assert.Null(inherited.AssistantProvider);
             Assert.False(inherited.AssistantLocalOnly);
 
+            var strictPolicy = reloadedService.UpdateSettings(new(AssistantLocalOnly: true));
+            Assert.Throws<ArgumentException>(() => reloadedService.UpdateSettings(new(DefaultProvider: "openai")));
+            Assert.True(strictPolicy.AssistantLocalOnly);
+
             // Créer un client depuis la factory
             var factory = new AiClientFactory(config, new MockHttpClientFactory(), reloadedService);
             var client = factory.CreateClient();
