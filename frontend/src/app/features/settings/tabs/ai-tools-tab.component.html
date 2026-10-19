@@ -133,7 +133,7 @@
                 matButton="text"
                 type="button"
                 [disabled]="!isAdmin() || savingSettings()"
-                (click)="provider.id === 'ollama' ? (ollamaEnabled.set(false), ollamaBaseUrl.set(''), ollamaModel.set('')) : (openAiEnabled.set(false), openAiBaseUrl.set(''), openAiModel.set(''), openAiApiKey.set(''))"
+                (click)="deleteProviderConfiguration(provider.id)"
               >
                 Supprimer
               </button>

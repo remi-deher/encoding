@@ -83,6 +83,18 @@ export class AiToolsTabComponent implements OnInit {
     const tool = this.tools().find((item) => item.id === id);
     return tool ? this.authLabel(tool.authStatus.state) : 'État indisponible';
   }
+  deleteProviderConfiguration(id: string): void {
+    if (id === 'ollama') {
+      this.ollamaEnabled.set(false);
+      this.ollamaBaseUrl.set('');
+      this.ollamaModel.set('');
+    } else if (id === 'openai') {
+      this.openAiEnabled.set(false);
+      this.openAiBaseUrl.set('');
+      this.openAiModel.set('');
+      this.openAiApiKey.set('');
+    }
+  }
   private readonly aiService = inject(AiToolsService);
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(MatDialog);

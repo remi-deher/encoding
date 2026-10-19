@@ -34,9 +34,10 @@ public sealed class AiAssistantService(
     McpService mcp,
     IDataProtectionProvider protection)
 {
-    public async Task<AiAssistantOptions> OptionsAsync(CancellationToken ct)
+    public async Task<AiAssistantOptions> OptionsAsync(CancellationToken ct, bool refresh = false)
     {
         var settings = await cluster.GetSettingsAsync(ct);
+        if (refresh) await cluster.ModelsAsync(true, ct);
         var view = await cluster.ViewAsync(ct);
         var policy = await cluster.ModelPolicyAsync(ct);
         var providerNames = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -449,7 +450,7 @@ public sealed class AiAssistantService(
                 if (request.ReasoningEffort is not null && !selectedOption.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal))
                     throw new ArgumentException("L’effort choisi n’est pas pris en charge par ce modèle.");
                 var now = DateTimeOffset.UtcNow;
-                var source = context?.Source ?? new AiAssistantSource("application", Guid.Empty, null, "Encoding", "/ai");
+                var source = context?.Source ?? new AiAssistantSource("application", Guid.Empty, "Encoding", "/ai");
                 conversation = new(
                     id,
                     provider,
