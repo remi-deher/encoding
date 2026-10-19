@@ -92,7 +92,9 @@ public sealed class AiAssistantService(
         IReadOnlyDictionary<Guid, string>? UserPrompts = null,
         IReadOnlyDictionary<Guid, string>? TurnPromptSnapshots = null,
         IReadOnlyDictionary<Guid, string>? TurnToolCalls = null,
-        IReadOnlyDictionary<Guid, string>? TurnModelPlans = null);
+        IReadOnlyDictionary<Guid, string>? TurnModelPlans = null,
+        IReadOnlyDictionary<Guid, AiTurnModelSelection>? TurnSelections = null,
+        IReadOnlyDictionary<Guid, string?>? TurnActualModels = null);
     private sealed record ResolvedContext(AiAssistantSource Source, string Data);
 
     /// <summary>Expire les conversations terminées et l'activité, avec des tombstones répliqués au lieu d'effacer une seule projection locale.</summary>
@@ -367,7 +369,10 @@ public sealed class AiAssistantService(
         var session = await cluster.GetSessionAsync(id, ct);
         var turns = session?.Turns.Select(turn => new AiAssistantTurn(
             turn.RequestId, stored.UserPrompts?.GetValueOrDefault(turn.RequestId) ?? turn.UserPrompt, turn.Content,
-            stored.TurnSources?.GetValueOrDefault(turn.RequestId) ?? [conversation.Source])).ToArray()
+            stored.TurnSources?.GetValueOrDefault(turn.RequestId) ?? [conversation.Source],
+            stored.TurnSelections?.GetValueOrDefault(turn.RequestId) ?? turn.Selection,
+            stored.TurnActualModels?.GetValueOrDefault(turn.RequestId) ?? turn.Usage?.Model,
+            turn.ExecutorNodeId)).ToArray()
             ?? Array.Empty<AiAssistantTurn>();
         var pending = session?.PendingRequest is { } requestId && session.PendingPrompt is { } prompt
             ? new AiAssistantPendingTurn(requestId, stored.UserPrompts?.GetValueOrDefault(requestId) ?? prompt.UserPrompt,
@@ -697,14 +702,30 @@ public sealed class AiAssistantService(
         await SaveActivityAsync(ownerId, activity, ct);
 
         conversation = conversation with { UpdatedAt = DateTimeOffset.UtcNow };
-        await SaveConversationAsync(ownerId, conversation, ct);
+        var updatedSelections = storedConversation?.TurnSelections?.ToDictionary(pair => pair.Key, pair => pair.Value)
+            ?? new Dictionary<Guid, AiTurnModelSelection>();
+        var selectedOptionForTurn = (await OptionsAsync(ct)).Models.FirstOrDefault(option =>
+            option.Provider == conversation.Provider && option.Model == conversation.Model && option.NodeId == conversation.NodeId);
+        if (selectedOptionForTurn is not null)
+            updatedSelections[request.RequestId] = new(conversation.Provider, conversation.Model,
+                conversation.ReasoningEffort, conversation.NodeId);
+        var observedModel = result.Usage?.Model;
+        var updatedActualModels = storedConversation?.TurnActualModels?.ToDictionary(pair => pair.Key, pair => pair.Value)
+            ?? new Dictionary<Guid, string?>();
+        updatedActualModels[request.RequestId] = observedModel;
+        var latestConversation = conversation with { Provider = conversation.Provider, Model = conversation.Model, ReasoningEffort = conversation.ReasoningEffort, NodeId = conversation.NodeId };
+        await SaveConversationAsync(ownerId, latestConversation, ct,
+            turnSelections: updatedSelections, turnActualModels: updatedActualModels);
         return new(
             result.Success,
-            conversation,
+            latestConversation,
             result.RequestId ?? request.RequestId,
             result.Success ? result.Content : null,
             result.Success ? null : result.ErrorMessage ?? "Le fournisseur IA n’a pas retourné de réponse.",
-            allSources);
+            allSources,
+            updatedSelections.GetValueOrDefault(request.RequestId),
+            observedModel,
+            result.ExecutorNodeId);
     }
 
     private async Task<ResolvedContext?> ResolveContextAsync(string kind, Guid id, int? version, CancellationToken ct)
@@ -805,7 +826,9 @@ public sealed class AiAssistantService(
         IReadOnlyDictionary<Guid, string>? userPrompts = null,
         IReadOnlyDictionary<Guid, string>? turnPromptSnapshots = null,
         IReadOnlyDictionary<Guid, string>? turnToolCalls = null,
-        IReadOnlyDictionary<Guid, string>? turnModelPlans = null)
+        IReadOnlyDictionary<Guid, string>? turnModelPlans = null,
+        IReadOnlyDictionary<Guid, AiTurnModelSelection>? turnSelections = null,
+        IReadOnlyDictionary<Guid, string?>? turnActualModels = null)
     {
         await store.SaveAsync(SessionOwnerKey(conversation.Id), ownerId, ct);
         var existing = await ReadConversationAsync(ownerId, conversation.Id, ct);
@@ -814,7 +837,9 @@ public sealed class AiAssistantService(
                 userPrompts ?? existing?.UserPrompts,
                 turnPromptSnapshots ?? existing?.TurnPromptSnapshots,
                 turnToolCalls ?? existing?.TurnToolCalls,
-                turnModelPlans ?? existing?.TurnModelPlans), ct);
+                turnModelPlans ?? existing?.TurnModelPlans,
+                turnSelections ?? existing?.TurnSelections,
+                turnActualModels ?? existing?.TurnActualModels), ct);
     }
 
     private sealed record StoredActivity(string OwnerId, AiAssistantActivity Activity);
