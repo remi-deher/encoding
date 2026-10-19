@@ -42,7 +42,12 @@ export class SystemLogsService {
 
     return this.http
       .get<SystemLogCategoriesResponse>('/api/v1/system/logs/categories', { params })
-      .pipe(map((res) => res.categories));
+      .pipe(
+        map((res) => {
+          if (!Array.isArray(res.categories)) throw new Error('Catalogue de catégories invalide.');
+          return res.categories;
+        }),
+      );
   }
 
   createLogStream(

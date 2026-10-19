@@ -5,43 +5,25 @@ import {
   inject,
   output,
   signal,
+  TemplateRef,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import { ApiTokenResponse } from '../../../shared/models/api-token';
 import { formatRelativeTime } from '../../../shared/models/date-format';
 import { ApiTokenService } from '../../../shared/services/api-token.service';
+import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 import {
   DataTableActionEvent,
   DataTableColumn,
   DataTableComponent,
-  DataTableRow,
   DataTableRowAction,
 } from '../../../shared/ui/data-table.component';
-import {
-  CreateApiTokenDialogComponent,
-  CreateApiTokenDialogResult,
-} from '../dialogs/create-api-token-dialog.component';
-import {
-  ApiTokenSecretDialogComponent,
-  ApiTokenSecretDialogData,
-} from '../dialogs/api-token-secret-dialog.component';
-
-interface ApiTokenRow extends DataTableRow {
-  readonly id: string;
-  readonly name: string;
-  readonly prefix: string;
-  readonly role: 'admin' | 'viewer';
-  readonly roleLabel: string;
-  readonly statusLabel: string;
-  readonly isActive: boolean;
-  readonly createdLabel: string;
-  readonly lastUsedLabel: string;
-  readonly expiresLabel: string;
-}
+import { RecordFormComponent, RecordFormData } from '../../../shared/ui/record-form.component';
+import { SettingsEditor } from '../settings-editor';
 
 @Component({
   selector: 'app-api-token-tab',
@@ -49,76 +31,127 @@ interface ApiTokenRow extends DataTableRow {
   imports: [
     DataTableComponent,
     MatButtonModule,
-    MatTooltipModule,
+    ConfigurationSectionComponent,
+    RecordFormComponent,
   ],
   template: `
-    <div class="tab-header">
-      <div class="tab-titles">
-        <h2>Jetons d’API</h2>
-        <p>Gérez les accès Bearer pour les scripts, outils externes, CI/CD et agents IA.</p>
-      </div>
-      <button matButton="filled" type="button" (click)="openCreate()">
-        Générer un jeton
-      </button>
-    </div>
-
-    <app-data-table
-      layout="resources"
-      catalogue-table
-      [columns]="columns"
-      [rows]="filteredRows()"
-      [rowActions]="actions"
-      (rowAction)="onAction($event)"
-      emptyMessage="Aucun jeton d’API actif. Générez-en un pour autoriser des accès programmatiques."
-    />
+    <app-configuration-section
+      title="Jetons d’API"
+      description="Un accès dédié à chaque application ou script."
+    >
+      <button section-actions matButton="tonal" (click)="openCreate()">Créer un jeton</button>
+      @if (state() === 'loading') {
+        <p role="status">Chargement des jetons…</p>
+      } @else if (state() === 'error') {
+        <p role="alert">Impossible de charger les jetons.</p>
+        <button matButton="text" (click)="refresh()">Réessayer</button>
+      } @else {
+        <app-data-table
+          layout="resources"
+          [compactResources]="true"
+          [columns]="columns"
+          [rows]="rows()"
+          [rowActions]="actions"
+          (rowAction)="onAction($event)"
+          emptyMessage="Aucun jeton d’API. Créez-en un pour autoriser une application."
+        />
+      }
+      <p class="note">La valeur complète d’un jeton est affichée une seule fois, à sa création.</p>
+    </app-configuration-section>
+    <ng-template #tokenEditor>
+      @if (secret()) {
+        <div class="secret-content">
+          <h3>Copiez votre jeton</h3>
+          <p>Il ne sera plus affiché après la fermeture de ce panneau.</p>
+          <code>{{ secret() }}</code
+          ><button matButton="tonal" (click)="copySecret()">Copier le jeton</button
+          ><button matButton="text" (click)="editor.close()">Terminer</button>
+        </div>
+      } @else {
+        <app-record-form
+          [data]="form"
+          [busy]="busy()"
+          (submitted)="create($event)"
+          (cancelled)="editor.close()"
+        />
+      }
+    </ng-template>
   `,
   styles: `
-    :host {
-      display: grid;
-      gap: var(--space-3);
-    }
-
-    .tab-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: var(--space-3);
-      padding: var(--space-2) 0;
-    }
-
-    .tab-titles h2 {
-      margin: 0;
-      font-size: var(--font-title);
-      color: var(--text-primary);
-    }
-
-    .tab-titles p {
-      margin: var(--space-1) 0 0 0;
-      font-size: var(--font-body-sm);
+    .note {
+      margin: var(--space-4) 0 0;
+      font-size: var(--font-label);
       color: var(--text-secondary);
+    }
+    .secret-content {
+      display: grid;
+      gap: var(--space-4);
+    }
+    .secret-content h3,
+    .secret-content p {
+      margin: 0;
+    }
+    .secret-content code {
+      overflow-wrap: anywhere;
+      padding: var(--space-4);
+      background: var(--surface-container-low);
+      border-radius: var(--radius-md);
+      user-select: all;
     }
   `,
 })
 export class ApiTokenTabComponent {
   private readonly tokenService = inject(ApiTokenService);
   private readonly notifications = inject(NotificationService);
-  private readonly dialog = inject(MatDialog);
-
+  private readonly clipboard = inject(ClipboardService);
+  protected readonly editor = inject(SettingsEditor);
+  private readonly tokenEditor = viewChild.required<TemplateRef<unknown>>('tokenEditor');
+  private readonly recordForm = viewChild(RecordFormComponent);
   readonly tokensUpdated = output<readonly ApiTokenResponse[]>();
-
   protected readonly tokens = signal<readonly ApiTokenResponse[]>([]);
-  protected readonly query = signal('');
-
+  protected readonly state = signal<'loading' | 'error' | 'ready'>('loading');
+  protected readonly busy = signal(false);
+  protected readonly secret = signal('');
+  protected readonly form: RecordFormData = {
+    title: 'Nouveau jeton',
+    description: 'Choisissez un nom et les droits nécessaires à cette application.',
+    submitLabel: 'Créer le jeton',
+    review: false,
+    fields: [
+      { id: 'name', label: 'Nom du jeton', type: 'text', required: true, maxLength: 64 },
+      {
+        id: 'role',
+        label: 'Rôle',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'viewer', label: 'Lecture seule' },
+          { value: 'admin', label: 'Administrateur' },
+        ],
+      },
+      {
+        id: 'duration',
+        label: 'Validité',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'never', label: 'Sans expiration' },
+          { value: '30', label: '30 jours' },
+          { value: '90', label: '90 jours' },
+          { value: '365', label: '1 an' },
+        ],
+      },
+    ],
+    initialValues: { role: 'viewer', duration: 'never' },
+  };
   protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Nom du jeton', sortable: true },
+    { key: 'name', label: 'Nom' },
+    { key: 'roleLabel', label: 'Rôle' },
+    { key: 'statusLabel', label: 'État' },
     { key: 'prefix', label: 'Préfixe' },
-    { key: 'roleLabel', label: 'Rôle', sortable: true },
-    { key: 'statusLabel', label: 'État', sortable: true },
-    { key: 'lastUsedLabel', label: 'Dernière utilisation', sortable: true },
-    { key: 'expiresLabel', label: 'Expiration', sortable: true },
+    { key: 'lastUsedLabel', label: 'Dernière utilisation' },
+    { key: 'expiresLabel', label: 'Expiration' },
   ];
-
   protected readonly actions: readonly DataTableRowAction[] = [
     {
       id: 'revoke',
@@ -126,9 +159,9 @@ export class ApiTokenTabComponent {
       tone: 'danger',
       visibleWhen: (row) => !!row['isActive'],
       confirmation: (row) => ({
-        title: 'Révoquer ce jeton d’API ?',
-        message: `Les systèmes utilisant « ${row['name']} » ne pourront plus s’authentifier sur le cluster. Cette action est irréversible.`,
-        confirmLabel: 'Révoquer définitivement',
+        title: 'Révoquer ce jeton ?',
+        message: `Les applications utilisant « ${row['name']} » perdront leur accès au cluster.`,
+        confirmLabel: 'Révoquer',
       }),
     },
     {
@@ -136,114 +169,95 @@ export class ApiTokenTabComponent {
       label: 'Supprimer',
       tone: 'danger',
       confirmation: (row) => ({
-        title: 'Supprimer ce jeton d’API ?',
-        message: `Le jeton « ${row['name']} » sera définitivement supprimé de la base de données.`,
-        confirmLabel: 'Supprimer définitivement',
+        title: 'Supprimer ce jeton ?',
+        message: `Le jeton « ${row['name']} » sera définitivement supprimé.`,
+        confirmLabel: 'Supprimer',
       }),
     },
   ];
-
-  protected readonly rows = computed<readonly ApiTokenRow[]>(() =>
+  protected readonly rows = computed(() =>
     this.tokens().map((token) => ({
       id: token.id,
       name: token.name,
-      prefix: token.tokenPrefix ? `${token.tokenPrefix}…` : '—',
-      role: token.role,
       roleLabel: token.role === 'admin' ? 'Administrateur' : 'Lecture seule',
       isActive: token.isActive,
-      statusLabel: token.isActive ? 'Actif' : 'Révoqué',
+      statusLabel: !token.isActive
+        ? 'Révoqué'
+        : token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now()
+          ? 'Expiré'
+          : 'Actif',
+      prefix: `${token.tokenPrefix}…`,
       lastUsedLabel: token.lastUsedAt ? formatRelativeTime(token.lastUsedAt) : 'Jamais utilisé',
       expiresLabel: token.expiresAt
         ? new Date(token.expiresAt).toLocaleDateString('fr-FR')
-        : 'N’expire jamais',
-      createdLabel: new Date(token.createdAt).toLocaleDateString('fr-FR'),
+        : 'Sans expiration',
     })),
   );
-
-  protected readonly filteredRows = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    return this.rows().filter(
-      (row) => !q || row.name.toLowerCase().includes(q) || row.prefix.toLowerCase().includes(q),
-    );
-  });
-
   constructor() {
     void this.refresh();
   }
-
   async refresh(): Promise<void> {
     try {
       const list = await firstValueFrom(this.tokenService.list());
       this.tokens.set(list);
       this.tokensUpdated.emit(list);
+      this.state.set('ready');
     } catch {
+      this.state.set('error');
       this.notifications.show('Impossible de récupérer les jetons d’API.');
     }
   }
-
   protected openCreate(): void {
-    const dialogRef = this.dialog.open<CreateApiTokenDialogComponent, undefined, CreateApiTokenDialogResult | null>(
-      CreateApiTokenDialogComponent,
-      {
-        width: '460px',
-      },
-    );
-
-    dialogRef.afterClosed().subscribe(async (result) => {
-      if (!result) return;
-      try {
-        let expiresAt: string | null = null;
-        if (result.expiresInDays) {
-          const date = new Date();
-          date.setDate(date.getDate() + result.expiresInDays);
-          expiresAt = date.toISOString();
-        }
-
-        const res = await firstValueFrom(
-          this.tokenService.create({
-            name: result.name,
-            role: result.role,
-            expiresAt,
-          }),
-        );
-
-        this.notifications.show(`Jeton « ${result.name} » généré.`);
-        await this.refresh();
-
-        this.dialog.open<ApiTokenSecretDialogComponent, ApiTokenSecretDialogData>(
-          ApiTokenSecretDialogComponent,
-          {
-            width: '500px',
-            data: {
-              name: result.name,
-              secret: res.token,
-            },
-          },
-        );
-      } catch {
-        this.notifications.show('Échec de la génération du jeton.');
-      }
+    this.secret.set('');
+    void this.editor.open({
+      title: 'Créer un jeton',
+      content: this.tokenEditor(),
+      dirty: () => !this.secret() && (this.recordForm()?.hasUnsavedChanges() ?? false),
+      busy: () => this.busy(),
+      onClosed: () => this.secret.set(''),
     });
   }
-
+  protected async create(value: Record<string, string>): Promise<void> {
+    this.busy.set(true);
+    try {
+      const expiresAt =
+        value['duration'] === 'never'
+          ? null
+          : new Date(Date.now() + Number(value['duration']) * 86400000).toISOString();
+      const result = await firstValueFrom(
+        this.tokenService.create({
+          name: value['name'].trim(),
+          role: value['role'] as 'admin' | 'viewer',
+          expiresAt,
+        }),
+      );
+      this.secret.set(result.token);
+      this.notifications.show('Jeton créé. Copiez sa valeur avant de fermer le panneau.');
+      await this.refresh();
+    } catch {
+      this.notifications.show('Impossible de créer le jeton.');
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  protected async copySecret(): Promise<void> {
+    this.notifications.show(
+      (await this.clipboard.copy(this.secret()))
+        ? 'Jeton copié.'
+        : 'Impossible de copier le jeton.',
+    );
+  }
   protected async onAction(event: DataTableActionEvent): Promise<void> {
-    const row = event.row as ApiTokenRow;
-    if (event.actionId === 'revoke') {
-      try {
-        await firstValueFrom(this.tokenService.revoke(row.id));
-        this.notifications.show(`Le jeton « ${row.name} » a été révoqué.`);
-        await this.refresh();
-      } catch {
-        this.notifications.show('Échec de la révocation du jeton.');
-      }
-    } else if (event.actionId === 'delete') {
-      try {
-        await firstValueFrom(this.tokenService.delete(row.id));
-        this.notifications.show(`Le jeton « ${row.name} » a été supprimé.`);
-        await this.refresh();
-      } catch {
-        this.notifications.show('Échec de la suppression du jeton.');
-      }
+    try {
+      await firstValueFrom(
+        event.actionId === 'delete'
+          ? this.tokenService.delete(String(event.row.id))
+          : this.tokenService.revoke(String(event.row.id)),
+      );
+      await this.refresh();
+      this.notifications.show('Jeton mis à jour.');
+    } catch {
+      this.notifications.show('Impossible de modifier le jeton.');
     }
   }
 }

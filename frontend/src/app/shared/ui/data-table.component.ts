@@ -134,7 +134,7 @@ export interface DataTableListActionEvent {
     NgTemplateOutlet,
   ],
   template: `
-    <div class="table-scroll-region">
+    <div class="table-scroll-region" [class.compact-resources]="compactResources()">
       @if (layoutOptions().length > 1) {
         <div class="layout-toolbar">
           <span class="layout-label">{{ layoutLabel() }}</span>
@@ -258,7 +258,7 @@ export interface DataTableListActionEvent {
       </ng-template>
 
       @if (layout() === 'resources') {
-        @if (selectable() || sortableColumns().length) {
+        @if (selectable() || (!compactResources() && sortableColumns().length)) {
           <div class="card-toolbar">
             @if (selectable()) {
               <mat-checkbox
@@ -344,10 +344,19 @@ export interface DataTableListActionEvent {
                         {{ rowOpenLabel() }} <span aria-hidden="true">→</span>
                       </button>
                     }
-                    @if (visibleRowActions(row).length > 0 && visibleRowActions(row).length <= 2 && !rowOpenable()) {
+                    @if (
+                      visibleRowActions(row).length > 0 &&
+                      visibleRowActions(row).length <= 2 &&
+                      !rowOpenable() &&
+                      !compactResources()
+                    ) {
                       @for (action of visibleRowActions(row); track action.id) {
                         <button
-                          [matButton]="action.tone === 'danger' && action.id !== 'delete' ? 'filled' : 'outlined'"
+                          [matButton]="
+                            action.tone === 'danger' && action.id !== 'delete'
+                              ? 'filled'
+                              : 'outlined'
+                          "
                           [class.data-card-action_danger]="action.tone === 'danger'"
                           type="button"
                           [attr.aria-label]="
@@ -358,7 +367,10 @@ export interface DataTableListActionEvent {
                           {{ rowActionLabel(action, row) }}
                         </button>
                       }
-                    } @else if (visibleRowActions(row).length > 2) {
+                    } @else if (
+                      visibleRowActions(row).length > 2 ||
+                      (compactResources() && visibleRowActions(row).length > 0)
+                    ) {
                       <button
                         matIconButton
                         type="button"
@@ -665,6 +677,8 @@ export class DataTableComponent {
   private readonly dialog = inject(MatDialog);
   readonly columns = input.required<readonly DataTableColumn[]>();
   readonly rows = input.required<readonly DataTableRow[]>();
+  /** Opt-in connected rows for configuration lists; standard resource catalogs are unchanged. */
+  readonly compactResources = input(false);
   /** `cards` présente chaque ligne comme une carte : plus d'informations lisibles que le tableau dense. */
   readonly layout = model<DataTableLayout>('table');
   readonly layoutOptions = input<readonly DataTableLayoutOption[]>([]);

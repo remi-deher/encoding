@@ -1,69 +1,39 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { of } from 'rxjs';
 import { McpServerTabComponent } from './mcp-server-tab.component';
 import { McpService } from '../../../shared/services/mcp.service';
 import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { ApiTokenResponse } from '../../../shared/models/api-token';
+import { SettingsEditor } from '../settings-editor';
 
 describe('McpServerTabComponent', () => {
-  let mcpServiceMock: { listTools: ReturnType<typeof vi.fn> };
-  let clipboardServiceMock: { copy: ReturnType<typeof vi.fn> };
-  let notificationServiceMock: { show: ReturnType<typeof vi.fn> };
-
-  const sampleTokens: ApiTokenResponse[] = [
-    {
-      id: '11111111-1111-1111-1111-111111111111',
-      name: 'Agent Claude',
-      tokenPrefix: 'enc_pat_clau',
-      role: 'admin',
-      isActive: true,
-      createdAt: '2026-10-18T10:00:00Z',
-    },
-  ];
-
-  async function setup(tokens: ApiTokenResponse[] = sampleTokens) {
-    mcpServiceMock = {
-      listTools: vi.fn().mockReturnValue(
-        of([
-          {
-            name: 'get_library_by_id',
-            description: 'Récupère une bibliothèque par son identifiant.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                library_id: { type: 'string', description: 'ID de la bibliothèque' },
-              },
-              required: ['library_id'],
-            },
-          },
-        ]),
-      ),
-    };
-
-    clipboardServiceMock = {
-      copy: vi.fn().mockResolvedValue(true),
-    };
-
-    notificationServiceMock = {
-      show: vi.fn(),
-    };
-
+  const copy = vi.fn().mockResolvedValue(true);
+  async function setup() {
     await TestBed.configureTestingModule({
       imports: [McpServerTabComponent],
       providers: [
-        provideHttpClient(),
-        provideHttpClientTesting(),
-        { provide: McpService, useValue: mcpServiceMock },
-        { provide: ClipboardService, useValue: clipboardServiceMock },
-        { provide: NotificationService, useValue: notificationServiceMock },
+        {
+          provide: McpService,
+          useValue: {
+            listTools: () =>
+              of([
+                {
+                  name: 'get_library_by_id',
+                  description: 'Récupère une bibliothèque.',
+                  inputSchema: {
+                    type: 'object',
+                    properties: { library_id: { type: 'string' } },
+                    required: ['library_id'],
+                  },
+                },
+              ]),
+          },
+        },
+        { provide: ClipboardService, useValue: { copy } },
+        { provide: NotificationService, useValue: { show: vi.fn() } },
       ],
     }).compileComponents();
-
     const fixture = TestBed.createComponent(McpServerTabComponent);
-    fixture.componentRef.setInput('tokens', tokens);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -73,41 +43,26 @@ describe('McpServerTabComponent', () => {
       element: fixture.nativeElement as HTMLElement,
     };
   }
-
-  it('renders tab title and does NOT display noisy status pill or tester button', async () => {
+  it('shows the endpoint and the real catalog without a second navigation shell', async () => {
     const { element } = await setup();
-
     expect(element.textContent).toContain('Serveur MCP');
-    expect(element.textContent).toContain('Configuration client');
-    // Vérifier l'absence de badge de statut et de bouton Tester pour une interface épurée
-    expect(element.querySelector('.mcp-status-pill')).toBeNull();
-    expect(element.textContent).not.toContain('Tester');
-    expect(element.textContent).not.toContain('Hors ligne');
-  });
-
-  it('renders available tools from MCP catalog', async () => {
-    const { component, fixture, element } = await setup();
-    await component.loadTools();
-    fixture.detectChanges();
-
-    expect(element.textContent).toContain('Outils disponibles (1)');
+    expect(element.textContent).toContain('/api/v1/mcp/sse');
     expect(element.textContent).toContain('get_library_by_id');
-    expect(element.textContent).toContain('library_id');
+    expect(element.querySelector('[role="tablist"]')).toBeNull();
   });
-
-  it('copies configuration using ClipboardService when button is clicked', async () => {
-    const { element } = await setup();
-    const copyButton = element.querySelector<HTMLButtonElement>('.token-selector-row button');
-    expect(copyButton).not.toBeNull();
-    expect(copyButton?.textContent).toContain('Copier la configuration');
-
-    copyButton?.click();
-    // Allow async promise to resolve
+  it('never substitutes a public token prefix for a full secret', async () => {
+    const { component } = await setup();
+    expect(component['configSnippet']()).toContain('<JETON_API_COMPLET>');
+    component['clientToken'].set('enc_pat_full_private_value');
+    await component['copyConfigSnippet']();
+    expect(copy).toHaveBeenCalledWith(expect.stringContaining('Bearer enc_pat_full_private_value'));
+  });
+  it('clears a pasted client secret when its panel closes', async () => {
+    const { component } = await setup();
+    component['openClient']();
     await Promise.resolve();
-
-    expect(clipboardServiceMock.copy).toHaveBeenCalled();
-    expect(notificationServiceMock.show).toHaveBeenCalledWith(
-      'Configuration copiée dans le presse-papier.',
-    );
+    component['clientToken'].set('temporary_secret');
+    await TestBed.inject(SettingsEditor).close();
+    expect(component['clientToken']()).toBe('');
   });
 });

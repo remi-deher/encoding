@@ -1,237 +1,164 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  effect,
+  DestroyRef,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
-import { firstValueFrom } from 'rxjs';
-import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ApiTokenResponse } from '../../shared/models/api-token';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
-import { ApiTokenTabComponent } from './tabs/api-token-tab.component';
-import { McpServerTabComponent } from './tabs/mcp-server-tab.component';
-import { SystemTabComponent } from './tabs/system-tab.component';
-import { UserManagementTabComponent } from './tabs/user-management-tab.component';
-import { WebhooksTabComponent } from './tabs/webhooks-tab.component';
-import { AiToolsTabComponent } from './tabs/ai-tools-tab.component';
-
+import { PageHeaderComponent } from '../../shared/ui/page-header.component';
+import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
+import { ConfigurationSectionComponent } from '../../shared/ui/configuration-section.component';
 import { SystemLogViewerComponent } from '../../shared/ui/system-log-viewer/system-log-viewer.component';
+import { ApiTokenTabComponent } from './tabs/api-token-tab.component';
+import { UserManagementTabComponent } from './tabs/user-management-tab.component';
+import { AiToolsTabComponent } from './tabs/ai-tools-tab.component';
+import { McpServerTabComponent } from './tabs/mcp-server-tab.component';
+import { WebhooksTabComponent } from './tabs/webhooks-tab.component';
+import { MetricsTabComponent } from './tabs/metrics-tab.component';
+import { SystemTabComponent } from './tabs/system-tab.component';
+import { AppearanceTabComponent } from './tabs/appearance-tab.component';
+import { SettingsEditor } from './settings-editor';
 
-export type SettingsMainTab = 'security' | 'integrations' | 'system';
-export type SecuritySubTab = 'tokens' | 'users';
-export type IntegrationsSubTab = 'mcp' | 'webhooks' | 'ai';
-export type SystemSubTab = 'overview' | 'logs';
-
+export type SettingsMainTab = 'interface' | 'access' | 'connections' | 'operations';
+export function settingsDomain(value: string | null): SettingsMainTab {
+  if (['access', 'security', 'tokens', 'users'].includes(value ?? '')) return 'access';
+  if (['connections', 'integrations', 'mcp', 'webhooks', 'ai'].includes(value ?? ''))
+    return 'connections';
+  if (['operations', 'system', 'overview', 'logs', 'system-logs'].includes(value ?? ''))
+    return 'operations';
+  return 'interface';
+}
 @Component({
   selector: 'app-settings-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [SettingsEditor],
   imports: [
-    AiToolsTabComponent,
-    ApiTokenTabComponent,
+    PageHeaderComponent,
     CategoryTabsComponent,
-    ManagementCatalogTemplateComponent,
-    McpServerTabComponent,
-    SystemLogViewerComponent,
-    SystemTabComponent,
+    DetailDrawerComponent,
+    ConfigurationSectionComponent,
+    ApiTokenTabComponent,
     UserManagementTabComponent,
+    AiToolsTabComponent,
+    McpServerTabComponent,
     WebhooksTabComponent,
+    MetricsTabComponent,
+    SystemTabComponent,
+    AppearanceTabComponent,
+    SystemLogViewerComponent,
   ],
   template: `
-    <app-management-catalog-template title="Paramètres" [showToolbar]="false">
-      <app-category-tabs
-        catalogue-navigation
-        label="Domaines de configuration"
-        [options]="mainTabs"
-        [selected]="activeMainTab()"
-        (selectedChange)="onMainTabChange($event)"
-      />
-
-      <p catalogue-summary class="settings-description">
-        Gérez les accès, les intégrations et le fonctionnement de votre installation.
-      </p>
-      <div catalogue-table class="settings-content-wrapper">
-        @switch (activeMainTab()) {
-          @case ('security') {
-            <app-category-tabs
-              label="Rubriques de sécurité"
-              [options]="securityTabs"
-              [selected]="securityTab()"
-              (selectedChange)="onSubTabChange($event)"
-            />
-
-            @if (securityTab() === 'tokens') {
-              <app-api-token-tab (tokensUpdated)="cachedTokens.set($event)" />
-            } @else {
-              <app-user-management-tab />
+    <app-detail-drawer
+      [opened]="!!editor.state()"
+      [title]="editor.state()?.title ?? ''"
+      [content]="editor.state()?.content"
+      size="standard"
+      [modal]="true"
+      mainScroll="parent"
+      [dismissible]="!editor.isBusy() && !editor.hasUnsavedChanges()"
+      (closed)="editor.drawerClosed()"
+    >
+      <div drawer-main>
+        <app-page-header title="Paramètres" [description]="descriptions[activeMainTab()]" />
+        <app-category-tabs
+          label="Domaines des paramètres"
+          [options]="mainTabs"
+          [selected]="activeMainTab()"
+          (selectedChange)="onMainTabChange($event)"
+        />
+        <div
+          class="settings-content"
+          role="tabpanel"
+          [attr.aria-label]="descriptions[activeMainTab()]"
+        >
+          @switch (activeMainTab()) {
+            @case ('interface') {
+              <app-appearance-tab />
             }
-          }
-
-          @case ('integrations') {
-            <app-category-tabs
-              label="Rubriques des intégrations"
-              [options]="integrationTabs"
-              [selected]="integrationsTab()"
-              (selectedChange)="onSubTabChange($event)"
-            />
-
-            @if (integrationsTab() === 'mcp') {
-              <app-mcp-server-tab [tokens]="cachedTokens()" />
-            } @else if (integrationsTab() === 'ai') {
-              <app-ai-tools-tab />
-            } @else {
-              <app-webhooks-tab />
+            @case ('access') {
+              <app-user-management-tab /><app-api-token-tab />
             }
-          }
-
-          @case ('system') {
-            <app-category-tabs
-              label="Rubriques du système"
-              [options]="systemTabs"
-              [selected]="systemTab()"
-              (selectedChange)="onSubTabChange($event)"
-            />
-
-            @if (systemTab() === 'overview') {
+            @case ('connections') {
+              <app-ai-tools-tab /><app-mcp-server-tab /><app-webhooks-tab />
+            }
+            @case ('operations') {
               <app-system-tab />
-            } @else {
-              <app-system-log-viewer />
+              <app-configuration-section
+                title="Journaux système"
+                description="Événements des services sur le nœud consulté."
+                ><app-system-log-viewer
+              /></app-configuration-section>
+              <app-metrics-tab />
             }
           }
-        }
+        </div>
       </div>
-    </app-management-catalog-template>
+    </app-detail-drawer>
   `,
   styles: `
-    .settings-description {
-      margin: 0;
-      color: var(--text-secondary);
-    }
-    .settings-content-wrapper {
+    .settings-content {
       display: grid;
-      gap: var(--space-6);
+      gap: var(--space-5);
+      margin-top: var(--space-6);
+      max-width: 1160px;
       min-width: 0;
     }
   `,
 })
 export class SettingsPageComponent {
+  private navigationApproved = false;
   private readonly aiTab = viewChild(AiToolsTabComponent);
-  private readonly dialog = inject(MatDialog);
-  hasUnsavedChanges(): boolean {
-    return this.aiTab()?.hasUnsavedChanges() ?? false;
-  }
-  private async mayLeaveAi(): Promise<boolean> {
-    if (!this.hasUnsavedChanges()) return true;
-    return (
-      (await firstValueFrom(
-        this.dialog
-          .open(ConfirmationDialogComponent, {
-            data: {
-              title: 'Quitter sans enregistrer ?',
-              message: 'Les modifications des paramètres IA seront perdues.',
-              confirmLabel: 'Quitter sans enregistrer',
-            },
-          })
-          .afterClosed(),
-      )) === true
-    );
-  }
+  protected readonly editor = inject(SettingsEditor);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-
-  protected readonly activeMainTab = signal<SettingsMainTab>('security');
-  protected readonly securityTab = signal<SecuritySubTab>('tokens');
-  protected readonly integrationsTab = signal<IntegrationsSubTab>('mcp');
-  protected readonly systemTab = signal<SystemSubTab>('overview');
-  protected readonly cachedTokens = signal<readonly ApiTokenResponse[]>([]);
-
-  protected readonly securityTabs: readonly CategoryTabOption[] = [
-    { value: 'tokens', label: 'Jetons d’API' },
-    { value: 'users', label: 'Comptes utilisateurs' },
-  ];
-  protected readonly integrationTabs: readonly CategoryTabOption[] = [
-    { value: 'mcp', label: 'Serveur MCP' },
-    { value: 'ai', label: 'IA & fournisseurs' },
-    { value: 'webhooks', label: 'Webhooks & Métriques' },
-  ];
-  protected readonly systemTabs: readonly CategoryTabOption[] = [
-    { value: 'overview', label: 'Santé & Apparence' },
-    { value: 'logs', label: 'Journaux système' },
-  ];
-
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly activeMainTab = signal<SettingsMainTab>('interface');
+  protected readonly descriptions: Record<SettingsMainTab, string> = {
+    interface: 'Vos préférences pour cette interface.',
+    access: 'Les comptes et les accès des applications à votre cluster.',
+    connections: 'Les services que votre cluster utilise et les applications qui s’y connectent.',
+    operations: 'La santé des services et les événements de ce nœud.',
+  };
   protected readonly mainTabs: readonly CategoryTabOption[] = [
-    { value: 'security', label: 'Accès & Sécurité' },
-    { value: 'integrations', label: 'Intégrations & MCP' },
-    { value: 'system', label: 'Système & Apparence' },
+    { value: 'interface', label: 'Interface' },
+    { value: 'access', label: 'Accès' },
+    { value: 'connections', label: 'Connexions' },
+    { value: 'operations', label: 'Exploitation' },
   ];
-
   constructor() {
-    this.parseInitialRoute();
-
-    effect(() => {
-      const qp = this.route.snapshot.queryParamMap.get('tab');
-      if (qp) this.applyTabParam(qp);
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
+      const domain = settingsDomain(params.get('tab'));
+      if (domain !== this.activeMainTab()) this.editor.reset();
+      this.activeMainTab.set(domain);
     });
+    this.destroyRef.onDestroy(() => this.editor.reset());
   }
-
-  private parseInitialRoute(): void {
-    const qp = this.route.snapshot.queryParamMap.get('tab');
-    if (qp) {
-      this.applyTabParam(qp);
-    }
+  hasUnsavedChanges(): boolean {
+    return (
+      !this.navigationApproved &&
+      (this.editor.hasUnsavedChanges() || (this.aiTab()?.hasUnsavedChanges() ?? false))
+    );
   }
-
-  private applyTabParam(tab: string): void {
-    if (tab === 'tokens' || tab === 'users') {
-      this.activeMainTab.set('security');
-      this.securityTab.set(tab);
-    } else if (tab === 'mcp' || tab === 'webhooks' || tab === 'ai') {
-      this.activeMainTab.set('integrations');
-      this.integrationsTab.set(tab as IntegrationsSubTab);
-    } else if (tab === 'system' || tab === 'overview') {
-      this.activeMainTab.set('system');
-      this.systemTab.set('overview');
-    } else if (tab === 'logs' || tab === 'system-logs') {
-      this.activeMainTab.set('system');
-      this.systemTab.set('logs');
+  protected async onMainTabChange(value: string): Promise<void> {
+    const tab = settingsDomain(value);
+    if (tab === this.activeMainTab() || this.editor.isBusy()) return;
+    if (this.hasUnsavedChanges() && !(await this.editor.confirmDiscard())) return;
+    this.navigationApproved = true;
+    try {
+      if (
+        await this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { tab },
+          queryParamsHandling: 'merge',
+        })
+      )
+        this.editor.reset();
+    } finally {
+      this.navigationApproved = false;
     }
-  }
-
-  protected async onMainTabChange(tab: string): Promise<void> {
-    if (tab !== this.activeMainTab() && !(await this.mayLeaveAi())) return;
-    if (tab === 'security' || tab === 'integrations' || tab === 'system') {
-      this.activeMainTab.set(tab);
-      const sub =
-        tab === 'security'
-          ? this.securityTab()
-          : tab === 'integrations'
-            ? this.integrationsTab()
-            : this.systemTab();
-      void this.router.navigate([], {
-        relativeTo: this.route,
-        queryParams: { tab: sub },
-        queryParamsHandling: 'merge',
-      });
-    }
-  }
-
-  protected async onSubTabChange(subTab: string): Promise<void> {
-    if (subTab !== 'ai' && !(await this.mayLeaveAi())) return;
-    if (subTab === 'tokens' || subTab === 'users') {
-      this.securityTab.set(subTab);
-    } else if (subTab === 'mcp' || subTab === 'webhooks' || subTab === 'ai') {
-      this.integrationsTab.set(subTab);
-    } else if (subTab === 'overview' || subTab === 'logs') {
-      this.systemTab.set(subTab);
-    }
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { tab: subTab },
-      queryParamsHandling: 'merge',
-    });
   }
 }
