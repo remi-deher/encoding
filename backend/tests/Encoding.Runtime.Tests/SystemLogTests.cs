@@ -395,6 +395,18 @@ public sealed class SystemLogMcpTests
         Assert.Equal("/flows", assistantRead.Href);
         await Assert.ThrowsAsync<ArgumentException>(() => mcp.CallAssistantReadToolAsync(
             new AiAssistantToolCall("delete_flow", FlowId: Guid.NewGuid()), CancellationToken.None));
+
+        var viewerWrite = await mcp.HandleMessageAsync(
+            new McpJsonRpcRequest(
+                "2.0",
+                "tools/call",
+                JsonDocument.Parse("3").RootElement,
+                JsonDocument.Parse("""{"name":"delete_flow","arguments":{"flowId":"11111111-1111-4111-8111-111111111111"}}""").RootElement),
+            new System.Security.Claims.ClaimsPrincipal(),
+            CancellationToken.None);
+        var deniedWrite = Assert.IsType<McpCallToolResult>(viewerWrite?.Result);
+        Assert.True(deniedWrite.IsError);
+        Assert.Contains("Permission refusée", deniedWrite.Content[0].Text);
     }
 }
 
