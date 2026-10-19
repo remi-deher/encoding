@@ -34,10 +34,12 @@ public sealed class AiSettingsService
         if (update.DefaultProvider is not null && update.DefaultProvider is not ("ollama" or "openai" or "codex-cli" or "claude-cli"))
             throw new ArgumentException("Fournisseur IA inconnu.");
         foreach (var provider in new[] { update.AssistantProvider, update.FlowProvider }.OfType<string>())
-            if (provider is not ("ollama" or "openai" or "codex-cli" or "claude-cli"))
+            if (provider is not ("default" or "ollama" or "openai" or "codex-cli" or "claude-cli"))
                 throw new ArgumentException("Fournisseur IA inconnu.");
-        var effectiveAssistantProvider = update.AssistantProvider ?? cachedSettings.AssistantProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
-        var effectiveFlowProvider = update.FlowProvider ?? cachedSettings.FlowProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
+        var effectiveAssistantProvider = update.AssistantProvider == "default" ? update.DefaultProvider ?? cachedSettings.DefaultProvider
+            : update.AssistantProvider ?? cachedSettings.AssistantProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
+        var effectiveFlowProvider = update.FlowProvider == "default" ? update.DefaultProvider ?? cachedSettings.DefaultProvider
+            : update.FlowProvider ?? cachedSettings.FlowProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
         if (update.AssistantLocalOnly == true && effectiveAssistantProvider != "ollama"
             || update.FlowLocalOnly == true && effectiveFlowProvider != "ollama")
             throw new ArgumentException("Le mode local uniquement exige Ollama comme fournisseur effectif.");
@@ -57,8 +59,8 @@ public sealed class AiSettingsService
                 OpenAiApiKey: update.OpenAiApiKey ?? cachedSettings.OpenAiApiKey,
                 TimeoutSeconds: update.TimeoutSeconds is > 0 ? update.TimeoutSeconds.Value : cachedSettings.TimeoutSeconds,
                 SubtitleBatchSize: update.SubtitleBatchSize is > 0 ? update.SubtitleBatchSize.Value : cachedSettings.SubtitleBatchSize,
-                AssistantProvider: update.AssistantProvider ?? cachedSettings.AssistantProvider,
-                FlowProvider: update.FlowProvider ?? cachedSettings.FlowProvider,
+                AssistantProvider: update.AssistantProvider is null ? cachedSettings.AssistantProvider : update.AssistantProvider == "default" ? null : update.AssistantProvider,
+                FlowProvider: update.FlowProvider is null ? cachedSettings.FlowProvider : update.FlowProvider == "default" ? null : update.FlowProvider,
                 AssistantLocalOnly: update.AssistantLocalOnly ?? cachedSettings.AssistantLocalOnly,
                 FlowLocalOnly: update.FlowLocalOnly ?? cachedSettings.FlowLocalOnly
             );

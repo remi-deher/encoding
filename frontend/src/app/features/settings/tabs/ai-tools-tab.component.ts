@@ -215,8 +215,8 @@ export class AiToolsTabComponent implements OnInit {
       openAiApiKey: this.openAiApiKey().trim() || null,
       timeoutSeconds: this.timeoutSeconds(),
       subtitleBatchSize: this.subtitleBatchSize(),
-      assistantProvider: this.assistantProvider(),
-      flowProvider: this.flowProvider(),
+      assistantProvider: this.assistantProvider() ?? 'default',
+      flowProvider: this.flowProvider() ?? 'default',
       assistantLocalOnly: this.assistantLocalOnly(),
       flowLocalOnly: this.flowLocalOnly(),
     };
