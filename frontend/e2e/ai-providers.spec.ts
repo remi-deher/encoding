@@ -273,3 +273,39 @@ test('Claude browser authentication accepts the return code from the redesigned 
   await expect.poll(() => submitted).toEqual({ input: 'return-code' });
   await expect(dialog.getByText('Code transmis. Claude Code vérifie la connexion…')).toBeVisible();
 });
+
+test('provider changes survive refresh before saving', async ({ page }) => {
+  let saved: Record<string, unknown> | undefined;
+  await page.route('**/api/v1/tools/ai/settings', async (route) => {
+    if (route.request().method() !== 'GET') {
+      saved = route.request().postDataJSON();
+    }
+    await route.fulfill({
+      json: {
+        defaultProvider: 'ollama',
+        ollamaBaseUrl: 'http://localhost:11434/v1/',
+        ollamaModel: saved?.['ollamaModel'] ?? 'llama3.2',
+        openAiBaseUrl: 'https://api.openai.com/v1/',
+        openAiModel: 'gpt-4o-mini',
+        hasOpenAiApiKey: true,
+        timeoutSeconds: 120,
+        subtitleBatchSize: 80,
+      },
+    });
+  });
+  await page.goto('/settings?tab=ai');
+  const tab = page.locator('app-ai-tools-tab');
+  await tab.getByRole('button', { name: 'Configurer Ollama', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: 'Ollama', exact: true });
+  await editor.getByLabel('Modèle', { exact: true }).fill('my-local-model');
+  await tab.getByRole('button', { name: 'Actualiser les connexions' }).click({ force: true });
+  await expect(editor.getByLabel('Modèle', { exact: true })).toHaveValue('my-local-model');
+  await editor.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect.poll(() => saved?.['ollamaModel']).toBe('my-local-model');
+  expect(saved?.['defaultProvider']).toBe('ollama');
+  await expect(editor).toHaveCount(0);
+  await tab.getByRole('button', { name: 'Configurer Ollama', exact: true }).click();
+  await expect(
+    page.getByRole('dialog', { name: 'Ollama', exact: true }).getByLabel('Modèle', { exact: true }),
+  ).toHaveValue('my-local-model');
+});
