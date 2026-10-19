@@ -225,6 +225,15 @@ export interface AiAssistantMessageResponse {
   readonly selection?: AiTurnModelSelection | null;
   readonly actualModel?: string | null;
   readonly executorNodeId?: string | null;
+  readonly actionProposal?: AiAssistantActionProposal | null;
+}
+
+export interface AiAssistantActionProposal {
+  readonly action:
+    'publish-flow' | 'delete-flow' | 'start-library' | 'cancel-execution' | 'assign-library-flow';
+  readonly confirmationToken: string;
+  readonly summary: string;
+  readonly expiresAt: string;
 }
 
 export interface AiAssistantPrepareActionRequest {
@@ -260,6 +269,8 @@ export interface AiAssistantActivity {
   readonly errorCategory: string | null;
   readonly operation?: string;
   readonly tools?: readonly string[] | null;
+  readonly progress?: string | null;
+  readonly progressDetail?: string | null;
 }
 
 export interface AiUsage {

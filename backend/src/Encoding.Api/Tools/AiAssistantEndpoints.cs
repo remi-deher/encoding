@@ -22,6 +22,11 @@ public static class AiAssistantEndpoints
         group.MapGet("/activity", async (HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.ActivityAsync(http.User, ct))));
 
+        group.MapGet("/activity/{requestId:guid}", async (Guid requestId, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () => await service.GetActivityAsync(requestId, http.User, ct) is { } activity
+                ? Results.Ok(activity)
+                : Results.NotFound()));
+
         group.MapGet("/conversations/{id}", async (string id, HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () =>
             {
@@ -119,6 +124,14 @@ public static class AiAssistantEndpoints
             return await GuardAsync(async () => await service.ConfirmStartLibraryAsync(request, http.User, ct) is { } result
                 ? Results.Ok(new { queued = result.Queued, skipped = result.Skipped })
                 : Results.Conflict(new { title = "La bibliothèque ou son affectation n’est plus disponible." }));
+        }).AllowAssistantConversation();
+
+        group.MapPost("/actions/assign-library-flow/confirm", async (AiAssistantConfirmActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.ConfirmAssignLibraryFlowAsync(request, http.User, ct)
+                ? Results.Ok(new { assigned = true })
+                : Results.Conflict(new { title = "L’affectation du flow n’a pas pu être modifiée." }));
         }).AllowAssistantConversation();
 
         group.MapPost("/activity/{requestId:guid}/proposal", async (Guid requestId, AiAssistantProposalDecision request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
