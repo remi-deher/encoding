@@ -177,11 +177,23 @@
           matButton="filled"
           type="button"
           [hidden]="assistantPanelOpen()"
+          [class.is-dragging]="assistantLauncherDragging()"
+          [style.left.px]="assistantLauncherPosition()?.left ?? null"
+          [style.top.px]="assistantLauncherPosition()?.top ?? null"
+          [style.right]="assistantLauncherPosition() ? 'auto' : null"
+          [style.bottom]="assistantLauncherPosition() ? 'auto' : null"
           #assistantLauncher
           aria-label="Ouvrir l’assistant IA"
+          aria-description="Glissez pour déplacer. Alt plus les flèches déplace par pas de grille."
+          aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"
           aria-controls="assistant-widget-panel"
           [attr.aria-expanded]="assistantPanelOpen()"
-          (click)="toggleAssistantPanel()"
+          (pointerdown)="startAssistantLauncherDrag($event)"
+          (pointermove)="moveAssistantLauncher($event)"
+          (pointerup)="finishAssistantLauncherDrag($event)"
+          (pointercancel)="finishAssistantLauncherDrag($event)"
+          (keydown)="onAssistantLauncherKeydown($event)"
+          (click)="onAssistantLauncherClick($event)"
         >
           <span aria-hidden="true">✦</span> Assistant
         </button>
