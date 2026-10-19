@@ -45,6 +45,9 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
                 @if (item.errorCategory) {
                   · Catégorie : {{ errorName(item.errorCategory) }}
                 }
+                @if (item.tools?.length) {
+                  · Outils : {{ item.tools?.join(', ') }}
+                }
               </p>
             </div>
             @if (item.conversationId) {

@@ -200,6 +200,9 @@
   align-items: end;
   gap: var(--space-3);
 }
+.read-tool-picker {
+  width: min(100%, 34rem);
+}
 
 .composer textarea {
   resize: vertical;

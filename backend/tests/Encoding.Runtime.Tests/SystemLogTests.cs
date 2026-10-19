@@ -10,6 +10,7 @@ using Encoding.Api.Mcp;
 using Encoding.Api.Nodes;
 using Encoding.Api.Plugins;
 using Encoding.Contracts.Logging;
+using Encoding.Contracts.Tools;
 using Encoding.Core.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -388,6 +389,12 @@ public sealed class SystemLogMcpTests
         var callJson = JsonSerializer.Serialize(callResult);
         Assert.Contains("log-mcp-1", callJson);
         Assert.Contains("Hardware acceleration dropped back to CPU", callJson);
+
+        var assistantRead = await mcp.CallAssistantReadToolAsync(new AiAssistantToolCall("list_flows"), CancellationToken.None);
+        Assert.Equal("list_flows", assistantRead.Name);
+        Assert.Equal("/flows", assistantRead.Href);
+        await Assert.ThrowsAsync<ArgumentException>(() => mcp.CallAssistantReadToolAsync(
+            new AiAssistantToolCall("delete_flow", FlowId: Guid.NewGuid()), CancellationToken.None));
     }
 }
 

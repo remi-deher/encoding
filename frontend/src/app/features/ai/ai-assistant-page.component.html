@@ -204,6 +204,16 @@
       <div class="error-message" role="alert">{{ error }}</div>
     }
 
+    <mat-form-field class="read-tool-picker" appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Outils de lecture pour ce message</mat-label>
+      <mat-select name="readTools" multiple [ngModel]="selectedReadTools()" (ngModelChange)="setSelectedReadTools($event)">
+        @for (tool of readTools; track tool.name) {
+          <mat-option [value]="tool.name" [disabled]="tool.name === 'get_flow' && selectedResourceType() !== 'flow'">{{ tool.label }}</mat-option>
+        }
+      </mat-select>
+      <mat-hint>Jusqu’à trois outils MCP en lecture seule ; les résultats seront cités.</mat-hint>
+    </mat-form-field>
+
     <form class="composer" (ngSubmit)="send()">
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Votre question</mat-label>
@@ -229,7 +239,7 @@
       }
     </form>
     <p class="privacy-note">
-      Votre question et les données des ressources sont transmises au fournisseur affecté à cet
+      Votre question, les données des ressources et les résultats des outils sélectionnés sont transmis au fournisseur affecté à cet
       usage, qui peut être externe à votre installation. La conversation reste privée à votre
       compte ; l’assistant ne peut modifier aucune ressource.
     </p>

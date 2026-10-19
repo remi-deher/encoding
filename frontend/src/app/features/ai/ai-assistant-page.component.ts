@@ -19,6 +19,7 @@ import {
   AiAssistantConversation,
   AiAssistantConversationDetail,
   AiAssistantSource,
+  AiAssistantToolCall,
 } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
 import { NodeResponse } from '../../shared/models/cluster';
@@ -78,6 +79,14 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly loadingDetail = signal(false);
   protected readonly sending = signal(false);
   protected readonly cancelling = signal(false);
+  protected readonly selectedReadTools = signal<string[]>([]);
+  protected readonly readTools = [
+    { name: 'list_flows', label: 'Lister les flows' },
+    { name: 'get_flow', label: 'Relire le flow sélectionné' },
+    { name: 'list_nodes', label: 'Lister les nœuds' },
+    { name: 'list_executions', label: 'Consulter les exécutions récentes' },
+    { name: 'get_libraries_overview', label: 'Consulter les bibliothèques' },
+  ] as const;
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly pendingPrompt = signal<string | null>(null);
   protected readonly hasPendingRequest = signal(false);
@@ -183,7 +192,8 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.aiTools.getAssistantConversation(id).subscribe({
       next: (detail) => {
         this.detail.set(detail);
-        this.selectedResourceType.set(detail.conversation.source.kind);
+        if (detail.conversation.source.kind !== 'tool')
+          this.selectedResourceType.set(detail.conversation.source.kind);
         this.selectedResourceId.set('');
         if (detail.pendingTurn) {
           this.prompt.set(detail.pendingTurn.userPrompt);
@@ -241,6 +251,10 @@ export class AiAssistantPageComponent implements OnDestroy {
         resourceType: activeConversation ? undefined : this.selectedResourceType(),
         resourceId: activeConversation ? undefined : (selectedResource?.id ?? undefined),
         resourceVersion: activeConversation ? undefined : (selectedResource?.version ?? undefined),
+        toolCalls: this.selectedReadTools().map((name) => ({
+          name,
+          ...(name === 'get_flow' ? { flowId: selectedResource?.id ?? null } : {}),
+        }) as AiAssistantToolCall),
       })
       .subscribe({
         next: (response) => {
@@ -277,6 +291,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.requestId = '';
             this.hasPendingRequest.set(false);
             this.resumingRequest.set(false);
+            this.selectedReadTools.set([]);
           } else {
             this.pendingPrompt.set(message);
             this.hasPendingRequest.set(true);
@@ -298,6 +313,10 @@ export class AiAssistantPageComponent implements OnDestroy {
           }
         },
       });
+  }
+
+  protected setSelectedReadTools(tools: readonly string[]): void {
+    this.selectedReadTools.set([...new Set(tools)].slice(0, 3));
   }
 
   protected cancelRequest(): void {
@@ -327,6 +346,8 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected selectResourceType(type: AssistantResourceType): void {
     this.selectedResourceType.set(type);
     this.selectedResourceId.set('');
+    if (type !== 'flow')
+      this.selectedReadTools.update((tools) => tools.filter((tool) => tool !== 'get_flow'));
   }
 
   protected conversationSources(

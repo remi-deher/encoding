@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Nodes;
+using Encoding.Api.Mcp;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Nodes;
 using Encoding.Contracts.Tools;
@@ -19,7 +20,8 @@ public sealed class AiAssistantService(
     FlowRepository flows,
     ExecutionRepository executions,
     NodeRepository nodes,
-    NodePresenceOptions nodePresence)
+    NodePresenceOptions nodePresence,
+    McpService mcp)
 {
     private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
     private const string ConversationPrefix = "assistant/conversations/";
@@ -219,8 +221,25 @@ public sealed class AiAssistantService(
         if (!legacySession && resolved.Sum(context => (long)context.Data.Length) > 80_000)
             throw new ArgumentException("La ressource dépasse la taille de contexte prise en charge.");
 
+        var requestedTools = request.ToolCalls ?? Array.Empty<AiAssistantToolCall>();
+        if (requestedTools.Count > 3 || requestedTools.Select(tool => tool.Name).Distinct().Count() != requestedTools.Count)
+            throw new ArgumentException("Une demande peut consulter jusqu’à trois outils de lecture distincts.");
+        if (legacySession && requestedTools.Count > 0)
+            throw new InvalidOperationException("Cette ancienne conversation ne prend pas en charge les outils de lecture. Créez une nouvelle conversation.");
+        var toolContexts = new List<ResolvedContext>();
+        foreach (var tool in requestedTools)
+        {
+            var result = await mcp.CallAssistantReadToolAsync(tool, ct);
+            var data = JsonSerializer.Serialize(result.Data);
+            toolContexts.Add(new(new AiAssistantSource("tool", Guid.NewGuid(), result.Label, result.Href), data));
+        }
+        if (resolved.Sum(context => (long)context.Data.Length) + toolContexts.Sum(context => (long)context.Data.Length) > 80_000)
+            throw new ArgumentException("Les ressources et outils dépassent la taille de contexte prise en charge.");
+        var allContexts = resolved.Concat(toolContexts).ToArray();
+        var allSources = allContexts.Select(context => context.Source).ToArray();
+
         var systemPrompt = session?.SystemPrompt ?? BuildSystemPrompt();
-        var contextualPrompt = legacySession ? request.UserPrompt : BuildContextualPrompt(request.UserPrompt, resolved);
+        var contextualPrompt = legacySession ? request.UserPrompt : BuildContextualPrompt(request.UserPrompt, allContexts);
         var existingTurn = session?.Turns.FirstOrDefault(turn => turn.RequestId == request.RequestId);
         if (existingTurn is not null && existingTurn.UserPrompt != contextualPrompt)
             throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre message ou contexte.");
@@ -231,14 +250,14 @@ public sealed class AiAssistantService(
         var storedConversation = await ReadConversationAsync(ownerId, conversation.Id, ct);
         var turnSources = storedConversation?.TurnSources?.ToDictionary(pair => pair.Key, pair => pair.Value)
             ?? new Dictionary<Guid, IReadOnlyList<AiAssistantSource>>();
-        turnSources[request.RequestId] = resolved.Select(context => context.Source).ToArray();
+        turnSources[request.RequestId] = allSources;
         var userPrompts = storedConversation?.UserPrompts?.ToDictionary(pair => pair.Key, pair => pair.Value)
             ?? new Dictionary<Guid, string>();
         userPrompts[request.RequestId] = request.UserPrompt;
         await SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts);
         var startedAt = DateTimeOffset.UtcNow;
         var activity = new AiAssistantActivity(request.RequestId, conversation.Id, conversation.Provider,
-            "running", startedAt, startedAt, null, null);
+            "running", startedAt, startedAt, null, null, Tools: requestedTools.Select(tool => tool.Name).ToArray());
         using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var activeKey = (ownerId, request.RequestId);
         if (!activeRequests.TryAdd(activeKey, requestCancellation))
@@ -268,7 +287,7 @@ public sealed class AiAssistantService(
             if (ct.IsCancellationRequested) throw;
             return new(false, conversation, request.RequestId, null,
                 "L’attente a été interrompue. Le fournisseur a peut-être déjà accepté la demande ; reprenez-la après expiration de son bail.",
-                resolved.Select(context => context.Source).ToArray());
+                allSources);
         }
         catch (Exception)
         {
@@ -300,7 +319,7 @@ public sealed class AiAssistantService(
             result.RequestId ?? request.RequestId,
             result.Success ? result.Content : null,
             result.Success ? null : result.ErrorMessage ?? "Le fournisseur IA n’a pas retourné de réponse.",
-            resolved.Select(context => context.Source).ToArray());
+            allSources);
     }
 
     private async Task<ResolvedContext?> ResolveContextAsync(string kind, Guid id, int? version, CancellationToken ct)

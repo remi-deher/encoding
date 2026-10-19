@@ -20,6 +20,10 @@ public sealed record AiAssistantResourceReference(string Type, Guid Id, int? Ver
 
 public sealed record AiAssistantSourcesRequest(IReadOnlyList<AiAssistantResourceReference> Sources);
 
+public sealed record AiAssistantToolCall(string Name, Guid? FlowId = null, string? State = null, int? Limit = null);
+
+public sealed record AiAssistantToolResult(string Name, string Label, string Href, JsonElement Data);
+
 public sealed record AiAssistantTurn(
     Guid RequestId,
     string UserPrompt,
@@ -39,7 +43,8 @@ public sealed record AiAssistantMessageRequest(
     string? ConversationId = null,
     string? ResourceType = null,
     Guid? ResourceId = null,
-    int? ResourceVersion = null);
+    int? ResourceVersion = null,
+    IReadOnlyList<AiAssistantToolCall>? ToolCalls = null);
 
 public sealed record AiAssistantMessageResponse(
     bool Success,
@@ -58,4 +63,5 @@ public sealed record AiAssistantActivity(
     DateTimeOffset UpdatedAt,
     long? DurationMilliseconds,
     string? ErrorCategory,
-    string Operation = "assistant");
+    string Operation = "assistant",
+    IReadOnlyList<string>? Tools = null);

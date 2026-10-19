@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Api.Auth;
 using Encoding.Contracts.Tools;
+using Encoding.Api.Mcp;
 
 namespace Encoding.Api.Tools;
 
@@ -46,6 +47,11 @@ public static class AiAssistantEndpoints
                 ? Results.Accepted(value: new { requestId, state = "cancellation-requested" })
                 : Results.Conflict(new { title = "Aucune demande active ne correspond à cet identifiant." }))
         .AllowAssistantConversation();
+
+        group.MapPost("/tools/call", async (AiAssistantToolCall call, McpService mcp, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await mcp.CallAssistantReadToolAsync(call, ct))))
+        .AllowAssistantConversation()
+        .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
     }
 
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)

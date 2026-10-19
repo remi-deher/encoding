@@ -105,7 +105,7 @@ export interface AiClusterView {
 }
 
 export interface AiAssistantSource {
-  readonly kind: 'flow' | 'execution' | 'node';
+  readonly kind: 'flow' | 'execution' | 'node' | 'tool';
   readonly resourceId: string;
   readonly label: string;
   readonly href: string;
@@ -148,6 +148,14 @@ export interface AiAssistantMessageRequest {
   readonly resourceType?: 'flow' | 'execution' | 'node' | null;
   readonly resourceId?: string | null;
   readonly resourceVersion?: number | null;
+  readonly toolCalls?: readonly AiAssistantToolCall[];
+}
+
+export interface AiAssistantToolCall {
+  readonly name: 'list_flows' | 'get_flow' | 'list_nodes' | 'list_executions' | 'get_libraries_overview';
+  readonly flowId?: string | null;
+  readonly state?: 'queued' | 'running' | 'failed' | 'completed' | null;
+  readonly limit?: number | null;
 }
 
 export interface AiAssistantSourcesRequest {
@@ -177,4 +185,5 @@ export interface AiAssistantActivity {
   readonly durationMilliseconds: number | null;
   readonly errorCategory: string | null;
   readonly operation?: string;
+  readonly tools?: readonly string[] | null;
 }
