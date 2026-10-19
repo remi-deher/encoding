@@ -336,6 +336,9 @@ public sealed class AiAssistantService(
         catch (ObjectDisposedException) { return false; }
     }
 
+    public Task<bool> CancelRequestAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct) =>
+        Task.FromResult(CancelRequest(requestId, user));
+
     public async Task<bool> UpdateFlowProposalActivityAsync(
         Guid requestId,
         string decision,
