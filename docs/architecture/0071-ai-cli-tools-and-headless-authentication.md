@@ -1,10 +1,10 @@
 # 0071 — Outils IA, authentification réelle et sessions applicatives partagées
 
-Statut : implémenté sur la branche `feat/cluster-ai-providers`. Remplace les commandes et le device flow générique initialement décrits ici. Complète 0049, 0054, 0064 et 0072.
+Statut : implémenté. Remplace les commandes et le device flow générique initialement décrits ici. Complète 0049, 0054, 0064 et 0072.
 
 ## Connexion des fournisseurs
 
-Les comptes ne sont plus associés par un code généré par Encoding. Codex fournit le lien et le code à partir de `codex login --device-auth`. La sortie est suivie pendant l'exécution, avec nettoyage ANSI et extraction des instructions attendues. La session est bornée à quinze minutes, réutilisée tant qu'elle attend, annulable et arrêtée à expiration. L'état final est relu avec `codex login status`.
+Les comptes ne sont plus associés par un code généré par Encoding. Codex fournit le lien et le code à partir de `codex login --device-auth`. La sortie est suivie pendant l'exécution, avec nettoyage ANSI et extraction des instructions attendues. Claude utilise `claude auth login` : Encoding récupère le lien HTTPS officiel émis par la CLI, le présente à l'administrateur et transmet au processus le code de retour saisi après la connexion navigateur. Le lien et le code restent en mémoire pour la session, ne sont ni journalisés ni persistés. Les deux sessions sont bornées à quinze minutes, réutilisées tant qu'elles attendent, annulables et arrêtées à expiration. Le succès n'est confirmé qu'après la fin du processus et un contrôle positif avec `codex login status` ou `claude auth status`.
 
 Claude utilise un jeton généré par l'administrateur sur son poste via `claude setup-token`. Encoding le protège avec ASP.NET Data Protection et le transmet uniquement au processus Claude via `CLAUDE_CODE_OAUTH_TOKEN`. `claude auth status` contrôle la reconnaissance locale des identifiants ; cela ne garantit ni la validité distante du jeton ni les quotas. Un remplacement refusé préserve le secret précédent.
 
@@ -12,7 +12,7 @@ Les répertoires `CODEX_HOME` et `CLAUDE_CONFIG_DIR` sont propres à chaque four
 
 Les commandes de production sont `codex exec --json --ephemeral` et `claude -p --output-format stream-json --verbose --no-session-persistence`. Le prompt passe par stdin. Claude est appelé sans outils, sans serveurs MCP hérités, sans skills et sans sources de réglages projet/utilisateur. Codex désactive les outils shell et unified-exec, utilise le sandbox read-only et refuse les demandes d'approbation interactives. Les sorties sont bornées ; l'annulation et le délai maximal arrêtent l'arbre de processus. Aucune CLI absente ne produit de réponse simulée, et une génération de flow échouée ne retourne plus de flow synthétique comme résultat IA.
 
-Sur Linux, le lancement réutilise le confinement Landlock partagé avec les scripts du worker, déplacé sans changement de comportement dans `Encoding.Core.Runtime`. Le profil IA est accessible en écriture ; les exécutables, bibliothèques et certificats sont accessibles en lecture. Les données d'Encoding et les médias extérieurs au profil ne sont pas accordés. Le dossier d'installation npm se règle avec `AiTools:RuntimeDirectory` (défaut `/opt/encoding/ai-cli`). Sans Landlock, la CLI refuse de démarrer ; il n'y a pas de repli de production qui supprime cette protection. Landlock borne ici le système de fichiers, pas les domaines réseau.
+Sur Linux, le lancement réutilise le confinement Landlock partagé avec les scripts du worker, déplacé sans changement de comportement dans `Encoding.Core.Runtime`. Le profil IA est accessible en écriture ; les exécutables, bibliothèques, certificats et fichiers de configuration OpenSSL système sont accessibles en lecture. Les données d'Encoding et les médias extérieurs au profil ne sont pas accordés. Le dossier d'installation npm se règle avec `AiTools:RuntimeDirectory` (défaut `/opt/encoding/ai-cli`). Sans Landlock, la CLI refuse de démarrer ; il n'y a pas de repli de production qui supprime cette protection. Landlock borne ici le système de fichiers, pas les domaines réseau.
 
 ## Accès depuis tous les nœuds
 
@@ -36,7 +36,7 @@ Ce protocole évite de confirmer plusieurs fois le même tour applicatif. Il ne 
 
 ## Interface et exploitation
 
-La page « IA & fournisseurs » distingue le moteur par défaut de la fiche sélectionnée. Une seule configuration est affichée ; les paramètres avancés sont repliés. Les boutons utilisent les variantes Material du socle et les secrets restent masqués. Le statut de configuration déclaré par un nœud n'est pas présenté comme une sonde distante du modèle. La liste montre les pairs répondants ; l'absence d'un pair n'efface pas sa configuration.
+La page « IA & fournisseurs » distingue le moteur par défaut de la fiche sélectionnée. Une seule configuration est affichée ; les paramètres avancés sont repliés. Les boutons utilisent les variantes Material du socle et les secrets restent masqués. Le dialogue d'association affiche le lien Claude émis par la CLI et, lorsque celle-ci l'attend, transmet le code de retour sans l'enregistrer. Le statut de configuration déclaré par un nœud n'est pas présenté comme une sonde distante du modèle. La liste montre les pairs répondants ; l'absence d'un pair n'efface pas sa configuration.
 
 Les actions de connexion, réglage et déconnexion requièrent l'administration. Les lectures restent soumises à l'authentification de gestion. Les sessions et leur contexte sont réservés aux administrateurs, aux workers authentifiés et aux pairs admis. Le bouton et l'endpoint de simulation sont supprimés. Les changements non enregistrés sont protégés au départ de la page et lors du changement d'onglet.
 

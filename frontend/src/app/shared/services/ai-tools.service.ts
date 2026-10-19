@@ -46,10 +46,11 @@ export class AiToolsService {
     return this.http.get<AiClusterView>('/api/v1/tools/ai/cluster');
   }
 
-  saveClaudeToken(token: string): Observable<{ readonly saved: boolean }> {
-    return this.http.post<{ readonly saved: boolean }>('/api/v1/tools/ai/claude-cli/auth/token', {
-      token,
-    });
+  submitAuthInput(toolId: string, input: string): Observable<{ readonly accepted: boolean }> {
+    return this.http.post<{ readonly accepted: boolean }>(
+      `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/input`,
+      { input },
+    );
   }
 
   cancelAuth(toolId: string): Observable<unknown> {

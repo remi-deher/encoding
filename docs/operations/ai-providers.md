@@ -9,7 +9,7 @@ Conserver le volume `Node:DataDirectory`, notamment les clés Data Protection et
 Ouvrir **Paramètres → Intégrations → IA & fournisseurs** sur le serveur qui doit héberger une connexion :
 
 - Codex : **Associer mon compte**, ouvrir le lien fourni par la CLI et valider son code. Le compte doit autoriser ce mode de connexion.
-- Claude : générer un jeton avec `claude setup-token` sur votre poste, puis le saisir dans le champ secret. Le contrôle de statut vérifie la reconnaissance locale, pas une requête au modèle.
+- Claude : **Se connecter**, ouvrir le lien fourni par `claude auth login` dans votre navigateur et terminer la connexion. Si la CLI demande un code de retour, le coller dans le dialogue pour le transmettre au nœud. Le contrôle de statut vérifie l’état local de la CLI, pas une requête au modèle.
 - Ollama ou API compatible : enregistrer l'adresse et le modèle sur ce serveur. La clé d'API est protégée localement ; laisser le champ vide la conserve.
 
 Choisir le moteur par défaut puis enregistrer. Les nœuds répondants et leurs fournisseurs sont listés sous la configuration. Les connexions déclarées ne garantissent ni le quota disponible ni la réponse du modèle.

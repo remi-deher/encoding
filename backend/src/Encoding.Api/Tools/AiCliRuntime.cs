@@ -55,32 +55,30 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
     public async Task<AiProcessResult> RunAsync(string id, IReadOnlyList<string> args, CancellationToken ct,
         Action<string>? onOutput = null, string? input = null)
     {
-        var start = await CreateStartAsync(id, args, ct);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
-        using var terminate = ct.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
-        var stdout = ReadAsync(process.StandardOutput, onOutput, ct);
-        var stderr = ReadAsync(process.StandardError, onOutput, ct);
+        var process = StartInteractive(id, args, onOutput);
         try
         {
-            if (input is not null) await process.StandardInput.WriteAsync(input.AsMemory(), ct);
-            process.StandardInput.Close();
-            await process.WaitForExitAsync(ct);
-            return new(process.ExitCode, await stdout, await stderr);
+            if (input is not null) await process.WriteInputAsync(input, ct);
+            process.CloseInput();
+            return await process.WaitAsync(ct);
         }
-        finally
-        {
-            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
-            try { await Task.WhenAll(stdout, stderr); } catch (OperationCanceledException) { }
-        }
+        finally { process.Dispose(); }
     }
+
+    public AiCliProcess StartInteractive(string id, IReadOnlyList<string> args, Action<string>? onOutput = null)
+    {
+        var process = Process.Start(CreateStart(id, args)) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
+        return new AiCliProcess(process, onOutput);
+    }
+
     /// <summary>Bounded duplex protocol using the same profile, environment and sandbox as inference.</summary>
     public async Task<T> RunProtocolAsync<T>(string id, IReadOnlyList<string> args,
         Func<StreamReader, StreamWriter, CancellationToken, Task<T>> protocol, CancellationToken ct)
     {
-        var start = await CreateStartAsync(id, args, ct);
+        var start = CreateStart(id, args);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
         using var terminate = ct.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
-        var stderr = ReadAsync(process.StandardError, null, ct);
+        var stderr = ReadAsync(process.StandardError, null);
         try
         {
             var exchange = protocol(process.StandardOutput, process.StandardInput, ct);
@@ -97,7 +95,7 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
         }
     }
 
-    private async Task<ProcessStartInfo> CreateStartAsync(string id, IReadOnlyList<string> args, CancellationToken ct)
+    private ProcessStartInfo CreateStart(string id, IReadOnlyList<string> args)
     {
         var path = Find(id) ?? throw new InvalidOperationException("Outil CLI non installé sur ce nœud.");
         var profile = Profile(id);
@@ -144,16 +142,16 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
         start.Environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1";
         start.Environment["DISABLE_TELEMETRY"] = "1";
         start.Environment["DISABLE_ERROR_REPORTING"] = "1";
-        if (id == "claude-cli" && HasClaudeToken)
-            start.Environment["CLAUDE_CODE_OAUTH_TOKEN"] = protector.Unprotect(await File.ReadAllTextAsync(Path.Combine(profile, "oauth-token.protected"), ct));
+        var startingClaudeLogin = id == "claude-cli" && args.Count >= 2 && args[0] == "auth" && args[1] == "login";
+        if (id == "claude-cli" && HasClaudeToken && !startingClaudeLogin)
+            start.Environment["CLAUDE_CODE_OAUTH_TOKEN"] = protector.Unprotect(File.ReadAllText(Path.Combine(profile, "oauth-token.protected")));
         return start;
     }
-
-    private static async Task<string> ReadAsync(StreamReader reader, Action<string>? callback, CancellationToken ct)
+    internal static async Task<string> ReadAsync(StreamReader reader, Action<string>? callback)
     {
         var result = new StringBuilder();
         var buffer = new char[2048];
-        while (await reader.ReadAsync(buffer.AsMemory(), ct) is var count && count > 0)
+        while (await reader.ReadAsync(buffer.AsMemory()) is var count && count > 0)
         {
             if (result.Length + count > 1024 * 1024) throw new InvalidOperationException("Sortie CLI trop volumineuse.");
             var chunk = new string(buffer, 0, count);
@@ -161,5 +159,67 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
             callback?.Invoke(chunk);
         }
         return result.ToString();
+    }
+}
+
+public sealed class AiCliProcess : IDisposable
+{
+    private readonly Process process;
+    private readonly Task<string> stdout;
+    private readonly Task<string> stderr;
+    private int inputClosed;
+
+    internal AiCliProcess(Process process, Action<string>? onOutput)
+    {
+        this.process = process;
+        stdout = AiCliRuntime.ReadAsync(process.StandardOutput, onOutput);
+        stderr = AiCliRuntime.ReadAsync(process.StandardError, onOutput);
+    }
+
+    public async Task WriteInputLineAsync(string value, CancellationToken ct)
+    {
+        if (Volatile.Read(ref inputClosed) != 0) throw new InvalidOperationException("Le processus n’accepte plus d’entrée.");
+        await WriteInputAsync(value, ct);
+        await process.StandardInput.WriteAsync(Environment.NewLine.AsMemory(), ct);
+        await process.StandardInput.FlushAsync(ct);
+    }
+
+    public async Task WriteInputAsync(string value, CancellationToken ct)
+    {
+        if (Volatile.Read(ref inputClosed) != 0) throw new InvalidOperationException("Le processus n’accepte plus d’entrée.");
+        await process.StandardInput.WriteAsync(value.AsMemory(), ct);
+        await process.StandardInput.FlushAsync(ct);
+    }
+
+    public void CloseInput()
+    {
+        if (Interlocked.Exchange(ref inputClosed, 1) != 0) return;
+        try { process.StandardInput.Close(); } catch (IOException) { }
+    }
+
+    public async Task<AiProcessResult> WaitAsync(CancellationToken ct)
+    {
+        using var terminate = ct.Register(Kill);
+        try { await process.WaitForExitAsync(ct); }
+        catch
+        {
+            Kill();
+            try { await process.WaitForExitAsync(CancellationToken.None); } catch (InvalidOperationException) { }
+            try { await Task.WhenAll(stdout, stderr); } catch (IOException) { }
+            throw;
+        }
+        return new(process.ExitCode, await stdout, await stderr);
+    }
+
+    private void Kill()
+    {
+        try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
+    }
+
+    public void Dispose()
+    {
+        CloseInput();
+        Kill();
+        process.Dispose();
     }
 }

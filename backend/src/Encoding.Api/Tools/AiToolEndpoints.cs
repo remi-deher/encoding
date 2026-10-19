@@ -16,6 +16,9 @@ public static class AiToolEndpoints
         group.MapPost("/{id}/auth/device-code/start", async (string id, DeviceCodeAuthService service, AiQuotaService quotas, CancellationToken ct) =>
             await GuardAsync(async () => { quotas.Invalidate(id); return Results.Ok(await service.StartDeviceAuthAsync(id, ct)); }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapPost("/{id}/auth/input", async (string id, AiCliAuthInputRequest request, DeviceCodeAuthService service, CancellationToken ct) =>
+            await GuardAsync(async () => { await service.SubmitAuthInputAsync(id, request.Input, ct); return Results.Ok(new { accepted = true }); }))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapGet("/{id}/auth/device-code/status", async (string id, DeviceCodeAuthService service, CancellationToken ct) => await GuardAsync(async () => Results.Ok(await service.GetStatusAsync(id, ct))));
         group.MapPost("/claude-cli/auth/token", async (ClaudeTokenRequest request, DeviceCodeAuthService service, AiQuotaService quotas, CancellationToken ct) =>
             await GuardAsync(async () => { quotas.Invalidate("claude-cli"); try { await service.SaveClaudeTokenAsync(request.Token, ct); return Results.Ok(new { saved = true }); } finally { quotas.Invalidate("claude-cli"); } }))

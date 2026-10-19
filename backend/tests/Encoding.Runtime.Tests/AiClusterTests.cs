@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Tools;
+using Encoding.Api.Nodes;
 using Encoding.Contracts.Tools;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -16,6 +17,19 @@ namespace Encoding.Runtime.Tests;
 public sealed class AiClusterTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
+
+    [Fact]
+    public async Task AvailabilityUsesDisplayNamesForLocalAndRemoteNodesWithTechnicalNameFallback()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        Assert.Equal("first", (await mesh.First.Service.LocalAsync(Ct)).Name);
+        await mesh.First.LocalNode.RequestNameAsync("Salon", Ct);
+        await mesh.Second.LocalNode.RequestNameAsync("Bureau", Ct);
+
+        var view = await mesh.First.Service.ViewAsync(Ct);
+        Assert.Contains(view.Nodes, node => node.NodeId == mesh.First.Identity.PeerId && node.Name == "Salon");
+        Assert.Contains(view.Nodes, node => node.NodeId == mesh.Second.Identity.PeerId && node.Name == "Bureau");
+    }
 
     [Fact]
     public async Task AnyPeerCanUseRemoteProviderAndResumeDurableApplicationContextWithoutCopyingSecrets()
@@ -171,6 +185,7 @@ public sealed class AiClusterTests
         public AiSettingsService Settings = null!;
         public AiClientFactory Clients = null!;
         public IConfiguration Configuration = null!;
+        public LocalNodeRegistry LocalNode = null!;
         public static async Task<Node> CreateAsync(Guid cluster, string name, string other, MeshFactory factory, byte[] key, bool connected)
         {
             var node = new Node { Database = await TestDatabase.CreateSqliteAsync("ai-cluster"), Profile = new() };
@@ -192,10 +207,11 @@ public sealed class AiClusterTests
             node.Auth = new(node.Profile.Runtime);
             node.Settings = new(node.Configuration);
             node.Clients = new(node.Configuration, factory, node.Settings, node.Profile.Runtime);
+            node.LocalNode = new(new NodeRepository(node.Database.Db));
             node.Service = node.NewService();
             return node;
         }
-        public AiClusterService NewService() => new(Transport, Store, Auth, Settings, Clients, Configuration, new AiQuotaService(Profile.Runtime));
+        public AiClusterService NewService() => new(Transport, Store, Auth, Settings, Clients, Configuration, LocalNode, new AiQuotaService(Profile.Runtime));
         public async ValueTask DisposeAsync() { Auth.Dispose(); Identity.Dispose(); Key.Dispose(); await Database.DisposeAsync(); Profile.Dispose(); }
     }
     private sealed class Mesh : IAsyncDisposable

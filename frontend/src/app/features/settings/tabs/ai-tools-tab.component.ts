@@ -1,6 +1,5 @@
 import { AiQuotaPanelComponent } from './ai-quota-panel.component';
 import { AiSessionHistoryComponent } from './ai-session-history.component';
-import { CategoryTabsComponent } from '../../../shared/ui/category-tabs.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -9,6 +8,8 @@ import {
   computed,
   inject,
   signal,
+  TemplateRef,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -19,7 +20,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatExpansionModule } from '@angular/material/expansion';
-import { MatMenuModule } from '@angular/material/menu';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
+import { SettingsEditor } from '../settings-editor';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import {
@@ -36,288 +38,47 @@ import { AuthService } from '../../../core/auth/auth.service';
   host: { '(window:beforeunload)': 'beforeUnload($event)' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    CategoryTabsComponent,
-    AiSessionHistoryComponent,
+    ConfigurationSectionComponent,
     AiQuotaPanelComponent,
+    AiSessionHistoryComponent,
     FormsModule,
     MatButtonModule,
-    MatFormFieldModule,
     MatIconModule,
+    MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
     MatProgressSpinnerModule,
     MatExpansionModule,
-    MatMenuModule,
   ],
-  template: `
-    <header class="page-heading">
-      <div>
-        <h2>IA & fournisseurs</h2>
-        <p>Choisissez le moteur du cluster et gérez ses connexions.</p>
-      </div>
-      <button matButton="text" type="button" [disabled]="loadingTools()" (click)="refreshTools()">
-        Actualiser les connexions
-      </button>
-    </header>
-    @if (loadingSettings()) {
-      <mat-spinner diameter="28" aria-label="Chargement des paramètres" />
-    } @else {
-      <form #settingsForm="ngForm" (ngSubmit)="saveSettings()">
-        <section class="default-provider">
-          <div>
-            <h3>Moteur par défaut</h3>
-            <p>Utilisé quand une demande ne précise pas de fournisseur.</p>
-          </div>
-          <mat-form-field appearance="outline"
-            ><mat-label>Moteur du cluster</mat-label>
-            <mat-select
-              name="defaultProvider"
-              [(ngModel)]="defaultProvider"
-              [disabled]="!isAdmin()"
-            >
-              @for (provider of providers; track provider.id) {
-                <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        </section>
-        <div class="workspace">
-          <app-category-tabs
-            label="Fournisseurs IA"
-            [options]="providerTabs()"
-            [selected]="selectedProvider()"
-            (selectedChange)="selectedProvider.set($event)"
-          />
-          <section class="provider-sheet" aria-labelledby="provider-title">
-            <header class="sheet-heading">
-              <div>
-                <h3 id="provider-title">{{ selectedName() }}</h3>
-                <p class="help">{{ clusterLabel(selectedProvider()) }}</p>
-                <p>
-                  Configuration de la connexion sur ce nœud. Les demandes du cluster peuvent
-                  l’utiliser.
-                </p>
-              </div>
-              @if (selectedTool(); as tool) {
-                @if (tool.authStatus.state === 'authorized' && isAdmin()) {
-                  <button
-                    matIconButton
-                    type="button"
-                    [matMenuTriggerFor]="connectionMenu"
-                    aria-label="Actions de connexion"
-                  >
-                    <mat-icon>more_vert</mat-icon>
-                  </button>
-                  <mat-menu #connectionMenu="matMenu"
-                    ><button mat-menu-item type="button" (click)="revoke(tool.id)">
-                      <mat-icon>link_off</mat-icon>Déconnecter ce nœud
-                    </button></mat-menu
-                  >
-                }
-              }
-            </header>
-            @switch (selectedProvider()) {
-              @case ('ollama') {
-                <div class="fields">
-                  <mat-form-field appearance="outline"
-                    ><mat-label>Adresse du serveur</mat-label
-                    ><input
-                      matInput
-                      name="ollamaBaseUrl"
-                      [(ngModel)]="ollamaBaseUrl"
-                      [readonly]="!isAdmin()"
-                      required
-                      type="url"
-                  /></mat-form-field>
-                  <mat-form-field appearance="outline"
-                    ><mat-label>Modèle</mat-label
-                    ><input
-                      matInput
-                      name="ollamaModel"
-                      [(ngModel)]="ollamaModel"
-                      [readonly]="!isAdmin()"
-                      required
-                  /></mat-form-field>
-                </div>
-              }
-              @case ('openai') {
-                <div class="fields">
-                  <mat-form-field appearance="outline"
-                    ><mat-label>Adresse de l’API compatible OpenAI</mat-label
-                    ><input
-                      matInput
-                      name="openAiBaseUrl"
-                      [(ngModel)]="openAiBaseUrl"
-                      [readonly]="!isAdmin()"
-                      required
-                      type="url"
-                  /></mat-form-field>
-                  <mat-form-field appearance="outline"
-                    ><mat-label>Modèle</mat-label
-                    ><input
-                      matInput
-                      name="openAiModel"
-                      [(ngModel)]="openAiModel"
-                      [readonly]="!isAdmin()"
-                      required
-                  /></mat-form-field>
-                  <mat-form-field appearance="outline"
-                    ><mat-label>Clé API</mat-label
-                    ><input
-                      matInput
-                      name="openAiApiKey"
-                      type="password"
-                      autocomplete="new-password"
-                      [(ngModel)]="openAiApiKey"
-                      [readonly]="!isAdmin()"
-                    />
-                    <mat-hint>{{
-                      hasOpenAiApiKey()
-                        ? 'Clé enregistrée. Laissez vide pour la conserver.'
-                        : 'La clé reste sur ce nœud.'
-                    }}</mat-hint>
-                  </mat-form-field>
-                </div>
-              }
-              @default {
-                @if (selectedTool(); as tool) {
-                  <div class="connection-status">
-                    <span class="badge">{{ authLabel(tool.authStatus.state) }}</span
-                    ><span>{{
-                      tool.isInstalled
-                        ? 'Outil installé sur ce nœud'
-                        : 'Outil non installé sur ce nœud'
-                    }}</span>
-                  </div>
-                  @if (tool.authStatus.errorMessage) {
-                    <p role="status">{{ tool.authStatus.errorMessage }}</p>
-                  }
-                  @if (!tool.isInstalled) {
-                    <p>Installez l’outil officiel sur ce nœud pour y ajouter une connexion.</p>
-                  } @else if (tool.id === 'codex-cli') {
-                    @if (isAdmin()) {
-                      <button
-                        matButton="tonal"
-                        type="button"
-                        [disabled]="connecting()"
-                        (click)="startAuth(tool)"
-                      >
-                        {{ connecting() ? 'Préparation de la connexion…' : 'Associer mon compte' }}
-                      </button>
-                    }
-                    <p class="help">
-                      Le lien et le code sont fournis par Codex. Aucun identifiant n’est partagé
-                      entre les nœuds.
-                    </p>
-                  } @else {
-                    <p>
-                      Sur votre poste, générez un jeton avec <code>claude setup-token</code>, puis
-                      enregistrez-le ici pour ce nœud.
-                    </p>
-                    @if (isAdmin()) {
-                      <mat-form-field appearance="outline"
-                        ><mat-label>Jeton Claude Code</mat-label
-                        ><input
-                          matInput
-                          type="password"
-                          autocomplete="new-password"
-                          name="claudeToken"
-                          [(ngModel)]="claudeToken"
-                          [ngModelOptions]="{ standalone: true }"
-                      /></mat-form-field>
-                      <div>
-                        <button
-                          matButton="tonal"
-                          type="button"
-                          [disabled]="connecting() || !claudeToken().trim()"
-                          (click)="saveClaudeToken()"
-                        >
-                          Enregistrer la connexion
-                        </button>
-                      </div>
-                    }
-                  }
-                } @else {
-                  <p>État local indisponible. Actualisez les connexions.</p>
-                }
-              }
-            }
-          </section>
-        </div>
-        <mat-expansion-panel class="advanced">
-          <mat-expansion-panel-header
-            ><mat-panel-title
-              >Paramètres avancés du cluster</mat-panel-title
-            ></mat-expansion-panel-header
-          >
-          <div class="fields">
-            <mat-form-field appearance="outline"
-              ><mat-label>Délai maximal par tentative (secondes)</mat-label
-              ><input
-                matInput
-                name="timeoutSeconds"
-                type="number"
-                min="10"
-                max="600"
-                required
-                [(ngModel)]="timeoutSeconds"
-                [readonly]="!isAdmin()"
-            /></mat-form-field>
-            <mat-form-field appearance="outline"
-              ><mat-label>Lignes de sous-titres par lot</mat-label
-              ><input
-                matInput
-                name="subtitleBatchSize"
-                type="number"
-                min="5"
-                max="200"
-                required
-                [(ngModel)]="subtitleBatchSize"
-                [readonly]="!isAdmin()"
-            /></mat-form-field>
-          </div>
-        </mat-expansion-panel>
-        @if (isAdmin()) {
-          <footer>
-            <span
-              >Le moteur et les limites sont partagés. Les adresses, modèles et secrets restent
-              propres à ce nœud.</span
-            ><button
-              matButton="filled"
-              type="submit"
-              [disabled]="savingSettings() || settingsForm.invalid"
-            >
-              {{ savingSettings() ? 'Enregistrement…' : 'Enregistrer les paramètres' }}
-            </button>
-          </footer>
-        }
-      </form>
-    }
-    @if (cluster(); as view) {
-      <section class="cluster-connections">
-        <h3>Connexions disponibles dans le cluster</h3>
-        <p>
-          Les nœuds répondants déclarent leurs connexions. Une déclaration de connexion ne garantit
-          pas le quota ou la disponibilité du modèle.
-        </p>
-        @for (node of view.nodes; track node.nodeId) {
-          <p>
-            <strong>{{ node.name }}</strong> ·
-            {{
-              node.providers.length ? providerNames(node.providers) : 'Aucun fournisseur configuré'
-            }}
-          </p>
-        }
-      </section>
-    }
-    @if (isAdmin()) {
-      <app-ai-quota-panel [refreshKey]="quotaRevision()" />
-      <app-ai-session-history />
-    }
-  `,
+  templateUrl: './ai-tools-tab.component.html',
   styleUrl: './ai-tools-tab.component.scss',
 })
 export class AiToolsTabComponent implements OnInit {
+  protected readonly editor = inject(SettingsEditor);
+  private readonly providerEditor = viewChild.required<TemplateRef<unknown>>('providerEditor');
+  readonly settingsError = signal(false);
+  private savedSettings: AiSettings | null = null;
+  openProvider(id: string): void {
+    this.selectedProvider.set(id);
+    void this.editor.open({
+      title: this.selectedName(),
+      content: this.providerEditor(),
+      dirty: () => this.hasUnsavedChanges(),
+      busy: () => this.savingSettings() || this.connecting(),
+      onClosed: () => this.discardChanges(),
+    });
+  }
+  discardChanges(): void {
+    if (this.savedSettings) this.applySettings(this.savedSettings);
+  }
+  providerStatus(id: string): string {
+    if (id === 'ollama')
+      return this.ollamaBaseUrl() && this.ollamaModel() ? 'Configuré' : 'Non configuré';
+    if (id === 'openai')
+      return this.openAiBaseUrl() && this.openAiModel() ? 'Configuré' : 'Non configuré';
+    const tool = this.tools().find((item) => item.id === id);
+    return tool ? this.authLabel(tool.authStatus.state) : 'État indisponible';
+  }
   private readonly aiService = inject(AiToolsService);
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(MatDialog);
@@ -343,12 +104,6 @@ export class AiToolsTabComponent implements OnInit {
     this.tools().find((t) => t.id === this.selectedProvider()),
   );
   readonly defaultProvider = signal('ollama');
-  readonly providerTabs = computed(() =>
-    this.providers.map((provider) => ({
-      value: provider.id,
-      label: provider.name + (this.defaultProvider() === provider.id ? ' · par défaut' : ''),
-    })),
-  );
   readonly ollamaBaseUrl = signal('');
   readonly ollamaModel = signal('');
   readonly openAiBaseUrl = signal('');
@@ -357,7 +112,6 @@ export class AiToolsTabComponent implements OnInit {
   readonly hasOpenAiApiKey = signal(false);
   readonly timeoutSeconds = signal(120);
   readonly subtitleBatchSize = signal(80);
-  readonly claudeToken = signal('');
 
   private savedFingerprint = '';
   private fingerprint(): string {
@@ -373,16 +127,17 @@ export class AiToolsTabComponent implements OnInit {
     ]);
   }
   hasUnsavedChanges(): boolean {
-    return (
-      !this.loadingSettings() &&
-      (this.fingerprint() !== this.savedFingerprint || this.claudeToken().length > 0)
-    );
+    return !this.loadingSettings() && this.fingerprint() !== this.savedFingerprint;
   }
   beforeUnload(event: BeforeUnloadEvent): void {
     if (this.hasUnsavedChanges()) event.preventDefault();
   }
   ngOnInit(): void {
     this.refreshTools();
+    this.loadSettings();
+  }
+  loadSettings(): void {
+    this.settingsError.set(false);
     this.aiService.getSettings().subscribe({
       next: (settings) => {
         this.applySettings(settings);
@@ -390,6 +145,7 @@ export class AiToolsTabComponent implements OnInit {
         this.loadingSettings.set(false);
       },
       error: () => {
+        this.settingsError.set(true);
         this.notifications.show('Impossible de charger les paramètres IA.');
       },
     });
@@ -415,6 +171,8 @@ export class AiToolsTabComponent implements OnInit {
     });
   }
   private applySettings(settings: AiSettings): void {
+    this.savedSettings = settings;
+    this.openAiApiKey.set('');
     this.defaultProvider.set(settings.defaultProvider);
     this.ollamaBaseUrl.set(settings.ollamaBaseUrl);
     this.ollamaModel.set(settings.ollamaModel);
@@ -426,7 +184,16 @@ export class AiToolsTabComponent implements OnInit {
     this.savedFingerprint = this.fingerprint();
   }
   saveSettings(): void {
-    if (!this.isAdmin()) return;
+    if (!this.isAdmin() || this.savingSettings()) return;
+    if (
+      this.timeoutSeconds() < 10 ||
+      this.timeoutSeconds() > 600 ||
+      this.subtitleBatchSize() < 5 ||
+      this.subtitleBatchSize() > 200
+    ) {
+      this.notifications.show('Vérifiez les limites du cluster.');
+      return;
+    }
     this.savingSettings.set(true);
     const request: AiSettingsUpdateRequest = {
       defaultProvider: this.defaultProvider(),
@@ -445,6 +212,7 @@ export class AiToolsTabComponent implements OnInit {
         this.savedFingerprint = this.fingerprint();
         this.savingSettings.set(false);
         this.notifications.show('Configuration IA enregistrée avec succès.');
+        this.editor.reset();
         this.refreshTools();
       },
       error: () => {
@@ -467,24 +235,6 @@ export class AiToolsTabComponent implements OnInit {
         ref.afterClosed().subscribe(() => this.refreshTools());
       },
       error: (error: HttpErrorResponse) => {
-        this.connecting.set(false);
-        this.notifications.show(this.authError(error));
-        this.refreshTools();
-      },
-    });
-  }
-  saveClaudeToken(): void {
-    if (!this.isAdmin()) return;
-    this.connecting.set(true);
-    this.aiService.saveClaudeToken(this.claudeToken().trim()).subscribe({
-      next: () => {
-        this.claudeToken.set('');
-        this.connecting.set(false);
-        this.notifications.show('Connexion Claude enregistrée sur ce nœud.');
-        this.refreshTools();
-      },
-      error: (error: HttpErrorResponse) => {
-        this.claudeToken.set('');
         this.connecting.set(false);
         this.notifications.show(this.authError(error));
         this.refreshTools();

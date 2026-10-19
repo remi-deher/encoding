@@ -1,10 +1,11 @@
 import { FlowDocument, FlowValidationIssue } from './flow-validation';
 
 export interface DeviceAuthPrompt {
-  readonly userCode: string;
+  readonly userCode?: string | null;
   readonly verificationUri: string;
   readonly expiresInSeconds: number;
   readonly intervalSeconds: number;
+  readonly requiresInput?: boolean;
 }
 
 export interface DeviceAuthStatus {
