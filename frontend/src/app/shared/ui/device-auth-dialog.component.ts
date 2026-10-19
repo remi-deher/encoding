@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { NotificationService } from '../services/notification.service';
 import { Subscription } from 'rxjs';
 import {
@@ -19,6 +20,8 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { AiToolsService } from '../services/ai-tools.service';
 import { ClipboardService } from '../services/clipboard.service';
 import { DeviceAuthPrompt } from '../models/ai-tools';
@@ -34,35 +37,48 @@ export interface DeviceAuthDialogData {
   selector: 'app-device-auth-dialog',
   imports: [
     CommonModule,
+    FormsModule,
     MatButtonModule,
     MatDialogActions,
     MatDialogContent,
     MatDialogTitle,
     MatIconModule,
     MatProgressSpinnerModule,
+    MatFormFieldModule,
+    MatInputModule,
   ],
   template: `
     <section class="app-dialog device-auth-dialog">
       <header class="app-dialog-header">
         <div class="app-dialog-heading">
-          <p class="app-dialog-eyebrow">Authentification sécurisée (Device Code)</p>
+          <p class="app-dialog-eyebrow">Authentification sécurisée</p>
           <h2 mat-dialog-title>Associer {{ data.toolName }}</h2>
         </div>
       </header>
 
       <mat-dialog-content class="app-dialog-body device-auth-body">
-        <p class="instruction">
-          Pour connecter votre compte sans clé API, ouvrez le lien officiel ci-dessous dans votre
-          navigateur et saisissez votre code unique d'autorisation :
-        </p>
+        @if (data.prompt.userCode) {
+          <p class="instruction">
+            Ouvrez le lien officiel ci-dessous dans votre navigateur et saisissez le code fourni
+            par {{ data.toolName }} :
+          </p>
+        } @else {
+          <p class="instruction">
+            Ouvrez le lien officiel ci-dessous dans votre navigateur pour vous connecter à
+            {{ data.toolName }}. Si la page vous fournit un code à coller dans la CLI, saisissez-le
+            ici pour terminer la connexion sur ce nœud.
+          </p>
+        }
 
-        <div class="code-box">
-          <span class="code-value">{{ data.prompt.userCode }}</span>
-          <button matButton="outlined" type="button" (click)="copyCode()">
-            <mat-icon>{{ copied() ? 'check' : 'content_copy' }}</mat-icon>
-            {{ copied() ? 'Copié !' : 'Copier le code' }}
-          </button>
-        </div>
+        @if (data.prompt.userCode; as userCode) {
+          <div class="code-box">
+            <span class="code-value">{{ userCode }}</span>
+            <button matButton="outlined" type="button" (click)="copyCode()">
+              <mat-icon>{{ copied() ? 'check' : 'content_copy' }}</mat-icon>
+              {{ copied() ? 'Copié !' : 'Copier le code' }}
+            </button>
+          </div>
+        }
 
         <div class="action-link-box">
           <a
@@ -75,6 +91,30 @@ export interface DeviceAuthDialogData {
             Ouvrir {{ data.prompt.verificationUri }}
           </a>
         </div>
+
+        @if (data.prompt.requiresInput && !inputSubmitted()) {
+          <mat-form-field appearance="outline">
+            <mat-label>Code de retour Claude</mat-label>
+            <input
+              matInput
+              name="authInput"
+              autocomplete="one-time-code"
+              [(ngModel)]="authInput"
+              [ngModelOptions]="{ standalone: true }"
+              [disabled]="submittingInput() || expired()"
+            />
+          </mat-form-field>
+          <button
+            matButton="tonal"
+            type="button"
+            [disabled]="!authInput().trim() || submittingInput() || expired()"
+            (click)="submitInput()"
+          >
+            {{ submittingInput() ? 'Transmission…' : 'Transmettre le code à Claude Code' }}
+          </button>
+        } @else if (inputSubmitted()) {
+          <p role="status">Code transmis. Claude Code vérifie la connexion…</p>
+        }
 
         <div class="status-indicator">
           @if (isChecking()) {
@@ -91,7 +131,8 @@ export interface DeviceAuthDialogData {
               [disabled]="isChecking()"
               (click)="checkStatus()"
             >
-              <mat-icon>refresh</mat-icon> J'ai validé le code
+              <mat-icon>refresh</mat-icon>
+              {{ data.prompt.userCode ? "J'ai validé le code" : 'Vérifier la connexion' }}
             </button>
           }
         </div>
@@ -175,6 +216,9 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
   private expiresAt = 0;
   readonly expired = signal(false);
   readonly statusMessage = signal('');
+  readonly authInput = signal('');
+  readonly submittingInput = signal(false);
+  readonly inputSubmitted = signal(false);
   ngOnInit(): void {
     this.expiresAt = Date.now() + this.data.prompt.expiresInSeconds * 1000;
     this.polling = setInterval(
@@ -199,16 +243,35 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
   readonly isAuthorized = signal(false);
 
   copyCode(): void {
-    this.clipboard.copy(this.data.prompt.userCode);
+    const userCode = this.data.prompt.userCode;
+    if (!userCode) return;
+    this.clipboard.copy(userCode);
     this.copied.set(true);
     setTimeout(() => this.copied.set(false), 3000);
+  }
+
+  submitInput(): void {
+    const value = this.authInput().trim();
+    if (!value || this.submittingInput() || this.inputSubmitted()) return;
+    this.submittingInput.set(true);
+    this.aiService.submitAuthInput(this.data.toolId, value).subscribe({
+      next: () => {
+        this.authInput.set('');
+        this.inputSubmitted.set(true);
+        this.submittingInput.set(false);
+      },
+      error: () => {
+        this.submittingInput.set(false);
+        this.statusMessage.set('Le code n’a pas pu être transmis. Vérifiez-le puis réessayez.');
+      },
+    });
   }
 
   checkStatus(): void {
     if (this.isChecking() || this.isAuthorized() || this.expired()) return;
     if (Date.now() >= this.expiresAt) {
       this.expired.set(true);
-      this.statusMessage.set('Le code a expiré. Fermez puis relancez l’association.');
+      this.statusMessage.set('La connexion a expiré. Fermez puis relancez l’association.');
       clearInterval(this.polling);
       return;
     }
