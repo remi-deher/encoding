@@ -79,6 +79,10 @@ export interface AiSettings {
   readonly flowLocalOnly?: boolean;
   readonly assistantConversationRetentionDays: number;
   readonly assistantActivityRetentionDays: number;
+  readonly ollamaEnabled?: boolean;
+  readonly openAiEnabled?: boolean;
+  readonly codexEnabled?: boolean;
+  readonly claudeEnabled?: boolean;
 }
 
 export interface AiSettingsUpdateRequest {
@@ -96,6 +100,10 @@ export interface AiSettingsUpdateRequest {
   readonly flowLocalOnly?: boolean;
   readonly assistantConversationRetentionDays?: number;
   readonly assistantActivityRetentionDays?: number;
+  readonly ollamaEnabled?: boolean;
+  readonly openAiEnabled?: boolean;
+  readonly codexEnabled?: boolean;
+  readonly claudeEnabled?: boolean;
 }
 
 export interface AiNodeAvailability {

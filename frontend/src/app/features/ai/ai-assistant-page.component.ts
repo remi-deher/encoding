@@ -211,7 +211,6 @@ export class AiAssistantPageComponent implements OnDestroy {
       !this.sending() &&
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
-      (Boolean(this.detail()) || Boolean(this.selectedResource())) &&
       (this.hasPendingRequest() ||
         (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
       (!this.hasPendingRequest() || this.prompt() === this.requestPrompt),
@@ -655,7 +654,7 @@ export class AiAssistantPageComponent implements OnDestroy {
         requestId: this.requestId,
         userPrompt: message,
         conversationId: activeConversation?.id,
-        resourceType: activeConversation ? undefined : this.selectedResourceType(),
+        resourceType: activeConversation ? undefined : (selectedResource ? this.selectedResourceType() : undefined),
         resourceId: activeConversation ? undefined : (selectedResource?.id ?? undefined),
         resourceVersion: activeConversation ? undefined : (selectedResource?.version ?? undefined),
         toolCalls: this.selectedReadTools().map(
