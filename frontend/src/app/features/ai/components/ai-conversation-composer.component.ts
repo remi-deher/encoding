@@ -33,14 +33,37 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
           (keydown)="onKeydown($event)"
         ></textarea>
       </mat-form-field>
+      @if (attachmentName()) {
+        <div class="file-attachment">
+          <span aria-hidden="true">📎</span>
+          <span class="file-name">{{ attachmentName() }}</span>
+          <button
+            mat-icon-button
+            type="button"
+            aria-label="Retirer le fichier joint"
+            [disabled]="locked()"
+            (click)="clearAttachment()"
+          >
+            ×
+          </button>
+        </div>
+      }
+      <input
+        #fileInput
+        class="visually-hidden"
+        type="file"
+        accept=".txt,.md,.csv,.json,.log,.yaml,.yml,text/plain,text/markdown,text/csv,application/json"
+        aria-label="Choisir un fichier texte à joindre"
+        (change)="readAttachment($event)"
+      />
       <div class="composer-tools">
         <button
           mat-icon-button
           type="button"
-          aria-label="Joindre une ressource"
-          [attr.aria-expanded]="attachmentOpen()"
+          aria-label="Ajouter un fichier texte"
+          title="Ajouter un fichier texte"
           [disabled]="locked()"
-          (click)="attach.emit()"
+          (click)="fileInput.click()"
         >
           <svg
             viewBox="0 0 24 24"
@@ -64,6 +87,7 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
           (typeChange)="typeChange.emit($event)"
           (modelChange)="modelChange.emit($event)"
           (effortChange)="effortChange.emit($event)"
+          (settingsOpenChange)="settingsOpenChange.emit($event)"
         />
         <button
           mat-icon-button
@@ -113,6 +137,9 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
         }
       </div>
       <mat-menu #menu="matMenu">
+        <button mat-menu-item type="button" [disabled]="locked()" (click)="attach.emit()">
+          Joindre une ressource Encoding
+        </button>
         <button
           mat-menu-item
           type="button"
@@ -141,6 +168,37 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
       background: var(--surface-container-low);
       border-radius: var(--radius-xl);
     }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .file-attachment {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 0 var(--space-2) var(--space-2);
+      padding: 0 var(--space-2);
+      border-radius: var(--radius-md);
+      background: var(--surface-container-highest);
+    }
+    .file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--font-label);
+    }
+    .file-attachment button {
+      flex: 0 0 auto;
+    }
     .prompt-field {
       width: 100%;
     }
@@ -157,6 +215,13 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
     }
     app-ai-model-selector {
       flex: 1 1 16rem;
+      order: 1;
+    }
+    .composer-tools > button:first-child {
+      order: 2;
+    }
+    .composer-tools > button:not(:first-child):not(.send-button) {
+      order: 3;
     }
     .send-button {
       flex: 0 0 40px;
@@ -200,16 +265,28 @@ export class AiConversationComposerComponent {
   readonly cancelling = input(false);
   readonly resuming = input(false);
   readonly canSend = input(false);
-  readonly attachmentOpen = input(false);
+  readonly attachmentName = input<string | null>(null);
   readonly typeChange = output<string>();
   readonly modelChange = output<string>();
   readonly effortChange = output<string | null>();
+  readonly settingsOpenChange = output<boolean>();
   readonly send = output<void>();
   readonly cancel = output<void>();
   readonly attach = output<void>();
+  readonly fileSelected = output<File>();
+  readonly fileRemoved = output<void>();
   readonly refresh = output<void>();
   readonly tools = output<void>();
   readonly newConversation = output<void>();
+  protected readAttachment(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) this.fileSelected.emit(file);
+    input.value = '';
+  }
+  protected clearAttachment(): void {
+    this.fileRemoved.emit();
+  }
   protected onKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();

@@ -111,6 +111,9 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly contextPickerOpen = signal(false);
   protected readonly contextSearch = signal('');
   protected readonly prompt = signal('');
+  protected readonly modelSettingsOpen = signal(false);
+  protected readonly attachmentName = signal<string | null>(null);
+  private readonly attachmentText = signal<string | null>(null);
   protected readonly loadingFlows = signal(true);
   protected readonly loadingExecutions = signal(true);
   protected readonly loadingNodes = signal(true);
@@ -211,12 +214,14 @@ export class AiAssistantPageComponent implements OnDestroy {
       !this.sending() &&
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
+      this.prompt().trim().length + (this.attachmentText()?.length ?? 0) <= 4000 &&
       (this.hasPendingRequest() ||
         (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
-      (!this.hasPendingRequest() || this.prompt() === this.requestPrompt),
+      (!this.hasPendingRequest() || this.prompt() === this.requestDraftPrompt),
   );
 
   private requestPrompt = '';
+  private requestDraftPrompt = '';
   private requestId = '';
   private requestSelection: AiTurnModelSelection | null = null;
   private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -274,10 +279,12 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.detail.set(null);
     this.errorMessage.set(null);
     this.prompt.set('');
+    this.removeAttachment();
     this.pendingPrompt.set(null);
     this.hasPendingRequest.set(false);
     this.resumingRequest.set(false);
     this.requestPrompt = '';
+    this.requestDraftPrompt = '';
     this.requestId = '';
     this.requestSelection = null;
     this.selectedReasoningEffort.set(null);
@@ -307,6 +314,37 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected toggleContextPicker(): void {
     this.contextPickerOpen.update((open) => !open);
     this.contextSearch.set('');
+  }
+
+  protected async selectAttachment(file: File): Promise<void> {
+    if (!/\.(txt|md|csv|json|log|yaml|yml)$/i.test(file.name) || file.size > 8_000) {
+      this.errorMessage.set(
+        'Choisissez un fichier texte (.txt, .md, .csv, .json, .log ou .yaml) de 8 Ko maximum.',
+      );
+      return;
+    }
+    try {
+      const content = await file.text();
+      const attachment = `\n\n[Contenu du fichier : ${file.name}]\n${content}`;
+      if (attachment.length > 3000) {
+        this.errorMessage.set('Le contenu du fichier dépasse la limite de 3 000 caractères.');
+        return;
+      }
+      if (this.prompt().trim().length + attachment.length > 4000) {
+        this.errorMessage.set('Le message et le fichier dépassent la limite de 4 000 caractères.');
+        return;
+      }
+      this.attachmentName.set(file.name);
+      this.attachmentText.set(attachment);
+      this.errorMessage.set(null);
+    } catch {
+      this.errorMessage.set('Impossible de lire ce fichier.');
+    }
+  }
+
+  protected removeAttachment(): void {
+    this.attachmentName.set(null);
+    this.attachmentText.set(null);
   }
 
   protected isSourceAttached(resource: AssistantResourceOption): boolean {
@@ -590,6 +628,7 @@ export class AiAssistantPageComponent implements OnDestroy {
           this.requestSelection = detail.conversation;
           this.prompt.set(detail.pendingTurn.userPrompt);
           this.requestPrompt = detail.pendingTurn.userPrompt;
+          this.requestDraftPrompt = detail.pendingTurn.userPrompt;
           this.requestId = detail.pendingTurn.requestId;
           this.hasPendingRequest.set(true);
           this.resumingRequest.set(!detail.pendingTurn.isRunning);
@@ -606,6 +645,7 @@ export class AiAssistantPageComponent implements OnDestroy {
           }
         } else {
           this.requestPrompt = '';
+          this.requestDraftPrompt = '';
           this.requestId = '';
           this.pendingPrompt.set(null);
           this.hasPendingRequest.set(false);
@@ -625,8 +665,13 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected send(): void {
     const message = this.prompt().trim();
     if (!message || !this.canSend()) return;
-    if (this.requestPrompt !== message || !this.requestId) {
-      this.requestPrompt = message;
+    const outgoingPrompt =
+      this.requestPrompt && this.hasPendingRequest()
+        ? this.requestPrompt
+        : `${message}${this.attachmentText() ?? ''}`;
+    if (this.requestDraftPrompt !== message || !this.requestId) {
+      this.requestDraftPrompt = message;
+      this.requestPrompt = outgoingPrompt;
       this.requestId = createUuid();
     }
 
@@ -652,9 +697,13 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.aiTools
       .sendAssistantMessage({
         requestId: this.requestId,
-        userPrompt: message,
+        userPrompt: outgoingPrompt,
         conversationId: activeConversation?.id,
-        resourceType: activeConversation ? undefined : (selectedResource ? this.selectedResourceType() : undefined),
+        resourceType: activeConversation
+          ? undefined
+          : selectedResource
+            ? this.selectedResourceType()
+            : undefined,
         resourceId: activeConversation ? undefined : (selectedResource?.id ?? undefined),
         resourceVersion: activeConversation ? undefined : (selectedResource?.version ?? undefined),
         toolCalls: this.selectedReadTools().map(
@@ -703,7 +752,9 @@ export class AiAssistantPageComponent implements OnDestroy {
           this.setConversationUrl(response.conversation.id);
           if (response.success) {
             this.prompt.set('');
+            this.removeAttachment();
             this.requestPrompt = '';
+            this.requestDraftPrompt = '';
             this.requestId = '';
             this.requestSelection = null;
             this.hasPendingRequest.set(false);
@@ -728,6 +779,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.resumingRequest.set(false);
             this.requestId = '';
             this.requestPrompt = '';
+            this.requestDraftPrompt = '';
             this.requestSelection = null;
             this.loadAssistantOptions(true);
           } else {
@@ -914,6 +966,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.resumingRequest.set(false);
             this.prompt.set('');
             this.requestPrompt = '';
+            this.requestDraftPrompt = '';
             this.requestId = '';
             this.requestSelection = null;
             this.loadConversations();
