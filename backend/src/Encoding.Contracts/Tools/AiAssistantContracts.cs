@@ -31,7 +31,8 @@ public sealed record AiAssistantResourceReference(string Type, Guid Id, int? Ver
 
 public sealed record AiAssistantSourcesRequest(IReadOnlyList<AiAssistantResourceReference> Sources);
 
-public sealed record AiAssistantToolCall(string Name, Guid? FlowId = null, string? State = null, int? Limit = null);
+public sealed record AiAssistantToolCall(string Name, Guid? FlowId = null, string? State = null, int? Limit = null,
+    JsonElement? Arguments = null);
 
 public sealed record AiAssistantToolResult(string Name, string Label, string Href, JsonElement Data);
 
@@ -85,7 +86,8 @@ public sealed record AiAssistantActionProposal(
     string Action,
     string ConfirmationToken,
     string Summary,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    string? OperationName = null);
 
 public sealed record AiAssistantActivity(
     Guid RequestId,

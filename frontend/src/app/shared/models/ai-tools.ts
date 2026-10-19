@@ -200,11 +200,11 @@ export interface AiAssistantMessageRequest {
 }
 
 export interface AiAssistantToolCall {
-  readonly name:
-    'list_flows' | 'get_flow' | 'list_nodes' | 'list_executions' | 'get_libraries_overview';
+  readonly name: string;
   readonly flowId?: string | null;
   readonly state?: 'queued' | 'running' | 'failed' | 'completed' | null;
   readonly limit?: number | null;
+  readonly arguments?: Readonly<Record<string, unknown>>;
 }
 
 export interface AiAssistantSourcesRequest {
@@ -229,8 +229,8 @@ export interface AiAssistantMessageResponse {
 }
 
 export interface AiAssistantActionProposal {
-  readonly action:
-    'publish-flow' | 'delete-flow' | 'start-library' | 'cancel-execution' | 'assign-library-flow';
+  readonly action: string;
+  readonly operationName?: string | null;
   readonly confirmationToken: string;
   readonly summary: string;
   readonly expiresAt: string;

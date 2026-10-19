@@ -180,6 +180,24 @@ export class AiToolsService {
     );
   }
 
+  confirmAssistantFlowTemplateCreation(
+    request: AiAssistantConfirmActionRequest,
+  ): Observable<{ readonly created: boolean }> {
+    return this.http.post<{ readonly created: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/create-flow-template/confirm',
+      request,
+    );
+  }
+
+  confirmAssistantBusinessOperation(
+    request: AiAssistantConfirmActionRequest,
+  ): Observable<{ readonly applied: boolean }> {
+    return this.http.post<{ readonly applied: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/business-operation/confirm',
+      request,
+    );
+  }
+
   recordFlowProposalDecision(
     requestId: string,
     decision: 'applied-to-editor' | 'rejected',

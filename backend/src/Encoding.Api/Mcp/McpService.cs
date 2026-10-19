@@ -22,10 +22,14 @@ namespace Encoding.Api.Mcp;
 /// </summary>
 public sealed class McpService(
     LibraryRepository libraries,
+    LibraryWorkflowRepository libraryWorkflows,
+    LibraryNodeAccessRepository libraryNodeAccess,
+    LibraryProcessingRepository libraryProcessing,
     FlowRepository flows,
     FlowComponentRegistry components,
     FlowDefinitionValidator validator,
     NodeRepository nodes,
+    NodeGroupRepository nodeGroups,
     NodePresenceOptions presenceOptions,
     ExecutionRepository executions,
     FlowScriptRepository scripts,
@@ -41,411 +45,11 @@ public sealed class McpService(
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
-    private static readonly IReadOnlyList<McpToolDefinition> DefinedTools =
-    [
-        // --- 1. BIBLIOTHÈQUES & SANTÉ DU CLUSTER ---
-        new(
-            "get_libraries_overview",
-            "Obtient une vue d'ensemble complète et consolidée de toutes les bibliothèques multimédias du cluster (flows associés, modes d'accès par nœud, état des scans et compteurs de fichiers).",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "list_nodes",
-            "Liste tous les nœuds du cluster, leurs rôles (serveur, worker), état de présence (en ligne/hors ligne) et capacités d'encodage.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "list_executions",
-            "Liste les exécutions de traitement récentes ou filtrées par état (queued, running, failed, completed).",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    state = new { type = "string", description = "Filtrer par état (queued, running, failed, completed)." },
-                    limit = new { type = "integer", description = "Nombre maximal de résultats (défaut 50, max 200).", @default = 50 }
-                },
-                required = Array.Empty<string>()
-            }
-        ),
 
-        new(
-            "get_system_logs",
-            "Consulte les journaux système et nœuds récents pour analyser les incidents, pannes matérielles, erreurs de plugins ou avertissements du cluster.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    min_level = new { type = "string", description = "Sévérité minimale des logs retournés (Trace, Debug, Information, Warning, Error, Critical). Défaut: Warning.", @default = "Warning" },
-                    category = new { type = "string", description = "Préfixe de catégorie de log (ex. 'Encoding.NodeAgent', 'Encoding.Plugins')." },
-                    search = new { type = "string", description = "Recherche textuelle dans le message ou l'exception du log." },
-                    limit = new { type = "integer", description = "Nombre maximal d'entrées (défaut: 50, max: 200).", @default = 50 },
-                    node_id = new { type = "string", description = "Identifiant UUID optionnel du nœud concerné." }
-                },
-                required = Array.Empty<string>()
-            }
-        ),
-
-        // --- 2. FLOWS ---
-        new(
-            "get_flow_schema",
-            "Introspecte le catalogue de composants de flows disponibles (identifiants, types d'entrées/sorties, paramètres configurables) et fournit un exemple de flow JSON valide.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "list_flows",
-            "Liste tous les flows configurés dans le cluster avec leurs versions publiées, leur type et statut de brouillon.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "get_flow",
-            "Récupère la définition complète d'un flow (ou de son brouillon) par son identifiant UUID.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du flow." }
-                },
-                required = new[] { "id" }
-            }
-        ),
-        new(
-            "create_flow",
-            "Crée et valide un nouveau flow à partir de sa définition JSON. Peut être publié immédiatement ou enregistré en brouillon. Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    name = new { type = "string", description = "Nom du flow." },
-                    type = new { type = "string", description = "Type de média du flow (video, image, music, subtitles, generic).", @default = "video" },
-                    publish = new { type = "boolean", description = "Si true, valide et publie le flow immédiatement en version 1.", @default = true },
-                    nodes = new { type = "array", description = "Liste des nœuds du flow avec id, component (ou componentId), name et configuration." },
-                    connections = new { type = "array", description = "Liste des connexions orientées entre sorties et entrées de nœuds." }
-                },
-                required = new[] { "nodes", "connections" }
-            }
-        ),
-        new(
-            "clone_flow",
-            "Duplique un flow existant sous un nouveau nom. Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    sourceFlowId = new { type = "string", description = "Identifiant UUID du flow à cloner." },
-                    newName = new { type = "string", description = "Nom donné au nouveau flow dupliqué." }
-                },
-                required = new[] { "sourceFlowId", "newName" }
-            }
-        ),
-        new(
-            "delete_flow",
-            "Supprime un flow du cluster (suppression logique préservant l'audit s'il a des versions publiées, définitive pour un brouillon). Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    flowId = new { type = "string", description = "Identifiant UUID du flow à supprimer." }
-                },
-                required = new[] { "flowId" }
-            }
-        ),
-
-        // --- 3. SCRIPTS (JAVASCRIPT / PYTHON) ---
-        new(
-            "list_scripts",
-            "Liste tous les scripts partagés réutilisables du cluster avec leur langage (javascript, python) et versions publiées.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "get_script",
-            "Récupère le détail d'un script et le code source complet de son brouillon.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du script." }
-                },
-                required = new[] { "id" }
-            }
-        ),
-        new(
-            "save_script",
-            "Crée ou met à jour le brouillon d'un script (javascript ou python). Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du script existant (omettre pour créer un nouveau script)." },
-                    name = new { type = "string", description = "Nom du script (max 128 caractères)." },
-                    language = new { type = "string", description = "Langage du script : 'javascript' ou 'python'.", @enum = new[] { "javascript", "python" } },
-                    description = new { type = "string", description = "Description du rôle du script (max 1000 caractères)." },
-                    code = new { type = "string", description = "Code source du script." },
-                    expectedRevision = new { type = "integer", description = "Révision attendue pour mise à jour d'un script existant (défaut 1)." }
-                },
-                required = new[] { "name", "language", "code" }
-            }
-        ),
-        new(
-            "publish_script",
-            "Publie une version immuable du brouillon d'un script pour utilisation en production. Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du script." },
-                    expectedRevision = new { type = "integer", description = "Révision de brouillon attendue." }
-                },
-                required = new[] { "id", "expectedRevision" }
-            }
-        ),
-
-        // --- 4. PROFILS D'ENCODAGE ---
-        new(
-            "list_encoding_profiles",
-            "Liste tous les profils de qualité d'encodage vidéo configurés dans le cluster.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "get_encoding_profile",
-            "Récupère le détail d'un profil d'encodage (cibles par encodeur matériel/logiciel, qualité, presets).",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du profil d'encodage." }
-                },
-                required = new[] { "id" }
-            }
-        ),
-        new(
-            "save_encoding_profile",
-            "Crée ou met à jour le brouillon d'un profil d'encodage vidéo. Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du profil existant (omettre pour en créer un nouveau)." },
-                    name = new { type = "string", description = "Nom du profil d'encodage." },
-                    description = new { type = "string", description = "Description du profil." },
-                    targets = new
-                    {
-                        type = "array",
-                        description = "Liste des cibles d'encodage (encoderId, quality, preset, priority).",
-                        items = new
-                        {
-                            type = "object",
-                            properties = new
-                            {
-                                encoderId = new { type = "string" },
-                                quality = new { type = "number" },
-                                preset = new { type = "string" },
-                                priority = new { type = "integer" }
-                            },
-                            required = new[] { "encoderId", "quality", "preset", "priority" }
-                        }
-                    },
-                    expectedRevision = new { type = "integer", description = "Révision attendue pour mise à jour." }
-                },
-                required = new[] { "name", "targets" }
-            }
-        ),
-        new(
-            "publish_encoding_profile",
-            "Publie une version immuable d'un profil d'encodage vidéo. Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du profil." },
-                    expectedRevision = new { type = "integer", description = "Révision de brouillon attendue." }
-                },
-                required = new[] { "id", "expectedRevision" }
-            }
-        ),
-
-        // --- 5. MODÈLES DE FLOWS (TEMPLATES) ---
-        new(
-            "list_templates",
-            "Liste tous les modèles de flows réutilisables du cluster.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "get_template",
-            "Récupère le détail d'un modèle et sa définition de flow complète.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du modèle." }
-                },
-                required = new[] { "id" }
-            }
-        ),
-        new(
-            "create_template_from_flow",
-            "Crée un modèle de flow réutilisable à partir d'une version publiée d'un flow existant. Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    sourceFlowId = new { type = "string", description = "UUID du flow source." },
-                    sourceVersion = new { type = "integer", description = "Numéro de version publiée du flow source." },
-                    name = new { type = "string", description = "Nom du modèle créé." },
-                    description = new { type = "string", description = "Description du modèle." }
-                },
-                required = new[] { "sourceFlowId", "sourceVersion", "name" }
-            }
-        ),
-
-        // --- 6. PACKS DE COMPOSANTS ---
-        new(
-            "list_component_packs",
-            "Liste tous les packs de composants (macro-composants réutilisables) disponibles dans le cluster.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "get_component_pack",
-            "Récupère la définition, entrées et sorties d'un pack de composants.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    id = new { type = "string", description = "Identifiant UUID du pack de composants." }
-                },
-                required = new[] { "id" }
-            }
-        ),
-        new(
-            "create_component_pack_from_flow",
-            "Crée un pack de composants réutilisable à partir d'une séquence de nœuds d'un flow publié. Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    sourceFlowId = new { type = "string", description = "UUID du flow source." },
-                    sourceVersion = new { type = "integer", description = "Version publiée du flow." },
-                    name = new { type = "string", description = "Nom du pack de composants." },
-                    description = new { type = "string", description = "Description du pack." }
-                },
-                required = new[] { "sourceFlowId", "sourceVersion", "name" }
-            }
-        ),
-
-        // --- 7. PLUGINS & INTÉGRATIONS EXTERNES ---
-        new(
-            "list_plugins",
-            "Liste les plugins installés (Plex, Sonarr, Radarr, Jellyfin...) avec leurs versions et schémas de configuration.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "get_plugin_configuration",
-            "Récupère la configuration globale d'un plugin (URL, réglages) et la liste des secrets configurés.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    pluginId = new { type = "string", description = "Identifiant du plugin (ex: plex, sonarr, radarr)." }
-                },
-                required = new[] { "pluginId" }
-            }
-        ),
-        new(
-            "save_plugin_configuration",
-            "Enregistre la configuration globale d'un plugin (clés API, adresses serveur). Nécessite les droits administrateur.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    pluginId = new { type = "string", description = "Identifiant du plugin." },
-                    expectedRevision = new { type = "integer", description = "Révision attendue (défaut 0)." },
-                    values = new { type = "object", description = "Dictionnaire clé/valeur des paramètres de configuration." },
-                    clearSecrets = new { type = "array", items = new { type = "string" }, description = "Liste facultative de secrets à effacer." }
-                },
-                required = new[] { "pluginId", "values" }
-            }
-        ),
-        new(
-            "test_plugin_connection",
-            "Teste la connectivité réseau et les identifiants d'un plugin vers son service externe.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    pluginId = new { type = "string", description = "Identifiant du plugin." },
-                    values = new { type = "object", description = "Valeurs de configuration à tester (facultatif, utilise la config enregistrée par défaut)." }
-                },
-                required = new[] { "pluginId" }
-            }
-        ),
-
-        // --- 8. OUTILS MÉDIA & VALIDATION IA ---
-        new(
-            "list_media_tools",
-            "Liste tous les outils média reconnus par le cluster (FFmpeg, FFprobe, MKVToolNix, MediaInfo, ImageMagick, Python, JS), leurs sous-commandes et leurs rôles.",
-            new { type = "object", properties = new { }, required = Array.Empty<string>() }
-        ),
-        new(
-            "get_media_tool_info",
-            "Fournit la documentation détaillée d'un outil média : sous-commandes, catalogue des encodeurs vidéo/audio (CPU et accélérations matérielles NVENC/QSV/VAAPI), presets et règles d'invocation sécurisées pour l'IA.",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    toolId = new { type = "string", description = "Identifiant de l'outil (ex: ffmpeg, ffprobe, mkvtoolnix, mediainfo, imagemagick, python, javascript)." }
-                },
-                required = new[] { "toolId" }
-            }
-        ),
-        new(
-            "validate_tool_definition",
-            "Valide un descripteur déclaratif tool.json pour l'intégration sécurisée d'un nouvel outil personnalisé au cluster (architecture 0064).",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    definition = new { type = "object", description = "Objet tool.json contenant id, name, executable, probe et capabilitiesExposed." }
-                },
-                required = new[] { "definition" }
-            }
-        ),
-        new(
-            "validate_plugin_manifest",
-            "Valide la conformité d'un manifeste plugin.json (namespace strict, runtime Python Landlock, descriptions sémantiques des sorties et schémas) pour l'intégration IA (architectures 0062 et 0063).",
-            new
-            {
-                type = "object",
-                properties = new
-                {
-                    manifest = new { type = "object", description = "Objet plugin.json décrivant le plugin et ses composants." }
-                },
-                required = new[] { "manifest" }
-            }
-        )
-    ];
 
     public async Task<McpJsonRpcResponse?> HandleMessageAsync(McpJsonRpcRequest request, ClaimsPrincipal user, CancellationToken ct)
     {
@@ -456,7 +60,9 @@ public sealed class McpService(
                 "initialize" => HandleInitialize(request),
                 "notifications/initialized" => null,
                 "ping" => McpJsonRpcResponse.Success(request.Id, new { }),
-                "tools/list" => McpJsonRpcResponse.Success(request.Id, new McpToolsListResult(DefinedTools)),
+                "tools/list" => McpJsonRpcResponse.Success(request.Id, new McpToolsListResult(
+                    BusinessOperationCatalog.DescribeTools()
+                        .Select(operation => new McpToolDefinition(operation.Name, operation.Description, operation.InputSchema)).ToArray())),
                 "tools/call" => await HandleCallToolAsync(request, user, ct),
                 _ => McpJsonRpcResponse.Failure(request.Id, -32601, $"Méthode inconnue : {request.Method}")
             };
@@ -471,47 +77,35 @@ public sealed class McpService(
     /// <summary>Invokes the assistant's bounded read-only subset through the same handlers MCP exposes.</summary>
     public async Task<AiAssistantToolResult> CallAssistantReadToolAsync(AiAssistantToolCall call, CancellationToken ct)
     {
-        McpCallToolResult result;
-        string label;
-        string href;
-        switch (call.Name)
+        var operation = BusinessOperationCatalog.FindTool(call.Name);
+        if (operation is null || !operation.ReadOnly || !operation.AvailableToAssistant)
+            throw new ArgumentException("Outil de lecture IA inconnu ou paramètres invalides.");
+        var arguments = call.Arguments is { ValueKind: JsonValueKind.Object } supplied ? supplied : call.Name switch
         {
-            case "list_flows" when call.FlowId is null && call.State is null && call.Limit is null:
-                result = await ToolListFlowsAsync(ct);
-                label = "Liste des flows";
-                href = "/flows";
-                break;
-            case "get_flow" when call.FlowId is { } flowId && call.State is null && call.Limit is null:
-                result = await ToolGetFlowAsync(JsonSerializer.SerializeToElement(new { id = flowId }, JsonOptions), ct);
-                label = $"Flow {flowId}";
-                href = "/flows";
-                break;
-            case "list_nodes" when call.FlowId is null && call.State is null && call.Limit is null:
-                result = await ToolListNodesAsync(ct);
-                label = "Liste des nœuds";
-                href = "/nodes";
-                break;
-            case "list_executions" when call.FlowId is null
-                && (call.State is null or "queued" or "running" or "failed" or "completed")
-                && (call.Limit is null or >= 1 and <= 50):
-                result = await ToolListExecutionsAsync(JsonSerializer.SerializeToElement(new { state = call.State, limit = call.Limit ?? 20 }, JsonOptions), ct);
-                label = "Exécutions récentes";
-                href = "/tasks";
-                break;
-            case "get_libraries_overview" when call.FlowId is null && call.State is null && call.Limit is null:
-                result = await ToolGetLibrariesOverviewAsync(ct);
-                label = "Vue des bibliothèques";
-                href = "/libraries";
-                break;
-            default:
-                throw new ArgumentException("Outil de lecture IA inconnu ou paramètres invalides.");
-        }
-
+            "get_flow" when call.FlowId is { } flowId => JsonSerializer.SerializeToElement(new { id = flowId }, JsonOptions),
+            "list_executions" => JsonSerializer.SerializeToElement(new { state = call.State, limit = call.Limit ?? 20 }, JsonOptions),
+            _ when call.FlowId is null && call.State is null && call.Limit is null => JsonSerializer.SerializeToElement(new { }, JsonOptions),
+            _ => default
+        };
+        if (!BusinessOperationCatalog.ValidateArguments(call.Name, arguments))
+            throw new ArgumentException("Les arguments ne correspondent pas au contrat de l’outil.");
+        var result = await ExecuteOperationAsync(call.Name, arguments, isAdmin: false, ct);
         if (result.IsError) throw new InvalidOperationException("L’outil de lecture n’a pas pu obtenir son résultat.");
         var raw = result.Content.FirstOrDefault()?.Text ?? "null";
         using var document = JsonDocument.Parse(raw);
         if (raw.Length > 80_000) throw new ArgumentException("Le résultat de l’outil dépasse la limite de contexte.");
-        return new(call.Name, label, href, document.RootElement.Clone());
+        var href = operation.Domain switch
+        {
+            "libraries" => "/libraries",
+            "nodes-and-groups" => "/nodes",
+            "executions-and-logs" => "/tasks",
+            "scripts" => "/scripts",
+            "encoding-profiles" => "/settings/encoding-profiles",
+            "plugins-and-integrations" => "/plugins",
+            "flow-templates" or "flows-and-components" => "/flows",
+            _ => "/"
+        };
+        return new(call.Name, operation.Description, href, document.RootElement.Clone());
     }
 
     private static McpJsonRpcResponse HandleInitialize(McpJsonRpcRequest request)
@@ -536,14 +130,61 @@ public sealed class McpService(
             ? argsProp
             : default;
 
-        var isAdmin = user.IsInRole("admin");
+        var callResult = await ExecuteOperationAsync(toolName, arguments, user.IsInRole("admin"), ct);
 
-        var callResult = toolName switch
+        return McpJsonRpcResponse.Success(request.Id, callResult);
+    }
+
+    /// <summary>Execute a catalogued operation; all public surfaces share this dispatcher.</summary>
+    public Task<McpCallToolResult> ExecuteOperationAsync(string toolName, JsonElement arguments, bool isAdmin, CancellationToken ct)
+    {
+        var operation = BusinessOperationCatalog.FindTool(toolName);
+        if (operation is null)
+            return Task.FromResult(McpCallToolResult.Text($"Outil introuvable : '{toolName}'", isError: true));
+        if (arguments.ValueKind != JsonValueKind.Object)
+            arguments = JsonSerializer.SerializeToElement(new { }, JsonOptions);
+        if (!BusinessOperationCatalog.ValidateArguments(toolName, arguments))
+            return Task.FromResult(McpCallToolResult.Text("Les arguments ne correspondent pas au schéma de l’opération.", isError: true));
+
+        return ExecuteOperationCoreAsync(toolName, arguments, isAdmin, ct);
+    }
+
+    private async Task<McpCallToolResult> ExecuteOperationCoreAsync(string toolName, JsonElement arguments, bool isAdmin, CancellationToken ct)
+    {
+        return toolName switch
         {
             // Bibliothèques, nœuds et exécutions
             "get_libraries_overview" => await ToolGetLibrariesOverviewAsync(ct),
+            "list_libraries" => await ToolListLibrariesAsync(ct),
+            "create_library" => await ToolCreateLibraryAsync(arguments, isAdmin, ct),
+            "update_library" => await ToolUpdateLibraryAsync(arguments, isAdmin, ct),
+            "delete_library" => await ToolDeleteLibraryAsync(arguments, isAdmin, ct),
+            "get_library_node_access" => await ToolGetLibraryNodeAccessAsync(arguments, ct),
+            "get_library_workflow" => await ToolGetLibraryWorkflowAsync(arguments, ct),
+            "get_library_processing" => await ToolGetLibraryProcessingAsync(arguments, ct),
+            "save_library_processing" => await ToolSaveLibraryProcessingAsync(arguments, isAdmin, ct),
+            "configure_library_node_access" => await ToolConfigureLibraryNodeAccessAsync(arguments, isAdmin, ct),
+            "set_library_activation" => await ToolSetLibraryActivationAsync(arguments, isAdmin, ct),
+            "assign_library_flow" => await ToolAssignLibraryFlowAsync(arguments, isAdmin, ct),
+            "request_library_discovery" => await ToolRequestLibraryDiscoveryAsync(arguments, isAdmin, ct),
             "list_nodes" => await ToolListNodesAsync(ct),
+            "list_node_groups" => await ToolListNodeGroupsAsync(ct),
+            "get_node_group" => await ToolGetNodeGroupAsync(arguments, ct),
+            "save_node_group" => await ToolSaveNodeGroupAsync(arguments, isAdmin, ct),
+            "delete_node_group" => await ToolDeleteNodeGroupAsync(arguments, isAdmin, ct),
+            "get_node_activity" => await ToolGetNodeActivityAsync(arguments, ct),
+            "get_node_identity" => await ToolGetNodeIdentityAsync(arguments, ct),
+            "save_node_identity" => await ToolSaveNodeIdentityAsync(arguments, isAdmin, ct),
+            "set_node_draining" => await ToolSetNodeDrainingAsync(arguments, isAdmin, ct),
+            "get_node_processing" => await ToolGetNodeProcessingAsync(arguments, ct),
+            "save_node_processing" => await ToolSaveNodeProcessingAsync(arguments, isAdmin, ct),
             "list_executions" => await ToolListExecutionsAsync(arguments, ct),
+            "get_execution" => await ToolGetExecutionAsync(arguments, ct),
+            "get_execution_events" => await ToolGetExecutionEventsAsync(arguments, ct),
+            "get_execution_pipeline" => await ToolGetExecutionPipelineAsync(arguments, ct),
+            "cancel_execution" => await ToolCancelExecutionAsync(arguments, isAdmin, ct),
+            "retry_execution" => await ToolRetryExecutionAsync(arguments, isAdmin, ct),
+            "resume_execution" => await ToolResumeExecutionAsync(arguments, isAdmin, ct),
             "get_system_logs" => await ToolGetSystemLogsAsync(arguments, ct),
 
             // Flows
@@ -559,6 +200,7 @@ public sealed class McpService(
             "get_script" => await ToolGetScriptAsync(arguments, ct),
             "save_script" => await ToolSaveScriptAsync(arguments, isAdmin, ct),
             "publish_script" => await ToolPublishScriptAsync(arguments, isAdmin, ct),
+            "validate_script_draft" => ToolValidateScriptDraft(arguments),
 
             // Profils d'encodage
             "list_encoding_profiles" => await ToolListEncodingProfilesAsync(ct),
@@ -581,6 +223,8 @@ public sealed class McpService(
             "get_plugin_configuration" => await ToolGetPluginConfigurationAsync(arguments, ct),
             "save_plugin_configuration" => await ToolSavePluginConfigurationAsync(arguments, isAdmin, ct),
             "test_plugin_connection" => await ToolTestPluginConnectionAsync(arguments, ct),
+            "get_flow_plugin_configuration" => await ToolGetFlowPluginConfigurationAsync(arguments, ct),
+            "save_flow_plugin_configuration" => await ToolSaveFlowPluginConfigurationAsync(arguments, isAdmin, ct),
 
             // Outils média & validation IA
             "list_media_tools" => ToolListMediaTools(),
@@ -590,8 +234,6 @@ public sealed class McpService(
 
             _ => McpCallToolResult.Text($"Outil introuvable : '{toolName}'", isError: true)
         };
-
-        return McpJsonRpcResponse.Success(request.Id, callResult);
     }
 
     // --- IMPLÉMENTATIONS DES OUTILS ---
@@ -600,6 +242,293 @@ public sealed class McpService(
     {
         var overview = await libraries.OverviewAsync(ct);
         return McpCallToolResult.Text(JsonSerializer.Serialize(overview, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolListLibrariesAsync(CancellationToken ct) =>
+        McpCallToolResult.Text(JsonSerializer.Serialize(await libraries.ListAsync(ct), JsonOptions));
+
+    private async Task<McpCallToolResult> ToolCreateLibraryAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La création d’une bibliothèque exige le rôle administrateur.");
+        if (!args.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(name.GetString()) || name.GetString()!.Trim().Length > 128)
+            return Invalid("Le nom de bibliothèque est obligatoire et limité à 128 caractères.");
+        var created = await libraries.CreateAsync(new(name.GetString()!.Trim()), ct);
+        return created is null ? Invalid("Une bibliothèque porte déjà ce nom.") : McpCallToolResult.Text(JsonSerializer.Serialize(created, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolUpdateLibraryAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La modification d’une bibliothèque exige le rôle administrateur.");
+        if (!TryGuid(args, "libraryId", out var id) || !args.TryGetProperty("name", out var name)
+            || name.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(name.GetString()) || name.GetString()!.Trim().Length > 128)
+            return Invalid("Paramètres 'libraryId' et 'name' invalides.");
+        try
+        {
+            var updated = await libraries.UpdateAsync(id, new(name.GetString()!.Trim()), ct);
+            return updated is null ? Invalid("Bibliothèque introuvable ou nom déjà utilisé.") : McpCallToolResult.Text(JsonSerializer.Serialize(updated, JsonOptions));
+        }
+        catch (System.Data.Common.DbException exception) when (Encoding.Api.Infrastructure.Data.Sql.IsUniqueViolation(exception))
+        {
+            return Invalid("Une bibliothèque porte déjà ce nom.");
+        }
+    }
+
+    private async Task<McpCallToolResult> ToolDeleteLibraryAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La suppression d’une bibliothèque exige le rôle administrateur.");
+        if (!TryGuid(args, "libraryId", out var id)) return Invalid("Paramètre 'libraryId' (UUID) requis.");
+        return await libraries.DeleteAsync(id, ct) ? McpCallToolResult.Text("Définition de bibliothèque supprimée; les fichiers média ne sont pas touchés.") : Invalid("Bibliothèque introuvable.");
+    }
+
+    private async Task<McpCallToolResult> ToolGetLibraryNodeAccessAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "libraryId", out var id)) return Invalid("Paramètre 'libraryId' (UUID) requis.");
+        var access = await libraryNodeAccess.ListAsync(id, ct);
+        return access is null ? Invalid("Bibliothèque introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(access, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolGetLibraryWorkflowAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "libraryId", out var id)) return Invalid("Paramètre 'libraryId' (UUID) requis.");
+        if (!(await libraries.ListAsync(ct)).Any(library => library.Id == id)) return Invalid("Bibliothèque introuvable.");
+        var search = args.TryGetProperty("search", out var searchValue) && searchValue.ValueKind == JsonValueKind.String ? searchValue.GetString() : null;
+        var limit = args.TryGetProperty("limit", out var limitValue) && limitValue.TryGetInt32(out var l) ? Math.Clamp(l, 1, 10000) : 1000;
+        var offset = args.TryGetProperty("offset", out var offsetValue) && offsetValue.TryGetInt32(out var o) ? Math.Max(0, o) : 0;
+        var result = await libraryWorkflows.GetAsync(id, search, limit, offset, ct);
+        return McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolGetLibraryProcessingAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "libraryId", out var id)) return Invalid("Paramètre 'libraryId' (UUID) requis.");
+        if (!(await libraries.ListAsync(ct)).Any(library => library.Id == id)) return Invalid("Bibliothèque introuvable.");
+        return McpCallToolResult.Text(JsonSerializer.Serialize(await libraryProcessing.GetAsync(id, ct), JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolSaveLibraryProcessingAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La configuration du traitement d’une bibliothèque exige le rôle administrateur.");
+        if (!TryGuid(args, "libraryId", out var id) || !TryDeserialize<Encoding.Contracts.Libraries.SaveLibraryProcessingSettings>(args, out var request))
+            return Invalid("Paramètres de surveillance de bibliothèque invalides.");
+        try
+        {
+            var saved = await libraryProcessing.SaveAsync(id, request, ct);
+            return saved ? McpCallToolResult.Text(JsonSerializer.Serialize(await libraryProcessing.GetAsync(id, ct), JsonOptions)) : Invalid("La bibliothèque ou sa révision de configuration a changé.");
+        }
+        catch (ArgumentException exception) { return Invalid(exception.Message); }
+    }
+
+    private async Task<McpCallToolResult> ToolConfigureLibraryNodeAccessAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La configuration des accès exige le rôle administrateur.");
+        if (!TryGuid(args, "libraryId", out var id) || !TryDeserialize<Encoding.Contracts.Libraries.ConfigureLibraryNodeAccessRequest>(args, out var request))
+            return Invalid("Paramètres 'libraryId' et 'nodes' invalides.");
+        try
+        {
+            var result = await libraryNodeAccess.ConfigureAsync(id, request, ct);
+            return result is null ? Invalid("Bibliothèque introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions));
+        }
+        catch (LibraryNodeAccessValidationException exception)
+        {
+            return Invalid(JsonSerializer.Serialize(exception.Errors, JsonOptions));
+        }
+    }
+
+    private async Task<McpCallToolResult> ToolSetLibraryActivationAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La modification d’une bibliothèque exige le rôle administrateur.");
+        if (!TryGuid(args, "libraryId", out var id) || !args.TryGetProperty("isActive", out var enabled) || enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            return Invalid("Paramètres 'libraryId' et 'isActive' requis.");
+        var result = await libraries.SetActiveAsync(id, enabled.GetBoolean(), ct);
+        return result is null ? Invalid("Bibliothèque introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolAssignLibraryFlowAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("L’affectation d’un flow exige le rôle administrateur.");
+        if (!TryGuid(args, "libraryId", out var id) || !TryInt(args, "expectedRevision", out var revision) || revision < 0)
+            return Invalid("Paramètres 'libraryId' et 'expectedRevision' invalides.");
+        Guid? flowId = null;
+        int? version = null;
+        if (args.TryGetProperty("flowId", out var flowValue) && flowValue.ValueKind != JsonValueKind.Null)
+        {
+            if (!Guid.TryParse(flowValue.GetString(), out var parsedFlow) || parsedFlow == Guid.Empty || !TryInt(args, "version", out var parsedVersion) || parsedVersion < 1)
+                return Invalid("Une affectation exige un 'flowId' et une version publiée valide.");
+            flowId = parsedFlow;
+            version = parsedVersion;
+        }
+        else if (args.TryGetProperty("version", out _))
+        {
+            return Invalid("Le paramètre 'version' nécessite un 'flowId'.");
+        }
+        var updated = await libraryWorkflows.AssignAsync(id, new(flowId, version, revision), ct);
+        return updated ? McpCallToolResult.Text(JsonSerializer.Serialize(await libraryWorkflows.GetAsync(id, ct), JsonOptions)) : Invalid("L’affectation a changé ou la version du flow n’est pas publiable.");
+    }
+
+    private async Task<McpCallToolResult> ToolRequestLibraryDiscoveryAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La découverte de fichiers exige le rôle administrateur.");
+        if (!TryGuid(args, "libraryId", out var id)) return Invalid("Paramètre 'libraryId' (UUID) requis.");
+        var scan = await libraryWorkflows.RequestScanAsync(id, ct);
+        return scan is null ? Invalid("Activez la bibliothèque et affectez-lui un flow publié avant la découverte.") : McpCallToolResult.Text(JsonSerializer.Serialize(new { scanId = scan }, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolListNodeGroupsAsync(CancellationToken ct) =>
+        McpCallToolResult.Text(JsonSerializer.Serialize(await nodeGroups.ListAsync(ct), JsonOptions));
+
+    private async Task<McpCallToolResult> ToolGetNodeGroupAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        var group = await nodeGroups.GetAsync(id, ct);
+        return group is null ? Invalid("Groupe de nœuds introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(group, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolSaveNodeGroupAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La modification des groupes exige le rôle administrateur.");
+        if (!TryDeserialize<Encoding.Contracts.Nodes.SaveNodeGroupRequest>(args, out var request)) return Invalid("Définition de groupe invalide.");
+        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 128
+            || request.Description is null || request.Description.Length > 2000
+            || request.Criteria is null || request.Labels is null || request.NodeIds is null || request.NodeIds.Count > 2048
+            || request.Labels.Count > 128 || !Enum.IsDefined(request.Mode)
+            || request.Mode == Encoding.Contracts.Nodes.NodeGroupMode.Automatic && request.NodeIds.Count > 0)
+            return Invalid("Les champs du groupe ou ses limites sont invalides.");
+        Guid? id = null;
+        if (args.TryGetProperty("id", out var idValue))
+        {
+            if (idValue.ValueKind != JsonValueKind.String || !Guid.TryParse(idValue.GetString(), out var parsed) || parsed == Guid.Empty)
+                return Invalid("Le paramètre 'id' doit être un UUID valide.");
+            id = parsed;
+        }
+        try
+        {
+            var saved = await nodeGroups.SaveAsync(id, request, ct);
+            if (!saved) return Invalid("Groupe introuvable ou paramètres invalides.");
+            var group = id is { } groupId
+                ? await nodeGroups.GetAsync(groupId, ct)
+                : (await nodeGroups.ListAsync(ct)).FirstOrDefault(item => item.Name == request.Name.Trim());
+            return McpCallToolResult.Text(JsonSerializer.Serialize(group, JsonOptions));
+        }
+        catch (System.Data.Common.DbException ex) when (Encoding.Api.Infrastructure.Data.Sql.IsUniqueViolation(ex))
+        {
+            return Invalid("Un groupe porte déjà ce nom.");
+        }
+    }
+
+    private async Task<McpCallToolResult> ToolDeleteNodeGroupAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La suppression des groupes exige le rôle administrateur.");
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        return await nodeGroups.DeleteAsync(id, ct) switch
+        {
+            "deleted" => McpCallToolResult.Text("Groupe supprimé."),
+            "in-use" => Invalid("Le groupe est référencé par un flow et ne peut pas être supprimé."),
+            _ => Invalid("Groupe de nœuds introuvable.")
+        };
+    }
+
+    private async Task<McpCallToolResult> ToolGetNodeActivityAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "nodeId", out var id)) return Invalid("Paramètre 'nodeId' (UUID) requis.");
+        var activity = await nodes.ActivityAsync(id, ct);
+        return McpCallToolResult.Text(JsonSerializer.Serialize(activity, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolGetNodeIdentityAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "nodeId", out var id)) return Invalid("Paramètre 'nodeId' (UUID) requis.");
+        var identity = await nodeGroups.GetNodeIdentityAsync(id, ct);
+        return identity is null ? Invalid("Nœud introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(identity, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolSaveNodeIdentityAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La modification de l’identité d’un nœud exige le rôle administrateur.");
+        if (!TryGuid(args, "nodeId", out var id) || !TryDeserialize<Encoding.Contracts.Nodes.SaveNodeIdentityRequest>(args, out var request))
+            return Invalid("Paramètres d’identité de nœud invalides.");
+        if (request.Labels is null || request.Labels.Count > 128 || request.DisplayName?.Length > 128
+            || request.Labels.Any(pair => !System.Text.RegularExpressions.Regex.IsMatch(pair.Key, "^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$") || pair.Value?.Length > 256))
+            return Invalid("Le nom ou les étiquettes du nœud sont invalides.");
+        var saved = await nodeGroups.SaveNodeIdentityAsync(id, request, ct);
+        return saved ? McpCallToolResult.Text(JsonSerializer.Serialize(await nodeGroups.GetNodeIdentityAsync(id, ct), JsonOptions)) : Invalid("Nœud introuvable.");
+    }
+
+    private async Task<McpCallToolResult> ToolSetNodeDrainingAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La vidange d’un nœud exige le rôle administrateur.");
+        if (!TryGuid(args, "nodeId", out var id) || !args.TryGetProperty("draining", out var value)
+            || value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return Invalid("Paramètres 'nodeId' et 'draining' invalides.");
+        return await nodes.SetDrainingAsync(id, value.GetBoolean(), ct) ? McpCallToolResult.Text("État de vidange mis à jour.") : Invalid("Nœud introuvable.");
+    }
+
+    private async Task<McpCallToolResult> ToolGetNodeProcessingAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "nodeId", out var id)) return Invalid("Paramètre 'nodeId' (UUID) requis.");
+        var settings = await libraryProcessing.NodeAsync(id, ct);
+        return settings is null ? Invalid("Nœud introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(settings, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolSaveNodeProcessingAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La configuration de capacité d’un nœud exige le rôle administrateur.");
+        if (!TryGuid(args, "nodeId", out var id) || !TryDeserialize<Encoding.Contracts.Nodes.SaveNodeProcessingSettings>(args, out var request))
+            return Invalid("Paramètres de capacité du nœud invalides.");
+        try
+        {
+            var saved = await libraryProcessing.SaveNodeAsync(id, request, ct);
+            return saved ? McpCallToolResult.Text(JsonSerializer.Serialize(await libraryProcessing.NodeAsync(id, ct), JsonOptions)) : Invalid("Le nœud ou sa révision de configuration a changé.");
+        }
+        catch (ArgumentException exception) { return Invalid(exception.Message); }
+    }
+
+    private async Task<McpCallToolResult> ToolGetExecutionAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        var result = await executions.GetAsync(id, ct);
+        return result is null ? Invalid("Exécution introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(result, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolGetExecutionEventsAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        if (await executions.GetAsync(id, ct) is null) return Invalid("Exécution introuvable.");
+        int? after = TryInt(args, "afterRevision", out var revision) ? Math.Max(0, revision) : null;
+        int? limit = TryInt(args, "limit", out var count) ? Math.Clamp(count, 1, 1000) : null;
+        return McpCallToolResult.Text(JsonSerializer.Serialize(await executions.EventsAsync(id, after, limit, ct), JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolGetExecutionPipelineAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        if (await executions.GetAsync(id, ct) is null) return Invalid("Exécution introuvable.");
+        return McpCallToolResult.Text(JsonSerializer.Serialize(await executions.PipelineAsync(id, ct), JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolCancelExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("L’annulation d’une exécution exige le rôle administrateur.");
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        int? revision = TryInt(args, "expectedRevision", out var value) ? value : null;
+        return await executions.CancelAsync(id, ct, revision) ? McpCallToolResult.Text("Annulation demandée.") : Invalid("Exécution introuvable ou non annulable dans cet état.");
+    }
+
+    private async Task<McpCallToolResult> ToolRetryExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La relance d’une exécution exige le rôle administrateur.");
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        var next = await executions.RetryAsync(id, ct);
+        return next is null ? Invalid("La relance est réservée aux exécutions en échec et ne peut être enregistrée qu’une fois.") : McpCallToolResult.Text(JsonSerializer.Serialize(new { id = next }, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolResumeExecutionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La reprise d’une exécution exige le rôle administrateur.");
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        var resumedId = await executions.ResumeAsync(id, ct);
+        return resumedId is { } next
+            ? McpCallToolResult.Text(JsonSerializer.Serialize(new { id = next, state = "queued", sourceExecutionId = id }, JsonOptions))
+            : Invalid("Reprise impossible : seule une exécution annulée sans reprise précédente peut être relancée.");
     }
 
     private McpCallToolResult ToolGetFlowSchema()
@@ -763,6 +692,49 @@ public sealed class McpService(
     {
         var list = await nodes.ListAsync(presenceOptions.OfflineAfter, ct);
         return McpCallToolResult.Text(JsonSerializer.Serialize(list, JsonOptions));
+    }
+
+    private McpCallToolResult ToolValidateScriptDraft(JsonElement args)
+    {
+        if (args.ValueKind != JsonValueKind.Object) return Invalid("Objet brouillon requis.");
+        var errors = new Dictionary<string, string[]>();
+        var name = args.TryGetProperty("name", out var nameValue) && nameValue.ValueKind == JsonValueKind.String ? nameValue.GetString() : null;
+        var language = args.TryGetProperty("language", out var languageValue) && languageValue.ValueKind == JsonValueKind.String ? languageValue.GetString() : null;
+        var description = args.TryGetProperty("description", out var descriptionValue) && descriptionValue.ValueKind == JsonValueKind.String ? descriptionValue.GetString() : null;
+        var code = args.TryGetProperty("code", out var codeValue) && codeValue.ValueKind == JsonValueKind.String ? codeValue.GetString() : null;
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 128) errors["name"] = ["Le nom est obligatoire et limité à 128 caractères."];
+        if (language is not ("javascript" or "python")) errors["language"] = ["Choisissez JavaScript ou Python."];
+        if (description is null || description.Length > 1000) errors["description"] = ["La description est obligatoire et limitée à 1 000 caractères."];
+        if (code is null || code.Length > 200000) errors["code"] = ["Le code est obligatoire et limité à 200 000 caractères."];
+        return McpCallToolResult.Text(JsonSerializer.Serialize(new { valid = errors.Count == 0, errors }, JsonOptions));
+    }
+
+    private static McpCallToolResult Invalid(string message) => McpCallToolResult.Text(message, isError: true);
+    private static McpCallToolResult Denied(string message) => McpCallToolResult.Text("Permission refusée : " + message, isError: true);
+    private static bool TryGuid(JsonElement args, string name, out Guid value)
+    {
+        value = Guid.Empty;
+        return args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var item)
+            && item.ValueKind == JsonValueKind.String && Guid.TryParse(item.GetString(), out value) && value != Guid.Empty;
+    }
+    private static bool TryInt(JsonElement args, string name, out int value)
+    {
+        value = 0;
+        return args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var item)
+            && item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out value);
+    }
+    private static bool TryDeserialize<T>(JsonElement args, out T value) where T : class
+    {
+        try
+        {
+            value = args.Deserialize<T>(JsonOptions)!;
+            return value is not null;
+        }
+        catch (JsonException)
+        {
+            value = null!;
+            return false;
+        }
     }
 
     private async Task<McpCallToolResult> ToolListExecutionsAsync(JsonElement arguments, CancellationToken ct)
@@ -1128,6 +1100,36 @@ public sealed class McpService(
         var testResult = await pluginTester.TestAsync(plugin.Id, resolvedValues, ct);
 
         return McpCallToolResult.Text(JsonSerializer.Serialize(testResult, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolGetFlowPluginConfigurationAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "flowId", out var flowId) || !args.TryGetProperty("pluginId", out var pluginValue)
+            || pluginValue.ValueKind != JsonValueKind.String) return Invalid("Paramètres 'flowId' et 'pluginId' requis.");
+        var plugin = components.Plugins.SingleOrDefault(item => item.Id == pluginValue.GetString());
+        if (plugin is null) return Invalid("Plugin introuvable.");
+        if (await flows.GetAsync(flowId, null, ct) is null && await flows.DraftAsync(flowId, ct) is null)
+            return Invalid("Flow introuvable.");
+        var configuration = await pluginConfigurations.GetFlowAsync(flowId, plugin, ct);
+        return configuration is null ? Invalid("Flow introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(configuration, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolSaveFlowPluginConfigurationAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La configuration d’un plugin dans un flow exige le rôle administrateur.");
+        if (!TryGuid(args, "flowId", out var flowId) || !args.TryGetProperty("pluginId", out var pluginValue)
+            || pluginValue.ValueKind != JsonValueKind.String || !TryDeserialize<Encoding.Contracts.Plugins.SavePluginConfigurationRequest>(args, out var request))
+            return Invalid("Paramètres de configuration du plugin dans le flow invalides.");
+        var plugin = components.Plugins.SingleOrDefault(item => item.Id == pluginValue.GetString());
+        if (plugin is null) return Invalid("Plugin introuvable.");
+        if (await flows.GetAsync(flowId, null, ct) is null && await flows.DraftAsync(flowId, ct) is null)
+            return Invalid("Flow introuvable.");
+        try
+        {
+            var saved = await pluginConfigurations.SaveFlowAsync(flowId, plugin, request, ct);
+            return saved is null ? Invalid("La configuration du plugin n’a pas pu être enregistrée.") : McpCallToolResult.Text(JsonSerializer.Serialize(saved, JsonOptions));
+        }
+        catch (PluginConfigurationValidationException exception) { return Invalid(exception.Message); }
     }
 
     // --- 8. OUTILS MÉDIA & VALIDATION IA ---

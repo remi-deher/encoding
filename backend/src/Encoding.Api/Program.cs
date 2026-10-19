@@ -250,6 +250,7 @@ app.MapLocalNodeEndpoints();
 app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
 app.MapMcpEndpoints();
+app.MapBusinessOperationEndpoints();
 app.MapAiToolEndpoints();
 app.MapAiAssistantEndpoints();
 app.MapOpenApiEndpoints();

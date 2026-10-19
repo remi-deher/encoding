@@ -134,6 +134,14 @@ export class AiAssistantPageComponent implements OnDestroy {
     { name: 'list_nodes', label: 'Lister les nœuds' },
     { name: 'list_executions', label: 'Consulter les exécutions récentes' },
     { name: 'get_libraries_overview', label: 'Consulter les bibliothèques' },
+    { name: 'list_libraries', label: 'Lister les bibliothèques' },
+    { name: 'list_node_groups', label: 'Lister les groupes de nœuds' },
+    { name: 'list_scripts', label: 'Lister les scripts' },
+    { name: 'list_encoding_profiles', label: 'Lister les profils d’encodage' },
+    { name: 'list_templates', label: 'Lister les modèles de flow' },
+    { name: 'list_component_packs', label: 'Lister les packs de composants' },
+    { name: 'list_plugins', label: 'Lister les plugins et intégrations' },
+    { name: 'list_media_tools', label: 'Lister les outils disponibles' },
   ] as const;
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly pendingPrompt = signal<string | null>(null);
@@ -815,6 +823,12 @@ export class AiAssistantPageComponent implements OnDestroy {
           return this.aiTools.confirmAssistantExecutionCancellation(request);
         case 'assign-library-flow':
           return this.aiTools.confirmAssistantLibraryFlowAssignment(request);
+        case 'create-flow-template':
+          return this.aiTools.confirmAssistantFlowTemplateCreation(request);
+        case 'business-operation':
+          return this.aiTools.confirmAssistantBusinessOperation(request);
+        default:
+          throw new Error('Action IA inconnue.');
       }
     })();
     confirmation.subscribe({
@@ -830,7 +844,11 @@ export class AiAssistantPageComponent implements OnDestroy {
                 ? 'Flow supprimé.'
                 : proposal.action === 'assign-library-flow'
                   ? 'Flow affecté à la bibliothèque.'
-                  : 'Flow publié.';
+                  : proposal.action === 'create-flow-template'
+                    ? 'Modèle de flow créé.'
+                    : proposal.action === 'business-operation'
+                      ? 'Configuration appliquée.'
+                      : 'Flow publié.';
         this.actionMessage.set(detail);
         if (proposal.action === 'start-library') this.loadExecutions();
         if (proposal.action === 'delete-flow' || proposal.action === 'publish-flow')

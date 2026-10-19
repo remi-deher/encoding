@@ -174,6 +174,29 @@ internal static partial class Harness
             Console.WriteLine("PASS: worker loss fails the attempt; explicit retry creates a fresh execution from the flow entry.");
         }
 
+        public async Task CancelledExecutionCanBeResumedAsFreshAttemptAsync()
+        {
+            await ResetNodesAsync();
+            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"middle","base-variable",new(){["name"]=J("step"),["value"]=J("done")}),Node(registry,"end","base-complete-flow"));
+            var(id,lease,context)=await EnqueueAsync(flow);
+            await CompleteAsync(id,a,lease,"entry",context);
+            Check(await executions.CancelAsync(id,CancellationToken.None),"The running execution can be cancelled before resuming.");
+            await ExpireAsync(id);
+            await RecoverCancellationAsync(id);
+
+            var resumedId=await executions.ResumeAsync(id,CancellationToken.None)??throw new InvalidOperationException("A cancelled execution must create a fresh resumed attempt.");
+            var resumed=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("A worker must claim the resumed attempt.");
+            Check(resumed.ExecutionId==resumedId && resumed.ExecutionId!=id && resumed.Attempt==lease.Attempt+1,"Resume creates a new execution and increments the attempt.");
+            Check(resumed.Checkpoint is null && resumed.EntryNodeId=="entry","Resume starts over from the original source and flow entry.");
+            Check(await ScalarAsync<Guid>("SELECT retry_of FROM executions WHERE id=@id",("id",resumedId))==id,"The resumed attempt links back to the interrupted execution.");
+            Check(await executions.ResumeAsync(id,CancellationToken.None) is null,"A cancelled execution can only be resumed once.");
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="cancelled","The original execution remains intact for history.");
+            Check(await executions.CancelAsync(resumedId,CancellationToken.None),"The resumed fixture can be cancelled for cleanup.");
+            await ExpireAsync(resumedId);
+            await RecoverCancellationAsync(resumedId);
+            Console.WriteLine("PASS: resuming a cancelled execution creates one new attempt from the original source.");
+        }
+
         public async Task BoundedFlowRetryAsync()
         {
             await ResetNodesAsync();
