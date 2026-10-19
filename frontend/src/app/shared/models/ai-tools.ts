@@ -141,3 +141,14 @@ export interface AiAssistantMessageResponse {
   readonly errorMessage?: string | null;
   readonly sources: readonly AiAssistantSource[];
 }
+
+export interface AiAssistantActivity {
+  readonly requestId: string;
+  readonly conversationId: string;
+  readonly provider: string;
+  readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+  readonly startedAt: string;
+  readonly updatedAt: string;
+  readonly durationMilliseconds: number | null;
+  readonly errorCategory: string | null;
+}

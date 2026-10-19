@@ -5,6 +5,7 @@ import {
   AiClusterView,
   AiAssistantConversation,
   AiAssistantConversationDetail,
+  AiAssistantActivity,
   AiAssistantMessageRequest,
   AiAssistantMessageResponse,
   AiSettings,
@@ -28,6 +29,10 @@ export class AiToolsService {
     return this.http.get<readonly AiAssistantConversation[]>(
       '/api/v1/tools/ai/assistant/conversations',
     );
+  }
+
+  listAssistantActivity(): Observable<readonly AiAssistantActivity[]> {
+    return this.http.get<readonly AiAssistantActivity[]>('/api/v1/tools/ai/assistant/activity');
   }
 
   getAssistantConversation(id: string): Observable<AiAssistantConversationDetail> {

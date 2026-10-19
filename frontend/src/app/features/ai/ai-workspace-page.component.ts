@@ -131,12 +131,13 @@ const PROVIDERS = [
           <div class="panel-heading">
             <div>
               <h2>Activité IA</h2>
-              <p>
-                Les demandes et opérations IA ne sont pas encore exposées par une source d’activité.
-              </p>
+              <p>Consultez l’historique de vos demandes récentes.</p>
             </div>
+            <a matButton="text" routerLink="/ai/activity">Voir l’activité</a>
           </div>
-          <p class="empty-activity">Aucune donnée d’activité disponible.</p>
+          <p class="empty-activity">
+            Ouvrez l’activité pour consulter les demandes de l’assistant.
+          </p>
         </section>
       }
     </div>

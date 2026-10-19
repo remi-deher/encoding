@@ -40,6 +40,16 @@ public sealed class AiAssistantService(
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<AiAssistantActivity>> ActivityAsync(ClaimsPrincipal user, CancellationToken ct)
+    {
+        var ownerId = OwnerId(user);
+        var records = await store.ReadPrefixAsync<StoredActivity>(ActivityPrefix + ownerId + "/", ct);
+        return records.Select(record => record.Activity)
+            .OrderByDescending(activity => activity.UpdatedAt)
+            .Take(100)
+            .ToArray();
+    }
+
     public async Task<AiAssistantConversationDetail?> GetAsync(string id, ClaimsPrincipal user, CancellationToken ct)
     {
         if (!IsSessionId(id)) return null;
@@ -113,10 +123,42 @@ public sealed class AiAssistantService(
             throw new ArgumentException("La ressource dépasse la taille de contexte prise en charge.");
 
         var systemPrompt = BuildSystemPrompt(conversation.Source, resolved.Data);
-        var result = await cluster.GenerateAsync(
-            conversation.Provider,
-            new AiPrompt(systemPrompt, request.UserPrompt, SessionId: conversation.Id, RequestId: request.RequestId),
-            ct);
+        var startedAt = DateTimeOffset.UtcNow;
+        var activity = new AiAssistantActivity(request.RequestId, conversation.Id, conversation.Provider,
+            "running", startedAt, startedAt, null, null);
+        await SaveActivityAsync(ownerId, activity, ct);
+        AiCompletionResult result;
+        try
+        {
+            result = await cluster.GenerateAsync(
+                conversation.Provider,
+                new AiPrompt(systemPrompt, request.UserPrompt, SessionId: conversation.Id, RequestId: request.RequestId),
+                ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            var cancelledAt = DateTimeOffset.UtcNow;
+            await SaveActivityAsync(ownerId, activity with { Status = "cancelled", UpdatedAt = cancelledAt,
+                DurationMilliseconds = (long)(cancelledAt - startedAt).TotalMilliseconds }, CancellationToken.None);
+            throw;
+        }
+        catch (Exception)
+        {
+            var failedAt = DateTimeOffset.UtcNow;
+            await SaveActivityAsync(ownerId, activity with { Status = "failed", UpdatedAt = failedAt,
+                DurationMilliseconds = (long)(failedAt - startedAt).TotalMilliseconds, ErrorCategory = "provider-error" }, CancellationToken.None);
+            throw;
+        }
+
+        var completedAt = DateTimeOffset.UtcNow;
+        activity = activity with
+        {
+            Status = result.Success ? "succeeded" : "failed",
+            UpdatedAt = completedAt,
+            DurationMilliseconds = (long)(completedAt - startedAt).TotalMilliseconds,
+            ErrorCategory = result.Success ? null : CategorizeError(result.ErrorMessage),
+        };
+        await SaveActivityAsync(ownerId, activity, ct);
 
         conversation = conversation with { UpdatedAt = DateTimeOffset.UtcNow };
         await SaveConversationAsync(ownerId, conversation, ct);
@@ -180,6 +222,21 @@ public sealed class AiAssistantService(
         await store.SaveAsync(SessionOwnerKey(conversation.Id), ownerId, ct);
         await store.SaveAsync(ConversationKey(ownerId, conversation.Id), new StoredConversation(ownerId, conversation), ct);
     }
+
+    private sealed record StoredActivity(string OwnerId, AiAssistantActivity Activity);
+    private const string ActivityPrefix = "assistant/activity/";
+
+    private Task SaveActivityAsync(string ownerId, AiAssistantActivity activity, CancellationToken ct) =>
+        store.SaveAsync(ActivityPrefix + ownerId + "/" + activity.RequestId.ToString("N"),
+            new StoredActivity(ownerId, activity), ct);
+
+    private static string CategorizeError(string? error) => error?.Contains("quota", StringComparison.OrdinalIgnoreCase) == true
+        ? "quota"
+        : error?.Contains("auth", StringComparison.OrdinalIgnoreCase) == true
+            ? "authentication"
+            : error?.Contains("délai", StringComparison.OrdinalIgnoreCase) == true || error?.Contains("timeout", StringComparison.OrdinalIgnoreCase) == true
+                ? "timeout"
+                : "provider-error";
 
     private static string ConversationKey(string ownerId, string id) => ConversationPrefix + ownerId + "/" + id;
     private static string SessionOwnerKey(string id) => SessionOwnerPrefix + id;

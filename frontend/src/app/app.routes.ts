@@ -43,6 +43,25 @@ const applicationRoutes: Routes = [
     },
   },
   {
+    path: 'ai/activity',
+    loadComponent: () =>
+      import('./features/ai/ai-activity-page.component').then(
+        (module) => module.AiActivityPageComponent,
+      ),
+    data: {
+      title: 'Activité IA',
+      navigation: {
+        group: 'Intelligence artificielle',
+        label: 'Activité',
+        glyph: '◷',
+        order: 3,
+        exact: true,
+        keywords: ['demandes', 'historique', 'erreurs'],
+      },
+      description: 'Historique des demandes de votre assistant.',
+    },
+  },
+  {
     path: 'ai/assistant',
     loadComponent: () =>
       import('./features/ai/ai-assistant-page.component').then(
