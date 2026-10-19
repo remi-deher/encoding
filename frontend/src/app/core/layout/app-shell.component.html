@@ -171,6 +171,45 @@
       <main id="main-content" class="main-content" tabindex="-1">
         <router-outlet />
       </main>
+      @if (showAssistantBubble()) {
+        <button
+          class="assistant-launcher"
+          matButton="filled"
+          type="button"
+          [hidden]="assistantPanelOpen()"
+          #assistantLauncher
+          aria-label="Ouvrir l’assistant IA"
+          aria-controls="assistant-widget-panel"
+          [attr.aria-expanded]="assistantPanelOpen()"
+          (click)="toggleAssistantPanel()"
+        >
+          <span aria-hidden="true">✦</span> Assistant
+        </button>
+      }
+      @if (assistantWidgetMounted()) {
+        <aside
+          id="assistant-widget-panel"
+          class="assistant-widget-panel"
+          [class.is-open]="assistantPanelOpen() && showAssistantBubble()"
+          [attr.inert]="assistantPanelOpen() && showAssistantBubble() ? null : ''"
+          [attr.aria-hidden]="!(assistantPanelOpen() && showAssistantBubble())"
+          aria-label="Panneau de l’assistant IA"
+        >
+          <header class="assistant-widget-header">
+            <h2>Assistant IA</h2>
+            <button
+              matButton="text"
+              type="button"
+              #assistantCloseButton
+              aria-label="Fermer le panneau de l’assistant"
+              (click)="closeAssistantPanel()"
+            >
+              Fermer
+            </button>
+          </header>
+          <app-ai-assistant-page [panelMode]="true" />
+        </aside>
+      }
     </mat-sidenav-content>
   </mat-sidenav-container>
 </div>

@@ -33,8 +33,22 @@ public sealed class AiSettingsService
     {
         if (update.DefaultProvider is not null && update.DefaultProvider is not ("ollama" or "openai" or "codex-cli" or "claude-cli"))
             throw new ArgumentException("Fournisseur IA inconnu.");
+        foreach (var provider in new[] { update.AssistantProvider, update.FlowProvider }.OfType<string>())
+            if (provider is not ("default" or "ollama" or "openai" or "codex-cli" or "claude-cli"))
+                throw new ArgumentException("Fournisseur IA inconnu.");
+        var effectiveAssistantProvider = update.AssistantProvider == "default" ? update.DefaultProvider ?? cachedSettings.DefaultProvider
+            : update.AssistantProvider ?? cachedSettings.AssistantProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
+        var effectiveFlowProvider = update.FlowProvider == "default" ? update.DefaultProvider ?? cachedSettings.DefaultProvider
+            : update.FlowProvider ?? cachedSettings.FlowProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
+        var assistantLocalOnly = update.AssistantLocalOnly ?? cachedSettings.AssistantLocalOnly;
+        var flowLocalOnly = update.FlowLocalOnly ?? cachedSettings.FlowLocalOnly;
+        if (assistantLocalOnly && effectiveAssistantProvider != "ollama"
+            || flowLocalOnly && effectiveFlowProvider != "ollama")
+            throw new ArgumentException("Le mode local uniquement exige Ollama comme fournisseur effectif.");
         if (update.TimeoutSeconds is < 10 or > 600 || update.SubtitleBatchSize is < 5 or > 200)
             throw new ArgumentException("Les limites IA sont invalides.");
+        if (update.AssistantConversationRetentionDays is < 1 or > 3650 || update.AssistantActivityRetentionDays is < 1 or > 3650)
+            throw new ArgumentException("Les délais de rétention IA doivent être compris entre 1 et 3 650 jours.");
         foreach (var url in new[] { update.OllamaBaseUrl, update.OpenAiBaseUrl }.OfType<string>())
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo))
                 throw new ArgumentException("L’adresse du fournisseur doit être une URL HTTP(S) sans identifiants.");
@@ -48,7 +62,13 @@ public sealed class AiSettingsService
                 OpenAiModel: !string.IsNullOrWhiteSpace(update.OpenAiModel) ? update.OpenAiModel : cachedSettings.OpenAiModel,
                 OpenAiApiKey: update.OpenAiApiKey ?? cachedSettings.OpenAiApiKey,
                 TimeoutSeconds: update.TimeoutSeconds is > 0 ? update.TimeoutSeconds.Value : cachedSettings.TimeoutSeconds,
-                SubtitleBatchSize: update.SubtitleBatchSize is > 0 ? update.SubtitleBatchSize.Value : cachedSettings.SubtitleBatchSize
+                SubtitleBatchSize: update.SubtitleBatchSize is > 0 ? update.SubtitleBatchSize.Value : cachedSettings.SubtitleBatchSize,
+                AssistantProvider: update.AssistantProvider is null ? cachedSettings.AssistantProvider : update.AssistantProvider == "default" ? null : update.AssistantProvider,
+                FlowProvider: update.FlowProvider is null ? cachedSettings.FlowProvider : update.FlowProvider == "default" ? null : update.FlowProvider,
+                AssistantLocalOnly: update.AssistantLocalOnly ?? cachedSettings.AssistantLocalOnly,
+                FlowLocalOnly: update.FlowLocalOnly ?? cachedSettings.FlowLocalOnly,
+                AssistantConversationRetentionDays: update.AssistantConversationRetentionDays ?? cachedSettings.AssistantConversationRetentionDays,
+                AssistantActivityRetentionDays: update.AssistantActivityRetentionDays ?? cachedSettings.AssistantActivityRetentionDays
             );
 
             SaveSettings(next);
@@ -81,7 +101,9 @@ public sealed class AiSettingsService
             OpenAiModel: configuration["AiTools:OpenAi:Model"] ?? "gpt-4o-mini",
             OpenAiApiKey: configuration["AiTools:OpenAi:ApiKey"],
             TimeoutSeconds: int.TryParse(configuration["AiTools:TimeoutSeconds"], out var t) && t > 0 ? t : 120,
-            SubtitleBatchSize: int.TryParse(configuration["AiTools:SubtitleBatchSize"], out var b) && b > 0 ? b : 80
+            SubtitleBatchSize: int.TryParse(configuration["AiTools:SubtitleBatchSize"], out var b) && b > 0 ? b : 80,
+            AssistantConversationRetentionDays: int.TryParse(configuration["AiTools:AssistantConversationRetentionDays"], out var c) && c > 0 ? c : 90,
+            AssistantActivityRetentionDays: int.TryParse(configuration["AiTools:AssistantActivityRetentionDays"], out var a) && a > 0 ? a : 30
         );
     }
 

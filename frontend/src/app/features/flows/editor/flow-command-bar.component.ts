@@ -93,6 +93,19 @@ import { MediaType } from '../../../shared/models/media-type';
       </div>
 
       <div class="command-group tool-actions">
+        @if (canRestoreAiProposal()) {
+          <button
+            matButton="tonal"
+            type="button"
+            class="tool-btn"
+            (click)="restoreAiProposalRequested.emit()"
+            aria-label="Restaurer le flow avant la proposition IA"
+            matTooltip="Restaurer l’état du flow avant l’application de la proposition IA"
+          >
+            <span class="btn-icon" aria-hidden="true">↶</span>
+            <span>Annuler la proposition</span>
+          </button>
+        }
         <button
           matButton="tonal"
           type="button"
@@ -522,6 +535,8 @@ export class FlowCommandBarComponent {
   readonly simulateRequested = output<void>();
   readonly packCreationRequested = output<void>();
   readonly aiAssistantRequested = output<void>();
+  readonly restoreAiProposalRequested = output<void>();
+  readonly canRestoreAiProposal = input(false);
   readonly togglePalette = output<void>();
   readonly toggleInspector = output<void>();
   readonly toggleTray = output<void>();

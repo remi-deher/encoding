@@ -38,11 +38,20 @@ public static class AiToolEndpoints
         group.MapGet("/sessions", async (int? offset, AiClusterService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.ListSessionsAsync(offset ?? 0, ct))))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        group.MapGet("/sessions/{id}", async (string id, AiClusterService service, CancellationToken ct) =>
-            await GuardAsync(async () => await service.GetSessionAsync(id, ct) is { } state ? Results.Ok(state) : Results.NotFound()))
+        group.MapGet("/sessions/{id}", async (string id, AiClusterService service, AiAssistantService assistant, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                if (await assistant.IsAssistantConversationAsync(id, ct)) return Results.NotFound();
+                var state = await service.GetSessionAsync(id, ct);
+                return state is null ? Results.NotFound() : Results.Ok(state);
+            }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        group.MapPost("/sessions/{id}/fork", async (string id, AiClusterService service, CancellationToken ct) =>
-            await GuardAsync(async () => Results.Ok(await service.ForkSessionAsync(id, ct))))
+        group.MapPost("/sessions/{id}/fork", async (string id, AiClusterService service, AiAssistantService assistant, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                if (await assistant.IsAssistantConversationAsync(id, ct)) return Results.NotFound();
+                return Results.Ok(await service.ForkSessionAsync(id, ct));
+            }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapPost("/generate", async (AiGenerateRequest request, AiClusterService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.GenerateAsync(request.Provider, request.Prompt, ct))))
@@ -55,7 +64,8 @@ public static class AiToolEndpoints
     private static IResult PublicSettings(AiSettingsDto settings) => Results.Ok(new
     {
         settings.DefaultProvider, settings.OllamaBaseUrl, settings.OllamaModel, settings.OpenAiBaseUrl,
-        settings.OpenAiModel, HasOpenAiApiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey), settings.TimeoutSeconds, settings.SubtitleBatchSize
+        settings.OpenAiModel, HasOpenAiApiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey), settings.TimeoutSeconds, settings.SubtitleBatchSize,
+        settings.AssistantProvider, settings.FlowProvider, settings.AssistantLocalOnly, settings.FlowLocalOnly
     });
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)
     {

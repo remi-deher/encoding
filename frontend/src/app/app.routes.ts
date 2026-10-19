@@ -43,6 +43,63 @@ const applicationRoutes: Routes = [
     },
   },
   {
+    path: 'ai/activity',
+    loadComponent: () =>
+      import('./features/ai/ai-activity-page.component').then(
+        (module) => module.AiActivityPageComponent,
+      ),
+    data: {
+      title: 'Activité IA',
+      navigation: {
+        group: 'Intelligence artificielle',
+        label: 'Activité',
+        glyph: '◷',
+        order: 3,
+        exact: true,
+        keywords: ['demandes', 'historique', 'erreurs'],
+      },
+      description: 'Historique des demandes de votre assistant.',
+    },
+  },
+  {
+    path: 'ai/assistant',
+    loadComponent: () =>
+      import('./features/ai/ai-assistant-page.component').then(
+        (module) => module.AiAssistantPageComponent,
+      ),
+    data: {
+      title: 'Assistant IA',
+      navigation: {
+        group: 'Intelligence artificielle',
+        label: 'Assistant',
+        glyph: '✦',
+        order: 2,
+        exact: false,
+        keywords: ['conversation', 'question', 'flow'],
+      },
+      description: 'Posez des questions sur un flow publié avec une source explicite.',
+    },
+  },
+  {
+    path: 'ai',
+    loadComponent: () =>
+      import('./features/ai/ai-workspace-page.component').then(
+        (module) => module.AiWorkspacePageComponent,
+      ),
+    data: {
+      title: 'Intelligence artificielle',
+      navigation: {
+        group: 'Intelligence artificielle',
+        label: 'Vue d’ensemble',
+        glyph: '✦',
+        exact: true,
+        order: 1,
+        keywords: ['assistant', 'ia', 'fournisseurs', 'activité'],
+      },
+      description: 'Consultez les connexions IA déclarées sur les nœuds du cluster.',
+    },
+  },
+  {
     path: 'libraries/encoding-profiles',
     loadComponent: () =>
       import('./features/libraries/encoding-profile-library-page.component').then(

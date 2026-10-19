@@ -238,7 +238,7 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
         }
     }
 
-    public async Task<(FlowDeleteResult Result, string? Reason)> DeleteFlowAsync(Guid id, CancellationToken ct)
+    public async Task<(FlowDeleteResult Result, string? Reason)> DeleteFlowAsync(Guid id, CancellationToken ct, int? expectedVersion = null)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
@@ -249,6 +249,8 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
         if (currentVersionObj is null or DBNull)
             return (FlowDeleteResult.NotFound, null);
         var currentVersion = Convert.ToInt32(currentVersionObj);
+        if (expectedVersion is { } expected && currentVersion != expected)
+            return (FlowDeleteResult.Conflict, "La version du flow a changé. Actualisez le contexte avant de confirmer sa suppression.");
 
         await using var checkAssign = Sql.Command("SELECT count(*) FROM library_flow_assignments WHERE flow_id = @id", connection, tx);
         checkAssign.Parameters.AddWithValue("id", id);
@@ -270,9 +272,11 @@ public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService
         clearDraft.Parameters.AddWithValue("id", id);
         await clearDraft.ExecuteNonQueryAsync(ct);
 
-        await using var softDelete = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id", connection, tx);
+        await using var softDelete = Sql.Command("UPDATE flows SET deleted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = @id AND (@expectedVersion IS NULL OR current_version = @expectedVersion)", connection, tx);
         softDelete.Parameters.AddWithValue("id", id);
-        await softDelete.ExecuteNonQueryAsync(ct);
+        softDelete.Parameters.AddWithValue("expectedVersion", (object?)expectedVersion ?? DBNull.Value);
+        if (await softDelete.ExecuteNonQueryAsync(ct) != 1)
+            return (FlowDeleteResult.Conflict, "La version du flow a changé. Actualisez le contexte avant de confirmer sa suppression.");
 
         await tx.CommitAsync(ct);
         return (FlowDeleteResult.Deleted, null);

@@ -11,9 +11,9 @@ public sealed class AiClientFactory(
 {
     private readonly AiSettingsService settingsService = settingsService ?? new AiSettingsService(configuration);
 
-    public IAiTextClient CreateClient(string? preferredProvider = null)
+    public IAiTextClient CreateClient(string? preferredProvider = null, bool localOnly = false)
     {
-        if (services is not null) return new ClusterClient(services.GetRequiredService<AiClusterService>(), preferredProvider);
+        if (services is not null) return new ClusterClient(services.GetRequiredService<AiClusterService>(), preferredProvider, localOnly);
         return CreateLocalClient(preferredProvider);
     }
 
@@ -55,8 +55,8 @@ public sealed class AiClientFactory(
             new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider()), settings.TimeoutSeconds);
     }
 
-    private sealed class ClusterClient(AiClusterService cluster, string? provider) : IAiTextClient
+    private sealed class ClusterClient(AiClusterService cluster, string? provider, bool localOnly) : IAiTextClient
     {
-        public Task<AiCompletionResult> GenerateTextAsync(AiPrompt prompt, CancellationToken ct = default) => cluster.GenerateAsync(provider, prompt, ct);
+        public Task<AiCompletionResult> GenerateTextAsync(AiPrompt prompt, CancellationToken ct = default) => cluster.GenerateAsync(provider, prompt, ct, localOnly);
     }
 }

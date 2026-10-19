@@ -12,6 +12,7 @@ using Encoding.Contracts.Flows;
 using Encoding.Contracts.Logging;
 using Encoding.Contracts.Plugins;
 using Encoding.Core.Logging;
+using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Mcp;
 
@@ -465,6 +466,52 @@ public sealed class McpService(
             logger.LogError(ex, "Erreur lors du traitement de la requête MCP {Method}", request.Method);
             return McpJsonRpcResponse.Failure(request.Id, -32603, $"Erreur interne du serveur MCP : {ex.Message}");
         }
+    }
+
+    /// <summary>Invokes the assistant's bounded read-only subset through the same handlers MCP exposes.</summary>
+    public async Task<AiAssistantToolResult> CallAssistantReadToolAsync(AiAssistantToolCall call, CancellationToken ct)
+    {
+        McpCallToolResult result;
+        string label;
+        string href;
+        switch (call.Name)
+        {
+            case "list_flows" when call.FlowId is null && call.State is null && call.Limit is null:
+                result = await ToolListFlowsAsync(ct);
+                label = "Liste des flows";
+                href = "/flows";
+                break;
+            case "get_flow" when call.FlowId is { } flowId && call.State is null && call.Limit is null:
+                result = await ToolGetFlowAsync(JsonSerializer.SerializeToElement(new { id = flowId }, JsonOptions), ct);
+                label = $"Flow {flowId}";
+                href = "/flows";
+                break;
+            case "list_nodes" when call.FlowId is null && call.State is null && call.Limit is null:
+                result = await ToolListNodesAsync(ct);
+                label = "Liste des nœuds";
+                href = "/nodes";
+                break;
+            case "list_executions" when call.FlowId is null
+                && (call.State is null or "queued" or "running" or "failed" or "completed")
+                && (call.Limit is null or >= 1 and <= 50):
+                result = await ToolListExecutionsAsync(JsonSerializer.SerializeToElement(new { state = call.State, limit = call.Limit ?? 20 }, JsonOptions), ct);
+                label = "Exécutions récentes";
+                href = "/tasks";
+                break;
+            case "get_libraries_overview" when call.FlowId is null && call.State is null && call.Limit is null:
+                result = await ToolGetLibrariesOverviewAsync(ct);
+                label = "Vue des bibliothèques";
+                href = "/libraries";
+                break;
+            default:
+                throw new ArgumentException("Outil de lecture IA inconnu ou paramètres invalides.");
+        }
+
+        if (result.IsError) throw new InvalidOperationException("L’outil de lecture n’a pas pu obtenir son résultat.");
+        var raw = result.Content.FirstOrDefault()?.Text ?? "null";
+        using var document = JsonDocument.Parse(raw);
+        if (raw.Length > 80_000) throw new ArgumentException("Le résultat de l’outil dépasse la limite de contexte.");
+        return new(call.Name, label, href, document.RootElement.Clone());
     }
 
     private static McpJsonRpcResponse HandleInitialize(McpJsonRpcRequest request)

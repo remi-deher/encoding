@@ -112,6 +112,12 @@ export class AiToolsTabComponent implements OnInit {
   readonly hasOpenAiApiKey = signal(false);
   readonly timeoutSeconds = signal(120);
   readonly subtitleBatchSize = signal(80);
+  readonly assistantConversationRetentionDays = signal(90);
+  readonly assistantActivityRetentionDays = signal(30);
+  readonly assistantProvider = signal<string | null>(null);
+  readonly flowProvider = signal<string | null>(null);
+  readonly assistantLocalOnly = signal(false);
+  readonly flowLocalOnly = signal(false);
 
   private savedFingerprint = '';
   private fingerprint(): string {
@@ -124,6 +130,12 @@ export class AiToolsTabComponent implements OnInit {
       this.openAiApiKey(),
       this.timeoutSeconds(),
       this.subtitleBatchSize(),
+      this.assistantConversationRetentionDays(),
+      this.assistantActivityRetentionDays(),
+      this.assistantProvider(),
+      this.flowProvider(),
+      this.assistantLocalOnly(),
+      this.flowLocalOnly(),
     ]);
   }
   hasUnsavedChanges(): boolean {
@@ -181,6 +193,12 @@ export class AiToolsTabComponent implements OnInit {
     this.hasOpenAiApiKey.set(settings.hasOpenAiApiKey ?? false);
     this.timeoutSeconds.set(settings.timeoutSeconds);
     this.subtitleBatchSize.set(settings.subtitleBatchSize);
+    this.assistantConversationRetentionDays.set(settings.assistantConversationRetentionDays ?? 90);
+    this.assistantActivityRetentionDays.set(settings.assistantActivityRetentionDays ?? 30);
+    this.assistantProvider.set(settings.assistantProvider ?? null);
+    this.flowProvider.set(settings.flowProvider ?? null);
+    this.assistantLocalOnly.set(settings.assistantLocalOnly ?? false);
+    this.flowLocalOnly.set(settings.flowLocalOnly ?? false);
     this.savedFingerprint = this.fingerprint();
   }
   saveSettings(): void {
@@ -189,9 +207,23 @@ export class AiToolsTabComponent implements OnInit {
       this.timeoutSeconds() < 10 ||
       this.timeoutSeconds() > 600 ||
       this.subtitleBatchSize() < 5 ||
-      this.subtitleBatchSize() > 200
+      this.subtitleBatchSize() > 200 ||
+      this.assistantConversationRetentionDays() < 1 ||
+      this.assistantConversationRetentionDays() > 3650 ||
+      this.assistantActivityRetentionDays() < 1 ||
+      this.assistantActivityRetentionDays() > 3650
     ) {
       this.notifications.show('Vérifiez les limites du cluster.');
+      return;
+    }
+    if (
+      (this.assistantLocalOnly() &&
+        (this.assistantProvider() ?? this.defaultProvider()) !== 'ollama') ||
+      (this.flowLocalOnly() && (this.flowProvider() ?? this.defaultProvider()) !== 'ollama')
+    ) {
+      this.notifications.show(
+        'Le mode local uniquement exige Ollama comme moteur effectif pour cet usage.',
+      );
       return;
     }
     this.savingSettings.set(true);
@@ -204,6 +236,12 @@ export class AiToolsTabComponent implements OnInit {
       openAiApiKey: this.openAiApiKey().trim() || null,
       timeoutSeconds: this.timeoutSeconds(),
       subtitleBatchSize: this.subtitleBatchSize(),
+      assistantConversationRetentionDays: this.assistantConversationRetentionDays(),
+      assistantActivityRetentionDays: this.assistantActivityRetentionDays(),
+      assistantProvider: this.assistantProvider() ?? 'default',
+      flowProvider: this.flowProvider() ?? 'default',
+      assistantLocalOnly: this.assistantLocalOnly(),
+      flowLocalOnly: this.flowLocalOnly(),
     };
     this.aiService.updateSettings(request).subscribe({
       next: (settings) => {

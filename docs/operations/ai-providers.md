@@ -14,6 +14,10 @@ Ouvrir **Paramètres → Intégrations → IA & fournisseurs** sur le serveur qu
 
 Choisir le moteur par défaut puis enregistrer. Les nœuds répondants et leurs fournisseurs sont listés sous la configuration. Les connexions déclarées ne garantissent ni le quota disponible ni la réponse du modèle.
 
+Dans **Usages et modèles**, l’assistant et les opérations sur les flows peuvent hériter du moteur par défaut ou choisir un fournisseur distinct. Le modèle est celui configuré pour cette connexion. La règle **local uniquement** impose Ollama sur une adresse de boucle locale et interdit le routage vers un autre nœud ou fournisseur. Sans cette règle, les questions et ressources de l’assistant peuvent transmettre des définitions de flows, des métadonnées de nœuds et bibliothèques, ainsi que des événements et journaux d’exécution pouvant contenir des chemins. Les sous-titres ne sont pas joints comme source dédiée par ce parcours. Vérifiez le fournisseur effectif avant d’y joindre des données sensibles.
+
+L’utilisateur peut sélectionner jusqu’à trois outils MCP de lecture : liste des flows, détail d’un flow, nœuds, exécutions récentes et vue des bibliothèques. Le modèle peut aussi demander un seul outil supplémentaire dans un format structuré. Le backend accepte uniquement cette liste blanche, valide les arguments et réutilise les handlers MCP en lecture seule. Une réponse de préparation invalide ne déclenche aucun outil. La préparation puis la réponse finale peuvent chacune consommer un appel fournisseur. La taille du contexte reste bornée. Une génération ou modification de flow reste une proposition : **Appliquer à l’éditeur** et **Rejeter** enregistrent la décision dans l’activité. Les administrateurs peuvent publier le brouillon attaché, supprimer un flow attaché, demander l’annulation d’une exécution attachée ou mettre en file les fichiers actuellement détectés d’une bibliothèque attachée. Chaque action est préparée par le serveur et confirmée dans l’interface avec un résumé signé, expirant après cinq minutes. Publication vérifie la révision du brouillon ; suppression et annulation vérifient la version/révision métier ; le lancement vérifie l’affectation et l’empreinte de la liste de fichiers. Les identifiants d’exécution déterministes rendent le lancement confirmé sans doublon lors d’une reprise.
+
 Sur Linux, Landlock doit être disponible. Le lancement refuse explicitement de s'exécuter sans confinement. Pour une installation CLI hors image, configurer au besoin `AiTools:RuntimeDirectory` pour accorder en lecture le répertoire d'installation ; la fonction serveur doit pouvoir exécuter l'outil. Les binaires peuvent être choisis par `AiTools:Executables:codex-cli` et `AiTools:Executables:claude-cli`.
 
 ## Demande et reprise
@@ -37,7 +41,15 @@ La réponse contient `sessionId` et `requestId`, y compris quand aucun exécuteu
 
 Une tentative est bornée par le délai configuré, entre 10 et 600 secondes. Un remplacement ambigu attend le délai précédent, avec une marge de cinq secondes ; au maximum trois exécuteurs sont essayés par appel. Si le coordinateur redémarre, attendre l'expiration du bail affiché avant de réessayer. Un échec peut avoir consommé du quota chez le fournisseur.
 
-Les checkpoints et les marqueurs locaux d'essai ne sont pas supprimés automatiquement : définir leur politique de rétention avant une utilisation intensive. Les checkpoints transitent chiffrés dans le journal du maillage ; les secrets de connexion n'y transitent pas.
+Les marqueurs locaux d'essai ne sont pas supprimés automatiquement. Les checkpoints transitent chiffrés dans le journal du maillage ; les secrets de connexion n'y transitent pas.
+
+Les conversations terminées et l’activité IA expirent automatiquement. Les valeurs par défaut sont 90 jours pour les conversations (instantanés de contexte compris) et 30 jours pour l’activité. Les administrateurs peuvent régler ces durées dans **Paramètres → IA → Paramètres avancés du cluster** ou via `AiTools:AssistantConversationRetentionDays` et `AiTools:AssistantActivityRetentionDays` (1 à 3 650 jours) au démarrage. Le réglage enregistré est répliqué au cluster. Chaque nœud publie un tombstone dans le registre répliqué ; la passe s’exécute toutes les heures et ignore une conversation qui possède encore une demande en attente.
+
+Après 24 heures, un nœud purge les anciennes versions chiffrées de son journal local seulement quand tous les pairs connus ont confirmé la séquence du tombstone. Un pair inaccessible retarde cette compaction, afin qu’il puisse d’abord recevoir la suppression. Une sauvegarde antérieure de la base ou un pair retiré hors du protocole de cluster peut toujours contenir l’ancien ciphertext : cette rétention ne constitue pas une purge cryptographique des sauvegardes.
+
+L’interruption d’une demande arrête l’attente locale lorsqu’elle est contrôlable ; un fournisseur distant peut avoir déjà accepté le travail. L’activité indique alors que le résultat distant reste incertain et la reprise attend l’expiration du bail.
+
+Le corpus de scénarios de référence se trouve dans docs/testing/ai-assistant-eval-cases.json. Il couvre l’ancrage aux sources, les injections dans les descriptions et journaux, les appels et arguments d’outils, les conflits de version, l’annulation et l’incertitude sur les coûts. Il sert de base à l’évaluation des fournisseurs ; la suite automatisée vérifie actuellement sa structure et sa couverture, pas la qualité sémantique des réponses d’un modèle.
 
 ## Vérifications de la branche
 

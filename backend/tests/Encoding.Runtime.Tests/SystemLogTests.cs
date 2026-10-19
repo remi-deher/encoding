@@ -10,6 +10,7 @@ using Encoding.Api.Mcp;
 using Encoding.Api.Nodes;
 using Encoding.Api.Plugins;
 using Encoding.Contracts.Logging;
+using Encoding.Contracts.Tools;
 using Encoding.Core.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -388,6 +389,24 @@ public sealed class SystemLogMcpTests
         var callJson = JsonSerializer.Serialize(callResult);
         Assert.Contains("log-mcp-1", callJson);
         Assert.Contains("Hardware acceleration dropped back to CPU", callJson);
+
+        var assistantRead = await mcp.CallAssistantReadToolAsync(new AiAssistantToolCall("list_flows"), CancellationToken.None);
+        Assert.Equal("list_flows", assistantRead.Name);
+        Assert.Equal("/flows", assistantRead.Href);
+        await Assert.ThrowsAsync<ArgumentException>(() => mcp.CallAssistantReadToolAsync(
+            new AiAssistantToolCall("delete_flow", FlowId: Guid.NewGuid()), CancellationToken.None));
+
+        var viewerWrite = await mcp.HandleMessageAsync(
+            new McpJsonRpcRequest(
+                "2.0",
+                "tools/call",
+                JsonDocument.Parse("3").RootElement,
+                JsonDocument.Parse("""{"name":"delete_flow","arguments":{"flowId":"11111111-1111-4111-8111-111111111111"}}""").RootElement),
+            new System.Security.Claims.ClaimsPrincipal(),
+            CancellationToken.None);
+        var deniedWrite = Assert.IsType<McpCallToolResult>(viewerWrite?.Result);
+        Assert.True(deniedWrite.IsError);
+        Assert.Contains("Permission refusée", deniedWrite.Content[0].Text);
     }
 }
 

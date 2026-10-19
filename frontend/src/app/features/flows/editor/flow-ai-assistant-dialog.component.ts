@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -16,6 +16,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { FlowDocument } from '../../../shared/models/flow-validation';
+import { FlowSimulation } from '../../../shared/services/flow-simulation';
+import { NotificationService } from '../../../shared/services/notification.service';
 
 export interface FlowAiAssistantDialogData {
   readonly mediaType: string;
@@ -25,6 +27,7 @@ export interface FlowAiAssistantDialogData {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-ai-assistant-dialog',
+  providers: [FlowSimulation],
   imports: [
     CommonModule,
     FormsModule,
@@ -113,6 +116,103 @@ export interface FlowAiAssistantDialogData {
           </div>
         }
 
+        @if (proposal(); as proposed) {
+          <section class="proposal-box" aria-labelledby="proposal-title">
+            <h3 id="proposal-title">Proposition à examiner</h3>
+            <p>
+              @if (data.currentFlow) {
+                {{ proposalChanges().addedNodes.length }} bloc(s) ajouté(s),
+                {{ proposalChanges().changedNodes.length }} modifié(s),
+                {{ proposalChanges().removedNodes.length }} supprimé(s),
+                {{ proposalChanges().addedConnections.length }} connexion(s) ajoutée(s) et
+                {{ proposalChanges().removedConnections.length }} supprimée(s).
+                @if (proposalChanges().metadataChanged) {
+                  Le nom ou le média du flow change.
+                }
+                @if (
+                  proposalChanges().addedNodes.length ||
+                  proposalChanges().changedNodes.length ||
+                  proposalChanges().removedNodes.length
+                ) {
+                  <ul aria-label="Blocs modifiés">
+                    @for (node of proposalChanges().addedNodes; track node) {
+                      <li>Ajout : {{ node }}</li>
+                    }
+                    @for (node of proposalChanges().changedNodes; track node) {
+                      <li>Modification : {{ node }}</li>
+                    }
+                    @for (node of proposalChanges().removedNodes; track node) {
+                      <li>Suppression : {{ node }}</li>
+                    }
+                  </ul>
+                }
+                @if (
+                  proposalChanges().addedConnections.length ||
+                  proposalChanges().removedConnections.length
+                ) {
+                  <ul aria-label="Connexions modifiées">
+                    @for (connection of proposalChanges().addedConnections; track connection) {
+                      <li>Connexion ajoutée : {{ connection }}</li>
+                    }
+                    @for (connection of proposalChanges().removedConnections; track connection) {
+                      <li>Connexion supprimée : {{ connection }}</li>
+                    }
+                  </ul>
+                }
+              } @else {
+                Le flow contient {{ proposed.nodes.length }} bloc(s) et
+                {{ proposed.connections.length }} connexion(s).
+              }
+            </p>
+            <details>
+              <summary>Examiner la définition complète</summary>
+              <pre>{{ formatFlow(proposed) }}</pre>
+            </details>
+            <section class="proposal-simulation" aria-labelledby="proposal-simulation-title">
+              <h4 id="proposal-simulation-title">Vérification du comportement</h4>
+              <p>
+                Simulation déterministe avec un profil fictif H.264 1080p et AAC stéréo. Les
+                résultats supposés ne prouvent ni l’exécution réelle ni la disponibilité d’un outil.
+              </p>
+              <button
+                matButton="tonal"
+                type="button"
+                [disabled]="simulation.busy()"
+                (click)="simulateProposal(proposed)"
+              >
+                {{ simulation.busy() ? 'Simulation…' : 'Simuler cette proposition' }}
+              </button>
+              @if (simulation.error()) {
+                <p role="alert">{{ simulation.error() }}</p>
+              }
+              @if (simulation.result(); as result) {
+                <div class="simulation-result" role="status">
+                  <strong>{{ simulationStatus(result.status) }}</strong>
+                  <p>{{ result.detail }}</p>
+                  @if (result.steps.length) {
+                    <ol>
+                      @for (step of result.steps; track $index) {
+                        <li>
+                          {{ step.name }} — {{ step.detail }}
+                          @if (step.assumed) {
+                            <span>(résultat supposé)</span>
+                          }
+                        </li>
+                      }
+                    </ol>
+                  }
+                </div>
+              }
+            </section>
+            <div class="proposal-actions">
+              <button matButton="text" type="button" (click)="discardProposal()">Rejeter</button>
+              <button matButton="filled" type="button" (click)="applyProposal()">
+                Appliquer à l’éditeur
+              </button>
+            </div>
+          </section>
+        }
+
         @if (errorMessage()) {
           <div class="error-box">
             <mat-icon>error_outline</mat-icon>
@@ -145,7 +245,7 @@ export interface FlowAiAssistantDialogData {
         <button
           matButton="filled"
           type="button"
-          [disabled]="loading() || (mode() !== 'explain' && !prompt().trim())"
+          [disabled]="loading() || proposal() || (mode() !== 'explain' && !prompt().trim())"
           (click)="submit()"
         >
           <mat-icon>{{ mode() === 'explain' ? 'visibility' : 'auto_fix_high' }}</mat-icon>
@@ -153,7 +253,7 @@ export interface FlowAiAssistantDialogData {
             mode() === 'explain'
               ? 'Expliquer'
               : mode() === 'refactor'
-                ? 'Appliquer modifications'
+                ? 'Préparer une proposition'
                 : 'Générer le flow'
           }}
         </button>
@@ -237,6 +337,40 @@ export interface FlowAiAssistantDialogData {
         border-radius: 8px;
         line-height: 1.5;
       }
+      .proposal-box {
+        padding: 16px;
+        border: 1px solid var(--mat-sys-outline-variant, #555);
+        border-radius: 8px;
+      }
+      .proposal-box h3 {
+        margin: 0;
+      }
+      .proposal-box pre {
+        max-height: 260px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+      .proposal-simulation {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: var(--radius-md, 12px);
+        background: var(--surface-container-low, #222);
+      }
+      .proposal-simulation h4,
+      .proposal-simulation p {
+        margin-top: 0;
+      }
+      .simulation-result {
+        margin-top: 12px;
+      }
+      .simulation-result ol {
+        padding-inline-start: 22px;
+      }
+      .proposal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
     `,
   ],
 })
@@ -244,11 +378,62 @@ export class FlowAiAssistantDialogComponent {
   readonly data = inject<FlowAiAssistantDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject(MatDialogRef<FlowAiAssistantDialogComponent>);
   private readonly aiService = inject(AiToolsService);
+  private readonly notifications = inject(NotificationService);
+  protected readonly simulation = inject(FlowSimulation);
 
   readonly mode = signal<'generate' | 'refactor' | 'explain'>('generate');
   readonly prompt = signal('');
   readonly loading = signal(false);
   readonly explanation = signal<string | null>(null);
+  readonly proposal = signal<FlowDocument | null>(null);
+  readonly proposalRequestId = signal<string | null>(null);
+  readonly proposalChanges = computed(() => {
+    const current = this.data.currentFlow;
+    const proposed = this.proposal();
+    if (!current || !proposed)
+      return {
+        addedNodes: [] as string[],
+        changedNodes: [] as string[],
+        removedNodes: [] as string[],
+        addedConnections: [] as string[],
+        removedConnections: [] as string[],
+        metadataChanged: false,
+      };
+    const nodeLabel = (node: FlowDocument['nodes'][number]) =>
+      `${node.name || node.component.componentId} · ${node.id}`;
+    const currentNodes = new Map(current.nodes.map((node) => [node.id, node]));
+    const proposedNodes = new Map(proposed.nodes.map((node) => [node.id, node]));
+    const addedNodes = [...proposedNodes]
+      .filter(([id]) => !currentNodes.has(id))
+      .map(([, node]) => nodeLabel(node));
+    const removedNodes = [...currentNodes]
+      .filter(([id]) => !proposedNodes.has(id))
+      .map(([, node]) => nodeLabel(node));
+    const changedNodes = [...proposedNodes]
+      .filter(([id, node]) => {
+        const previous = currentNodes.get(id);
+        return previous !== undefined && JSON.stringify(previous) !== JSON.stringify(node);
+      })
+      .map(([, node]) => nodeLabel(node));
+    const connectionLabel = (connection: FlowDocument['connections'][number]) =>
+      `${connection.sourceNodeId} · ${connection.sourceOutputId} → ${connection.targetNodeId}`;
+    const key = (connection: FlowDocument['connections'][number]) =>
+      `${connection.sourceNodeId}|${connection.sourceOutputId}|${connection.targetNodeId}`;
+    const currentConnections = new Set(current.connections.map(key));
+    const proposedConnections = new Set(proposed.connections.map(key));
+    return {
+      addedNodes,
+      changedNodes,
+      removedNodes,
+      addedConnections: proposed.connections
+        .filter((item) => !currentConnections.has(key(item)))
+        .map(connectionLabel),
+      removedConnections: current.connections
+        .filter((item) => !proposedConnections.has(key(item)))
+        .map(connectionLabel),
+      metadataChanged: current.name !== proposed.name || current.mediaType !== proposed.mediaType,
+    };
+  });
   readonly errorMessage = signal<string | null>(null);
 
   readonly sessionId = signal<string | null>(null);
@@ -268,6 +453,57 @@ export class FlowAiAssistantDialogComponent {
     this.requestId = crypto.randomUUID();
     this.errorMessage.set(null);
     this.explanation.set(null);
+    this.proposal.set(null);
+    this.proposalRequestId.set(null);
+  }
+
+  applyProposal(): void {
+    const flow = this.proposal();
+    if (!flow) return;
+    this.recordProposalDecision('applied-to-editor');
+    this.dialogRef.close({ flow });
+  }
+
+  simulateProposal(flow: FlowDocument): void {
+    this.simulation.prepare(flow);
+    void this.simulation.run(this.simulation.profile());
+  }
+
+  simulationStatus(status: string): string {
+    return (
+      (
+        {
+          completed: 'Simulation terminée',
+          waiting: 'Simulation en attente d’une hypothèse',
+          failed: 'Échec simulé',
+          invalid: 'Flow invalide pour la simulation',
+        } as Record<string, string>
+      )[status] ?? 'État de simulation inconnu'
+    );
+  }
+
+  discardProposal(): void {
+    this.recordProposalDecision('rejected');
+    this.proposal.set(null);
+    this.errorMessage.set(null);
+    this.requestId = crypto.randomUUID();
+    this.lastPrompt = '';
+  }
+
+  private recordProposalDecision(decision: 'applied-to-editor' | 'rejected'): void {
+    const requestId = this.proposalRequestId();
+    if (!requestId) return;
+    this.aiService.recordFlowProposalDecision(requestId, decision).subscribe({
+      error: () =>
+        this.notifications.show(
+          'La décision est appliquée, mais son suivi IA n’a pas pu être mis à jour.',
+        ),
+    });
+    this.proposalRequestId.set(null);
+  }
+
+  formatFlow(flow: FlowDocument): string {
+    return JSON.stringify(flow, null, 2);
   }
 
   recoverSession(): void {
@@ -303,6 +539,8 @@ export class FlowAiAssistantDialogComponent {
     this.loading.set(true);
     this.errorMessage.set(null);
     this.explanation.set(null);
+    this.proposal.set(null);
+    this.proposalRequestId.set(null);
 
     const currentMode = this.mode();
     if (currentMode === 'generate') {
@@ -320,7 +558,8 @@ export class FlowAiAssistantDialogComponent {
             if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
             if (res.success && res.flow) {
-              this.dialogRef.close({ flow: res.flow });
+              this.proposalRequestId.set(res.requestId ?? null);
+              this.proposal.set(res.flow);
             } else {
               this.errorMessage.set(res.explanation || 'Impossible de générer un flow valide.');
             }
@@ -345,7 +584,8 @@ export class FlowAiAssistantDialogComponent {
             if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
             if (res.success && res.flow) {
-              this.dialogRef.close({ flow: res.flow });
+              this.proposalRequestId.set(res.requestId ?? null);
+              this.proposal.set(res.flow);
             } else {
               this.errorMessage.set(
                 res.explanation || 'Impossible d’appliquer les modifications au flow.',

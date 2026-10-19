@@ -53,7 +53,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     {
         "availability" => await LocalAsync(ct),
         "quotas" => await LocalQuotasAsync(ct),
-        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct, localOnly: true),
+        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct),
         "execute" => await ExecuteAsync(value.Deserialize<AiExecuteRequest>()!, ct),
         _ => throw new ArgumentException("Opération IA inconnue.")
     };
@@ -85,6 +85,9 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     {
         provider ??= (await GetSettingsAsync(ct)).DefaultProvider;
         if (provider is not ("codex-cli" or "claude-cli" or "ollama" or "openai")) throw new ArgumentException("Fournisseur IA inconnu.");
+        if (localOnly && provider != "ollama") return new(false, "", "Le mode local uniquement exige Ollama.");
+        if (localOnly && (!Uri.TryCreate(settings.GetSettings().OllamaBaseUrl, UriKind.Absolute, out var localUri) || !localUri.IsLoopback))
+            return new(false, "", "Ollama doit être configuré sur une adresse de boucle locale pour cette politique.");
         var requestId = prompt.RequestId ?? Guid.NewGuid();
         var id = prompt.SessionId ?? $"{transport.LocalId:N}.{requestId:N}";
         if (requestId == Guid.Empty || string.IsNullOrWhiteSpace(prompt.UserPrompt) || prompt.UserPrompt.Length + prompt.SystemPrompt.Length > 120000)
@@ -134,7 +137,9 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested) { }
             }
             AiCompletionResult result = new(false, "", "Aucun nœud connecté à ce fournisseur. La demande reste en attente.");
-            foreach (var candidate in candidates.DistinctBy(c => c.Node.NodeId).Where(c => c.Node.Providers.Contains(provider)).Take(3))
+            foreach (var candidate in candidates.DistinctBy(c => c.Node.NodeId)
+                .Where(c => c.Node.Providers.Contains(provider) && (!localOnly || c.Url is null))
+                .Take(localOnly ? 1 : 3))
             {
                 var seconds = Math.Clamp((await GetSettingsAsync(ct)).TimeoutSeconds, 10, 600);
                 var deadline = DateTimeOffset.UtcNow.AddSeconds(seconds);
@@ -208,7 +213,18 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     {
         var shared = await store.ReadAsync<AiSettingsDto>("settings", ct);
         var local = settings.GetSettings();
-        return shared is null ? local : local with { DefaultProvider = shared.DefaultProvider, TimeoutSeconds = shared.TimeoutSeconds, SubtitleBatchSize = shared.SubtitleBatchSize };
+        return shared is null ? local : local with
+        {
+            DefaultProvider = shared.DefaultProvider,
+            TimeoutSeconds = shared.TimeoutSeconds,
+            SubtitleBatchSize = shared.SubtitleBatchSize,
+            AssistantProvider = shared.AssistantProvider,
+            FlowProvider = shared.FlowProvider,
+            AssistantLocalOnly = shared.AssistantLocalOnly,
+            FlowLocalOnly = shared.FlowLocalOnly,
+            AssistantConversationRetentionDays = shared.AssistantConversationRetentionDays,
+            AssistantActivityRetentionDays = shared.AssistantActivityRetentionDays
+        };
     }
     public async Task<AiSettingsDto> UpdateSettingsAsync(AiSettingsUpdateRequest update, CancellationToken ct)
     {

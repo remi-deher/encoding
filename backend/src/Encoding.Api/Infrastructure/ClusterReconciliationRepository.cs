@@ -207,6 +207,69 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         await transaction.CommitAsync(ct);
     }
 
+    /// <summary>
+    /// Purge les anciennes versions IA seulement quand chaque pair connu a confirmé la séquence du tombstone.
+    /// Les tombstones et les versions LWW courantes sont conservés pour empêcher toute résurrection.
+    /// </summary>
+    public async Task<int> PruneAssistantHistoryAsync(IEnumerable<string> peerUrls, DateTimeOffset tombstonesBefore, CancellationToken ct)
+    {
+        var vectors = new Dictionary<string, IReadOnlyDictionary<Guid, long>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var url in peerUrls.Select(TryNormalizePeerUrl).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+            vectors[url] = await GetPeerVectorAsync(url, ct);
+
+        await EnsureIdentityAsync(ct);
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        Guid clusterId;
+        await using (var identity = Sql.Command("SELECT id FROM cluster_identity WHERE singleton = true", connection, transaction))
+        {
+            var value = await identity.ExecuteScalarAsync(ct);
+            if (value is null or DBNull) throw new InvalidOperationException("L’identité du cluster est absente.");
+            clusterId = value is Guid id ? id : Guid.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!);
+        }
+
+        var tombstones = new List<(string Key, DateTimeOffset Time, Guid Origin, long Sequence)>();
+        await using (var command = Sql.Command("SELECT register_key,occurred_at,origin_id,sequence FROM cluster_sync_registers WHERE value='null' AND (register_key LIKE 'ai/assistant/%' OR register_key LIKE 'ai/session/%')", connection, transaction))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+            while (await reader.ReadAsync(ct)) tombstones.Add((reader.GetString(0), ReadDateTimeOffset(reader.GetValue(1)), ReadGuid(reader, 2), Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture)));
+
+        var purged = 0;
+        foreach (var tombstone in tombstones)
+        {
+            if (tombstone.Time >= tombstonesBefore) continue;
+            var acknowledgedByAll = vectors.Values.All(vector => vector.TryGetValue(tombstone.Origin, out var sequence) && sequence >= tombstone.Sequence);
+            if (!acknowledgedByAll) continue;
+
+            var oldEvents = new List<(Guid Id, DateTimeOffset Time, Guid Origin, long Sequence)>();
+            await using (var command = Sql.Command("SELECT event_id,occurred_at,origin_id,sequence,payload FROM cluster_change_log WHERE cluster_id=@cluster AND event_type='register.set' AND json_extract(payload,'$.key')=@key", connection, transaction))
+            {
+                command.Parameters.AddWithValue("cluster", clusterId);
+                command.Parameters.AddWithValue("key", tombstone.Key);
+                await using var reader = await command.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    var payload = JsonSerializer.Deserialize<RegisterChange>(reader.GetString(4), JsonOptions);
+                    if (payload is not null && payload.Value == "null") continue;
+                    var time = ReadDateTimeOffset(reader.GetValue(1));
+                    var origin = ReadGuid(reader, 2);
+                    var sequence = Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture);
+                    if (CompareVersion(time, origin, sequence, tombstone.Time, tombstone.Origin, tombstone.Sequence) < 0)
+                        oldEvents.Add((ReadGuid(reader, 0), time, origin, sequence));
+                }
+            }
+
+            foreach (var oldEvent in oldEvents)
+            {
+                await using var delete = Sql.Command("DELETE FROM cluster_change_log WHERE event_id=@id", connection, transaction);
+                delete.Parameters.AddWithValue("id", oldEvent.Id);
+                purged += await delete.ExecuteNonQueryAsync(ct);
+            }
+        }
+
+        await transaction.CommitAsync(ct);
+        return purged;
+    }
+
     public static string? TryNormalizePeerUrl(string? peerUrl)
     {
         if (string.IsNullOrWhiteSpace(peerUrl)) return null;

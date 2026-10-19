@@ -182,6 +182,7 @@ export class FlowEditorPageComponent {
   protected readonly componentPacks = signal<readonly FlowComponentPackInstance[]>([]);
   protected readonly packCatalog = signal<readonly FlowComponentPackSummary[]>([]);
   protected readonly packCreationOpen = signal(false);
+  protected readonly aiProposalRollback = signal<FlowDocument | null>(null);
 
   protected readonly flowMediaType = signal<MediaType>('video');
   private readonly installedComponents = signal<readonly FlowComponentDefinition[]>([]);
@@ -995,10 +996,18 @@ export class FlowEditorPageComponent {
       },
     });
 
-    dialogRef.afterClosed().subscribe((result: { flow?: FlowDocument } | undefined) => {
-      if (result?.flow) {
-        void this.loadAiFlow(result.flow);
+    dialogRef.afterClosed().subscribe(async (result: { flow?: FlowDocument } | undefined) => {
+      if (!result?.flow) return;
+      if (currentDoc) {
+        const latestDoc = await this.currentFlowDocument();
+        if (!latestDoc || JSON.stringify(latestDoc) !== JSON.stringify(currentDoc)) {
+          this.notifications.show(
+            'Le flow a changé depuis la création de la proposition. Elle n’a pas été appliquée ; relancez l’assistant depuis l’état actuel.',
+          );
+          return;
+        }
       }
+      await this.loadAiFlow(result.flow, currentDoc);
     });
   }
 
@@ -1018,7 +1027,25 @@ export class FlowEditorPageComponent {
     }
   }
 
-  private async loadAiFlow(definition: FlowDocument): Promise<void> {
+  protected async restoreAiProposal(): Promise<void> {
+    const previous = this.aiProposalRollback();
+    if (!previous) return;
+    try {
+      const plugins = await this.serverValidation.catalog();
+      this.savedName.set(previous.name);
+      this.flowMediaType.set(previous.mediaType);
+      const nodes = this.mapDefinitionNodes(previous, plugins);
+      this.updateGraphCounters(previous, nodes);
+      this.setGraph(nodes, previous.connections);
+      this.componentPacks.set(previous.componentPacks ?? []);
+      this.aiProposalRollback.set(null);
+      this.notifications.show('État précédent du flow restauré.');
+    } catch {
+      this.notifications.show('Impossible de restaurer l’état précédent du flow.');
+    }
+  }
+
+  private async loadAiFlow(definition: FlowDocument, rollback: FlowDocument | null): Promise<void> {
     try {
       const plugins = await this.serverValidation.catalog();
       this.savedName.set(definition.name);
@@ -1026,6 +1053,7 @@ export class FlowEditorPageComponent {
       const nodes = this.mapDefinitionNodes(definition, plugins);
       this.updateGraphCounters(definition, nodes);
       this.setGraph(nodes, definition.connections);
+      this.aiProposalRollback.set(rollback);
       this.notifications.show("Flow généré par l'IA appliqué avec succès !");
     } catch {
       this.notifications.show("Erreur lors de l'application du flow généré.");
@@ -1442,6 +1470,7 @@ export class FlowEditorPageComponent {
     nodes: readonly FlowGraphNode[],
     connections: readonly FlowGraphConnection[],
   ): void {
+    this.aiProposalRollback.set(null);
     this.nodes.set(nodes);
     this.connections.set(connections);
   }
