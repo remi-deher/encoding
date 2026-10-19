@@ -77,6 +77,8 @@ export interface AiSettings {
   readonly flowProvider?: string | null;
   readonly assistantLocalOnly?: boolean;
   readonly flowLocalOnly?: boolean;
+  readonly assistantConversationRetentionDays: number;
+  readonly assistantActivityRetentionDays: number;
 }
 
 export interface AiSettingsUpdateRequest {
@@ -92,6 +94,8 @@ export interface AiSettingsUpdateRequest {
   readonly flowProvider?: string | null;
   readonly assistantLocalOnly?: boolean;
   readonly flowLocalOnly?: boolean;
+  readonly assistantConversationRetentionDays?: number;
+  readonly assistantActivityRetentionDays?: number;
 }
 
 export interface AiNodeAvailability {
@@ -105,7 +109,7 @@ export interface AiClusterView {
 }
 
 export interface AiAssistantSource {
-  readonly kind: 'flow' | 'execution' | 'node' | 'tool';
+  readonly kind: 'flow' | 'execution' | 'node' | 'library' | 'tool';
   readonly resourceId: string;
   readonly label: string;
   readonly href: string;
@@ -145,7 +149,7 @@ export interface AiAssistantMessageRequest {
   readonly requestId: string;
   readonly userPrompt: string;
   readonly conversationId?: string | null;
-  readonly resourceType?: 'flow' | 'execution' | 'node' | null;
+  readonly resourceType?: 'flow' | 'execution' | 'node' | 'library' | null;
   readonly resourceId?: string | null;
   readonly resourceVersion?: number | null;
   readonly toolCalls?: readonly AiAssistantToolCall[];

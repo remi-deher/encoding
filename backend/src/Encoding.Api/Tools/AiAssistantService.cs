@@ -10,7 +10,10 @@ using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Nodes;
 using Encoding.Api.Mcp;
+using Encoding.Api.Libraries;
 using Encoding.Contracts.Executions;
+using Encoding.Contracts.Flows;
+using Encoding.Contracts.Libraries;
 using Encoding.Contracts.Nodes;
 using Encoding.Contracts.Tools;
 
@@ -23,10 +26,11 @@ public sealed class AiAssistantService(
     AiClusterTransport transport,
     FlowRepository flows,
     ExecutionRepository executions,
+    LibraryWorkflowRepository libraryWorkflows,
+    LibraryRepository libraries,
     NodeRepository nodes,
     NodePresenceOptions nodePresence,
     McpService mcp,
-    IConfiguration configuration,
     IDataProtectionProvider protection)
 {
     private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
@@ -50,8 +54,9 @@ public sealed class AiAssistantService(
     /// <summary>Expire les conversations terminées et l'activité, avec des tombstones répliqués au lieu d'effacer une seule projection locale.</summary>
     public async Task<int> PurgeExpiredAsync(CancellationToken ct)
     {
-        var conversationDays = RetentionDays("AiTools:AssistantConversationRetentionDays", 90);
-        var activityDays = RetentionDays("AiTools:AssistantActivityRetentionDays", 30);
+        var settings = await cluster.GetSettingsAsync(ct);
+        var conversationDays = Math.Clamp(settings.AssistantConversationRetentionDays, 1, 3650);
+        var activityDays = Math.Clamp(settings.AssistantActivityRetentionDays, 1, 3650);
         var now = DateTimeOffset.UtcNow;
         var removed = 0;
 
@@ -82,9 +87,6 @@ public sealed class AiAssistantService(
         return removed;
     }
 
-    private int RetentionDays(string key, int fallback) =>
-        int.TryParse(configuration[key], out var value) ? Math.Clamp(value, 1, 3650) : fallback;
-
     public async Task<AiAssistantPreparedAction?> PrepareDeleteFlowAsync(AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
     {
         EnsureAdmin(user);
@@ -94,8 +96,41 @@ public sealed class AiAssistantService(
         if (current is null) return null;
         if (current.Version != request.ExpectedVersion)
             throw new InvalidOperationException("Le flow a changé. Actualisez son état avant de préparer la suppression.");
-        return PrepareAction(user, "delete-flow", request.ResourceId, request.ExpectedVersion,
+        return PrepareAction(user, "delete-flow", request.ResourceId, request.ExpectedVersion, null,
             $"Supprimer le flow « {current.Name} », version {current.Version} ? Les flows assignés ou utilisés par une exécution active seront refusés.");
+    }
+
+    public async Task<AiAssistantPreparedAction?> PreparePublishFlowAsync(AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        EnsureAdmin(user);
+        if (request.ResourceId == Guid.Empty || request.ExpectedVersion < 0)
+            throw new ArgumentException("Flow ou version publiée invalide.");
+        var draft = await flows.DraftAsync(request.ResourceId, ct);
+        if (draft is null) return null;
+        if (draft.PublishedVersion != request.ExpectedVersion)
+            throw new InvalidOperationException("La version publiée du flow a changé. Actualisez le contexte.");
+        var hash = HashJson(new { draft.DraftRevision, draft.PublishedVersion, draft.Definition });
+        return PrepareAction(user, "publish-flow", request.ResourceId, request.ExpectedVersion, hash,
+            $"Publier le brouillon « {draft.Definition.Name} » (révision {draft.DraftRevision}) comme version {draft.PublishedVersion + 1} ?");
+    }
+
+    public async Task<AiAssistantPreparedAction?> PrepareStartLibraryAsync(AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        EnsureAdmin(user);
+        if (request.ResourceId == Guid.Empty || request.ExpectedVersion < 0)
+            throw new ArgumentException("Bibliothèque ou révision d’affectation invalide.");
+        var workflow = await libraryWorkflows.GetAsync(request.ResourceId, null, 10000, 0, ct);
+        var library = (await libraries.ListAsync(ct)).FirstOrDefault(item => item.Id == request.ResourceId);
+        if (library is null || workflow.Assignment is null || !library.IsActive) return null;
+        if (workflow.Revision != request.ExpectedVersion)
+            throw new InvalidOperationException("L’affectation de la bibliothèque a changé. Actualisez le contexte.");
+        if (workflow.TotalFiles > workflow.Files.Count)
+            throw new InvalidOperationException("La bibliothèque contient plus de 10 000 fichiers détectés. Réduisez la sélection avant de lancer le traitement.");
+        var ids = workflow.Files.Select(file => file.Id).Order().ToArray();
+        if (ids.Length == 0) throw new InvalidOperationException("Aucun fichier détecté ne peut être mis en file.");
+        var hash = HashJson(new { workflow.Revision, Assignment = workflow.Assignment, FileIds = ids });
+        return PrepareAction(user, "start-library", request.ResourceId, workflow.Revision, hash,
+            $"Mettre en file les {ids.Length} fichiers actuellement détectés dans « {library.Name} » avec le flow « {workflow.Assignment.Name} », version {workflow.Assignment.Version} ?");
     }
 
     public async Task<AiAssistantPreparedAction?> PrepareCancelExecutionAsync(AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
@@ -109,7 +144,7 @@ public sealed class AiAssistantService(
             throw new InvalidOperationException("L’exécution a changé. Actualisez son état avant de préparer l’annulation.");
         if (execution.State is not ("queued" or "running"))
             throw new InvalidOperationException("Cette exécution n’est plus annulable.");
-        return PrepareAction(user, "cancel-execution", request.ResourceId, request.ExpectedVersion,
+        return PrepareAction(user, "cancel-execution", request.ResourceId, request.ExpectedVersion, null,
             $"Demander l’annulation de « {execution.Media} » ? État : {execution.State}, révision {execution.Revision}.");
     }
 
@@ -119,7 +154,23 @@ public sealed class AiAssistantService(
         var action = ReadAction(request, user, "delete-flow");
         var (result, reason) = await flows.DeleteFlowAsync(action.ResourceId, ct, action.ExpectedVersion);
         if (result == FlowDeleteResult.Conflict) throw new InvalidOperationException(reason ?? "La suppression du flow est en conflit.");
+        if (result == FlowDeleteResult.Deleted) await RecordConfirmedActionAsync(action.ActionId, "flow-delete", user, ct);
         return result == FlowDeleteResult.Deleted;
+    }
+
+    public async Task<bool> ConfirmPublishFlowAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        EnsureAdmin(user);
+        var action = ReadAction(request, user, "publish-flow");
+        var draft = await flows.DraftAsync(action.ResourceId, ct);
+        if (draft is null || draft.PublishedVersion != action.ExpectedVersion
+            || HashJson(new { draft.DraftRevision, draft.PublishedVersion, draft.Definition }) != action.ParameterHash)
+            throw new InvalidOperationException("Le brouillon ou la version publiée a changé après la confirmation.");
+        var definition = draft.Definition with { Version = draft.PublishedVersion + 1 };
+        var saved = await flows.SaveAsync(new SaveFlowRequest(draft.PublishedVersion, definition, draft.DraftRevision), ct);
+        if (saved is null) throw new InvalidOperationException("Le flow a changé pendant la publication. Actualisez son état.");
+        await RecordConfirmedActionAsync(action.ActionId, "flow-publish", user, ct);
+        return true;
     }
 
     public async Task<bool> ConfirmCancelExecutionAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct)
@@ -130,17 +181,47 @@ public sealed class AiAssistantService(
         if (execution is null) return false;
         if (execution.Revision != action.ExpectedVersion)
             throw new InvalidOperationException("L’exécution a changé après la confirmation. Actualisez son état.");
-        return await executions.CancelAsync(action.ResourceId, ct, action.ExpectedVersion);
+        var cancelled = await executions.CancelAsync(action.ResourceId, ct, action.ExpectedVersion);
+        if (cancelled) await RecordConfirmedActionAsync(action.ActionId, "execution-cancel", user, ct);
+        return cancelled;
     }
 
-    private sealed record ProtectedAssistantAction(string OwnerId, string Action, Guid ResourceId, int ExpectedVersion, DateTimeOffset ExpiresAt);
+    public async Task<(int Queued, int Skipped)?> ConfirmStartLibraryAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        EnsureAdmin(user);
+        var action = ReadAction(request, user, "start-library");
+        var workflow = await libraryWorkflows.GetAsync(action.ResourceId, null, 10000, 0, ct);
+        var library = (await libraries.ListAsync(ct)).FirstOrDefault(item => item.Id == action.ResourceId);
+        if (library is null || !library.IsActive || workflow.Assignment is null || workflow.Revision != action.ExpectedVersion)
+            throw new InvalidOperationException("L’affectation ou l’état de la bibliothèque a changé après la confirmation.");
+        if (workflow.TotalFiles > workflow.Files.Count) throw new InvalidOperationException("La liste des fichiers dépasse la limite prise en charge.");
+        var ids = workflow.Files.Select(file => file.Id).Order().ToArray();
+        if (HashJson(new { workflow.Revision, Assignment = workflow.Assignment, FileIds = ids }) != action.ParameterHash)
+            throw new InvalidOperationException("La sélection des fichiers a changé après la confirmation.");
+        var result = await libraryWorkflows.EnqueueConfirmedAsync(action.ResourceId, ids, action.ExpectedVersion, action.ActionId, ct)
+            ?? throw new InvalidOperationException("Le flow, la révision ou la sélection n’est plus disponible.");
+        await RecordConfirmedActionAsync(action.ActionId, "library-start", user, ct);
+        return result;
+    }
 
-    private AiAssistantPreparedAction PrepareAction(ClaimsPrincipal user, string action, Guid resourceId, int expectedVersion, string summary)
+    private Task RecordConfirmedActionAsync(Guid actionId, string operation, ClaimsPrincipal user, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return RecordOperationActivityAsync(user, actionId, operation, "assistant", "succeeded", now, null, ct);
+    }
+
+    private sealed record ProtectedAssistantAction(string OwnerId, string Action, Guid ResourceId, int ExpectedVersion,
+        Guid ActionId, string? ParameterHash, DateTimeOffset ExpiresAt);
+
+    private AiAssistantPreparedAction PrepareAction(ClaimsPrincipal user, string action, Guid resourceId, int expectedVersion,
+        string? parameterHash, string summary)
     {
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var payload = new ProtectedAssistantAction(OwnerId(user), action, resourceId, expectedVersion, expiresAt);
+        var payload = new ProtectedAssistantAction(OwnerId(user), action, resourceId, expectedVersion, Guid.NewGuid(), parameterHash, expiresAt);
         return new(actionProtector.Protect(JsonSerializer.Serialize(payload)), summary, expiresAt);
     }
+
+    private static string HashJson<T>(T value) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
 
     private ProtectedAssistantAction ReadAction(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, string expectedAction)
     {
@@ -594,6 +675,15 @@ public sealed class AiAssistantService(
                 var label = string.IsNullOrWhiteSpace(node.DisplayName) ? node.Name : node.DisplayName;
                 var source = new AiAssistantSource("node", id, $"Nœud {label}", "/nodes");
                 return new(source, JsonSerializer.Serialize(node, ContextJsonOptions));
+            }
+            case "library":
+            {
+                var workflow = await libraryWorkflows.GetAsync(id, null, 100, 0, ct);
+                if (version is { } expectedRevision && workflow.Revision != expectedRevision) return null;
+                var library = (await libraries.ListAsync(ct)).FirstOrDefault(item => item.Id == id);
+                if (library is null) return null;
+                var source = new AiAssistantSource("library", id, $"Bibliothèque {library.Name} — révision {workflow.Revision}", "/libraries", workflow.Revision);
+                return new(source, JsonSerializer.Serialize(new { library, workflow }, ContextJsonOptions));
             }
             default:
                 throw new ArgumentException("Type de contexte IA non pris en charge.");

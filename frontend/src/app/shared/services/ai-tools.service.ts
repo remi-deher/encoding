@@ -75,6 +75,18 @@ export class AiToolsService {
     );
   }
 
+  prepareAssistantFlowPublish(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
+    return this.http.post<AiAssistantPreparedAction>(
+      '/api/v1/tools/ai/assistant/actions/publish-flow/prepare', request,
+    );
+  }
+
+  confirmAssistantFlowPublish(request: AiAssistantConfirmActionRequest): Observable<{ readonly published: boolean }> {
+    return this.http.post<{ readonly published: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/publish-flow/confirm', request,
+    );
+  }
+
   confirmAssistantFlowDeletion(request: AiAssistantConfirmActionRequest): Observable<{ readonly deleted: boolean }> {
     return this.http.post<{ readonly deleted: boolean }>(
       '/api/v1/tools/ai/assistant/actions/delete-flow/confirm', request,
@@ -84,6 +96,18 @@ export class AiToolsService {
   prepareAssistantExecutionCancellation(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
     return this.http.post<AiAssistantPreparedAction>(
       '/api/v1/tools/ai/assistant/actions/cancel-execution/prepare', request,
+    );
+  }
+
+  prepareAssistantLibraryStart(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
+    return this.http.post<AiAssistantPreparedAction>(
+      '/api/v1/tools/ai/assistant/actions/start-library/prepare', request,
+    );
+  }
+
+  confirmAssistantLibraryStart(request: AiAssistantConfirmActionRequest): Observable<{ readonly queued: number; readonly skipped: number }> {
+    return this.http.post<{ readonly queued: number; readonly skipped: number }>(
+      '/api/v1/tools/ai/assistant/actions/start-library/confirm', request,
     );
   }
 

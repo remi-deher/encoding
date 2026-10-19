@@ -147,7 +147,32 @@
               [(ngModel)]="subtitleBatchSize"
               [readonly]="!isAdmin()"
           /></mat-form-field>
+          <mat-form-field appearance="outline"
+            ><mat-label>Conservation des conversations (jours)</mat-label
+            ><input
+              matInput
+              name="assistantConversationRetentionDays"
+              type="number"
+              min="1"
+              max="3650"
+              required
+              [(ngModel)]="assistantConversationRetentionDays"
+              [readonly]="!isAdmin()"
+          /></mat-form-field>
+          <mat-form-field appearance="outline"
+            ><mat-label>Conservation de l’activité IA (jours)</mat-label
+            ><input
+              matInput
+              name="assistantActivityRetentionDays"
+              type="number"
+              min="1"
+              max="3650"
+              required
+              [(ngModel)]="assistantActivityRetentionDays"
+              [readonly]="!isAdmin()"
+          /></mat-form-field>
         </div>
+        <p class="muted">Les demandes en attente ne sont pas expirées. Les tombstones sont répliqués ; les anciens événements chiffrés restent dans le journal append-only.</p>
       </mat-expansion-panel>
       @if (isAdmin() && hasUnsavedChanges() && !editor.state()) {
         <footer class="save-bar">

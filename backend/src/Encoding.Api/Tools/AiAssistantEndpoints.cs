@@ -69,6 +69,22 @@ public static class AiAssistantEndpoints
                 : Results.NotFound());
         }).AllowAssistantConversation();
 
+        group.MapPost("/actions/publish-flow/prepare", async (AiAssistantPrepareActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.PreparePublishFlowAsync(request, http.User, ct) is { } prepared
+                ? Results.Ok(prepared)
+                : Results.NotFound());
+        }).AllowAssistantConversation();
+
+        group.MapPost("/actions/publish-flow/confirm", async (AiAssistantConfirmActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.ConfirmPublishFlowAsync(request, http.User, ct)
+                ? Results.Ok(new { published = true })
+                : Results.Conflict(new { title = "Le flow n’a pas pu être publié." }));
+        }).AllowAssistantConversation();
+
         group.MapPost("/actions/cancel-execution/prepare", async (AiAssistantPrepareActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
         {
             if (!http.User.IsInRole("admin")) return Results.Forbid();
@@ -83,6 +99,22 @@ public static class AiAssistantEndpoints
             return await GuardAsync(async () => await service.ConfirmCancelExecutionAsync(request, http.User, ct)
                 ? Results.Ok(new { cancellationRequested = true })
                 : Results.Conflict(new { title = "L’exécution n’est plus annulable." }));
+        }).AllowAssistantConversation();
+
+        group.MapPost("/actions/start-library/prepare", async (AiAssistantPrepareActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.PrepareStartLibraryAsync(request, http.User, ct) is { } prepared
+                ? Results.Ok(prepared)
+                : Results.NotFound());
+        }).AllowAssistantConversation();
+
+        group.MapPost("/actions/start-library/confirm", async (AiAssistantConfirmActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.ConfirmStartLibraryAsync(request, http.User, ct) is { } result
+                ? Results.Ok(new { queued = result.Queued, skipped = result.Skipped })
+                : Results.Conflict(new { title = "La bibliothèque ou son affectation n’est plus disponible." }));
         }).AllowAssistantConversation();
 
         group.MapPost("/activity/{requestId:guid}/proposal", async (Guid requestId, AiAssistantProposalDecision request, HttpContext http, AiAssistantService service, CancellationToken ct) =>

@@ -69,8 +69,18 @@
               <li>
                 <a [routerLink]="source.href">{{ source.label }}</a>
                 @if (isAdmin() && source.kind === 'flow' && source.version) {
+                  @if (hasDraftFor(source)) {
+                    <button matButton="text" type="button" [disabled]="actionBusy()" (click)="publishFlowFromAssistant(source)">
+                      Publier le brouillon…
+                    </button>
+                  }
                   <button matButton="text" type="button" [disabled]="actionBusy()" (click)="deleteFlowFromAssistant(source)">
                     Supprimer le flow…
+                  </button>
+                }
+                @if (isAdmin() && canStartLibrary(source)) {
+                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="startLibraryFromAssistant(source)">
+                    Lancer les traitements…
                   </button>
                 }
                 @if (isAdmin() && isCancelableExecution(source)) {
@@ -106,6 +116,7 @@
             <mat-option value="flow">Flow publié</mat-option>
             <mat-option value="execution">Exécution</mat-option>
             <mat-option value="node">Nœud</mat-option>
+            <mat-option value="library">Bibliothèque</mat-option>
           </mat-select>
         </mat-form-field>
         @if (!loadingSelectedResource() && resourceOptions().length > 0) {
@@ -177,6 +188,7 @@
             <mat-option value="flow">Flow publié</mat-option>
             <mat-option value="execution">Exécution</mat-option>
             <mat-option value="node">Nœud</mat-option>
+            <mat-option value="library">Bibliothèque</mat-option>
           </mat-select>
         </mat-form-field>
         @if (loadingSelectedResource()) {
@@ -193,6 +205,9 @@
               }
               @case ('node') {
                 <a matButton="text" routerLink="/nodes">Parcourir les nœuds</a>
+              }
+              @case ('library') {
+                <a matButton="text" routerLink="/libraries">Parcourir les bibliothèques</a>
               }
             }
           </div>

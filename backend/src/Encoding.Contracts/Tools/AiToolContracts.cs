@@ -66,7 +66,9 @@ public sealed record AiSettingsDto(
     string? AssistantProvider = null,
     string? FlowProvider = null,
     bool AssistantLocalOnly = false,
-    bool FlowLocalOnly = false);
+    bool FlowLocalOnly = false,
+    int AssistantConversationRetentionDays = 90,
+    int AssistantActivityRetentionDays = 30);
 
 /// <summary>Requête de mise à jour de la configuration de l'IA.</summary>
 public sealed record AiSettingsUpdateRequest(
@@ -81,4 +83,6 @@ public sealed record AiSettingsUpdateRequest(
     string? AssistantProvider = null,
     string? FlowProvider = null,
     bool? AssistantLocalOnly = null,
-    bool? FlowLocalOnly = null);
+    bool? FlowLocalOnly = null,
+    int? AssistantConversationRetentionDays = null,
+    int? AssistantActivityRetentionDays = null);

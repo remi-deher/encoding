@@ -22,7 +22,7 @@ import {
   AiAssistantToolCall,
 } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
-import { NodeResponse } from '../../shared/models/cluster';
+import { LibraryResponse, NodeResponse } from '../../shared/models/cluster';
 import { FlowSummary } from '../../shared/models/flow-validation';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
 import { ClusterApi } from '../../shared/services/cluster-api';
@@ -31,7 +31,7 @@ import { FlowValidation } from '../../shared/services/flow-validation';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { AuthService } from '../../core/auth/auth.service';
 
-type AssistantResourceType = 'flow' | 'execution' | 'node';
+type AssistantResourceType = 'flow' | 'execution' | 'node' | 'library';
 
 interface AssistantResourceOption {
   readonly id: string;
@@ -69,6 +69,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly flows = signal<readonly FlowSummary[]>([]);
   protected readonly executions = signal<readonly ExecutionResponse[]>([]);
   protected readonly nodes = signal<readonly NodeResponse[]>([]);
+  protected readonly libraries = signal<readonly LibraryResponse[]>([]);
   protected readonly conversations = signal<readonly AiAssistantConversation[]>([]);
   protected readonly detail = signal<AiAssistantConversationDetail | null>(null);
   protected readonly selectedResourceType = signal<AssistantResourceType>('flow');
@@ -77,6 +78,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly loadingFlows = signal(true);
   protected readonly loadingExecutions = signal(true);
   protected readonly loadingNodes = signal(true);
+  protected readonly loadingLibraries = signal(true);
   protected readonly loadingConversations = signal(true);
   protected readonly loadingDetail = signal(false);
   protected readonly sending = signal(false);
@@ -114,6 +116,11 @@ export class AiAssistantPageComponent implements OnDestroy {
           id: node.id,
           label: `${node.displayName || node.name} · ${node.lifecycle ?? node.status}`,
         }));
+      case 'library':
+        return this.libraries().filter((library) => library.isActive).map((library) => ({
+          id: library.id,
+          label: `${library.name}${library.flowName ? ` · ${library.flowName}` : ' · aucun flow attribué'}`,
+        }));
     }
   });
   protected readonly selectedResource = computed(
@@ -128,6 +135,8 @@ export class AiAssistantPageComponent implements OnDestroy {
         return this.loadingExecutions();
       case 'node':
         return this.loadingNodes();
+      case 'library':
+        return this.loadingLibraries();
     }
   });
   protected readonly resourceDisclosure = computed(() => {
@@ -138,6 +147,8 @@ export class AiAssistantPageComponent implements OnDestroy {
         return 'L’état, les événements, le pipeline et les journaux de commande disponibles seront transmis.';
       case 'node':
         return 'La présence, les rôles, les capacités déclarées et les informations matérielles du nœud seront transmises.';
+      case 'library':
+        return 'L’état de la bibliothèque, son affectation de flow et jusqu’à 10 000 fichiers détectés seront transmis.';
     }
   });
   protected readonly canSend = computed(
@@ -161,6 +172,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.loadFlows();
     this.loadExecutions();
     this.loadNodes();
+    this.loadLibraries();
     this.loadConversations();
     this.route.queryParamMap.subscribe((params) => {
       const id = params.get('conversation');
@@ -201,6 +213,49 @@ export class AiAssistantPageComponent implements OnDestroy {
         });
       },
       error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La suppression du flow a échoué. Actualisez son état puis réessayez.')); },
+    });
+  }
+
+  protected hasDraftFor(source: AiAssistantSource): boolean {
+    return source.kind === 'flow' && this.flows().some((flow) => flow.id === source.resourceId && flow.isDraft);
+  }
+
+  protected canStartLibrary(source: AiAssistantSource): boolean {
+    const library = source.kind === 'library'
+      ? this.libraries().find((item) => item.id === source.resourceId)
+      : null;
+    return library?.isActive === true && library.flowName != null && source.version != null;
+  }
+
+  protected publishFlowFromAssistant(source: AiAssistantSource): void {
+    if (!this.isAdmin() || source.kind !== 'flow' || source.version == null || this.actionBusy()) return;
+    this.actionBusy.set(true);
+    this.actionMessage.set(null);
+    this.aiTools.prepareAssistantFlowPublish({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
+      next: (prepared) => {
+        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
+        this.aiTools.confirmAssistantFlowPublish({ confirmationToken: prepared.confirmationToken }).subscribe({
+          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Brouillon publié pour ${source.label}.`); this.loadFlows(); },
+          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La publication a échoué ou le brouillon a changé. Actualisez le flow.')); },
+        });
+      },
+      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'Aucun brouillon publiable pour ce flow.')); },
+    });
+  }
+
+  protected startLibraryFromAssistant(source: AiAssistantSource): void {
+    if (!this.isAdmin() || source.kind !== 'library' || source.version == null || this.actionBusy()) return;
+    this.actionBusy.set(true);
+    this.actionMessage.set(null);
+    this.aiTools.prepareAssistantLibraryStart({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
+      next: (prepared) => {
+        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
+        this.aiTools.confirmAssistantLibraryStart({ confirmationToken: prepared.confirmationToken }).subscribe({
+          next: (result) => { this.actionBusy.set(false); this.actionMessage.set(`${result.queued} exécution(s) mise(s) en file, ${result.skipped} ignorée(s).`); this.loadExecutions(); },
+          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La bibliothèque ou sa sélection a changé. Actualisez le contexte.')); },
+        });
+      },
+      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'Aucun traitement ne peut être lancé pour cette bibliothèque.')); },
     });
   }
 
@@ -492,6 +547,13 @@ export class AiAssistantPageComponent implements OnDestroy {
         this.loadingNodes.set(false);
       },
       error: () => this.loadingNodes.set(false),
+    });
+  }
+
+  private loadLibraries(): void {
+    this.clusterApi.listLibraries().subscribe({
+      next: (libraries) => { this.libraries.set(libraries); this.loadingLibraries.set(false); },
+      error: () => this.loadingLibraries.set(false),
     });
   }
 

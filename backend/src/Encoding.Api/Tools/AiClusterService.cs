@@ -178,7 +178,9 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             AssistantProvider = shared.AssistantProvider,
             FlowProvider = shared.FlowProvider,
             AssistantLocalOnly = shared.AssistantLocalOnly,
-            FlowLocalOnly = shared.FlowLocalOnly
+            FlowLocalOnly = shared.FlowLocalOnly,
+            AssistantConversationRetentionDays = shared.AssistantConversationRetentionDays,
+            AssistantActivityRetentionDays = shared.AssistantActivityRetentionDays
         };
     }
     public async Task<AiSettingsDto> UpdateSettingsAsync(AiSettingsUpdateRequest update, CancellationToken ct)
