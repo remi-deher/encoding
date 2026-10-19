@@ -492,12 +492,15 @@ public sealed class AiAssistantService(
                 throw new ArgumentException("Le fournisseur ne peut pas changer dans une conversation.");
             var chosenModel = request.Model ?? savedConversation.Model;
             var chosenProvider = request.Provider ?? savedConversation.Provider;
-            var availableSelection = (await OptionsAsync(ct)).Models.Any(option =>
-                option.Provider == chosenProvider && option.Model == chosenModel
-                && option.NodeId == (request.NodeId ?? savedConversation.NodeId)
-                && (request.ReasoningEffort is null || option.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal)));
-            if (!availableSelection)
-                throw new ArgumentException("Le fournisseur, le modèle, le nœud ou l’effort choisi n’est pas disponible.");
+            if (chosenProvider == savedConversation.Provider)
+            {
+                var availableSelection = (await OptionsAsync(ct)).Models.Any(option =>
+                    option.Provider == chosenProvider && option.Model == chosenModel
+                    && option.NodeId == (request.NodeId ?? savedConversation.NodeId)
+                    && (request.ReasoningEffort is null || option.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal)));
+                if (!availableSelection)
+                    throw new ArgumentException("Le fournisseur, le modèle, le nœud ou l’effort choisi n’est pas disponible.");
+            }
             conversation = savedConversation with
             {
                 Provider = request.Provider ?? savedConversation.Provider,
