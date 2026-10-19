@@ -59,7 +59,7 @@ public static class AiToolEndpoints
             }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapPost("/generate", async (AiGenerateRequest request, AiClusterService service, CancellationToken ct) =>
-            await GuardAsync(async () => Results.Ok(await service.GenerateAsync(request.Provider, request.Prompt, ct))))
+            await GuardAsync(async () => Results.Ok(await service.GenerateAsync(request.Provider, request.Prompt, ct, allowModelChanges: request.AllowModelChanges))))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy).RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
         // Signed peer admission + AES-GCM payload are checked inside ReceiveAsync, independently of user sessions.
         app.MapPost(AiClusterTransport.Path, async (HttpContext http, AiClusterTransport transport, AiClusterService service, CancellationToken ct) =>
