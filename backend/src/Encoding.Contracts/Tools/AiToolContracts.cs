@@ -2,10 +2,14 @@ namespace Encoding.Contracts.Tools;
 
 /// <summary>Prompt information returned during OAuth 2.0 Device Authorization Grant (RFC 8628).</summary>
 public sealed record DeviceAuthPrompt(
-    string UserCode,
+    string? UserCode,
     string VerificationUri,
     int ExpiresInSeconds = 900,
-    int IntervalSeconds = 5);
+    int IntervalSeconds = 5,
+    bool RequiresInput = false);
+
+/// <summary>Single-line login input requested by a provider CLI, such as Claude's browser return code.</summary>
+public sealed record AiCliAuthInputRequest(string Input);
 
 /// <summary>Status of an AI tool authentication session on a node.</summary>
 public sealed record DeviceAuthStatus(

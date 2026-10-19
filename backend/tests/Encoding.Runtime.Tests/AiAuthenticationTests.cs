@@ -27,6 +27,19 @@ public sealed class AiAuthenticationTests
     }
 
     [Fact]
+    public async Task ProductionSandboxAllowsReadingSystemOpenSslConfiguration()
+    {
+        if (!OperatingSystem.IsLinux() || !Encoding.Core.Runtime.ProcessSandbox.IsAvailable) return;
+        var config = new[] { "/usr/lib/ssl/openssl.cnf", "/etc/ssl/openssl.cnf" }.FirstOrDefault(File.Exists);
+        if (config is null) return;
+        using var fixture = new AiCliTestProfile($"if [ -r '{config}' ]; then printf readable; else exit 1; fi");
+        var production = new AiCliRuntime(fixture.Configuration, new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider());
+        var result = await production.RunAsync("codex-cli", ["openssl-config-probe"], CancellationToken.None);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("readable", result.Output);
+    }
+
+    [Fact]
     public async Task CodexUsesProviderCodeAndRealProfileStatus()
     {
         if (OperatingSystem.IsWindows()) return;
@@ -51,6 +64,40 @@ public sealed class AiAuthenticationTests
         Assert.Equal("authorized", (await new DeviceCodeAuthService(fixture.Runtime).GetStatusAsync("codex-cli")).State);
         await service.RevokeAuthAsync("codex-cli", CancellationToken.None);
         Assert.Equal("unconfigured", (await service.GetStatusAsync("codex-cli")).State);
+    }
+
+    [Fact]
+    public async Task ClaudeLoginReturnsOfficialLinkAndAcceptsBrowserReturnCode()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var fixture = new AiCliTestProfile("""
+            if [ "$1 $2" = "auth login" ]; then
+              printf 'If the browser did not open, visit: https://claude.com/oauth/authorize?flow=example\nPaste code here if prompted >'
+              IFS= read -r code
+              if [ "$code" = "sample-return-code" ]; then touch "$CLAUDE_CONFIG_DIR/auth.valid"; exit 0; fi
+              exit 2
+            fi
+            if [ "$1 $2" = "auth status" ]; then
+              if test -f "$CLAUDE_CONFIG_DIR/auth.valid"; then printf '{"loggedIn":true}'; exit 0; fi
+              printf '{"loggedIn":false}'; exit 1
+            fi
+            exit 1
+            """);
+        var logger = new AiAuthenticationDiagnosticsTests.CaptureLogger();
+        using var service = new DeviceCodeAuthService(fixture.Runtime, logger);
+
+        var response = await service.StartDeviceAuthAsync("claude-cli", CancellationToken.None);
+
+        Assert.Null(response.Prompt.UserCode);
+        Assert.Equal("https://claude.com/oauth/authorize?flow=example", response.Prompt.VerificationUri);
+        Assert.True(response.Prompt.RequiresInput);
+        Assert.Equal("pending", (await service.GetStatusAsync("claude-cli")).State);
+        await service.SubmitAuthInputAsync("claude-cli", "sample-return-code", CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SubmitAuthInputAsync("claude-cli", "another-code", CancellationToken.None));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while ((await service.GetStatusAsync("claude-cli", deadline.Token)).State == "pending") await Task.Delay(20, deadline.Token);
+        Assert.Equal("authorized", (await service.GetStatusAsync("claude-cli")).State);
+        Assert.DoesNotContain("sample-return-code", string.Join("\n", logger.Messages));
     }
 
     [Fact]
@@ -174,7 +221,7 @@ public sealed class AiAuthenticationDiagnosticsTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class CaptureLogger : Microsoft.Extensions.Logging.ILogger<DeviceCodeAuthService>
+    internal sealed class CaptureLogger : Microsoft.Extensions.Logging.ILogger<DeviceCodeAuthService>
     {
         public readonly System.Collections.Concurrent.ConcurrentQueue<string> Messages = new();
         public readonly TaskCompletionSource FirstOutput = new(TaskCreationOptions.RunContinuationsAsynchronously);
