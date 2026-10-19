@@ -35,108 +35,71 @@ app-shell {
   background: var(--page-background);
 }
 
-.assistant-launcher {
+/* This control lives outside the scrolling Material container. Its positioning must
+   also win over Material's lazily loaded button positioning styles. */
+button.assistant-launcher {
   position: fixed;
-  left: max(20px, env(safe-area-inset-left));
-  bottom: max(20px, env(safe-area-inset-bottom));
-  right: auto;
+  right: max(var(--space-5), env(safe-area-inset-right));
+  bottom: max(var(--space-5), env(safe-area-inset-bottom));
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  padding: 0;
+  border-radius: var(--radius-pill);
   z-index: 40;
   touch-action: none;
   cursor: grab;
-  box-shadow: 0 14px 30px rgb(15 35 29 / 28%);
-  animation: assistant-launcher-float 3.8s ease-in-out infinite;
-  transition:
-    box-shadow 180ms var(--motion-spring-fast),
-    filter 180ms var(--motion-spring-fast);
-
-  &:hover {
-    box-shadow: 0 18px 36px rgb(15 35 29 / 34%);
-    filter: brightness(1.04);
+  box-shadow: var(--elevation-2);
+  &[hidden] {
+    display: none;
   }
-
   &:focus-visible {
     outline: 3px solid var(--accent-strong);
     outline-offset: 4px;
   }
-
   &.is-dragging {
     cursor: grabbing;
-    animation: none;
-    box-shadow: 0 20px 40px rgb(15 35 29 / 38%);
-    filter: brightness(1.06);
-    transition: none;
     user-select: none;
   }
 }
-
-@keyframes assistant-launcher-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
 .assistant-widget-panel {
   position: fixed;
-  top: 76px;
-  right: 12px;
-  bottom: 12px;
-  z-index: 30;
-  width: min(540px, calc(100vw - 24px));
-  overflow: auto;
-  resize: horizontal;
-  border: 1px solid var(--sidebar-border);
-  border-radius: var(--radius-2xl);
-  background: var(--page-background);
+  right: max(var(--space-4), env(safe-area-inset-right));
+  bottom: max(88px, calc(env(safe-area-inset-bottom) + 72px));
+  width: min(380px, calc(100vw - 32px));
+  height: min(520px, calc(100dvh - 112px));
+  z-index: 40;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--surface-container-lowest);
   box-shadow: var(--elevation-2);
   display: none;
+  &.is-open {
+    display: flex;
+    flex-direction: column;
+  }
+  > app-ai-assistant-page {
+    flex: 1;
+    min-height: 0;
+  }
 }
-
-.assistant-widget-panel.is-open {
-  display: block;
-}
-
 .assistant-widget-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: var(--space-2) var(--space-3);
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-1);
   background: var(--surface-container-low);
-  border-bottom: 1px solid var(--sidebar-border);
+  h2 {
+    flex: 1;
+    margin: 0;
+    font-size: var(--font-title-sm);
+  }
 }
-
-.assistant-widget-header h2 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--font-title-sm);
-}
-
 @media (max-width: 760px) {
-  .assistant-launcher {
-    left: max(12px, env(safe-area-inset-left));
-    bottom: max(12px, env(safe-area-inset-bottom));
-  }
-
-  .assistant-widget-panel {
-    inset: 0;
-    z-index: 100;
-    width: 100%;
-    resize: none;
-    border: 0;
-    border-radius: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .assistant-launcher {
-    animation: none;
-    transition: none;
+  button.assistant-launcher {
+    right: var(--space-4);
+    bottom: max(var(--space-4), env(safe-area-inset-bottom));
   }
 }
 
@@ -414,9 +377,9 @@ app-shell {
   max-width: 1680px;
   margin-inline: auto;
   padding: 10px clamp(16px, 2.5vw, 40px) 6px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 26%) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
   background: color-mix(in srgb, var(--page-background) 88%, transparent);
   backdrop-filter: blur(10px);
@@ -465,7 +428,18 @@ app-shell {
   font-weight: 700;
 }
 
+.topbar-search {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+
+  .topbar-search-pill {
+    width: 100%;
+  }
+}
+
 .topbar-end {
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -694,5 +668,37 @@ app-shell {
   .main-content {
     padding-inline: 12px;
     padding-block: 8px 24px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .shell-topbar {
+    grid-template-columns: minmax(0, 1fr) 42px auto;
+  }
+  .topbar-search .topbar-search-pill {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  .topbar-search .search-trigger-placeholder,
+  .topbar-search .search-shortcut {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .shell-topbar {
+    grid-template-columns: minmax(0, 1fr) 38px auto;
+    gap: 6px;
+    padding-inline: 12px;
+  }
+  .topbar-cluster-pill {
+    display: none;
+  }
+  .topbar-tasks-pill {
+    padding-inline: 8px;
+    white-space: nowrap;
+  }
+  .topbar-end {
+    gap: 4px;
   }
 }

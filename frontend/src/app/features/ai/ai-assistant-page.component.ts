@@ -1,5 +1,18 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
+import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatMenuModule } from '@angular/material/menu';
+import { AiConversationComposerComponent } from './components/ai-conversation-composer.component';
+import { aiEffortLabel, aiModelKey } from './components/ai-model-selection';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
+  afterNextRender,
+  afterRenderEffect,
+  DestroyRef,
+  ElementRef,
+  viewChild,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -20,8 +33,8 @@ import {
   AiAssistantConversationDetail,
   AiAssistantSource,
   AiAssistantToolCall,
-  AiAssistantModelOption,
   AiAssistantOptions,
+  AiTurnModelSelection,
 } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
 import { LibraryResponse, NodeResponse } from '../../shared/models/cluster';
@@ -30,7 +43,6 @@ import { AiToolsService } from '../../shared/services/ai-tools.service';
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { ExecutionTracking } from '../../shared/services/execution-tracking';
 import { FlowValidation } from '../../shared/services/flow-validation';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { AuthService } from '../../core/auth/auth.service';
 import { createUuid } from '../../shared/utils/uuid';
 
@@ -52,7 +64,10 @@ interface AssistantResourceOption {
     MatInputModule,
     MatProgressSpinnerModule,
     MatSelectModule,
-    PageHeaderComponent,
+    AiConversationComposerComponent,
+    MatSidenavModule,
+    MatChipsModule,
+    MatMenuModule,
     RouterLink,
   ],
   templateUrl: './ai-assistant-page.component.html',
@@ -67,6 +82,17 @@ export class AiAssistantPageComponent implements OnDestroy {
   private readonly executionTracking = inject(ExecutionTracking);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly compact = toSignal(
+    inject(BreakpointObserver)
+      .observe('(max-width: 760px)')
+      .pipe(map((state) => state.matches)),
+    { initialValue: false },
+  );
+  protected readonly historyOpen = signal(false);
+  protected readonly toolsOpen = signal(false);
+  private readonly followTail = signal(true);
+  private readonly messageThread = viewChild<ElementRef<HTMLElement>>('messageThread');
   protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly flows = signal<readonly FlowSummary[]>([]);
@@ -75,6 +101,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly libraries = signal<readonly LibraryResponse[]>([]);
   protected readonly conversations = signal<readonly AiAssistantConversation[]>([]);
   protected readonly detail = signal<AiAssistantConversationDetail | null>(null);
+  readonly conversationId = computed(() => this.detail()?.conversation.id ?? null);
   protected readonly assistantOptions = signal<AiAssistantOptions | null>(null);
   protected readonly selectedModelKey = signal('');
   protected readonly selectedReasoningEffort = signal<string | null>(null);
@@ -126,10 +153,12 @@ export class AiAssistantPageComponent implements OnDestroy {
           label: `${node.displayName || node.name} · ${node.lifecycle ?? node.status}`,
         }));
       case 'library':
-        return this.libraries().filter((library) => library.isActive).map((library) => ({
-          id: library.id,
-          label: `${library.name}${library.flowName ? ` · ${library.flowName}` : ' · aucun flow attribué'}`,
-        }));
+        return this.libraries()
+          .filter((library) => library.isActive)
+          .map((library) => ({
+            id: library.id,
+            label: `${library.name}${library.flowName ? ` · ${library.flowName}` : ' · aucun flow attribué'}`,
+          }));
     }
   });
   protected readonly selectedResource = computed(
@@ -139,13 +168,20 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly filteredResourceOptions = computed(() => {
     const search = this.contextSearch().trim().toLocaleLowerCase();
     return search
-      ? this.resourceOptions().filter((resource) => resource.label.toLocaleLowerCase().includes(search))
+      ? this.resourceOptions().filter((resource) =>
+          resource.label.toLocaleLowerCase().includes(search),
+        )
       : this.resourceOptions();
   });
-  protected readonly selectedModelOption = computed(() =>
-    this.assistantOptions()?.models.find((option) => this.modelOptionKey(option) === this.selectedModelKey()) ?? null,
+  protected readonly selectedModelOption = computed(
+    () =>
+      this.assistantOptions()?.models.find(
+        (option) => this.modelOptionKey(option) === this.selectedModelKey(),
+      ) ?? null,
   );
-  protected readonly reasoningEfforts = computed(() => this.selectedModelOption()?.reasoningEfforts ?? []);
+  protected readonly reasoningEfforts = computed(
+    () => this.selectedModelOption()?.reasoningEfforts ?? [],
+  );
   protected readonly loadingSelectedResource = computed(() => {
     switch (this.selectedResourceType()) {
       case 'flow':
@@ -175,12 +211,14 @@ export class AiAssistantPageComponent implements OnDestroy {
       !this.sending() &&
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
-      (Boolean(this.detail()) || (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
+      (this.hasPendingRequest() ||
+        (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
       (!this.hasPendingRequest() || this.prompt() === this.requestPrompt),
   );
 
   private requestPrompt = '';
   private requestId = '';
+  private requestSelection: AiTurnModelSelection | null = null;
   private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnDestroy(): void {
@@ -194,17 +232,45 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.loadLibraries();
     this.loadConversations();
     this.loadAssistantOptions();
-    this.route.queryParamMap.subscribe((params) => {
-      const id = params.get('conversation');
-      if (!id) {
-        if (this.detail()) this.detail.set(null);
-        return;
-      }
-      if (this.detail()?.conversation.id !== id) this.openConversation(id, false);
+    afterNextRender(() => {
+      if (this.panelMode()) return;
+      this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+        const id = params.get('conversation');
+        if (!id) {
+          if (this.detail()) this.detail.set(null);
+          return;
+        }
+        if (this.detail()?.conversation.id !== id) this.openConversation(id, false);
+      });
+    });
+    afterRenderEffect(() => {
+      this.detail();
+      this.pendingPrompt();
+      this.sending();
+      const thread = this.messageThread()?.nativeElement;
+      if (thread && this.followTail()) thread.scrollTop = thread.scrollHeight;
     });
   }
 
+  protected onThreadScroll(): void {
+    const thread = this.messageThread()?.nativeElement;
+    if (thread)
+      this.followTail.set(thread.scrollHeight - thread.clientHeight - thread.scrollTop < 80);
+  }
+
+  protected selectType(provider: string): void {
+    if (this.sending() || this.hasPendingRequest()) return;
+    const options =
+      this.assistantOptions()?.models.filter((option) => option.provider === provider) ?? [];
+    const selected = options.find((option) => option.isDefault) ?? options[0];
+    if (selected) this.selectModel(this.modelOptionKey(selected));
+  }
+
   protected startNewConversation(): void {
+    if (this.sending()) return;
+    this.selectedResourceId.set('');
+    this.historyOpen.set(false);
+    this.followTail.set(true);
     this.detail.set(null);
     this.errorMessage.set(null);
     this.prompt.set('');
@@ -213,10 +279,12 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.resumingRequest.set(false);
     this.requestPrompt = '';
     this.requestId = '';
+    this.requestSelection = null;
     this.selectedReasoningEffort.set(null);
     this.contextPickerOpen.set(false);
     this.contextSearch.set('');
     this.selectDefaultModel();
+    if (this.panelMode()) return;
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { conversation: null },
@@ -224,31 +292,12 @@ export class AiAssistantPageComponent implements OnDestroy {
     });
   }
 
-  protected modelOptionKey(option: Pick<AiAssistantModelOption, 'provider' | 'model'>): string {
-    return `${option.provider}\n${option.model ?? ''}`;
-  }
-
-  protected conversationModelLabel(conversation: AiAssistantConversation): string {
-    return this.assistantOptions()?.models.find(
-      (option) => option.provider === conversation.provider && option.model === conversation.model,
-    )?.label ?? `${conversation.provider}${conversation.model ? ` · ${conversation.model}` : ' · modèle par défaut'}`;
-  }
-
-  protected modelShortName(label: string): string {
-    return label.split(' · ').at(-1) ?? label;
-  }
-
-  protected modelProviderName(provider: string): string {
-    return ({ ollama: 'Ollama', openai: 'OpenAI / API compatible', 'codex-cli': 'Codex', 'claude-cli': 'Claude' } as Record<string, string>)[provider] ?? provider;
-  }
-
-  protected effortLabel(effort: string): string {
-    return ({ low: 'Faible', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé' } as Record<string, string>)[effort] ?? effort;
-  }
+  protected readonly modelOptionKey = aiModelKey;
+  protected readonly effortLabel = aiEffortLabel;
 
   protected selectModel(key: string): void {
     this.selectedModelKey.set(key);
-    this.selectedReasoningEffort.set(null);
+    this.selectedReasoningEffort.set(this.selectedModelOption()?.defaultReasoningEffort ?? null);
   }
 
   protected selectEffort(value: string | null): void {
@@ -262,13 +311,24 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   protected isSourceAttached(resource: AssistantResourceOption): boolean {
     const conversation = this.detail()?.conversation;
-    return conversation !== null && conversation !== undefined && this.conversationSources(conversation).some(
-      (source) => source.kind === this.selectedResourceType() && source.resourceId === resource.id,
+    return (
+      conversation !== null &&
+      conversation !== undefined &&
+      this.conversationSources(conversation).some(
+        (source) =>
+          source.kind === this.selectedResourceType() && source.resourceId === resource.id,
+      )
     );
   }
 
   protected addResourceToContext(resource: AssistantResourceOption): void {
-    if (this.isSourceAttached(resource) || this.updatingSources() || this.hasPendingRequest()) return;
+    if (
+      this.isSourceAttached(resource) ||
+      this.updatingSources() ||
+      this.hasPendingRequest() ||
+      this.sending()
+    )
+      return;
     const current = this.detail()?.conversation;
     if (!current) return;
     const sources = this.conversationSources(current);
@@ -295,62 +355,159 @@ export class AiAssistantPageComponent implements OnDestroy {
   }
 
   protected deleteFlowFromAssistant(source: AiAssistantSource): void {
-    if (!this.isAdmin() || source.kind !== 'flow' || source.version === null || source.version === undefined || this.actionBusy()) return;
+    if (
+      !this.isAdmin() ||
+      source.kind !== 'flow' ||
+      source.version === null ||
+      source.version === undefined ||
+      this.actionBusy()
+    )
+      return;
     this.actionBusy.set(true);
     this.actionMessage.set(null);
-    this.aiTools.prepareAssistantFlowDeletion({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
-      next: (prepared) => {
-        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
-        this.aiTools.confirmAssistantFlowDeletion({ confirmationToken: prepared.confirmationToken }).subscribe({
-          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Flow supprimé : ${source.label}.`); this.loadFlows(); },
-          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La suppression a échoué ou la version a changé. Actualisez le flow.')); },
-        });
-      },
-      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La suppression du flow a échoué. Actualisez son état puis réessayez.')); },
-    });
+    this.aiTools
+      .prepareAssistantFlowDeletion({
+        resourceId: source.resourceId,
+        expectedVersion: source.version,
+      })
+      .subscribe({
+        next: (prepared) => {
+          if (!window.confirm(prepared.summary)) {
+            this.actionBusy.set(false);
+            return;
+          }
+          this.aiTools
+            .confirmAssistantFlowDeletion({ confirmationToken: prepared.confirmationToken })
+            .subscribe({
+              next: () => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(`Flow supprimé : ${source.label}.`);
+                this.loadFlows();
+              },
+              error: (error: HttpErrorResponse) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  this.errorText(
+                    error,
+                    'La suppression a échoué ou la version a changé. Actualisez le flow.',
+                  ),
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          this.actionBusy.set(false);
+          this.actionMessage.set(
+            this.errorText(
+              error,
+              'La suppression du flow a échoué. Actualisez son état puis réessayez.',
+            ),
+          );
+        },
+      });
   }
 
   protected hasDraftFor(source: AiAssistantSource): boolean {
-    return source.kind === 'flow' && this.flows().some((flow) => flow.id === source.resourceId && flow.isDraft);
+    return (
+      source.kind === 'flow' &&
+      this.flows().some((flow) => flow.id === source.resourceId && flow.isDraft)
+    );
   }
 
   protected canStartLibrary(source: AiAssistantSource): boolean {
-    const library = source.kind === 'library'
-      ? this.libraries().find((item) => item.id === source.resourceId)
-      : null;
+    const library =
+      source.kind === 'library'
+        ? this.libraries().find((item) => item.id === source.resourceId)
+        : null;
     return library?.isActive === true && library.flowName != null && source.version != null;
   }
 
   protected publishFlowFromAssistant(source: AiAssistantSource): void {
-    if (!this.isAdmin() || source.kind !== 'flow' || source.version == null || this.actionBusy()) return;
+    if (!this.isAdmin() || source.kind !== 'flow' || source.version == null || this.actionBusy())
+      return;
     this.actionBusy.set(true);
     this.actionMessage.set(null);
-    this.aiTools.prepareAssistantFlowPublish({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
-      next: (prepared) => {
-        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
-        this.aiTools.confirmAssistantFlowPublish({ confirmationToken: prepared.confirmationToken }).subscribe({
-          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Brouillon publié pour ${source.label}.`); this.loadFlows(); },
-          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La publication a échoué ou le brouillon a changé. Actualisez le flow.')); },
-        });
-      },
-      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'Aucun brouillon publiable pour ce flow.')); },
-    });
+    this.aiTools
+      .prepareAssistantFlowPublish({
+        resourceId: source.resourceId,
+        expectedVersion: source.version,
+      })
+      .subscribe({
+        next: (prepared) => {
+          if (!window.confirm(prepared.summary)) {
+            this.actionBusy.set(false);
+            return;
+          }
+          this.aiTools
+            .confirmAssistantFlowPublish({ confirmationToken: prepared.confirmationToken })
+            .subscribe({
+              next: () => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(`Brouillon publié pour ${source.label}.`);
+                this.loadFlows();
+              },
+              error: (error: HttpErrorResponse) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  this.errorText(
+                    error,
+                    'La publication a échoué ou le brouillon a changé. Actualisez le flow.',
+                  ),
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          this.actionBusy.set(false);
+          this.actionMessage.set(this.errorText(error, 'Aucun brouillon publiable pour ce flow.'));
+        },
+      });
   }
 
   protected startLibraryFromAssistant(source: AiAssistantSource): void {
-    if (!this.isAdmin() || source.kind !== 'library' || source.version == null || this.actionBusy()) return;
+    if (!this.isAdmin() || source.kind !== 'library' || source.version == null || this.actionBusy())
+      return;
     this.actionBusy.set(true);
     this.actionMessage.set(null);
-    this.aiTools.prepareAssistantLibraryStart({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
-      next: (prepared) => {
-        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
-        this.aiTools.confirmAssistantLibraryStart({ confirmationToken: prepared.confirmationToken }).subscribe({
-          next: (result) => { this.actionBusy.set(false); this.actionMessage.set(`${result.queued} exécution(s) mise(s) en file, ${result.skipped} ignorée(s).`); this.loadExecutions(); },
-          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La bibliothèque ou sa sélection a changé. Actualisez le contexte.')); },
-        });
-      },
-      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'Aucun traitement ne peut être lancé pour cette bibliothèque.')); },
-    });
+    this.aiTools
+      .prepareAssistantLibraryStart({
+        resourceId: source.resourceId,
+        expectedVersion: source.version,
+      })
+      .subscribe({
+        next: (prepared) => {
+          if (!window.confirm(prepared.summary)) {
+            this.actionBusy.set(false);
+            return;
+          }
+          this.aiTools
+            .confirmAssistantLibraryStart({ confirmationToken: prepared.confirmationToken })
+            .subscribe({
+              next: (result) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  `${result.queued} exécution(s) mise(s) en file, ${result.skipped} ignorée(s).`,
+                );
+                this.loadExecutions();
+              },
+              error: (error: HttpErrorResponse) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  this.errorText(
+                    error,
+                    'La bibliothèque ou sa sélection a changé. Actualisez le contexte.',
+                  ),
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          this.actionBusy.set(false);
+          this.actionMessage.set(
+            this.errorText(error, 'Aucun traitement ne peut être lancé pour cette bibliothèque.'),
+          );
+        },
+      });
   }
 
   protected cancelExecutionFromAssistant(source: AiAssistantSource): void {
@@ -359,26 +516,61 @@ export class AiAssistantPageComponent implements OnDestroy {
     if (!execution || !['queued', 'running'].includes(execution.state)) return;
     this.actionBusy.set(true);
     this.actionMessage.set(null);
-    this.aiTools.prepareAssistantExecutionCancellation({ resourceId: execution.id, expectedVersion: execution.revision }).subscribe({
-      next: (prepared) => {
-        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
-        this.aiTools.confirmAssistantExecutionCancellation({ confirmationToken: prepared.confirmationToken }).subscribe({
-          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Annulation demandée pour ${execution.media}.`); this.loadExecutions(); },
-          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.')); },
-        });
-      },
-      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.')); },
-    });
+    this.aiTools
+      .prepareAssistantExecutionCancellation({
+        resourceId: execution.id,
+        expectedVersion: execution.revision,
+      })
+      .subscribe({
+        next: (prepared) => {
+          if (!window.confirm(prepared.summary)) {
+            this.actionBusy.set(false);
+            return;
+          }
+          this.aiTools
+            .confirmAssistantExecutionCancellation({
+              confirmationToken: prepared.confirmationToken,
+            })
+            .subscribe({
+              next: () => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(`Annulation demandée pour ${execution.media}.`);
+                this.loadExecutions();
+              },
+              error: (error: HttpErrorResponse) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  this.errorText(
+                    error,
+                    'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.',
+                  ),
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          this.actionBusy.set(false);
+          this.actionMessage.set(
+            this.errorText(
+              error,
+              'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.',
+            ),
+          );
+        },
+      });
   }
 
   protected isCancelableExecution(source: AiAssistantSource): boolean {
-    const execution = source.kind === 'execution'
-      ? this.executions().find((item) => item.id === source.resourceId)
-      : null;
+    const execution =
+      source.kind === 'execution'
+        ? this.executions().find((item) => item.id === source.resourceId)
+        : null;
     return execution != null && ['queued', 'running'].includes(execution.state);
   }
 
   protected openConversation(id: string, updateUrl = true): void {
+    this.historyOpen.set(false);
+    this.followTail.set(true);
     if (this.loadingDetail()) return;
     if (this.pendingPollTimer !== null) clearTimeout(this.pendingPollTimer);
     this.loadingDetail.set(true);
@@ -393,7 +585,9 @@ export class AiAssistantPageComponent implements OnDestroy {
         if (detail.conversation.source.kind !== 'tool')
           this.selectedResourceType.set(detail.conversation.source.kind);
         this.selectedResourceId.set('');
+        this.requestSelection = null;
         if (detail.pendingTurn) {
+          this.requestSelection = detail.conversation;
           this.prompt.set(detail.pendingTurn.userPrompt);
           this.requestPrompt = detail.pendingTurn.userPrompt;
           this.requestId = detail.pendingTurn.requestId;
@@ -411,6 +605,8 @@ export class AiAssistantPageComponent implements OnDestroy {
             );
           }
         } else {
+          this.requestPrompt = '';
+          this.requestId = '';
           this.pendingPrompt.set(null);
           this.hasPendingRequest.set(false);
           this.resumingRequest.set(false);
@@ -437,6 +633,17 @@ export class AiAssistantPageComponent implements OnDestroy {
     const activeConversation = this.detail()?.conversation ?? null;
     const selectedResource = this.selectedResource();
     const selectedModel = this.selectedModelOption();
+    this.requestSelection ??= selectedModel
+      ? {
+          provider: selectedModel.provider,
+          model: selectedModel.model,
+          reasoningEffort: this.selectedReasoningEffort(),
+          nodeId: selectedModel.nodeId,
+        }
+      : activeConversation;
+    this.followTail.set(true);
+    this.contextPickerOpen.set(false);
+    this.toolsOpen.set(false);
     this.sending.set(true);
     this.cancelling.set(false);
     this.pendingPrompt.set(message);
@@ -457,9 +664,10 @@ export class AiAssistantPageComponent implements OnDestroy {
               ...(name === 'get_flow' ? { flowId: selectedResource?.id ?? null } : {}),
             }) as AiAssistantToolCall,
         ),
-        provider: activeConversation ? activeConversation.provider : selectedModel?.provider,
-        model: activeConversation ? activeConversation.model : selectedModel?.model,
-        reasoningEffort: activeConversation ? activeConversation.reasoningEffort : this.selectedReasoningEffort(),
+        provider: this.requestSelection?.provider,
+        model: this.requestSelection?.model,
+        reasoningEffort: this.requestSelection?.reasoningEffort,
+        nodeId: this.requestSelection?.nodeId,
       })
       .subscribe({
         next: (response) => {
@@ -475,6 +683,9 @@ export class AiAssistantPageComponent implements OnDestroy {
                       userPrompt: message,
                       content: response.content,
                       sources: response.sources,
+                      selection: response.selection,
+                      actualModel: response.actualModel,
+                      executorNodeId: response.executorNodeId,
                     },
                   ]
               : oldTurns;
@@ -494,6 +705,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.prompt.set('');
             this.requestPrompt = '';
             this.requestId = '';
+            this.requestSelection = null;
             this.hasPendingRequest.set(false);
             this.resumingRequest.set(false);
             this.selectedReadTools.set([]);
@@ -511,7 +723,14 @@ export class AiAssistantPageComponent implements OnDestroy {
           this.errorMessage.set(
             this.errorText(error, 'Impossible d’envoyer le message. Réessayez.'),
           );
-          if (activeConversation) {
+          if (error.status === 400 || error.status === 404) {
+            this.hasPendingRequest.set(false);
+            this.resumingRequest.set(false);
+            this.requestId = '';
+            this.requestPrompt = '';
+            this.requestSelection = null;
+            this.loadAssistantOptions(true);
+          } else {
             this.pendingPrompt.set(message);
             this.hasPendingRequest.set(true);
             this.resumingRequest.set(true);
@@ -564,7 +783,7 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   protected removeConversationSource(source: AiAssistantSource): void {
     const current = this.detail()?.conversation;
-    if (!current || this.updatingSources() || this.hasPendingRequest()) return;
+    if (!current || this.updatingSources() || this.hasPendingRequest() || this.sending()) return;
     const sources = this.conversationSources(current);
     if (sources.length <= 1) return;
     this.updateConversationSources(sources.filter((candidate) => candidate !== source));
@@ -620,7 +839,10 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   private loadLibraries(): void {
     this.clusterApi.listLibraries().subscribe({
-      next: (libraries) => { this.libraries.set(libraries); this.loadingLibraries.set(false); },
+      next: (libraries) => {
+        this.libraries.set(libraries);
+        this.loadingLibraries.set(false);
+      },
       error: () => this.loadingLibraries.set(false),
     });
   }
@@ -636,8 +858,9 @@ export class AiAssistantPageComponent implements OnDestroy {
     });
   }
 
-  private loadAssistantOptions(): void {
-    this.aiTools.getAssistantOptions().subscribe({
+  protected loadAssistantOptions(refresh = false): void {
+    this.loadingAssistantOptions.set(true);
+    this.aiTools.getAssistantOptions(refresh).subscribe({
       next: (options) => {
         this.assistantOptions.set(options);
         this.loadingAssistantOptions.set(false);
@@ -650,13 +873,19 @@ export class AiAssistantPageComponent implements OnDestroy {
   private selectDefaultModel(): void {
     const options = this.assistantOptions();
     if (!options) return;
-    const selected = options.models.find(
-      (option) => option.provider === options.defaultProvider && option.model === options.defaultModel,
-    ) ?? options.models.find((option) => option.provider === options.defaultProvider) ?? options.models[0];
+    const selected =
+      options.models.find(
+        (option) =>
+          option.provider === options.defaultProvider && option.model === options.defaultModel,
+      ) ??
+      options.models.find((option) => option.provider === options.defaultProvider) ??
+      options.models[0];
     this.selectedModelKey.set(selected ? this.modelOptionKey(selected) : '');
+    this.selectedReasoningEffort.set(selected?.defaultReasoningEffort ?? null);
   }
 
   private setConversationUrl(id: string): void {
+    if (this.panelMode()) return;
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { conversation: id },
@@ -686,6 +915,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.prompt.set('');
             this.requestPrompt = '';
             this.requestId = '';
+            this.requestSelection = null;
             this.loadConversations();
             return;
           }

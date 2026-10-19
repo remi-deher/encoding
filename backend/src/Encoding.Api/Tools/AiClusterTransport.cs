@@ -70,7 +70,7 @@ public sealed class AiClusterTransport(ClusterPeerIdentityStore identity, Cluste
         http.Response.Headers[ClusterReconciliationSignature.SignatureHeader] = ClusterReconciliationSignature.Create(identity, timestamp, body);
         return Results.Bytes(body, "application/json");
     }
-    private static async Task<byte[]> ReadAsync(Stream stream, CancellationToken ct)
+    internal static async Task<byte[]> ReadAsync(Stream stream, CancellationToken ct)
     {
         using var output = new MemoryStream();
         var buffer = new byte[8192];

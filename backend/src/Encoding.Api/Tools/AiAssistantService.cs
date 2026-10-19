@@ -38,6 +38,7 @@ public sealed class AiAssistantService(
     {
         var settings = await cluster.GetSettingsAsync(ct);
         var view = await cluster.ViewAsync(ct);
+        var policy = await cluster.ModelPolicyAsync(ct);
         var providerNames = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["codex-cli"] = "Codex CLI",
@@ -46,28 +47,21 @@ public sealed class AiAssistantService(
             ["ollama"] = "Ollama",
         };
         var nodes = settings.AssistantLocalOnly ? view.Nodes.Take(1) : view.Nodes;
-        var options = nodes
-            .Where(node => node.Reachable)
-            .SelectMany(node => node.Providers.Select(provider =>
-            {
-                var model = node.Models?.GetValueOrDefault(provider);
-                if (provider == "codex-cli" && !settings.CodexEnabled || provider == "claude-cli" && !settings.ClaudeEnabled) return null;
-                if (provider == "ollama" && !settings.OllamaEnabled || provider == "openai" && !settings.OpenAiEnabled) return null;
-                if ((provider is "openai" or "ollama") && string.IsNullOrWhiteSpace(model)) return null;
-                if (!providerNames.TryGetValue(provider, out var providerName)) return null;
-                if (settings.AssistantLocalOnly && provider != "ollama") return null;
-                return new AiAssistantModelOption(
-                    provider,
-                    model,
-                    string.IsNullOrWhiteSpace(model) ? $"{providerName} · modèle par défaut" : $"{providerName} · {model}",
-                    ReasoningEfforts(provider, model));
-            }))
-            .OfType<AiAssistantModelOption>()
-            .DistinctBy(option => (option.Provider, option.Model))
-            .ToArray();
+        var catalogs = nodes.Where(n => n.Reachable).Select(n => new AiNodeModelCatalog(n.NodeId, n.Name, n.Catalogs ?? [])).ToArray();
+        var options = catalogs.SelectMany(node => node.Providers
+            .Where(c => c.State == "available"
+                && (!settings.AssistantLocalOnly || c.Provider == "ollama")
+                && (c.Provider != "codex-cli" || settings.CodexEnabled)
+                && (c.Provider != "claude-cli" || settings.ClaudeEnabled)
+                && (c.Provider != "ollama" || settings.OllamaEnabled)
+                && (c.Provider != "openai" || settings.OpenAiEnabled))
+            .SelectMany(c => c.Models.Where(m => !policy.DisabledModels.Any(d => d.Provider == c.Provider && d.Model == m.Id))
+                .Select(m => new AiAssistantModelOption(c.Provider, m.Id, m.Label, m.ReasoningEfforts,
+                    node.NodeId, node.Name, m.DefaultReasoningEffort, m.ReasoningKnown, m.IsDefault)))).ToArray();
         var defaultProvider = settings.AssistantProvider ?? settings.DefaultProvider;
-        var defaultModel = options.FirstOrDefault(option => option.Provider == defaultProvider)?.Model;
-        return new(defaultProvider, defaultModel, options);
+        var defaultModel = options.FirstOrDefault(option => option.Provider == defaultProvider && option.IsDefault)?.Model
+            ?? options.FirstOrDefault(option => option.Provider == defaultProvider)?.Model;
+        return new(defaultProvider, defaultModel, options, catalogs);
     }
 
     private static IReadOnlyList<string> ReasoningEfforts(string provider, string? model) => provider switch

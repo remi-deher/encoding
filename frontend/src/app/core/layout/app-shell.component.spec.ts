@@ -79,7 +79,7 @@ describe('AppShellComponent', () => {
     expect(mainContent).toBeTruthy();
 
     expect(host.textContent).toContain('2 / 2 en ligne');
-    expect(host.textContent).toContain('3 en cours');
+    expect(host.textContent).toContain('3 jobs en cours');
   });
 
   it('toggles navigation rail collapse state and persists it to localStorage', () => {

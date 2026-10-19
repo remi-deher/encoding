@@ -135,6 +135,7 @@ export interface AiAssistantConversation {
   readonly additionalSources?: readonly AiAssistantSource[] | null;
   readonly model?: string | null;
   readonly reasoningEffort?: string | null;
+  readonly nodeId?: string | null;
 }
 
 export interface AiAssistantModelOption {
@@ -142,19 +143,34 @@ export interface AiAssistantModelOption {
   readonly model?: string | null;
   readonly label: string;
   readonly reasoningEfforts: readonly string[];
+  readonly nodeId?: string | null;
+  readonly nodeName?: string | null;
+  readonly defaultReasoningEffort?: string | null;
+  readonly reasoningKnown?: boolean;
+  readonly isDefault?: boolean;
 }
 
 export interface AiAssistantOptions {
   readonly defaultProvider: string;
   readonly defaultModel?: string | null;
   readonly models: readonly AiAssistantModelOption[];
+  readonly catalogs?: readonly AiNodeModelCatalog[];
 }
 
+export interface AiTurnModelSelection {
+  readonly provider: string;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
+  readonly nodeId?: string | null;
+}
 export interface AiAssistantTurn {
   readonly requestId: string;
   readonly userPrompt: string;
   readonly content: string;
   readonly sources?: readonly AiAssistantSource[] | null;
+  readonly selection?: AiTurnModelSelection | null;
+  readonly actualModel?: string | null;
+  readonly executorNodeId?: string | null;
 }
 
 export interface AiAssistantConversationDetail {
@@ -180,6 +196,7 @@ export interface AiAssistantMessageRequest {
   readonly provider?: string | null;
   readonly model?: string | null;
   readonly reasoningEffort?: string | null;
+  readonly nodeId?: string | null;
 }
 
 export interface AiAssistantToolCall {
@@ -205,6 +222,9 @@ export interface AiAssistantMessageResponse {
   readonly content?: string | null;
   readonly errorMessage?: string | null;
   readonly sources: readonly AiAssistantSource[];
+  readonly selection?: AiTurnModelSelection | null;
+  readonly actualModel?: string | null;
+  readonly executorNodeId?: string | null;
 }
 
 export interface AiAssistantPrepareActionRequest {
@@ -309,4 +329,33 @@ export interface AiNodeQuotas {
 }
 export interface AiClusterQuotas {
   readonly nodes: readonly AiNodeQuotas[];
+}
+
+export interface AiDiscoveredModel {
+  readonly id: string;
+  readonly label: string;
+  readonly reasoningEfforts: readonly string[];
+  readonly defaultReasoningEffort?: string | null;
+  readonly isDefault: boolean;
+  readonly reasoningKnown: boolean;
+}
+export interface AiModelCatalog {
+  readonly provider: string;
+  readonly state: 'available' | 'unavailable' | 'stale';
+  readonly models: readonly AiDiscoveredModel[];
+  readonly observedAt: string | null;
+  readonly checkedAt: string;
+  readonly message?: string | null;
+}
+export interface AiNodeModelCatalog {
+  readonly nodeId: string;
+  readonly name: string;
+  readonly providers: readonly AiModelCatalog[];
+}
+export interface AiModelPolicy {
+  readonly disabledModels: readonly { readonly provider: string; readonly model: string }[];
+}
+export interface AiClusterModelCatalog {
+  readonly nodes: readonly AiNodeModelCatalog[];
+  readonly policy: AiModelPolicy;
 }

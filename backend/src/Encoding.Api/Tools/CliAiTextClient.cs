@@ -18,11 +18,9 @@ public sealed class CliAiTextClient(string toolId, AiCliRuntime runtime, int tim
             if (prompt.Model is { Length: > 0 }) args = [.. args[..^ (toolId == "codex-cli" ? 1 : 0)], "--model", prompt.Model, .. (toolId == "codex-cli" ? new[] { "-" } : Array.Empty<string>())];
             if (prompt.ReasoningEffort is { Length: > 0 } effort)
             {
-                var allowedEfforts = toolId == "claude-cli"
-                    ? new[] { "low", "medium", "high" }
-                    : new[] { "low", "medium", "high", "xhigh" };
-                if (!allowedEfforts.Contains(effort, StringComparer.Ordinal))
-                    return new(false, "", "L’effort de raisonnement choisi n’est pas pris en charge par cet outil.");
+                // Model-specific capabilities are validated against the local observed catalogue before execution.
+                if (effort.Length > 64 || effort.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-'))
+                    return new(false, "", "Niveau de raisonnement invalide.");
                 if (toolId == "claude-cli") args = [.. args, "--effort", effort];
                 else args = [.. args[..^1], "-c", $"model_reasoning_effort=\"{effort}\"", "-"];
             }

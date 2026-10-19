@@ -1,0 +1,479 @@
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test } from '@playwright/test';
+
+const nodeId = '00000000-0000-0000-0000-000000000002';
+const conversationId = '00000000000000000000000000000002.00000000000000000000000000000003';
+const source = { kind: 'node', resourceId: nodeId, label: 'Nœud Salon', href: '/nodes' };
+const conversation = {
+  id: conversationId,
+  provider: 'codex-cli',
+  model: 'server-model-a',
+  reasoningEffort: 'high',
+  nodeId,
+  title: 'Inspecter le nœud',
+  source,
+  createdAt: '2030-01-01T00:00:00Z',
+  updatedAt: '2030-01-01T00:00:00Z',
+};
+const models = [
+  {
+    provider: 'codex-cli',
+    model: 'server-model-a',
+    label: 'Modèle fourni A',
+    reasoningEfforts: ['low', 'high'],
+    defaultReasoningEffort: 'high',
+    reasoningKnown: true,
+    nodeId,
+    nodeName: 'Salon',
+  },
+  {
+    provider: 'claude-cli',
+    model: 'server-model-b',
+    label: 'Modèle fourni B',
+    reasoningEfforts: ['medium', 'max'],
+    defaultReasoningEffort: 'medium',
+    reasoningKnown: true,
+    nodeId,
+    nodeName: 'Salon',
+  },
+];
+
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/auth/status', (route) =>
+    route.fulfill({
+      json: { setupRequired: false, user: { id: nodeId, username: 'admin', role: 'admin' } },
+    }),
+  );
+  await page.route('**/health/details', (route) =>
+    route.fulfill({ json: { status: 'healthy', checks: [] } }),
+  );
+  await page.route('**/api/v1/executions*', (route) => route.fulfill({ json: { executions: [] } }));
+  await page.route('**/api/v1/tools/ai/assistant/options*', (route) =>
+    route.fulfill({
+      json: { defaultProvider: 'codex-cli', defaultModel: 'server-model-a', models },
+    }),
+  );
+  await page.route('**/api/v1/tools/ai/assistant/conversations', (route) =>
+    route.fulfill({ json: [conversation] }),
+  );
+  await page.route(`**/api/v1/tools/ai/assistant/conversations/${conversationId}`, (route) =>
+    route.fulfill({
+      json: {
+        conversation,
+        turns: [
+          {
+            requestId: 'old',
+            userPrompt: 'Question initiale',
+            content: 'Réponse initiale',
+            selection: {
+              provider: 'codex-cli',
+              model: 'server-model-a',
+              reasoningEffort: 'high',
+              nodeId,
+            },
+            actualModel: 'confirmed-model-a',
+          },
+        ],
+      },
+    }),
+  );
+});
+
+test('backend models and reasoning drive each turn while old turns retain observed models', async ({
+  page,
+}, testInfo) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  let release: (() => void) | undefined;
+  let received: Record<string, unknown> | undefined;
+  await page.route('**/api/v1/tools/ai/assistant/messages', async (route) => {
+    const request = route.request().postDataJSON();
+    received = request;
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await route.fulfill({
+      json: {
+        success: true,
+        conversation: {
+          ...conversation,
+          provider: request.provider,
+          model: request.model,
+          reasoningEffort: request.reasoningEffort,
+        },
+        requestId: request.requestId,
+        content: 'Nouvelle réponse',
+        sources: [source],
+        selection: {
+          provider: request.provider,
+          model: request.model,
+          reasoningEffort: request.reasoningEffort,
+          nodeId,
+        },
+        actualModel: 'confirmed-model-b',
+      },
+    });
+  });
+  await page.goto(`/ai/assistant?conversation=${conversationId}`);
+  const assistant = page.locator('app-ai-assistant-page').first();
+  const model = assistant.getByRole('combobox', { name: 'Modèle', exact: true });
+  await expect(model).toContainText('Modèle fourni A');
+  await assistant.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await expect(page.getByRole('option', { name: 'Ollama', exact: true })).toHaveCount(0);
+  await page.getByRole('option', { name: 'Claude', exact: true }).click();
+  await model.click();
+  await expect(page.getByRole('option', { name: /Modèle fourni A/ })).toHaveCount(0);
+  await page.getByRole('option', { name: /Modèle fourni B/ }).click();
+  const reasoning = assistant.getByRole('combobox', { name: 'Effort de raisonnement' });
+  await expect(reasoning).toContainText('Moyen');
+  await reasoning.click();
+  await expect(page.getByRole('option', { name: 'Faible', exact: true })).toHaveCount(0);
+  await page.getByRole('option', { name: 'Maximum', exact: true }).click();
+  await assistant.getByRole('textbox', { name: 'Votre question' }).fill('Analyser ce nœud');
+  await assistant.getByRole('button', { name: 'Envoyer', exact: true }).click();
+  await expect.poll(() => received).toBeTruthy();
+  expect(received).toMatchObject({
+    provider: 'claude-cli',
+    model: 'server-model-b',
+    reasoningEffort: 'max',
+    nodeId,
+  });
+  await expect(model).toBeDisabled();
+  await expect(assistant.getByRole('combobox', { name: 'Type', exact: true })).toBeDisabled();
+  await expect(reasoning).toBeDisabled();
+  release!();
+  await expect(assistant.getByText('Nouvelle réponse', { exact: true })).toBeVisible();
+  for (const details of await assistant.locator('details.response-details').all())
+    await details.locator('summary').click();
+  await expect(
+    assistant.getByText('Modèle utilisé : confirmed-model-a', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    assistant.getByText('Modèle utilisé : confirmed-model-b', { exact: true }),
+  ).toBeVisible();
+  await expect(model).toBeEnabled();
+  for (const details of await assistant.locator('details.response-details').all())
+    await details.locator('summary').click();
+  const result = await new AxeBuilder({ page })
+    .include('app-ai-assistant-page')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(
+    result.violations.map((violation) => ({
+      id: violation.id,
+      nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })),
+    })),
+  ).toEqual([]);
+  await model.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('assistant-models.png'), fullPage: true });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+  ).toBeTruthy();
+  expect(errors).toEqual([]);
+});
+
+test('unavailable catalog blocks a new turn and refresh preserves the selected conversation', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/tools/ai/assistant/options*', (route) =>
+    route.fulfill({
+      json: {
+        defaultProvider: 'codex-cli',
+        models: [],
+        catalogs: [
+          {
+            nodeId,
+            name: 'Salon',
+            providers: [
+              {
+                provider: 'codex-cli',
+                state: 'unavailable',
+                models: [],
+                observedAt: null,
+                checkedAt: '2030-01-01T00:00:00Z',
+                message: 'Catalogue indisponible',
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto(`/ai/assistant?conversation=${conversationId}`);
+  const assistant = page.locator('app-ai-assistant-page').first();
+  await assistant.getByRole('textbox', { name: 'Votre question' }).fill('Question');
+  await expect(assistant.getByRole('button', { name: 'Envoyer', exact: true })).toBeDisabled();
+  await expect(assistant.getByText(/Salon · codex-cli : Catalogue indisponible/)).toBeVisible();
+  await page.route('**/api/v1/tools/ai/assistant/options?refresh=true', (route) =>
+    route.fulfill({ json: { defaultProvider: 'codex-cli', models } }),
+  );
+  await assistant.getByRole('button', { name: 'Options de la conversation' }).click();
+  await page.getByRole('menuitem', { name: 'Actualiser les modèles' }).click();
+  await expect(assistant.getByRole('combobox', { name: 'Modèle', exact: true })).toContainText(
+    'Modèle fourni A',
+  );
+  await expect(assistant.getByRole('button', { name: 'Envoyer', exact: true })).toBeEnabled();
+});
+
+test('administrators disable discovered models through the backend policy', async ({ page }) => {
+  let disabled = false;
+  let saved: unknown;
+  await page.route('**/api/v1/tools/ai/settings', (route) =>
+    route.fulfill({
+      json: {
+        defaultProvider: 'codex-cli',
+        ollamaBaseUrl: '',
+        ollamaModel: '',
+        openAiBaseUrl: '',
+        openAiModel: '',
+        timeoutSeconds: 120,
+        subtitleBatchSize: 80,
+        assistantConversationRetentionDays: 90,
+        assistantActivityRetentionDays: 30,
+      },
+    }),
+  );
+  await page.route('**/api/v1/tools/ai/cluster', (route) => route.fulfill({ json: { nodes: [] } }));
+  await page.route('**/api/v1/tools/ai/quotas', (route) => route.fulfill({ json: { nodes: [] } }));
+  await page.route('**/api/v1/tools/ai/sessions?*', (route) =>
+    route.fulfill({ json: { items: [], offset: 0, hasMore: false } }),
+  );
+  await page.route('**/api/v1/tools/ai/models?*', (route) =>
+    route.fulfill({
+      json: {
+        nodes: [
+          {
+            nodeId,
+            name: 'Salon',
+            providers: [
+              {
+                provider: 'codex-cli',
+                state: 'available',
+                models: [
+                  {
+                    id: 'server-model-a',
+                    label: 'Modèle fourni A',
+                    reasoningEfforts: ['low', 'high'],
+                    reasoningKnown: true,
+                  },
+                ],
+                observedAt: '2030-01-01T00:00:00Z',
+                checkedAt: '2030-01-01T00:00:00Z',
+              },
+            ],
+          },
+        ],
+        policy: {
+          disabledModels: disabled ? [{ provider: 'codex-cli', model: 'server-model-a' }] : [],
+        },
+      },
+    }),
+  );
+  await page.route('**/api/v1/tools/ai/models/policy', async (route) => {
+    saved = route.request().postDataJSON();
+    disabled = !(saved as { enabled: boolean }).enabled;
+    await route.fulfill({
+      json: {
+        disabledModels: disabled ? [{ provider: 'codex-cli', model: 'server-model-a' }] : [],
+      },
+    });
+  });
+  await page.goto('/settings?tab=ai');
+  const panel = page.locator('app-ai-model-catalog');
+  const toggle = panel.getByRole('switch', { name: 'Modèle fourni A' });
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  expect(saved).toEqual({ provider: 'codex-cli', model: 'server-model-a', enabled: false });
+  await panel.getByRole('button', { name: 'Actualiser les modèles' }).click();
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  const result = await new AxeBuilder({ page })
+    .include('app-ai-model-catalog')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(
+    result.violations.map((violation) => ({
+      id: violation.id,
+      nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })),
+    })),
+  ).toEqual([]);
+});
+
+test('network retries keep the selected model and request id while validation errors unlock selection', async ({
+  page,
+}) => {
+  const requests: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/tools/ai/assistant/messages', async (route) => {
+    requests.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: requests.length === 1 ? 503 : 400,
+      json: { title: requests.length === 1 ? 'Résultat incertain' : 'Ce modèle est désactivé' },
+    });
+  });
+  await page.goto(`/ai/assistant?conversation=${conversationId}`);
+  const assistant = page.locator('app-ai-assistant-page').first();
+  const model = assistant.getByRole('combobox', { name: 'Modèle', exact: true });
+  await assistant.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await page.getByRole('option', { name: 'Claude', exact: true }).click();
+  await model.click();
+  await page.getByRole('option', { name: /Modèle fourni B/ }).click();
+  await assistant.getByRole('textbox', { name: 'Votre question' }).fill('Question à reprendre');
+  await assistant.getByRole('button', { name: 'Envoyer', exact: true }).click();
+  await expect(
+    assistant.getByRole('button', { name: 'Reprendre la demande', exact: true }),
+  ).toBeVisible();
+  await expect(model).toBeDisabled();
+  await assistant.getByRole('button', { name: 'Reprendre la demande', exact: true }).click();
+  await expect(model).toBeEnabled();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(requests[1]).toMatchObject({
+    provider: 'claude-cli',
+    model: 'server-model-b',
+    reasoningEffort: 'medium',
+    nodeId,
+  });
+  await expect(assistant.getByRole('textbox', { name: 'Votre question' })).toBeEnabled();
+});
+
+test('floating launcher follows scrolling and compact chat preserves conversation without changing the page', async ({
+  page,
+}, testInfo) => {
+  await page.route('**/api/v1/tools/ai/assistant/activity', (route) =>
+    route.fulfill({
+      json: Array.from({ length: 60 }, (_, index) => ({
+        requestId: `request-${index}`,
+        provider: 'codex-cli',
+        status: 'succeeded',
+        startedAt: '2030-01-01T00:00:00Z',
+        updatedAt: '2030-01-01T00:00:00Z',
+        durationMilliseconds: 300,
+        errorCategory: null,
+        conversationId: null,
+      })),
+    }),
+  );
+  await page.route('**/api/v1/nodes', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: nodeId,
+          name: 'Salon',
+          roles: ['worker'],
+          maxConcurrentTasks: 1,
+          capabilities: [],
+          status: 'online',
+          lastSeenAt: '2030-01-01T00:00:00Z',
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/v1/tools/ai/assistant/messages', (route) => {
+    const request = route.request().postDataJSON();
+    expect(request).toMatchObject({
+      resourceType: 'node',
+      resourceId: nodeId,
+      provider: 'claude-cli',
+      model: 'server-model-b',
+      reasoningEffort: 'medium',
+    });
+    return route.fulfill({
+      json: {
+        success: true,
+        conversation: {
+          ...conversation,
+          provider: request.provider,
+          model: request.model,
+          reasoningEffort: request.reasoningEffort,
+        },
+        requestId: request.requestId,
+        content: 'Réponse du widget',
+        sources: [source],
+        selection: {
+          provider: request.provider,
+          model: request.model,
+          reasoningEffort: request.reasoningEffort,
+          nodeId,
+        },
+      },
+    });
+  });
+  await page.goto('/ai/activity');
+  const launcher = page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true });
+  await expect(launcher).toBeVisible();
+  const before = (await launcher.boundingBox())!;
+  expect(before.width).toBeLessThanOrEqual(60);
+  const scroller = page.locator('mat-sidenav-content.page-transition-region');
+  await scroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(600);
+  const after = (await launcher.boundingBox())!;
+  expect(Math.abs(before.y - after.y)).toBeLessThan(1);
+  expect(after.y + after.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await launcher.click();
+  const widget = page.locator('#assistant-widget-panel');
+  await expect(widget).toBeVisible();
+  expect((await widget.boundingBox())!.height).toBeLessThanOrEqual(520);
+  await widget.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await page.getByRole('option', { name: 'Claude', exact: true }).click();
+  await widget.getByRole('button', { name: 'Joindre une ressource' }).click();
+  await widget.getByRole('combobox', { name: 'Type de ressource' }).click();
+  await page.getByRole('option', { name: 'Nœud', exact: true }).click();
+  await widget.getByRole('combobox', { name: 'Ressource', exact: true }).click();
+  await page.getByRole('option', { name: 'Salon · online', exact: true }).click();
+  await widget.getByRole('textbox', { name: 'Votre question' }).fill('Analyser ce nœud');
+  await widget.getByRole('textbox', { name: 'Votre question' }).press('Enter');
+  await expect(widget.getByText('Réponse du widget', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/ai\/activity$/);
+  await widget.getByRole('textbox', { name: 'Votre question' }).fill('Brouillon conservé');
+  await page.getByRole('button', { name: 'Fermer le panneau de l’assistant' }).click();
+  await expect(launcher).toBeFocused();
+  await launcher.click();
+  await expect(widget.getByRole('textbox', { name: 'Votre question' })).toHaveValue(
+    'Brouillon conservé',
+  );
+  await expect(widget.getByText('Réponse du widget', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('floating-chat.png'), fullPage: true });
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme,
+    );
+    const result = await new AxeBuilder({ page })
+      .include('#assistant-widget-panel')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(
+      result.violations.map((violation) => ({
+        id: violation.id,
+        nodes: violation.nodes.map((node) => ({
+          target: node.target,
+          summary: node.failureSummary,
+        })),
+      })),
+    ).toEqual([]);
+  }
+  await page.getByRole('button', { name: 'Fermer le panneau de l’assistant' }).click();
+  await launcher.focus();
+  await page.keyboard.press('Alt+ArrowUp');
+  expect((await launcher.boundingBox())!.y).toBeLessThan(after.y);
+  const moved = (await launcher.boundingBox())!;
+  await page.reload();
+  await expect(launcher).toBeVisible();
+  await expect
+    .poll(async () => Math.abs((await launcher.boundingBox())!.y - moved.y))
+    .toBeLessThan(1);
+  await page.setViewportSize({ width: 360, height: 640 });
+  await expect
+    .poll(async () => {
+      const rect = (await launcher.boundingBox())!;
+      return (
+        rect.x >= 0 && rect.x + rect.width <= 360 && rect.y >= 0 && rect.y + rect.height <= 640
+      );
+    })
+    .toBeTruthy();
+});
