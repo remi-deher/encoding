@@ -35,6 +35,7 @@ import { FlowTemplates } from '../../shared/services/flow-templates';
 import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import { FlowPreviewComponent } from '../../shared/ui/flow-preview/flow-preview';
 import { firstValueFrom } from 'rxjs';
+import { FileImportComponent } from '../../shared/ui/file-import.component';
 
 interface FlowRecord extends DataTableRow {
   readonly id: string;
@@ -64,15 +65,9 @@ interface FlowRecord extends DataTableRow {
     RecordFormComponent,
     DrawerActionButtonComponent,
     FlowPreviewComponent,
+    FileImportComponent,
   ],
   templateUrl: './flow-catalog-page.component.html',
-  styles: `
-    .import-file-btn {
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-    }
-  `,
 })
 export class FlowCatalogPageComponent {
   private readonly route = inject(ActivatedRoute);
@@ -205,23 +200,13 @@ export class FlowCatalogPageComponent {
   private readonly downloads = inject(FileDownload);
   private readonly notifications = inject(NotificationService);
   protected readonly listActions = [{ id: 'import', label: 'Importer', fileAccept: '.json,.zip' }];
-  protected async onImportFile(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
+  protected readonly importing = signal(false);
+  protected async onImportFile(file: File): Promise<void> {
+    this.importing.set(true);
     try {
-      const result = await this.api.import(file);
-      this.notifications.show(result.imported + ' flow(s) importé(s).');
-    } catch (error) {
-      this.notifications.show(
-        error instanceof HttpErrorResponse
-          ? (error.error?.title ??
-              error.error?.issues?.map((issue: { message: string }) => issue.message).join(' ') ??
-              'Import impossible.')
-          : 'Import impossible.',
-      );
+      await this.onListAction({ actionId: 'import', file });
     } finally {
-      input.value = '';
+      this.importing.set(false);
     }
   }
   protected readonly rowActions = [
@@ -384,38 +369,47 @@ export class FlowCatalogPageComponent {
   private readonly componentPacks = inject(FlowComponentPacks);
   private readonly catalog = toSignal(
     timer(0, 5000).pipe(
-      switchMap(() => this.api.list()),
-      map((flows): { state: 'ready' | 'error' | 'loading'; records: readonly FlowRecord[] } => ({
-        state: 'ready' as const,
-        records: flows.map((flow) => ({
-          id: flow.id,
-          name: flow.name,
-          category: flow.mediaType,
-          mediaType:
-            (MEDIA_TYPE_OPTIONS.find((type) => type.value === flow.mediaType)?.label ??
-              flow.mediaType) +
-            ' · ' +
-            flow.nodeCount +
-            (flow.nodeCount === 1 ? ' étape' : ' étapes'),
-          publishedVersion: flow.version,
-          version: 'v' + flow.version,
-          summary: flow.nodeCount + ' étapes',
-          components: flow.nodeCount + ' composants',
-          state: flow.isDraft ? 'Brouillon' : 'Publié',
-          status: (flow.isDraft ? 'Brouillon' : 'Publié') + ' · v' + flow.version,
-          backup:
-            flow.backupStatus === 'draft'
-              ? 'Brouillon en base'
-              : flow.backupStatus === 'ready'
-                ? 'Disponible'
-                : flow.backupStatus === 'failed'
-                  ? 'En échec'
-                  : 'En attente',
-          modifiedAt: new Date(flow.updatedAt).toLocaleString('fr-FR'),
-          modifiedOrder: Date.parse(flow.updatedAt),
-        })),
-      })),
-      catchError(() => of({ state: 'error' as const, records: [] as readonly FlowRecord[] })),
+      switchMap(() =>
+        this.api.list().pipe(
+          map((flows) => ({ state: 'ready' as const, flows })),
+          catchError(() => of({ state: 'error' as const, flows: [] })),
+        ),
+      ),
+      map(
+        ({
+          state,
+          flows,
+        }): { state: 'ready' | 'error' | 'loading'; records: readonly FlowRecord[] } => ({
+          state,
+          records: flows.map((flow) => ({
+            id: flow.id,
+            name: flow.name,
+            category: flow.mediaType,
+            mediaType:
+              (MEDIA_TYPE_OPTIONS.find((type) => type.value === flow.mediaType)?.label ??
+                flow.mediaType) +
+              ' · ' +
+              flow.nodeCount +
+              (flow.nodeCount === 1 ? ' étape' : ' étapes'),
+            publishedVersion: flow.version,
+            version: 'v' + flow.version,
+            summary: flow.nodeCount + ' étapes',
+            components: flow.nodeCount + ' composants',
+            state: flow.isDraft ? 'Brouillon' : 'Publié',
+            status: (flow.isDraft ? 'Brouillon' : 'Publié') + ' · v' + flow.version,
+            backup:
+              flow.backupStatus === 'draft'
+                ? 'Brouillon en base'
+                : flow.backupStatus === 'ready'
+                  ? 'Disponible'
+                  : flow.backupStatus === 'failed'
+                    ? 'En échec'
+                    : 'En attente',
+            modifiedAt: new Date(flow.updatedAt).toLocaleString('fr-FR'),
+            modifiedOrder: Date.parse(flow.updatedAt),
+          })),
+        }),
+      ),
     ),
     { initialValue: { state: 'loading' as const, records: [] as readonly FlowRecord[] } },
   );
