@@ -20,7 +20,7 @@ public sealed class FlowAiGeneratorService(
         var systemPrompt = promptBuilder.BuildSystemPrompt(request.MediaType);
         var userPrompt = $"Génère un flow complet pour le média '{request.MediaType}' répondant à cette demande :\n\"{request.UserPrompt}\"";
 
-        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId), ct);
+        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId, Scope: new("flow-create")), ct);
         FlowAiResponse Reply(FlowAiResponse response) => response with { SessionId = aiResult.SessionId, RequestId = aiResult.RequestId };
         if (!aiResult.Success)
         {
@@ -65,7 +65,7 @@ public sealed class FlowAiGeneratorService(
         var systemPrompt = promptBuilder.BuildSystemPrompt(request.CurrentFlow.MediaType);
         var userPrompt = $"Modifie ce flow existant selon l'instruction suivante : \"{request.UserPrompt}\".\n\nFlow actuel :\n{currentJson}";
 
-        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId), ct);
+        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId, Scope: new("flow-edit", FlowId: request.CurrentFlow.Id)), ct);
         FlowAiResponse Reply(FlowAiResponse response) => response with { SessionId = aiResult.SessionId, RequestId = aiResult.RequestId };
         if (!aiResult.Success)
         {
@@ -115,9 +115,12 @@ public sealed class FlowAiGeneratorService(
         var systemPrompt = "Tu es un assistant expert qui explique avec pédagogie et précision le fonctionnement d'un flow de traitement de fichiers multimédias dans Encoding.";
         var userPrompt = $"Explique étape par étape ce que fait ce flow (objectifs, conditions, transcodage, gestion des pistes) en français structuré :\n\n{currentJson}";
 
-        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId), ct);
+        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId, Scope: new("flow-explain", FlowId: request.Flow.Id)), ct);
         return new FlowAiResponse(aiResult.Success, request.Flow, aiResult.Success ? aiResult.Content : aiResult.ErrorMessage, SessionId: aiResult.SessionId, RequestId: aiResult.RequestId);
     }
+
+    private static Guid RepairRequestId(Guid originalId) => new(System.Security.Cryptography.SHA256.HashData(
+        System.Text.Encoding.UTF8.GetBytes("Encoding.FlowAi.Repair.v1/" + originalId)).AsSpan(0, 16));
 
     private (FlowDefinition? Definition, FlowValidationResult? Result) TryValidate(string json)
     {

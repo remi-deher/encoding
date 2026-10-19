@@ -3,6 +3,9 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
   AiClusterView,
+  AiClusterQuotas,
+  AiSessionPage,
+  AiSessionState,
   AiAssistantConversation,
   AiAssistantConversationDetail,
   AiAssistantActivity,
@@ -127,11 +130,23 @@ export class AiToolsService {
     );
   }
 
+  listSessions(offset = 0): Observable<AiSessionPage> {
+    return this.http.get<AiSessionPage>('/api/v1/tools/ai/sessions', { params: { offset } });
+  }
+
+  getSession(id: string): Observable<AiSessionState> {
+    return this.http.get<AiSessionState>(`/api/v1/tools/ai/sessions/${encodeURIComponent(id)}`);
+  }
+
   forkSession(id: string): Observable<{ readonly id: string }> {
     return this.http.post<{ readonly id: string }>(
       `/api/v1/tools/ai/sessions/${encodeURIComponent(id)}/fork`,
       {},
     );
+  }
+
+  getQuotas(): Observable<AiClusterQuotas> {
+    return this.http.get<AiClusterQuotas>('/api/v1/tools/ai/quotas');
   }
 
   getCluster(): Observable<AiClusterView> {

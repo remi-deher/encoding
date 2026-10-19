@@ -1,12 +1,13 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Encoding.Contracts.Tools;
+using Encoding.Api.Nodes;
 
 namespace Encoding.Api.Tools;
 
 /// <summary>A stable session coordinator owns writes; inference may move between connected peers without moving secrets.</summary>
 public sealed class AiClusterService(AiClusterTransport transport, AiClusterStore store, DeviceCodeAuthService auth,
-    AiSettingsService settings, AiClientFactory factory, IConfiguration configuration)
+    AiSettingsService settings, AiClientFactory factory, IConfiguration configuration, LocalNodeRegistry localNode, AiQuotaService? quotaService = null)
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> gates = new();
     private readonly ConcurrentDictionary<Guid, Lazy<Task<AiCompletionResult>>> running = new();
@@ -16,7 +17,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var local = settings.GetSettings();
         if (!string.IsNullOrWhiteSpace(local.OllamaBaseUrl) && !string.IsNullOrWhiteSpace(local.OllamaModel)) providers.Add("ollama");
         if (!string.IsNullOrWhiteSpace(local.OpenAiBaseUrl) && !string.IsNullOrWhiteSpace(local.OpenAiModel) && !string.IsNullOrWhiteSpace(local.OpenAiApiKey)) providers.Add("openai");
-        return new(transport.LocalId, configuration["Node:Name"] ?? Environment.MachineName, providers);
+        var displayName = await localNode.ResolveDisplayNameAsync(ct);
+        return new(transport.LocalId, displayName ?? configuration["Node:Name"] ?? Environment.MachineName, providers);
     }
     public async Task<AiClusterView> ViewAsync(CancellationToken ct)
     {
@@ -29,10 +31,29 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         nodes.AddRange(results.OfType<AiNodeAvailability>().Where(n => n.NodeId != transport.LocalId));
         return new(nodes.DistinctBy(n => n.NodeId).ToArray());
     }
+    public async Task<AiNodeQuotas> LocalQuotasAsync(CancellationToken ct)
+    {
+        var displayName = await localNode.ResolveDisplayNameAsync(ct) ?? configuration["Node:Name"] ?? Environment.MachineName;
+        if (quotaService is null) return new(transport.LocalId, displayName, []);
+        var quotas = await Task.WhenAll(new[] { "codex-cli", "claude-cli" }.Select(provider => quotaService.ReadAsync(provider, ct)));
+        return new(transport.LocalId, displayName, quotas);
+    }
+    public async Task<AiClusterQuotas> QuotasAsync(CancellationToken ct)
+    {
+        var local = LocalQuotasAsync(ct);
+        var peers = (await transport.PeersAsync(ct)).Select(async url =>
+        {
+            try { return await transport.CallAsync<AiNodeQuotas>(url, "quotas", new { }, TimeSpan.FromSeconds(20), ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested) { return null; }
+        }).ToArray();
+        var remote = await Task.WhenAll(peers);
+        return new(new[] { await local }.Concat(remote.OfType<AiNodeQuotas>()).DistinctBy(n => n.NodeId).ToArray());
+    }
     public async Task<object> DispatchAsync(string operation, JsonElement value, CancellationToken ct) => operation switch
     {
         "availability" => await LocalAsync(ct),
-        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct),
+        "quotas" => await LocalQuotasAsync(ct),
+        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct, localOnly: true),
         "execute" => await ExecuteAsync(value.Deserialize<AiExecuteRequest>()!, ct),
         _ => throw new ArgumentException("Opération IA inconnue.")
     };
@@ -40,6 +61,25 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     {
         _ = Owner(id);
         return await store.ReadAsync<AiSessionState>("session/" + id, ct);
+    }
+    public async Task<AiSessionPage> ListSessionsAsync(int offset, CancellationToken ct)
+    {
+        if (offset < 0) throw new ArgumentException("Pagination invalide.");
+        var sessions = await store.ListSessionsAsync<AiSessionState>(offset, 51, ct);
+        return new(sessions.Take(50).Select(session => new AiSessionSummary(
+            session.Id, session.Provider, session.Model ?? session.Turns.LastOrDefault()?.Usage?.Model,
+            session.PendingRequest is null ? "completed" : session.AttemptDeadline is { } deadline && deadline.AddSeconds(5) > DateTimeOffset.UtcNow ? "running" : "awaitingRetry",
+            session.Turns.Count, session.Attempt, session.UpdatedAt, session.AttemptDeadline, session.LastError,
+            SumUsage(session.Turns), session.Scope)).ToArray(), offset, sessions.Count > 50);
+    }
+    private static AiUsage? SumUsage(IReadOnlyList<AiSessionTurn> turns)
+    {
+        if (turns.Count == 0 || turns.All(t => t.Usage is null)) return null;
+        return new(
+            turns.All(t => t.Usage?.InputTokens is not null) ? turns.Sum(t => t.Usage!.InputTokens!.Value) : null,
+            turns.All(t => t.Usage?.OutputTokens is not null) ? turns.Sum(t => t.Usage!.OutputTokens!.Value) : null,
+            turns.All(t => t.Usage?.CachedInputTokens is not null) ? turns.Sum(t => t.Usage!.CachedInputTokens!.Value) : null,
+            turns.All(t => t.Usage?.EstimatedCostUsd is not null) ? turns.Sum(t => t.Usage!.EstimatedCostUsd!.Value) : null);
     }
     public async Task<AiCompletionResult> GenerateAsync(string? provider, AiPrompt prompt, CancellationToken ct, bool localOnly = false)
     {
@@ -52,6 +92,9 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var id = prompt.SessionId ?? $"{transport.LocalId:N}.{requestId:N}";
         if (requestId == Guid.Empty || string.IsNullOrWhiteSpace(prompt.UserPrompt) || prompt.UserPrompt.Length + prompt.SystemPrompt.Length > 120000)
             throw new ArgumentException("Demande IA invalide ou trop volumineuse.");
+        if (prompt.Scope is { } scope && (string.IsNullOrWhiteSpace(scope.Operation) || scope.Operation.Length > 80
+            || new[] { scope.LibraryId, scope.FlowId, scope.MediaId, scope.ExecutionId }.Any(value => value == Guid.Empty)))
+            throw new ArgumentException("Périmètre de session IA invalide.");
         var owner = Owner(id);
         if (owner != transport.LocalId)
         {
@@ -71,11 +114,11 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         if (!await gate.WaitAsync(0, ct)) return new(false, "", "Une demande est déjà en cours dans cette session.", SessionId: id, RequestId: requestId);
         try
         {
-            var session = await GetSessionAsync(id, ct) ?? new(id, provider, prompt.SystemPrompt, []);
-            if (session.Provider != provider || session.SystemPrompt != prompt.SystemPrompt) throw new ArgumentException("Le moteur et les consignes sont fixes pour une session. Ouvrez une nouvelle session.");
+            var session = await GetSessionAsync(id, ct) ?? new(id, provider, prompt.SystemPrompt, [], Model: prompt.Model, Scope: prompt.Scope);
+            if (session.Provider != provider || session.SystemPrompt != prompt.SystemPrompt || session.Model != prompt.Model || session.Scope != prompt.Scope) throw new ArgumentException("Le moteur, les consignes et le périmètre sont fixes pour une session. Ouvrez une nouvelle session.");
             var completed = session.Turns.FirstOrDefault(t => t.RequestId == requestId);
             if (completed is not null && completed.UserPrompt != prompt.UserPrompt) throw new ArgumentException("Identifiant de requête déjà utilisé pour une autre demande.");
-            if (completed is not null) return new(true, completed.Content, SessionId: id, RequestId: requestId);
+            if (completed is not null) return new(true, completed.Content, SessionId: id, RequestId: requestId, Usage: completed.Usage);
             if (session.PendingRequest is { } pending && pending != requestId)
                 return new(false, "", "Reprenez d’abord la demande interrompue avec son identifiant.", SessionId: id, RequestId: pending);
             if (session.PendingPrompt is { } saved && saved.UserPrompt != prompt.UserPrompt) throw new ArgumentException("L’identifiant de requête est déjà associé à un autre prompt.");
@@ -85,7 +128,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             var context = string.Join("\n\n", session.Turns.Select(t => "Utilisateur :\n" + t.UserPrompt + "\nAssistant :\n" + t.Content));
             var executionPrompt = prompt with { UserPrompt = context + "\n\nUtilisateur :\n" + prompt.UserPrompt, SessionId = null, RequestId = null };
             if (executionPrompt.UserPrompt.Length > 240000) return new(false, "", "Contexte maximal atteint. Ouvrez une nouvelle session.", SessionId: id, RequestId: requestId);
-            session = session with { PendingRequest = requestId, PendingPrompt = prompt with { SessionId = id, RequestId = requestId } };
+            session = session with { PendingRequest = requestId, PendingPrompt = prompt with { SessionId = id, RequestId = requestId }, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
             await store.SaveAsync("session/" + id, session, ct);
             var candidates = new List<(string? Url, AiNodeAvailability Node)> { (null, await LocalAsync(ct)) };
             foreach (var url in await transport.PeersAsync(ct))
@@ -113,7 +156,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
                 { ambiguous = true; result = new(false, "", "Le nœud d’exécution n’a pas confirmé de résultat."); }
                 if (result.Success)
                 {
-                    session = session with { Turns = [.. session.Turns, new(requestId, prompt.UserPrompt, result.Content)], PendingRequest = null, PendingPrompt = null, AttemptDeadline = null };
+                    session = session with { Turns = [.. session.Turns, new(requestId, prompt.UserPrompt, result.Content, result.Usage, DateTimeOffset.UtcNow)], PendingRequest = null, PendingPrompt = null, AttemptDeadline = null, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
                     await store.SaveAsync("session/" + id, session, ct);
                     return result with { SessionId = id, RequestId = requestId };
                 }
@@ -121,7 +164,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
                 var wait = deadline.AddSeconds(5) - DateTimeOffset.UtcNow;
                 if (ambiguous && wait > TimeSpan.Zero) await Task.Delay(wait, ct);
             }
-            await store.SaveAsync("session/" + id, session with { AttemptDeadline = null }, ct);
+            await store.SaveAsync("session/" + id, session with { AttemptDeadline = null, UpdatedAt = DateTimeOffset.UtcNow, LastError = result.ErrorMessage }, ct);
             return result with { SessionId = id, RequestId = requestId };
         }
         finally { gate.Release(); }
@@ -155,7 +198,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var saved = await GetSessionAsync(id, ct) ?? throw new ArgumentException("Checkpoint encore indisponible sur ce nœud. Réessayez après réconciliation.");
         if (saved.AttemptDeadline is { } deadline && deadline.AddSeconds(5) > DateTimeOffset.UtcNow)
             throw new InvalidOperationException("Attendez la fin du bail de la tentative précédente avant de créer une nouvelle session.");
-        var fork = saved with { Id = $"{transport.LocalId:N}.{Guid.NewGuid():N}", PendingRequest = null, PendingPrompt = null, AttemptDeadline = null, Attempt = 0 };
+        var fork = saved with { Id = $"{transport.LocalId:N}.{Guid.NewGuid():N}", PendingRequest = null, PendingPrompt = null, AttemptDeadline = null, Attempt = 0, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
         await store.SaveAsync("session/" + fork.Id, fork, ct);
         return fork;
     }

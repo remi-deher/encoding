@@ -9,7 +9,7 @@
     [disabled]="loadingTools()"
     (click)="refreshTools()"
   >
-    Actualiser les connexions
+    <mat-icon>refresh</mat-icon>Actualiser les connexions
   </button>
   @if (loadingSettings()) {
     <p role="status">Chargement des paramètres…</p>
@@ -20,7 +20,9 @@
   } @else {
     <form #settingsForm="ngForm" (ngSubmit)="saveSettings()">
       <div class="default-provider">
+        <span class="step-number" aria-hidden="true">01</span>
         <div>
+          <span class="eyebrow">À l’échelle du cluster</span>
           <h3>Moteur par défaut</h3>
           <p>Utilisé lorsqu’aucun fournisseur n’est précisé.</p>
         </div>
@@ -97,10 +99,20 @@
           définition du flow et les ressources jointes au fournisseur choisi.
         </p>
       </section>
-      <h3 class="list-heading">Connexions sur ce nœud</h3>
+      <div class="section-intro">
+        <span class="step-number" aria-hidden="true">02</span>
+        <div>
+          <span class="eyebrow">Sur ce nœud</span>
+          <h3 class="list-heading">Connexions sur ce nœud</h3>
+          <p>Choisissez un fournisseur pour configurer son accès ou associer votre compte.</p>
+        </div>
+      </div>
       <div class="provider-list">
         @for (provider of providers; track provider.id) {
           <div class="provider-row">
+            <mat-icon class="provider-icon" aria-hidden="true">{{
+              provider.id === 'ollama' ? 'dns' : provider.id === 'openai' ? 'api' : 'terminal'
+            }}</mat-icon>
             <div>
               <h3>{{ provider.name }}</h3>
               <p>{{ clusterLabel(provider.id) }}</p>
@@ -201,20 +213,30 @@
           Les nœuds répondants déclarent leurs connexions ; le quota et la disponibilité du modèle
           restent à vérifier.
         </p>
-        @for (node of view.nodes; track node.nodeId) {
-          <p>
-            <strong>{{ node.name }}</strong> ·
-            {{
-              node.providers.length ? providerNames(node.providers) : 'Aucun fournisseur configuré'
-            }}
-          </p>
-        }
+        <div class="node-list">
+          @for (node of view.nodes; track node.nodeId) {
+            <div class="node-row">
+              <mat-icon aria-hidden="true">dns</mat-icon><strong>{{ node.name }}</strong
+              ><span>{{
+                node.providers.length
+                  ? providerNames(node.providers)
+                  : 'Aucun fournisseur configuré'
+              }}</span>
+            </div>
+          } @empty {
+            <p>Aucune connexion déclarée par les nœuds répondants.</p>
+          }
+        </div>
       } @else {
         <p>Disponibilité du cluster indisponible.</p>
       }
     </mat-expansion-panel>
   }
 </app-configuration-section>
+@if (isAdmin()) {
+  <app-ai-quota-panel [refreshKey]="quotaRevision()" />
+  <app-ai-session-history />
+}
 <ng-template #providerEditor>
   <form #providerForm="ngForm" class="provider-editor" (ngSubmit)="saveSettings()">
     <p>
@@ -286,14 +308,17 @@
       }
       @default {
         @if (selectedTool(); as tool) {
-          <div class="connection-status">
+          <div
+            class="connection-status"
+            [class.is-authorized]="tool.authStatus.state === 'authorized'"
+          >
             <span class="badge">{{ authLabel(tool.authStatus.state) }}</span
             ><span>{{
               tool.isInstalled ? 'Outil installé sur ce nœud' : 'Outil non installé sur ce nœud'
             }}</span>
           </div>
           @if (tool.authStatus.errorMessage) {
-            <p role="status">{{ tool.authStatus.errorMessage }}</p>
+            <p class="connection-error" role="status">{{ tool.authStatus.errorMessage }}</p>
           }
           @if (!tool.isInstalled) {
             <p>Installez l’outil officiel sur ce nœud pour y ajouter une connexion.</p>

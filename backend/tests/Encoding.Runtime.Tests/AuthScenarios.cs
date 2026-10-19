@@ -158,7 +158,7 @@ internal static class AuthScenarios
         }
         Check(await anonymous.StatusAsync(get, "/health/live") == HttpStatusCode.OK, "Liveness stays public.");
         Check(await anonymous.StatusAsync(get, "/api/v1/cluster") == HttpStatusCode.OK, "Cluster identity stays public for worker discovery.");
-        foreach (var url in new[] { "/api/v1/libraries", "/api/v1/flows", "/api/v1/nodes", "/api/v1/executions", "/api/v1/plugins/base/configuration", "/api/v1/users", "/api/v1/nodes/enrollment-requests", "/api/v1/node/mode", "/api/v1/local-node/status" })
+        foreach (var url in new[] { "/api/v1/tools/ai/quotas", "/api/v1/tools/ai/sessions", "/api/v1/libraries", "/api/v1/flows", "/api/v1/nodes", "/api/v1/executions", "/api/v1/plugins/base/configuration", "/api/v1/users", "/api/v1/nodes/enrollment-requests", "/api/v1/node/mode", "/api/v1/local-node/status" })
             Check(await anonymous.StatusAsync(get, url) == HttpStatusCode.Unauthorized, "Anonymous reads of " + url + " are refused.");
         Check(await anonymous.StatusAsync(post, "/api/v1/libraries", new { name = "x" }) == HttpStatusCode.Unauthorized, "Anonymous writes are refused.");
 
@@ -184,6 +184,8 @@ internal static class AuthScenarios
         var concurrent = await Task.WhenAll(Enumerable.Range(0, 1).Select(_ => anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("racer", AdminPassword), csrf: false)));
         Check(concurrent.All(code => code == HttpStatusCode.Conflict), "A later setup attempt never creates a second administrator.");
 
+        Check(await admin.StatusAsync(get, "/api/v1/tools/ai/quotas") == HttpStatusCode.OK, "An administrator reads subscription quota observations.");
+        Check(await admin.StatusAsync(get, "/api/v1/tools/ai/sessions") == HttpStatusCode.OK, "An administrator reads AI session summaries.");
         // Administrateur : lecture, écriture avec protection CSRF.
         Check(await admin.StatusAsync(get, "/api/v1/libraries") == HttpStatusCode.OK, "An administrator reads.");
         Check(await admin.StatusAsync(put, "/api/v1/node/mode", new { server = true, worker = true }) == HttpStatusCode.Conflict, "Without a launcher, an administrator gets a clear refusal to change the node mode.");
@@ -198,6 +200,8 @@ internal static class AuthScenarios
         Check(await viewer.StatusAsync(get, "/api/v1/libraries") == HttpStatusCode.OK, "A viewer reads.");
         Check(await viewer.StatusAsync(post, "/api/v1/libraries", new { name = "interdit" }) == HttpStatusCode.Forbidden, "A viewer cannot create.");
         Check(await viewer.StatusAsync(delete, "/api/v1/libraries/" + Guid.NewGuid()) == HttpStatusCode.Forbidden, "A viewer cannot delete.");
+        Check(await viewer.StatusAsync(get, "/api/v1/tools/ai/quotas") == HttpStatusCode.Forbidden, "A viewer cannot read account subscription quotas.");
+        Check(await viewer.StatusAsync(get, "/api/v1/tools/ai/sessions") == HttpStatusCode.Forbidden, "A viewer cannot list private AI sessions.");
         Check(await viewer.StatusAsync(get, "/api/v1/users") == HttpStatusCode.Forbidden, "A viewer cannot list users.");
         Check(await viewer.StatusAsync(get, "/api/v1/node/mode") == HttpStatusCode.OK, "A viewer reads the node mode.");
         Check(await viewer.StatusAsync(put, "/api/v1/node/mode", new { server = false, worker = true }) == HttpStatusCode.Forbidden, "A viewer cannot change the node mode.");

@@ -51,6 +51,22 @@ public sealed class AiClusterStore(DbDataSource database, ClusterReconciliationR
     /// <summary>Réplique un tombstone. Les anciennes versions restent dans le journal append-only jusqu'à leur purge coordonnée.</summary>
     public Task DeleteAsync(string key, CancellationToken ct) =>
         journal.SetRegisterAsync("ai/" + key, "null", ct);
+    public async Task<IReadOnlyList<T>> ListSessionsAsync<T>(int offset, int limit, CancellationToken ct)
+    {
+        // Bounded pagination over the existing encrypted registers, ordered by their last observed update.
+        var rows = new List<(string Key, string Value)>();
+        await using (var command = database.CreateCommand("SELECT register_key, value FROM cluster_sync_registers WHERE register_key LIKE 'ai/session/%' ORDER BY occurred_at DESC, register_key LIMIT @limit OFFSET @offset"))
+        {
+            command.Parameters.AddWithValue("limit", limit);
+            command.Parameters.AddWithValue("offset", offset);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) rows.Add((reader.GetString(0)[3..], reader.GetString(1)));
+        }
+        var sessions = new List<T>();
+        foreach (var row in rows)
+            sessions.Add(await UnprotectAsync<T>(JsonSerializer.Deserialize<string>(row.Value)!, row.Key, ct));
+        return sessions;
+    }
     public async Task<T?> ReadAsync<T>(string key, CancellationToken ct)
     {
         await using var command = database.CreateCommand("SELECT value FROM cluster_sync_registers WHERE register_key=@key");
