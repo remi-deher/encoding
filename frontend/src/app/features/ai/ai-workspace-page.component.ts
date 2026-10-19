@@ -60,7 +60,9 @@ const PROVIDERS = [
                 <h2>Fournisseurs</h2>
                 <p>Configuration locale et état des identifiants connus.</p>
               </div>
-              <a matButton="text" routerLink="/settings">Paramètres IA</a>
+              <a matButton="text" [routerLink]="['/settings']" [queryParams]="{ tab: 'ai' }"
+                >Paramètres IA</a
+              >
             </div>
 
             @if (providersUnavailable()) {
