@@ -95,6 +95,7 @@ builder.Services.AddSingleton<IntegrationTriggerRepository>();
 builder.Services.AddSingleton<IntegrationTriggerService>();
 builder.Services.AddSingleton<AiCliRuntime>();
 builder.Services.AddSingleton<AiQuotaService>();
+builder.Services.AddSingleton<AiModelCatalogService>();
 builder.Services.AddSingleton<AiClusterStore>();
 builder.Services.AddSingleton<AiClusterTransport>();
 builder.Services.AddSingleton<AiClusterService>();

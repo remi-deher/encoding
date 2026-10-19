@@ -18,13 +18,14 @@ public sealed record AiAssistantConversation(
     DateTimeOffset UpdatedAt,
     IReadOnlyList<AiAssistantSource>? AdditionalSources = null,
     string? Model = null,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null, Guid? NodeId = null);
 
 public sealed record AiAssistantModelOption(string Provider, string? Model, string Label,
-    IReadOnlyList<string> ReasoningEfforts);
+    IReadOnlyList<string> ReasoningEfforts, Guid? NodeId = null, string? NodeName = null,
+    string? DefaultReasoningEffort = null, bool ReasoningKnown = false, bool IsDefault = false);
 
 public sealed record AiAssistantOptions(string DefaultProvider, string? DefaultModel,
-    IReadOnlyList<AiAssistantModelOption> Models);
+    IReadOnlyList<AiAssistantModelOption> Models, IReadOnlyList<AiNodeModelCatalog>? Catalogs = null);
 
 public sealed record AiAssistantResourceReference(string Type, Guid Id, int? Version = null);
 
@@ -48,7 +49,8 @@ public sealed record AiAssistantTurn(
     Guid RequestId,
     string UserPrompt,
     string Content,
-    IReadOnlyList<AiAssistantSource>? Sources = null);
+    IReadOnlyList<AiAssistantSource>? Sources = null, AiTurnModelSelection? Selection = null,
+    string? ActualModel = null, Guid? ExecutorNodeId = null);
 
 public sealed record AiAssistantConversationDetail(
     AiAssistantConversation Conversation,
@@ -67,7 +69,7 @@ public sealed record AiAssistantMessageRequest(
     IReadOnlyList<AiAssistantToolCall>? ToolCalls = null,
     string? Provider = null,
     string? Model = null,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null, Guid? NodeId = null);
 
 public sealed record AiAssistantMessageResponse(
     bool Success,
@@ -75,7 +77,8 @@ public sealed record AiAssistantMessageResponse(
     Guid RequestId,
     string? Content,
     string? ErrorMessage,
-    IReadOnlyList<AiAssistantSource> Sources);
+    IReadOnlyList<AiAssistantSource> Sources, AiTurnModelSelection? Selection = null,
+    string? ActualModel = null, Guid? ExecutorNodeId = null);
 
 public sealed record AiAssistantActivity(
     Guid RequestId,
@@ -88,3 +91,8 @@ public sealed record AiAssistantActivity(
     string? ErrorCategory,
     string Operation = "assistant",
     IReadOnlyList<string>? Tools = null);
+
+// Only exchanged over the authenticated, encrypted peer transport; never accepted from a public HTTP body.
+public sealed record AiAssistantForwardRequest(AiAssistantMessageRequest Request, Guid OwnerId, bool IsAdmin);
+public sealed record AiAssistantForwardResponse(AiAssistantMessageResponse? Result, string? Error = null, bool InvalidRequest = false);
+public sealed record AiAssistantForwardCancel(Guid OwnerId, Guid RequestId);

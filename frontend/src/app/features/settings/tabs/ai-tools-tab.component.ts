@@ -1,3 +1,4 @@
+import { AiModelCatalogComponent } from './ai-model-catalog.component';
 import { AiQuotaPanelComponent } from './ai-quota-panel.component';
 import { AiSessionHistoryComponent } from './ai-session-history.component';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -40,6 +41,7 @@ import { AuthService } from '../../../core/auth/auth.service';
   imports: [
     ConfigurationSectionComponent,
     AiQuotaPanelComponent,
+    AiModelCatalogComponent,
     AiSessionHistoryComponent,
     FormsModule,
     MatButtonModule,
@@ -96,14 +98,14 @@ export class AiToolsTabComponent implements OnInit {
   readonly loadingSettings = signal(true);
   readonly savingSettings = signal(false);
   readonly connecting = signal(false);
-  readonly selectedProvider = signal('ollama');
+  readonly selectedProvider = signal('codex-cli');
   readonly selectedName = computed(
     () => this.providers.find((p) => p.id === this.selectedProvider())?.name ?? 'Fournisseur',
   );
   readonly selectedTool = computed(() =>
     this.tools().find((t) => t.id === this.selectedProvider()),
   );
-  readonly defaultProvider = signal('ollama');
+  readonly defaultProvider = signal('codex-cli');
   readonly ollamaBaseUrl = signal('');
   readonly ollamaModel = signal('');
   readonly openAiBaseUrl = signal('');

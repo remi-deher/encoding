@@ -104,21 +104,6 @@
   min-width: min(14rem, 100%);
 }
 
-.model-summary {
-  display: grid;
-  gap: 3px;
-  color: var(--text-secondary);
-  font-size: var(--font-label);
-}
-
-.model-summary strong {
-  color: var(--text-primary);
-}
-
-.model-summary-label {
-  color: var(--text-muted);
-}
-
 .chat-heading {
   padding-bottom: var(--space-4);
 }

@@ -1,0 +1,234 @@
+<div class="prototype">
+  <span>MAQUETTE INTERACTIVE · Données de démonstration</span><app-theme-toggle />
+</div>
+<div class="shell">
+  <aside class="rail" aria-label="Application">
+    <strong class="brand">e<span>encoding</span></strong
+    ><span class="muted">ESPACE DE TRAVAIL</span>
+    <p>Vue d’ensemble</p>
+    <p>Bibliothèques</p>
+    <p>Flows</p>
+    <p>Exécutions</p>
+    <p>Nœuds</p>
+    <div class="rail-active">✦ Intelligence artificielle</div>
+    <div class="rail-bottom">
+      Cluster Maison<br /><app-status-badge label="Démonstration" tone="neutral" />
+    </div>
+  </aside>
+  <main>
+    <header class="page-heading">
+      <div>
+        <h1>Intelligence artificielle</h1>
+      </div>
+    </header>
+    <app-category-tabs
+      label="Espace IA"
+      [options]="tabs"
+      [selected]="tab()"
+      (selectedChange)="tab.set($event)"
+    />
+    @if (tab() === 'assistant') {
+      <div class="workspace">
+        <aside class="history">
+          <button matButton="filled" (click)="reset()">＋ Nouvelle conversation</button>
+          <h2>Conversations</h2>
+          <span class="muted">AUJOURD’HUI</span
+          ><button matButton="tonal" class="history-item" (click)="started.set(true)">
+            Optimiser mon flow HEVC
+          </button>
+          <p class="muted">Flow · HEVC + AAC/AC3 + ASS</p>
+        </aside>
+        <section class="chat" aria-label="Assistant">
+          <div class="chat-toolbar">
+            <strong>✦ Assistant Encoding</strong
+            ><app-status-badge label="Mode démonstration" tone="neutral" />
+          </div>
+          <div class="messages" aria-live="polite">
+            @if (!started()) {
+              <div class="welcome">
+                <div class="spark">✦</div>
+                <h2>Que souhaitez-vous<br />améliorer aujourd’hui ?</h2>
+              </div>
+            } @else {
+              <div class="bubble user">Comment optimiser mon flow HEVC sans perdre le HDR ?</div>
+              <article class="answer">
+                <span class="eyebrow">✦ ENCODING · EXEMPLE DE RÉPONSE</span>
+                <h2>Préserver la qualité, étape par étape.</h2>
+                <p>
+                  Le bloc de transcodage peut préserver les métadonnées HDR. Vérifiez le profil de
+                  qualité et les capacités de l’encodeur choisi avant de lancer le traitement.
+                </p>
+                <div class="recommendation">
+                  <strong>Point de départ</strong>
+                  <p>
+                    Inspecter le bloc Transcodage vidéo et comparer les métadonnées source et sortie
+                    sur un fichier de test.
+                  </p>
+                </div>
+                <p class="muted">Source illustrative : flow HEVC + AAC/AC3 + ASS · v3</p>
+              </article>
+            }
+            @for (message of messages(); track $index) {
+              <div class="bubble user">{{ message }}</div>
+              <p class="demo-response">
+                Message simulé. Aucune requête n’est envoyée à un fournisseur IA.
+              </p>
+            }
+          </div>
+          <form class="composer" (ngSubmit)="send()">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"
+              ><mat-label>Votre message à l’assistant</mat-label
+              ><textarea
+                matInput
+                name="message"
+                rows="3"
+                [ngModel]="prompt()"
+                (ngModelChange)="prompt.set($event)"
+              ></textarea>
+            </mat-form-field>
+            <button
+              matButton="text"
+              type="button"
+              [attr.aria-expanded]="resourcePickerOpen()"
+              aria-controls="resource-picker"
+              (click)="resourcePickerOpen.set(!resourcePickerOpen())"
+            >
+              ＋ Joindre une ressource
+            </button>
+            @if (resourcePickerOpen()) {
+              <section
+                id="resource-picker"
+                class="resource-picker"
+                aria-label="Joindre une ressource"
+              >
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Ressource</mat-label>
+                  <mat-select
+                    name="resource"
+                    [ngModel]="selectedResource()"
+                    (ngModelChange)="selectedResource.set($event)"
+                  >
+                    @for (group of resourceGroups; track group.label) {
+                      <mat-optgroup [label]="group.label">
+                        @for (resource of group.resources; track resource.id) {
+                          <mat-option
+                            [value]="resource.id"
+                            [disabled]="attachedResources().includes(resource.id)"
+                            >{{ resource.label }}</mat-option
+                          >
+                        }
+                      </mat-optgroup>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <button
+                  matButton="tonal"
+                  type="button"
+                  [disabled]="!selectedResource()"
+                  (click)="attachResource()"
+                >
+                  Joindre
+                </button>
+              </section>
+            }
+            <div class="compose-actions">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic"
+                ><mat-label>Modèle de la conversation</mat-label
+                ><mat-select [ngModel]="model()" (ngModelChange)="model.set($event)" name="model">
+                  @for (group of modelGroups; track group.provider) {
+                    <mat-optgroup [label]="group.provider">
+                      @for (option of group.models; track option.id) {
+                        @if (!disabledModels().includes(option.id)) {
+                          <mat-option [value]="option.id">{{ option.label }}</mat-option>
+                        }
+                      }
+                    </mat-optgroup>
+                  }
+                </mat-select></mat-form-field
+              ><button matButton="filled" type="submit" [disabled]="!prompt().trim() || !model()">
+                Envoyer ↑
+              </button>
+            </div>
+          </form>
+        </section>
+        <aside class="context">
+          <h2>Contexte</h2>
+          <mat-chip-set aria-label="Ressources attachées">
+            @for (id of attachedResources(); track id) {
+              <mat-chip (removed)="removeResource(id)"
+                >{{ resourceLabel(id)
+                }}<button matChipRemove [attr.aria-label]="'Retirer ' + resourceLabel(id)">
+                  ×
+                </button></mat-chip
+              >
+            }
+          </mat-chip-set>
+          @if (!attachedResources().length) {
+            <p>Aucune ressource jointe</p>
+          }
+        </aside>
+      </div>
+    }
+    @if (tab() === 'providers') {
+      <section class="secondary">
+        <div class="eyebrow">CONNEXIONS DU CLUSTER</div>
+        <h2>Vos fournisseurs IA</h2>
+        <p>Une vue commune des connexions ; les identifiants restent sur leur nœud.</p>
+        <div class="provider-grid">
+          @for (provider of providers; track provider) {
+            <article>
+              <app-status-badge label="Exemple · connecté" tone="success" />
+              <h2>{{ provider }}</h2>
+              <p>Nœud Maison · Configuration illustrative</p>
+              <button
+                matButton="tonal"
+                (click)="
+                  notice.show(
+                    'Maquette : la configuration utilisera le parcours existant des paramètres IA.'
+                  )
+                "
+              >
+                Configurer
+              </button>
+            </article>
+          }
+        </div>
+        <h2>Modèles disponibles</h2>
+        <div class="model-settings">
+          @for (group of modelGroups; track group.provider) {
+            <section>
+              <h3>{{ group.provider }}</h3>
+              @for (option of group.models; track option.id) {
+                <mat-slide-toggle
+                  [checked]="!disabledModels().includes(option.id)"
+                  (change)="toggleModel(option.id, $event.checked)"
+                  >{{ option.label }}</mat-slide-toggle
+                >
+              }
+            </section>
+          }
+        </div>
+        <p>Ollama · Non configuré</p>
+        <p class="muted">Quotas : indisponibles dans la démonstration. Aucun pourcentage estimé.</p>
+      </section>
+    }
+    @if (tab() === 'activity') {
+      <section class="secondary">
+        <div class="eyebrow">SUIVI DES DEMANDES</div>
+        <h2>Activité récente</h2>
+        <article class="activity">
+          <div>
+            <strong>Explication du flow HEVC</strong>
+            <p>Codex CLI · Exemple de demande terminée</p>
+          </div>
+          <app-status-badge label="Réussie · exemple" tone="success" /><button
+            matButton="tonal"
+            (click)="tab.set('assistant'); started.set(true)"
+          >
+            Ouvrir la conversation
+          </button>
+        </article>
+      </section>
+    }
+  </main>
+</div>

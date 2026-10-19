@@ -22,6 +22,7 @@ import {
   AiAssistantToolCall,
   AiAssistantModelOption,
   AiAssistantOptions,
+  AiTurnModelSelection,
 } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
 import { LibraryResponse, NodeResponse } from '../../shared/models/cluster';
@@ -126,10 +127,12 @@ export class AiAssistantPageComponent implements OnDestroy {
           label: `${node.displayName || node.name} · ${node.lifecycle ?? node.status}`,
         }));
       case 'library':
-        return this.libraries().filter((library) => library.isActive).map((library) => ({
-          id: library.id,
-          label: `${library.name}${library.flowName ? ` · ${library.flowName}` : ' · aucun flow attribué'}`,
-        }));
+        return this.libraries()
+          .filter((library) => library.isActive)
+          .map((library) => ({
+            id: library.id,
+            label: `${library.name}${library.flowName ? ` · ${library.flowName}` : ' · aucun flow attribué'}`,
+          }));
     }
   });
   protected readonly selectedResource = computed(
@@ -139,13 +142,20 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly filteredResourceOptions = computed(() => {
     const search = this.contextSearch().trim().toLocaleLowerCase();
     return search
-      ? this.resourceOptions().filter((resource) => resource.label.toLocaleLowerCase().includes(search))
+      ? this.resourceOptions().filter((resource) =>
+          resource.label.toLocaleLowerCase().includes(search),
+        )
       : this.resourceOptions();
   });
-  protected readonly selectedModelOption = computed(() =>
-    this.assistantOptions()?.models.find((option) => this.modelOptionKey(option) === this.selectedModelKey()) ?? null,
+  protected readonly selectedModelOption = computed(
+    () =>
+      this.assistantOptions()?.models.find(
+        (option) => this.modelOptionKey(option) === this.selectedModelKey(),
+      ) ?? null,
   );
-  protected readonly reasoningEfforts = computed(() => this.selectedModelOption()?.reasoningEfforts ?? []);
+  protected readonly reasoningEfforts = computed(
+    () => this.selectedModelOption()?.reasoningEfforts ?? [],
+  );
   protected readonly loadingSelectedResource = computed(() => {
     switch (this.selectedResourceType()) {
       case 'flow':
@@ -176,12 +186,14 @@ export class AiAssistantPageComponent implements OnDestroy {
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
       (Boolean(this.detail()) || Boolean(this.selectedResource())) &&
-      (Boolean(this.detail()) || (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
+      (this.hasPendingRequest() ||
+        (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
       (!this.hasPendingRequest() || this.prompt() === this.requestPrompt),
   );
 
   private requestPrompt = '';
   private requestId = '';
+  private requestSelection: AiTurnModelSelection | null = null;
   private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnDestroy(): void {
@@ -214,6 +226,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.resumingRequest.set(false);
     this.requestPrompt = '';
     this.requestId = '';
+    this.requestSelection = null;
     this.selectedReasoningEffort.set(null);
     this.contextPickerOpen.set(false);
     this.contextSearch.set('');
@@ -225,23 +238,31 @@ export class AiAssistantPageComponent implements OnDestroy {
     });
   }
 
-  protected modelOptionKey(option: Pick<AiAssistantModelOption, 'provider' | 'model'>): string {
-    return `${option.provider}\n${option.model ?? ''}`;
-  }
-
-  protected conversationModelLabel(conversation: AiAssistantConversation): string {
-    return this.assistantOptions()?.models.find(
-      (option) => option.provider === conversation.provider && option.model === conversation.model,
-    )?.label ?? `${conversation.provider}${conversation.model ? ` · ${conversation.model}` : ' · modèle par défaut'}`;
+  protected modelOptionKey(
+    option: Pick<AiAssistantModelOption, 'provider' | 'model' | 'nodeId'>,
+  ): string {
+    return `${option.provider}\n${option.model ?? ''}\n${option.nodeId ?? ''}`;
   }
 
   protected effortLabel(effort: string): string {
-    return ({ low: 'Faible', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé' } as Record<string, string>)[effort] ?? effort;
+    return (
+      (
+        {
+          none: 'Aucun',
+          minimal: 'Minimal',
+          low: 'Faible',
+          medium: 'Moyen',
+          high: 'Élevé',
+          xhigh: 'Très élevé',
+          max: 'Maximum',
+        } as Record<string, string>
+      )[effort] ?? effort
+    );
   }
 
   protected selectModel(key: string): void {
     this.selectedModelKey.set(key);
-    this.selectedReasoningEffort.set(null);
+    this.selectedReasoningEffort.set(this.selectedModelOption()?.defaultReasoningEffort ?? null);
   }
 
   protected selectEffort(value: string | null): void {
@@ -255,13 +276,19 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   protected isSourceAttached(resource: AssistantResourceOption): boolean {
     const conversation = this.detail()?.conversation;
-    return conversation !== null && conversation !== undefined && this.conversationSources(conversation).some(
-      (source) => source.kind === this.selectedResourceType() && source.resourceId === resource.id,
+    return (
+      conversation !== null &&
+      conversation !== undefined &&
+      this.conversationSources(conversation).some(
+        (source) =>
+          source.kind === this.selectedResourceType() && source.resourceId === resource.id,
+      )
     );
   }
 
   protected addResourceToContext(resource: AssistantResourceOption): void {
-    if (this.isSourceAttached(resource) || this.updatingSources() || this.hasPendingRequest()) return;
+    if (this.isSourceAttached(resource) || this.updatingSources() || this.hasPendingRequest())
+      return;
     const current = this.detail()?.conversation;
     if (!current) return;
     const sources = this.conversationSources(current);
@@ -288,62 +315,159 @@ export class AiAssistantPageComponent implements OnDestroy {
   }
 
   protected deleteFlowFromAssistant(source: AiAssistantSource): void {
-    if (!this.isAdmin() || source.kind !== 'flow' || source.version === null || source.version === undefined || this.actionBusy()) return;
+    if (
+      !this.isAdmin() ||
+      source.kind !== 'flow' ||
+      source.version === null ||
+      source.version === undefined ||
+      this.actionBusy()
+    )
+      return;
     this.actionBusy.set(true);
     this.actionMessage.set(null);
-    this.aiTools.prepareAssistantFlowDeletion({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
-      next: (prepared) => {
-        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
-        this.aiTools.confirmAssistantFlowDeletion({ confirmationToken: prepared.confirmationToken }).subscribe({
-          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Flow supprimé : ${source.label}.`); this.loadFlows(); },
-          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La suppression a échoué ou la version a changé. Actualisez le flow.')); },
-        });
-      },
-      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La suppression du flow a échoué. Actualisez son état puis réessayez.')); },
-    });
+    this.aiTools
+      .prepareAssistantFlowDeletion({
+        resourceId: source.resourceId,
+        expectedVersion: source.version,
+      })
+      .subscribe({
+        next: (prepared) => {
+          if (!window.confirm(prepared.summary)) {
+            this.actionBusy.set(false);
+            return;
+          }
+          this.aiTools
+            .confirmAssistantFlowDeletion({ confirmationToken: prepared.confirmationToken })
+            .subscribe({
+              next: () => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(`Flow supprimé : ${source.label}.`);
+                this.loadFlows();
+              },
+              error: (error: HttpErrorResponse) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  this.errorText(
+                    error,
+                    'La suppression a échoué ou la version a changé. Actualisez le flow.',
+                  ),
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          this.actionBusy.set(false);
+          this.actionMessage.set(
+            this.errorText(
+              error,
+              'La suppression du flow a échoué. Actualisez son état puis réessayez.',
+            ),
+          );
+        },
+      });
   }
 
   protected hasDraftFor(source: AiAssistantSource): boolean {
-    return source.kind === 'flow' && this.flows().some((flow) => flow.id === source.resourceId && flow.isDraft);
+    return (
+      source.kind === 'flow' &&
+      this.flows().some((flow) => flow.id === source.resourceId && flow.isDraft)
+    );
   }
 
   protected canStartLibrary(source: AiAssistantSource): boolean {
-    const library = source.kind === 'library'
-      ? this.libraries().find((item) => item.id === source.resourceId)
-      : null;
+    const library =
+      source.kind === 'library'
+        ? this.libraries().find((item) => item.id === source.resourceId)
+        : null;
     return library?.isActive === true && library.flowName != null && source.version != null;
   }
 
   protected publishFlowFromAssistant(source: AiAssistantSource): void {
-    if (!this.isAdmin() || source.kind !== 'flow' || source.version == null || this.actionBusy()) return;
+    if (!this.isAdmin() || source.kind !== 'flow' || source.version == null || this.actionBusy())
+      return;
     this.actionBusy.set(true);
     this.actionMessage.set(null);
-    this.aiTools.prepareAssistantFlowPublish({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
-      next: (prepared) => {
-        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
-        this.aiTools.confirmAssistantFlowPublish({ confirmationToken: prepared.confirmationToken }).subscribe({
-          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Brouillon publié pour ${source.label}.`); this.loadFlows(); },
-          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La publication a échoué ou le brouillon a changé. Actualisez le flow.')); },
-        });
-      },
-      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'Aucun brouillon publiable pour ce flow.')); },
-    });
+    this.aiTools
+      .prepareAssistantFlowPublish({
+        resourceId: source.resourceId,
+        expectedVersion: source.version,
+      })
+      .subscribe({
+        next: (prepared) => {
+          if (!window.confirm(prepared.summary)) {
+            this.actionBusy.set(false);
+            return;
+          }
+          this.aiTools
+            .confirmAssistantFlowPublish({ confirmationToken: prepared.confirmationToken })
+            .subscribe({
+              next: () => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(`Brouillon publié pour ${source.label}.`);
+                this.loadFlows();
+              },
+              error: (error: HttpErrorResponse) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  this.errorText(
+                    error,
+                    'La publication a échoué ou le brouillon a changé. Actualisez le flow.',
+                  ),
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          this.actionBusy.set(false);
+          this.actionMessage.set(this.errorText(error, 'Aucun brouillon publiable pour ce flow.'));
+        },
+      });
   }
 
   protected startLibraryFromAssistant(source: AiAssistantSource): void {
-    if (!this.isAdmin() || source.kind !== 'library' || source.version == null || this.actionBusy()) return;
+    if (!this.isAdmin() || source.kind !== 'library' || source.version == null || this.actionBusy())
+      return;
     this.actionBusy.set(true);
     this.actionMessage.set(null);
-    this.aiTools.prepareAssistantLibraryStart({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
-      next: (prepared) => {
-        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
-        this.aiTools.confirmAssistantLibraryStart({ confirmationToken: prepared.confirmationToken }).subscribe({
-          next: (result) => { this.actionBusy.set(false); this.actionMessage.set(`${result.queued} exécution(s) mise(s) en file, ${result.skipped} ignorée(s).`); this.loadExecutions(); },
-          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La bibliothèque ou sa sélection a changé. Actualisez le contexte.')); },
-        });
-      },
-      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'Aucun traitement ne peut être lancé pour cette bibliothèque.')); },
-    });
+    this.aiTools
+      .prepareAssistantLibraryStart({
+        resourceId: source.resourceId,
+        expectedVersion: source.version,
+      })
+      .subscribe({
+        next: (prepared) => {
+          if (!window.confirm(prepared.summary)) {
+            this.actionBusy.set(false);
+            return;
+          }
+          this.aiTools
+            .confirmAssistantLibraryStart({ confirmationToken: prepared.confirmationToken })
+            .subscribe({
+              next: (result) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  `${result.queued} exécution(s) mise(s) en file, ${result.skipped} ignorée(s).`,
+                );
+                this.loadExecutions();
+              },
+              error: (error: HttpErrorResponse) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  this.errorText(
+                    error,
+                    'La bibliothèque ou sa sélection a changé. Actualisez le contexte.',
+                  ),
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          this.actionBusy.set(false);
+          this.actionMessage.set(
+            this.errorText(error, 'Aucun traitement ne peut être lancé pour cette bibliothèque.'),
+          );
+        },
+      });
   }
 
   protected cancelExecutionFromAssistant(source: AiAssistantSource): void {
@@ -352,22 +476,55 @@ export class AiAssistantPageComponent implements OnDestroy {
     if (!execution || !['queued', 'running'].includes(execution.state)) return;
     this.actionBusy.set(true);
     this.actionMessage.set(null);
-    this.aiTools.prepareAssistantExecutionCancellation({ resourceId: execution.id, expectedVersion: execution.revision }).subscribe({
-      next: (prepared) => {
-        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
-        this.aiTools.confirmAssistantExecutionCancellation({ confirmationToken: prepared.confirmationToken }).subscribe({
-          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Annulation demandée pour ${execution.media}.`); this.loadExecutions(); },
-          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.')); },
-        });
-      },
-      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.')); },
-    });
+    this.aiTools
+      .prepareAssistantExecutionCancellation({
+        resourceId: execution.id,
+        expectedVersion: execution.revision,
+      })
+      .subscribe({
+        next: (prepared) => {
+          if (!window.confirm(prepared.summary)) {
+            this.actionBusy.set(false);
+            return;
+          }
+          this.aiTools
+            .confirmAssistantExecutionCancellation({
+              confirmationToken: prepared.confirmationToken,
+            })
+            .subscribe({
+              next: () => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(`Annulation demandée pour ${execution.media}.`);
+                this.loadExecutions();
+              },
+              error: (error: HttpErrorResponse) => {
+                this.actionBusy.set(false);
+                this.actionMessage.set(
+                  this.errorText(
+                    error,
+                    'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.',
+                  ),
+                );
+              },
+            });
+        },
+        error: (error: HttpErrorResponse) => {
+          this.actionBusy.set(false);
+          this.actionMessage.set(
+            this.errorText(
+              error,
+              'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.',
+            ),
+          );
+        },
+      });
   }
 
   protected isCancelableExecution(source: AiAssistantSource): boolean {
-    const execution = source.kind === 'execution'
-      ? this.executions().find((item) => item.id === source.resourceId)
-      : null;
+    const execution =
+      source.kind === 'execution'
+        ? this.executions().find((item) => item.id === source.resourceId)
+        : null;
     return execution != null && ['queued', 'running'].includes(execution.state);
   }
 
@@ -386,7 +543,9 @@ export class AiAssistantPageComponent implements OnDestroy {
         if (detail.conversation.source.kind !== 'tool')
           this.selectedResourceType.set(detail.conversation.source.kind);
         this.selectedResourceId.set('');
+        this.requestSelection = null;
         if (detail.pendingTurn) {
+          this.requestSelection = detail.conversation;
           this.prompt.set(detail.pendingTurn.userPrompt);
           this.requestPrompt = detail.pendingTurn.userPrompt;
           this.requestId = detail.pendingTurn.requestId;
@@ -430,6 +589,14 @@ export class AiAssistantPageComponent implements OnDestroy {
     const activeConversation = this.detail()?.conversation ?? null;
     const selectedResource = this.selectedResource();
     const selectedModel = this.selectedModelOption();
+    this.requestSelection ??= selectedModel
+      ? {
+          provider: selectedModel.provider,
+          model: selectedModel.model,
+          reasoningEffort: this.selectedReasoningEffort(),
+          nodeId: selectedModel.nodeId,
+        }
+      : activeConversation;
     this.sending.set(true);
     this.cancelling.set(false);
     this.pendingPrompt.set(message);
@@ -450,9 +617,10 @@ export class AiAssistantPageComponent implements OnDestroy {
               ...(name === 'get_flow' ? { flowId: selectedResource?.id ?? null } : {}),
             }) as AiAssistantToolCall,
         ),
-        provider: activeConversation ? activeConversation.provider : selectedModel?.provider,
-        model: activeConversation ? activeConversation.model : selectedModel?.model,
-        reasoningEffort: activeConversation ? activeConversation.reasoningEffort : this.selectedReasoningEffort(),
+        provider: this.requestSelection?.provider,
+        model: this.requestSelection?.model,
+        reasoningEffort: this.requestSelection?.reasoningEffort,
+        nodeId: this.requestSelection?.nodeId,
       })
       .subscribe({
         next: (response) => {
@@ -468,6 +636,9 @@ export class AiAssistantPageComponent implements OnDestroy {
                       userPrompt: message,
                       content: response.content,
                       sources: response.sources,
+                      selection: response.selection,
+                      actualModel: response.actualModel,
+                      executorNodeId: response.executorNodeId,
                     },
                   ]
               : oldTurns;
@@ -487,6 +658,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.prompt.set('');
             this.requestPrompt = '';
             this.requestId = '';
+            this.requestSelection = null;
             this.hasPendingRequest.set(false);
             this.resumingRequest.set(false);
             this.selectedReadTools.set([]);
@@ -504,7 +676,14 @@ export class AiAssistantPageComponent implements OnDestroy {
           this.errorMessage.set(
             this.errorText(error, 'Impossible d’envoyer le message. Réessayez.'),
           );
-          if (activeConversation) {
+          if (error.status === 400 || error.status === 404) {
+            this.hasPendingRequest.set(false);
+            this.resumingRequest.set(false);
+            this.requestId = '';
+            this.requestPrompt = '';
+            this.requestSelection = null;
+            this.loadAssistantOptions(true);
+          } else {
             this.pendingPrompt.set(message);
             this.hasPendingRequest.set(true);
             this.resumingRequest.set(true);
@@ -613,7 +792,10 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   private loadLibraries(): void {
     this.clusterApi.listLibraries().subscribe({
-      next: (libraries) => { this.libraries.set(libraries); this.loadingLibraries.set(false); },
+      next: (libraries) => {
+        this.libraries.set(libraries);
+        this.loadingLibraries.set(false);
+      },
       error: () => this.loadingLibraries.set(false),
     });
   }
@@ -629,8 +811,9 @@ export class AiAssistantPageComponent implements OnDestroy {
     });
   }
 
-  private loadAssistantOptions(): void {
-    this.aiTools.getAssistantOptions().subscribe({
+  protected loadAssistantOptions(refresh = false): void {
+    this.loadingAssistantOptions.set(true);
+    this.aiTools.getAssistantOptions(refresh).subscribe({
       next: (options) => {
         this.assistantOptions.set(options);
         this.loadingAssistantOptions.set(false);
@@ -643,10 +826,15 @@ export class AiAssistantPageComponent implements OnDestroy {
   private selectDefaultModel(): void {
     const options = this.assistantOptions();
     if (!options) return;
-    const selected = options.models.find(
-      (option) => option.provider === options.defaultProvider && option.model === options.defaultModel,
-    ) ?? options.models.find((option) => option.provider === options.defaultProvider) ?? options.models[0];
+    const selected =
+      options.models.find(
+        (option) =>
+          option.provider === options.defaultProvider && option.model === options.defaultModel,
+      ) ??
+      options.models.find((option) => option.provider === options.defaultProvider) ??
+      options.models[0];
     this.selectedModelKey.set(selected ? this.modelOptionKey(selected) : '');
+    this.selectedReasoningEffort.set(selected?.defaultReasoningEffort ?? null);
   }
 
   private setConversationUrl(id: string): void {
@@ -679,6 +867,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.prompt.set('');
             this.requestPrompt = '';
             this.requestId = '';
+            this.requestSelection = null;
             this.loadConversations();
             return;
           }

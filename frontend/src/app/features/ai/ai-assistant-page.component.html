@@ -6,10 +6,7 @@
     <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
   </app-page-header>
 } @else {
-  <app-page-header
-    title="Assistant"
-    description="Conversations privées, conservées à la fermeture du panneau."
-  >
+  <app-page-header title="Assistant">
     <a
       page-actions
       matButton="text"
@@ -21,7 +18,7 @@
 }
 
 <div class="assistant-layout">
-  <aside class="conversation-panel" aria-label="Conversations privées">
+  <aside class="conversation-panel" aria-label="Conversations">
     <div class="conversation-heading">
       <h2>Conversations</h2>
       <button
@@ -57,48 +54,70 @@
 
   <section class="chat-panel" aria-label="Échange avec l’assistant">
     <div class="assistant-model-controls" aria-label="Modèle utilisé par l’assistant">
-      @if (detail(); as current) {
-        <div class="model-summary">
-          <span class="model-summary-label">Modèle de cette conversation</span>
-          <strong>{{ conversationModelLabel(current.conversation) }}</strong>
-          @if (current.conversation.reasoningEffort) {
-            <span>Effort : {{ effortLabel(current.conversation.reasoningEffort) }}</span>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Modèle</mat-label>
+        <mat-select
+          name="assistantModel"
+          [ngModel]="selectedModelKey()"
+          (ngModelChange)="selectModel($event)"
+          [disabled]="loadingAssistantOptions() || sending() || hasPendingRequest()"
+        >
+          @if (detail() && !selectedModelOption()) {
+            <mat-option [value]="selectedModelKey()" [disabled]="true">
+              {{ detail()?.conversation?.model ?? 'Modèle fournisseur' }} ·
+              {{ hasPendingRequest() ? 'Reprise' : 'Indisponible' }}
+            </mat-option>
           }
-        </div>
-      } @else {
+          @for (option of assistantOptions()?.models ?? []; track modelOptionKey(option)) {
+            <mat-option [value]="modelOptionKey(option)"
+              >{{ option.label }} · {{ option.provider
+              }}{{ option.nodeName ? ' · ' + option.nodeName : '' }}</mat-option
+            >
+          }
+        </mat-select>
+      </mat-form-field>
+      @if (reasoningEfforts().length > 0) {
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Modèle</mat-label>
+          <mat-label>Effort de raisonnement</mat-label>
           <mat-select
-            name="assistantModel"
-            [ngModel]="selectedModelKey()"
-            (ngModelChange)="selectModel($event)"
-            [disabled]="loadingAssistantOptions() || sending() || hasPendingRequest()"
+            name="assistantReasoningEffort"
+            [ngModel]="selectedReasoningEffort()"
+            (ngModelChange)="selectEffort($event)"
+            [disabled]="sending() || hasPendingRequest()"
           >
-            @for (option of assistantOptions()?.models ?? []; track modelOptionKey(option)) {
-              <mat-option [value]="modelOptionKey(option)">{{ option.label }}</mat-option>
+            <mat-option [value]="null">Automatique</mat-option>
+            @for (effort of reasoningEfforts(); track effort) {
+              <mat-option [value]="effort">{{ effortLabel(effort) }}</mat-option>
             }
           </mat-select>
         </mat-form-field>
-        @if (reasoningEfforts().length > 0) {
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Effort de raisonnement</mat-label>
-            <mat-select
-              name="assistantReasoningEffort"
-              [ngModel]="selectedReasoningEffort()"
-              (ngModelChange)="selectEffort($event)"
-              [disabled]="sending() || hasPendingRequest()"
+      }
+      @if (selectedModelOption() && !selectedModelOption()?.reasoningKnown) {
+        <span class="muted">Niveaux de raisonnement non communiqués par le fournisseur.</span>
+      }
+      <button
+        matButton="text"
+        type="button"
+        [disabled]="loadingAssistantOptions() || sending() || hasPendingRequest()"
+        (click)="loadAssistantOptions(true)"
+      >
+        Actualiser les modèles
+      </button>
+      @if (loadingAssistantOptions()) {
+        <span role="status">Chargement des modèles…</span>
+      } @else if (!selectedModelOption() && !hasPendingRequest()) {
+        <span role="status"
+          >Modèle indisponible ou désactivé. Choisissez un modèle disponible.</span
+        >
+      }
+      @for (node of assistantOptions()?.catalogs ?? []; track node.nodeId) {
+        @for (catalog of node.providers; track catalog.provider) {
+          @if (catalog.state !== 'available') {
+            <span role="status"
+              >{{ node.name }} · {{ catalog.provider }} :
+              {{ catalog.message ?? 'Catalogue indisponible' }}</span
             >
-              <mat-option [value]="null">Automatique</mat-option>
-              @for (effort of reasoningEfforts(); track effort) {
-                <mat-option [value]="effort">{{ effortLabel(effort) }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        }
-        @if (loadingAssistantOptions()) {
-          <span class="muted" role="status">Chargement des modèles configurés…</span>
-        } @else if (!assistantOptions()?.models?.length) {
-          <span class="muted">Aucun modèle IA disponible dans la configuration.</span>
+          }
         }
       }
     </div>
@@ -293,6 +312,18 @@
           </article>
           <article class="message assistant-message">
             <h3>Assistant</h3>
+            @if (turn.actualModel) {
+              <p class="muted">Modèle utilisé : {{ turn.actualModel }}</p>
+            } @else if (turn.selection?.model) {
+              <p class="muted">
+                Modèle demandé : {{ turn.selection?.model }} · Modèle effectif non communiqué
+              </p>
+            } @else {
+              <p class="muted">Modèle non communiqué</p>
+            }
+            @if (turn.selection?.reasoningEffort; as effort) {
+              <p class="muted">Raisonnement demandé : {{ effortLabel(effort) }}</p>
+            }
             <p>{{ turn.content }}</p>
             @for (
               source of turn.sources ?? [current.conversation.source];

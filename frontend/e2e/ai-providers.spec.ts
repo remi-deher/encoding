@@ -2,6 +2,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/v1/tools/ai/models?*', (route) =>
+    route.fulfill({ json: { nodes: [], policy: { disabledModels: [] } } }),
+  );
   await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/v1/system/logs/categories*', (route) =>
     route.fulfill({ json: { categories: [] } }),

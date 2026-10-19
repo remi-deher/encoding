@@ -55,7 +55,14 @@ public sealed class OpenAiCompatibleAiClient(HttpClient httpClient, string model
                 .GetProperty("content")
                 .GetString() ?? string.Empty;
 
-            return new AiCompletionResult(true, AnsiSanitizer.Sanitize(reply));
+            var root = doc.RootElement;
+            var observedModel = root.TryGetProperty("model", out var observed) && observed.ValueKind == JsonValueKind.String ? observed.GetString() : null;
+            root.TryGetProperty("usage", out var usage);
+            long? Tokens(string name) => usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty(name, out var field)
+                && field.TryGetInt64(out var count) && count >= 0 ? count : null;
+            return new AiCompletionResult(true, AnsiSanitizer.Sanitize(reply),
+                Usage: observedModel is null && usage.ValueKind != JsonValueKind.Object ? null
+                    : new AiUsage(Tokens("prompt_tokens"), Tokens("completion_tokens"), Model: observedModel));
         }
         catch (OperationCanceledException)
         {
