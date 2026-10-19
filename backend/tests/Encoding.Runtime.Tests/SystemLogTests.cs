@@ -343,10 +343,14 @@ public sealed class SystemLogMcpTests
         services.AddHttpClient();
         services.AddSingleton(db.Db);
         services.AddSingleton<LibraryRepository>();
+        services.AddSingleton<LibraryWorkflowRepository>();
+        services.AddSingleton<LibraryNodeAccessRepository>();
+        services.AddSingleton<LibraryProcessingRepository>();
         services.AddSingleton<FlowRepository>();
         services.AddSingleton<FlowComponentRegistry>();
         services.AddSingleton<FlowDefinitionValidator>();
         services.AddSingleton<NodeRepository>();
+        services.AddSingleton<NodeGroupRepository>();
         services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(30)));
         services.AddSingleton<ExecutionRepository>();
         services.AddSingleton<FlowScriptRepository>();

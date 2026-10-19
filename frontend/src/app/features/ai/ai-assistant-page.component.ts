@@ -1,6 +1,6 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
@@ -31,6 +31,7 @@ import { MatSelectModule } from '@angular/material/select';
 import {
   AiAssistantConversation,
   AiAssistantConversationDetail,
+  AiAssistantActionProposal,
   AiAssistantSource,
   AiAssistantToolCall,
   AiAssistantOptions,
@@ -38,7 +39,13 @@ import {
 } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
 import { LibraryResponse, NodeResponse } from '../../shared/models/cluster';
-import { FlowSummary } from '../../shared/models/flow-validation';
+import {
+  FlowDocument,
+  FlowSummary,
+  FlowVersionResponse,
+} from '../../shared/models/flow-validation';
+import { FlowComponentDefinition } from '../../shared/models/flow-component';
+import { FlowPreviewComponent } from '../../shared/ui/flow-preview/flow-preview';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { ExecutionTracking } from '../../shared/services/execution-tracking';
@@ -69,6 +76,7 @@ interface AssistantResourceOption {
     MatChipsModule,
     MatMenuModule,
     RouterLink,
+    FlowPreviewComponent,
   ],
   templateUrl: './ai-assistant-page.component.html',
   styleUrl: './ai-assistant-page.component.scss',
@@ -111,6 +119,9 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly contextPickerOpen = signal(false);
   protected readonly contextSearch = signal('');
   protected readonly prompt = signal('');
+  protected readonly modelSettingsOpen = signal(false);
+  protected readonly attachmentName = signal<string | null>(null);
+  private readonly attachmentText = signal<string | null>(null);
   protected readonly loadingFlows = signal(true);
   protected readonly loadingExecutions = signal(true);
   protected readonly loadingNodes = signal(true);
@@ -126,6 +137,14 @@ export class AiAssistantPageComponent implements OnDestroy {
     { name: 'list_nodes', label: 'Lister les nœuds' },
     { name: 'list_executions', label: 'Consulter les exécutions récentes' },
     { name: 'get_libraries_overview', label: 'Consulter les bibliothèques' },
+    { name: 'list_libraries', label: 'Lister les bibliothèques' },
+    { name: 'list_node_groups', label: 'Lister les groupes de nœuds' },
+    { name: 'list_scripts', label: 'Lister les scripts' },
+    { name: 'list_encoding_profiles', label: 'Lister les profils d’encodage' },
+    { name: 'list_templates', label: 'Lister les modèles de flow' },
+    { name: 'list_component_packs', label: 'Lister les packs de composants' },
+    { name: 'list_plugins', label: 'Lister les plugins et intégrations' },
+    { name: 'list_media_tools', label: 'Lister les outils disponibles' },
   ] as const;
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly pendingPrompt = signal<string | null>(null);
@@ -134,6 +153,17 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly updatingSources = signal(false);
   protected readonly actionBusy = signal(false);
   protected readonly actionMessage = signal<string | null>(null);
+  protected readonly pendingActionProposal = signal<AiAssistantActionProposal | null>(null);
+  protected readonly confirmingAiAction = signal(false);
+  protected readonly requestProgress = signal<string | null>(null);
+  protected readonly requestProgressDetail = signal<string | null>(null);
+  protected readonly previewOpen = signal(false);
+  protected readonly previewTitle = signal('Aperçu');
+  protected readonly previewFlow = signal<FlowDocument | null>(null);
+  protected readonly previewComponents = signal<readonly FlowComponentDefinition[]>([]);
+  protected readonly previewLoading = signal(false);
+  protected readonly previewError = signal<string | null>(null);
+  private progressPollTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly resourceOptions = computed<readonly AssistantResourceOption[]>(() => {
     switch (this.selectedResourceType()) {
       case 'flow':
@@ -211,18 +241,20 @@ export class AiAssistantPageComponent implements OnDestroy {
       !this.sending() &&
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
+      this.prompt().trim().length + (this.attachmentText()?.length ?? 0) <= 4000 &&
       (this.hasPendingRequest() ||
         (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
-      (!this.hasPendingRequest() || this.prompt() === this.requestPrompt),
+      (!this.hasPendingRequest() || this.prompt() === this.requestDraftPrompt),
   );
 
   private requestPrompt = '';
+  private requestDraftPrompt = '';
   private requestId = '';
   private requestSelection: AiTurnModelSelection | null = null;
   private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
-
   ngOnDestroy(): void {
     if (this.pendingPollTimer !== null) clearTimeout(this.pendingPollTimer);
+    this.stopProgressPolling();
   }
 
   constructor() {
@@ -268,16 +300,20 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   protected startNewConversation(): void {
     if (this.sending()) return;
+    this.closePreview();
     this.selectedResourceId.set('');
     this.historyOpen.set(false);
     this.followTail.set(true);
     this.detail.set(null);
     this.errorMessage.set(null);
+    this.pendingActionProposal.set(null);
     this.prompt.set('');
+    this.removeAttachment();
     this.pendingPrompt.set(null);
     this.hasPendingRequest.set(false);
     this.resumingRequest.set(false);
     this.requestPrompt = '';
+    this.requestDraftPrompt = '';
     this.requestId = '';
     this.requestSelection = null;
     this.selectedReasoningEffort.set(null);
@@ -307,6 +343,37 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected toggleContextPicker(): void {
     this.contextPickerOpen.update((open) => !open);
     this.contextSearch.set('');
+  }
+
+  protected async selectAttachment(file: File): Promise<void> {
+    if (!/\.(txt|md|csv|json|log|yaml|yml)$/i.test(file.name) || file.size > 8_000) {
+      this.errorMessage.set(
+        'Choisissez un fichier texte (.txt, .md, .csv, .json, .log ou .yaml) de 8 Ko maximum.',
+      );
+      return;
+    }
+    try {
+      const content = await file.text();
+      const attachment = `\n\n[Contenu du fichier : ${file.name}]\n${content}`;
+      if (attachment.length > 3000) {
+        this.errorMessage.set('Le contenu du fichier dépasse la limite de 3 000 caractères.');
+        return;
+      }
+      if (this.prompt().trim().length + attachment.length > 4000) {
+        this.errorMessage.set('Le message et le fichier dépassent la limite de 4 000 caractères.');
+        return;
+      }
+      this.attachmentName.set(file.name);
+      this.attachmentText.set(attachment);
+      this.errorMessage.set(null);
+    } catch {
+      this.errorMessage.set('Impossible de lire ce fichier.');
+    }
+  }
+
+  protected removeAttachment(): void {
+    this.attachmentName.set(null);
+    this.attachmentText.set(null);
   }
 
   protected isSourceAttached(resource: AssistantResourceOption): boolean {
@@ -569,6 +636,8 @@ export class AiAssistantPageComponent implements OnDestroy {
   }
 
   protected openConversation(id: string, updateUrl = true): void {
+    this.closePreview();
+    this.pendingActionProposal.set(null);
     this.historyOpen.set(false);
     this.followTail.set(true);
     if (this.loadingDetail()) return;
@@ -590,6 +659,7 @@ export class AiAssistantPageComponent implements OnDestroy {
           this.requestSelection = detail.conversation;
           this.prompt.set(detail.pendingTurn.userPrompt);
           this.requestPrompt = detail.pendingTurn.userPrompt;
+          this.requestDraftPrompt = detail.pendingTurn.userPrompt;
           this.requestId = detail.pendingTurn.requestId;
           this.hasPendingRequest.set(true);
           this.resumingRequest.set(!detail.pendingTurn.isRunning);
@@ -597,6 +667,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.pendingPrompt.set(detail.pendingTurn.userPrompt);
             this.sending.set(true);
             this.pollPendingConversation(id, detail.pendingTurn.requestId);
+            this.pollRequestProgress(detail.pendingTurn.requestId);
           } else {
             this.pendingPrompt.set(detail.pendingTurn.userPrompt);
             this.sending.set(false);
@@ -606,6 +677,7 @@ export class AiAssistantPageComponent implements OnDestroy {
           }
         } else {
           this.requestPrompt = '';
+          this.requestDraftPrompt = '';
           this.requestId = '';
           this.pendingPrompt.set(null);
           this.hasPendingRequest.set(false);
@@ -625,8 +697,13 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected send(): void {
     const message = this.prompt().trim();
     if (!message || !this.canSend()) return;
-    if (this.requestPrompt !== message || !this.requestId) {
-      this.requestPrompt = message;
+    const outgoingPrompt =
+      this.requestPrompt && this.hasPendingRequest()
+        ? this.requestPrompt
+        : `${message}${this.attachmentText() ?? ''}`;
+    if (this.requestDraftPrompt !== message || !this.requestId) {
+      this.requestDraftPrompt = message;
+      this.requestPrompt = outgoingPrompt;
       this.requestId = createUuid();
     }
 
@@ -649,12 +726,19 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.pendingPrompt.set(message);
     this.resumingRequest.set(false);
     this.errorMessage.set(null);
+    this.requestProgress.set('preparing');
+    this.requestProgressDetail.set('Préparation de votre demande');
+    this.pollRequestProgress(this.requestId);
     this.aiTools
       .sendAssistantMessage({
         requestId: this.requestId,
-        userPrompt: message,
+        userPrompt: outgoingPrompt,
         conversationId: activeConversation?.id,
-        resourceType: activeConversation ? undefined : (selectedResource ? this.selectedResourceType() : undefined),
+        resourceType: activeConversation
+          ? undefined
+          : selectedResource
+            ? this.selectedResourceType()
+            : undefined,
         resourceId: activeConversation ? undefined : (selectedResource?.id ?? undefined),
         resourceVersion: activeConversation ? undefined : (selectedResource?.version ?? undefined),
         toolCalls: this.selectedReadTools().map(
@@ -699,11 +783,17 @@ export class AiAssistantPageComponent implements OnDestroy {
           this.pendingPrompt.set(null);
           this.sending.set(false);
           this.cancelling.set(false);
+          this.stopProgressPolling();
           this.loadConversations();
           this.setConversationUrl(response.conversation.id);
+          this.pendingActionProposal.set(
+            response.success ? (response.actionProposal ?? null) : null,
+          );
           if (response.success) {
             this.prompt.set('');
+            this.removeAttachment();
             this.requestPrompt = '';
+            this.requestDraftPrompt = '';
             this.requestId = '';
             this.requestSelection = null;
             this.hasPendingRequest.set(false);
@@ -719,6 +809,7 @@ export class AiAssistantPageComponent implements OnDestroy {
         error: (error: HttpErrorResponse) => {
           this.sending.set(false);
           this.cancelling.set(false);
+          this.stopProgressPolling();
           this.pendingPrompt.set(null);
           this.errorMessage.set(
             this.errorText(error, 'Impossible d’envoyer le message. Réessayez.'),
@@ -728,6 +819,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.resumingRequest.set(false);
             this.requestId = '';
             this.requestPrompt = '';
+            this.requestDraftPrompt = '';
             this.requestSelection = null;
             this.loadAssistantOptions(true);
           } else {
@@ -755,6 +847,164 @@ export class AiAssistantPageComponent implements OnDestroy {
         );
       },
     });
+  }
+
+  protected dismissAiAction(): void {
+    this.pendingActionProposal.set(null);
+  }
+
+  protected confirmAiAction(): void {
+    const proposal = this.pendingActionProposal();
+    if (!proposal || this.confirmingAiAction() || !this.isAdmin()) return;
+    this.confirmingAiAction.set(true);
+    this.actionMessage.set(null);
+    const request = { confirmationToken: proposal.confirmationToken };
+    const confirmation: Observable<unknown> = (() => {
+      switch (proposal.action) {
+        case 'publish-flow':
+          return this.aiTools.confirmAssistantFlowPublish(request);
+        case 'delete-flow':
+          return this.aiTools.confirmAssistantFlowDeletion(request);
+        case 'start-library':
+          return this.aiTools.confirmAssistantLibraryStart(request);
+        case 'cancel-execution':
+          return this.aiTools.confirmAssistantExecutionCancellation(request);
+        case 'assign-library-flow':
+          return this.aiTools.confirmAssistantLibraryFlowAssignment(request);
+        case 'create-flow-template':
+          return this.aiTools.confirmAssistantFlowTemplateCreation(request);
+        case 'business-operation':
+          return this.aiTools.confirmAssistantBusinessOperation(request);
+        default:
+          throw new Error('Action IA inconnue.');
+      }
+    })();
+    confirmation.subscribe({
+      next: (result) => {
+        this.confirmingAiAction.set(false);
+        this.pendingActionProposal.set(null);
+        const detail =
+          proposal.action === 'start-library'
+            ? `${(result as { queued: number; skipped: number }).queued} tâche(s) mise(s) en file.`
+            : proposal.action === 'cancel-execution'
+              ? 'Annulation demandée.'
+              : proposal.action === 'delete-flow'
+                ? 'Flow supprimé.'
+                : proposal.action === 'assign-library-flow'
+                  ? 'Flow affecté à la bibliothèque.'
+                  : proposal.action === 'create-flow-template'
+                    ? 'Modèle de flow créé.'
+                    : proposal.action === 'business-operation'
+                      ? 'Configuration appliquée.'
+                      : 'Flow publié.';
+        this.actionMessage.set(detail);
+        if (proposal.action === 'start-library') this.loadExecutions();
+        if (proposal.action === 'delete-flow' || proposal.action === 'publish-flow')
+          this.loadFlows();
+        if (proposal.action === 'cancel-execution') this.loadExecutions();
+        if (proposal.action === 'assign-library-flow') this.loadLibraries();
+      },
+      error: (error: HttpErrorResponse) => {
+        this.confirmingAiAction.set(false);
+        this.errorMessage.set(
+          this.errorText(
+            error,
+            'L’action a expiré ou la ressource a changé. Demandez une nouvelle proposition.',
+          ),
+        );
+      },
+    });
+  }
+
+  protected previewSource(source: AiAssistantSource): void {
+    this.previewTitle.set(source.label);
+    this.previewOpen.set(true);
+    this.previewError.set(null);
+    this.previewFlow.set(null);
+    if (source.kind !== 'flow' || source.version == null) {
+      this.previewLoading.set(false);
+      this.previewError.set('L’aperçu visuel est disponible pour les flows publiés.');
+      return;
+    }
+    this.previewLoading.set(true);
+    this.flowValidation.versionStatus(source.resourceId, source.version).subscribe({
+      next: (saved: FlowVersionResponse) => {
+        this.previewFlow.set(saved.definition);
+        this.previewLoading.set(false);
+        void this.flowValidation
+          .catalog()
+          .then((catalog) =>
+            this.previewComponents.set(
+              catalog.flatMap((plugin) =>
+                plugin.components.map((component) => ({
+                  ...component,
+                  pluginId: plugin.id,
+                  pluginName: plugin.name,
+                })),
+              ),
+            ),
+          )
+          .catch(() =>
+            this.previewError.set('Les descriptions des blocs n’ont pas pu être chargées.'),
+          );
+      },
+      error: () => {
+        this.previewLoading.set(false);
+        this.previewError.set(
+          'Impossible de charger cet aperçu. Vérifiez que le flow est toujours disponible.',
+        );
+      },
+    });
+  }
+
+  protected closePreview(): void {
+    this.previewOpen.set(false);
+    this.previewFlow.set(null);
+    this.previewError.set(null);
+  }
+
+  private pollRequestProgress(requestId: string): void {
+    this.stopProgressPolling();
+    const poll = () =>
+      this.aiTools.getAssistantActivity(requestId).subscribe({
+        next: (activity) => {
+          this.requestProgress.set(activity.progress ?? activity.status);
+          this.requestProgressDetail.set(
+            activity.progressDetail ?? this.progressLabel(activity.progress ?? activity.status),
+          );
+          if (this.sending() && this.requestId === requestId)
+            this.progressPollTimer = window.setTimeout(poll, 900);
+        },
+        error: () => {
+          if (this.sending() && this.requestId === requestId)
+            this.progressPollTimer = window.setTimeout(poll, 1800);
+        },
+      });
+    this.progressPollTimer = window.setTimeout(poll, 350);
+  }
+
+  private stopProgressPolling(): void {
+    if (this.progressPollTimer !== null) clearTimeout(this.progressPollTimer);
+    this.progressPollTimer = null;
+  }
+
+  private progressLabel(progress: string): string {
+    switch (progress) {
+      case 'context':
+        return 'Recherche des informations utiles dans Encoding';
+      case 'reading':
+        return 'Consultation des ressources nécessaires';
+      case 'generating':
+        return 'Rédaction de la réponse';
+      case 'completed':
+        return 'Réponse prête';
+      case 'cancelled':
+        return 'Demande interrompue';
+      case 'failed':
+        return 'La demande a échoué';
+      default:
+        return 'Préparation de votre demande';
+    }
   }
 
   private loadFlows(): void {
@@ -914,6 +1164,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.resumingRequest.set(false);
             this.prompt.set('');
             this.requestPrompt = '';
+            this.requestDraftPrompt = '';
             this.requestId = '';
             this.requestSelection = null;
             this.loadConversations();
@@ -938,6 +1189,19 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   private errorText(error: HttpErrorResponse, fallback: string): string {
     const title: unknown = error.error?.title;
-    return typeof title === 'string' && title.trim() ? title : fallback;
+    if (typeof title === 'string' && title.trim()) return title;
+    if (error.status === 0)
+      return 'Connexion au serveur impossible. Vérifiez votre réseau puis réessayez.';
+    if (error.status === 401) return 'Votre session a expiré. Reconnectez-vous pour continuer.';
+    if (error.status === 403) return 'Vous n’avez pas les droits nécessaires pour cette action.';
+    if (error.status === 408 || error.status === 504)
+      return 'La demande a dépassé le délai prévu. Vous pouvez la reprendre après vérification de son état.';
+    if (error.status === 429)
+      return 'Trop de demandes sont en cours. Patientez un instant avant de réessayer.';
+    if (error.status === 502 || error.status === 503)
+      return 'Le service IA est momentanément indisponible. Vérifiez le fournisseur sélectionné ou réessayez plus tard.';
+    if (error.status >= 500)
+      return 'Le serveur n’a pas pu terminer la demande. Elle peut être reprise avec le même message.';
+    return fallback;
   }
 }

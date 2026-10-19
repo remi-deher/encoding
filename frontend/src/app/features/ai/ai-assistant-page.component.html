@@ -51,6 +51,28 @@
       }
     </nav>
   </mat-drawer>
+  <mat-drawer
+    class="preview-panel"
+    position="end"
+    [mode]="compact() ? 'over' : 'side'"
+    [opened]="previewOpen()"
+    (closedStart)="closePreview()"
+    aria-label="Aperçu de la ressource"
+  >
+    <header class="preview-panel__header">
+      <h2>{{ previewTitle() }}</h2>
+      <button mat-icon-button type="button" aria-label="Fermer l’aperçu" (click)="closePreview()">
+        ×
+      </button>
+    </header>
+    @if (previewLoading()) {
+      <p class="muted" role="status"><mat-spinner diameter="20" /> Chargement de l’aperçu…</p>
+    } @else if (previewError(); as error) {
+      <p class="error-message" role="alert">{{ error }}</p>
+    } @else if (previewFlow(); as flow) {
+      <app-flow-preview [flow]="flow" [components]="previewComponents()" mode="flow" />
+    }
+  </mat-drawer>
   <mat-drawer-content class="chat-panel">
     @if (!panelMode()) {
       <header class="chat-toolbar">
@@ -132,7 +154,14 @@
               source of turn.sources ?? [current.conversation.source];
               track source.kind + source.resourceId
             ) {
-              <a [routerLink]="source.href">Source : {{ source.label }}</a>
+              <div class="message-source">
+                <a [routerLink]="source.href">Source : {{ source.label }}</a>
+                @if (source.kind === 'flow' && source.version) {
+                  <button matButton="text" type="button" (click)="previewSource(source)">
+                    Aperçu
+                  </button>
+                }
+              </div>
             }
           </article>
         }
@@ -143,7 +172,38 @@
           </article>
         }
         @if (sending()) {
-          <p class="thinking" role="status"><mat-spinner diameter="20" /> Réponse en cours…</p>
+          <div class="thinking" role="status">
+            <mat-spinner diameter="20" />
+            <span>{{ requestProgressDetail() ?? 'Préparation de votre demande' }}</span>
+          </div>
+        }
+        @if (pendingActionProposal(); as proposal) {
+          <section class="assistant-action-confirmation" aria-label="Action à confirmer">
+            <h3>Action proposée</h3>
+            <p>{{ proposal.summary }}</p>
+            <p class="muted">
+              Cette action n’aura lieu qu’après votre confirmation. Le lien expire dans cinq
+              minutes.
+            </p>
+            <div class="assistant-action-confirmation__buttons">
+              <button
+                matButton="filled"
+                type="button"
+                [disabled]="confirmingAiAction()"
+                (click)="confirmAiAction()"
+              >
+                {{ confirmingAiAction() ? 'Application…' : 'Confirmer l’action' }}
+              </button>
+              <button
+                matButton="text"
+                type="button"
+                [disabled]="confirmingAiAction()"
+                (click)="dismissAiAction()"
+              >
+                Ignorer
+              </button>
+            </div>
+          </section>
         }
       } @else {
         <div class="welcome">
@@ -152,7 +212,7 @@
         </div>
       }
     </div>
-    <footer class="conversation-footer">
+    <footer class="conversation-footer" [class.model-settings-open]="modelSettingsOpen()">
       <div class="source-bar">
         <mat-chip-set aria-label="Ressources jointes">
           @if (detail(); as current) {
@@ -444,20 +504,20 @@
         [cancelling]="cancelling()"
         [resuming]="resumingRequest()"
         [canSend]="canSend()"
-        [attachmentOpen]="contextPickerOpen()"
+        [attachmentName]="attachmentName()"
+        (settingsOpenChange)="modelSettingsOpen.set($event)"
         (typeChange)="selectType($event)"
         (modelChange)="selectModel($event)"
         (effortChange)="selectEffort($event)"
         (send)="send()"
         (cancel)="cancelRequest()"
         (attach)="toggleContextPicker()"
+        (fileSelected)="selectAttachment($event)"
+        (fileRemoved)="removeAttachment()"
         (refresh)="loadAssistantOptions(true)"
         (tools)="toolsOpen.set(!toolsOpen())"
         (newConversation)="startNewConversation()"
       />
-      @if (!detail() && !selectedResource()) {
-        <p class="context-hint">Posez votre question : l’assistant cherchera le contexte utile dans Encoding.</p>
-      }
     </footer>
   </mat-drawer-content>
 </mat-drawer-container>

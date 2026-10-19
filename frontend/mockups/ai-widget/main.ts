@@ -1,95 +1,126 @@
 import { ChangeDetectionStrategy, Component, ElementRef, signal, viewChild } from '@angular/core';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { FormsModule } from '@angular/forms';
-import { OverlayModule } from '@angular/cdk/overlay';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatChipsModule } from '@angular/material/chips';
-import { ThemeToggleComponent } from '../../src/app/core/theme/theme-toggle.component';
-import { AiAssistantModelOption } from '../../src/app/shared/models/ai-tools';
 
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    FormsModule,
-    OverlayModule,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatMenuModule,
-    MatChipsModule,
-    ThemeToggleComponent,
-  ],
+  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatSelectModule, MatMenuModule],
   templateUrl: './mockup.html',
   styleUrl: './mockup.scss',
+  host: {
+    '(document:click)': 'closeSettingsOnOutsideClick($event)',
+    '(document:keydown.escape)': 'closeSettings()',
+  },
 })
 class WidgetMockup {
-  readonly open = signal(false);
   readonly text = signal('');
-  readonly model = signal('codex-demo');
-  readonly effort = signal<string | null>(null);
+  readonly provider = signal('openai');
+  readonly model = signal('gpt-6.1');
+  readonly effortIndex = signal(1);
+  readonly settingsOpen = signal(false);
   readonly resource = signal<string | null>(null);
-  readonly messages = signal<{ role: string; text: string }[]>([]);
-  // Fixture only. Production consumes AiAssistantOptions from the backend.
-  readonly models: readonly AiAssistantModelOption[] = [
+  readonly fileName = signal<string | null>(null);
+  readonly messages = signal<{ role: string; text: string }[]>([
+    { role: 'Vous', text: 'Quels flows ont été modifiés récemment ?' },
     {
-      provider: 'codex-cli',
-      model: 'codex-demo',
+      role: 'Assistant',
+      text: 'Le flow « HEVC + AAC/AC3 + ASS » a été mis à jour hier. Je peux aussi comparer ses dernières versions.',
+    },
+  ]);
+  readonly providers = [
+    { id: 'openai', label: 'OpenAI' },
+    { id: 'anthropic', label: 'Anthropic' },
+  ];
+  // Fixture visuelle : en production, options et efforts viennent du backend.
+  readonly models = [
+    {
+      provider: 'openai',
+      model: 'gpt-6.1',
       label: 'GPT 6.1',
+      reasoningEfforts: ['low', 'medium', 'high', 'max'],
+    },
+    {
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      label: 'GPT 5 mini',
       reasoningEfforts: ['low', 'medium', 'high'],
-      reasoningKnown: true,
     },
     {
-      provider: 'claude-cli',
-      model: 'opus-demo',
-      label: 'Claude Opus',
-      reasoningEfforts: ['medium', 'high', 'max'],
-      reasoningKnown: true,
-    },
-    {
-      provider: 'claude-cli',
-      model: 'sonnet-demo',
+      provider: 'anthropic',
+      model: 'claude-sonnet',
       label: 'Claude Sonnet',
       reasoningEfforts: ['low', 'medium', 'high'],
-      reasoningKnown: true,
+    },
+    {
+      provider: 'anthropic',
+      model: 'claude-opus',
+      label: 'Claude Opus',
+      reasoningEfforts: ['medium', 'high', 'max'],
     },
   ];
-  readonly launcher = viewChild('launcher', { read: ElementRef });
   readonly input = viewChild<ElementRef<HTMLTextAreaElement>>('messageInput');
   readonly thread = viewChild<ElementRef<HTMLElement>>('thread');
-  readonly position = [
-    {
-      originX: 'end' as const,
-      originY: 'top' as const,
-      overlayX: 'end' as const,
-      overlayY: 'bottom' as const,
-      offsetY: -12,
-      offsetX: 16,
-    },
-  ];
-  toggle() {
-    if (this.open()) this.close();
-    else this.open.set(true);
+  readonly modelControl = viewChild<ElementRef<HTMLElement>>('modelControl');
+
+  closeSettingsOnOutsideClick(event: MouseEvent) {
+    if (!this.settingsOpen()) return;
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest('.cdk-overlay-container')) return;
+    if (!this.modelControl()?.nativeElement.contains(target)) this.closeSettings();
   }
-  close() {
-    this.open.set(false);
-    this.launcher()?.nativeElement.focus();
+
+  filteredModels() {
+    return this.models.filter((option) => option.provider === this.provider());
   }
-  focusInput() {
-    this.input()?.nativeElement.focus();
+
+  selectedModelOption() {
+    return this.models.find((option) => option.model === this.model()) ?? this.filteredModels()[0];
   }
+
+  efforts() {
+    return this.selectedModelOption().reasoningEfforts;
+  }
+
+  selectedEffort() {
+    return this.efforts()[this.effortIndex()] ?? this.efforts()[0];
+  }
+
+  selectProvider(value: string) {
+    this.provider.set(value);
+    const firstModel = this.models.find((option) => option.provider === value);
+    if (!firstModel) return;
+    this.model.set(firstModel.model);
+    this.effortIndex.set(Math.min(1, firstModel.reasoningEfforts.length - 1));
+  }
+
   selectModel(value: string) {
     this.model.set(value);
-    this.effort.set(null);
+    this.effortIndex.set(Math.min(1, this.efforts().length - 1));
   }
-  efforts() {
-    return this.models.find((option) => option.model === this.model())?.reasoningEfforts ?? [];
+
+  setEffortIndex(value: string) {
+    this.effortIndex.set(Number(value));
   }
+
+  resetEffort() {
+    this.effortIndex.set(Math.min(1, this.efforts().length - 1));
+  }
+
+  closeSettings() {
+    this.settingsOpen.set(false);
+  }
+
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    this.fileName.set(input.files?.[0]?.name ?? null);
+    input.value = '';
+  }
+
   effortLabel(value: string) {
     return (
       ({ low: 'Faible', medium: 'Moyen', high: 'Élevé', max: 'Maximum' } as Record<string, string>)[
@@ -97,24 +128,29 @@ class WidgetMockup {
       ] ?? value
     );
   }
+
   send() {
     const text = this.text().trim();
     if (!text) return;
+    const attachmentNote = [this.resource(), this.fileName()].filter(Boolean).join(' · ');
     this.messages.update((messages) => [
       ...messages,
       { role: 'Vous', text },
       {
         role: 'Assistant',
-        text: 'Voici où apparaîtra la réponse de l’assistant. Cet aperçu ne contacte aucun fournisseur IA.',
+        text: `Réponse de démonstration avec ${this.selectedModelOption().label} · effort ${this.effortLabel(this.selectedEffort())}.${attachmentNote ? ` Pièce jointe : ${attachmentNote}.` : ''}`,
       },
     ]);
     this.text.set('');
+    this.fileName.set(null);
+    this.resource.set(null);
     setTimeout(() => {
       const element = this.thread()?.nativeElement;
       element?.scrollTo({ top: element.scrollHeight });
-      this.focusInput();
+      this.input()?.nativeElement.focus();
     });
   }
+
   keydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();

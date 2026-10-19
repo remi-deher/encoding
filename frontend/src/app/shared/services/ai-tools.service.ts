@@ -63,6 +63,12 @@ export class AiToolsService {
     return this.http.get<readonly AiAssistantActivity[]>('/api/v1/tools/ai/assistant/activity');
   }
 
+  getAssistantActivity(requestId: string): Observable<AiAssistantActivity> {
+    return this.http.get<AiAssistantActivity>(
+      `/api/v1/tools/ai/assistant/activity/${encodeURIComponent(requestId)}`,
+    );
+  }
+
   getAssistantConversation(id: string): Observable<AiAssistantConversationDetail> {
     return this.http.get<AiAssistantConversationDetail>(
       `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}`,
@@ -161,6 +167,33 @@ export class AiToolsService {
   ): Observable<{ readonly cancellationRequested: boolean }> {
     return this.http.post<{ readonly cancellationRequested: boolean }>(
       '/api/v1/tools/ai/assistant/actions/cancel-execution/confirm',
+      request,
+    );
+  }
+
+  confirmAssistantLibraryFlowAssignment(
+    request: AiAssistantConfirmActionRequest,
+  ): Observable<{ readonly assigned: boolean }> {
+    return this.http.post<{ readonly assigned: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/assign-library-flow/confirm',
+      request,
+    );
+  }
+
+  confirmAssistantFlowTemplateCreation(
+    request: AiAssistantConfirmActionRequest,
+  ): Observable<{ readonly created: boolean }> {
+    return this.http.post<{ readonly created: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/create-flow-template/confirm',
+      request,
+    );
+  }
+
+  confirmAssistantBusinessOperation(
+    request: AiAssistantConfirmActionRequest,
+  ): Observable<{ readonly applied: boolean }> {
+    return this.http.post<{ readonly applied: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/business-operation/confirm',
       request,
     );
   }

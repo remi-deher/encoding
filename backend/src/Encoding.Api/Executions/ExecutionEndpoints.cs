@@ -135,6 +135,14 @@ public static class ExecutionEndpoints
                 ? ApiProblem.Conflict("Relance impossible ou déjà enregistrée pour cette tentative.")
                 : Results.Created($"/api/v1/executions/{retryId}", new { id = retryId });
         }).WithName("RetryExecution");
+
+        executions.MapPost("/{id:guid}/resume", async (Guid id, ExecutionRepository repository, CancellationToken ct) =>
+        {
+            var resumedId = await repository.ResumeAsync(id, ct);
+            return resumedId is null
+                ? ApiProblem.Conflict("Reprise impossible : seule une exécution annulée sans reprise précédente peut être relancée.")
+                : Results.Created($"/api/v1/executions/{resumedId}", new { id = resumedId });
+        }).WithName("ResumeExecution");
     }
 
     private static bool IsTerminalState(string state) =>

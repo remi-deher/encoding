@@ -31,7 +31,8 @@ public sealed record AiAssistantResourceReference(string Type, Guid Id, int? Ver
 
 public sealed record AiAssistantSourcesRequest(IReadOnlyList<AiAssistantResourceReference> Sources);
 
-public sealed record AiAssistantToolCall(string Name, Guid? FlowId = null, string? State = null, int? Limit = null);
+public sealed record AiAssistantToolCall(string Name, Guid? FlowId = null, string? State = null, int? Limit = null,
+    JsonElement? Arguments = null);
 
 public sealed record AiAssistantToolResult(string Name, string Label, string Href, JsonElement Data);
 
@@ -78,7 +79,15 @@ public sealed record AiAssistantMessageResponse(
     string? Content,
     string? ErrorMessage,
     IReadOnlyList<AiAssistantSource> Sources, AiTurnModelSelection? Selection = null,
-    string? ActualModel = null, Guid? ExecutorNodeId = null);
+    string? ActualModel = null, Guid? ExecutorNodeId = null,
+    AiAssistantActionProposal? ActionProposal = null);
+
+public sealed record AiAssistantActionProposal(
+    string Action,
+    string ConfirmationToken,
+    string Summary,
+    DateTimeOffset ExpiresAt,
+    string? OperationName = null);
 
 public sealed record AiAssistantActivity(
     Guid RequestId,
@@ -90,7 +99,9 @@ public sealed record AiAssistantActivity(
     long? DurationMilliseconds,
     string? ErrorCategory,
     string Operation = "assistant",
-    IReadOnlyList<string>? Tools = null);
+    IReadOnlyList<string>? Tools = null,
+    string? Progress = null,
+    string? ProgressDetail = null);
 
 // Only exchanged over the authenticated, encrypted peer transport; never accepted from a public HTTP body.
 public sealed record AiAssistantForwardRequest(AiAssistantMessageRequest Request, Guid OwnerId, bool IsAdmin);

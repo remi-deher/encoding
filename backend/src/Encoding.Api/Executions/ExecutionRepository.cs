@@ -197,6 +197,43 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         return created;
     }
 
+    /// <summary>Creates a fresh attempt from the original source for a cancelled execution.</summary>
+    public async Task<Guid?> ResumeAsync(Guid id, CancellationToken ct)
+    {
+        await using var c = await dataSource.OpenConnectionAsync(ct);
+        await using var tx = await c.BeginTransactionAsync(ct);
+        var next = Guid.NewGuid();
+        const string detail = "Nouvelle exécution créée depuis la source après interruption.";
+        await using (var create = Sql.Command("""
+            INSERT INTO executions(id,media,library_name,flow_name,flow_version,flow_definition,state,attempt,retry_of,detail)
+            SELECT @next,media,library_name,flow_name,flow_version,flow_definition,'queued',attempt+1,id,@detail
+            FROM executions WHERE id=@id AND state='cancelled'
+            ON CONFLICT(retry_of) DO NOTHING RETURNING id
+            """, c, tx))
+        {
+            create.Parameters.AddWithValue("id", id);
+            create.Parameters.AddWithValue("next", next);
+            create.Parameters.AddWithValue("detail", detail);
+            if (await create.ScalarGuidAsync(ct) is not { } created) return null;
+            next = created;
+        }
+        await AddEvent(c, tx, next, Guid.NewGuid(), 0, "queued", detail, ct);
+        await using (var work = Sql.Command("""
+            INSERT INTO execution_work(execution_id,library_id,media_path,media_key,available_at)
+            SELECT @next,library_id,media_path,media_key,clock_timestamp()
+            FROM execution_work WHERE execution_id=@id
+            """, c, tx))
+        {
+            work.Parameters.AddWithValue("id", id);
+            work.Parameters.AddWithValue("next", next);
+            if (await work.ExecuteNonQueryAsync(ct) != 1)
+                throw new InvalidOperationException("L’exécution d’origine ne possède plus de source à reprendre.");
+        }
+        await tx.CommitAsync(ct);
+        broadcaster?.Publish(next);
+        return next;
+    }
+
     internal static async Task<Guid?> RetryInTransactionAsync(Guid id,RuntimeHandoffSelector? selector,Guid? previousWorker,string detail,
         DbConnection c,DbTransaction tx,CancellationToken ct)
     {

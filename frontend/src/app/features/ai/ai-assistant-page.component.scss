@@ -14,6 +14,30 @@
   background: var(--surface-container-low);
   border: 0;
 }
+.preview-panel {
+  width: min(440px, 42vw);
+  min-width: 320px;
+  padding: var(--space-4);
+  overflow-y: auto;
+  background: var(--surface-container-low);
+  border: 0;
+  border-left: 1px solid var(--outline-variant);
+}
+.preview-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.preview-panel__header h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-title-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .conversation-heading {
   display: flex;
   align-items: center;
@@ -151,11 +175,38 @@
   margin-top: var(--space-3);
   margin-right: var(--space-3);
 }
+.message-source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.message-source a {
+  margin: 0;
+}
 .thinking {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   color: var(--text-muted);
+}
+.assistant-action-confirmation {
+  align-self: flex-start;
+  width: min(100%, 620px);
+  padding: var(--space-4);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-low);
+}
+.assistant-action-confirmation h3,
+.assistant-action-confirmation p {
+  margin: 0 0 var(--space-2);
+}
+.assistant-action-confirmation__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 .conversation-footer {
   flex: 0 0 auto;
@@ -250,11 +301,10 @@
   color: var(--text-primary);
   font-size: var(--font-label);
 }
-.context-hint {
-  margin: var(--space-2) 0 0;
-  font-size: var(--font-label);
-  color: var(--text-muted);
-  text-align: center;
+.conversation-footer.model-settings-open {
+  position: relative;
+  z-index: 2;
+  overflow: visible;
 }
 :host(.assistant-panel-mode) {
   height: 100%;
@@ -290,6 +340,10 @@
   font-size: var(--font-label);
 }
 @media (max-width: 760px) {
+  .preview-panel {
+    width: min(92vw, 440px);
+    min-width: 0;
+  }
   :host {
     height: calc(100dvh - 100px);
   }

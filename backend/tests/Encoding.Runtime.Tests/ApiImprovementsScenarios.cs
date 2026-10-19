@@ -169,6 +169,22 @@ internal static class ApiImprovementsScenarios
                 Check(events.Count == 1 && events[0].Revision == 1 && events[0].State == "cancelled",
                     "afterRevision=0 returns only the cancellation event at revision 1.");
             }
+            await using (var resumeConnection = await dataSource.OpenConnectionAsync())
+            await using (var work = Encoding.Api.Infrastructure.Data.Sql.Command(
+                "INSERT INTO execution_work(execution_id,library_id,media_path,media_key) VALUES(@id,@library,'cancelled.mkv','CANCELLED.MKV')",
+                resumeConnection))
+            {
+                work.Parameters.AddWithValue("id", exec2);
+                work.Parameters.AddWithValue("library", createdLib.Id);
+                await work.ExecuteNonQueryAsync();
+            }
+            using (var resumeResp = await admin.SendAsync(HttpMethod.Post, $"/api/v1/executions/{exec2}/resume", new { }))
+            {
+                Check(resumeResp.StatusCode == HttpStatusCode.Created, "Resume endpoint creates a new execution from a cancelled source.");
+                var resumedId = (await resumeResp.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetGuid();
+                Check(resumedId != exec2 && await execRepo.GetAsync(resumedId, CancellationToken.None) is { State: "queued", Attempt: 2 },
+                    "Resume responds with a linked queued attempt.");
+            }
             Console.WriteLine("PASS: executions and events pagination and filtering.");
 
             // 4. Flux temps réel SSE (Server-Sent Events)
