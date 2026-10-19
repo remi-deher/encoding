@@ -4,22 +4,26 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-public sealed class OpenAiCompatibleAiClient(HttpClient httpClient, string model = "gpt-4o-mini", string? apiKey = null) : IAiTextClient
+public sealed class OpenAiCompatibleAiClient(HttpClient httpClient, string model = "gpt-4o-mini", string? apiKey = null,
+    bool supportsReasoningEffort = false) : IAiTextClient
 {
     public async Task<AiCompletionResult> GenerateTextAsync(AiPrompt prompt, CancellationToken ct = default)
     {
         try
         {
-            var requestBody = new
+            var requestBody = new Dictionary<string, object?>
             {
-                model = prompt.Model ?? model,
-                messages = new[]
+                ["model"] = prompt.Model ?? model,
+                ["messages"] = new[]
                 {
                     new { role = "system", content = prompt.SystemPrompt },
                     new { role = "user", content = prompt.UserPrompt }
-                },
-                temperature = prompt.Temperature
+                }
             };
+            if (supportsReasoningEffort && prompt.ReasoningEffort is { Length: > 0 })
+                requestBody["reasoning_effort"] = prompt.ReasoningEffort;
+            else
+                requestBody["temperature"] = prompt.Temperature;
 
             using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
             {

@@ -16,6 +16,16 @@ public sealed class CliAiTextClient(string toolId, AiCliRuntime runtime, int tim
                 ? ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands"]
                 : ["exec", "--json", "--ephemeral", "--disable", "shell_tool", "--disable", "unified_exec", "--skip-git-repo-check", "--sandbox", "read-only", "--color", "never", "-c", "approval_policy=\"never\"", "-"];
             if (prompt.Model is { Length: > 0 }) args = [.. args[..^ (toolId == "codex-cli" ? 1 : 0)], "--model", prompt.Model, .. (toolId == "codex-cli" ? new[] { "-" } : Array.Empty<string>())];
+            if (prompt.ReasoningEffort is { Length: > 0 } effort)
+            {
+                var allowedEfforts = toolId == "claude-cli"
+                    ? new[] { "low", "medium", "high" }
+                    : new[] { "low", "medium", "high", "xhigh" };
+                if (!allowedEfforts.Contains(effort, StringComparer.Ordinal))
+                    return new(false, "", "L’effort de raisonnement choisi n’est pas pris en charge par cet outil.");
+                if (toolId == "claude-cli") args = [.. args, "--effort", effort];
+                else args = [.. args[..^1], "-c", $"model_reasoning_effort=\"{effort}\"", "-"];
+            }
             var result = await runtime.RunAsync(toolId, args, timeout.Token, input: text);
             var completion = AiCliOutputParser.Parse(toolId, result.Output);
             if (result.ExitCode != 0)

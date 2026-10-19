@@ -56,6 +56,53 @@
   </aside>
 
   <section class="chat-panel" aria-label="Échange avec l’assistant">
+    <div class="assistant-model-controls" aria-label="Modèle utilisé par l’assistant">
+      @if (detail(); as current) {
+        <div class="model-summary">
+          <span class="model-summary-label">Modèle de cette conversation</span>
+          <strong>{{ conversationModelLabel(current.conversation) }}</strong>
+          @if (current.conversation.reasoningEffort) {
+            <span>Effort : {{ effortLabel(current.conversation.reasoningEffort) }}</span>
+          }
+        </div>
+      } @else {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Modèle</mat-label>
+          <mat-select
+            name="assistantModel"
+            [ngModel]="selectedModelKey()"
+            (ngModelChange)="selectModel($event)"
+            [disabled]="loadingAssistantOptions() || sending() || hasPendingRequest()"
+          >
+            @for (option of assistantOptions()?.models ?? []; track modelOptionKey(option)) {
+              <mat-option [value]="modelOptionKey(option)">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        @if (reasoningEfforts().length > 0) {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Effort de raisonnement</mat-label>
+            <mat-select
+              name="assistantReasoningEffort"
+              [ngModel]="selectedReasoningEffort()"
+              (ngModelChange)="selectEffort($event)"
+              [disabled]="sending() || hasPendingRequest()"
+            >
+              <mat-option [value]="null">Automatique</mat-option>
+              @for (effort of reasoningEfforts(); track effort) {
+                <mat-option [value]="effort">{{ effortLabel(effort) }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+        @if (loadingAssistantOptions()) {
+          <span class="muted" role="status">Chargement des modèles configurés…</span>
+        } @else if (!assistantOptions()?.models?.length) {
+          <span class="muted">Aucun modèle IA disponible dans la configuration.</span>
+        }
+      }
+    </div>
+
     @if (detail(); as current) {
       <header class="chat-heading">
         <div>
@@ -70,21 +117,41 @@
                 <a [routerLink]="source.href">{{ source.label }}</a>
                 @if (isAdmin() && source.kind === 'flow' && source.version) {
                   @if (hasDraftFor(source)) {
-                    <button matButton="text" type="button" [disabled]="actionBusy()" (click)="publishFlowFromAssistant(source)">
+                    <button
+                      matButton="text"
+                      type="button"
+                      [disabled]="actionBusy()"
+                      (click)="publishFlowFromAssistant(source)"
+                    >
                       Publier le brouillon…
                     </button>
                   }
-                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="deleteFlowFromAssistant(source)">
+                  <button
+                    matButton="text"
+                    type="button"
+                    [disabled]="actionBusy()"
+                    (click)="deleteFlowFromAssistant(source)"
+                  >
                     Supprimer le flow…
                   </button>
                 }
                 @if (isAdmin() && canStartLibrary(source)) {
-                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="startLibraryFromAssistant(source)">
+                  <button
+                    matButton="text"
+                    type="button"
+                    [disabled]="actionBusy()"
+                    (click)="startLibraryFromAssistant(source)"
+                  >
                     Lancer les traitements…
                   </button>
                 }
                 @if (isAdmin() && isCancelableExecution(source)) {
-                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="cancelExecutionFromAssistant(source)">
+                  <button
+                    matButton="text"
+                    type="button"
+                    [disabled]="actionBusy()"
+                    (click)="cancelExecutionFromAssistant(source)"
+                  >
                     Annuler l’exécution…
                   </button>
                 }
@@ -104,44 +171,117 @@
         </div>
         <a matButton="text" [routerLink]="current.conversation.source.href">Ouvrir la ressource</a>
       </header>
-      <div class="add-context-controls" aria-label="Ajouter une ressource au contexte">
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Type de ressource à ajouter</mat-label>
-          <mat-select
-            name="additionalResourceType"
-            [ngModel]="selectedResourceType()"
-            (ngModelChange)="selectResourceType($event)"
-            [disabled]="updatingSources() || hasPendingRequest()"
-          >
-            <mat-option value="flow">Flow publié</mat-option>
-            <mat-option value="execution">Exécution</mat-option>
-            <mat-option value="node">Nœud</mat-option>
-            <mat-option value="library">Bibliothèque</mat-option>
-          </mat-select>
-        </mat-form-field>
-        @if (!loadingSelectedResource() && resourceOptions().length > 0) {
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Ressource</mat-label>
-            <mat-select
-              name="additionalResourceId"
-              [(ngModel)]="selectedResourceId"
-              [disabled]="updatingSources() || hasPendingRequest()"
-            >
-              @for (resource of resourceOptions(); track resource.id) {
-                <mat-option [value]="resource.id">{{ resource.label }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        }
-        <button
-          matButton="tonal"
-          type="button"
-          [disabled]="!selectedResource() || updatingSources() || hasPendingRequest()"
-          (click)="addSelectedResource()"
+      <button
+        class="context-picker-toggle"
+        matButton="tonal"
+        type="button"
+        [disabled]="
+          updatingSources() ||
+          hasPendingRequest() ||
+          conversationSources(current.conversation).length >= 5
+        "
+        [attr.aria-expanded]="contextPickerOpen()"
+        (click)="toggleContextPicker()"
+      >
+        {{ contextPickerOpen() ? 'Fermer le sélecteur' : '＋ Ajouter au contexte' }}
+        <span>{{ conversationSources(current.conversation).length }}/5 ressources</span>
+      </button>
+      @if (contextPickerOpen()) {
+        <section
+          class="add-context-controls"
+          aria-label="Sélectionner une ressource pour le contexte"
         >
-          Ajouter au contexte
-        </button>
-      </div>
+          <div class="context-picker-heading">
+            <div>
+              <h3>Enrichir le contexte</h3>
+              <p>Choisissez les ressources que l’assistant pourra consulter.</p>
+            </div>
+            <span class="muted" aria-live="polite">
+              {{ conversationSources(current.conversation).length }} sur 5
+            </span>
+          </div>
+          <div class="context-categories" role="group" aria-label="Type de ressource">
+            <button
+              matButton="text"
+              type="button"
+              [class.is-active]="selectedResourceType() === 'flow'"
+              (click)="selectResourceType('flow')"
+            >
+              Flows
+            </button>
+            <button
+              matButton="text"
+              type="button"
+              [class.is-active]="selectedResourceType() === 'library'"
+              (click)="selectResourceType('library')"
+            >
+              Bibliothèques
+            </button>
+            <button
+              matButton="text"
+              type="button"
+              [class.is-active]="selectedResourceType() === 'node'"
+              (click)="selectResourceType('node')"
+            >
+              Nœuds
+            </button>
+            <button
+              matButton="text"
+              type="button"
+              [class.is-active]="selectedResourceType() === 'execution'"
+              (click)="selectResourceType('execution')"
+            >
+              Exécutions
+            </button>
+          </div>
+          <mat-form-field class="context-search" appearance="outline" subscriptSizing="dynamic">
+            <mat-label
+              >Rechercher
+              {{
+                selectedResourceType() === 'flow'
+                  ? 'un flow'
+                  : selectedResourceType() === 'library'
+                    ? 'une bibliothèque'
+                    : selectedResourceType() === 'node'
+                      ? 'un nœud'
+                      : 'une exécution'
+              }}</mat-label
+            >
+            <input
+              matInput
+              name="contextSearch"
+              [ngModel]="contextSearch()"
+              (ngModelChange)="contextSearch.set($event)"
+            />
+          </mat-form-field>
+          @if (loadingSelectedResource()) {
+            <p class="muted" role="status">Chargement des ressources…</p>
+          } @else if (filteredResourceOptions().length === 0) {
+            <p class="muted context-empty">Aucune ressource ne correspond à cette recherche.</p>
+          } @else {
+            <ul class="context-resource-list">
+              @for (resource of filteredResourceOptions(); track resource.id) {
+                <li>
+                  <button
+                    type="button"
+                    class="context-resource-option"
+                    [disabled]="
+                      isSourceAttached(resource) ||
+                      updatingSources() ||
+                      hasPendingRequest() ||
+                      conversationSources(current.conversation).length >= 5
+                    "
+                    (click)="addResourceToContext(resource)"
+                  >
+                    <span>{{ resource.label }}</span>
+                    <span>{{ isSourceAttached(resource) ? 'Ajoutée' : '+ Ajouter' }}</span>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+      }
       @if (actionMessage(); as message) {
         <p class="muted" role="status">{{ message }}</p>
       }
@@ -222,8 +362,8 @@
           </mat-form-field>
         }
         <p class="data-disclosure">
-          {{ resourceDisclosure() }} Votre question et ces informations seront transmises au
-          fournisseur IA configuré par défaut, qui peut être externe à votre installation.
+          {{ resourceDisclosure() }} Votre question et ces informations seront transmises au modèle
+          choisi, qui peut être hébergé en dehors de votre installation.
         </p>
       </div>
     }
