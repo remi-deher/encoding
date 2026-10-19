@@ -3,6 +3,8 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
   AiClusterView,
+  AiClusterModelCatalog,
+  AiModelPolicy,
   AiClusterQuotas,
   AiSessionPage,
   AiSessionState,
@@ -39,8 +41,22 @@ export class AiToolsService {
     );
   }
 
-  getAssistantOptions(): Observable<AiAssistantOptions> {
-    return this.http.get<AiAssistantOptions>('/api/v1/tools/ai/assistant/options');
+  getModelCatalog(refresh = false): Observable<AiClusterModelCatalog> {
+    return this.http.get<AiClusterModelCatalog>('/api/v1/tools/ai/models', { params: { refresh } });
+  }
+
+  updateModelPolicy(provider: string, model: string, enabled: boolean): Observable<AiModelPolicy> {
+    return this.http.put<AiModelPolicy>('/api/v1/tools/ai/models/policy', {
+      provider,
+      model,
+      enabled,
+    });
+  }
+
+  getAssistantOptions(refresh = false): Observable<AiAssistantOptions> {
+    return this.http.get<AiAssistantOptions>('/api/v1/tools/ai/assistant/options', {
+      params: { refresh },
+    });
   }
 
   listAssistantActivity(): Observable<readonly AiAssistantActivity[]> {

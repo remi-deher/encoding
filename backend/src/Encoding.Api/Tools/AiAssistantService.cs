@@ -34,51 +34,24 @@ public sealed class AiAssistantService(
     McpService mcp,
     IDataProtectionProvider protection)
 {
-    public async Task<AiAssistantOptions> OptionsAsync(CancellationToken ct)
+    public async Task<AiAssistantOptions> OptionsAsync(CancellationToken ct, bool refresh = false)
     {
         var settings = await cluster.GetSettingsAsync(ct);
+        if (refresh) await cluster.ModelsAsync(true, ct);
         var view = await cluster.ViewAsync(ct);
-        var providerNames = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["codex-cli"] = "Codex CLI",
-            ["claude-cli"] = "Claude CLI",
-            ["openai"] = "OpenAI compatible",
-            ["ollama"] = "Ollama",
-        };
+        var policy = await cluster.ModelPolicyAsync(ct);
         var nodes = settings.AssistantLocalOnly ? view.Nodes.Take(1) : view.Nodes;
-        var options = nodes
-            .Where(node => node.Reachable)
-            .SelectMany(node => node.Providers.Select(provider =>
-            {
-                var model = node.Models?.GetValueOrDefault(provider);
-                if ((provider is "openai" or "ollama") && string.IsNullOrWhiteSpace(model)) return null;
-                if (!providerNames.TryGetValue(provider, out var providerName)) return null;
-                if (settings.AssistantLocalOnly && provider != "ollama") return null;
-                return new AiAssistantModelOption(
-                    provider,
-                    model,
-                    string.IsNullOrWhiteSpace(model) ? $"{providerName} · modèle par défaut" : $"{providerName} · {model}",
-                    ReasoningEfforts(provider, model));
-            }))
-            .OfType<AiAssistantModelOption>()
-            .DistinctBy(option => (option.Provider, option.Model))
-            .ToArray();
+        var catalogs = nodes.Where(n => n.Reachable).Select(n => new AiNodeModelCatalog(n.NodeId, n.Name, n.Catalogs ?? [])).ToArray();
+        var options = catalogs.SelectMany(node => node.Providers
+            .Where(c => c.State == "available" && (!settings.AssistantLocalOnly || c.Provider == "ollama"))
+            .SelectMany(c => c.Models.Where(m => !policy.DisabledModels.Any(d => d.Provider == c.Provider && d.Model == m.Id))
+                .Select(m => new AiAssistantModelOption(c.Provider, m.Id, m.Label, m.ReasoningEfforts,
+                    node.NodeId, node.Name, m.DefaultReasoningEffort, m.ReasoningKnown, m.IsDefault)))).ToArray();
         var defaultProvider = settings.AssistantProvider ?? settings.DefaultProvider;
-        var defaultModel = options.FirstOrDefault(option => option.Provider == defaultProvider)?.Model;
-        return new(defaultProvider, defaultModel, options);
+        var defaultModel = options.FirstOrDefault(o => o.Provider == defaultProvider && o.IsDefault)?.Model
+            ?? options.FirstOrDefault(o => o.Provider == defaultProvider)?.Model;
+        return new(defaultProvider, defaultModel, options, catalogs);
     }
-
-    private static IReadOnlyList<string> ReasoningEfforts(string provider, string? model) => provider switch
-    {
-        "codex-cli" => ["low", "medium", "high", "xhigh"],
-        "claude-cli" => ["low", "medium", "high"],
-        "openai" when model is not null && (model.StartsWith("o1", StringComparison.OrdinalIgnoreCase)
-            || model.StartsWith("o3", StringComparison.OrdinalIgnoreCase)
-            || model.StartsWith("o4", StringComparison.OrdinalIgnoreCase)
-            || model.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase))
-            => ["low", "medium", "high"],
-        _ => [],
-    };
 
     private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
     private readonly IDataProtector actionProtector = protection.CreateProtector("Encoding.AiAssistantAction.v1");
@@ -95,7 +68,8 @@ public sealed class AiAssistantService(
         IReadOnlyDictionary<Guid, string>? UserPrompts = null,
         IReadOnlyDictionary<Guid, string>? TurnPromptSnapshots = null,
         IReadOnlyDictionary<Guid, string>? TurnToolCalls = null,
-        IReadOnlyDictionary<Guid, string>? TurnModelPlans = null);
+        IReadOnlyDictionary<Guid, string>? TurnModelPlans = null,
+        IReadOnlyDictionary<Guid, AiTurnModelSelection>? TurnSelections = null);
     private sealed record ResolvedContext(AiAssistantSource Source, string Data);
 
     /// <summary>Expire les conversations terminées et l'activité, avec des tombstones répliqués au lieu d'effacer une seule projection locale.</summary>
@@ -326,6 +300,15 @@ public sealed class AiAssistantService(
         await SaveActivityAsync(OwnerId(user), activity, ct);
     }
 
+    private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), string> forwardedRequests = new();
+    public async Task<bool> CancelRequestAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct)
+    {
+        if (CancelRequest(requestId, user)) return true;
+        if (!forwardedRequests.TryGetValue((OwnerId(user), requestId), out var url)) return false;
+        try { return await transport.CallAsync<bool>(url, "assistant-cancel", new AiAssistantForwardCancel(Guid.ParseExact(OwnerId(user), "N"), requestId), TimeSpan.FromSeconds(15), ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested) { return false; }
+    }
+
     public bool CancelRequest(Guid requestId, ClaimsPrincipal user)
     {
         if (requestId == Guid.Empty) return false;
@@ -367,7 +350,8 @@ public sealed class AiAssistantService(
         var session = await cluster.GetSessionAsync(id, ct);
         var turns = session?.Turns.Select(turn => new AiAssistantTurn(
             turn.RequestId, stored.UserPrompts?.GetValueOrDefault(turn.RequestId) ?? turn.UserPrompt, turn.Content,
-            stored.TurnSources?.GetValueOrDefault(turn.RequestId) ?? [conversation.Source])).ToArray()
+            stored.TurnSources?.GetValueOrDefault(turn.RequestId) ?? [conversation.Source],
+            turn.Selection, turn.Usage?.Model, turn.ExecutorNodeId)).ToArray()
             ?? Array.Empty<AiAssistantTurn>();
         var pending = session?.PendingRequest is { } requestId && session.PendingPrompt is { } prompt
             ? new AiAssistantPendingTurn(requestId, stored.UserPrompts?.GetValueOrDefault(requestId) ?? prompt.UserPrompt,
@@ -415,7 +399,48 @@ public sealed class AiAssistantService(
         return conversation;
     }
 
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> conversationGates = new();
     public async Task<AiAssistantMessageResponse?> SendAsync(AiAssistantMessageRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        var id = request.ConversationId ?? $"{transport.LocalId:N}.{request.RequestId:N}";
+        if (request.ConversationId is not null && IsSessionId(id)
+            && Guid.ParseExact(id.Split('.')[0], "N") != transport.LocalId)
+        {
+            var owner = Guid.ParseExact(id.Split('.')[0], "N");
+            foreach (var url in await transport.PeersAsync(ct))
+            {
+                AiNodeAvailability? node;
+                try { node = await transport.CallAsync<AiNodeAvailability>(url, "availability", new { }, TimeSpan.FromSeconds(20), ct); }
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested) { continue; }
+                if (node.NodeId != owner) continue;
+                AiAssistantForwardResponse reply;
+                var forwardedKey = (OwnerId(user), request.RequestId);
+                if (!forwardedRequests.TryAdd(forwardedKey, url)) throw new InvalidOperationException("Cette demande est déjà en cours.");
+                try
+                {
+                    reply = await transport.CallAsync<AiAssistantForwardResponse>(url, "assistant-message",
+                        new AiAssistantForwardRequest(request, Guid.ParseExact(OwnerId(user), "N"), user.IsInRole("admin")), TimeSpan.FromMinutes(35), ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                { throw new InvalidOperationException("Le coordinateur n’a pas confirmé le résultat. Reprenez le même message après son retour."); }
+                finally { forwardedRequests.TryRemove(forwardedKey, out _); }
+                if (reply.Error is { } error)
+                {
+                    if (reply.InvalidRequest) throw new ArgumentException(error);
+                    throw new InvalidOperationException(error);
+                }
+                return reply.Result;
+            }
+            throw new InvalidOperationException("Le coordinateur de cette conversation est indisponible. Réessayez après son retour.");
+        }
+
+        var gate = conversationGates.GetOrAdd(OwnerId(user) + "/" + id, _ => new(1));
+        if (!await gate.WaitAsync(0, ct)) throw new InvalidOperationException("Un message est déjà en cours dans cette conversation.");
+        try { return await SendCoreAsync(request, user, ct); }
+        finally { gate.Release(); }
+    }
+
+    private async Task<AiAssistantMessageResponse?> SendCoreAsync(AiAssistantMessageRequest request, ClaimsPrincipal user, CancellationToken ct)
     {
         var ownerId = OwnerId(user);
         if (request.RequestId == Guid.Empty || string.IsNullOrWhiteSpace(request.UserPrompt) || request.UserPrompt.Length > 4000)
@@ -439,14 +464,17 @@ public sealed class AiAssistantService(
                     || saved.Conversation.Source.ResourceId != context.Source.ResourceId
                     || saved.Conversation.Source.Version != context.Source.Version)
                     throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre contexte.");
-                conversation = saved.Conversation;
+                conversation = request.Provider is null ? saved.Conversation : saved.Conversation with
+                {
+                    Provider = request.Provider, Model = request.Model, ReasoningEffort = request.ReasoningEffort, NodeId = request.NodeId,
+                };
             }
             else
             {
                 var options = await OptionsAsync(ct);
                 var provider = request.Provider ?? options.DefaultProvider;
                 var model = request.Provider is null && request.Model is null ? options.DefaultModel : request.Model;
-                var selectedOption = options.Models.FirstOrDefault(option => option.Provider == provider && option.Model == model)
+                var selectedOption = options.Models.FirstOrDefault(option => option.Provider == provider && option.Model == model && (request.NodeId is null || option.NodeId == request.NodeId))
                     ?? throw new ArgumentException("Le fournisseur ou le modèle choisi n’est pas configuré ou disponible dans le cluster.");
                 if (request.ReasoningEffort is not null && !selectedOption.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal))
                     throw new ArgumentException("L’effort choisi n’est pas pris en charge par ce modèle.");
@@ -459,7 +487,7 @@ public sealed class AiAssistantService(
                     now,
                     now,
                     Model: model,
-                    ReasoningEffort: request.ReasoningEffort);
+                    ReasoningEffort: request.ReasoningEffort, NodeId: selectedOption.NodeId);
                 await SaveConversationAsync(ownerId, conversation, ct);
             }
         }
@@ -473,10 +501,10 @@ public sealed class AiAssistantService(
                 || request.ResourceId is { } resourceId && resourceId != savedConversation.Source.ResourceId
                 || request.ResourceVersion is { } version && version != savedConversation.Source.Version)
                 throw new ArgumentException("Le contexte d’une conversation est fixe. Ouvrez une nouvelle conversation pour une autre ressource.");
-            if (request.Provider is not null && (request.Provider != savedConversation.Provider
-                || request.Model != savedConversation.Model || request.ReasoningEffort != savedConversation.ReasoningEffort))
-                throw new ArgumentException("Le fournisseur, le modèle et l’effort sont fixes pour une conversation. Ouvrez un nouvel échange pour les modifier.");
-            conversation = savedConversation;
+            conversation = request.Provider is null ? savedConversation : savedConversation with
+            {
+                Provider = request.Provider, Model = request.Model, ReasoningEffort = request.ReasoningEffort, NodeId = request.NodeId,
+            };
         }
 
         var session = await cluster.GetSessionAsync(conversation.Id, ct);
@@ -487,6 +515,35 @@ public sealed class AiAssistantService(
         if (legacySession && requestedTools.Count > 0)
             throw new InvalidOperationException("Cette ancienne conversation ne prend pas en charge les outils de lecture. Créez une nouvelle conversation.");
         var storedConversation = await ReadConversationAsync(ownerId, conversation.Id, ct);
+        var selection = new AiTurnModelSelection(conversation.Provider, conversation.Model, conversation.ReasoningEffort, conversation.NodeId);
+        var savedSelection = storedConversation?.TurnSelections?.GetValueOrDefault(request.RequestId);
+        if (savedSelection is not null && request.Provider is null)
+        {
+            selection = savedSelection;
+            conversation = conversation with { Provider = selection.Provider, Model = selection.Model, ReasoningEffort = selection.ReasoningEffort, NodeId = selection.NodeId };
+        }
+        if (savedSelection is not null && savedSelection != selection)
+            throw new ArgumentException("Cette demande conserve son modèle et son niveau de raisonnement. Utilisez un nouvel identifiant pour un autre tour.");
+        if (session?.PendingRequest is { } pendingId && pendingId != request.RequestId)
+            throw new InvalidOperationException("Terminez ou reprenez le message en attente avant de changer de modèle.");
+        if (session?.PendingRequest == request.RequestId && session.PendingPrompt is { } pendingSelection
+            && (conversation.Provider != session.Provider || conversation.Model != pendingSelection.Model
+                || conversation.ReasoningEffort != pendingSelection.ReasoningEffort || conversation.NodeId != pendingSelection.NodeId))
+            throw new ArgumentException("La reprise conserve le modèle, le raisonnement et la connexion du message en attente.");
+        if (savedSelection is null && session?.PendingRequest != request.RequestId
+            && session?.Turns.Any(t => t.RequestId == request.RequestId) != true)
+        {
+            var options = await OptionsAsync(ct);
+            var option = options.Models.FirstOrDefault(o => o.Provider == conversation.Provider && o.Model == conversation.Model
+                && (conversation.NodeId is null || o.NodeId == conversation.NodeId))
+                ?? throw new ArgumentException("Le modèle choisi est désactivé ou indisponible. Actualisez les modèles.");
+            if (conversation.ReasoningEffort is not null && !option.ReasoningEfforts.Contains(conversation.ReasoningEffort))
+                throw new ArgumentException("Ce niveau de raisonnement n’est pas disponible pour ce modèle.");
+            conversation = conversation with { NodeId = option.NodeId };
+            selection = selection with { NodeId = option.NodeId };
+        }
+        var selections = storedConversation?.TurnSelections?.ToDictionary(p => p.Key, p => p.Value) ?? new Dictionary<Guid, AiTurnModelSelection>();
+        selections[request.RequestId] = selection;
         var savedUserPrompt = storedConversation?.UserPrompts?.GetValueOrDefault(request.RequestId);
         if (savedUserPrompt is not null && savedUserPrompt != request.UserPrompt)
             throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre message.");
@@ -494,6 +551,13 @@ public sealed class AiAssistantService(
         var savedToolCalls = storedConversation?.TurnToolCalls?.GetValueOrDefault(request.RequestId);
         if (savedToolCalls is not null && savedToolCalls != serializedToolCalls)
             throw new ArgumentException("Cet identifiant de requête est déjà associé à d’autres outils ou paramètres.");
+        if (session?.Turns.FirstOrDefault(t => t.RequestId == request.RequestId) is { } completed)
+        {
+            // A replay is a read of an already committed turn; it must not rewind the conversation's latest configuration.
+            return new(true, storedConversation!.Conversation, request.RequestId, completed.Content, null,
+                storedConversation.TurnSources?.GetValueOrDefault(request.RequestId) ?? [storedConversation.Conversation.Source],
+                completed.Selection, completed.Usage?.Model, completed.ExecutorNodeId);
+        }
         var savedPromptSnapshot = storedConversation?.TurnPromptSnapshots?.GetValueOrDefault(request.RequestId);
         IReadOnlyList<AiAssistantSource> allSources;
         string contextualPrompt;
@@ -536,11 +600,6 @@ public sealed class AiAssistantService(
             allSources = allContexts.Select(context => context.Source).ToArray();
             contextualPrompt = legacySession ? request.UserPrompt : BuildContextualPrompt(request.UserPrompt, allContexts);
         }
-        var existingTurn = session?.Turns.FirstOrDefault(turn => turn.RequestId == request.RequestId);
-        if (existingTurn is not null && existingTurn.UserPrompt != contextualPrompt)
-            throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre message ou contexte.");
-        if (existingTurn is not null && storedConversation?.TurnModelPlans?.ContainsKey(request.RequestId) != true)
-            return new(true, conversation, request.RequestId, existingTurn.Content, null, allSources);
         if (session?.PendingPrompt is { } pendingPrompt
             && pendingPrompt.RequestId == request.RequestId
             && pendingPrompt.UserPrompt != contextualPrompt)
@@ -557,7 +616,7 @@ public sealed class AiAssistantService(
         var turnToolCalls = storedConversation?.TurnToolCalls?.ToDictionary(pair => pair.Key, pair => pair.Value)
             ?? new Dictionary<Guid, string>();
         turnToolCalls[request.RequestId] = serializedToolCalls;
-        await SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts, turnPromptSnapshots, turnToolCalls);
+        await SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts, turnPromptSnapshots, turnToolCalls, turnSelections: selections);
         var startedAt = DateTimeOffset.UtcNow;
         var activity = new AiAssistantActivity(request.RequestId, conversation.Id, conversation.Provider,
             "running", startedAt, startedAt, null, null, Tools: requestedTools.Select(tool => tool.Name).ToArray());
@@ -596,9 +655,9 @@ public sealed class AiAssistantService(
                 var plannerSessionId = $"{conversation.Id.Split('.')[0]}.{plannerRequestId:N}";
                 var planner = await cluster.GenerateAsync(
                     conversation.Provider,
-                    new AiPrompt(BuildToolPlannerPrompt(), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId, RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort),
+                    new AiPrompt(BuildToolPlannerPrompt(), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId, RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
                     requestCancellation.Token,
-                    localOnly: policy.AssistantLocalOnly);
+                    localOnly: policy.AssistantLocalOnly, allowModelChanges: true);
                 if (!planner.Success)
                     throw new InvalidOperationException(planner.ErrorMessage ?? "Le modèle n’a pas pu choisir une réponse ou un outil de lecture.");
                 try { plan = AiAssistantToolPlanParser.Parse(planner.Content); }
@@ -653,9 +712,9 @@ public sealed class AiAssistantService(
             await SaveActivityAsync(ownerId, activity, ct);
             result = await cluster.GenerateAsync(
                 conversation.Provider,
-                new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId, ReasoningEffort: conversation.ReasoningEffort),
+                new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
                 requestCancellation.Token,
-                localOnly: policy.AssistantLocalOnly);
+                localOnly: policy.AssistantLocalOnly, allowModelChanges: true);
         }
         catch (OperationCanceledException) when (requestCancellation.IsCancellationRequested)
         {
@@ -698,7 +757,7 @@ public sealed class AiAssistantService(
             result.RequestId ?? request.RequestId,
             result.Success ? result.Content : null,
             result.Success ? null : result.ErrorMessage ?? "Le fournisseur IA n’a pas retourné de réponse.",
-            allSources);
+            allSources, selection, result.Usage?.Model, result.ExecutorNodeId);
     }
 
     private async Task<ResolvedContext?> ResolveContextAsync(string kind, Guid id, int? version, CancellationToken ct)
@@ -799,7 +858,8 @@ public sealed class AiAssistantService(
         IReadOnlyDictionary<Guid, string>? userPrompts = null,
         IReadOnlyDictionary<Guid, string>? turnPromptSnapshots = null,
         IReadOnlyDictionary<Guid, string>? turnToolCalls = null,
-        IReadOnlyDictionary<Guid, string>? turnModelPlans = null)
+        IReadOnlyDictionary<Guid, string>? turnModelPlans = null,
+        IReadOnlyDictionary<Guid, AiTurnModelSelection>? turnSelections = null)
     {
         await store.SaveAsync(SessionOwnerKey(conversation.Id), ownerId, ct);
         var existing = await ReadConversationAsync(ownerId, conversation.Id, ct);
@@ -808,7 +868,7 @@ public sealed class AiAssistantService(
                 userPrompts ?? existing?.UserPrompts,
                 turnPromptSnapshots ?? existing?.TurnPromptSnapshots,
                 turnToolCalls ?? existing?.TurnToolCalls,
-                turnModelPlans ?? existing?.TurnModelPlans), ct);
+                turnModelPlans ?? existing?.TurnModelPlans, turnSelections ?? existing?.TurnSelections), ct);
     }
 
     private sealed record StoredActivity(string OwnerId, AiAssistantActivity Activity);

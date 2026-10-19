@@ -12,8 +12,8 @@ public static class AiAssistantEndpoints
     {
         var group = app.MapGroup("/api/v1/tools/ai/assistant").WithTags("AI Assistant");
 
-        group.MapGet("/options", async (AiAssistantService service, CancellationToken ct) =>
-            await GuardAsync(async () => Results.Ok(await service.OptionsAsync(ct))))
+        group.MapGet("/options", async (bool? refresh, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await service.OptionsAsync(ct, refresh ?? false))))
         .AllowAssistantConversation();
 
         group.MapGet("/conversations", async (HttpContext http, AiAssistantService service, CancellationToken ct) =>
@@ -46,8 +46,8 @@ public static class AiAssistantEndpoints
         .AllowAssistantConversation()
         .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
 
-        group.MapPost("/requests/{requestId:guid}/cancel", (Guid requestId, HttpContext http, AiAssistantService service) =>
-            service.CancelRequest(requestId, http.User)
+        group.MapPost("/requests/{requestId:guid}/cancel", async (Guid requestId, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await service.CancelRequestAsync(requestId, http.User, ct)
                 ? Results.Accepted(value: new { requestId, state = "cancellation-requested" })
                 : Results.Conflict(new { title = "Aucune demande active ne correspond à cet identifiant." }))
         .AllowAssistantConversation();

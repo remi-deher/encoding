@@ -38,8 +38,8 @@
       <section class="usage-settings" aria-labelledby="ai-usage-title">
         <h3 id="ai-usage-title">Usages et modèles</h3>
         <p>
-          Chaque usage utilise le modèle configuré pour son fournisseur. « Par défaut » suit le
-          moteur du cluster.
+          « Par défaut » suit le moteur du cluster. Le modèle et le raisonnement de l’assistant se
+          choisissent dans la conversation.
         </p>
         <div class="fields">
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -382,3 +382,7 @@
     }
   </form>
 </ng-template>
+
+@if (isAdmin()) {
+  <app-ai-model-catalog />
+}
