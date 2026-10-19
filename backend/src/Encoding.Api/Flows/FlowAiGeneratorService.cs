@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+using System.Text;
 using Encoding.Api.Tools;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Tools;
@@ -38,9 +40,7 @@ public sealed class FlowAiGeneratorService(
 
         // Boucle d'auto-réparation (1 tour)
         var issuesText = string.Join("\n", val?.Issues.Select(i => $"- [{i.Code}] {i.Path}: {i.Message}") ?? []);
-        var repairPrompt = $"Le JSON précédent contient les erreurs suivantes :\n{issuesText}\n\nCorrige le document JSON et renvoie UNIQUEMENT l'objet JSON valide sans texte additionnel :\n{json}";
-
-        var repairResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, repairPrompt), ct);
+        var repairResult = await RepairAsync(client, systemPrompt, aiResult, json, issuesText, ct);
         if (repairResult.Success)
         {
             var repairedJson = ExtractJson(repairResult.Content);
@@ -54,7 +54,7 @@ public sealed class FlowAiGeneratorService(
             }
         }
 
-        return Reply(new FlowAiResponse(false, null, "Le flow généré ne respecte pas le catalogue.", val?.Issues));
+        return Reply(new FlowAiResponse(false, null, "Le flow généré ne respecte pas le catalogue après une tentative de réparation.", val?.Issues));
     }
 
     public async Task<FlowAiResponse> RefactorFlowAsync(FlowAiRefactorRequest request, CancellationToken ct = default)
@@ -83,7 +83,21 @@ public sealed class FlowAiGeneratorService(
             return Reply(new FlowAiResponse(true, def));
         }
 
-        return Reply(new FlowAiResponse(false, def, "Le flow modifié contient des erreurs de validation.", val?.Issues));
+        var issuesText = string.Join("\n", val?.Issues.Select(i => $"- [{i.Code}] {i.Path}: {i.Message}") ?? []);
+        var repairResult = await RepairAsync(client, systemPrompt, aiResult, json, issuesText, ct);
+        if (repairResult.Success)
+        {
+            var repairedJson = ExtractJson(repairResult.Content);
+            if (repairedJson is not null)
+            {
+                var (repDef, repVal) = TryValidate(repairedJson);
+                if (repVal is not null && repVal.IsValid && repDef is not null)
+                    return Reply(new FlowAiResponse(true, repDef));
+                val = repVal;
+            }
+        }
+
+        return Reply(new FlowAiResponse(false, def, "Le flow modifié ne respecte pas le catalogue après une tentative de réparation.", val?.Issues));
     }
 
     public async Task<FlowAiResponse> ExplainFlowAsync(FlowAiExplainRequest request, CancellationToken ct = default)
@@ -108,6 +122,27 @@ public sealed class FlowAiGeneratorService(
         {
             return (null, null);
         }
+    }
+
+    private static Task<AiCompletionResult> RepairAsync(
+        IAiTextClient client,
+        string systemPrompt,
+        AiCompletionResult original,
+        string invalidJson,
+        string issuesText,
+        CancellationToken ct)
+    {
+        var repairPrompt = $"Le JSON précédent contient les erreurs suivantes :\n{issuesText}\n\nCorrige le document JSON et renvoie UNIQUEMENT l'objet JSON valide sans texte additionnel :\n{invalidJson}";
+        var operationId = original.RequestId ?? Guid.NewGuid();
+        var repairId = CreateRepairRequestId(operationId);
+        return client.GenerateTextAsync(new AiPrompt(systemPrompt, repairPrompt,
+            SessionId: original.SessionId, RequestId: repairId), ct);
+    }
+
+    private static Guid CreateRepairRequestId(Guid operationId)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"flow-repair-v1:{operationId:N}"));
+        return new Guid(hash.AsSpan(0, 16));
     }
 
     private static string? ExtractJson(string text)
