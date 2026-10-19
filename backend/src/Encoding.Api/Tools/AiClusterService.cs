@@ -1,12 +1,13 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Encoding.Contracts.Tools;
+using Encoding.Api.Nodes;
 
 namespace Encoding.Api.Tools;
 
 /// <summary>A stable session coordinator owns writes; inference may move between connected peers without moving secrets.</summary>
 public sealed class AiClusterService(AiClusterTransport transport, AiClusterStore store, DeviceCodeAuthService auth,
-    AiSettingsService settings, AiClientFactory factory, IConfiguration configuration)
+    AiSettingsService settings, AiClientFactory factory, IConfiguration configuration, LocalNodeRegistry localNode)
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> gates = new();
     private readonly ConcurrentDictionary<Guid, Lazy<Task<AiCompletionResult>>> running = new();
@@ -16,7 +17,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var local = settings.GetSettings();
         if (!string.IsNullOrWhiteSpace(local.OllamaBaseUrl) && !string.IsNullOrWhiteSpace(local.OllamaModel)) providers.Add("ollama");
         if (!string.IsNullOrWhiteSpace(local.OpenAiBaseUrl) && !string.IsNullOrWhiteSpace(local.OpenAiModel) && !string.IsNullOrWhiteSpace(local.OpenAiApiKey)) providers.Add("openai");
-        return new(transport.LocalId, configuration["Node:Name"] ?? Environment.MachineName, providers);
+        var displayName = await localNode.ResolveDisplayNameAsync(ct);
+        return new(transport.LocalId, displayName ?? configuration["Node:Name"] ?? Environment.MachineName, providers);
     }
     public async Task<AiClusterView> ViewAsync(CancellationToken ct)
     {

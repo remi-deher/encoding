@@ -219,3 +219,38 @@ test('Codex displays the server diagnostic instead of a generic network error', 
   await expect(page.getByText(title, { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('provider changes survive navigation and refresh before saving', async ({ page }) => {
+  let saved: Record<string, unknown> | undefined;
+  await page.route('**/api/v1/tools/ai/settings', async (route) => {
+    if (route.request().method() !== 'GET') {
+      saved = route.request().postDataJSON();
+    }
+    await route.fulfill({
+      json: {
+        defaultProvider: 'ollama',
+        ollamaBaseUrl: 'http://localhost:11434/v1/',
+        ollamaModel: saved?.['ollamaModel'] ?? 'llama3.2',
+        openAiBaseUrl: 'https://api.openai.com/v1/',
+        openAiModel: 'gpt-4o-mini',
+        hasOpenAiApiKey: true,
+        timeoutSeconds: 120,
+        subtitleBatchSize: 80,
+      },
+    });
+  });
+  await page.goto('/settings?tab=ai');
+  const tab = page.locator('app-ai-tools-tab');
+  await tab.getByLabel('Modèle', { exact: true }).fill('my-local-model');
+  await expect(tab.getByText('Modifications non enregistrées', { exact: true })).toBeVisible();
+  await tab.getByRole('tab', { name: /Claude Code/ }).click();
+  await expect(tab.getByText('Préparer votre jeton', { exact: true })).toBeVisible();
+  await expect(tab.getByLabel('Jeton Claude Code')).toHaveAttribute('type', 'password');
+  await tab.getByRole('button', { name: 'Actualiser les connexions' }).click();
+  await tab.getByRole('tab', { name: /Ollama/ }).click();
+  await expect(tab.getByLabel('Modèle', { exact: true })).toHaveValue('my-local-model');
+  await tab.getByRole('button', { name: 'Enregistrer les paramètres', exact: true }).click();
+  await expect.poll(() => saved?.['ollamaModel']).toBe('my-local-model');
+  expect(saved?.['defaultProvider']).toBe('ollama');
+  await expect(tab.getByText('Configuration enregistrée', { exact: true })).toBeVisible();
+});

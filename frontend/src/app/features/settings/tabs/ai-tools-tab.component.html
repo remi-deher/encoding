@@ -1,0 +1,325 @@
+<header class="page-heading">
+  <div>
+    <span class="eyebrow">Configuration de l’intelligence artificielle</span>
+    <h2>IA & fournisseurs</h2>
+    <p>Un moteur pour vos demandes, des connexions sur vos nœuds.</p>
+  </div>
+  <button matButton="text" type="button" [disabled]="loadingTools()" (click)="refreshTools()">
+    <mat-icon>refresh</mat-icon>Actualiser les connexions
+  </button>
+</header>
+@if (loadingSettings()) {
+  <div class="loading-state" role="status">
+    <mat-spinner diameter="28" aria-label="Chargement des paramètres" />
+    <p>Chargement de votre configuration…</p>
+  </div>
+} @else {
+  <form #settingsForm="ngForm" (ngSubmit)="saveSettings()">
+    <section class="default-provider" aria-labelledby="default-title">
+      <div class="section-intro">
+        <span class="step-number" aria-hidden="true">01</span>
+        <div>
+          <span class="eyebrow">À l’échelle du cluster</span>
+          <h3 id="default-title">Moteur par défaut</h3>
+          <p>Utilisé quand une demande ne précise pas de fournisseur.</p>
+        </div>
+      </div>
+      <mat-form-field appearance="outline"
+        ><mat-label>Moteur du cluster</mat-label>
+        <mat-select name="defaultProvider" [(ngModel)]="defaultProvider" [disabled]="!isAdmin()">
+          @for (provider of providers; track provider.id) {
+            <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </section>
+    <section class="workspace" aria-labelledby="connection-title">
+      <div class="section-intro">
+        <span class="step-number" aria-hidden="true">02</span>
+        <div>
+          <span class="eyebrow">Sur ce nœud</span>
+          <h3 id="connection-title">Configurer une connexion</h3>
+          <p>Choisissez un fournisseur pour renseigner son accès ou associer votre compte.</p>
+        </div>
+      </div>
+      <app-category-tabs
+        label="Fournisseurs IA"
+        [options]="providerTabs()"
+        [selected]="selectedProvider()"
+        (selectedChange)="selectedProvider.set($event)"
+      />
+      <section
+        class="provider-sheet"
+        role="tabpanel"
+        aria-label="Configuration du fournisseur"
+        aria-labelledby="provider-title"
+      >
+        <header class="sheet-heading">
+          <div>
+            <div class="provider-title">
+              <mat-icon aria-hidden="true">{{
+                selectedProvider() === 'ollama'
+                  ? 'dns'
+                  : selectedProvider() === 'openai'
+                    ? 'api'
+                    : 'terminal'
+              }}</mat-icon>
+              <h4 id="provider-title">{{ selectedName() }}</h4>
+            </div>
+            <span class="availability"
+              ><mat-icon aria-hidden="true">hub</mat-icon
+              >{{ clusterLabel(selectedProvider()) }}</span
+            >
+            <p>
+              {{
+                selectedProvider() === 'ollama'
+                  ? 'Connectez votre serveur Ollama et indiquez le modèle à utiliser.'
+                  : selectedProvider() === 'openai'
+                    ? 'Utilisez OpenAI ou un service exposant une API compatible.'
+                    : 'Associez votre compte à l’outil installé sur ce nœud.'
+              }}
+            </p>
+          </div>
+          @if (selectedTool(); as tool) {
+            @if (tool.authStatus.state === 'authorized' && isAdmin()) {
+              <button
+                matIconButton
+                type="button"
+                [matMenuTriggerFor]="connectionMenu"
+                aria-label="Actions de connexion"
+              >
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #connectionMenu="matMenu"
+                ><button mat-menu-item type="button" (click)="revoke(tool.id)">
+                  <mat-icon>link_off</mat-icon>Déconnecter ce nœud
+                </button></mat-menu
+              >
+            }
+          }
+        </header>
+        @switch (selectedProvider()) {
+          @case ('ollama') {
+            <div class="fields">
+              <mat-form-field appearance="outline"
+                ><mat-label>Adresse du serveur</mat-label
+                ><input
+                  matInput
+                  name="ollamaBaseUrl"
+                  [(ngModel)]="ollamaBaseUrl"
+                  [readonly]="!isAdmin()"
+                  required
+                  type="url"
+              /></mat-form-field>
+              <mat-form-field appearance="outline"
+                ><mat-label>Modèle</mat-label
+                ><input
+                  matInput
+                  name="ollamaModel"
+                  [(ngModel)]="ollamaModel"
+                  [readonly]="!isAdmin()"
+                  required
+              /></mat-form-field>
+            </div>
+          }
+          @case ('openai') {
+            <div class="fields">
+              <mat-form-field appearance="outline"
+                ><mat-label>Adresse de l’API compatible OpenAI</mat-label
+                ><input
+                  matInput
+                  name="openAiBaseUrl"
+                  [(ngModel)]="openAiBaseUrl"
+                  [readonly]="!isAdmin()"
+                  required
+                  type="url"
+              /></mat-form-field>
+              <mat-form-field appearance="outline"
+                ><mat-label>Modèle</mat-label
+                ><input
+                  matInput
+                  name="openAiModel"
+                  [(ngModel)]="openAiModel"
+                  [readonly]="!isAdmin()"
+                  required
+              /></mat-form-field>
+              <mat-form-field appearance="outline"
+                ><mat-label>Clé API</mat-label
+                ><input
+                  matInput
+                  name="openAiApiKey"
+                  type="password"
+                  autocomplete="new-password"
+                  [(ngModel)]="openAiApiKey"
+                  [readonly]="!isAdmin()"
+                />
+                <mat-hint>{{
+                  hasOpenAiApiKey()
+                    ? 'Clé enregistrée. Laissez vide pour la conserver.'
+                    : 'La clé reste sur ce nœud.'
+                }}</mat-hint>
+              </mat-form-field>
+            </div>
+          }
+          @default {
+            @if (selectedTool(); as tool) {
+              <div
+                class="connection-status"
+                [class.is-authorized]="tool.authStatus.state === 'authorized'"
+              >
+                <mat-icon aria-hidden="true">{{
+                  tool.authStatus.state === 'authorized' ? 'check_circle' : 'info'
+                }}</mat-icon>
+                <span class="badge">{{ authLabel(tool.authStatus.state) }}</span
+                ><span>{{
+                  tool.isInstalled ? 'Outil installé sur ce nœud' : 'Outil non installé sur ce nœud'
+                }}</span>
+              </div>
+              @if (tool.authStatus.errorMessage) {
+                <p class="connection-error" role="status">{{ tool.authStatus.errorMessage }}</p>
+              }
+              @if (!tool.isInstalled) {
+                <p>Installez l’outil officiel sur ce nœud pour y ajouter une connexion.</p>
+              } @else if (tool.id === 'codex-cli') {
+                @if (isAdmin()) {
+                  <button
+                    matButton="tonal"
+                    type="button"
+                    [disabled]="connecting()"
+                    (click)="startAuth(tool)"
+                  >
+                    {{ connecting() ? 'Préparation de la connexion…' : 'Associer mon compte' }}
+                  </button>
+                }
+                <p class="help">
+                  Le lien et le code sont fournis par Codex. Aucun identifiant n’est partagé entre
+                  les nœuds.
+                </p>
+              } @else {
+                <div class="token-instructions">
+                  <mat-icon aria-hidden="true">terminal</mat-icon>
+                  <div>
+                    <strong>Préparer votre jeton</strong>
+                    <p>
+                      Sur votre poste, exécutez <code>claude setup-token</code>, puis collez le
+                      jeton ci-dessous.
+                    </p>
+                  </div>
+                </div>
+                @if (isAdmin()) {
+                  <mat-form-field appearance="outline"
+                    ><mat-label>Jeton Claude Code</mat-label
+                    ><input
+                      matInput
+                      type="password"
+                      autocomplete="new-password"
+                      name="claudeToken"
+                      [(ngModel)]="claudeToken"
+                      [ngModelOptions]="{ standalone: true }"
+                  /></mat-form-field>
+                  <div>
+                    <button
+                      matButton="tonal"
+                      type="button"
+                      [disabled]="connecting() || !claudeToken().trim()"
+                      (click)="saveClaudeToken()"
+                    >
+                      Enregistrer la connexion
+                    </button>
+                  </div>
+                }
+              }
+            } @else {
+              <p>État local indisponible. Actualisez les connexions.</p>
+            }
+          }
+        }
+        <div class="scope-note">
+          <mat-icon aria-hidden="true">lock</mat-icon
+          ><span
+            >Les adresses, modèles et identifiants restent sur ce nœud. Le cluster peut utiliser
+            cette connexion sans partager ses secrets.</span
+          >
+        </div>
+      </section>
+    </section>
+    <mat-expansion-panel class="advanced">
+      <mat-expansion-panel-header
+        ><mat-panel-title
+          ><span class="advanced-title"
+            ><mat-icon aria-hidden="true">tune</mat-icon>Paramètres avancés du cluster</span
+          ></mat-panel-title
+        ></mat-expansion-panel-header
+      >
+      <div class="fields">
+        <mat-form-field appearance="outline"
+          ><mat-label>Délai maximal par tentative (secondes)</mat-label
+          ><input
+            matInput
+            name="timeoutSeconds"
+            type="number"
+            min="10"
+            max="600"
+            required
+            [(ngModel)]="timeoutSeconds"
+            [readonly]="!isAdmin()"
+        /></mat-form-field>
+        <mat-form-field appearance="outline"
+          ><mat-label>Lignes de sous-titres par lot</mat-label
+          ><input
+            matInput
+            name="subtitleBatchSize"
+            type="number"
+            min="5"
+            max="200"
+            required
+            [(ngModel)]="subtitleBatchSize"
+            [readonly]="!isAdmin()"
+        /></mat-form-field>
+      </div>
+    </mat-expansion-panel>
+    @if (isAdmin()) {
+      <footer>
+        <div class="save-summary">
+          <mat-icon aria-hidden="true">{{ hasUnsavedChanges() ? 'edit' : 'check_circle' }}</mat-icon
+          ><span>{{
+            hasUnsavedChanges() ? 'Modifications non enregistrées' : 'Configuration enregistrée'
+          }}</span>
+        </div>
+        <button
+          matButton="filled"
+          type="submit"
+          [disabled]="savingSettings() || settingsForm.invalid"
+        >
+          {{ savingSettings() ? 'Enregistrement…' : 'Enregistrer les paramètres' }}
+        </button>
+      </footer>
+    }
+  </form>
+}
+@if (cluster(); as view) {
+  <section class="cluster-connections" aria-labelledby="cluster-title">
+    <header class="section-intro">
+      <mat-icon aria-hidden="true">hub</mat-icon>
+      <div>
+        <h3 id="cluster-title">Connexions disponibles dans le cluster</h3>
+        <p>Fournisseurs déclarés par les nœuds répondants.</p>
+      </div>
+    </header>
+    <div class="node-list">
+      @for (node of view.nodes; track node.nodeId) {
+        <div class="node-row">
+          <mat-icon aria-hidden="true">dns</mat-icon><strong>{{ node.name }}</strong>
+          <span>{{
+            node.providers.length ? providerNames(node.providers) : 'Aucun fournisseur configuré'
+          }}</span>
+        </div>
+      } @empty {
+        <p class="empty-state">Aucune connexion déclarée par les nœuds répondants.</p>
+      }
+    </div>
+    <p class="help">
+      Une connexion déclarée ne garantit pas le quota ou la disponibilité du modèle.
+    </p>
+  </section>
+}
