@@ -73,6 +73,10 @@ export interface AiSettings {
   readonly hasOpenAiApiKey?: boolean;
   readonly timeoutSeconds: number;
   readonly subtitleBatchSize: number;
+  readonly assistantProvider?: string | null;
+  readonly flowProvider?: string | null;
+  readonly assistantLocalOnly?: boolean;
+  readonly flowLocalOnly?: boolean;
 }
 
 export interface AiSettingsUpdateRequest {
@@ -84,6 +88,10 @@ export interface AiSettingsUpdateRequest {
   readonly openAiApiKey?: string | null;
   readonly timeoutSeconds?: number;
   readonly subtitleBatchSize?: number;
+  readonly assistantProvider?: string | null;
+  readonly flowProvider?: string | null;
+  readonly assistantLocalOnly?: boolean;
+  readonly flowLocalOnly?: boolean;
 }
 
 export interface AiNodeAvailability {

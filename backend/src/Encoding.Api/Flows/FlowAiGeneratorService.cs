@@ -14,9 +14,9 @@ public sealed class FlowAiGeneratorService(
     FlowCatalogPromptBuilder promptBuilder,
     FlowDefinitionValidator validator)
 {
-    public async Task<FlowAiResponse> GenerateFlowAsync(FlowAiGenerateRequest request, CancellationToken ct = default)
+    public async Task<FlowAiResponse> GenerateFlowAsync(FlowAiGenerateRequest request, CancellationToken ct = default, bool localOnly = false)
     {
-        var client = clientFactory.CreateClient(request.Provider);
+        var client = clientFactory.CreateClient(request.Provider, localOnly);
         var systemPrompt = promptBuilder.BuildSystemPrompt(request.MediaType);
         var userPrompt = $"Génère un flow complet pour le média '{request.MediaType}' répondant à cette demande :\n\"{request.UserPrompt}\"";
 
@@ -58,9 +58,9 @@ public sealed class FlowAiGeneratorService(
         return Reply(new FlowAiResponse(false, null, "Le flow généré ne respecte pas le catalogue après une tentative de réparation.", val?.Issues));
     }
 
-    public async Task<FlowAiResponse> RefactorFlowAsync(FlowAiRefactorRequest request, CancellationToken ct = default)
+    public async Task<FlowAiResponse> RefactorFlowAsync(FlowAiRefactorRequest request, CancellationToken ct = default, bool localOnly = false)
     {
-        var client = clientFactory.CreateClient(request.Provider);
+        var client = clientFactory.CreateClient(request.Provider, localOnly);
         var currentJson = JsonSerializer.Serialize(request.CurrentFlow, new JsonSerializerOptions { WriteIndented = true });
         var systemPrompt = promptBuilder.BuildSystemPrompt(request.CurrentFlow.MediaType);
         var userPrompt = $"Modifie ce flow existant selon l'instruction suivante : \"{request.UserPrompt}\".\n\nFlow actuel :\n{currentJson}";
@@ -108,9 +108,9 @@ public sealed class FlowAiGeneratorService(
         return Reply(new FlowAiResponse(false, def, "Le flow modifié ne respecte pas le catalogue après une tentative de réparation.", val?.Issues));
     }
 
-    public async Task<FlowAiResponse> ExplainFlowAsync(FlowAiExplainRequest request, CancellationToken ct = default)
+    public async Task<FlowAiResponse> ExplainFlowAsync(FlowAiExplainRequest request, CancellationToken ct = default, bool localOnly = false)
     {
-        var client = clientFactory.CreateClient(request.Provider);
+        var client = clientFactory.CreateClient(request.Provider, localOnly);
         var currentJson = JsonSerializer.Serialize(request.Flow, new JsonSerializerOptions { WriteIndented = true });
         var systemPrompt = "Tu es un assistant expert qui explique avec pédagogie et précision le fonctionnement d'un flow de traitement de fichiers multimédias dans Encoding.";
         var userPrompt = $"Explique étape par étape ce que fait ce flow (objectifs, conditions, transcodage, gestion des pistes) en français structuré :\n\n{currentJson}";

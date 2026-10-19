@@ -60,6 +60,25 @@ p {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
   gap: var(--space-4);
 }
+.usage-settings {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-low);
+}
+.local-policies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.local-policies label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
 .advanced {
   margin-top: var(--space-4);
   background: var(--surface-container-low);

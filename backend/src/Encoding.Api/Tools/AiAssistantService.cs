@@ -158,7 +158,8 @@ public sealed class AiAssistantService(
             }
             else
             {
-                var provider = (await cluster.GetSettingsAsync(ct)).DefaultProvider;
+                var settings = await cluster.GetSettingsAsync(ct);
+                var provider = settings.AssistantProvider ?? settings.DefaultProvider;
                 var now = DateTimeOffset.UtcNow;
                 conversation = new(
                     id,
@@ -227,10 +228,12 @@ public sealed class AiAssistantService(
         AiCompletionResult result;
         try
         {
+            var policy = await cluster.GetSettingsAsync(ct);
             result = await cluster.GenerateAsync(
                 conversation.Provider,
                 new AiPrompt(systemPrompt, contextualPrompt, SessionId: conversation.Id, RequestId: request.RequestId),
-                ct);
+                ct,
+                localOnly: policy.AssistantLocalOnly);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

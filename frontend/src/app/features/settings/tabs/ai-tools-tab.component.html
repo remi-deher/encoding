@@ -33,6 +33,35 @@
           </mat-select></mat-form-field
         >
       </div>
+      <section class="usage-settings" aria-labelledby="ai-usage-title">
+        <h3 id="ai-usage-title">Usages et modèles</h3>
+        <p>Chaque usage utilise le modèle configuré pour son fournisseur. « Par défaut » suit le moteur du cluster.</p>
+        <div class="fields">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Assistant</mat-label>
+            <mat-select name="assistantProvider" [ngModel]="assistantProvider()" (ngModelChange)="assistantProvider.set($event || null)" [disabled]="!isAdmin()">
+              <mat-option [value]="null">Par défaut</mat-option>
+              @for (provider of providers; track provider.id) {
+                <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Génération et modification de flows</mat-label>
+            <mat-select name="flowProvider" [ngModel]="flowProvider()" (ngModelChange)="flowProvider.set($event || null)" [disabled]="!isAdmin()">
+              <mat-option [value]="null">Par défaut</mat-option>
+              @for (provider of providers; track provider.id) {
+                <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <div class="local-policies">
+          <label><input type="checkbox" name="assistantLocalOnly" [ngModel]="assistantLocalOnly()" (ngModelChange)="assistantLocalOnly.set($event)" [disabled]="!isAdmin()" /> Assistant : local uniquement</label>
+          <label><input type="checkbox" name="flowLocalOnly" [ngModel]="flowLocalOnly()" (ngModelChange)="flowLocalOnly.set($event)" [disabled]="!isAdmin()" /> Flows : local uniquement</label>
+        </div>
+        <p>Cette règle exige Ollama sur une adresse de boucle locale. Elle bloque l’envoi vers les autres nœuds et fournisseurs. Les autres usages peuvent transmettre la demande, la définition du flow et les ressources jointes au fournisseur choisi.</p>
+      </section>
       <h3 class="list-heading">Connexions sur ce nœud</h3>
       <div class="provider-list">
         @for (provider of providers; track provider.id) {

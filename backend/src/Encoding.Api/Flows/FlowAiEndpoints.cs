@@ -21,13 +21,14 @@ public static class FlowAiEndpoints
                 return Results.BadRequest(new { message = "Le prompt utilisateur est obligatoire." });
             }
             var requestId = request.RequestId ?? Guid.NewGuid();
-            var provider = request.Provider ?? (await cluster.GetSettingsAsync(ct)).DefaultProvider;
+            var settings = await cluster.GetSettingsAsync(ct);
+            var provider = settings.FlowProvider ?? request.Provider ?? settings.DefaultProvider;
             request = request with { Provider = provider };
             var startedAt = DateTimeOffset.UtcNow;
             await activity.RecordOperationActivityAsync(user, requestId, "flow-generation", provider, "running", startedAt, null, ct);
             try
             {
-                var response = await service.GenerateFlowAsync(request with { RequestId = requestId }, ct);
+                var response = await service.GenerateFlowAsync(request with { RequestId = requestId }, ct, settings.FlowLocalOnly);
                 await activity.RecordOperationActivityAsync(user, requestId, "flow-generation", provider, response.Success ? "succeeded" : "failed", startedAt,
                     response.Success ? null : "invalid-result", ct);
                 return Results.Ok(response);
@@ -46,13 +47,14 @@ public static class FlowAiEndpoints
                 return Results.BadRequest(new { message = "Le flow courant et le prompt sont obligatoires." });
             }
             var requestId = request.RequestId ?? Guid.NewGuid();
-            var provider = request.Provider ?? (await cluster.GetSettingsAsync(ct)).DefaultProvider;
+            var settings = await cluster.GetSettingsAsync(ct);
+            var provider = settings.FlowProvider ?? request.Provider ?? settings.DefaultProvider;
             request = request with { Provider = provider };
             var startedAt = DateTimeOffset.UtcNow;
             await activity.RecordOperationActivityAsync(user, requestId, "flow-refactor", provider, "running", startedAt, null, ct);
             try
             {
-                var response = await service.RefactorFlowAsync(request with { RequestId = requestId }, ct);
+                var response = await service.RefactorFlowAsync(request with { RequestId = requestId }, ct, settings.FlowLocalOnly);
                 await activity.RecordOperationActivityAsync(user, requestId, "flow-refactor", provider, response.Success ? "succeeded" : "failed", startedAt,
                     response.Success ? null : "invalid-result", ct);
                 return Results.Ok(response);
@@ -71,13 +73,14 @@ public static class FlowAiEndpoints
                 return Results.BadRequest(new { message = "Le flow à expliquer est obligatoire." });
             }
             var requestId = request.RequestId ?? Guid.NewGuid();
-            var provider = request.Provider ?? (await cluster.GetSettingsAsync(ct)).DefaultProvider;
+            var settings = await cluster.GetSettingsAsync(ct);
+            var provider = settings.FlowProvider ?? request.Provider ?? settings.DefaultProvider;
             request = request with { Provider = provider };
             var startedAt = DateTimeOffset.UtcNow;
             await activity.RecordOperationActivityAsync(user, requestId, "flow-explain", provider, "running", startedAt, null, ct);
             try
             {
-                var response = await service.ExplainFlowAsync(request with { RequestId = requestId }, ct);
+                var response = await service.ExplainFlowAsync(request with { RequestId = requestId }, ct, settings.FlowLocalOnly);
                 await activity.RecordOperationActivityAsync(user, requestId, "flow-explain", provider, response.Success ? "succeeded" : "failed", startedAt,
                     response.Success ? null : "provider-error", ct);
                 return Results.Ok(response);

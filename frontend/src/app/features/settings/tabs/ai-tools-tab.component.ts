@@ -105,6 +105,10 @@ export class AiToolsTabComponent implements OnInit {
   readonly hasOpenAiApiKey = signal(false);
   readonly timeoutSeconds = signal(120);
   readonly subtitleBatchSize = signal(80);
+  readonly assistantProvider = signal<string | null>(null);
+  readonly flowProvider = signal<string | null>(null);
+  readonly assistantLocalOnly = signal(false);
+  readonly flowLocalOnly = signal(false);
 
   private savedFingerprint = '';
   private fingerprint(): string {
@@ -117,6 +121,10 @@ export class AiToolsTabComponent implements OnInit {
       this.openAiApiKey(),
       this.timeoutSeconds(),
       this.subtitleBatchSize(),
+      this.assistantProvider(),
+      this.flowProvider(),
+      this.assistantLocalOnly(),
+      this.flowLocalOnly(),
     ]);
   }
   hasUnsavedChanges(): boolean {
@@ -173,6 +181,10 @@ export class AiToolsTabComponent implements OnInit {
     this.hasOpenAiApiKey.set(settings.hasOpenAiApiKey ?? false);
     this.timeoutSeconds.set(settings.timeoutSeconds);
     this.subtitleBatchSize.set(settings.subtitleBatchSize);
+    this.assistantProvider.set(settings.assistantProvider ?? null);
+    this.flowProvider.set(settings.flowProvider ?? null);
+    this.assistantLocalOnly.set(settings.assistantLocalOnly ?? false);
+    this.flowLocalOnly.set(settings.flowLocalOnly ?? false);
     this.savedFingerprint = this.fingerprint();
   }
   saveSettings(): void {
@@ -186,6 +198,13 @@ export class AiToolsTabComponent implements OnInit {
       this.notifications.show('Vérifiez les limites du cluster.');
       return;
     }
+    if (
+      (this.assistantLocalOnly() && (this.assistantProvider() ?? this.defaultProvider()) !== 'ollama') ||
+      (this.flowLocalOnly() && (this.flowProvider() ?? this.defaultProvider()) !== 'ollama')
+    ) {
+      this.notifications.show('Le mode local uniquement exige Ollama comme moteur effectif pour cet usage.');
+      return;
+    }
     this.savingSettings.set(true);
     const request: AiSettingsUpdateRequest = {
       defaultProvider: this.defaultProvider(),
@@ -196,6 +215,10 @@ export class AiToolsTabComponent implements OnInit {
       openAiApiKey: this.openAiApiKey().trim() || null,
       timeoutSeconds: this.timeoutSeconds(),
       subtitleBatchSize: this.subtitleBatchSize(),
+      assistantProvider: this.assistantProvider(),
+      flowProvider: this.flowProvider(),
+      assistantLocalOnly: this.assistantLocalOnly(),
+      flowLocalOnly: this.flowLocalOnly(),
     };
     this.aiService.updateSettings(request).subscribe({
       next: (settings) => {

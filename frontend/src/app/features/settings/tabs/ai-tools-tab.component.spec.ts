@@ -122,4 +122,21 @@ describe('AiToolsTabComponent', () => {
       expect.stringContaining('enregistrée avec succès'),
     );
   });
+
+  it('enregistre les fournisseurs par usage et la politique locale', async () => {
+    const { component } = await setup();
+    component.assistantProvider.set('ollama');
+    component.flowProvider.set('openai');
+    component.assistantLocalOnly.set(true);
+    component.saveSettings();
+
+    expect(aiServiceMock.updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assistantProvider: 'ollama',
+        flowProvider: 'openai',
+        assistantLocalOnly: true,
+        flowLocalOnly: false,
+      }),
+    );
+  });
 });

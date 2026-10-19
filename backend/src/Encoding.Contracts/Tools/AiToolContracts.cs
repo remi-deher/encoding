@@ -62,7 +62,11 @@ public sealed record AiSettingsDto(
     string OpenAiModel,
     string? OpenAiApiKey,
     int TimeoutSeconds = 120,
-    int SubtitleBatchSize = 80);
+    int SubtitleBatchSize = 80,
+    string? AssistantProvider = null,
+    string? FlowProvider = null,
+    bool AssistantLocalOnly = false,
+    bool FlowLocalOnly = false);
 
 /// <summary>Requête de mise à jour de la configuration de l'IA.</summary>
 public sealed record AiSettingsUpdateRequest(
@@ -73,4 +77,8 @@ public sealed record AiSettingsUpdateRequest(
     string? OpenAiModel = null,
     string? OpenAiApiKey = null,
     int? TimeoutSeconds = null,
-    int? SubtitleBatchSize = null);
+    int? SubtitleBatchSize = null,
+    string? AssistantProvider = null,
+    string? FlowProvider = null,
+    bool? AssistantLocalOnly = null,
+    bool? FlowLocalOnly = null);

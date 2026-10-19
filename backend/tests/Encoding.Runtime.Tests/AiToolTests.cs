@@ -197,13 +197,19 @@ public sealed class AiToolTests
                 DefaultProvider: "ollama",
                 OllamaBaseUrl: "http://192.168.1.100:11434/v1/",
                 OllamaModel: "qwen2.5-coder:7b",
-                TimeoutSeconds: 60
+                TimeoutSeconds: 60,
+                AssistantProvider: "ollama",
+                FlowProvider: "openai",
+                AssistantLocalOnly: true
             ));
 
             Assert.Equal("ollama", updated.DefaultProvider);
             Assert.Equal("http://192.168.1.100:11434/v1/", updated.OllamaBaseUrl);
             Assert.Equal("qwen2.5-coder:7b", updated.OllamaModel);
             Assert.Equal(60, updated.TimeoutSeconds);
+            Assert.Equal("ollama", updated.AssistantProvider);
+            Assert.Equal("openai", updated.FlowProvider);
+            Assert.True(updated.AssistantLocalOnly);
 
             // Recharger une nouvelle instance depuis le même dossier pour vérifier la persistance
             var reloadedService = new AiSettingsService(config);
@@ -212,6 +218,9 @@ public sealed class AiToolTests
             Assert.Equal("http://192.168.1.100:11434/v1/", reloaded.OllamaBaseUrl);
             Assert.Equal("qwen2.5-coder:7b", reloaded.OllamaModel);
             Assert.Equal(60, reloaded.TimeoutSeconds);
+            Assert.Equal("ollama", reloaded.AssistantProvider);
+            Assert.Equal("openai", reloaded.FlowProvider);
+            Assert.True(reloaded.AssistantLocalOnly);
 
             // Créer un client depuis la factory
             var factory = new AiClientFactory(config, new MockHttpClientFactory(), reloadedService);
@@ -236,6 +245,7 @@ public sealed class AiToolTests
         Assert.Throws<ArgumentException>(() => service.UpdateSettings(new(TimeoutSeconds: 0)));
         Assert.Equal(120, service.GetSettings().TimeoutSeconds);
         Assert.Throws<ArgumentException>(() => service.UpdateSettings(new(DefaultProvider: "unknown")));
+            Assert.Throws<ArgumentException>(() => service.UpdateSettings(new(AssistantProvider: "openai", AssistantLocalOnly: true)));
     }
 
     private sealed class MockHttpClientFactory : IHttpClientFactory
