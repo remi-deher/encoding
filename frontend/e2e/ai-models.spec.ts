@@ -423,6 +423,15 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   await expect
     .poll(() => widget.evaluate((panel) => panel.getBoundingClientRect().width))
     .toBeGreaterThan(300);
+  await expect
+    .poll(
+      () =>
+        widget.evaluate(
+          (panel) => getComputedStyle(panel).transform === 'matrix(1, 0, 0, 1, 0, 0)',
+        ),
+      { timeout: 2_000 },
+    )
+    .toBe(true);
   const panelBounds = (await widget.boundingBox())!;
   expect(panelBounds.height).toBeLessThanOrEqual(520);
   expect(Math.abs(panelBounds.x + panelBounds.width - (after.x + after.width))).toBeLessThan(1);
