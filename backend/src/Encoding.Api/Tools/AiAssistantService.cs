@@ -700,7 +700,8 @@ public sealed class AiAssistantService(
                 conversation.Provider,
                 new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId, ReasoningEffort: conversation.ReasoningEffort),
                 requestCancellation.Token,
-                localOnly: policy.AssistantLocalOnly);
+                localOnly: policy.AssistantLocalOnly,
+                allowModelChanges: true);
         }
         catch (OperationCanceledException) when (requestCancellation.IsCancellationRequested)
         {
