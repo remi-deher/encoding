@@ -118,11 +118,44 @@ export interface FlowAiAssistantDialogData {
             <h3 id="proposal-title">Proposition à examiner</h3>
             <p>
               @if (data.currentFlow) {
-                {{ proposalChanges().added }} bloc(s) ajouté(s),
-                {{ proposalChanges().changed }} modifié(s),
-                {{ proposalChanges().removed }} supprimé(s),
-                {{ proposalChanges().connectionsAdded }} connexion(s) ajoutée(s) et
-                {{ proposalChanges().connectionsRemoved }} supprimée(s).
+                {{ proposalChanges().addedNodes.length }} bloc(s) ajouté(s),
+                {{ proposalChanges().changedNodes.length }} modifié(s),
+                {{ proposalChanges().removedNodes.length }} supprimé(s),
+                {{ proposalChanges().addedConnections.length }} connexion(s) ajoutée(s) et
+                {{ proposalChanges().removedConnections.length }} supprimée(s).
+                @if (proposalChanges().metadataChanged) {
+                  Le nom ou le média du flow change.
+                }
+                @if (
+                  proposalChanges().addedNodes.length ||
+                  proposalChanges().changedNodes.length ||
+                  proposalChanges().removedNodes.length
+                ) {
+                  <ul aria-label="Blocs modifiés">
+                    @for (node of proposalChanges().addedNodes; track node) {
+                      <li>Ajout : {{ node }}</li>
+                    }
+                    @for (node of proposalChanges().changedNodes; track node) {
+                      <li>Modification : {{ node }}</li>
+                    }
+                    @for (node of proposalChanges().removedNodes; track node) {
+                      <li>Suppression : {{ node }}</li>
+                    }
+                  </ul>
+                }
+                @if (
+                  proposalChanges().addedConnections.length ||
+                  proposalChanges().removedConnections.length
+                ) {
+                  <ul aria-label="Connexions modifiées">
+                    @for (connection of proposalChanges().addedConnections; track connection) {
+                      <li>Connexion ajoutée : {{ connection }}</li>
+                    }
+                    @for (connection of proposalChanges().removedConnections; track connection) {
+                      <li>Connexion supprimée : {{ connection }}</li>
+                    }
+                  </ul>
+                }
               } @else {
                 Le flow contient {{ proposed.nodes.length }} bloc(s) et
                 {{ proposed.connections.length }} connexion(s).
@@ -300,25 +333,47 @@ export class FlowAiAssistantDialogComponent {
     const current = this.data.currentFlow;
     const proposed = this.proposal();
     if (!current || !proposed)
-      return { added: 0, changed: 0, removed: 0, connectionsAdded: 0, connectionsRemoved: 0 };
-    const currentNodes = new Map(current.nodes.map((node) => [node.id, JSON.stringify(node)]));
-    const proposedNodes = new Map(proposed.nodes.map((node) => [node.id, JSON.stringify(node)]));
-    const added = [...proposedNodes.keys()].filter((id) => !currentNodes.has(id)).length;
-    const removed = [...currentNodes.keys()].filter((id) => !proposedNodes.has(id)).length;
-    const changed = [...proposedNodes].filter(
-      ([id, value]) => currentNodes.has(id) && currentNodes.get(id) !== value,
-    ).length;
-    const key = (connection: unknown) => JSON.stringify(connection);
+      return {
+        addedNodes: [] as string[],
+        changedNodes: [] as string[],
+        removedNodes: [] as string[],
+        addedConnections: [] as string[],
+        removedConnections: [] as string[],
+        metadataChanged: false,
+      };
+    const nodeLabel = (node: FlowDocument['nodes'][number]) =>
+      `${node.name || node.component.componentId} · ${node.id}`;
+    const currentNodes = new Map(current.nodes.map((node) => [node.id, node]));
+    const proposedNodes = new Map(proposed.nodes.map((node) => [node.id, node]));
+    const addedNodes = [...proposedNodes]
+      .filter(([id]) => !currentNodes.has(id))
+      .map(([, node]) => nodeLabel(node));
+    const removedNodes = [...currentNodes]
+      .filter(([id]) => !proposedNodes.has(id))
+      .map(([, node]) => nodeLabel(node));
+    const changedNodes = [...proposedNodes]
+      .filter(([id, node]) => {
+        const previous = currentNodes.get(id);
+        return previous !== undefined && JSON.stringify(previous) !== JSON.stringify(node);
+      })
+      .map(([, node]) => nodeLabel(node));
+    const connectionLabel = (connection: FlowDocument['connections'][number]) =>
+      `${connection.sourceNodeId} · ${connection.sourceOutputId} → ${connection.targetNodeId}`;
+    const key = (connection: FlowDocument['connections'][number]) =>
+      `${connection.sourceNodeId}|${connection.sourceOutputId}|${connection.targetNodeId}`;
     const currentConnections = new Set(current.connections.map(key));
     const proposedConnections = new Set(proposed.connections.map(key));
     return {
-      added,
-      changed,
-      removed,
-      connectionsAdded: [...proposedConnections].filter((item) => !currentConnections.has(item))
-        .length,
-      connectionsRemoved: [...currentConnections].filter((item) => !proposedConnections.has(item))
-        .length,
+      addedNodes,
+      changedNodes,
+      removedNodes,
+      addedConnections: proposed.connections
+        .filter((item) => !currentConnections.has(key(item)))
+        .map(connectionLabel),
+      removedConnections: current.connections
+        .filter((item) => !proposedConnections.has(key(item)))
+        .map(connectionLabel),
+      metadataChanged: current.name !== proposed.name || current.mediaType !== proposed.mediaType,
     };
   });
   readonly errorMessage = signal<string | null>(null);
