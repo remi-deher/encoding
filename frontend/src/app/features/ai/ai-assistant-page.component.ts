@@ -32,6 +32,7 @@ import { ExecutionTracking } from '../../shared/services/execution-tracking';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { AuthService } from '../../core/auth/auth.service';
+import { createUuid } from '../../shared/utils/uuid';
 
 type AssistantResourceType = 'flow' | 'execution' | 'node' | 'library';
 
@@ -423,7 +424,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     if (!message || !this.canSend()) return;
     if (this.requestPrompt !== message || !this.requestId) {
       this.requestPrompt = message;
-      this.requestId = crypto.randomUUID();
+      this.requestId = createUuid();
     }
 
     const activeConversation = this.detail()?.conversation ?? null;

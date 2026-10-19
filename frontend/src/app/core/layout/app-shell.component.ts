@@ -8,6 +8,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -50,6 +51,8 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
   },
 })
 export class AppShellComponent {
+  private static readonly assistantLauncherStorageKey = 'encoding.assistant-launcher.position';
+  private static readonly assistantLauncherGrid = 24;
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private paletteDialogRef: MatDialogRef<SearchPaletteDialogComponent> | null = null;
@@ -94,6 +97,7 @@ export class AppShellComponent {
   }
 
   constructor() {
+    afterNextRender(() => this.onWindowResize());
     effect(() => {
       const compact = this.isCompactNavigation();
       const context = this.navigationEnd();
@@ -126,11 +130,140 @@ export class AppShellComponent {
   );
   protected readonly assistantWidgetMounted = signal(false);
   protected readonly assistantPanelOpen = signal(false);
+  protected readonly assistantLauncherPosition = signal(this.readAssistantLauncherPosition());
+  protected readonly assistantLauncherDragging = signal(false);
   private readonly assistantLauncher =
     viewChild<ElementRef<HTMLButtonElement>>('assistantLauncher');
   private readonly assistantCloseButton =
     viewChild<ElementRef<HTMLButtonElement>>('assistantCloseButton');
   private focusReturnElement: HTMLElement | null = null;
+  private assistantDrag: {
+    readonly pointerId: number;
+    readonly pointerX: number;
+    readonly pointerY: number;
+    readonly left: number;
+    readonly top: number;
+    moved: boolean;
+  } | null = null;
+  private suppressAssistantClick = false;
+
+  protected startAssistantLauncherDrag(event: PointerEvent): void {
+    if (event.button !== 0 || !this.assistantLauncher()) return;
+    const rect = this.assistantLauncher()!.nativeElement.getBoundingClientRect();
+    this.assistantDrag = {
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+      moved: false,
+    };
+    this.assistantLauncher()!.nativeElement.setPointerCapture(event.pointerId);
+  }
+
+  protected moveAssistantLauncher(event: PointerEvent): void {
+    const drag = this.assistantDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - drag.pointerX;
+    const deltaY = event.clientY - drag.pointerY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < 5) return;
+    drag.moved = true;
+    this.assistantLauncherDragging.set(true);
+    event.preventDefault();
+    this.setAssistantLauncherPosition(drag.left + deltaX, drag.top + deltaY, false);
+  }
+
+  protected finishAssistantLauncherDrag(event: PointerEvent): void {
+    const drag = this.assistantDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    this.assistantDrag = null;
+    this.assistantLauncherDragging.set(false);
+    if (drag.moved) {
+      this.saveAssistantLauncherPosition();
+      this.suppressAssistantClick = true;
+      setTimeout(() => (this.suppressAssistantClick = false));
+    }
+    const button = this.assistantLauncher()?.nativeElement;
+    if (button?.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+  }
+
+  protected onAssistantLauncherClick(event: MouseEvent): void {
+    if (this.suppressAssistantClick) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.suppressAssistantClick = false;
+      return;
+    }
+    this.toggleAssistantPanel();
+  }
+
+  protected onAssistantLauncherKeydown(event: KeyboardEvent): void {
+    if (!event.altKey || !event.key.startsWith('Arrow')) return;
+    const rect = this.assistantLauncher()?.nativeElement.getBoundingClientRect();
+    if (!rect) return;
+    const step = AppShellComponent.assistantLauncherGrid;
+    const delta = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    this.setAssistantLauncherPosition(rect.left + delta[0], rect.top + delta[1], true);
+  }
+
+  protected onWindowResize(): void {
+    const position = this.assistantLauncherPosition();
+    if (position) this.setAssistantLauncherPosition(position.left, position.top, true);
+  }
+
+  private setAssistantLauncherPosition(left: number, top: number, persist: boolean): void {
+    const button = this.assistantLauncher()?.nativeElement;
+    const margin = 16;
+    const maxLeft = Math.max(margin, window.innerWidth - (button?.offsetWidth ?? 160) - margin);
+    const maxTop = Math.max(margin, window.innerHeight - (button?.offsetHeight ?? 48) - margin);
+    const grid = AppShellComponent.assistantLauncherGrid;
+    const snap = (value: number, max: number) =>
+      Math.min(max, Math.max(margin, Math.round((value - margin) / grid) * grid + margin));
+    this.assistantLauncherPosition.set({ left: snap(left, maxLeft), top: snap(top, maxTop) });
+    if (persist) this.saveAssistantLauncherPosition();
+  }
+
+  private saveAssistantLauncherPosition(): void {
+    try {
+      const position = this.assistantLauncherPosition();
+      if (position)
+        localStorage.setItem(
+          AppShellComponent.assistantLauncherStorageKey,
+          JSON.stringify(position),
+        );
+    } catch {
+      // Position persistence is optional when storage is unavailable.
+    }
+  }
+
+  private readAssistantLauncherPosition(): { left: number; top: number } | null {
+    try {
+      const value = localStorage.getItem(AppShellComponent.assistantLauncherStorageKey);
+      if (!value) return null;
+      const position: unknown = JSON.parse(value);
+      if (
+        typeof position === 'object' &&
+        position !== null &&
+        'left' in position &&
+        'top' in position &&
+        typeof position.left === 'number' &&
+        Number.isFinite(position.left) &&
+        typeof position.top === 'number' &&
+        Number.isFinite(position.top)
+      )
+        return { left: position.left, top: position.top };
+    } catch {
+      // Fall back to the default bottom-left position.
+    }
+    return null;
+  }
 
   protected toggleAssistantPanel(): void {
     if (this.assistantPanelOpen()) {
