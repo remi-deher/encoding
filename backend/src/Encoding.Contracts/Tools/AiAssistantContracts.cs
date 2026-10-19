@@ -51,10 +51,11 @@ public sealed record AiAssistantMessageResponse(
 
 public sealed record AiAssistantActivity(
     Guid RequestId,
-    string ConversationId,
+    string? ConversationId,
     string Provider,
     string Status,
     DateTimeOffset StartedAt,
     DateTimeOffset UpdatedAt,
     long? DurationMilliseconds,
-    string? ErrorCategory);
+    string? ErrorCategory,
+    string Operation = "assistant");

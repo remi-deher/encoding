@@ -12,7 +12,7 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DatePipe, MatButtonModule, MatProgressSpinnerModule, PageHeaderComponent, RouterLink],
   template: `
-    <app-page-header title="Activité IA" description="Historique des demandes de votre assistant.">
+    <app-page-header title="Activité IA" description="Historique des demandes de l’assistant et des flows.">
       <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
     </app-page-header>
     <section class="activity-list" aria-label="Demandes récentes">
@@ -36,7 +36,7 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
             [id]="'activity-' + item.requestId"
           >
             <div>
-              <h2>{{ providerName(item.provider) }} · {{ statusName(item.status) }}</h2>
+              <h2>{{ operationName(item.operation) }} · {{ providerName(item.provider) }} · {{ statusName(item.status) }}</h2>
               <p>
                 Début : {{ item.startedAt | date: 'short' }}
                 @if (item.durationMilliseconds !== null) {
@@ -47,12 +47,14 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
                 }
               </p>
             </div>
-            <a
+            @if (item.conversationId) {
+              <a
               matButton="text"
               [routerLink]="['/ai/assistant']"
               [queryParams]="{ conversation: item.conversationId }"
               >Ouvrir la conversation</a
-            >
+              >
+            }
             <a
               matButton="text"
               [routerLink]="['/ai/activity']"
@@ -148,6 +150,16 @@ export class AiActivityPageComponent {
           openai: 'OpenAI',
         } as Record<string, string>
       )[provider] ?? provider
+    );
+  }
+  protected operationName(operation?: string): string {
+    return (
+      ({
+        assistant: 'Assistant',
+        'flow-generation': 'Génération de flow',
+        'flow-refactor': 'Modification de flow',
+        'flow-explain': 'Explication de flow',
+      } as Record<string, string>)[operation ?? 'assistant'] ?? 'Opération IA'
     );
   }
   protected statusName(status: string): string {

@@ -139,7 +139,7 @@ const PROVIDERS = [
           <div class="panel-heading">
             <div>
               <h2>Activité IA</h2>
-              <p>Consultez l’historique de vos demandes récentes.</p>
+              <p>Consultez l’historique de l’assistant et des opérations sur les flows.</p>
             </div>
             <a matButton="text" routerLink="/ai/activity">Voir l’activité</a>
           </div>
@@ -152,7 +152,8 @@ const PROVIDERS = [
               @for (item of recentActivity()?.slice(0, 5) ?? []; track item.requestId) {
                 <li>
                   <span
-                    ><strong>{{ providerName(item.provider) }}</strong> ·
+                    ><strong>{{ operationName(item.operation) }}</strong> ·
+                    {{ providerName(item.provider) }} ·
                     {{ activityStatus(item.status) }}</span
                   >
                   <time [dateTime]="item.updatedAt">{{ item.updatedAt | date: 'short' }}</time>
@@ -483,6 +484,17 @@ export class AiWorkspacePageComponent {
           cancelled: 'Annulée',
         } as Record<string, string>
       )[status] ?? status
+    );
+  }
+
+  protected operationName(operation?: string): string {
+    return (
+      ({
+        assistant: 'Assistant',
+        'flow-generation': 'Génération de flow',
+        'flow-refactor': 'Modification de flow',
+        'flow-explain': 'Explication de flow',
+      } as Record<string, string>)[operation ?? 'assistant'] ?? 'Opération IA'
     );
   }
 

@@ -54,6 +54,24 @@ public sealed class AiAssistantService(
             .ToArray();
     }
 
+    public async Task RecordOperationActivityAsync(
+        ClaimsPrincipal user,
+        Guid requestId,
+        string operation,
+        string provider,
+        string status,
+        DateTimeOffset startedAt,
+        string? errorCategory,
+        CancellationToken ct)
+    {
+        if (requestId == Guid.Empty) throw new ArgumentException("Identifiant de demande invalide.");
+        var updatedAt = DateTimeOffset.UtcNow;
+        var activity = new AiAssistantActivity(requestId, null, provider, status, startedAt, updatedAt,
+            status == "running" ? null : (long)(updatedAt - startedAt).TotalMilliseconds,
+            errorCategory, operation);
+        await SaveActivityAsync(OwnerId(user), activity, ct);
+    }
+
     public async Task<AiAssistantConversationDetail?> GetAsync(string id, ClaimsPrincipal user, CancellationToken ct)
     {
         if (!IsSessionId(id)) return null;
