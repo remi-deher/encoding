@@ -59,6 +59,13 @@ export class AiToolsService {
     );
   }
 
+  cancelAssistantRequest(requestId: string): Observable<void> {
+    return this.http.post<void>(
+      `/api/v1/tools/ai/assistant/requests/${encodeURIComponent(requestId)}/cancel`,
+      {},
+    );
+  }
+
   forkSession(id: string): Observable<{ readonly id: string }> {
     return this.http.post<{ readonly id: string }>(
       `/api/v1/tools/ai/sessions/${encodeURIComponent(id)}/fork`,

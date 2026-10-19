@@ -40,6 +40,12 @@ public static class AiAssistantEndpoints
             }))
         .AllowAssistantConversation()
         .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
+
+        group.MapPost("/requests/{requestId:guid}/cancel", (Guid requestId, HttpContext http, AiAssistantService service) =>
+            service.CancelRequest(requestId, http.User)
+                ? Results.Accepted(value: new { requestId, state = "cancellation-requested" })
+                : Results.Conflict(new { title = "Aucune demande active ne correspond à cet identifiant." }))
+        .AllowAssistantConversation();
     }
 
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)

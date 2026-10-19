@@ -77,6 +77,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly loadingConversations = signal(true);
   protected readonly loadingDetail = signal(false);
   protected readonly sending = signal(false);
+  protected readonly cancelling = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly pendingPrompt = signal<string | null>(null);
   protected readonly hasPendingRequest = signal(false);
@@ -228,6 +229,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     const activeConversation = this.detail()?.conversation ?? null;
     const selectedResource = this.selectedResource();
     this.sending.set(true);
+    this.cancelling.set(false);
     this.pendingPrompt.set(message);
     this.resumingRequest.set(false);
     this.errorMessage.set(null);
@@ -266,6 +268,7 @@ export class AiAssistantPageComponent implements OnDestroy {
           });
           this.pendingPrompt.set(null);
           this.sending.set(false);
+          this.cancelling.set(false);
           this.loadConversations();
           this.setConversationUrl(response.conversation.id);
           if (response.success) {
@@ -283,6 +286,7 @@ export class AiAssistantPageComponent implements OnDestroy {
         },
         error: (error: HttpErrorResponse) => {
           this.sending.set(false);
+          this.cancelling.set(false);
           this.pendingPrompt.set(null);
           this.errorMessage.set(
             this.errorText(error, 'Impossible d’envoyer le message. Réessayez.'),
@@ -294,6 +298,20 @@ export class AiAssistantPageComponent implements OnDestroy {
           }
         },
       });
+  }
+
+  protected cancelRequest(): void {
+    if (!this.requestId || this.cancelling()) return;
+    this.cancelling.set(true);
+    this.aiTools.cancelAssistantRequest(this.requestId).subscribe({
+      next: () => this.cancelling.set(false),
+      error: (error: HttpErrorResponse) => {
+        this.cancelling.set(false);
+        this.errorMessage.set(
+          this.errorText(error, 'La demande est terminée ou ne peut plus être interrompue.'),
+        );
+      },
+    });
   }
 
   private loadFlows(): void {

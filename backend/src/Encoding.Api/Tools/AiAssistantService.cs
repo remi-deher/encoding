@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Encoding.Api.Executions;
@@ -20,6 +21,7 @@ public sealed class AiAssistantService(
     NodeRepository nodes,
     NodePresenceOptions nodePresence)
 {
+    private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
     private const string ConversationPrefix = "assistant/conversations/";
     private const string SessionOwnerPrefix = "assistant/session-owner/";
     private static readonly JsonSerializerOptions ContextJsonOptions = new(JsonSerializerDefaults.Web)
@@ -70,6 +72,19 @@ public sealed class AiAssistantService(
             status == "running" ? null : (long)(updatedAt - startedAt).TotalMilliseconds,
             errorCategory, operation);
         await SaveActivityAsync(OwnerId(user), activity, ct);
+    }
+
+    public bool CancelRequest(Guid requestId, ClaimsPrincipal user)
+    {
+        if (requestId == Guid.Empty) return false;
+        var key = (OwnerId(user), requestId);
+        if (!activeRequests.TryGetValue(key, out var cancellation)) return false;
+        try
+        {
+            cancellation.Cancel();
+            return true;
+        }
+        catch (ObjectDisposedException) { return false; }
     }
 
     public async Task<AiAssistantConversationDetail?> GetAsync(string id, ClaimsPrincipal user, CancellationToken ct)
@@ -224,7 +239,16 @@ public sealed class AiAssistantService(
         var startedAt = DateTimeOffset.UtcNow;
         var activity = new AiAssistantActivity(request.RequestId, conversation.Id, conversation.Provider,
             "running", startedAt, startedAt, null, null);
-        await SaveActivityAsync(ownerId, activity, ct);
+        using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var activeKey = (ownerId, request.RequestId);
+        if (!activeRequests.TryAdd(activeKey, requestCancellation))
+            throw new InvalidOperationException("Cette demande est déjà en cours.");
+        try { await SaveActivityAsync(ownerId, activity, ct); }
+        catch
+        {
+            activeRequests.TryRemove(activeKey, out _);
+            throw;
+        }
         AiCompletionResult result;
         try
         {
@@ -232,15 +256,19 @@ public sealed class AiAssistantService(
             result = await cluster.GenerateAsync(
                 conversation.Provider,
                 new AiPrompt(systemPrompt, contextualPrompt, SessionId: conversation.Id, RequestId: request.RequestId),
-                ct,
+                requestCancellation.Token,
                 localOnly: policy.AssistantLocalOnly);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (requestCancellation.IsCancellationRequested)
         {
             var cancelledAt = DateTimeOffset.UtcNow;
             await SaveActivityAsync(ownerId, activity with { Status = "cancelled", UpdatedAt = cancelledAt,
-                DurationMilliseconds = (long)(cancelledAt - startedAt).TotalMilliseconds }, CancellationToken.None);
-            throw;
+                DurationMilliseconds = (long)(cancelledAt - startedAt).TotalMilliseconds,
+                ErrorCategory = ct.IsCancellationRequested ? null : "remote-result-uncertain" }, CancellationToken.None);
+            if (ct.IsCancellationRequested) throw;
+            return new(false, conversation, request.RequestId, null,
+                "L’attente a été interrompue. Le fournisseur a peut-être déjà accepté la demande ; reprenez-la après expiration de son bail.",
+                resolved.Select(context => context.Source).ToArray());
         }
         catch (Exception)
         {
@@ -248,6 +276,10 @@ public sealed class AiAssistantService(
             await SaveActivityAsync(ownerId, activity with { Status = "failed", UpdatedAt = failedAt,
                 DurationMilliseconds = (long)(failedAt - startedAt).TotalMilliseconds, ErrorCategory = "provider-error" }, CancellationToken.None);
             throw;
+        }
+        finally
+        {
+            activeRequests.TryRemove(activeKey, out _);
         }
 
         var completedAt = DateTimeOffset.UtcNow;

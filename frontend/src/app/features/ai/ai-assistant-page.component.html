@@ -222,11 +222,16 @@
           sending() ? 'Réponse en cours…' : resumingRequest() ? 'Reprendre la demande' : 'Envoyer'
         }}
       </button>
+      @if (sending()) {
+        <button matButton="text" type="button" [disabled]="cancelling()" (click)="cancelRequest()">
+          {{ cancelling() ? 'Interruption demandée…' : 'Interrompre' }}
+        </button>
+      }
     </form>
     <p class="privacy-note">
-      Votre question et les données de la ressource sont transmises au fournisseur IA par défaut,
-      qui peut être externe à votre installation. La conversation reste privée à votre compte ;
-      l’assistant ne peut modifier aucune ressource.
+      Votre question et les données des ressources sont transmises au fournisseur affecté à cet
+      usage, qui peut être externe à votre installation. La conversation reste privée à votre
+      compte ; l’assistant ne peut modifier aucune ressource.
     </p>
   </section>
 </div>

@@ -182,6 +182,7 @@ export class AiActivityPageComponent {
           authentication: 'authentification',
           timeout: 'délai dépassé',
           'provider-error': 'fournisseur',
+          'remote-result-uncertain': 'résultat distant incertain après interruption',
         } as Record<string, string>
       )[category] ?? category
     );
