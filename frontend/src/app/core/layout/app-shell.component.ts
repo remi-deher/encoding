@@ -25,6 +25,7 @@ import { AuthService } from '../auth/auth.service';
 import { UserMenuComponent } from '../auth/user-menu.component';
 import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 import { SearchPaletteDialogComponent } from './search-palette-dialog.component';
+import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.component';
 
 @Component({
   selector: 'app-shell',
@@ -39,6 +40,7 @@ import { SearchPaletteDialogComponent } from './search-palette-dialog.component'
     RouterOutlet,
     ThemeToggleComponent,
     UserMenuComponent,
+    AiAssistantPageComponent,
   ],
   templateUrl: './app-shell.component.html',
   host: {
@@ -95,6 +97,9 @@ export class AppShellComponent {
       const context = this.navigationEnd();
       this.navigationOpened.set(!compact && !context.authMode && !context.workspaceMode);
     });
+    effect(() => {
+      if (this.assistantRouteActive()) this.assistantPanelOpen.set(false);
+    });
   }
 
   private readonly dynamicTitle = inject(PageTitle);
@@ -107,6 +112,28 @@ export class AppShellComponent {
   protected readonly subSectionLabel = computed(() => this.navigationEnd().subLabel);
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
+  protected readonly assistantRouteActive = computed(() =>
+    this.navigationEnd().url.startsWith('/ai/assistant'),
+  );
+  protected readonly showAssistantBubble = computed(
+    () =>
+      Boolean(this.currentUser()) &&
+      !this.authMode() &&
+      !this.workspaceMode() &&
+      !this.assistantRouteActive(),
+  );
+  protected readonly assistantWidgetMounted = signal(false);
+  protected readonly assistantPanelOpen = signal(false);
+
+  protected toggleAssistantPanel(): void {
+    if (!this.assistantWidgetMounted()) this.assistantWidgetMounted.set(true);
+    this.assistantPanelOpen.update((open) => !open);
+    if (this.isCompactNavigation()) this.navigationOpened.set(false);
+  }
+
+  protected closeAssistantPanel(): void {
+    this.assistantPanelOpen.set(false);
+  }
 
   private readonly auth = inject(AuthService);
   protected readonly currentUser = this.auth.user;

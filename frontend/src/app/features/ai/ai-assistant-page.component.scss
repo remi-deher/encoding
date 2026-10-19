@@ -203,6 +203,25 @@
   line-height: 1.5;
 }
 
+:host(.assistant-panel-mode) {
+  padding: var(--space-3);
+}
+
+:host(.assistant-panel-mode) .assistant-layout {
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:host(.assistant-panel-mode) .conversation-panel {
+  max-height: 10rem;
+  overflow-y: auto;
+}
+
+:host(.assistant-panel-mode) .chat-panel {
+  min-height: 28rem;
+  padding: var(--space-3);
+}
+
 @media (max-width: 760px) {
   .assistant-layout {
     grid-template-columns: minmax(0, 1fr);

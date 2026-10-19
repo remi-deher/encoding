@@ -1,9 +1,24 @@
-<app-page-header
-  title="Assistant"
-  description="Posez une question sur un flow publié, une exécution ou un nœud. La ressource consultée reste attachée à la conversation."
->
-  <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
-</app-page-header>
+@if (!panelMode()) {
+  <app-page-header
+    title="Assistant"
+    description="Posez une question sur un flow publié, une exécution ou un nœud. La ressource consultée reste attachée à la conversation."
+  >
+    <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
+  </app-page-header>
+} @else {
+  <app-page-header
+    title="Assistant"
+    description="Conversations privées, conservées à la fermeture du panneau."
+  >
+    <a
+      page-actions
+      matButton="text"
+      [routerLink]="['/ai/assistant']"
+      [queryParams]="detail() ? { conversation: detail()!.conversation.id } : {}"
+      >Ouvrir la page</a
+    >
+  </app-page-header>
+}
 
 <div class="assistant-layout">
   <aside class="conversation-panel" aria-label="Conversations privées">

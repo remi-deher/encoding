@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -43,8 +43,10 @@ interface AssistantResourceOption {
   ],
   templateUrl: './ai-assistant-page.component.html',
   styleUrl: './ai-assistant-page.component.scss',
+  host: { '[class.assistant-panel-mode]': 'panelMode()' },
 })
 export class AiAssistantPageComponent {
+  readonly panelMode = input(false);
   private readonly aiTools = inject(AiToolsService);
   private readonly flowValidation = inject(FlowValidation);
   private readonly clusterApi = inject(ClusterApi);
