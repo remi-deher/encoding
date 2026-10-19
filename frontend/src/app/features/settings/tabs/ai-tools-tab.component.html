@@ -184,7 +184,10 @@
               [readonly]="!isAdmin()"
           /></mat-form-field>
         </div>
-        <p class="muted">Les demandes en attente ne sont pas expirées. Les tombstones sont répliqués ; les anciens événements chiffrés restent dans le journal append-only.</p>
+        <p class="muted">
+          Les demandes en attente ne sont pas expirées. Les tombstones sont répliqués ; les anciens
+          événements chiffrés restent dans le journal append-only.
+        </p>
       </mat-expansion-panel>
       @if (isAdmin() && hasUnsavedChanges() && !editor.state()) {
         <footer class="save-bar">
