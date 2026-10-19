@@ -20,6 +20,8 @@ import {
   AiAssistantConversationDetail,
   AiAssistantSource,
   AiAssistantToolCall,
+  AiAssistantModelOption,
+  AiAssistantOptions,
 } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
 import { LibraryResponse, NodeResponse } from '../../shared/models/cluster';
@@ -72,8 +74,14 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly libraries = signal<readonly LibraryResponse[]>([]);
   protected readonly conversations = signal<readonly AiAssistantConversation[]>([]);
   protected readonly detail = signal<AiAssistantConversationDetail | null>(null);
+  protected readonly assistantOptions = signal<AiAssistantOptions | null>(null);
+  protected readonly selectedModelKey = signal('');
+  protected readonly selectedReasoningEffort = signal<string | null>(null);
+  protected readonly loadingAssistantOptions = signal(true);
   protected readonly selectedResourceType = signal<AssistantResourceType>('flow');
   protected readonly selectedResourceId = signal('');
+  protected readonly contextPickerOpen = signal(false);
+  protected readonly contextSearch = signal('');
   protected readonly prompt = signal('');
   protected readonly loadingFlows = signal(true);
   protected readonly loadingExecutions = signal(true);
@@ -127,6 +135,16 @@ export class AiAssistantPageComponent implements OnDestroy {
     () =>
       this.resourceOptions().find((resource) => resource.id === this.selectedResourceId()) ?? null,
   );
+  protected readonly filteredResourceOptions = computed(() => {
+    const search = this.contextSearch().trim().toLocaleLowerCase();
+    return search
+      ? this.resourceOptions().filter((resource) => resource.label.toLocaleLowerCase().includes(search))
+      : this.resourceOptions();
+  });
+  protected readonly selectedModelOption = computed(() =>
+    this.assistantOptions()?.models.find((option) => this.modelOptionKey(option) === this.selectedModelKey()) ?? null,
+  );
+  protected readonly reasoningEfforts = computed(() => this.selectedModelOption()?.reasoningEfforts ?? []);
   protected readonly loadingSelectedResource = computed(() => {
     switch (this.selectedResourceType()) {
       case 'flow':
@@ -157,6 +175,7 @@ export class AiAssistantPageComponent implements OnDestroy {
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
       (Boolean(this.detail()) || Boolean(this.selectedResource())) &&
+      (Boolean(this.detail()) || (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
       (!this.hasPendingRequest() || this.prompt() === this.requestPrompt),
   );
 
@@ -174,6 +193,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.loadNodes();
     this.loadLibraries();
     this.loadConversations();
+    this.loadAssistantOptions();
     this.route.queryParamMap.subscribe((params) => {
       const id = params.get('conversation');
       if (!id) {
@@ -193,11 +213,77 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.resumingRequest.set(false);
     this.requestPrompt = '';
     this.requestId = '';
+    this.selectedReasoningEffort.set(null);
+    this.contextPickerOpen.set(false);
+    this.contextSearch.set('');
+    this.selectDefaultModel();
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { conversation: null },
       queryParamsHandling: 'merge',
     });
+  }
+
+  protected modelOptionKey(option: Pick<AiAssistantModelOption, 'provider' | 'model'>): string {
+    return `${option.provider}\n${option.model ?? ''}`;
+  }
+
+  protected conversationModelLabel(conversation: AiAssistantConversation): string {
+    return this.assistantOptions()?.models.find(
+      (option) => option.provider === conversation.provider && option.model === conversation.model,
+    )?.label ?? `${conversation.provider}${conversation.model ? ` · ${conversation.model}` : ' · modèle par défaut'}`;
+  }
+
+  protected effortLabel(effort: string): string {
+    return ({ low: 'Faible', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé' } as Record<string, string>)[effort] ?? effort;
+  }
+
+  protected selectModel(key: string): void {
+    this.selectedModelKey.set(key);
+    this.selectedReasoningEffort.set(null);
+  }
+
+  protected selectEffort(value: string | null): void {
+    this.selectedReasoningEffort.set(value || null);
+  }
+
+  protected toggleContextPicker(): void {
+    this.contextPickerOpen.update((open) => !open);
+    this.contextSearch.set('');
+  }
+
+  protected isSourceAttached(resource: AssistantResourceOption): boolean {
+    const conversation = this.detail()?.conversation;
+    return conversation !== null && conversation !== undefined && this.conversationSources(conversation).some(
+      (source) => source.kind === this.selectedResourceType() && source.resourceId === resource.id,
+    );
+  }
+
+  protected addResourceToContext(resource: AssistantResourceOption): void {
+    if (this.isSourceAttached(resource) || this.updatingSources() || this.hasPendingRequest()) return;
+    const current = this.detail()?.conversation;
+    if (!current) return;
+    const sources = this.conversationSources(current);
+    if (sources.length >= 5) {
+      this.errorMessage.set('Une conversation peut consulter au maximum cinq ressources.');
+      return;
+    }
+    const href = {
+      flow: '/flows',
+      execution: '/tasks',
+      node: '/nodes',
+      library: '/libraries',
+    }[this.selectedResourceType()];
+    this.updateConversationSources([
+      ...sources,
+      {
+        kind: this.selectedResourceType(),
+        resourceId: resource.id,
+        version: resource.version,
+        label: resource.label,
+        href,
+      },
+    ]);
   }
 
   protected deleteFlowFromAssistant(source: AiAssistantSource): void {
@@ -292,6 +378,10 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.aiTools.getAssistantConversation(id).subscribe({
       next: (detail) => {
         this.detail.set(detail);
+        this.contextPickerOpen.set(false);
+        this.contextSearch.set('');
+        this.selectedModelKey.set(this.modelOptionKey(detail.conversation));
+        this.selectedReasoningEffort.set(detail.conversation.reasoningEffort ?? null);
         if (detail.conversation.source.kind !== 'tool')
           this.selectedResourceType.set(detail.conversation.source.kind);
         this.selectedResourceId.set('');
@@ -338,6 +428,7 @@ export class AiAssistantPageComponent implements OnDestroy {
 
     const activeConversation = this.detail()?.conversation ?? null;
     const selectedResource = this.selectedResource();
+    const selectedModel = this.selectedModelOption();
     this.sending.set(true);
     this.cancelling.set(false);
     this.pendingPrompt.set(message);
@@ -358,6 +449,9 @@ export class AiAssistantPageComponent implements OnDestroy {
               ...(name === 'get_flow' ? { flowId: selectedResource?.id ?? null } : {}),
             }) as AiAssistantToolCall,
         ),
+        provider: activeConversation ? activeConversation.provider : selectedModel?.provider,
+        model: activeConversation ? activeConversation.model : selectedModel?.model,
+        reasoningEffort: activeConversation ? activeConversation.reasoningEffort : this.selectedReasoningEffort(),
       })
       .subscribe({
         next: (response) => {
@@ -449,6 +543,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected selectResourceType(type: AssistantResourceType): void {
     this.selectedResourceType.set(type);
     this.selectedResourceId.set('');
+    this.contextSearch.set('');
     if (type !== 'flow')
       this.selectedReadTools.update((tools) => tools.filter((tool) => tool !== 'get_flow'));
   }
@@ -457,41 +552,6 @@ export class AiAssistantPageComponent implements OnDestroy {
     conversation: AiAssistantConversation,
   ): readonly AiAssistantSource[] {
     return [conversation.source, ...(conversation.additionalSources ?? [])];
-  }
-
-  protected addSelectedResource(): void {
-    const current = this.detail()?.conversation;
-    const selected = this.selectedResource();
-    if (!current || !selected || this.updatingSources() || this.hasPendingRequest()) return;
-    const sources = this.conversationSources(current);
-    if (
-      sources.some(
-        (source) =>
-          source.kind === this.selectedResourceType() && source.resourceId === selected.id,
-      )
-    ) {
-      this.errorMessage.set('Cette ressource est déjà attachée à la conversation.');
-      return;
-    }
-    if (sources.length >= 5) {
-      this.errorMessage.set('Une conversation peut consulter au maximum cinq ressources.');
-      return;
-    }
-    this.updateConversationSources([
-      ...sources,
-      {
-        kind: this.selectedResourceType(),
-        resourceId: selected.id,
-        version: selected.version,
-        label: selected.label,
-        href:
-          this.selectedResourceType() === 'flow'
-            ? '/flows'
-            : this.selectedResourceType() === 'execution'
-              ? '/tasks'
-              : '/nodes',
-      },
-    ]);
   }
 
   protected removeConversationSource(source: AiAssistantSource): void {
@@ -566,6 +626,26 @@ export class AiAssistantPageComponent implements OnDestroy {
       },
       error: () => this.loadingConversations.set(false),
     });
+  }
+
+  private loadAssistantOptions(): void {
+    this.aiTools.getAssistantOptions().subscribe({
+      next: (options) => {
+        this.assistantOptions.set(options);
+        this.loadingAssistantOptions.set(false);
+        if (!this.detail()) this.selectDefaultModel();
+      },
+      error: () => this.loadingAssistantOptions.set(false),
+    });
+  }
+
+  private selectDefaultModel(): void {
+    const options = this.assistantOptions();
+    if (!options) return;
+    const selected = options.models.find(
+      (option) => option.provider === options.defaultProvider && option.model === options.defaultModel,
+    ) ?? options.models.find((option) => option.provider === options.defaultProvider) ?? options.models[0];
+    this.selectedModelKey.set(selected ? this.modelOptionKey(selected) : '');
   }
 
   private setConversationUrl(id: string): void {

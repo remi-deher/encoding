@@ -12,6 +12,10 @@ public static class AiAssistantEndpoints
     {
         var group = app.MapGroup("/api/v1/tools/ai/assistant").WithTags("AI Assistant");
 
+        group.MapGet("/options", async (AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await service.OptionsAsync(ct))))
+        .AllowAssistantConversation();
+
         group.MapGet("/conversations", async (HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.ListAsync(http.User, ct))));
 

@@ -15,10 +15,19 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     {
         var providers = (await auth.ListToolsAsync(ct)).Where(t => t.IsInstalled && t.AuthStatus.State == "authorized").Select(t => t.Id).ToList();
         var local = settings.GetSettings();
-        if (!string.IsNullOrWhiteSpace(local.OllamaBaseUrl) && !string.IsNullOrWhiteSpace(local.OllamaModel)) providers.Add("ollama");
-        if (!string.IsNullOrWhiteSpace(local.OpenAiBaseUrl) && !string.IsNullOrWhiteSpace(local.OpenAiModel) && !string.IsNullOrWhiteSpace(local.OpenAiApiKey)) providers.Add("openai");
+        var models = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(local.OllamaBaseUrl) && !string.IsNullOrWhiteSpace(local.OllamaModel))
+        {
+            providers.Add("ollama");
+            models["ollama"] = local.OllamaModel;
+        }
+        if (!string.IsNullOrWhiteSpace(local.OpenAiBaseUrl) && !string.IsNullOrWhiteSpace(local.OpenAiModel) && !string.IsNullOrWhiteSpace(local.OpenAiApiKey))
+        {
+            providers.Add("openai");
+            models["openai"] = local.OpenAiModel;
+        }
         var displayName = await localNode.ResolveDisplayNameAsync(ct);
-        return new(transport.LocalId, displayName ?? configuration["Node:Name"] ?? Environment.MachineName, providers);
+        return new(transport.LocalId, displayName ?? configuration["Node:Name"] ?? Environment.MachineName, providers, Models: models);
     }
     public async Task<AiClusterView> ViewAsync(CancellationToken ct)
     {
@@ -114,8 +123,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         if (!await gate.WaitAsync(0, ct)) return new(false, "", "Une demande est déjà en cours dans cette session.", SessionId: id, RequestId: requestId);
         try
         {
-            var session = await GetSessionAsync(id, ct) ?? new(id, provider, prompt.SystemPrompt, [], Model: prompt.Model, Scope: prompt.Scope);
-            if (session.Provider != provider || session.SystemPrompt != prompt.SystemPrompt || session.Model != prompt.Model || session.Scope != prompt.Scope) throw new ArgumentException("Le moteur, les consignes et le périmètre sont fixes pour une session. Ouvrez une nouvelle session.");
+            var session = await GetSessionAsync(id, ct) ?? new(id, provider, prompt.SystemPrompt, [], Model: prompt.Model, Scope: prompt.Scope, ReasoningEffort: prompt.ReasoningEffort);
+            if (session.Provider != provider || session.SystemPrompt != prompt.SystemPrompt || session.Model != prompt.Model || session.Scope != prompt.Scope || session.ReasoningEffort != prompt.ReasoningEffort) throw new ArgumentException("Le moteur, le modèle, l’effort, les consignes et le périmètre sont fixes pour une session. Ouvrez une nouvelle session.");
             var completed = session.Turns.FirstOrDefault(t => t.RequestId == requestId);
             if (completed is not null && completed.UserPrompt != prompt.UserPrompt) throw new ArgumentException("Identifiant de requête déjà utilisé pour une autre demande.");
             if (completed is not null) return new(true, completed.Content, SessionId: id, RequestId: requestId, Usage: completed.Usage);
@@ -138,7 +147,9 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             }
             AiCompletionResult result = new(false, "", "Aucun nœud connecté à ce fournisseur. La demande reste en attente.");
             foreach (var candidate in candidates.DistinctBy(c => c.Node.NodeId)
-                .Where(c => c.Node.Providers.Contains(provider) && (!localOnly || c.Url is null))
+                .Where(c => c.Node.Providers.Contains(provider)
+                    && (prompt.Model is null || c.Node.Models?.GetValueOrDefault(provider) == prompt.Model)
+                    && (!localOnly || c.Url is null))
                 .Take(localOnly ? 1 : 3))
             {
                 var seconds = Math.Clamp((await GetSettingsAsync(ct)).TimeoutSeconds, 10, 600);

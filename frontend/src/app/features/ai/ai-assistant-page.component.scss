@@ -88,6 +88,37 @@
   padding: var(--space-5);
 }
 
+.assistant-model-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container);
+}
+
+.assistant-model-controls mat-form-field {
+  flex: 1 1 14rem;
+  min-width: min(14rem, 100%);
+}
+
+.model-summary {
+  display: grid;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-size: var(--font-label);
+}
+
+.model-summary strong {
+  color: var(--text-primary);
+}
+
+.model-summary-label {
+  color: var(--text-muted);
+}
+
 .chat-heading {
   padding-bottom: var(--space-4);
 }
@@ -114,15 +145,104 @@
 .add-context-controls {
   padding: var(--space-3);
   display: grid;
-  grid-template-columns: minmax(8rem, 0.8fr) minmax(10rem, 1.2fr) auto;
-  align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   border-radius: var(--radius-lg);
   background: var(--surface-container);
 }
 
-.add-context-controls mat-form-field {
+.context-picker-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.context-picker-toggle span {
+  color: var(--text-muted);
+  font-size: var(--font-label);
+}
+
+.context-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.context-picker-heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-title-sm);
+}
+
+.context-picker-heading p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-label);
+}
+
+.context-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.context-categories button.is-active {
+  background: var(--surface-container-high);
+  color: var(--accent-strong);
+}
+
+.context-search {
   width: 100%;
+}
+
+.context-resource-list {
+  max-height: 15rem;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.context-resource-option {
+  width: 100%;
+  padding: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface-container-low);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-resource-option:hover:not(:disabled) {
+  border-color: var(--border-subtle);
+  background: var(--surface-container-high);
+}
+
+.context-resource-option span:last-child {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: var(--font-label);
+}
+
+.context-resource-option:disabled {
+  cursor: default;
+}
+
+.context-resource-option:disabled span:last-child {
+  color: var(--text-muted);
+}
+
+.context-empty {
+  padding: var(--space-3);
 }
 
 .message-list {
@@ -254,6 +374,10 @@
   padding: var(--space-3);
 }
 
+:host(.assistant-panel-mode) .assistant-model-controls mat-form-field {
+  flex-basis: 10rem;
+}
+
 :host(.assistant-panel-mode) .add-context-controls {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -278,10 +402,6 @@
   }
 
   .composer {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .add-context-controls {
     grid-template-columns: minmax(0, 1fr);
   }
 

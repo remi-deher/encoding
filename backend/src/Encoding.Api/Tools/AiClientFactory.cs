@@ -42,7 +42,7 @@ public sealed class AiClientFactory(
             var key = settings.OpenAiApiKey ?? configuration["AiTools:OpenAi:ApiKey"];
             var client = httpClientFactory.CreateClient("AiClient");
             client.BaseAddress = new Uri(url.EndsWith('/') ? url : url + "/");
-            return new OpenAiCompatibleAiClient(client, model, key);
+            return new OpenAiCompatibleAiClient(client, model, key, supportsReasoningEffort: true);
         }
 
         // Par défaut : CLI officielle (Codex ou Claude)
