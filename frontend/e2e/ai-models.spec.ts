@@ -119,17 +119,18 @@ test('backend models and reasoning drive each turn while old turns retain observ
   const assistant = page.locator('app-ai-assistant-page').first();
   const model = assistant.getByRole('combobox', { name: 'Modèle', exact: true });
   await expect(model).toContainText('Modèle fourni A');
-  await assistant.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await assistant.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await expect(page.getByRole('option', { name: 'Ollama', exact: true })).toHaveCount(0);
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
   await model.click();
   await expect(page.getByRole('option', { name: /Modèle fourni A/ })).toHaveCount(0);
   await page.getByRole('option', { name: /Modèle fourni B/ }).click();
-  const reasoning = assistant.getByRole('combobox', { name: 'Effort de raisonnement' });
-  await expect(reasoning).toContainText('Moyen');
-  await reasoning.click();
-  await expect(page.getByRole('option', { name: 'Faible', exact: true })).toHaveCount(0);
-  await page.getByRole('option', { name: 'Maximum', exact: true }).click();
+  const reasoning = assistant.getByRole('slider', { name: 'Effort de raisonnement' });
+  await expect(assistant.locator('.effort-value')).toHaveText('Moyen');
+  await expect(reasoning).toHaveAttribute('aria-valuetext', 'Moyen');
+  await reasoning.press('End');
+  await expect(assistant.locator('.effort-value')).toHaveText('Maximum');
+  await expect(reasoning).toHaveAttribute('aria-valuetext', 'Maximum');
   await assistant.getByRole('textbox', { name: 'Votre question' }).fill('Analyser ce nœud');
   await assistant.getByRole('button', { name: 'Envoyer', exact: true }).click();
   await expect.poll(() => received).toBeTruthy();
@@ -140,7 +141,7 @@ test('backend models and reasoning drive each turn while old turns retain observ
     nodeId,
   });
   await expect(model).toBeDisabled();
-  await expect(assistant.getByRole('combobox', { name: 'Type', exact: true })).toBeDisabled();
+  await expect(assistant.getByRole('combobox', { name: 'Fournisseur IA', exact: true })).toBeDisabled();
   await expect(reasoning).toBeDisabled();
   release!();
   await expect(assistant.getByText('Nouvelle réponse', { exact: true })).toBeVisible();
@@ -316,7 +317,7 @@ test('network retries keep the selected model and request id while validation er
   await page.goto(`/ai/assistant?conversation=${conversationId}`);
   const assistant = page.locator('app-ai-assistant-page').first();
   const model = assistant.getByRole('combobox', { name: 'Modèle', exact: true });
-  await assistant.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await assistant.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
   await model.click();
   await page.getByRole('option', { name: /Modèle fourni B/ }).click();
@@ -418,7 +419,7 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   const widget = page.locator('#assistant-widget-panel');
   await expect(widget).toBeVisible();
   expect((await widget.boundingBox())!.height).toBeLessThanOrEqual(520);
-  await widget.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await widget.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
   await widget.getByRole('button', { name: 'Joindre une ressource' }).click();
   await widget.getByRole('combobox', { name: 'Type de ressource' }).click();

@@ -13,5 +13,6 @@ html = html.replace(
   () => `<script type="module">${js.replace(/<\/script/gi, '<\\/script')}</script>`,
 );
 html = html.replace('<base href="/">', '<base href="./">');
+html = html.replace(/[ \t]+$/gm, '');
 await writeFile(resolve(root, 'maquette-ia.html'), html);
 console.log(resolve(root, 'maquette-ia.html'));
