@@ -517,3 +517,35 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Opt-in connected rows for compact configuration lists; other catalogs keep their layout. */
+.compact-resources {
+  .resource-list {
+    padding: 0;
+    gap: var(--space-1);
+  }
+  .resource-row {
+    padding: var(--space-4);
+    border-radius: var(--radius-sm);
+    background: var(--surface-container-low);
+    box-shadow: none;
+    border: 0;
+  }
+  .resource-row:first-child {
+    border-start-start-radius: var(--radius-lg);
+    border-start-end-radius: var(--radius-lg);
+  }
+  .resource-row:last-child {
+    border-end-start-radius: var(--radius-lg);
+    border-end-end-radius: var(--radius-lg);
+  }
+  .resource-fields {
+    padding: 0;
+    background: transparent;
+    margin-top: var(--space-2);
+    gap: var(--space-3);
+  }
+  .data-card-field {
+    padding: 0;
+  }
+}

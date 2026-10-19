@@ -4,99 +4,70 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter, Router } from '@angular/router';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Subject } from 'rxjs';
-import { SettingsPageComponent } from './settings-page.component';
+import { SettingsPageComponent, settingsDomain } from './settings-page.component';
 
 describe('SettingsPageComponent', () => {
-  async function setup() {
+  async function setup(query = '') {
     await TestBed.configureTestingModule({
       imports: [SettingsPageComponent],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
-
-    await TestBed.inject(Router).navigateByUrl('/');
+    await TestBed.inject(Router).navigateByUrl('/' + query);
     const fixture = TestBed.createComponent(SettingsPageComponent);
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement };
   }
-
-  it('renders 3 main domains for Settings hub', async () => {
+  it('shows four domains, a single editing drawer, and appearance by default', async () => {
     const { element } = await setup();
-    expect(element.textContent).toContain('Accès & Sécurité');
-    expect(element.textContent).toContain('Intégrations & MCP');
-    expect(element.textContent).toContain('Système & Apparence');
+    expect(
+      [...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent?.trim()),
+    ).toEqual(['Interface', 'Accès', 'Connexions', 'Exploitation']);
+    expect(element.querySelector('app-appearance-tab')).not.toBeNull();
+    expect(element.querySelectorAll('app-detail-drawer')).toHaveLength(1);
   });
-
-  it('renders API tokens subtab by default under Accès & Sécurité', async () => {
-    const { element } = await setup();
-    expect(element.querySelector('app-api-token-tab')).not.toBeNull();
-    expect(element.textContent).toContain('Jetons d’API');
-  });
-
-  it('switches to Users subtab when clicked', async () => {
-    const { fixture, element } = await setup();
-    const component = fixture.componentInstance;
-    await component['onSubTabChange']('users');
-    fixture.detectChanges();
-
-    expect(element.querySelector('app-user-management-tab')).not.toBeNull();
-    expect(element.textContent).toContain('Comptes utilisateurs');
-  });
-
-  it('switches to Integrations tab when selected', async () => {
-    const { fixture, element } = await setup();
-    const component = fixture.componentInstance;
-    await component['onMainTabChange']('integrations');
-    fixture.detectChanges();
-
-    expect(element.querySelector('app-mcp-server-tab')).not.toBeNull();
-    expect(element.textContent).toContain('Serveur MCP');
-  });
-
-  it('switches to System tab when selected', async () => {
-    const { fixture, element } = await setup();
-    const component = fixture.componentInstance;
-    await component['onMainTabChange']('system');
-    fixture.detectChanges();
-
-    expect(element.querySelector('app-system-tab')).not.toBeNull();
-    expect(element.textContent).toContain('Thème visuel');
-  });
-
-  it('switches to System Logs subtab under System', async () => {
-    const { fixture, element } = await setup();
-    const component = fixture.componentInstance;
-    await component['onMainTabChange']('system');
-    await component['onSubTabChange']('logs');
-    fixture.detectChanges();
-
-    expect(element.querySelector('app-system-log-viewer')).not.toBeNull();
-    expect(element.textContent).toContain('Journaux système');
-  });
-
-  it.each([false, true])(
-    'attend la confirmation avant de quitter les réglages modifiés (confirmation : %s)',
-    async (confirmed) => {
-      const { fixture, element } = await setup();
-      const component = fixture.componentInstance;
-      const decision = new Subject<boolean>();
-      vi.spyOn(component, 'hasUnsavedChanges').mockReturnValue(true);
-      const open = vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
-        afterClosed: () => decision,
-      } as unknown as MatDialogRef<unknown>);
-
-      const navigation = component['onMainTabChange']('system');
-      fixture.detectChanges();
-      expect(open).toHaveBeenCalledOnce();
+  it.each(['tokens', 'users', 'security', 'access'])(
+    'keeps legacy access links working: %s',
+    async (tab) => {
+      const { element } = await setup(`?tab=${tab}`);
+      expect(element.querySelector('app-user-management-tab')).not.toBeNull();
       expect(element.querySelector('app-api-token-tab')).not.toBeNull();
-      expect(element.querySelector('app-system-tab')).toBeNull();
-
-      decision.next(confirmed);
-      decision.complete();
-      await navigation;
-      fixture.detectChanges();
-
-      expect(element.querySelector('app-system-tab') !== null).toBe(confirmed);
-      expect(element.querySelector('app-api-token-tab') !== null).toBe(!confirmed);
     },
   );
+  it('renders all connection sections together, with no provider sub-tabs', async () => {
+    const { element } = await setup('?tab=ai');
+    expect(element.querySelector('app-ai-tools-tab')).not.toBeNull();
+    expect(element.querySelector('app-mcp-server-tab')).not.toBeNull();
+    expect(element.querySelector('app-webhooks-tab')).not.toBeNull();
+    expect(element.querySelectorAll('[role="tab"]')).toHaveLength(4);
+  });
+  it.each(['system', 'logs', 'system-logs', 'overview', 'operations'])(
+    'keeps operation deep links working: %s',
+    async (tab) => {
+      const { element } = await setup(`?tab=${tab}`);
+      expect(element.querySelector('app-system-tab')).not.toBeNull();
+      expect(element.querySelector('app-system-log-viewer')).not.toBeNull();
+      expect(element.querySelector('app-metrics-tab')).not.toBeNull();
+      expect(element.querySelector('app-appearance-tab')).toBeNull();
+    },
+  );
+  it.each([false, true])(
+    'protects unsaved changes before a tab switch (confirmed: %s)',
+    async (confirmed) => {
+      const { fixture, element } = await setup();
+      const decision = new Subject<boolean>();
+      vi.spyOn(fixture.componentInstance, 'hasUnsavedChanges').mockReturnValue(true);
+      const open = vi
+        .spyOn(fixture.debugElement.injector.get(MatDialog), 'open')
+        .mockReturnValue({ afterClosed: () => decision } as unknown as MatDialogRef<unknown>);
+      const change = fixture.componentInstance['onMainTabChange']('operations');
+      expect(open).toHaveBeenCalledOnce();
+      expect(element.querySelector('app-system-tab')).toBeNull();
+      decision.next(confirmed);
+      decision.complete();
+      await change;
+      fixture.detectChanges();
+      expect(element.querySelector('app-system-tab') !== null).toBe(confirmed);
+    },
+  );
+  it('maps unknown links to Interface', () => expect(settingsDomain('unknown')).toBe('interface'));
 });

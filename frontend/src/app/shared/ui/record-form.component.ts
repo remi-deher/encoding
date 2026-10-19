@@ -379,6 +379,10 @@ export class RecordFormComponent implements OnChanges {
       .filter((field): field is RecordFormField => field !== undefined);
   }
 
+  hasUnsavedChanges(): boolean {
+    return Object.values(this.stepForms).some((form) => form.dirty);
+  }
+
   protected advance(stepper: MatStepper, step: RecordFormStep, last: boolean): void {
     const form = this.formFor(step.id);
     form.markAllAsTouched();

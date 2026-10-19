@@ -230,6 +230,7 @@ const applicationRoutes: Routes = [
   },
   {
     path: 'settings',
+    runGuardsAndResolvers: 'paramsOrQueryParamsChange',
     canDeactivate: [unsavedChangesGuard],
     loadComponent: () =>
       import('./features/settings/settings-page.component').then(

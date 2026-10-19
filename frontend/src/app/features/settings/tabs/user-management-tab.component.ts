@@ -4,9 +4,13 @@ import {
   computed,
   inject,
   signal,
+  TemplateRef,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
+import { SettingsEditor } from '../settings-editor';
 import { AuthService } from '../../../core/auth/auth.service';
 import {
   MINIMUM_PASSWORD_LENGTH,
@@ -39,78 +43,49 @@ interface UserRow extends DataTableRow {
   selector: 'app-user-management-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    ConfigurationSectionComponent,
     DataTableComponent,
     MatButtonModule,
     RecordFormComponent,
   ],
   template: `
-    <div class="tab-header">
-      <div class="tab-titles">
-        <h2>Comptes utilisateurs</h2>
-        <p>Gérez les identifiants locaux et les rôles d’administration du cluster.</p>
-      </div>
-      <button matButton="filled" type="button" (click)="newUser()">
-        Nouvel utilisateur
+    <app-configuration-section
+      title="Utilisateurs"
+      description="Les personnes qui peuvent accéder au cluster."
+    >
+      <button section-actions matButton="filled" type="button" (click)="newUser()">
+        Créer un compte
       </button>
-    </div>
-
-    <app-data-table
-      layout="resources"
-      catalogue-table
-      [columns]="columns"
-      [rows]="filteredRows()"
-      [rowActions]="actions"
-      (rowAction)="onAction($event)"
-      emptyMessage="Aucun utilisateur."
-    />
-
-    @if (formOpen()) {
-      <section class="user-form-drawer" aria-labelledby="user-form-title">
-        <app-record-form
-          [data]="form()"
-          [busy]="busy()"
-          (submitted)="submit($event)"
-          (cancelled)="closeForm()"
+      @if (state() === 'loading') {
+        <p role="status">Chargement des utilisateurs…</p>
+      } @else if (state() === 'error') {
+        <p role="alert">Impossible de charger les utilisateurs.</p>
+        <button matButton="text" (click)="refresh()">Réessayer</button>
+      } @else {
+        <app-data-table
+          layout="resources"
+          [compactResources]="true"
+          [columns]="columns"
+          [rows]="filteredRows()"
+          [rowActions]="actions"
+          (rowAction)="onAction($event)"
+          emptyMessage="Aucun utilisateur."
         />
-      </section>
-    }
-  `,
-  styles: `
-    :host {
-      display: grid;
-      gap: var(--space-3);
-    }
-
-    .tab-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: var(--space-3);
-      padding: var(--space-2) 0;
-    }
-
-    .tab-titles h2 {
-      margin: 0;
-      font-size: var(--font-title);
-      color: var(--text-primary);
-    }
-
-    .tab-titles p {
-      margin: var(--space-1) 0 0 0;
-      font-size: var(--font-body-sm);
-      color: var(--text-secondary);
-    }
-
-    .user-form-drawer {
-      padding: var(--space-4);
-      background: var(--surface-container);
-      border-radius: var(--radius-xl);
-      margin-top: var(--space-2);
-    }
+      }
+    </app-configuration-section>
+    <ng-template #userEditor
+      ><app-record-form
+        [data]="form()"
+        [busy]="busy()"
+        (submitted)="submit($event)"
+        (cancelled)="editor.close()"
+    /></ng-template>
   `,
 })
 export class UserManagementTabComponent {
+  protected readonly editor = inject(SettingsEditor);
+  private readonly userEditor = viewChild.required<TemplateRef<unknown>>('userEditor');
+  private readonly recordForm = viewChild(RecordFormComponent);
   private readonly accounts = inject(UserAccounts);
   private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationService);
@@ -119,7 +94,6 @@ export class UserManagementTabComponent {
   protected readonly state = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly query = signal('');
   protected readonly busy = signal(false);
-  protected readonly formOpen = signal(false);
   protected readonly resetTarget = signal<UserRow | null>(null);
 
   protected readonly columns: readonly DataTableColumn[] = [
@@ -194,6 +168,7 @@ export class UserManagementTabComponent {
       ? {
           title: 'Réinitialiser le mot de passe',
           description: `Nouveau mot de passe de « ${target.username} ». Ses sessions seront fermées.`,
+          review: false,
           submitLabel: 'Réinitialiser',
           fields: [
             {
@@ -202,6 +177,7 @@ export class UserManagementTabComponent {
               type: 'password',
               required: true,
               autocomplete: 'new-password',
+              minLength: MINIMUM_PASSWORD_LENGTH,
               hint: `Au moins ${MINIMUM_PASSWORD_LENGTH} caractères.`,
             },
           ],
@@ -209,6 +185,7 @@ export class UserManagementTabComponent {
       : {
           title: 'Nouvel utilisateur',
           description: 'Créez un compte pour un membre de l’équipe.',
+          review: false,
           submitLabel: 'Créer l’utilisateur',
           fields: [
             {
@@ -225,6 +202,7 @@ export class UserManagementTabComponent {
               type: 'password',
               required: true,
               autocomplete: 'new-password',
+              minLength: MINIMUM_PASSWORD_LENGTH,
               hint: `Au moins ${MINIMUM_PASSWORD_LENGTH} caractères.`,
             },
             {
@@ -257,11 +235,16 @@ export class UserManagementTabComponent {
 
   protected newUser(): void {
     this.resetTarget.set(null);
-    this.formOpen.set(true);
+    void this.editor.open({
+      title: this.resetTarget() ? 'Réinitialiser le mot de passe' : 'Créer un compte',
+      content: this.userEditor(),
+      dirty: () => this.recordForm()?.hasUnsavedChanges() ?? false,
+      busy: () => this.busy(),
+    });
   }
 
   protected closeForm(): void {
-    this.formOpen.set(false);
+    this.editor.reset();
     this.resetTarget.set(null);
   }
 
@@ -270,7 +253,12 @@ export class UserManagementTabComponent {
     switch (event.actionId) {
       case 'password':
         this.resetTarget.set(row);
-        this.formOpen.set(true);
+        void this.editor.open({
+          title: this.resetTarget() ? 'Réinitialiser le mot de passe' : 'Créer un compte',
+          content: this.userEditor(),
+          dirty: () => this.recordForm()?.hasUnsavedChanges() ?? false,
+          busy: () => this.busy(),
+        });
         return;
       case 'make-admin':
         return this.run(
