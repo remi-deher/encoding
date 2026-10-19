@@ -21,6 +21,7 @@
 }
 
 <ng-template #homeContent>
+  <p class="cluster-name">{{ clusterName() }}</p>
   <app-page-header title="Vue d’ensemble" [actions]="pageActionsTemplate()" />
 
   @if (state().status === 'loading') {
@@ -33,63 +34,71 @@
       }
     </p>
   }
-  @if (health(); as health) {
-    <div class="health-banner-section">
-      <app-health-banner [title]="health.title" [tone]="health.tone" [issues]="health.issues" />
-    </div>
-  }
 
   <section
     class="metrics-grid"
     [attr.aria-label]="standalone() ? 'Indicateurs de ce nœud' : 'Indicateurs du cluster'"
   >
     @for (metric of metrics(); track metric.label) {
-      <app-metric-card [label]="metric.label" [value]="metric.value" [detail]="metric.detail" />
+      <a
+        class="metric"
+        [class.featured]="$first"
+        [class.is-stale]="
+          metric.view === null ? state().status === 'error' : executionState().status === 'error'
+        "
+        [routerLink]="metric.view === null ? '/libraries' : '/tasks'"
+        [queryParams]="metric.view ? { view: metric.view } : {}"
+      >
+        <span>{{ metric.label }}</span
+        ><strong>{{ metric.value }}</strong
+        ><small>{{ metric.detail }}</small>
+      </a>
     }
   </section>
 
   <div class="overview-grid">
-    <section class="surface-panel tasks-panel" aria-labelledby="active-tasks-heading">
+    <section class="tasks-panel" aria-labelledby="active-tasks-heading">
       <div class="panel-heading">
         <div>
-          <h2 id="active-tasks-heading">Exécutions en cours</h2>
-          <p>Progression des tâches prises en charge par les workers.</p>
+          <h2 id="active-tasks-heading">
+            Traitements en cours
+            <span class="count">{{ count(executionState().data?.activeCount) }}</span>
+          </h2>
         </div>
         <a class="subtle-link" routerLink="/tasks"
           >Toutes les tâches <span aria-hidden="true">→</span></a
         >
       </div>
 
-      @if (executionState().status === 'loading') {
+      @if (executionState().status === 'loading' || homeExecutionState().status === 'loading') {
         <p role="status">Chargement des exécutions…</p>
       }
-      @if (executionState().status === 'error') {
+      @if (executionState().status === 'error' || homeExecutionState().status === 'error') {
         <p role="alert">
           Le suivi n’a pas pu être actualisé. Les dernières valeurs reçues peuvent être obsolètes.
         </p>
       }
       <div class="execution-card-list">
-        @for (task of activeTasks(); track task.id) {
-          <app-execution-card [execution]="task" />
+        @for (task of activePreview(); track task.id) {
+          <app-overview-execution [execution]="task" />
         } @empty {
-          @if (executionState().status === 'ready') {
+          @if (homeExecutionState().status === 'ready') {
             <p class="empty-panel-message">Aucune exécution en cours.</p>
           }
         }
       </div>
+      @if (remainingActive() > 0) {
+        <a class="remaining-link" routerLink="/tasks" [queryParams]="{ view: 'active' }"
+          >{{ remainingActive() }}
+          {{ remainingActive() === 1 ? 'autre traitement' : 'autres traitements' }} en cours ↗</a
+        >
+      }
     </section>
 
-    <section class="surface-panel nodes-panel" aria-labelledby="nodes-heading">
+    <section class="nodes-panel" aria-labelledby="nodes-heading">
       <div class="panel-heading">
         <div>
           <h2 id="nodes-heading">{{ standalone() ? 'Ce nœud' : 'Nœuds du cluster' }}</h2>
-          <p>
-            {{
-              standalone()
-                ? 'Disponibilité et fonctions de cette installation.'
-                : 'Disponibilité et activité des installations.'
-            }}
-          </p>
         </div>
         <a class="subtle-link" routerLink="/nodes"
           >{{ standalone() ? 'Gérer ce nœud' : 'Voir les nœuds' }}
@@ -99,18 +108,32 @@
 
       <div class="node-list">
         @for (node of nodes(); track node.id) {
-          <article class="node-row">
-            <div class="node-avatar" aria-hidden="true">
-              {{ node.name.substring(0, 1).toUpperCase() }}
-            </div>
-            <div class="node-info">
-              <h3>{{ node.name }}</h3>
-              <p>{{ roleLabel(node.roles) }}</p>
-            </div>
-            <div class="node-state">
+          <article
+            class="node-row"
+            [class.is-stale]="node.status === 'offline' || state().status === 'error'"
+          >
+            <div class="node-heading">
+              <h3>{{ formatNodeLabel(node.name, node.displayName) }}</h3>
               <app-status-badge [label]="lifecycleLabel(node)" [tone]="lifecycleTone(node)" />
-              <span class="node-workload"
-                >Dernier signal : {{ node.lastSeenAt | date: 'dd/MM HH:mm:ss' }}</span
+            </div>
+            <p class="node-hardware">
+              {{ roleLabel(node.roles) }}
+              @if (node.inventory?.processorModel; as processor) {
+                · {{ processor }}
+              }
+            </p>
+            @if (node.inventory?.gpus?.length) {
+              <p class="node-hardware">
+                @for (gpu of node.inventory?.gpus; track $index) {
+                  {{ gpu.name }}{{ $last ? '' : ' · ' }}
+                }
+              </p>
+            }
+            <div class="node-facts">
+              <span
+                >Concurrence configurée <strong>{{ count(node.maxConcurrentTasks) }}</strong></span
+              ><span
+                >Dernier signal <strong>{{ node.lastSeenAt | date: 'dd/MM HH:mm' }}</strong></span
               >
             </div>
           </article>
@@ -126,27 +149,66 @@
           }
         }
       </div>
+      @if (failedCount() > 0) {
+        <aside class="attention">
+          <strong
+            >{{ failedCount() }} {{ failedCount() === 1 ? 'tâche' : 'tâches' }} à examiner</strong
+          >
+          <p>Consultez les erreurs avant de relancer les traitements.</p>
+          <a routerLink="/tasks" [queryParams]="{ view: 'errors' }">Examiner les échecs ↗</a>
+        </aside>
+      }
+      @if (deferredCount(); as count) {
+        <p class="deferred-note">
+          {{ count }} {{ count === 1 ? 'exécution' : 'exécutions' }} en attente de reprise.
+        </p>
+      }
+      @if (health(); as health) {
+        @if (health.issues.length > 0) {
+          <div class="health-banner-section">
+            <app-health-banner
+              [title]="health.title"
+              [tone]="health.tone"
+              [issues]="health.issues"
+            />
+          </div>
+        }
+      }
     </section>
   </div>
 
-  <div
-    class="overview-bottom-grid"
-    [class.has-matrix]="matrixColumns().length && matrixRows().length"
-  >
-    <section class="activity-panel surface-panel" aria-labelledby="activity-heading">
+  <div class="overview-bottom-grid">
+    <section class="activity-panel" aria-labelledby="activity-heading">
       <div class="panel-heading">
         <div>
-          <h2 id="activity-heading">Activité récente</h2>
-          <p>Les cinq exécutions récemment actualisées.</p>
+          <h2 id="activity-heading">Derniers traitements terminés</h2>
         </div>
-        <a class="subtle-link" routerLink="/tasks">Historique <span aria-hidden="true">→</span></a>
+        <a class="subtle-link" routerLink="/tasks" [queryParams]="{ view: 'history' }"
+          >Historique <span aria-hidden="true">→</span></a
+        >
       </div>
+      @if (homeExecutionState().status === 'error') {
+        <p role="alert">
+          Les derniers traitements terminés n’ont pas pu être actualisés. Les valeurs conservées
+          peuvent être obsolètes.
+        </p>
+      }
       <div class="execution-card-list">
-        @for (execution of recentExecutions(); track execution.id) {
-          <app-execution-card [execution]="execution" />
+        @for (execution of publications(); track execution.id) {
+          <article class="publication">
+            <span class="publication-icon" aria-hidden="true">✓</span>
+            <div>
+              <h3>{{ execution.media }}</h3>
+              <p>{{ execution.library }} · {{ execution.flow }}</p>
+            </div>
+            <span class="publication-state">Réussi</span
+            ><time [attr.datetime]="execution.finishedAt ?? execution.updatedAt">{{
+              execution.finishedAt ?? execution.updatedAt | date: 'dd/MM HH:mm'
+            }}</time>
+          </article>
         } @empty {
-          @if (executionState().status === 'ready') {
-            <p class="empty-panel-message">Aucune exécution récente.</p>
+          @if (homeExecutionState().status === 'ready') {
+            <p class="empty-panel-message">Aucun traitement terminé.</p>
           }
         }
       </div>
