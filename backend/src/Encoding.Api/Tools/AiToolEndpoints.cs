@@ -65,7 +65,8 @@ public static class AiToolEndpoints
     {
         settings.DefaultProvider, settings.OllamaBaseUrl, settings.OllamaModel, settings.OpenAiBaseUrl,
         settings.OpenAiModel, HasOpenAiApiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey), settings.TimeoutSeconds, settings.SubtitleBatchSize,
-        settings.AssistantProvider, settings.FlowProvider, settings.AssistantLocalOnly, settings.FlowLocalOnly
+        settings.AssistantProvider, settings.FlowProvider, settings.AssistantLocalOnly, settings.FlowLocalOnly,
+        settings.OllamaEnabled, settings.OpenAiEnabled, settings.CodexEnabled, settings.ClaudeEnabled
     });
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)
     {

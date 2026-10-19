@@ -1,7 +1,7 @@
 @if (!panelMode()) {
   <app-page-header
     title="Assistant"
-    description="Posez une question sur un flow publié, une exécution ou un nœud. La ressource consultée reste attachée à la conversation."
+    description="Posez vos questions sur Encoding. L’assistant recherche le contexte utile dans l’application et peut vous proposer des pistes."
   >
     <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
   </app-page-header>
@@ -66,7 +66,7 @@
           }
         </div>
       } @else {
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-form-field class="model-picker" appearance="outline" subscriptSizing="dynamic">
           <mat-label>Modèle</mat-label>
           <mat-select
             name="assistantModel"
@@ -75,7 +75,9 @@
             [disabled]="loadingAssistantOptions() || sending() || hasPendingRequest()"
           >
             @for (option of assistantOptions()?.models ?? []; track modelOptionKey(option)) {
-              <mat-option [value]="modelOptionKey(option)">{{ option.label }}</mat-option>
+              <mat-option [value]="modelOptionKey(option)">
+                <span class="model-option"><strong>{{ modelShortName(option.label) }}</strong><small>{{ modelProviderName(option.provider) }} · {{ option.model ?? 'Modèle par défaut' }}</small></span>
+              </mat-option>
             }
           </mat-select>
         </mat-form-field>
@@ -314,10 +316,8 @@
       </div>
     } @else {
       <div class="new-conversation">
-        <h2>Quel contexte consulter ?</h2>
-        <p>
-          Choisissez une ressource accessible en lecture. Le contexte restera attaché à cet échange.
-        </p>
+        <h2>Que souhaitez-vous savoir ?</h2>
+        <p>L’assistant cherchera les informations utiles dans l’application à partir de votre demande. Vous pouvez aussi lui demander des idées ou des pistes.</p>
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Type de ressource</mat-label>
           <mat-select
@@ -373,7 +373,7 @@
     }
 
     <mat-form-field class="read-tool-picker" appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Outils de lecture pour ce message</mat-label>
+      <mat-label>Outils de lecture disponibles</mat-label>
       <mat-select
         name="readTools"
         multiple

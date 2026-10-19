@@ -205,12 +205,7 @@ export interface FlowAiAssistantDialogData {
                 </div>
               }
             </section>
-            <div class="proposal-actions">
-              <button matButton="text" type="button" (click)="discardProposal()">Rejeter</button>
-              <button matButton="filled" type="button" (click)="applyProposal()">
-                Appliquer à l’éditeur
-              </button>
-            </div>
+            <p class="proposal-applied" role="status">Proposition appliquée à l’éditeur. Vous pouvez continuer la conversation pour l’ajuster.</p>
           </section>
         }
 
@@ -462,7 +457,7 @@ export class FlowAiAssistantDialogComponent {
     const flow = this.proposal();
     if (!flow) return;
     this.recordProposalDecision('applied-to-editor');
-    this.dialogRef.close({ flow });
+    this.proposal.set(flow);
   }
 
   simulateProposal(flow: FlowDocument): void {
@@ -561,6 +556,7 @@ export class FlowAiAssistantDialogComponent {
             if (res.success && res.flow) {
               this.proposalRequestId.set(res.requestId ?? null);
               this.proposal.set(res.flow);
+              this.dialogRef.close({ flow: res.flow });
             } else {
               this.errorMessage.set(res.explanation || 'Impossible de générer un flow valide.');
             }
@@ -587,6 +583,7 @@ export class FlowAiAssistantDialogComponent {
             if (res.success && res.flow) {
               this.proposalRequestId.set(res.requestId ?? null);
               this.proposal.set(res.flow);
+              this.dialogRef.close({ flow: res.flow });
             } else {
               this.errorMessage.set(
                 res.explanation || 'Impossible d’appliquer les modifications au flow.',

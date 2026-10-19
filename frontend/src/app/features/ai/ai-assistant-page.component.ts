@@ -175,7 +175,6 @@ export class AiAssistantPageComponent implements OnDestroy {
       !this.sending() &&
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
-      (Boolean(this.detail()) || Boolean(this.selectedResource())) &&
       (Boolean(this.detail()) || (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
       (!this.hasPendingRequest() || this.prompt() === this.requestPrompt),
   );
@@ -233,6 +232,14 @@ export class AiAssistantPageComponent implements OnDestroy {
     return this.assistantOptions()?.models.find(
       (option) => option.provider === conversation.provider && option.model === conversation.model,
     )?.label ?? `${conversation.provider}${conversation.model ? ` · ${conversation.model}` : ' · modèle par défaut'}`;
+  }
+
+  protected modelShortName(label: string): string {
+    return label.split(' · ').at(-1) ?? label;
+  }
+
+  protected modelProviderName(provider: string): string {
+    return ({ ollama: 'Ollama', openai: 'OpenAI / API compatible', 'codex-cli': 'Codex', 'claude-cli': 'Claude' } as Record<string, string>)[provider] ?? provider;
   }
 
   protected effortLabel(effort: string): string {
@@ -440,7 +447,7 @@ export class AiAssistantPageComponent implements OnDestroy {
         requestId: this.requestId,
         userPrompt: message,
         conversationId: activeConversation?.id,
-        resourceType: activeConversation ? undefined : this.selectedResourceType(),
+        resourceType: activeConversation ? undefined : (selectedResource ? this.selectedResourceType() : undefined),
         resourceId: activeConversation ? undefined : (selectedResource?.id ?? undefined),
         resourceVersion: activeConversation ? undefined : (selectedResource?.version ?? undefined),
         toolCalls: this.selectedReadTools().map(

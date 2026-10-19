@@ -117,8 +117,31 @@
               <h3>{{ provider.name }}</h3>
               <p>{{ clusterLabel(provider.id) }}</p>
             </div>
-            <span class="provider-status">{{ providerStatus(provider.id) }}</span
-            ><button
+            <span class="provider-status">{{ providerStatus(provider.id) }}</span>
+            @if (provider.id === 'ollama' || provider.id === 'openai') {
+              <mat-slide-toggle
+                [checked]="provider.id === 'ollama' ? ollamaEnabled() : openAiEnabled()"
+                [disabled]="!isAdmin() || savingSettings()"
+                (change)="provider.id === 'ollama' ? ollamaEnabled.set($event.checked) : openAiEnabled.set($event.checked)"
+                >Actif</mat-slide-toggle
+              >
+              <button matButton="text" type="button" [disabled]="!isAdmin() || savingSettings()"
+                (click)="provider.id === 'ollama' ? (ollamaEnabled.set(false), ollamaBaseUrl.set(''), ollamaModel.set('')) : (openAiEnabled.set(false), openAiBaseUrl.set(''), openAiModel.set(''), openAiApiKey.set(''))">Supprimer</button>
+            } @else {
+              <mat-slide-toggle
+                [checked]="provider.id === 'codex-cli' ? codexEnabled() : claudeEnabled()"
+                [disabled]="!isAdmin() || savingSettings()"
+                (change)="provider.id === 'codex-cli' ? codexEnabled.set($event.checked) : claudeEnabled.set($event.checked)"
+                >Actif</mat-slide-toggle
+              >
+              <button
+                matButton="text"
+                type="button"
+                [disabled]="!isAdmin() || connecting()"
+                (click)="revoke(provider.id)"
+              >Supprimer</button>
+            }
+            <button
               matButton="text"
               type="button"
               [attr.aria-label]="'Configurer ' + provider.name"
@@ -159,6 +182,7 @@
               [(ngModel)]="subtitleBatchSize"
               [readonly]="!isAdmin()"
           /></mat-form-field>
+          <mat-slide-toggle name="ollamaEnabled" [ngModel]="ollamaEnabled()" (ngModelChange)="ollamaEnabled.set($event)" [disabled]="!isAdmin()">Activer cette configuration</mat-slide-toggle>
           <mat-form-field appearance="outline"
             ><mat-label>Conservation des conversations (jours)</mat-label
             ><input
@@ -171,6 +195,7 @@
               [(ngModel)]="assistantConversationRetentionDays"
               [readonly]="!isAdmin()"
           /></mat-form-field>
+          <mat-slide-toggle name="openAiEnabled" [ngModel]="openAiEnabled()" (ngModelChange)="openAiEnabled.set($event)" [disabled]="!isAdmin()">Activer cette configuration</mat-slide-toggle>
           <mat-form-field appearance="outline"
             ><mat-label>Conservation de l’activité IA (jours)</mat-label
             ><input

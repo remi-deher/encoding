@@ -16,12 +16,14 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var providers = (await auth.ListToolsAsync(ct)).Where(t => t.IsInstalled && t.AuthStatus.State == "authorized").Select(t => t.Id).ToList();
         var local = settings.GetSettings();
         var models = new Dictionary<string, string?>(StringComparer.Ordinal);
-        if (!string.IsNullOrWhiteSpace(local.OllamaBaseUrl) && !string.IsNullOrWhiteSpace(local.OllamaModel))
+        if (!local.CodexEnabled) providers.Remove("codex-cli");
+        if (!local.ClaudeEnabled) providers.Remove("claude-cli");
+        if (local.OllamaEnabled && !string.IsNullOrWhiteSpace(local.OllamaBaseUrl) && !string.IsNullOrWhiteSpace(local.OllamaModel))
         {
             providers.Add("ollama");
             models["ollama"] = local.OllamaModel;
         }
-        if (!string.IsNullOrWhiteSpace(local.OpenAiBaseUrl) && !string.IsNullOrWhiteSpace(local.OpenAiModel) && !string.IsNullOrWhiteSpace(local.OpenAiApiKey))
+        if (local.OpenAiEnabled && !string.IsNullOrWhiteSpace(local.OpenAiBaseUrl) && !string.IsNullOrWhiteSpace(local.OpenAiModel) && !string.IsNullOrWhiteSpace(local.OpenAiApiKey))
         {
             providers.Add("openai");
             models["openai"] = local.OpenAiModel;
@@ -234,7 +236,11 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             AssistantLocalOnly = shared.AssistantLocalOnly,
             FlowLocalOnly = shared.FlowLocalOnly,
             AssistantConversationRetentionDays = shared.AssistantConversationRetentionDays,
-            AssistantActivityRetentionDays = shared.AssistantActivityRetentionDays
+            AssistantActivityRetentionDays = shared.AssistantActivityRetentionDays,
+            OllamaEnabled = shared.OllamaEnabled,
+            OpenAiEnabled = shared.OpenAiEnabled,
+            CodexEnabled = shared.CodexEnabled,
+            ClaudeEnabled = shared.ClaudeEnabled
         };
     }
     public async Task<AiSettingsDto> UpdateSettingsAsync(AiSettingsUpdateRequest update, CancellationToken ct)

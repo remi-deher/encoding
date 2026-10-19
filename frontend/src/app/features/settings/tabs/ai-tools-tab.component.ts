@@ -20,6 +20,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 import { SettingsEditor } from '../settings-editor';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
@@ -49,6 +50,7 @@ import { AuthService } from '../../../core/auth/auth.service';
     MatSelectModule,
     MatProgressSpinnerModule,
     MatExpansionModule,
+    MatSlideToggleModule,
   ],
   templateUrl: './ai-tools-tab.component.html',
   styleUrl: './ai-tools-tab.component.scss',
@@ -110,6 +112,10 @@ export class AiToolsTabComponent implements OnInit {
   readonly openAiModel = signal('');
   readonly openAiApiKey = signal('');
   readonly hasOpenAiApiKey = signal(false);
+  readonly ollamaEnabled = signal(true);
+  readonly openAiEnabled = signal(true);
+  readonly codexEnabled = signal(true);
+  readonly claudeEnabled = signal(true);
   readonly timeoutSeconds = signal(120);
   readonly subtitleBatchSize = signal(80);
   readonly assistantConversationRetentionDays = signal(90);
@@ -128,6 +134,10 @@ export class AiToolsTabComponent implements OnInit {
       this.openAiBaseUrl(),
       this.openAiModel(),
       this.openAiApiKey(),
+      this.ollamaEnabled(),
+      this.openAiEnabled(),
+      this.codexEnabled(),
+      this.claudeEnabled(),
       this.timeoutSeconds(),
       this.subtitleBatchSize(),
       this.assistantConversationRetentionDays(),
@@ -191,6 +201,10 @@ export class AiToolsTabComponent implements OnInit {
     this.openAiBaseUrl.set(settings.openAiBaseUrl);
     this.openAiModel.set(settings.openAiModel);
     this.hasOpenAiApiKey.set(settings.hasOpenAiApiKey ?? false);
+    this.ollamaEnabled.set(settings.ollamaEnabled ?? Boolean(settings.ollamaModel));
+    this.openAiEnabled.set(settings.openAiEnabled ?? Boolean(settings.openAiModel));
+    this.codexEnabled.set(settings.codexEnabled ?? true);
+    this.claudeEnabled.set(settings.claudeEnabled ?? true);
     this.timeoutSeconds.set(settings.timeoutSeconds);
     this.subtitleBatchSize.set(settings.subtitleBatchSize);
     this.assistantConversationRetentionDays.set(settings.assistantConversationRetentionDays ?? 90);
@@ -234,6 +248,10 @@ export class AiToolsTabComponent implements OnInit {
       openAiBaseUrl: this.openAiBaseUrl().trim(),
       openAiModel: this.openAiModel().trim(),
       openAiApiKey: this.openAiApiKey().trim() || null,
+      ollamaEnabled: this.ollamaEnabled(),
+      openAiEnabled: this.openAiEnabled(),
+      codexEnabled: this.codexEnabled(),
+      claudeEnabled: this.claudeEnabled(),
       timeoutSeconds: this.timeoutSeconds(),
       subtitleBatchSize: this.subtitleBatchSize(),
       assistantConversationRetentionDays: this.assistantConversationRetentionDays(),
@@ -287,12 +305,17 @@ export class AiToolsTabComponent implements OnInit {
   }
   revoke(id: string): void {
     if (!this.isAdmin()) return;
+    this.connecting.set(true);
     this.aiService.revokeAuth(id).subscribe({
       next: () => {
+        this.connecting.set(false);
         this.notifications.show('Connexion locale supprimée.');
         this.refreshTools();
       },
-      error: () => this.notifications.show('Impossible de déconnecter le compte.'),
+      error: () => {
+        this.connecting.set(false);
+        this.notifications.show('Impossible de supprimer la configuration locale.');
+      },
     });
   }
   clusterLabel(id: string): string {
