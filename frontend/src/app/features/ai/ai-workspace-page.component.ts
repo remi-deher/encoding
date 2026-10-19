@@ -1,9 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
-import { AiClusterView, AiSettings, AiToolInfo } from '../../shared/models/ai-tools';
+import {
+  AiAssistantActivity,
+  AiClusterView,
+  AiSettings,
+  AiToolInfo,
+} from '../../shared/models/ai-tools';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 
@@ -25,7 +31,7 @@ const PROVIDERS = [
 @Component({
   selector: 'app-ai-workspace-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatProgressSpinnerModule, PageHeaderComponent, RouterLink],
+  imports: [DatePipe, MatButtonModule, MatProgressSpinnerModule, PageHeaderComponent, RouterLink],
   template: `
     <app-page-header
       title="Intelligence artificielle"
@@ -137,9 +143,26 @@ const PROVIDERS = [
             </div>
             <a matButton="text" routerLink="/ai/activity">Voir l’activité</a>
           </div>
-          <p class="empty-activity">
-            Ouvrez l’activité pour consulter les demandes de l’assistant.
-          </p>
+          @if (recentActivity() === null) {
+            <p class="empty-activity">L’activité récente est indisponible.</p>
+          } @else if (recentActivity()?.length === 0) {
+            <p class="empty-activity">Aucune demande récente de l’assistant.</p>
+          } @else {
+            <ul class="recent-activity-list">
+              @for (item of recentActivity()?.slice(0, 5) ?? []; track item.requestId) {
+                <li>
+                  <span
+                    ><strong>{{ providerName(item.provider) }}</strong> ·
+                    {{ activityStatus(item.status) }}</span
+                  >
+                  <time [dateTime]="item.updatedAt">{{ item.updatedAt | date: 'short' }}</time>
+                  <a [routerLink]="['/ai/activity']" [queryParams]="{ request: item.requestId }"
+                    >Voir le détail</a
+                  >
+                </li>
+              }
+            </ul>
+          }
         </section>
       }
     </div>
@@ -193,7 +216,8 @@ const PROVIDERS = [
       line-height: 1.5;
     }
     .provider-list,
-    .node-list {
+    .node-list,
+    .recent-activity-list {
       display: grid;
       gap: 3px;
       margin: 0;
@@ -201,7 +225,8 @@ const PROVIDERS = [
       list-style: none;
     }
     .provider-row,
-    .node-row {
+    .node-row,
+    .recent-activity-list li {
       min-width: 0;
       padding: var(--space-3) var(--space-4);
       display: flex;
@@ -253,6 +278,15 @@ const PROVIDERS = [
     }
     .node-row {
       align-items: flex-start;
+    }
+    .recent-activity-list li {
+      flex-wrap: wrap;
+    }
+    .recent-activity-list time {
+      color: var(--text-muted);
+    }
+    .recent-activity-list a {
+      color: var(--accent-strong);
     }
     .node-row strong {
       color: var(--text-primary);
@@ -339,6 +373,7 @@ export class AiWorkspacePageComponent {
   protected readonly tools = signal<readonly AiToolInfo[] | null>(null);
   protected readonly cluster = signal<AiClusterView | null>(null);
   protected readonly settings = signal<AiSettings | null>(null);
+  protected readonly recentActivity = signal<readonly AiAssistantActivity[] | null>(null);
   protected readonly providersUnavailable = computed(
     () => this.tools() === null || this.settings() === null,
   );
@@ -418,10 +453,12 @@ export class AiWorkspacePageComponent {
       tools: this.aiTools.listTools().pipe(catchError(() => of(null))),
       cluster: this.aiTools.getCluster().pipe(catchError(() => of(null))),
       settings: this.aiTools.getSettings().pipe(catchError(() => of(null))),
-    }).subscribe(({ tools, cluster, settings }) => {
+      activity: this.aiTools.listAssistantActivity().pipe(catchError(() => of(null))),
+    }).subscribe(({ tools, cluster, settings, activity }) => {
       this.tools.set(tools);
       this.cluster.set(cluster);
       this.settings.set(settings);
+      this.recentActivity.set(activity);
       this.loadFailed.set(tools === null || cluster === null || settings === null);
       this.loading.set(false);
     });
@@ -430,6 +467,23 @@ export class AiWorkspacePageComponent {
   protected providerNames(ids: readonly string[]): string {
     if (!ids.length) return 'Aucun fournisseur déclaré';
     return ids.map((id) => PROVIDERS.find((provider) => provider.id === id)?.name ?? id).join(', ');
+  }
+
+  protected providerName(id: string): string {
+    return PROVIDERS.find((provider) => provider.id === id)?.name ?? id;
+  }
+
+  protected activityStatus(status: string): string {
+    return (
+      (
+        {
+          running: 'En cours',
+          succeeded: 'Réussie',
+          failed: 'Échouée',
+          cancelled: 'Annulée',
+        } as Record<string, string>
+      )[status] ?? status
+    );
   }
 
   private unknownProvider(id: string, name: string): ProviderSummary {
