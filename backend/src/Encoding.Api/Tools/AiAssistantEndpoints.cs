@@ -134,6 +134,22 @@ public static class AiAssistantEndpoints
                 : Results.Conflict(new { title = "L’affectation du flow n’a pas pu être modifiée." }));
         }).AllowAssistantConversation();
 
+        group.MapPost("/actions/create-flow-template/confirm", async (AiAssistantConfirmActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.ConfirmCreateFlowTemplateAsync(request, http.User, ct)
+                ? Results.Ok(new { created = true })
+                : Results.Conflict(new { title = "Le modèle de flow n’a pas pu être créé." }));
+        }).AllowAssistantConversation();
+
+        group.MapPost("/actions/business-operation/confirm", async (AiAssistantConfirmActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.ConfirmBusinessOperationAsync(request, http.User, ct)
+                ? Results.Ok(new { applied = true })
+                : Results.Conflict(new { title = "L’opération n’a pas pu être appliquée." }));
+        }).AllowAssistantConversation();
+
         group.MapPost("/activity/{requestId:guid}/proposal", async (Guid requestId, AiAssistantProposalDecision request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () => await service.UpdateFlowProposalActivityAsync(requestId, request.Decision, http.User, ct)
                 ? Results.Ok(new { requestId, status = request.Decision })

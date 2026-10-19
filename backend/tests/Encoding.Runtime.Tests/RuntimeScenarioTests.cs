@@ -68,6 +68,9 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     public Task WorkerLossFailover() => Scenarios.WorkerLossFailoverAsync();
 
     [DatabaseFact]
+    public Task CancelledExecutionCanBeResumedAsFreshAttempt() => Scenarios.CancelledExecutionCanBeResumedAsFreshAttemptAsync();
+
+    [DatabaseFact]
     public Task UncertainPluginSideEffectIsNotRepeatedAfterWorkerLoss() => Scenarios.UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync();
 
     [DatabaseFact]
