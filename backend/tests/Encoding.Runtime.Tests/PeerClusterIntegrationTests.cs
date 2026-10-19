@@ -285,6 +285,16 @@ public sealed class PeerClusterIntegrationTests
             var states = await Task.WhenAll(clients.Select(client => client.GetFromJsonAsync<PeerConsensusStatus>("api/v1/peer-cluster/consensus")));
             return Array.FindIndex(states, state => state is { IsLeader: true, HasQuorum: true });
         }
+        async Task<int> WaitForLeaderAsync()
+        {
+            var leader = -1;
+            await WaitUntilAsync(async () =>
+            {
+                leader = await LeaderAsync();
+                return leader >= 0;
+            }, TimeSpan.FromSeconds(15), "a leader with quorum", processes);
+            return leader;
+        }
         async Task StopAsync(int index)
         {
             var peer = processes[index]; processes[index] = null!;
@@ -302,7 +312,7 @@ public sealed class PeerClusterIntegrationTests
                 return states.All(state => state is { Members.Count: 3 }) && states.Count(state => state is { IsLeader: true, HasQuorum: true }) == 1;
             }, TimeSpan.FromSeconds(40), "recovered three-voter membership", processes);
         }
-        var leader = await LeaderAsync();
+        var leader = await WaitForLeaderAsync();
         var follower = (leader + 1) % 3;
         await WaitUntilAsync(async () => (await Task.WhenAll(clients.Select(client => client.GetAsync("health/ready"))))
             .All(response => response.IsSuccessStatusCode), TimeSpan.FromSeconds(30), "all SQL projections ready", processes);
@@ -349,7 +359,7 @@ public sealed class PeerClusterIntegrationTests
             }, TimeSpan.FromSeconds(20), "majority election during bidirectional leader partition", processes);
             using (var blocked = await SendAdminAsync(clients[leader], HttpMethod.Post, "api/v1/libraries", new { name = "Must never commit" }))
                 Assert.Equal(HttpStatusCode.ServiceUnavailable, blocked.StatusCode);
-            var majorityLeader = await LeaderAsync();
+            var majorityLeader = await WaitForLeaderAsync();
             using (var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/runtime/nodes/{fixture.Worker:D}/executions/{fixture.Execution:D}/renew")
             { Content = JsonContent.Create(new RuntimeFence(lease.Epoch)) })
             {
@@ -368,7 +378,7 @@ public sealed class PeerClusterIntegrationTests
         foreach (var client in clients)
             Assert.DoesNotContain((await client.GetFromJsonAsync<LibraryResponse[]>("api/v1/libraries"))!, library => library.Name == "Must never commit");
 
-        var rotating = ((await LeaderAsync()) + 1) % 3;
+        var rotating = ((await WaitForLeaderAsync()) + 1) % 3;
         PeerCertificateRequest prepared;
         using (var prepare = await SendAdminAsync(clients[rotating], HttpMethod.Post, "api/v1/peer-cluster/certificate/prepare", new { }))
         {
@@ -376,7 +386,7 @@ public sealed class PeerClusterIntegrationTests
             var document = await prepare.Content.ReadFromJsonAsync<JsonElement>();
             prepared = new(document.GetProperty("certificatePem").GetString()!, document.GetProperty("thumbprint").GetString()!);
         }
-        leader = await LeaderAsync();
+        leader = await WaitForLeaderAsync();
         using (var approve = await SendAdminAsync(clients[leader], HttpMethod.Post,
             $"api/v1/peer-cluster/peers/{identities[rotating].PeerId:D}/certificate", prepared))
             Assert.Equal(HttpStatusCode.OK, approve.StatusCode);
@@ -388,7 +398,7 @@ public sealed class PeerClusterIntegrationTests
             identity.ActivateRotation(TestIdentityPassword(rotating), prepared.Fingerprint);
         Restart(rotating);
         await ThreeReadyAsync();
-        leader = await LeaderAsync();
+        leader = await WaitForLeaderAsync();
         using (var complete = await SendAdminAsync(clients[leader], HttpMethod.Post,
             $"api/v1/peer-cluster/peers/{identities[rotating].PeerId:D}/certificate/complete", new { }))
             Assert.Equal(HttpStatusCode.NoContent, complete.StatusCode);
@@ -410,7 +420,7 @@ public sealed class PeerClusterIntegrationTests
         Restart(rotating);
         await ThreeReadyAsync();
         await WaitUntilAsync(ConvergedAsync, TimeSpan.FromSeconds(20), "cold restore and log catch-up", processes);
-        using (var afterSnapshot = await SendAdminAsync(clients[await LeaderAsync()], HttpMethod.Post,
+        using (var afterSnapshot = await SendAdminAsync(clients[await WaitForLeaderAsync()], HttpMethod.Post,
             "api/v1/libraries", new { name = "Must replay from WAL" }))
             Assert.Equal(HttpStatusCode.Created, afterSnapshot.StatusCode);
         for (var index = 0; index < 3; index++) await StopAsync(index);
