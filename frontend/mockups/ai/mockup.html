@@ -18,11 +18,8 @@
   <main>
     <header class="page-heading">
       <div>
-        <div class="eyebrow">VOTRE CLUSTER, EN CONVERSATION</div>
         <h1>Intelligence artificielle</h1>
-        <p>Comprendre, concevoir et améliorer vos traitements.</p>
       </div>
-      <app-status-badge label="Conversations privées" tone="accent" />
     </header>
     <app-category-tabs
       label="Espace IA"
@@ -40,7 +37,6 @@
             Optimiser mon flow HEVC
           </button>
           <p class="muted">Flow · HEVC + AAC/AC3 + ASS</p>
-          <span class="muted">Vos échanges restent privés.<br />Retrouvez-les à votre retour.</span>
         </aside>
         <section class="chat" aria-label="Assistant">
           <div class="chat-toolbar">
@@ -52,10 +48,6 @@
               <div class="welcome">
                 <div class="spark">✦</div>
                 <h2>Que souhaitez-vous<br />améliorer aujourd’hui ?</h2>
-                <p>
-                  Partez d’une question. Ajoutez une ressource<br />pour obtenir une réponse adaptée
-                  à votre cluster.
-                </p>
               </div>
               <div class="suggestions">
                 @for (suggestion of suggestions; track suggestion) {
@@ -103,23 +95,26 @@
             </mat-form-field>
             <div class="compose-actions">
               <mat-form-field appearance="outline" subscriptSizing="dynamic"
-                ><mat-label>Modèle</mat-label
+                ><mat-label>Modèle de la conversation</mat-label
                 ><mat-select [ngModel]="model()" (ngModelChange)="model.set($event)" name="model">
-                  @for (provider of providers; track provider) {
-                    <mat-option [value]="provider">{{ provider }}</mat-option>
+                  @for (group of modelGroups; track group.provider) {
+                    <mat-optgroup [label]="group.provider">
+                      @for (option of group.models; track option.id) {
+                        @if (!disabledModels().includes(option.id)) {
+                          <mat-option [value]="option.id">{{ option.label }}</mat-option>
+                        }
+                      }
+                    </mat-optgroup>
                   }
                 </mat-select></mat-form-field
-              ><button matButton="filled" type="submit" [disabled]="!prompt().trim()">
+              ><button matButton="filled" type="submit" [disabled]="!prompt().trim() || !model()">
                 Envoyer ↑
               </button>
             </div>
-            <small>Les propositions sont à vérifier avant application.</small>
           </form>
         </section>
         <aside class="context">
-          <div class="eyebrow">CONTEXTE DE TRAVAIL</div>
-          <h2>Une réponse ancrée<br />dans vos ressources.</h2>
-          <p>L’assistant s’appuie sur les éléments attachés à cette conversation.</p>
+          <h2>Contexte</h2>
           <mat-chip-set aria-label="Ressources attachées">
             @if (context()) {
               <mat-chip (removed)="context.set(false)"
@@ -129,26 +124,8 @@
               >
             }</mat-chip-set
           ><button matButton="tonal" [disabled]="context()" (click)="context.set(true)">
-            ＋ Ajouter le flow de démo</button
-          ><mat-accordion
-            ><mat-expansion-panel
-              ><mat-expansion-panel-header
-                ><mat-panel-title
-                  >Ce que l’IA peut consulter</mat-panel-title
-                ></mat-expansion-panel-header
-              >
-              <p>
-                Les ressources attachées et leurs informations applicatives. Aucun média n’est
-                transmis dans cette maquette.
-              </p></mat-expansion-panel
-            ></mat-accordion
-          >
-          <div class="context-note">
-            <strong>Vous gardez la main</strong>
-            <p>
-              Les actions sensibles demandent une confirmation explicite dans le parcours final.
-            </p>
-          </div>
+            ＋ Ajouter le flow de démo
+          </button>
         </aside>
       </div>
     }
@@ -176,6 +153,22 @@
             </article>
           }
         </div>
+        <h2>Modèles disponibles</h2>
+        <div class="model-settings">
+          @for (group of modelGroups; track group.provider) {
+            <section>
+              <h3>{{ group.provider }}</h3>
+              @for (option of group.models; track option.id) {
+                <mat-slide-toggle
+                  [checked]="!disabledModels().includes(option.id)"
+                  (change)="toggleModel(option.id, $event.checked)"
+                  >{{ option.label }}</mat-slide-toggle
+                >
+              }
+            </section>
+          }
+        </div>
+        <p>Ollama · Non configuré</p>
         <p class="muted">Quotas : indisponibles dans la démonstration. Aucun pourcentage estimé.</p>
       </section>
     }

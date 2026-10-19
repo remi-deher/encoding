@@ -182,7 +182,8 @@ small {
   align-items: center;
 }
 .compose-actions mat-form-field {
-  max-width: 200px;
+  width: 280px;
+  max-width: 100%;
   min-width: 0;
 }
 .context h2 {
@@ -191,18 +192,8 @@ small {
 .context p {
   font-size: var(--font-label);
 }
-.context mat-accordion {
-  display: block;
-  margin-top: var(--space-5);
-}
 .context > button {
   margin-top: var(--space-3);
-}
-.context-note {
-  margin-top: var(--space-6);
-  padding: var(--space-4);
-  background: var(--tertiary-soft);
-  border-radius: var(--radius-lg);
 }
 .bubble {
   padding: var(--space-4);
@@ -311,4 +302,17 @@ small {
   .compose-actions {
     flex-wrap: wrap;
   }
+}
+
+.model-settings {
+  display: grid;
+  gap: var(--space-4);
+  margin-block: var(--space-5);
+}
+.model-settings section {
+  background: var(--surface-container);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: var(--space-4);
 }

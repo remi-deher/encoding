@@ -23,7 +23,9 @@ node mockups/ai/verify.cjs
 
 Ce script vérifie le parcours, l’absence de débordement horizontal à 390 px, les erreurs navigateur et l’accessibilité WCAG AA du thème clair sur mobile. Il produit les captures ordinateur et mobile. Les valeurs de quotas indisponibles restent explicitement indisponibles.
 
-L’intégration finale devra réutiliser les services IA et les confirmations existantes. La sélection de modèle est illustrative ; le parcours réel conserve le modèle d’une conversation déjà créée. Les ressources de démonstration restent limitées à un flow pour cette proposition.
+L’intégration finale devra réutiliser les services IA et les confirmations existantes. Le sélecteur liste les modèles de démonstration par fournisseur (GPT 6.1, Claude Opus, Sonnet et Haiku) et reste accessible pendant la conversation. L’intégration devra alimenter la liste depuis les modèles disponibles et prendre en charge le changement de modèle côté backend. Les ressources de démonstration restent limitées à un flow pour cette proposition.
 
 Pour générer le fichier HTML autonome après compilation : `node mockups/ai/package.mjs`.
 Le résultat est `dist/ai-mockup/browser/maquette-ia.html`.
+
+Dans Fournisseurs, chaque modèle peut être activé ou désactivé. Les modèles désactivés disparaissent du sélecteur ; désactiver le modèle sélectionné sélectionne le premier modèle actif. Sans modèle actif, l’envoi est désactivé. Ces réglages sont simulés en mémoire et réinitialisés au rechargement. Ollama est explicitement non configuré et ne fournit aucun modèle par défaut.
