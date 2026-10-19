@@ -68,7 +68,11 @@ public sealed record AiSettingsDto(
     bool AssistantLocalOnly = false,
     bool FlowLocalOnly = false,
     int AssistantConversationRetentionDays = 90,
-    int AssistantActivityRetentionDays = 30);
+    int AssistantActivityRetentionDays = 30,
+    bool OllamaEnabled = true,
+    bool OpenAiEnabled = true,
+    bool CodexEnabled = true,
+    bool ClaudeEnabled = true);
 
 /// <summary>Requête de mise à jour de la configuration de l'IA.</summary>
 public sealed record AiSettingsUpdateRequest(
@@ -85,4 +89,8 @@ public sealed record AiSettingsUpdateRequest(
     bool? AssistantLocalOnly = null,
     bool? FlowLocalOnly = null,
     int? AssistantConversationRetentionDays = null,
-    int? AssistantActivityRetentionDays = null);
+    int? AssistantActivityRetentionDays = null,
+    bool? OllamaEnabled = null,
+    bool? OpenAiEnabled = null,
+    bool? CodexEnabled = null,
+    bool? ClaudeEnabled = null);

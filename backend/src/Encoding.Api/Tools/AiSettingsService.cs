@@ -54,13 +54,18 @@ public sealed class AiSettingsService
                 throw new ArgumentException("L’adresse du fournisseur doit être une URL HTTP(S) sans identifiants.");
         lock (syncRoot)
         {
+            var ollamaEnabled = update.OllamaEnabled ?? cachedSettings.OllamaEnabled;
+            var openAiEnabled = update.OpenAiEnabled ?? cachedSettings.OpenAiEnabled;
+            var nextDefault = !string.IsNullOrWhiteSpace(update.DefaultProvider) ? update.DefaultProvider : cachedSettings.DefaultProvider;
+            if (nextDefault == "ollama" && !ollamaEnabled || nextDefault == "openai" && !openAiEnabled)
+                throw new ArgumentException("Le moteur par défaut doit être activé et configuré.");
             var next = new AiSettingsDto(
-                DefaultProvider: !string.IsNullOrWhiteSpace(update.DefaultProvider) ? update.DefaultProvider : cachedSettings.DefaultProvider,
-                OllamaBaseUrl: !string.IsNullOrWhiteSpace(update.OllamaBaseUrl) ? update.OllamaBaseUrl : cachedSettings.OllamaBaseUrl,
-                OllamaModel: !string.IsNullOrWhiteSpace(update.OllamaModel) ? update.OllamaModel : cachedSettings.OllamaModel,
-                OpenAiBaseUrl: !string.IsNullOrWhiteSpace(update.OpenAiBaseUrl) ? update.OpenAiBaseUrl : cachedSettings.OpenAiBaseUrl,
-                OpenAiModel: !string.IsNullOrWhiteSpace(update.OpenAiModel) ? update.OpenAiModel : cachedSettings.OpenAiModel,
-                OpenAiApiKey: update.OpenAiApiKey ?? cachedSettings.OpenAiApiKey,
+                DefaultProvider: nextDefault,
+                OllamaBaseUrl: update.OllamaEnabled == false ? string.Empty : !string.IsNullOrWhiteSpace(update.OllamaBaseUrl) ? update.OllamaBaseUrl : cachedSettings.OllamaBaseUrl,
+                OllamaModel: update.OllamaEnabled == false ? string.Empty : !string.IsNullOrWhiteSpace(update.OllamaModel) ? update.OllamaModel : cachedSettings.OllamaModel,
+                OpenAiBaseUrl: update.OpenAiEnabled == false ? string.Empty : !string.IsNullOrWhiteSpace(update.OpenAiBaseUrl) ? update.OpenAiBaseUrl : cachedSettings.OpenAiBaseUrl,
+                OpenAiModel: update.OpenAiEnabled == false ? string.Empty : !string.IsNullOrWhiteSpace(update.OpenAiModel) ? update.OpenAiModel : cachedSettings.OpenAiModel,
+                OpenAiApiKey: update.OpenAiEnabled == false ? null : update.OpenAiApiKey ?? cachedSettings.OpenAiApiKey,
                 TimeoutSeconds: update.TimeoutSeconds is > 0 ? update.TimeoutSeconds.Value : cachedSettings.TimeoutSeconds,
                 SubtitleBatchSize: update.SubtitleBatchSize is > 0 ? update.SubtitleBatchSize.Value : cachedSettings.SubtitleBatchSize,
                 AssistantProvider: update.AssistantProvider is null ? cachedSettings.AssistantProvider : update.AssistantProvider == "default" ? null : update.AssistantProvider,
@@ -68,7 +73,11 @@ public sealed class AiSettingsService
                 AssistantLocalOnly: update.AssistantLocalOnly ?? cachedSettings.AssistantLocalOnly,
                 FlowLocalOnly: update.FlowLocalOnly ?? cachedSettings.FlowLocalOnly,
                 AssistantConversationRetentionDays: update.AssistantConversationRetentionDays ?? cachedSettings.AssistantConversationRetentionDays,
-                AssistantActivityRetentionDays: update.AssistantActivityRetentionDays ?? cachedSettings.AssistantActivityRetentionDays
+                AssistantActivityRetentionDays: update.AssistantActivityRetentionDays ?? cachedSettings.AssistantActivityRetentionDays,
+                OllamaEnabled: ollamaEnabled,
+                OpenAiEnabled: openAiEnabled,
+                CodexEnabled: update.CodexEnabled ?? cachedSettings.CodexEnabled,
+                ClaudeEnabled: update.ClaudeEnabled ?? cachedSettings.ClaudeEnabled
             );
 
             SaveSettings(next);
