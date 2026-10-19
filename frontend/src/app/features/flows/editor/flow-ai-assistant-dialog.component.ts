@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -113,6 +113,34 @@ export interface FlowAiAssistantDialogData {
           </div>
         }
 
+        @if (proposal(); as proposed) {
+          <section class="proposal-box" aria-labelledby="proposal-title">
+            <h3 id="proposal-title">Proposition à examiner</h3>
+            <p>
+              @if (data.currentFlow) {
+                {{ proposalChanges().added }} bloc(s) ajouté(s),
+                {{ proposalChanges().changed }} modifié(s),
+                {{ proposalChanges().removed }} supprimé(s),
+                {{ proposalChanges().connectionsAdded }} connexion(s) ajoutée(s) et
+                {{ proposalChanges().connectionsRemoved }} supprimée(s).
+              } @else {
+                Le flow contient {{ proposed.nodes.length }} bloc(s) et
+                {{ proposed.connections.length }} connexion(s).
+              }
+            </p>
+            <details>
+              <summary>Examiner la définition complète</summary>
+              <pre>{{ formatFlow(proposed) }}</pre>
+            </details>
+            <div class="proposal-actions">
+              <button matButton="text" type="button" (click)="discardProposal()">Rejeter</button>
+              <button matButton="filled" type="button" (click)="applyProposal()">
+                Appliquer à l’éditeur
+              </button>
+            </div>
+          </section>
+        }
+
         @if (errorMessage()) {
           <div class="error-box">
             <mat-icon>error_outline</mat-icon>
@@ -145,7 +173,7 @@ export interface FlowAiAssistantDialogData {
         <button
           matButton="filled"
           type="button"
-          [disabled]="loading() || (mode() !== 'explain' && !prompt().trim())"
+          [disabled]="loading() || proposal() || (mode() !== 'explain' && !prompt().trim())"
           (click)="submit()"
         >
           <mat-icon>{{ mode() === 'explain' ? 'visibility' : 'auto_fix_high' }}</mat-icon>
@@ -153,7 +181,7 @@ export interface FlowAiAssistantDialogData {
             mode() === 'explain'
               ? 'Expliquer'
               : mode() === 'refactor'
-                ? 'Appliquer modifications'
+                ? 'Préparer une proposition'
                 : 'Générer le flow'
           }}
         </button>
@@ -237,6 +265,24 @@ export interface FlowAiAssistantDialogData {
         border-radius: 8px;
         line-height: 1.5;
       }
+      .proposal-box {
+        padding: 16px;
+        border: 1px solid var(--mat-sys-outline-variant, #555);
+        border-radius: 8px;
+      }
+      .proposal-box h3 {
+        margin: 0;
+      }
+      .proposal-box pre {
+        max-height: 260px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+      .proposal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
     `,
   ],
 })
@@ -249,6 +295,32 @@ export class FlowAiAssistantDialogComponent {
   readonly prompt = signal('');
   readonly loading = signal(false);
   readonly explanation = signal<string | null>(null);
+  readonly proposal = signal<FlowDocument | null>(null);
+  readonly proposalChanges = computed(() => {
+    const current = this.data.currentFlow;
+    const proposed = this.proposal();
+    if (!current || !proposed)
+      return { added: 0, changed: 0, removed: 0, connectionsAdded: 0, connectionsRemoved: 0 };
+    const currentNodes = new Map(current.nodes.map((node) => [node.id, JSON.stringify(node)]));
+    const proposedNodes = new Map(proposed.nodes.map((node) => [node.id, JSON.stringify(node)]));
+    const added = [...proposedNodes.keys()].filter((id) => !currentNodes.has(id)).length;
+    const removed = [...currentNodes.keys()].filter((id) => !proposedNodes.has(id)).length;
+    const changed = [...proposedNodes].filter(
+      ([id, value]) => currentNodes.has(id) && currentNodes.get(id) !== value,
+    ).length;
+    const key = (connection: unknown) => JSON.stringify(connection);
+    const currentConnections = new Set(current.connections.map(key));
+    const proposedConnections = new Set(proposed.connections.map(key));
+    return {
+      added,
+      changed,
+      removed,
+      connectionsAdded: [...proposedConnections].filter((item) => !currentConnections.has(item))
+        .length,
+      connectionsRemoved: [...currentConnections].filter((item) => !proposedConnections.has(item))
+        .length,
+    };
+  });
   readonly errorMessage = signal<string | null>(null);
 
   readonly sessionId = signal<string | null>(null);
@@ -268,6 +340,23 @@ export class FlowAiAssistantDialogComponent {
     this.requestId = crypto.randomUUID();
     this.errorMessage.set(null);
     this.explanation.set(null);
+    this.proposal.set(null);
+  }
+
+  applyProposal(): void {
+    const flow = this.proposal();
+    if (flow) this.dialogRef.close({ flow });
+  }
+
+  discardProposal(): void {
+    this.proposal.set(null);
+    this.errorMessage.set(null);
+    this.requestId = crypto.randomUUID();
+    this.lastPrompt = '';
+  }
+
+  formatFlow(flow: FlowDocument): string {
+    return JSON.stringify(flow, null, 2);
   }
 
   recoverSession(): void {
@@ -303,6 +392,7 @@ export class FlowAiAssistantDialogComponent {
     this.loading.set(true);
     this.errorMessage.set(null);
     this.explanation.set(null);
+    this.proposal.set(null);
 
     const currentMode = this.mode();
     if (currentMode === 'generate') {
@@ -320,7 +410,7 @@ export class FlowAiAssistantDialogComponent {
             if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
             if (res.success && res.flow) {
-              this.dialogRef.close({ flow: res.flow });
+              this.proposal.set(res.flow);
             } else {
               this.errorMessage.set(res.explanation || 'Impossible de générer un flow valide.');
             }
@@ -345,7 +435,7 @@ export class FlowAiAssistantDialogComponent {
             if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
             if (res.success && res.flow) {
-              this.dialogRef.close({ flow: res.flow });
+              this.proposal.set(res.flow);
             } else {
               this.errorMessage.set(
                 res.explanation || 'Impossible d’appliquer les modifications au flow.',
