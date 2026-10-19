@@ -3,6 +3,10 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
   AiClusterView,
+  AiAssistantConversation,
+  AiAssistantConversationDetail,
+  AiAssistantMessageRequest,
+  AiAssistantMessageResponse,
   AiSettings,
   AiSettingsUpdateRequest,
   AiToolInfo,
@@ -19,6 +23,25 @@ import {
 })
 export class AiToolsService {
   private readonly http = inject(HttpClient);
+
+  listAssistantConversations(): Observable<readonly AiAssistantConversation[]> {
+    return this.http.get<readonly AiAssistantConversation[]>(
+      '/api/v1/tools/ai/assistant/conversations',
+    );
+  }
+
+  getAssistantConversation(id: string): Observable<AiAssistantConversationDetail> {
+    return this.http.get<AiAssistantConversationDetail>(
+      `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}`,
+    );
+  }
+
+  sendAssistantMessage(request: AiAssistantMessageRequest): Observable<AiAssistantMessageResponse> {
+    return this.http.post<AiAssistantMessageResponse>(
+      '/api/v1/tools/ai/assistant/messages',
+      request,
+    );
+  }
 
   forkSession(id: string): Observable<{ readonly id: string }> {
     return this.http.post<{ readonly id: string }>(

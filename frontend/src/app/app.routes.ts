@@ -43,6 +43,25 @@ const applicationRoutes: Routes = [
     },
   },
   {
+    path: 'ai/assistant',
+    loadComponent: () =>
+      import('./features/ai/ai-assistant-page.component').then(
+        (module) => module.AiAssistantPageComponent,
+      ),
+    data: {
+      title: 'Assistant IA',
+      navigation: {
+        group: 'Intelligence artificielle',
+        label: 'Assistant',
+        glyph: '✦',
+        order: 2,
+        exact: false,
+        keywords: ['conversation', 'question', 'flow'],
+      },
+      description: 'Posez des questions sur un flow publié avec une source explicite.',
+    },
+  },
+  {
     path: 'ai',
     loadComponent: () =>
       import('./features/ai/ai-workspace-page.component').then(
@@ -52,9 +71,9 @@ const applicationRoutes: Routes = [
       title: 'Intelligence artificielle',
       navigation: {
         group: 'Intelligence artificielle',
-        label: 'Intelligence artificielle',
+        label: 'Vue d’ensemble',
         glyph: '✦',
-        exact: false,
+        exact: true,
         order: 1,
         keywords: ['assistant', 'ia', 'fournisseurs', 'activité'],
       },

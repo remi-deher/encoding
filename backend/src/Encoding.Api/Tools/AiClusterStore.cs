@@ -54,4 +54,24 @@ public sealed class AiClusterStore(DbDataSource database, ClusterReconciliationR
         var value = await command.ExecuteScalarAsync(ct);
         return value is null or DBNull ? default : await UnprotectAsync<T>(JsonSerializer.Deserialize<string>((string)value)!, key, ct);
     }
+
+    public async Task<IReadOnlyList<T>> ReadPrefixAsync<T>(string prefix, CancellationToken ct)
+    {
+        await using var command = database.CreateCommand("SELECT register_key,value FROM cluster_sync_registers WHERE register_key LIKE @prefix ORDER BY register_key LIMIT 1000");
+        command.Parameters.AddWithValue("prefix", "ai/" + prefix + "%");
+        var values = new List<(string Key, string Encoded)>();
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct)) values.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        var result = new List<T>(values.Count);
+        foreach (var (key, value) in values)
+        {
+            var purpose = key["ai/".Length..];
+            var encoded = JsonSerializer.Deserialize<string>(value)!;
+            result.Add(await UnprotectAsync<T>(encoded, purpose, ct));
+        }
+        return result;
+    }
 }

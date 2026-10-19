@@ -1,0 +1,205 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
+import {
+  AiAssistantConversation,
+  AiAssistantConversationDetail,
+} from '../../shared/models/ai-tools';
+import { FlowSummary } from '../../shared/models/flow-validation';
+import { AiToolsService } from '../../shared/services/ai-tools.service';
+import { FlowValidation } from '../../shared/services/flow-validation';
+import { PageHeaderComponent } from '../../shared/ui/page-header.component';
+
+@Component({
+  selector: 'app-ai-assistant-page',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    FormsModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatProgressSpinnerModule,
+    MatSelectModule,
+    PageHeaderComponent,
+    RouterLink,
+  ],
+  templateUrl: './ai-assistant-page.component.html',
+  styleUrl: './ai-assistant-page.component.scss',
+})
+export class AiAssistantPageComponent {
+  private readonly aiTools = inject(AiToolsService);
+  private readonly flowValidation = inject(FlowValidation);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+
+  protected readonly flows = signal<readonly FlowSummary[]>([]);
+  protected readonly conversations = signal<readonly AiAssistantConversation[]>([]);
+  protected readonly detail = signal<AiAssistantConversationDetail | null>(null);
+  protected readonly selectedFlowId = signal('');
+  protected readonly prompt = signal('');
+  protected readonly loadingFlows = signal(true);
+  protected readonly loadingConversations = signal(true);
+  protected readonly loadingDetail = signal(false);
+  protected readonly sending = signal(false);
+  protected readonly errorMessage = signal<string | null>(null);
+  protected readonly pendingPrompt = signal<string | null>(null);
+  protected readonly selectedFlow = computed(
+    () => this.flows().find((flow) => flow.id === this.selectedFlowId()) ?? null,
+  );
+  protected readonly canSend = computed(
+    () =>
+      !this.sending() &&
+      !this.loadingDetail() &&
+      Boolean(this.prompt().trim()) &&
+      (Boolean(this.detail()) || Boolean(this.selectedFlow())),
+  );
+
+  private requestPrompt = '';
+  private requestId = '';
+
+  constructor() {
+    this.loadFlows();
+    this.loadConversations();
+    this.route.queryParamMap.subscribe((params) => {
+      const id = params.get('conversation');
+      if (!id) {
+        if (this.detail()) this.detail.set(null);
+        return;
+      }
+      if (this.detail()?.conversation.id !== id) this.openConversation(id, false);
+    });
+  }
+
+  protected startNewConversation(): void {
+    this.detail.set(null);
+    this.errorMessage.set(null);
+    this.prompt.set('');
+    this.pendingPrompt.set(null);
+    this.requestPrompt = '';
+    this.requestId = '';
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { conversation: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  protected openConversation(id: string, updateUrl = true): void {
+    if (this.loadingDetail()) return;
+    this.loadingDetail.set(true);
+    this.errorMessage.set(null);
+    this.aiTools.getAssistantConversation(id).subscribe({
+      next: (detail) => {
+        this.detail.set(detail);
+        this.selectedFlowId.set(detail.conversation.source.resourceId);
+        this.loadingDetail.set(false);
+        if (updateUrl) this.setConversationUrl(id);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.loadingDetail.set(false);
+        this.errorMessage.set(this.errorText(error, 'Cette conversation est indisponible.'));
+      },
+    });
+  }
+
+  protected send(): void {
+    const message = this.prompt().trim();
+    if (!message || !this.canSend()) return;
+    if (this.requestPrompt !== message || !this.requestId) {
+      this.requestPrompt = message;
+      this.requestId = crypto.randomUUID();
+    }
+
+    const activeConversation = this.detail()?.conversation ?? null;
+    const selectedFlow = this.selectedFlow();
+    this.sending.set(true);
+    this.pendingPrompt.set(message);
+    this.errorMessage.set(null);
+    this.aiTools
+      .sendAssistantMessage({
+        requestId: this.requestId,
+        userPrompt: message,
+        conversationId: activeConversation?.id,
+        flowId: activeConversation ? undefined : (selectedFlow?.id ?? undefined),
+        flowVersion: activeConversation ? undefined : (selectedFlow?.version ?? undefined),
+      })
+      .subscribe({
+        next: (response) => {
+          const oldTurns = this.detail()?.turns ?? [];
+          const turns =
+            response.success && response.content
+              ? oldTurns.some((turn) => turn.requestId === response.requestId)
+                ? oldTurns
+                : [
+                    ...oldTurns,
+                    {
+                      requestId: response.requestId,
+                      userPrompt: message,
+                      content: response.content,
+                    },
+                  ]
+              : oldTurns;
+          this.detail.set({ conversation: response.conversation, turns });
+          this.pendingPrompt.set(null);
+          this.sending.set(false);
+          this.loadConversations();
+          this.setConversationUrl(response.conversation.id);
+          if (response.success) {
+            this.prompt.set('');
+            this.requestPrompt = '';
+            this.requestId = '';
+          } else {
+            this.errorMessage.set(response.errorMessage ?? 'Le fournisseur IA n’a pas répondu.');
+          }
+        },
+        error: (error: HttpErrorResponse) => {
+          this.sending.set(false);
+          this.pendingPrompt.set(null);
+          this.errorMessage.set(
+            this.errorText(error, 'Impossible d’envoyer le message. Réessayez.'),
+          );
+        },
+      });
+  }
+
+  private loadFlows(): void {
+    this.flowValidation.list().subscribe({
+      next: (flows) => {
+        this.flows.set(flows.filter((flow) => flow.version > 0));
+        this.loadingFlows.set(false);
+      },
+      error: () => this.loadingFlows.set(false),
+    });
+  }
+
+  private loadConversations(): void {
+    this.loadingConversations.set(true);
+    this.aiTools.listAssistantConversations().subscribe({
+      next: (conversations) => {
+        this.conversations.set(conversations);
+        this.loadingConversations.set(false);
+      },
+      error: () => this.loadingConversations.set(false),
+    });
+  }
+
+  private setConversationUrl(id: string): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { conversation: id },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
+  private errorText(error: HttpErrorResponse, fallback: string): string {
+    const title: unknown = error.error?.title;
+    return typeof title === 'string' && title.trim() ? title : fallback;
+  }
+}

@@ -95,3 +95,48 @@ export interface AiNodeAvailability {
 export interface AiClusterView {
   readonly nodes: readonly AiNodeAvailability[];
 }
+
+export interface AiAssistantSource {
+  readonly kind: string;
+  readonly resourceId: string;
+  readonly label: string;
+  readonly href: string;
+  readonly version?: number | null;
+}
+
+export interface AiAssistantConversation {
+  readonly id: string;
+  readonly provider: string;
+  readonly title: string;
+  readonly source: AiAssistantSource;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface AiAssistantTurn {
+  readonly requestId: string;
+  readonly userPrompt: string;
+  readonly content: string;
+}
+
+export interface AiAssistantConversationDetail {
+  readonly conversation: AiAssistantConversation;
+  readonly turns: readonly AiAssistantTurn[];
+}
+
+export interface AiAssistantMessageRequest {
+  readonly requestId: string;
+  readonly userPrompt: string;
+  readonly conversationId?: string | null;
+  readonly flowId?: string | null;
+  readonly flowVersion?: number | null;
+}
+
+export interface AiAssistantMessageResponse {
+  readonly success: boolean;
+  readonly conversation: AiAssistantConversation;
+  readonly requestId: string;
+  readonly content?: string | null;
+  readonly errorMessage?: string | null;
+  readonly sources: readonly AiAssistantSource[];
+}

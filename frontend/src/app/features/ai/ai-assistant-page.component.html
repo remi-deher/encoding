@@ -1,0 +1,129 @@
+<app-page-header
+  title="Assistant"
+  description="Posez une question sur un flow publié. La version consultée reste attachée à la conversation."
+>
+  <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
+</app-page-header>
+
+<div class="assistant-layout">
+  <aside class="conversation-panel" aria-label="Conversations privées">
+    <div class="conversation-heading">
+      <h2>Conversations</h2>
+      <button
+        matButton="tonal"
+        type="button"
+        [disabled]="sending()"
+        (click)="startNewConversation()"
+      >
+        Nouvelle
+      </button>
+    </div>
+    @if (loadingConversations()) {
+      <p class="muted" role="status">Chargement…</p>
+    } @else if (conversations().length === 0) {
+      <p class="muted">Vos conversations apparaîtront ici.</p>
+    } @else {
+      <nav aria-label="Conversations IA">
+        @for (conversation of conversations(); track conversation.id) {
+          <button
+            class="conversation-link"
+            [class.is-active]="detail()?.conversation.id === conversation.id"
+            [disabled]="sending()"
+            type="button"
+            (click)="openConversation(conversation.id)"
+          >
+            <strong>{{ conversation.title }}</strong>
+            <span>{{ conversation.source.label }}</span>
+          </button>
+        }
+      </nav>
+    }
+  </aside>
+
+  <section class="chat-panel" aria-label="Échange avec l’assistant">
+    @if (detail(); as current) {
+      <header class="chat-heading">
+        <div>
+          <h2>{{ current.conversation.title }}</h2>
+          <p>Contexte attaché : {{ current.conversation.source.label }}</p>
+        </div>
+        <a matButton="text" [routerLink]="current.conversation.source.href">Ouvrir le flow</a>
+      </header>
+      <div class="message-list" aria-live="polite">
+        @for (turn of current.turns; track turn.requestId) {
+          <article class="message user-message">
+            <h3>Vous</h3>
+            <p>{{ turn.userPrompt }}</p>
+          </article>
+          <article class="message assistant-message">
+            <h3>Assistant</h3>
+            <p>{{ turn.content }}</p>
+            <a [routerLink]="current.conversation.source.href">
+              Source : {{ current.conversation.source.label }}
+            </a>
+          </article>
+        }
+        @if (pendingPrompt(); as pending) {
+          <article class="message user-message">
+            <h3>Vous</h3>
+            <p>{{ pending }}</p>
+          </article>
+        }
+        @if (sending()) {
+          <p class="thinking" role="status"><mat-spinner diameter="20" /> Réponse en cours…</p>
+        }
+      </div>
+    } @else {
+      <div class="new-conversation">
+        <h2>Quelle question avez-vous sur un flow ?</h2>
+        <p>Choisissez un flow publié. L’assistant consultera cette version en lecture seule.</p>
+        @if (loadingFlows()) {
+          <p class="muted" role="status">Chargement des flows…</p>
+        } @else if (flows().length === 0) {
+          <div class="empty-state">
+            <p>Aucun flow publié n’est disponible pour le contexte de l’assistant.</p>
+            <a matButton="text" routerLink="/flows">Parcourir les flows</a>
+          </div>
+        } @else {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Flow publié</mat-label>
+            <mat-select name="flow" [(ngModel)]="selectedFlowId">
+              @for (flow of flows(); track flow.id) {
+                <mat-option [value]="flow.id">
+                  {{ flow.name }} · version {{ flow.version }}
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+      </div>
+    }
+
+    @if (errorMessage(); as error) {
+      <div class="error-message" role="alert">{{ error }}</div>
+    }
+
+    <form class="composer" (ngSubmit)="send()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Votre question</mat-label>
+        <textarea
+          matInput
+          name="prompt"
+          rows="3"
+          maxlength="4000"
+          [(ngModel)]="prompt"
+          [disabled]="sending() || (loadingFlows() && !detail())"
+        ></textarea>
+        <mat-hint align="end">{{ prompt().length }}/4000</mat-hint>
+      </mat-form-field>
+      <button matButton="filled" type="submit" [disabled]="!canSend()">
+        {{ sending() ? 'Réponse en cours…' : 'Envoyer' }}
+      </button>
+    </form>
+    <p class="privacy-note">
+      Votre question et la définition du flow sont transmises au fournisseur IA par défaut, qui peut
+      être externe à votre installation. La conversation reste privée à votre compte ; l’assistant
+      ne peut pas modifier ni publier le flow.
+    </p>
+  </section>
+</div>

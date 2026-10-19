@@ -33,11 +33,20 @@ public static class AiToolEndpoints
         group.MapPut("/settings", async (AiSettingsUpdateRequest request, AiClusterService service, CancellationToken ct) =>
             await GuardAsync(async () => PublicSettings(await service.UpdateSettingsAsync(request, ct))))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        group.MapGet("/sessions/{id}", async (string id, AiClusterService service, CancellationToken ct) =>
-            await GuardAsync(async () => await service.GetSessionAsync(id, ct) is { } state ? Results.Ok(state) : Results.NotFound()))
+        group.MapGet("/sessions/{id}", async (string id, AiClusterService service, AiAssistantService assistant, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                if (await assistant.IsAssistantConversationAsync(id, ct)) return Results.NotFound();
+                var state = await service.GetSessionAsync(id, ct);
+                return state is null ? Results.NotFound() : Results.Ok(state);
+            }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        group.MapPost("/sessions/{id}/fork", async (string id, AiClusterService service, CancellationToken ct) =>
-            await GuardAsync(async () => Results.Ok(await service.ForkSessionAsync(id, ct))))
+        group.MapPost("/sessions/{id}/fork", async (string id, AiClusterService service, AiAssistantService assistant, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                if (await assistant.IsAssistantConversationAsync(id, ct)) return Results.NotFound();
+                return Results.Ok(await service.ForkSessionAsync(id, ct));
+            }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapPost("/generate", async (AiGenerateRequest request, AiClusterService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.GenerateAsync(request.Provider, request.Prompt, ct))))

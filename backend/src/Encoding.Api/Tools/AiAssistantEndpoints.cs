@@ -1,0 +1,43 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using Encoding.Api.Auth;
+using Encoding.Contracts.Tools;
+
+namespace Encoding.Api.Tools;
+
+public static class AiAssistantEndpoints
+{
+    public static void MapAiAssistantEndpoints(this WebApplication app)
+    {
+        var group = app.MapGroup("/api/v1/tools/ai/assistant").WithTags("AI Assistant");
+
+        group.MapGet("/conversations", async (HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await service.ListAsync(http.User, ct))));
+
+        group.MapGet("/conversations/{id}", async (string id, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                var detail = await service.GetAsync(id, http.User, ct);
+                return detail is null ? Results.NotFound() : Results.Ok(detail);
+            }));
+
+        group.MapPost("/messages", async (AiAssistantMessageRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                var result = await service.SendAsync(request, http.User, ct);
+                return result is null ? Results.NotFound() : Results.Ok(result);
+            }))
+        .AllowAssistantConversation()
+        .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
+    }
+
+    private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)
+    {
+        try { return await action(); }
+        catch (ArgumentException ex) { return Results.BadRequest(new { title = ex.Message }); }
+        catch (InvalidOperationException ex) { return Results.Conflict(new { title = ex.Message }); }
+        catch (CryptographicException) { return Results.BadRequest(new { title = "Message IA invalide." }); }
+        catch (JsonException) { return Results.BadRequest(new { title = "Message IA invalide." }); }
+        catch (FormatException) { return Results.BadRequest(new { title = "Message IA invalide." }); }
+    }
+}

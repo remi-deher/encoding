@@ -30,7 +30,9 @@ const PROVIDERS = [
     <app-page-header
       title="Intelligence artificielle"
       description="État observé des fournisseurs IA et de leurs connexions dans le cluster."
-    />
+    >
+      <a page-actions matButton="filled" routerLink="/ai/assistant">Ouvrir l’assistant</a>
+    </app-page-header>
 
     <div class="ai-workspace">
       @if (loading()) {
