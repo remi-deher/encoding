@@ -43,6 +43,25 @@ const applicationRoutes: Routes = [
     },
   },
   {
+    path: 'ai',
+    loadComponent: () =>
+      import('./features/ai/ai-workspace-page.component').then(
+        (module) => module.AiWorkspacePageComponent,
+      ),
+    data: {
+      title: 'Intelligence artificielle',
+      navigation: {
+        group: 'Intelligence artificielle',
+        label: 'Intelligence artificielle',
+        glyph: '✦',
+        exact: false,
+        order: 1,
+        keywords: ['assistant', 'ia', 'fournisseurs', 'activité'],
+      },
+      description: 'Consultez les connexions IA déclarées sur les nœuds du cluster.',
+    },
+  },
+  {
     path: 'libraries/encoding-profiles',
     loadComponent: () =>
       import('./features/libraries/encoding-profile-library-page.component').then(

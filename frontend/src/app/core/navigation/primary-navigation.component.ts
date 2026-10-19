@@ -33,6 +33,7 @@ interface RouteNavigationMetadata {
 const NAVIGATION_GROUP_ORDER = [
   'Vue générale',
   'Traitements',
+  'Intelligence artificielle',
   'Ressources',
   'Infrastructure',
   'Administration',
