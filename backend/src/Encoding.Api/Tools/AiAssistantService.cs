@@ -271,9 +271,9 @@ public sealed class AiAssistantService(
             var toolContexts = new List<ResolvedContext>();
             foreach (var tool in requestedTools)
             {
-                var result = await mcp.CallAssistantReadToolAsync(tool, ct);
-                var data = JsonSerializer.Serialize(result.Data);
-                toolContexts.Add(new(new AiAssistantSource("tool", Guid.NewGuid(), result.Label, result.Href), data));
+                var selectedToolResult = await mcp.CallAssistantReadToolAsync(tool, ct);
+                var data = JsonSerializer.Serialize(selectedToolResult.Data);
+                toolContexts.Add(new(new AiAssistantSource("tool", Guid.NewGuid(), selectedToolResult.Label, selectedToolResult.Href), data));
             }
             if (resolved.Sum(context => (long)context.Data.Length) + toolContexts.Sum(context => (long)context.Data.Length) > 80_000)
                 throw new ArgumentException("Les ressources et outils dépassent la taille de contexte prise en charge.");
@@ -497,7 +497,7 @@ public sealed class AiAssistantService(
 
     private static Guid DeriveRequestId(string scope, string purpose)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(scope + "/" + purpose));
+        var bytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(scope + "/" + purpose));
         var derived = new Guid(bytes.AsSpan(0, 16));
         return derived == Guid.Empty ? new Guid(bytes.AsSpan(16, 16)) : derived;
     }

@@ -149,7 +149,7 @@ public sealed class FlowAiGeneratorService(
 
     private static Guid CreateRepairRequestId(Guid operationId)
     {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"flow-repair-v1:{operationId:N}"));
+        var hash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"flow-repair-v1:{operationId:N}"));
         return new Guid(hash.AsSpan(0, 16));
     }
 

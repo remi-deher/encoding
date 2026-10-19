@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Encoding.Contracts.Tools;
 
 public sealed record AiAssistantSource(

@@ -32,7 +32,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     public async Task<object> DispatchAsync(string operation, JsonElement value, CancellationToken ct) => operation switch
     {
         "availability" => await LocalAsync(ct),
-        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct, localOnly: true),
+        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct),
         "execute" => await ExecuteAsync(value.Deserialize<AiExecuteRequest>()!, ct),
         _ => throw new ArgumentException("Opération IA inconnue.")
     };
@@ -95,7 +95,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             }
             AiCompletionResult result = new(false, "", "Aucun nœud connecté à ce fournisseur. La demande reste en attente.");
             foreach (var candidate in candidates.DistinctBy(c => c.Node.NodeId)
-                .Where(c => c.Node.Providers.Contains(provider) && (!localOnly || c.Url is null)).Take(localOnly ? 1 : 3))
+                .Where(c => c.Node.Providers.Contains(provider) && (!localOnly || c.Url is null))
+                .Take(localOnly ? 1 : 3))
             {
                 var seconds = Math.Clamp((await GetSettingsAsync(ct)).TimeoutSeconds, 10, 600);
                 var deadline = DateTimeOffset.UtcNow.AddSeconds(seconds);
