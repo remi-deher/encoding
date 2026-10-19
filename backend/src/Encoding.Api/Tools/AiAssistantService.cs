@@ -584,7 +584,7 @@ public sealed class AiAssistantService(
         var existingTurn = session?.Turns.FirstOrDefault(turn => turn.RequestId == request.RequestId);
         if (existingTurn is not null && existingTurn.UserPrompt != contextualPrompt)
             throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre message ou contexte.");
-        if (existingTurn is not null && storedConversation?.TurnModelPlans?.ContainsKey(request.RequestId) != true)
+        if (existingTurn is not null)
             return new(true, storedConversation?.Conversation ?? conversation, request.RequestId, existingTurn.Content, null, allSources);
         if (session?.PendingPrompt is { } pendingPrompt
             && pendingPrompt.RequestId == request.RequestId
