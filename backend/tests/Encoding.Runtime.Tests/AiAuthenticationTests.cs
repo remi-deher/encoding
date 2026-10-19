@@ -136,7 +136,9 @@ public sealed class AiAuthenticationTests
             if [ "$1" != "exec" ]; then exit 1; fi
             if [ -z "$CODEX_HOME" ] || [ "$HOME" != "$CODEX_HOME" ] || [ "$XDG_CONFIG_HOME" != "$CODEX_HOME" ] || [ -n "$OPENAI_API_KEY" ]; then exit 2; fi
             cat >/dev/null
-            printf 'Real CLI test result'
+            case " $* " in *" --ephemeral "*) ;; *) exit 3 ;; esac
+            case " $* " in *" --json "*) ;; *) exit 4 ;; esac
+            printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"Real CLI test result"}}' '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":4}}'
             """);
         var result = await new CliAiTextClient("codex-cli", fixture.Runtime).GenerateTextAsync(new AiPrompt("Instructions", "Request"));
         Assert.True(result.Success);

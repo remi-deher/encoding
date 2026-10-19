@@ -67,6 +67,36 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
 
     public AiCliProcess StartInteractive(string id, IReadOnlyList<string> args, Action<string>? onOutput = null)
     {
+        var process = Process.Start(CreateStart(id, args)) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
+        return new AiCliProcess(process, onOutput);
+    }
+
+    /// <summary>Bounded duplex protocol using the same profile, environment and sandbox as inference.</summary>
+    public async Task<T> RunProtocolAsync<T>(string id, IReadOnlyList<string> args,
+        Func<StreamReader, StreamWriter, CancellationToken, Task<T>> protocol, CancellationToken ct)
+    {
+        var start = CreateStart(id, args);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
+        using var terminate = ct.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
+        var stderr = ReadAsync(process.StandardError, null);
+        try
+        {
+            var exchange = protocol(process.StandardOutput, process.StandardInput, ct);
+            // A noisy or failed stderr reader must also interrupt a blocked protocol.
+            var first = await Task.WhenAny(exchange, stderr);
+            if (first == stderr && stderr.IsFaulted) await stderr;
+            return await exchange;
+        }
+        finally
+        {
+            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
+            await process.WaitForExitAsync(CancellationToken.None);
+            try { await stderr; } catch (OperationCanceledException) { }
+        }
+    }
+
+    private ProcessStartInfo CreateStart(string id, IReadOnlyList<string> args)
+    {
         var path = Find(id) ?? throw new InvalidOperationException("Outil CLI non installé sur ce nœud.");
         var profile = Profile(id);
         var work = Path.Combine(profile, "work");
@@ -115,8 +145,7 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
         var startingClaudeLogin = id == "claude-cli" && args.Count >= 2 && args[0] == "auth" && args[1] == "login";
         if (id == "claude-cli" && HasClaudeToken && !startingClaudeLogin)
             start.Environment["CLAUDE_CODE_OAUTH_TOKEN"] = protector.Unprotect(File.ReadAllText(Path.Combine(profile, "oauth-token.protected")));
-        var process = Process.Start(start) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
-        return new AiCliProcess(process, onOutput);
+        return start;
     }
     internal static async Task<string> ReadAsync(StreamReader reader, Action<string>? callback)
     {

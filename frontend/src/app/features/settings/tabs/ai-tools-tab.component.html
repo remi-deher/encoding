@@ -144,6 +144,10 @@
     </mat-expansion-panel>
   }
 </app-configuration-section>
+@if (isAdmin()) {
+  <app-ai-quota-panel [refreshKey]="quotaRevision()" />
+  <app-ai-session-history />
+}
 <ng-template #providerEditor>
   <form #providerForm="ngForm" class="provider-editor" (ngSubmit)="saveSettings()">
     <p>

@@ -67,3 +67,35 @@ Le lecteur de journaux accepte les réponses HTTP historiques sous forme de tabl
 ainsi que l’enveloppe `entries` pour les mises à jour progressives des nœuds. Le flux
 SSE écoute les événements nommés `log`, se reconnecte après interruption et déduplique
 les événements rejoués. Les journaux restent propres au nœud consulté.
+
+## Sessions et historique applicatif
+
+Les inférences utilisent désormais `claude -p --output-format stream-json --verbose --no-session-persistence` et `codex exec --json --ephemeral`. Les autres restrictions d’outils et de confinement sont conservées. Une version CLI ne reconnaissant pas ces options échoue explicitement ; aucun repli ne réactive la persistance native. Ces options désactivent l’historique local natif, sans définir la politique de conservation du fournisseur.
+
+Encoding conserve son propre contexte chiffré, reprend exclusivement par identifiants de session et de requête, et ne crée ni ne classe de conversations dans les Projets web de Claude.ai ou ChatGPT. Une reprise peut changer de nœud d’inférence sans déplacer les identifiants CLI. Le modèle demandé et le périmètre applicatif sont immuables dans une session.
+
+Dans **Paramètres → IA & fournisseurs → Sessions et traitements IA**, un administrateur peut charger les checkpoints connus du nœud, paginés par 50, puis consulter les consignes et échanges d’une session. L’actualisation est explicite et la vue indique que les données des pairs sont éventuellement cohérentes. Un bail actif n’est pas une preuve que le modèle génère encore du texte ; son expiration laisse la demande en attente de reprise, jamais terminée artificiellement.
+
+API administrateur : `GET /api/v1/tools/ai/sessions?offset=0` retourne les résumés sans prompts ; `GET /api/v1/tools/ai/sessions/{id}` fournit le checkpoint complet. Le champ optionnel `scope` d’un `AiPrompt` associe une opération (`operation`, 80 caractères maximum) à `libraryId`, `flowId`, `mediaId` et/ou `executionId`. Ce classement n’ajoute aucun contexte partagé ni accès au système de fichiers. Les appels de création, modification et explication de flow renseignent leur opération et le flow existant. Un changement de périmètre exige une nouvelle session.
+
+Les compteurs d’entrée, sortie et cache proviennent des événements structurés du fournisseur. Le coût estimé Claude est enregistré lorsqu’il est fourni. Une réponse n’est acceptée qu’après l’événement terminal de succès, avec un contenu final non vide ; les sorties partielles, erreurs et diagnostics ne deviennent pas une réponse. Les consommations des tours validés sont conservées dans le checkpoint et restituées à l’identique lors d’un rejeu, sans nouvelle inférence. Les sommes incomplètes restent indisponibles. Les tentatives échouées ou interrompues peuvent être facturées sans figurer dans ce total.
+
+La consommation des tours est distincte des quotas d’abonnement, présentés dans le panneau dédié décrit ci-dessous. Aucun quota ou coût Codex n’est extrapolé à partir des jetons consommés. La traduction automatique de sous-titres demeure un composant déclaré au catalogue ; cet historique ne constitue pas son implémentation runtime.
+
+
+## Quotas des abonnements
+
+Le panneau administrateur **Quotas des abonnements** lit les limites réelles des comptes CLI de chaque serveur. `GET /api/v1/tools/ai/quotas` retourne les observations par nœud ; les pairs sont consultés avec l’opération `quotas` du transport IA signé et chiffré. Aucun identifiant CLI, courriel de compte ou secret n’est renvoyé. Les quotas sont ceux du compte fournisseur, incluant son utilisation sur d’autres appareils ; plusieurs nœuds peuvent employer le même compte et leurs valeurs ne doivent jamais être additionnées.
+
+- **Codex** : lancement borné de `codex app-server`, handshake `initialize` / `initialized`, puis `account/rateLimits/read`. Aucun thread, prompt ou tour de modèle n’est créé. Toutes les fenêtres `primary` / `secondary` des compartiments retournés sont conservées (jusqu’à 32 compartiments), avec pourcentage et réinitialisation lorsqu’ils sont fournis.
+- **Claude** : adaptateur expérimental du protocole de contrôle du SDK publié `@anthropic-ai/claude-agent-sdk` 0.3.302, compatible avec la CLI épinglée 2.1.302. Une session `-p --input-format stream-json --output-format stream-json --no-session-persistence` reçoit uniquement `initialize`, puis `get_usage` avec `skip_behaviors: true`. Ce dernier correspond à `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET()` ; il ne génère pas de réponse du modèle et ne parcourt pas les transcriptions pour attribuer les usages. Les fenêtres 5 h, 7 jours, Opus/Sonnet, OAuth et par modèle sont affichées lorsqu’elles existent. Les achats de crédits et l’activation d’usage supplémentaire ne sont jamais demandés.
+
+La connexion par `setup-token` n’assure pas les droits de lecture du profil : Claude peut retourner `rate_limits_available: false`, notamment si le scope de profil manque. Les connexions par clé API, les comptes sans limite d’abonnement applicable, les versions incompatibles et les réponses sans pourcentage exploitable restent **Indisponibles**. Aucune connexion web de substitution ni API privée avec extraction de jeton n’est utilisée.
+
+Le lancement réutilise le profil et le confinement Landlock communs aux inférences. Chaque lecture est plafonnée à 15 secondes, avec sortie totale bornée à 1 Mio et trame à 256 Kio. Aucun prompt utilisateur n’est envoyé. Les fenêtres sont validées (pourcentages entre 0 et 100, dates valides), sans conversion en nombre de jetons disponibles.
+
+Le cache local et l’actualisation de l’interface sont d’une minute. Une lecture échouée conserve la dernière observation dans le même profil, marquée **Donnée ancienne**, et la jauge actuelle disparaît. Une fenêtre expirée n’est jamais remise artificiellement à 100 %. Un nœud devenu injoignable reste visible dans la vue ouverte avec ses dernières observations marquées anciennes. Les changements de connexion invalident le cache local ; les observations ne sont pas répliquées ni conservées après redémarrage.
+
+Les alertes visuelles apparaissent à 20 % restants et deviennent critiques à 5 %. Elles ne déclenchent aucune notification externe, aucun achat ni aucune pause automatique de flow. Les quotas sont informatifs et n’autorisent pas l’application à dépasser une limite fournisseur.
+
+Références : [Codex App Server](https://developers.openai.com/codex/app-server), [changelog officiel du SDK Claude](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md), déclarations `SDKControlGetUsageRequest` / `SDKControlGetUsageResponse` du paquet npm officiel 0.3.302.
