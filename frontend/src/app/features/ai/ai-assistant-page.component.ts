@@ -80,6 +80,8 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly loadingAssistantOptions = signal(true);
   protected readonly selectedResourceType = signal<AssistantResourceType>('flow');
   protected readonly selectedResourceId = signal('');
+  protected readonly contextPickerOpen = signal(false);
+  protected readonly contextSearch = signal('');
   protected readonly prompt = signal('');
   protected readonly loadingFlows = signal(true);
   protected readonly loadingExecutions = signal(true);
@@ -133,6 +135,12 @@ export class AiAssistantPageComponent implements OnDestroy {
     () =>
       this.resourceOptions().find((resource) => resource.id === this.selectedResourceId()) ?? null,
   );
+  protected readonly filteredResourceOptions = computed(() => {
+    const search = this.contextSearch().trim().toLocaleLowerCase();
+    return search
+      ? this.resourceOptions().filter((resource) => resource.label.toLocaleLowerCase().includes(search))
+      : this.resourceOptions();
+  });
   protected readonly selectedModelOption = computed(() =>
     this.assistantOptions()?.models.find((option) => this.modelOptionKey(option) === this.selectedModelKey()) ?? null,
   );
@@ -206,6 +214,8 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.requestPrompt = '';
     this.requestId = '';
     this.selectedReasoningEffort.set(null);
+    this.contextPickerOpen.set(false);
+    this.contextSearch.set('');
     this.selectDefaultModel();
     void this.router.navigate([], {
       relativeTo: this.route,
@@ -235,6 +245,45 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   protected selectEffort(value: string | null): void {
     this.selectedReasoningEffort.set(value || null);
+  }
+
+  protected toggleContextPicker(): void {
+    this.contextPickerOpen.update((open) => !open);
+    this.contextSearch.set('');
+  }
+
+  protected isSourceAttached(resource: AssistantResourceOption): boolean {
+    const conversation = this.detail()?.conversation;
+    return conversation !== null && conversation !== undefined && this.conversationSources(conversation).some(
+      (source) => source.kind === this.selectedResourceType() && source.resourceId === resource.id,
+    );
+  }
+
+  protected addResourceToContext(resource: AssistantResourceOption): void {
+    if (this.isSourceAttached(resource) || this.updatingSources() || this.hasPendingRequest()) return;
+    const current = this.detail()?.conversation;
+    if (!current) return;
+    const sources = this.conversationSources(current);
+    if (sources.length >= 5) {
+      this.errorMessage.set('Une conversation peut consulter au maximum cinq ressources.');
+      return;
+    }
+    const href = {
+      flow: '/flows',
+      execution: '/tasks',
+      node: '/nodes',
+      library: '/libraries',
+    }[this.selectedResourceType()];
+    this.updateConversationSources([
+      ...sources,
+      {
+        kind: this.selectedResourceType(),
+        resourceId: resource.id,
+        version: resource.version,
+        label: resource.label,
+        href,
+      },
+    ]);
   }
 
   protected deleteFlowFromAssistant(source: AiAssistantSource): void {
@@ -329,6 +378,8 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.aiTools.getAssistantConversation(id).subscribe({
       next: (detail) => {
         this.detail.set(detail);
+        this.contextPickerOpen.set(false);
+        this.contextSearch.set('');
         this.selectedModelKey.set(this.modelOptionKey(detail.conversation));
         this.selectedReasoningEffort.set(detail.conversation.reasoningEffort ?? null);
         if (detail.conversation.source.kind !== 'tool')
@@ -492,6 +543,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected selectResourceType(type: AssistantResourceType): void {
     this.selectedResourceType.set(type);
     this.selectedResourceId.set('');
+    this.contextSearch.set('');
     if (type !== 'flow')
       this.selectedReadTools.update((tools) => tools.filter((tool) => tool !== 'get_flow'));
   }
@@ -500,41 +552,6 @@ export class AiAssistantPageComponent implements OnDestroy {
     conversation: AiAssistantConversation,
   ): readonly AiAssistantSource[] {
     return [conversation.source, ...(conversation.additionalSources ?? [])];
-  }
-
-  protected addSelectedResource(): void {
-    const current = this.detail()?.conversation;
-    const selected = this.selectedResource();
-    if (!current || !selected || this.updatingSources() || this.hasPendingRequest()) return;
-    const sources = this.conversationSources(current);
-    if (
-      sources.some(
-        (source) =>
-          source.kind === this.selectedResourceType() && source.resourceId === selected.id,
-      )
-    ) {
-      this.errorMessage.set('Cette ressource est déjà attachée à la conversation.');
-      return;
-    }
-    if (sources.length >= 5) {
-      this.errorMessage.set('Une conversation peut consulter au maximum cinq ressources.');
-      return;
-    }
-    this.updateConversationSources([
-      ...sources,
-      {
-        kind: this.selectedResourceType(),
-        resourceId: selected.id,
-        version: selected.version,
-        label: selected.label,
-        href:
-          this.selectedResourceType() === 'flow'
-            ? '/flows'
-            : this.selectedResourceType() === 'execution'
-              ? '/tasks'
-              : '/nodes',
-      },
-    ]);
   }
 
   protected removeConversationSource(source: AiAssistantSource): void {
