@@ -10,7 +10,7 @@ Claude utilise un jeton généré par l'administrateur sur son poste via `claude
 
 Les répertoires `CODEX_HOME` et `CLAUDE_CONFIG_DIR` sont propres à chaque fournisseur et réutilisés pour connexion, statut, inférence et déconnexion. Le répertoire est sous `AiTools:CredentialsDirectory`, ou par défaut sous `Node:DataDirectory/credentials/ai-tools`. Les secrets et les marqueurs d'essai restent locaux et hors du maillage. Un ancien fichier `credentials.json` n'est jamais une preuve de connexion.
 
-Les commandes de production sont `codex exec` et `claude -p --output-format text`. Le prompt passe par stdin. Claude est appelé sans outils, sans serveurs MCP hérités, sans skills et sans sources de réglages projet/utilisateur. Codex désactive les outils shell et unified-exec, utilise le sandbox read-only et refuse les demandes d'approbation interactives. Les sorties sont bornées ; l'annulation et le délai maximal arrêtent l'arbre de processus. Aucune CLI absente ne produit de réponse simulée, et une génération de flow échouée ne retourne plus de flow synthétique comme résultat IA.
+Les commandes de production sont `codex exec --json --ephemeral` et `claude -p --output-format stream-json --verbose --no-session-persistence`. Le prompt passe par stdin. Claude est appelé sans outils, sans serveurs MCP hérités, sans skills et sans sources de réglages projet/utilisateur. Codex désactive les outils shell et unified-exec, utilise le sandbox read-only et refuse les demandes d'approbation interactives. Les sorties sont bornées ; l'annulation et le délai maximal arrêtent l'arbre de processus. Aucune CLI absente ne produit de réponse simulée, et une génération de flow échouée ne retourne plus de flow synthétique comme résultat IA.
 
 Sur Linux, le lancement réutilise le confinement Landlock partagé avec les scripts du worker, déplacé sans changement de comportement dans `Encoding.Core.Runtime`. Le profil IA est accessible en écriture ; les exécutables, bibliothèques et certificats sont accessibles en lecture. Les données d'Encoding et les médias extérieurs au profil ne sont pas accordés. Le dossier d'installation npm se règle avec `AiTools:RuntimeDirectory` (défaut `/opt/encoding/ai-cli`). Sans Landlock, la CLI refuse de démarrer ; il n'y a pas de repli de production qui supprime cette protection. Landlock borne ici le système de fichiers, pas les domaines réseau.
 
@@ -43,3 +43,19 @@ Les actions de connexion, réglage et déconnexion requièrent l'administration.
 Voir [la procédure d'exploitation](../operations/ai-providers.md) pour les versions embarquées, les API, les limites et la validation.
 
 Sources : [Codex CLI](https://developers.openai.com/codex/cli/reference), [Claude CLI](https://code.claude.com/docs/en/cli-reference), [authentification Claude](https://code.claude.com/docs/en/authentication).
+
+
+## Évolution : historique et sessions natives éphémères
+
+Les CLIs ne conservent plus de conversation native locale pour les inférences. Le contexte applicatif reste l’autorité pour la reprise distribuée ; aucun rattachement à un Projet web fournisseur n’est supposé. Les sorties structurées doivent confirmer explicitement la terminaison avant succès.
+
+Les tours applicatifs peuvent désormais inclure la consommation observée et leur date de validation. Le checkpoint conserve aussi le modèle demandé, le périmètre optionnel (opération, bibliothèque, flow, média, exécution), la date de mise à jour et la dernière erreur contrôlée. Modèle et périmètre sont immuables pour empêcher la réutilisation d’un contexte sur un autre média. Les champs ajoutés sont optionnels pour relire les checkpoints existants ; une ancienne session sans périmètre reste utilisable sans périmètre.
+
+L’historique administrateur pagine les registres chiffrés existants, sans nouveau stockage ni autorité centrale. Les résumés n’exposent pas les prompts. L’état distingue un bail actif, une demande en attente de reprise et un tour terminé. Les compteurs présentés concernent uniquement les tours validés, avec valeurs absentes explicites et sans estimation d’un quota restant. Voir la procédure d’exploitation pour les limites.
+
+
+## Quotas de comptes CLI
+
+Une sonde locale bornée réutilise le lanceur confiné existant avec un canal stdin/stdout bidirectionnel. Codex emploie la lecture de compte App Server ; Claude emploie le contrôle expérimental `get_usage` du SDK publié, sans prompt et sans scan d’historique (`skip_behaviors`). Le contrat partagé distingue fenêtres disponibles, indisponibilité et observation ancienne, avec dates d’observation et de contrôle. Le pourcentage restant est le complément du pourcentage fournisseur et ne définit pas un budget en jetons.
+
+Les observations sont en mémoire, propres à la connexion de chaque nœud, et ne sont pas des registres réconciliés. Les serveurs les consultent via le transport chiffré et signé commun ; le panneau admin les conserve séparément sans somme inter-nœuds. Le cache d’une minute limite les sondes, les changements de connexion l’invalident, et une panne conserve une observation explicitement ancienne. Les fenêtres expirées ne deviennent pas des quotas pleins. La disponibilité de Claude dépend de la version et des scopes de la connexion ; aucune commande interactive ni extraction de secrets ne sert de repli.

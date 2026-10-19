@@ -38,6 +38,10 @@ test.beforeEach(async ({ page }) => {
       },
     }),
   );
+  await page.route('**/api/v1/tools/ai/sessions?offset=*', (route) =>
+    route.fulfill({ json: { items: [], offset: 0, hasMore: false } }),
+  );
+  await page.route('**/api/v1/tools/ai/quotas', (route) => route.fulfill({ json: { nodes: [] } }));
   await page.route('**/api/v1/tools/ai/cluster', (route) =>
     route.fulfill({
       json: {
@@ -218,4 +222,140 @@ test('Codex displays the server diagnostic instead of a generic network error', 
   await page.getByRole('button', { name: 'Associer mon compte', exact: true }).click();
   await expect(page.getByText(title, { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('application sessions show observed usage and exchanges on desktop and mobile', async ({
+  page,
+}, testInfo) => {
+  const id = 'application-session';
+  await page.route('**/api/v1/tools/ai/sessions?offset=0', (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id,
+            provider: 'claude-cli',
+            status: 'completed',
+            turnCount: 1,
+            attempt: 1,
+            updatedAt: '2026-10-19T08:00:00Z',
+            scope: { operation: 'flow-create' },
+            usage: { inputTokens: 150, outputTokens: 40, estimatedCostUsd: 0.012 },
+          },
+        ],
+        offset: 0,
+        hasMore: false,
+      },
+    }),
+  );
+  await page.route(`**/api/v1/tools/ai/sessions/${id}`, (route) =>
+    route.fulfill({
+      json: {
+        id,
+        systemPrompt: 'Conserver les minutages.',
+        turns: [
+          {
+            requestId: 'request',
+            userPrompt: '<script>texte source</script>',
+            content: 'Traduction validée',
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto('/settings?tab=ai');
+  const history = page.locator('app-ai-session-history');
+  await history.getByRole('button', { name: 'Actualiser l’historique' }).click();
+  await expect(history.getByText('Création de flow', { exact: true })).toBeVisible();
+  await expect(history.getByText('Jetons d’entrée : 150', { exact: false })).toBeVisible();
+  await expect(history.getByText('Traduction validée')).toHaveCount(0);
+  await history.getByRole('button', { name: 'Consulter les échanges' }).click();
+  await expect(history.getByText('Traduction validée')).toBeVisible();
+  await expect(history.locator('script')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  const accessibility = await new AxeBuilder({ page })
+    .include('app-ai-session-history')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+  await history.screenshot({ path: testInfo.outputPath('ai-session-history.png') });
+});
+
+test('subscription quotas show windows and mark failed refreshes as old', async ({
+  page,
+}, testInfo) => {
+  let failed = false;
+  await page.route('**/api/v1/tools/ai/quotas', (route) =>
+    failed
+      ? route.fulfill({ status: 503, json: { title: 'Unavailable' } })
+      : route.fulfill({
+          json: {
+            nodes: [
+              {
+                nodeId: 'first',
+                name: 'Salon',
+                providers: [
+                  {
+                    provider: 'codex-cli',
+                    state: 'available',
+                    experimental: false,
+                    observedAt: new Date().toISOString(),
+                    checkedAt: new Date().toISOString(),
+                    windows: [
+                      {
+                        id: 'codex/primary',
+                        name: 'Codex · 300 min',
+                        usedPercent: 85,
+                        remainingPercent: 15,
+                        resetsAt: new Date(Date.now() + 3600_000).toISOString(),
+                      },
+                    ],
+                  },
+                  {
+                    provider: 'claude-cli',
+                    state: 'unavailable',
+                    experimental: true,
+                    observedAt: null,
+                    checkedAt: new Date().toISOString(),
+                    windows: [],
+                    message: 'Les autorisations du profil ne fournissent pas le quota.',
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+  );
+  await page.goto('/settings?tab=ai');
+  const quotas = page.locator('app-ai-quota-panel');
+  await expect(quotas.getByText('15 % restant', { exact: true })).toBeVisible();
+  await expect(quotas.getByText('Quota bientôt atteint')).toBeVisible();
+  await expect(quotas.getByText('Indisponible', { exact: true })).toBeVisible();
+  await expect(quotas.getByText('Lecture expérimentale', { exact: false })).toBeVisible();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme,
+    );
+    expect(
+      (
+        await new AxeBuilder({ page })
+          .include('app-ai-quota-panel')
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+          .analyze()
+      ).violations,
+    ).toEqual([]);
+    await quotas.screenshot({ path: testInfo.outputPath(`ai-quotas-${theme}.png`) });
+  }
+  failed = true;
+  await quotas.getByRole('button', { name: 'Actualiser les quotas' }).click();
+  await expect(
+    quotas.getByText('15 % restant lors de la dernière observation', { exact: true }),
+  ).toBeVisible();
+  await expect(quotas.locator('mat-progress-bar')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
 });

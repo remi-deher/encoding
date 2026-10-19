@@ -94,3 +94,72 @@ export interface AiNodeAvailability {
 export interface AiClusterView {
   readonly nodes: readonly AiNodeAvailability[];
 }
+
+export interface AiUsage {
+  readonly inputTokens?: number | null;
+  readonly outputTokens?: number | null;
+  readonly cachedInputTokens?: number | null;
+  readonly estimatedCostUsd?: number | null;
+  readonly model?: string | null;
+}
+export interface AiSessionScope {
+  readonly operation: string;
+  readonly libraryId?: string | null;
+  readonly flowId?: string | null;
+  readonly mediaId?: string | null;
+  readonly executionId?: string | null;
+}
+export interface AiSessionSummary {
+  readonly id: string;
+  readonly provider: string;
+  readonly model?: string | null;
+  readonly scope?: AiSessionScope | null;
+  readonly status: 'completed' | 'running' | 'awaitingRetry';
+  readonly turnCount: number;
+  readonly attempt: number;
+  readonly updatedAt?: string | null;
+  readonly attemptDeadline?: string | null;
+  readonly lastError?: string | null;
+  readonly usage?: AiUsage | null;
+}
+export interface AiSessionPage {
+  readonly items: readonly AiSessionSummary[];
+  readonly offset: number;
+  readonly hasMore: boolean;
+}
+export interface AiSessionState {
+  readonly id: string;
+  readonly systemPrompt: string;
+  readonly turns: readonly {
+    readonly requestId: string;
+    readonly userPrompt: string;
+    readonly content: string;
+    readonly usage?: AiUsage | null;
+    readonly completedAt?: string | null;
+  }[];
+}
+
+export interface AiQuotaWindow {
+  readonly id: string;
+  readonly name: string;
+  readonly usedPercent: number | null;
+  readonly remainingPercent: number | null;
+  readonly resetsAt: string | null;
+}
+export interface AiQuotaSnapshot {
+  readonly provider: string;
+  readonly state: 'available' | 'unavailable' | 'stale';
+  readonly windows: readonly AiQuotaWindow[];
+  readonly observedAt: string | null;
+  readonly checkedAt: string;
+  readonly experimental: boolean;
+  readonly message?: string | null;
+}
+export interface AiNodeQuotas {
+  readonly nodeId: string;
+  readonly name: string;
+  readonly providers: readonly AiQuotaSnapshot[];
+}
+export interface AiClusterQuotas {
+  readonly nodes: readonly AiNodeQuotas[];
+}

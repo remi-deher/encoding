@@ -55,6 +55,50 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
     public async Task<AiProcessResult> RunAsync(string id, IReadOnlyList<string> args, CancellationToken ct,
         Action<string>? onOutput = null, string? input = null)
     {
+        var start = await CreateStartAsync(id, args, ct);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
+        using var terminate = ct.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
+        var stdout = ReadAsync(process.StandardOutput, onOutput, ct);
+        var stderr = ReadAsync(process.StandardError, onOutput, ct);
+        try
+        {
+            if (input is not null) await process.StandardInput.WriteAsync(input.AsMemory(), ct);
+            process.StandardInput.Close();
+            await process.WaitForExitAsync(ct);
+            return new(process.ExitCode, await stdout, await stderr);
+        }
+        finally
+        {
+            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
+            try { await Task.WhenAll(stdout, stderr); } catch (OperationCanceledException) { }
+        }
+    }
+    /// <summary>Bounded duplex protocol using the same profile, environment and sandbox as inference.</summary>
+    public async Task<T> RunProtocolAsync<T>(string id, IReadOnlyList<string> args,
+        Func<StreamReader, StreamWriter, CancellationToken, Task<T>> protocol, CancellationToken ct)
+    {
+        var start = await CreateStartAsync(id, args, ct);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
+        using var terminate = ct.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
+        var stderr = ReadAsync(process.StandardError, null, ct);
+        try
+        {
+            var exchange = protocol(process.StandardOutput, process.StandardInput, ct);
+            // A noisy or failed stderr reader must also interrupt a blocked protocol.
+            var first = await Task.WhenAny(exchange, stderr);
+            if (first == stderr && stderr.IsFaulted) await stderr;
+            return await exchange;
+        }
+        finally
+        {
+            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
+            await process.WaitForExitAsync(CancellationToken.None);
+            try { await stderr; } catch (OperationCanceledException) { }
+        }
+    }
+
+    private async Task<ProcessStartInfo> CreateStartAsync(string id, IReadOnlyList<string> args, CancellationToken ct)
+    {
         var path = Find(id) ?? throw new InvalidOperationException("Outil CLI non installé sur ce nœud.");
         var profile = Profile(id);
         var work = Path.Combine(profile, "work");
@@ -102,23 +146,9 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
         start.Environment["DISABLE_ERROR_REPORTING"] = "1";
         if (id == "claude-cli" && HasClaudeToken)
             start.Environment["CLAUDE_CODE_OAUTH_TOKEN"] = protector.Unprotect(await File.ReadAllTextAsync(Path.Combine(profile, "oauth-token.protected"), ct));
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("Démarrage CLI impossible.");
-        using var terminate = ct.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } });
-        var stdout = ReadAsync(process.StandardOutput, onOutput, ct);
-        var stderr = ReadAsync(process.StandardError, onOutput, ct);
-        try
-        {
-            if (input is not null) await process.StandardInput.WriteAsync(input.AsMemory(), ct);
-            process.StandardInput.Close();
-            await process.WaitForExitAsync(ct);
-            return new(process.ExitCode, await stdout, await stderr);
-        }
-        finally
-        {
-            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
-            try { await Task.WhenAll(stdout, stderr); } catch (OperationCanceledException) { }
-        }
+        return start;
     }
+
     private static async Task<string> ReadAsync(StreamReader reader, Action<string>? callback, CancellationToken ct)
     {
         var result = new StringBuilder();
