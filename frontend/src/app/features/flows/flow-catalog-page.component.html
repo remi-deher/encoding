@@ -18,10 +18,12 @@
   "
 >
   <ng-template #pageActions>
-    <label matButton="outlined" class="import-file-btn">
-      Importer
-      <input type="file" accept=".json,.zip" (change)="onImportFile($event)" hidden />
-    </label>
+    <app-file-import
+      label="Importer"
+      accept=".json,.zip"
+      [busy]="importing()"
+      (selected)="onImportFile($event)"
+    />
     <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
   </ng-template>
 
