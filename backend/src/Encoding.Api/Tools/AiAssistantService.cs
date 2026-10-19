@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Hosting;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Nodes;
@@ -23,7 +24,8 @@ public sealed class AiAssistantService(
     ExecutionRepository executions,
     NodeRepository nodes,
     NodePresenceOptions nodePresence,
-    McpService mcp)
+    McpService mcp,
+    IConfiguration configuration)
 {
     private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
     private const string ConversationPrefix = "assistant/conversations/";
@@ -41,6 +43,44 @@ public sealed class AiAssistantService(
         IReadOnlyDictionary<Guid, string>? TurnToolCalls = null,
         IReadOnlyDictionary<Guid, string>? TurnModelPlans = null);
     private sealed record ResolvedContext(AiAssistantSource Source, string Data);
+
+    /// <summary>Expire les conversations terminées et l'activité, avec des tombstones répliqués au lieu d'effacer une seule projection locale.</summary>
+    public async Task<int> PurgeExpiredAsync(CancellationToken ct)
+    {
+        var conversationDays = RetentionDays("AiTools:AssistantConversationRetentionDays", 90);
+        var activityDays = RetentionDays("AiTools:AssistantActivityRetentionDays", 30);
+        var now = DateTimeOffset.UtcNow;
+        var removed = 0;
+
+        var conversations = await store.ReadPrefixAsync<StoredConversation>(ConversationPrefix, ct);
+        foreach (var stored in conversations.Where(record => record.Conversation.UpdatedAt < now.AddDays(-conversationDays)))
+        {
+            var session = await cluster.GetSessionAsync(stored.Conversation.Id, ct);
+            if (session?.PendingRequest is not null) continue;
+
+            await store.DeleteAsync(ConversationKey(stored.OwnerId, stored.Conversation.Id), ct);
+            await store.DeleteAsync(SessionOwnerKey(stored.Conversation.Id), ct);
+            await store.DeleteAsync("session/" + stored.Conversation.Id, ct);
+            foreach (var requestId in stored.TurnPromptSnapshots?.Keys ?? Array.Empty<Guid>())
+            {
+                var plannerRequestId = DeriveRequestId(
+                    stored.Conversation.Id + "/" + requestId.ToString("N"), "assistant-read-tool-planner");
+                await store.DeleteAsync("session/" + $"{stored.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}", ct);
+            }
+            removed++;
+        }
+
+        var activities = await store.ReadPrefixAsync<StoredActivity>(ActivityPrefix, ct);
+        foreach (var stored in activities.Where(record => record.Activity.UpdatedAt < now.AddDays(-activityDays)))
+        {
+            await store.DeleteAsync(ActivityPrefix + stored.OwnerId + "/" + stored.Activity.RequestId.ToString("N"), ct);
+            removed++;
+        }
+        return removed;
+    }
+
+    private int RetentionDays(string key, int fallback) =>
+        int.TryParse(configuration[key], out var value) ? Math.Clamp(value, 1, 3650) : fallback;
 
     public async Task<IReadOnlyList<AiAssistantConversation>> ListAsync(ClaimsPrincipal user, CancellationToken ct)
     {
@@ -616,5 +656,31 @@ public sealed class AiAssistantService(
         {contextData}
         Fin des données jointes.
         """;
+    }
+}
+
+public sealed class AiAssistantRetentionService(
+    AiAssistantService assistant,
+    ILogger<AiAssistantRetentionService> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var removed = await assistant.PurgeExpiredAsync(stoppingToken);
+                if (removed > 0) logger.LogInformation("La rétention IA a expiré {Count} enregistrements.", removed);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "La rétention IA a échoué et sera retentée à la prochaine passe.");
+            }
+
+            try { await timer.WaitForNextTickAsync(stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+        }
     }
 }
