@@ -1,6 +1,12 @@
 # Publication des images Docker
 
-Le workflow `.github/workflows/release.yml` s'exécute à chaque push sur `main` touchant `backend/` ou `frontend/`. Il attend que les contrôles CI du commit (Backend, Frontend) soient tous terminés et verts, puis publie sur Docker Hub :
+## Parcours de développement et promotion
+
+- Les PR de fonctionnalités sont ouvertes vers `dev`. La policy du dépôt active leur auto-merge.
+- Quand un ensemble de changements est prêt à sortir, ouvrir une PR de `dev` vers `main`. La policy active automatiquement l’auto-merge de cette PR, sans label supplémentaire ; GitHub la fusionne lorsque les exigences et contrôles requis sont satisfaits.
+- La fusion de cette PR sur `main` déclenche le workflow de release. Il attend que les contrôles CI Backend et Frontend soient terminés et verts avant de publier. Une PR de promotion peut être fermée ou son auto-merge désactivé si la release doit être reportée.
+
+Le workflow `.github/workflows/release.yml` s'exécute à chaque push sur `main`. Il confirme qu'une PR `dev` vers `main` a été fusionnée et attend que les contrôles CI du commit (Backend, Frontend) soient tous terminés et verts, puis publie sur Docker Hub :
 
 - `<utilisateur>/encoding` (`backend/Dockerfile`, contexte racine) : image unique contenant le serveur, l'interface web, le worker et le lanceur qui les démarre selon le mode du nœud (voir l'architecture 0036).
 
