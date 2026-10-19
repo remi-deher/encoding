@@ -53,6 +53,38 @@ public static class AiAssistantEndpoints
         .AllowAssistantConversation()
         .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
 
+        group.MapPost("/actions/delete-flow/prepare", async (AiAssistantPrepareActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.PrepareDeleteFlowAsync(request, http.User, ct) is { } prepared
+                ? Results.Ok(prepared)
+                : Results.NotFound());
+        }).AllowAssistantConversation();
+
+        group.MapPost("/actions/delete-flow/confirm", async (AiAssistantConfirmActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.ConfirmDeleteFlowAsync(request, http.User, ct)
+                ? Results.Ok(new { deleted = true })
+                : Results.NotFound());
+        }).AllowAssistantConversation();
+
+        group.MapPost("/actions/cancel-execution/prepare", async (AiAssistantPrepareActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.PrepareCancelExecutionAsync(request, http.User, ct) is { } prepared
+                ? Results.Ok(prepared)
+                : Results.NotFound());
+        }).AllowAssistantConversation();
+
+        group.MapPost("/actions/cancel-execution/confirm", async (AiAssistantConfirmActionRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        {
+            if (!http.User.IsInRole("admin")) return Results.Forbid();
+            return await GuardAsync(async () => await service.ConfirmCancelExecutionAsync(request, http.User, ct)
+                ? Results.Ok(new { cancellationRequested = true })
+                : Results.Conflict(new { title = "L’exécution n’est plus annulable." }));
+        }).AllowAssistantConversation();
+
         group.MapPost("/activity/{requestId:guid}/proposal", async (Guid requestId, AiAssistantProposalDecision request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () => await service.UpdateFlowProposalActivityAsync(requestId, request.Decision, http.User, ct)
                 ? Results.Ok(new { requestId, status = request.Decision })

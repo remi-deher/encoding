@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.DataProtection;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Nodes;
@@ -25,9 +26,11 @@ public sealed class AiAssistantService(
     NodeRepository nodes,
     NodePresenceOptions nodePresence,
     McpService mcp,
-    IConfiguration configuration)
+    IConfiguration configuration,
+    IDataProtectionProvider protection)
 {
     private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
+    private readonly IDataProtector actionProtector = protection.CreateProtector("Encoding.AiAssistantAction.v1");
     private const string ConversationPrefix = "assistant/conversations/";
     private const string SessionOwnerPrefix = "assistant/session-owner/";
     private static readonly JsonSerializerOptions ContextJsonOptions = new(JsonSerializerDefaults.Web)
@@ -81,6 +84,80 @@ public sealed class AiAssistantService(
 
     private int RetentionDays(string key, int fallback) =>
         int.TryParse(configuration[key], out var value) ? Math.Clamp(value, 1, 3650) : fallback;
+
+    public async Task<AiAssistantPreparedAction?> PrepareDeleteFlowAsync(AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        EnsureAdmin(user);
+        if (request.ResourceId == Guid.Empty || request.ExpectedVersion < 1)
+            throw new ArgumentException("Flow ou version invalide.");
+        var current = (await flows.ListAsync(ct)).FirstOrDefault(flow => flow.Id == request.ResourceId);
+        if (current is null) return null;
+        if (current.Version != request.ExpectedVersion)
+            throw new InvalidOperationException("Le flow a changé. Actualisez son état avant de préparer la suppression.");
+        return PrepareAction(user, "delete-flow", request.ResourceId, request.ExpectedVersion,
+            $"Supprimer le flow « {current.Name} », version {current.Version} ? Les flows assignés ou utilisés par une exécution active seront refusés.");
+    }
+
+    public async Task<AiAssistantPreparedAction?> PrepareCancelExecutionAsync(AiAssistantPrepareActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        EnsureAdmin(user);
+        if (request.ResourceId == Guid.Empty || request.ExpectedVersion < 0)
+            throw new ArgumentException("Exécution ou révision invalide.");
+        var execution = await executions.GetAsync(request.ResourceId, ct);
+        if (execution is null) return null;
+        if (execution.Revision != request.ExpectedVersion)
+            throw new InvalidOperationException("L’exécution a changé. Actualisez son état avant de préparer l’annulation.");
+        if (execution.State is not ("queued" or "running"))
+            throw new InvalidOperationException("Cette exécution n’est plus annulable.");
+        return PrepareAction(user, "cancel-execution", request.ResourceId, request.ExpectedVersion,
+            $"Demander l’annulation de « {execution.Media} » ? État : {execution.State}, révision {execution.Revision}.");
+    }
+
+    public async Task<bool> ConfirmDeleteFlowAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        EnsureAdmin(user);
+        var action = ReadAction(request, user, "delete-flow");
+        var (result, reason) = await flows.DeleteFlowAsync(action.ResourceId, ct, action.ExpectedVersion);
+        if (result == FlowDeleteResult.Conflict) throw new InvalidOperationException(reason ?? "La suppression du flow est en conflit.");
+        return result == FlowDeleteResult.Deleted;
+    }
+
+    public async Task<bool> ConfirmCancelExecutionAsync(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, CancellationToken ct)
+    {
+        EnsureAdmin(user);
+        var action = ReadAction(request, user, "cancel-execution");
+        var execution = await executions.GetAsync(action.ResourceId, ct);
+        if (execution is null) return false;
+        if (execution.Revision != action.ExpectedVersion)
+            throw new InvalidOperationException("L’exécution a changé après la confirmation. Actualisez son état.");
+        return await executions.CancelAsync(action.ResourceId, ct, action.ExpectedVersion);
+    }
+
+    private sealed record ProtectedAssistantAction(string OwnerId, string Action, Guid ResourceId, int ExpectedVersion, DateTimeOffset ExpiresAt);
+
+    private AiAssistantPreparedAction PrepareAction(ClaimsPrincipal user, string action, Guid resourceId, int expectedVersion, string summary)
+    {
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        var payload = new ProtectedAssistantAction(OwnerId(user), action, resourceId, expectedVersion, expiresAt);
+        return new(actionProtector.Protect(JsonSerializer.Serialize(payload)), summary, expiresAt);
+    }
+
+    private ProtectedAssistantAction ReadAction(AiAssistantConfirmActionRequest request, ClaimsPrincipal user, string expectedAction)
+    {
+        if (string.IsNullOrWhiteSpace(request.ConfirmationToken)) throw new ArgumentException("Le jeton de confirmation est requis.");
+        ProtectedAssistantAction? action;
+        try { action = JsonSerializer.Deserialize<ProtectedAssistantAction>(actionProtector.Unprotect(request.ConfirmationToken)); }
+        catch (Exception exception) when (exception is CryptographicException or JsonException or FormatException)
+        { throw new ArgumentException("Le jeton de confirmation est invalide ou expiré."); }
+        if (action is null || action.OwnerId != OwnerId(user) || action.Action != expectedAction || action.ExpiresAt <= DateTimeOffset.UtcNow)
+            throw new ArgumentException("Le jeton de confirmation est invalide, expiré ou lié à une autre action.");
+        return action;
+    }
+
+    private static void EnsureAdmin(ClaimsPrincipal user)
+    {
+        if (!user.IsInRole("admin")) throw new UnauthorizedAccessException("Cette action nécessite le rôle administrateur.");
+    }
 
     public async Task<IReadOnlyList<AiAssistantConversation>> ListAsync(ClaimsPrincipal user, CancellationToken ct)
     {

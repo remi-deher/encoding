@@ -28,6 +28,14 @@ public sealed record AiAssistantToolResult(string Name, string Label, string Hre
 
 public sealed record AiAssistantProposalDecision(string Decision);
 
+public sealed record AiAssistantPrepareActionRequest(
+    Guid ResourceId,
+    int ExpectedVersion);
+
+public sealed record AiAssistantPreparedAction(string ConfirmationToken, string Summary, DateTimeOffset ExpiresAt);
+
+public sealed record AiAssistantConfirmActionRequest(string ConfirmationToken);
+
 public sealed record AiAssistantTurn(
     Guid RequestId,
     string UserPrompt,

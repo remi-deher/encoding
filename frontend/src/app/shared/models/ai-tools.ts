@@ -176,6 +176,21 @@ export interface AiAssistantMessageResponse {
   readonly sources: readonly AiAssistantSource[];
 }
 
+export interface AiAssistantPrepareActionRequest {
+  readonly resourceId: string;
+  readonly expectedVersion: number;
+}
+
+export interface AiAssistantPreparedAction {
+  readonly confirmationToken: string;
+  readonly summary: string;
+  readonly expiresAt: string;
+}
+
+export interface AiAssistantConfirmActionRequest {
+  readonly confirmationToken: string;
+}
+
 export interface AiAssistantActivity {
   readonly requestId: string;
   readonly conversationId: string | null;

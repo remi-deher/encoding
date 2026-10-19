@@ -68,6 +68,16 @@
             ) {
               <li>
                 <a [routerLink]="source.href">{{ source.label }}</a>
+                @if (isAdmin() && source.kind === 'flow' && source.version) {
+                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="deleteFlowFromAssistant(source)">
+                    Supprimer le flow…
+                  </button>
+                }
+                @if (isAdmin() && isCancelableExecution(source)) {
+                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="cancelExecutionFromAssistant(source)">
+                    Annuler l’exécution…
+                  </button>
+                }
                 @if (conversationSources(current.conversation).length > 1) {
                   <button
                     matButton="text"
@@ -121,6 +131,9 @@
           Ajouter au contexte
         </button>
       </div>
+      @if (actionMessage(); as message) {
+        <p class="muted" role="status">{{ message }}</p>
+      }
       <div class="message-list" aria-live="polite">
         @for (turn of current.turns; track turn.requestId) {
           <article class="message user-message">

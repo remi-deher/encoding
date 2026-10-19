@@ -8,6 +8,9 @@ import {
   AiAssistantActivity,
   AiAssistantMessageRequest,
   AiAssistantMessageResponse,
+  AiAssistantConfirmActionRequest,
+  AiAssistantPrepareActionRequest,
+  AiAssistantPreparedAction,
   AiAssistantSourcesRequest,
   AiSettings,
   AiSettingsUpdateRequest,
@@ -63,6 +66,30 @@ export class AiToolsService {
     return this.http.post<void>(
       `/api/v1/tools/ai/assistant/requests/${encodeURIComponent(requestId)}/cancel`,
       {},
+    );
+  }
+
+  prepareAssistantFlowDeletion(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
+    return this.http.post<AiAssistantPreparedAction>(
+      '/api/v1/tools/ai/assistant/actions/delete-flow/prepare', request,
+    );
+  }
+
+  confirmAssistantFlowDeletion(request: AiAssistantConfirmActionRequest): Observable<{ readonly deleted: boolean }> {
+    return this.http.post<{ readonly deleted: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/delete-flow/confirm', request,
+    );
+  }
+
+  prepareAssistantExecutionCancellation(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
+    return this.http.post<AiAssistantPreparedAction>(
+      '/api/v1/tools/ai/assistant/actions/cancel-execution/prepare', request,
+    );
+  }
+
+  confirmAssistantExecutionCancellation(request: AiAssistantConfirmActionRequest): Observable<{ readonly cancellationRequested: boolean }> {
+    return this.http.post<{ readonly cancellationRequested: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/cancel-execution/confirm', request,
     );
   }
 

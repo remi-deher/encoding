@@ -29,6 +29,7 @@ import { ClusterApi } from '../../shared/services/cluster-api';
 import { ExecutionTracking } from '../../shared/services/execution-tracking';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
+import { AuthService } from '../../core/auth/auth.service';
 
 type AssistantResourceType = 'flow' | 'execution' | 'node';
 
@@ -63,6 +64,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   private readonly executionTracking = inject(ExecutionTracking);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly flows = signal<readonly FlowSummary[]>([]);
   protected readonly executions = signal<readonly ExecutionResponse[]>([]);
@@ -92,6 +94,8 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly hasPendingRequest = signal(false);
   protected readonly resumingRequest = signal(false);
   protected readonly updatingSources = signal(false);
+  protected readonly actionBusy = signal(false);
+  protected readonly actionMessage = signal<string | null>(null);
   protected readonly resourceOptions = computed<readonly AssistantResourceOption[]>(() => {
     switch (this.selectedResourceType()) {
       case 'flow':
@@ -182,6 +186,47 @@ export class AiAssistantPageComponent implements OnDestroy {
       queryParams: { conversation: null },
       queryParamsHandling: 'merge',
     });
+  }
+
+  protected deleteFlowFromAssistant(source: AiAssistantSource): void {
+    if (!this.isAdmin() || source.kind !== 'flow' || source.version === null || source.version === undefined || this.actionBusy()) return;
+    this.actionBusy.set(true);
+    this.actionMessage.set(null);
+    this.aiTools.prepareAssistantFlowDeletion({ resourceId: source.resourceId, expectedVersion: source.version }).subscribe({
+      next: (prepared) => {
+        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
+        this.aiTools.confirmAssistantFlowDeletion({ confirmationToken: prepared.confirmationToken }).subscribe({
+          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Flow supprimé : ${source.label}.`); this.loadFlows(); },
+          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La suppression a échoué ou la version a changé. Actualisez le flow.')); },
+        });
+      },
+      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'La suppression du flow a échoué. Actualisez son état puis réessayez.')); },
+    });
+  }
+
+  protected cancelExecutionFromAssistant(source: AiAssistantSource): void {
+    if (!this.isAdmin() || source.kind !== 'execution' || this.actionBusy()) return;
+    const execution = this.executions().find((item) => item.id === source.resourceId);
+    if (!execution || !['queued', 'running'].includes(execution.state)) return;
+    this.actionBusy.set(true);
+    this.actionMessage.set(null);
+    this.aiTools.prepareAssistantExecutionCancellation({ resourceId: execution.id, expectedVersion: execution.revision }).subscribe({
+      next: (prepared) => {
+        if (!window.confirm(prepared.summary)) { this.actionBusy.set(false); return; }
+        this.aiTools.confirmAssistantExecutionCancellation({ confirmationToken: prepared.confirmationToken }).subscribe({
+          next: () => { this.actionBusy.set(false); this.actionMessage.set(`Annulation demandée pour ${execution.media}.`); this.loadExecutions(); },
+          error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.')); },
+        });
+      },
+      error: (error: HttpErrorResponse) => { this.actionBusy.set(false); this.actionMessage.set(this.errorText(error, 'L’exécution a changé ou ne peut plus être annulée. Actualisez son état.')); },
+    });
+  }
+
+  protected isCancelableExecution(source: AiAssistantSource): boolean {
+    const execution = source.kind === 'execution'
+      ? this.executions().find((item) => item.id === source.resourceId)
+      : null;
+    return execution != null && ['queued', 'running'].includes(execution.state);
   }
 
   protected openConversation(id: string, updateUrl = true): void {
