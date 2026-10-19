@@ -18,6 +18,7 @@ import { MatSelectModule } from '@angular/material/select';
 import {
   AiAssistantConversation,
   AiAssistantConversationDetail,
+  AiAssistantSource,
 } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
 import { NodeResponse } from '../../shared/models/cluster';
@@ -80,6 +81,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly pendingPrompt = signal<string | null>(null);
   protected readonly hasPendingRequest = signal(false);
   protected readonly resumingRequest = signal(false);
+  protected readonly updatingSources = signal(false);
   protected readonly resourceOptions = computed<readonly AssistantResourceOption[]>(() => {
     switch (this.selectedResourceType()) {
       case 'flow':
@@ -181,7 +183,7 @@ export class AiAssistantPageComponent implements OnDestroy {
       next: (detail) => {
         this.detail.set(detail);
         this.selectedResourceType.set(detail.conversation.source.kind);
-        this.selectedResourceId.set(detail.conversation.source.resourceId);
+        this.selectedResourceId.set('');
         if (detail.pendingTurn) {
           this.prompt.set(detail.pendingTurn.userPrompt);
           this.requestPrompt = detail.pendingTurn.userPrompt;
@@ -251,6 +253,7 @@ export class AiAssistantPageComponent implements OnDestroy {
                       requestId: response.requestId,
                       userPrompt: message,
                       content: response.content,
+                      sources: response.sources,
                     },
                   ]
               : oldTurns;
@@ -306,6 +309,83 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected selectResourceType(type: AssistantResourceType): void {
     this.selectedResourceType.set(type);
     this.selectedResourceId.set('');
+  }
+
+  protected conversationSources(
+    conversation: AiAssistantConversation,
+  ): readonly AiAssistantSource[] {
+    return [conversation.source, ...(conversation.additionalSources ?? [])];
+  }
+
+  protected addSelectedResource(): void {
+    const current = this.detail()?.conversation;
+    const selected = this.selectedResource();
+    if (!current || !selected || this.updatingSources() || this.hasPendingRequest()) return;
+    const sources = this.conversationSources(current);
+    if (
+      sources.some(
+        (source) =>
+          source.kind === this.selectedResourceType() && source.resourceId === selected.id,
+      )
+    ) {
+      this.errorMessage.set('Cette ressource est déjà attachée à la conversation.');
+      return;
+    }
+    if (sources.length >= 5) {
+      this.errorMessage.set('Une conversation peut consulter au maximum cinq ressources.');
+      return;
+    }
+    this.updateConversationSources([
+      ...sources,
+      {
+        kind: this.selectedResourceType(),
+        resourceId: selected.id,
+        version: selected.version,
+        label: selected.label,
+        href:
+          this.selectedResourceType() === 'flow'
+            ? '/flows'
+            : this.selectedResourceType() === 'execution'
+              ? '/tasks'
+              : '/nodes',
+      },
+    ]);
+  }
+
+  protected removeConversationSource(source: AiAssistantSource): void {
+    const current = this.detail()?.conversation;
+    if (!current || this.updatingSources() || this.hasPendingRequest()) return;
+    const sources = this.conversationSources(current);
+    if (sources.length <= 1) return;
+    this.updateConversationSources(sources.filter((candidate) => candidate !== source));
+  }
+
+  private updateConversationSources(sources: readonly AiAssistantSource[]): void {
+    const conversation = this.detail()?.conversation;
+    if (!conversation) return;
+    this.updatingSources.set(true);
+    this.errorMessage.set(null);
+    this.aiTools
+      .updateAssistantSources(conversation.id, {
+        sources: sources.map((source) => ({
+          type: source.kind,
+          id: source.resourceId,
+          version: source.version,
+        })),
+      })
+      .subscribe({
+        next: (updated) => {
+          this.detail.update((detail) => (detail ? { ...detail, conversation: updated } : detail));
+          this.selectedResourceId.set('');
+          this.updatingSources.set(false);
+        },
+        error: (error: HttpErrorResponse) => {
+          this.updatingSources.set(false);
+          this.errorMessage.set(
+            this.errorText(error, 'Impossible de modifier les ressources du contexte.'),
+          );
+        },
+      });
   }
 
   private loadExecutions(): void {

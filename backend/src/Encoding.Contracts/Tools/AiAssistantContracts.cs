@@ -13,12 +13,18 @@ public sealed record AiAssistantConversation(
     string Title,
     AiAssistantSource Source,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<AiAssistantSource>? AdditionalSources = null);
+
+public sealed record AiAssistantResourceReference(string Type, Guid Id, int? Version = null);
+
+public sealed record AiAssistantSourcesRequest(IReadOnlyList<AiAssistantResourceReference> Sources);
 
 public sealed record AiAssistantTurn(
     Guid RequestId,
     string UserPrompt,
-    string Content);
+    string Content,
+    IReadOnlyList<AiAssistantSource>? Sources = null);
 
 public sealed record AiAssistantConversationDetail(
     AiAssistantConversation Conversation,

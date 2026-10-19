@@ -24,6 +24,14 @@ public static class AiAssistantEndpoints
                 return detail is null ? Results.NotFound() : Results.Ok(detail);
             }));
 
+        group.MapPut("/conversations/{id}/sources", async (string id, AiAssistantSourcesRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                var conversation = await service.UpdateSourcesAsync(id, request, http.User, ct);
+                return conversation is null ? Results.NotFound() : Results.Ok(conversation);
+            }))
+        .AllowAssistantConversation();
+
         group.MapPost("/messages", async (AiAssistantMessageRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () =>
             {

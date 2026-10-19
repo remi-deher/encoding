@@ -8,6 +8,7 @@ import {
   AiAssistantActivity,
   AiAssistantMessageRequest,
   AiAssistantMessageResponse,
+  AiAssistantSourcesRequest,
   AiSettings,
   AiSettingsUpdateRequest,
   AiToolInfo,
@@ -38,6 +39,16 @@ export class AiToolsService {
   getAssistantConversation(id: string): Observable<AiAssistantConversationDetail> {
     return this.http.get<AiAssistantConversationDetail>(
       `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}`,
+    );
+  }
+
+  updateAssistantSources(
+    id: string,
+    request: AiAssistantSourcesRequest,
+  ): Observable<AiAssistantConversation> {
+    return this.http.put<AiAssistantConversation>(
+      `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}/sources`,
+      request,
     );
   }
 

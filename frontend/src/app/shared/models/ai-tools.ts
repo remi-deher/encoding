@@ -111,12 +111,14 @@ export interface AiAssistantConversation {
   readonly source: AiAssistantSource;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly additionalSources?: readonly AiAssistantSource[] | null;
 }
 
 export interface AiAssistantTurn {
   readonly requestId: string;
   readonly userPrompt: string;
   readonly content: string;
+  readonly sources?: readonly AiAssistantSource[] | null;
 }
 
 export interface AiAssistantConversationDetail {
@@ -138,6 +140,14 @@ export interface AiAssistantMessageRequest {
   readonly resourceType?: 'flow' | 'execution' | 'node' | null;
   readonly resourceId?: string | null;
   readonly resourceVersion?: number | null;
+}
+
+export interface AiAssistantSourcesRequest {
+  readonly sources: readonly {
+    readonly type: string;
+    readonly id: string;
+    readonly version?: number | null;
+  }[];
 }
 
 export interface AiAssistantMessageResponse {

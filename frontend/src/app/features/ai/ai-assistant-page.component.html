@@ -60,10 +60,67 @@
       <header class="chat-heading">
         <div>
           <h2>{{ current.conversation.title }}</h2>
-          <p>Contexte attaché : {{ current.conversation.source.label }}</p>
+          <p>Contexte attaché :</p>
+          <ul class="attached-sources" aria-label="Ressources consultées">
+            @for (
+              source of conversationSources(current.conversation);
+              track source.kind + source.resourceId
+            ) {
+              <li>
+                <a [routerLink]="source.href">{{ source.label }}</a>
+                @if (conversationSources(current.conversation).length > 1) {
+                  <button
+                    matButton="text"
+                    type="button"
+                    [disabled]="updatingSources() || hasPendingRequest()"
+                    (click)="removeConversationSource(source)"
+                  >
+                    Retirer
+                  </button>
+                }
+              </li>
+            }
+          </ul>
         </div>
         <a matButton="text" [routerLink]="current.conversation.source.href">Ouvrir la ressource</a>
       </header>
+      <div class="add-context-controls" aria-label="Ajouter une ressource au contexte">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Type de ressource à ajouter</mat-label>
+          <mat-select
+            name="additionalResourceType"
+            [ngModel]="selectedResourceType()"
+            (ngModelChange)="selectResourceType($event)"
+            [disabled]="updatingSources() || hasPendingRequest()"
+          >
+            <mat-option value="flow">Flow publié</mat-option>
+            <mat-option value="execution">Exécution</mat-option>
+            <mat-option value="node">Nœud</mat-option>
+          </mat-select>
+        </mat-form-field>
+        @if (!loadingSelectedResource() && resourceOptions().length > 0) {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Ressource</mat-label>
+            <mat-select
+              name="additionalResourceId"
+              [(ngModel)]="selectedResourceId"
+              [disabled]="updatingSources() || hasPendingRequest()"
+            >
+              @for (resource of resourceOptions(); track resource.id) {
+                <mat-option [value]="resource.id">{{ resource.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+        <button
+          matButton="tonal"
+          type="button"
+          [disabled]="!selectedResource() || updatingSources() || hasPendingRequest()"
+          (click)="addSelectedResource()"
+        >
+          Ajouter au contexte
+        </button>
+      </div>
       <div class="message-list" aria-live="polite">
         @for (turn of current.turns; track turn.requestId) {
           <article class="message user-message">
@@ -73,9 +130,12 @@
           <article class="message assistant-message">
             <h3>Assistant</h3>
             <p>{{ turn.content }}</p>
-            <a [routerLink]="current.conversation.source.href">
-              Source : {{ current.conversation.source.label }}
-            </a>
+            @for (
+              source of turn.sources ?? [current.conversation.source];
+              track source.kind + source.resourceId
+            ) {
+              <a [routerLink]="source.href">Source : {{ source.label }}</a>
+            }
           </article>
         }
         @if (pendingPrompt(); as pending) {
