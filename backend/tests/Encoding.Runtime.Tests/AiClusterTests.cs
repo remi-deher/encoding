@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Tools;
+using Encoding.Api.Nodes;
 using Encoding.Contracts.Tools;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -16,6 +17,19 @@ namespace Encoding.Runtime.Tests;
 public sealed class AiClusterTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
+
+    [Fact]
+    public async Task AvailabilityUsesDisplayNamesForLocalAndRemoteNodesWithTechnicalNameFallback()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        Assert.Equal("first", (await mesh.First.Service.LocalAsync(Ct)).Name);
+        await mesh.First.LocalNode.RequestNameAsync("Salon", Ct);
+        await mesh.Second.LocalNode.RequestNameAsync("Bureau", Ct);
+
+        var view = await mesh.First.Service.ViewAsync(Ct);
+        Assert.Contains(view.Nodes, node => node.NodeId == mesh.First.Identity.PeerId && node.Name == "Salon");
+        Assert.Contains(view.Nodes, node => node.NodeId == mesh.Second.Identity.PeerId && node.Name == "Bureau");
+    }
 
     [Fact]
     public async Task AnyPeerCanUseRemoteProviderAndResumeDurableApplicationContextWithoutCopyingSecrets()
@@ -49,6 +63,65 @@ public sealed class AiClusterTests
         Assert.StartsWith(mesh.Second.Identity.PeerId.ToString("N"), fork.Id);
         Assert.Equal(2, fork.Turns.Count);
         Assert.Null(fork.PendingRequest);
+    }
+
+    [Fact]
+    public async Task SessionHistoryIsBoundedAndReportsPendingAndCompletedWorkWithoutPrompts()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        Assert.Empty((await mesh.First.Service.ListSessionsAsync(0, Ct)).Items);
+        var first = await mesh.First.Service.GenerateAsync("openai", new("private instructions", "private question"), Ct);
+        var page = await mesh.First.Service.ListSessionsAsync(0, Ct);
+        var summary = Assert.Single(page.Items);
+        Assert.Equal(first.SessionId, summary.Id);
+        Assert.Equal("completed", summary.Status);
+        Assert.Equal(1, summary.TurnCount);
+        Assert.NotNull(summary.UpdatedAt);
+        Assert.Null(summary.Usage);
+        Assert.DoesNotContain("private question", JsonSerializer.Serialize(page));
+        Assert.DoesNotContain("private instructions", JsonSerializer.Serialize(page));
+        var id = $"{mesh.First.Identity.PeerId:N}.{Guid.NewGuid():N}";
+        await mesh.First.Store.SaveAsync("session/" + id, new AiSessionState(id, "openai", "system", [],
+            Guid.NewGuid(), DateTimeOffset.UtcNow.AddMinutes(1)), Ct);
+        Assert.Contains((await mesh.First.Service.ListSessionsAsync(0, Ct)).Items, item => item.Id == id && item.Status == "running");
+        Assert.Empty((await mesh.First.Service.ListSessionsAsync(50, Ct)).Items);
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.ListSessionsAsync(-1, Ct));
+    }
+
+    [Fact]
+    public async Task SessionsCannotMixMediaOrOperationsAndPreserveUsageOnReplay()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var scope = new AiSessionScope("subtitle-translation", LibraryId: Guid.NewGuid(), MediaId: Guid.NewGuid());
+        var prompt = new AiPrompt("instructions", "question", Scope: scope);
+        var first = await mesh.First.Service.GenerateAsync("openai", prompt, Ct);
+        Assert.True(first.Success);
+        var session = await mesh.First.Service.GetSessionAsync(first.SessionId!, Ct);
+        var usage = new AiUsage(100, 20);
+        await mesh.First.Store.SaveAsync("session/" + first.SessionId, session! with {
+            Turns = [session!.Turns[0] with { Usage = usage }]
+        }, Ct);
+        var replay = await mesh.First.NewService().GenerateAsync("openai", prompt with { SessionId = first.SessionId, RequestId = first.RequestId }, Ct);
+        Assert.Equal(usage, replay.Usage);
+        Assert.Equal(usage, Assert.Single((await mesh.First.Service.ListSessionsAsync(0, Ct)).Items).Usage);
+        Assert.Equal(1, mesh.Factory.Inferences);
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.GenerateAsync("openai",
+            prompt with { SessionId = first.SessionId, Scope = scope with { MediaId = Guid.NewGuid() } }, Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.GenerateAsync("openai",
+            prompt with { SessionId = first.SessionId, Model = "another-model" }, Ct));
+    }
+
+    [Fact]
+    public async Task QuotasUseSignedPeerTransportAndStaySeparatedByNode()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var quotas = await mesh.First.Service.QuotasAsync(Ct);
+        Assert.Equal(2, quotas.Nodes.Count);
+        Assert.All(quotas.Nodes, node => {
+            Assert.Equal(2, node.Providers.Count);
+            Assert.All(node.Providers, provider => Assert.Equal("unavailable", provider.State));
+        });
+        Assert.DoesNotContain("private-api-key", JsonSerializer.Serialize(quotas));
     }
 
     [Fact]
@@ -112,6 +185,7 @@ public sealed class AiClusterTests
         public AiSettingsService Settings = null!;
         public AiClientFactory Clients = null!;
         public IConfiguration Configuration = null!;
+        public LocalNodeRegistry LocalNode = null!;
         public static async Task<Node> CreateAsync(Guid cluster, string name, string other, MeshFactory factory, byte[] key, bool connected)
         {
             var node = new Node { Database = await TestDatabase.CreateSqliteAsync("ai-cluster"), Profile = new() };
@@ -133,10 +207,11 @@ public sealed class AiClusterTests
             node.Auth = new(node.Profile.Runtime);
             node.Settings = new(node.Configuration);
             node.Clients = new(node.Configuration, factory, node.Settings, node.Profile.Runtime);
+            node.LocalNode = new(new NodeRepository(node.Database.Db));
             node.Service = node.NewService();
             return node;
         }
-        public AiClusterService NewService() => new(Transport, Store, Auth, Settings, Clients, Configuration);
+        public AiClusterService NewService() => new(Transport, Store, Auth, Settings, Clients, Configuration, LocalNode, new AiQuotaService(Profile.Runtime));
         public async ValueTask DisposeAsync() { Auth.Dispose(); Identity.Dispose(); Key.Dispose(); await Database.DisposeAsync(); Profile.Dispose(); }
     }
     private sealed class Mesh : IAsyncDisposable

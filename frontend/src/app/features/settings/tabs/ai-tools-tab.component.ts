@@ -1,3 +1,5 @@
+import { AiQuotaPanelComponent } from './ai-quota-panel.component';
+import { AiSessionHistoryComponent } from './ai-session-history.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -12,6 +14,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
@@ -36,8 +39,11 @@ import { AuthService } from '../../../core/auth/auth.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ConfigurationSectionComponent,
+    AiQuotaPanelComponent,
+    AiSessionHistoryComponent,
     FormsModule,
     MatButtonModule,
+    MatIconModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
@@ -86,6 +92,7 @@ export class AiToolsTabComponent implements OnInit {
   readonly tools = signal<readonly AiToolInfo[]>([]);
   readonly cluster = signal<AiClusterView | null>(null);
   readonly loadingTools = signal(false);
+  readonly quotaRevision = signal(0);
   readonly loadingSettings = signal(true);
   readonly savingSettings = signal(false);
   readonly connecting = signal(false);
@@ -144,6 +151,7 @@ export class AiToolsTabComponent implements OnInit {
     });
   }
   refreshTools(): void {
+    this.quotaRevision.update((value) => value + 1);
     this.loadingTools.set(true);
     this.aiService.listTools().subscribe({
       next: (tools) => {

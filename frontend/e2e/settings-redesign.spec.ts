@@ -58,6 +58,10 @@ test.beforeEach(async ({ page }) => {
       },
     }),
   );
+  await page.route('**/api/v1/tools/ai/quotas', (route) => route.fulfill({ json: { nodes: [] } }));
+  await page.route('**/api/v1/tools/ai/sessions?offset=*', (route) =>
+    route.fulfill({ json: { items: [], offset: 0, hasMore: false } }),
+  );
   await page.route('**/api/v1/tools/ai/cluster', (route) => route.fulfill({ json: { nodes: [] } }));
   await page.route('**/api/v1/system/logs?*', (route) =>
     route.fulfill({ json: { entries, totalBuffered: entries.length } }),
