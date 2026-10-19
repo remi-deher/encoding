@@ -22,7 +22,10 @@ public sealed record AiAssistantTurn(
 
 public sealed record AiAssistantConversationDetail(
     AiAssistantConversation Conversation,
-    IReadOnlyList<AiAssistantTurn> Turns);
+    IReadOnlyList<AiAssistantTurn> Turns,
+    AiAssistantPendingTurn? PendingTurn = null);
+
+public sealed record AiAssistantPendingTurn(Guid RequestId, string UserPrompt, bool IsRunning);
 
 public sealed record AiAssistantMessageRequest(
     Guid RequestId,

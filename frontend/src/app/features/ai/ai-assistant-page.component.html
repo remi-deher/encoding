@@ -153,12 +153,14 @@
           rows="3"
           maxlength="4000"
           [(ngModel)]="prompt"
-          [disabled]="sending() || (loadingSelectedResource() && !detail())"
+          [disabled]="sending() || hasPendingRequest() || (loadingSelectedResource() && !detail())"
         ></textarea>
         <mat-hint align="end">{{ prompt().length }}/4000</mat-hint>
       </mat-form-field>
       <button matButton="filled" type="submit" [disabled]="!canSend()">
-        {{ sending() ? 'Réponse en cours…' : 'Envoyer' }}
+        {{
+          sending() ? 'Réponse en cours…' : resumingRequest() ? 'Reprendre la demande' : 'Envoyer'
+        }}
       </button>
     </form>
     <p class="privacy-note">

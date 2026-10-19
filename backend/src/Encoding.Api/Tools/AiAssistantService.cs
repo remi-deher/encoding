@@ -60,7 +60,11 @@ public sealed class AiAssistantService(
         var session = await cluster.GetSessionAsync(id, ct);
         var turns = session?.Turns.Select(turn => new AiAssistantTurn(turn.RequestId, turn.UserPrompt, turn.Content)).ToArray()
             ?? Array.Empty<AiAssistantTurn>();
-        return new(conversation, turns);
+        var pending = session?.PendingRequest is { } requestId && session.PendingPrompt is { } prompt
+            ? new AiAssistantPendingTurn(requestId, prompt.UserPrompt,
+                session.AttemptDeadline is { } deadline && deadline > DateTimeOffset.UtcNow)
+            : null;
+        return new(conversation, turns, pending);
     }
 
     public async Task<AiAssistantMessageResponse?> SendAsync(AiAssistantMessageRequest request, ClaimsPrincipal user, CancellationToken ct)

@@ -122,6 +122,13 @@ export interface AiAssistantTurn {
 export interface AiAssistantConversationDetail {
   readonly conversation: AiAssistantConversation;
   readonly turns: readonly AiAssistantTurn[];
+  readonly pendingTurn?: AiAssistantPendingTurn | null;
+}
+
+export interface AiAssistantPendingTurn {
+  readonly requestId: string;
+  readonly userPrompt: string;
+  readonly isRunning: boolean;
 }
 
 export interface AiAssistantMessageRequest {

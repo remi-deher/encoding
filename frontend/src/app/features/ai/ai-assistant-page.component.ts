@@ -1,5 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  OnDestroy,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -45,7 +53,7 @@ interface AssistantResourceOption {
   styleUrl: './ai-assistant-page.component.scss',
   host: { '[class.assistant-panel-mode]': 'panelMode()' },
 })
-export class AiAssistantPageComponent {
+export class AiAssistantPageComponent implements OnDestroy {
   readonly panelMode = input(false);
   private readonly aiTools = inject(AiToolsService);
   private readonly flowValidation = inject(FlowValidation);
@@ -70,6 +78,8 @@ export class AiAssistantPageComponent {
   protected readonly sending = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly pendingPrompt = signal<string | null>(null);
+  protected readonly hasPendingRequest = signal(false);
+  protected readonly resumingRequest = signal(false);
   protected readonly resourceOptions = computed<readonly AssistantResourceOption[]>(() => {
     switch (this.selectedResourceType()) {
       case 'flow':
@@ -119,11 +129,17 @@ export class AiAssistantPageComponent {
       !this.sending() &&
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
-      (Boolean(this.detail()) || Boolean(this.selectedResource())),
+      (Boolean(this.detail()) || Boolean(this.selectedResource())) &&
+      (!this.hasPendingRequest() || this.prompt() === this.requestPrompt),
   );
 
   private requestPrompt = '';
   private requestId = '';
+  private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  ngOnDestroy(): void {
+    if (this.pendingPollTimer !== null) clearTimeout(this.pendingPollTimer);
+  }
 
   constructor() {
     this.loadFlows();
@@ -145,6 +161,8 @@ export class AiAssistantPageComponent {
     this.errorMessage.set(null);
     this.prompt.set('');
     this.pendingPrompt.set(null);
+    this.hasPendingRequest.set(false);
+    this.resumingRequest.set(false);
     this.requestPrompt = '';
     this.requestId = '';
     void this.router.navigate([], {
@@ -156,6 +174,7 @@ export class AiAssistantPageComponent {
 
   protected openConversation(id: string, updateUrl = true): void {
     if (this.loadingDetail()) return;
+    if (this.pendingPollTimer !== null) clearTimeout(this.pendingPollTimer);
     this.loadingDetail.set(true);
     this.errorMessage.set(null);
     this.aiTools.getAssistantConversation(id).subscribe({
@@ -163,6 +182,29 @@ export class AiAssistantPageComponent {
         this.detail.set(detail);
         this.selectedResourceType.set(detail.conversation.source.kind);
         this.selectedResourceId.set(detail.conversation.source.resourceId);
+        if (detail.pendingTurn) {
+          this.prompt.set(detail.pendingTurn.userPrompt);
+          this.requestPrompt = detail.pendingTurn.userPrompt;
+          this.requestId = detail.pendingTurn.requestId;
+          this.hasPendingRequest.set(true);
+          this.resumingRequest.set(!detail.pendingTurn.isRunning);
+          if (detail.pendingTurn.isRunning) {
+            this.pendingPrompt.set(detail.pendingTurn.userPrompt);
+            this.sending.set(true);
+            this.pollPendingConversation(id, detail.pendingTurn.requestId);
+          } else {
+            this.pendingPrompt.set(detail.pendingTurn.userPrompt);
+            this.sending.set(false);
+            this.errorMessage.set(
+              'Une demande interrompue peut être reprise avec le même identifiant.',
+            );
+          }
+        } else {
+          this.pendingPrompt.set(null);
+          this.hasPendingRequest.set(false);
+          this.resumingRequest.set(false);
+          this.sending.set(false);
+        }
         this.loadingDetail.set(false);
         if (updateUrl) this.setConversationUrl(id);
       },
@@ -185,6 +227,7 @@ export class AiAssistantPageComponent {
     const selectedResource = this.selectedResource();
     this.sending.set(true);
     this.pendingPrompt.set(message);
+    this.resumingRequest.set(false);
     this.errorMessage.set(null);
     this.aiTools
       .sendAssistantMessage({
@@ -211,7 +254,13 @@ export class AiAssistantPageComponent {
                     },
                   ]
               : oldTurns;
-          this.detail.set({ conversation: response.conversation, turns });
+          this.detail.set({
+            conversation: response.conversation,
+            turns,
+            pendingTurn: response.success
+              ? null
+              : { requestId: response.requestId, userPrompt: message, isRunning: false },
+          });
           this.pendingPrompt.set(null);
           this.sending.set(false);
           this.loadConversations();
@@ -220,7 +269,12 @@ export class AiAssistantPageComponent {
             this.prompt.set('');
             this.requestPrompt = '';
             this.requestId = '';
+            this.hasPendingRequest.set(false);
+            this.resumingRequest.set(false);
           } else {
+            this.pendingPrompt.set(message);
+            this.hasPendingRequest.set(true);
+            this.resumingRequest.set(true);
             this.errorMessage.set(response.errorMessage ?? 'Le fournisseur IA n’a pas répondu.');
           }
         },
@@ -230,6 +284,11 @@ export class AiAssistantPageComponent {
           this.errorMessage.set(
             this.errorText(error, 'Impossible d’envoyer le message. Réessayez.'),
           );
+          if (activeConversation) {
+            this.pendingPrompt.set(message);
+            this.hasPendingRequest.set(true);
+            this.resumingRequest.set(true);
+          }
         },
       });
   }
@@ -287,6 +346,47 @@ export class AiAssistantPageComponent {
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
+  }
+
+  private pollPendingConversation(conversationId: string, requestId: string): void {
+    this.pendingPollTimer = window.setTimeout(() => {
+      this.pendingPollTimer = null;
+      if (
+        !this.detail() ||
+        this.detail()?.conversation.id !== conversationId ||
+        this.detail()?.pendingTurn?.requestId !== requestId
+      )
+        return;
+      this.aiTools.getAssistantConversation(conversationId).subscribe({
+        next: (detail) => {
+          if (this.detail()?.conversation.id !== conversationId) return;
+          this.detail.set(detail);
+          if (detail.turns.some((turn) => turn.requestId === requestId)) {
+            this.sending.set(false);
+            this.pendingPrompt.set(null);
+            this.hasPendingRequest.set(false);
+            this.resumingRequest.set(false);
+            this.prompt.set('');
+            this.requestPrompt = '';
+            this.requestId = '';
+            this.loadConversations();
+            return;
+          }
+          if (detail.pendingTurn?.requestId === requestId && detail.pendingTurn.isRunning) {
+            this.pollPendingConversation(conversationId, requestId);
+          } else {
+            this.sending.set(false);
+            this.pendingPrompt.set(detail.pendingTurn?.userPrompt ?? this.prompt());
+            this.hasPendingRequest.set(true);
+            this.resumingRequest.set(true);
+            this.errorMessage.set(
+              'La demande est interrompue ou son résultat reste incertain. Vous pouvez la reprendre.',
+            );
+          }
+        },
+        error: () => this.pollPendingConversation(conversationId, requestId),
+      });
+    }, 2000);
   }
 
   private errorText(error: HttpErrorResponse, fallback: string): string {
