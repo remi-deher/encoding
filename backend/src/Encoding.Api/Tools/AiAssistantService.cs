@@ -442,6 +442,11 @@ public sealed class AiAssistantService(
             var saved = await ReadConversationAsync(ownerId, id, ct);
             if (saved is not null)
             {
+                if (request.Provider is not null && (request.Provider != saved.Conversation.Provider
+                    || request.Model != saved.Conversation.Model
+                    || request.ReasoningEffort != saved.Conversation.ReasoningEffort
+                    || request.NodeId != saved.Conversation.NodeId))
+                    throw new ArgumentException("Cet identifiant de requête est déjà associé à une autre configuration de modèle.");
                 if (context is not null && (saved.Conversation.Source.Kind != context.Source.Kind
                     || saved.Conversation.Source.ResourceId != context.Source.ResourceId
                     || saved.Conversation.Source.Version != context.Source.Version))
@@ -467,7 +472,8 @@ public sealed class AiAssistantService(
                     now,
                     now,
                     Model: model,
-                    ReasoningEffort: request.ReasoningEffort);
+                    ReasoningEffort: request.ReasoningEffort,
+                    NodeId: request.NodeId);
                 await SaveConversationAsync(ownerId, conversation, ct);
             }
         }
@@ -481,10 +487,24 @@ public sealed class AiAssistantService(
                 || request.ResourceId is { } resourceId && resourceId != savedConversation.Source.ResourceId
                 || request.ResourceVersion is { } version && version != savedConversation.Source.Version)
                 throw new ArgumentException("Le contexte d’une conversation est fixe. Ouvrez une nouvelle conversation pour une autre ressource.");
-            if (request.Provider is not null && (request.Provider != savedConversation.Provider
-                || request.Model != savedConversation.Model || request.ReasoningEffort != savedConversation.ReasoningEffort))
-                throw new ArgumentException("Le fournisseur, le modèle et l’effort sont fixes pour une conversation. Ouvrez un nouvel échange pour les modifier.");
-            conversation = savedConversation;
+            if (request.Provider is not null && request.Model == savedConversation.Model
+                && request.Provider != savedConversation.Provider)
+                throw new ArgumentException("Le fournisseur ne peut pas changer dans une conversation.");
+            var chosenModel = request.Model ?? savedConversation.Model;
+            var chosenProvider = request.Provider ?? savedConversation.Provider;
+            var availableSelection = (await OptionsAsync(ct)).Models.Any(option =>
+                option.Provider == chosenProvider && option.Model == chosenModel
+                && option.NodeId == (request.NodeId ?? savedConversation.NodeId)
+                && (request.ReasoningEffort is null || option.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal)));
+            if (!availableSelection)
+                throw new ArgumentException("Le fournisseur, le modèle, le nœud ou l’effort choisi n’est pas disponible.");
+            conversation = savedConversation with
+            {
+                Provider = request.Provider ?? savedConversation.Provider,
+                Model = request.Model ?? savedConversation.Model,
+                ReasoningEffort = request.ReasoningEffort ?? savedConversation.ReasoningEffort,
+                NodeId = request.NodeId ?? savedConversation.NodeId,
+            };
         }
 
         var session = await cluster.GetSessionAsync(conversation.Id, ct);
