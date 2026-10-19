@@ -3,6 +3,12 @@ import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/system/logs/categories*', (route) =>
+    route.fulfill({ json: { categories: [] } }),
+  );
+  await page.route('**/health/details', (route) =>
+    route.fulfill({ json: { status: 'healthy', totalDurationMs: 0, checks: [] } }),
+  );
   await page.route('**/api/v1/auth/status', (route) =>
     route.fulfill({
       json: {
@@ -57,14 +63,21 @@ test('provider settings remain focused, accessible and usable in both themes', a
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/settings?tab=ai');
   const tab = page.locator('app-ai-tools-tab');
-  await expect(tab.getByRole('heading', { name: 'IA & fournisseurs' })).toBeVisible();
-  await expect(tab.getByLabel('Adresse du serveur')).toBeVisible();
+  await expect(tab.getByRole('heading', { name: 'Fournisseurs IA' })).toBeVisible();
+  await tab.getByRole('button', { name: 'Configurer Ollama', exact: true }).click();
+  let editor = page.getByRole('dialog', { name: 'Ollama', exact: true });
+  await expect(editor.getByLabel('Adresse du serveur')).toBeVisible();
   await expect(tab.getByLabel('Clé API', { exact: true })).toHaveCount(0);
-  await tab.getByRole('tab', { name: /OpenAI \/ API compatible/ }).click();
-  await expect(tab.getByLabel('Clé API', { exact: true })).toHaveAttribute('type', 'password');
-  await expect(tab.getByLabel('Adresse du serveur')).toHaveCount(0);
+  await editor.getByRole('button', { name: 'Fermer le panneau' }).click();
+  await tab
+    .getByRole('button', { name: 'Configurer OpenAI / API compatible', exact: true })
+    .click();
+  editor = page.getByRole('dialog', { name: 'OpenAI / API compatible', exact: true });
+  await expect(editor.getByLabel('Clé API', { exact: true })).toHaveAttribute('type', 'password');
+  await expect(editor.getByLabel('Adresse du serveur')).toHaveCount(0);
   await expect(tab.getByRole('combobox', { name: 'Moteur du cluster' })).toContainText('Ollama');
   await expect(tab.getByText('Simuler', { exact: false })).toHaveCount(0);
+  await editor.getByRole('button', { name: 'Fermer le panneau' }).click();
   for (const theme of ['light', 'dark']) {
     await page.evaluate(
       (value) => document.documentElement.setAttribute('data-theme', value),
@@ -111,10 +124,10 @@ test('Codex only shows the supplied code and closing cancels the attempt', async
   await page.goto('/settings?tab=ai');
   await page
     .locator('app-ai-tools-tab')
-    .getByRole('tab', { name: /Codex CLI/ })
+    .getByRole('button', { name: 'Configurer Codex CLI', exact: true })
     .click();
   await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('dialog', { name: /Associer/ });
   await expect(dialog.getByText('ABCD-12345')).toBeVisible();
   await expect(dialog.getByRole('link')).toHaveAttribute(
     'href',
@@ -149,6 +162,7 @@ test('settings navigation and system health use shared components in both themes
   await page.goto('/settings?tab=system');
   const settings = page.locator('app-settings-page');
   await expect(settings.locator('app-resource-sheet')).toHaveCount(2);
+  await settings.getByRole('button', { name: 'Identité du cluster' }).click();
   await expect(settings.getByText('Cluster de test')).toBeVisible();
   for (const theme of ['light', 'dark']) {
     await page.evaluate(
@@ -165,9 +179,9 @@ test('settings navigation and system health use shared components in both themes
     ).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`settings-${theme}.png`), fullPage: true });
   }
-  await settings.getByRole('tab', { name: 'Santé & Apparence' }).focus();
+  await settings.getByRole('tab', { name: 'Interface', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
-  await expect(settings.getByRole('tab', { name: 'Journaux système' })).toHaveAttribute(
+  await expect(settings.getByRole('tab', { name: 'Accès', exact: true })).toHaveAttribute(
     'aria-selected',
     'true',
   );
@@ -213,9 +227,49 @@ test('Codex displays the server diagnostic instead of a generic network error', 
   await page.goto('/settings?tab=ai');
   await page
     .locator('app-ai-tools-tab')
-    .getByRole('tab', { name: /Codex CLI/ })
+    .getByRole('button', { name: 'Configurer Codex CLI', exact: true })
     .click();
   await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
   await expect(page.getByText(title, { exact: true })).toBeVisible();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: /Associer/ })).toHaveCount(0);
+});
+
+test('Claude browser authentication accepts the return code from the redesigned drawer', async ({
+  page,
+}) => {
+  let submitted: unknown;
+  await page.route('**/api/v1/tools/ai/claude-cli/auth/device-code/start', (route) =>
+    route.fulfill({
+      json: {
+        toolId: 'claude-cli',
+        prompt: {
+          userCode: null,
+          verificationUri: 'https://claude.ai/oauth/authorize',
+          requiresInput: true,
+          expiresInSeconds: 60,
+          intervalSeconds: 5,
+        },
+      },
+    }),
+  );
+  await page.route('**/api/v1/tools/ai/claude-cli/auth/device-code/status', (route) =>
+    route.fulfill({ json: { toolId: 'claude-cli', state: 'pending' } }),
+  );
+  await page.route('**/api/v1/tools/ai/claude-cli/auth/input', async (route) => {
+    submitted = route.request().postDataJSON();
+    await route.fulfill({ json: { accepted: true } });
+  });
+  await page.goto('/settings?tab=ai');
+  await page.getByRole('button', { name: 'Configurer Claude Code', exact: true }).click();
+  await expect(page.getByLabel('Jeton Claude Code')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: /Associer/ });
+  await expect(dialog.getByRole('link')).toHaveAttribute(
+    'href',
+    'https://claude.ai/oauth/authorize',
+  );
+  await dialog.getByLabel('Code de retour Claude').fill('return-code');
+  await dialog.getByRole('button', { name: 'Transmettre le code à Claude Code' }).click();
+  await expect.poll(() => submitted).toEqual({ input: 'return-code' });
+  await expect(dialog.getByText('Code transmis. Claude Code vérifie la connexion…')).toBeVisible();
 });

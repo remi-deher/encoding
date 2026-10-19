@@ -8,188 +8,150 @@ import { NotificationService } from '../../services/notification.service';
 import { SystemLogEntry } from '../../models/system-logs';
 
 describe('SystemLogViewerComponent', () => {
-  let mockLogsService: {
+  let stream: Subject<SystemLogEntry>;
+  let service: {
     getLogs: ReturnType<typeof vi.fn>;
     getCategories: ReturnType<typeof vi.fn>;
     createLogStream: ReturnType<typeof vi.fn>;
   };
-  let mockClipboard: { copy: ReturnType<typeof vi.fn> };
-  let mockFileDownload: { save: ReturnType<typeof vi.fn> };
-  let mockNotifications: { show: ReturnType<typeof vi.fn> };
-  let streamSubject: Subject<SystemLogEntry>;
-
-  const sampleLog: SystemLogEntry = {
-    id: 'log-1',
-    timestamp: '2026-10-18T20:15:30.123Z',
+  let clipboard: { copy: ReturnType<typeof vi.fn> };
+  let downloads: { save: ReturnType<typeof vi.fn> };
+  const info: SystemLogEntry = {
+    id: 'one',
+    timestamp: '2026-10-19T08:00:00Z',
     level: 'Information',
     category: 'Encoding.Api',
     message: 'Server started successfully',
   };
-
-  const sampleErrorLog: SystemLogEntry = {
-    id: 'log-2',
-    timestamp: '2026-10-18T20:15:32.456Z',
+  const error: SystemLogEntry = {
+    id: 'two',
+    timestamp: '2026-10-19T08:00:01Z',
     level: 'Error',
-    category: 'Encoding.Core',
+    category: 'Encoding.Worker',
     message: 'Worker execution failed',
-    exception: 'System.InvalidOperationException: Invalid state\n  at Encoding.Core...',
+    exception: 'InvalidOperationException\n  at Worker()',
   };
-
   beforeEach(async () => {
-    streamSubject = new Subject<SystemLogEntry>();
-
-    mockLogsService = {
-      getLogs: vi.fn().mockReturnValue(
-        of({
-          entries: [sampleLog],
-          totalBuffered: 1,
-        }),
-      ),
-      getCategories: vi.fn().mockReturnValue(of(['Encoding.Api', 'Encoding.Core'])),
-      createLogStream: vi.fn().mockReturnValue(streamSubject.asObservable()),
+    stream = new Subject();
+    service = {
+      getLogs: vi.fn().mockReturnValue(of({ entries: [info], totalBuffered: 1 })),
+      getCategories: vi.fn().mockReturnValue(of(['Encoding.Api', 'Encoding.Worker'])),
+      createLogStream: vi.fn().mockReturnValue(stream),
     };
-
-    mockClipboard = {
-      copy: vi.fn().mockResolvedValue(true),
-    };
-
-    mockFileDownload = {
-      save: vi.fn(),
-    };
-
-    mockNotifications = {
-      show: vi.fn(),
-    };
-
+    clipboard = { copy: vi.fn().mockResolvedValue(true) };
+    downloads = { save: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [SystemLogViewerComponent],
       providers: [
-        { provide: SystemLogsService, useValue: mockLogsService },
-        { provide: ClipboardService, useValue: mockClipboard },
-        { provide: FileDownload, useValue: mockFileDownload },
-        { provide: NotificationService, useValue: mockNotifications },
+        { provide: SystemLogsService, useValue: service },
+        { provide: ClipboardService, useValue: clipboard },
+        { provide: FileDownload, useValue: downloads },
+        { provide: NotificationService, useValue: { show: vi.fn() } },
       ],
     }).compileComponents();
   });
-
-  it('orders descending API history chronologically and ignores SSE replays', () => {
-    mockLogsService.getLogs.mockReturnValue(
-      of({ entries: [sampleErrorLog, sampleLog], totalBuffered: 2 }),
-    );
+  function setup() {
     const fixture = TestBed.createComponent(SystemLogViewerComponent);
     fixture.detectChanges();
-    expect(fixture.componentInstance['displayedEntries']().map((entry) => entry.id)).toEqual([
-      'log-1',
-      'log-2',
-    ]);
-    streamSubject.next(sampleLog);
-    expect(fixture.componentInstance['displayedEntries']()).toHaveLength(2);
-    fixture.destroy();
+    return fixture;
+  }
+  it('defaults to a summary of original messages and groups exact repetitions', () => {
+    service.getLogs.mockReturnValue(
+      of({
+        entries: [info, error, { ...error, id: 'three', timestamp: '2026-10-19T08:00:02Z' }],
+        totalBuffered: 3,
+      }),
+    );
+    const fixture = setup();
+    const component = fixture.componentInstance;
+    expect(component['view']()).toBe('summary');
+    expect(component['groups']()).toHaveLength(2);
+    expect(component['groups']()[0].entries).toHaveLength(2);
+    expect(component['groups']()[0].entry.message).toBe(error.message);
+    expect(fixture.nativeElement.querySelector('.terminal-console')).toBeNull();
   });
-
-  it('retains live entries received while the history request is pending', () => {
+  it('opens matching console lines without removing their context or exceptions', () => {
+    service.getLogs.mockReturnValue(of({ entries: [error, info], totalBuffered: 2 }));
+    const fixture = setup();
+    const component = fixture.componentInstance;
+    component.showGroup(component['groups']()[0]);
+    fixture.detectChanges();
+    const pre = fixture.nativeElement.querySelector('pre') as HTMLPreElement;
+    expect(pre.textContent).toContain(error.exception);
+    expect(pre.textContent).toContain(info.message);
+    expect(pre.querySelectorAll('.is-focused')).toHaveLength(1);
+  });
+  it('preserves filters across views and copies and exports only matching events', async () => {
+    const fixture = setup();
+    const component = fixture.componentInstance;
+    stream.next(error);
+    component['searchText'].set('InvalidOperationException');
+    fixture.detectChanges();
+    component.changeView('console');
+    fixture.detectChanges();
+    expect(component['filteredEntries']().map((e) => e.id)).toEqual(['two']);
+    await component.copyLogs();
+    expect(clipboard.copy).toHaveBeenCalledWith(expect.stringContaining(error.exception!));
+    expect(clipboard.copy.mock.calls[0][0]).not.toContain(info.message);
+    component.exportJson();
+    component.exportTxt();
+    component.exportCsv();
+    expect(downloads.save.mock.calls.map((call) => call[1])).toEqual([
+      expect.stringMatching(/\.json$/),
+      expect.stringMatching(/\.txt$/),
+      expect.stringMatching(/\.csv$/),
+    ]);
+  });
+  it('merges late history, ignores SSE replay and bounds the stream', () => {
     const history = new Subject<{ entries: readonly SystemLogEntry[]; totalBuffered: number }>();
-    mockLogsService.getLogs.mockReturnValue(history);
-    const fixture = TestBed.createComponent(SystemLogViewerComponent);
-    fixture.detectChanges();
-    streamSubject.next(sampleErrorLog);
-    history.next({ entries: [sampleLog], totalBuffered: 1 });
-    expect(fixture.componentInstance['displayedEntries']().map((entry) => entry.id)).toEqual([
-      'log-1',
-      'log-2',
+    service.getLogs.mockReturnValue(history);
+    const fixture = setup();
+    stream.next(error);
+    history.next({ entries: [info], totalBuffered: 1 });
+    stream.next(error);
+    expect(fixture.componentInstance['displayedEntries']().map((e) => e.id)).toEqual([
+      'one',
+      'two',
     ]);
+    fixture.componentRef.setInput('maxBufferSize', 1);
+    fixture.detectChanges();
+    stream.next(error);
+    stream.next({ ...info, id: 'latest', timestamp: '2026-10-19T09:00:00Z' });
+    expect(fixture.componentInstance['displayedEntries']().map((e) => e.id)).toEqual(['latest']);
     fixture.destroy();
   });
-
-  it('renders toolbar, initial logs, and categories', () => {
-    const fixture = TestBed.createComponent(SystemLogViewerComponent);
-    fixture.detectChanges();
-
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('Tous');
-    expect(compiled.textContent).toContain('Info+');
-    expect(compiled.textContent).toContain('Server started successfully');
-    expect(compiled.textContent).toContain('Encoding.Api');
+  it('buffers, deduplicates and orders pending events on resume', () => {
+    const fixture = setup();
+    const component = fixture.componentInstance;
+    component.togglePause();
+    stream.next({ ...error, id: 'three', timestamp: '2026-10-19T08:00:02Z' });
+    stream.next(error);
+    stream.next(error);
+    expect(component['pendingCount']()).toBe(2);
+    expect(component['displayedEntries']()).toHaveLength(1);
+    component.togglePause();
+    expect(component['displayedEntries']().map((e) => e.id)).toEqual(['one', 'two', 'three']);
+    expect(component['pendingCount']()).toBe(0);
   });
-
-  it('appends streaming logs when stream emits and not paused', () => {
-    const fixture = TestBed.createComponent(SystemLogViewerComponent);
+  it('reloads history and SSE for a different node and tears down old subscriptions', () => {
+    const fixture = setup();
+    service.getLogs.mockReturnValue(of({ entries: [], totalBuffered: 0 }));
+    fixture.componentRef.setInput('nodeId', 'other');
     fixture.detectChanges();
-
-    streamSubject.next(sampleErrorLog);
-    fixture.detectChanges();
-
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('Worker execution failed');
-    expect(compiled.textContent).toContain('ERR');
-  });
-
-  it('buffers logs when paused and flushes on resume', () => {
-    const fixture = TestBed.createComponent(SystemLogViewerComponent);
-    fixture.detectChanges();
-
-    const comp = fixture.componentInstance;
-    comp.togglePause();
-    fixture.detectChanges();
-
-    expect(comp['isPaused']()).toBe(true);
-
-    streamSubject.next(sampleErrorLog);
-    fixture.detectChanges();
-
-    expect(comp['pendingCount']()).toBe(1);
-    // Not yet displayed in console
-    expect(comp['displayedEntries']().length).toBe(1);
-
-    comp.togglePause();
-    fixture.detectChanges();
-
-    expect(comp['isPaused']()).toBe(false);
-    expect(comp['pendingCount']()).toBe(0);
-    expect(comp['displayedEntries']().length).toBe(2);
-  });
-
-  it('clears logs when clearLogs is called', () => {
-    const fixture = TestBed.createComponent(SystemLogViewerComponent);
-    fixture.detectChanges();
-
-    const comp = fixture.componentInstance;
-    expect(comp['displayedEntries']().length).toBe(1);
-
-    comp.clearLogs();
-    fixture.detectChanges();
-
-    expect(comp['displayedEntries']().length).toBe(0);
-  });
-
-  it('copies logs to clipboard', async () => {
-    const fixture = TestBed.createComponent(SystemLogViewerComponent);
-    fixture.detectChanges();
-
-    const comp = fixture.componentInstance;
-    await comp.copyLogs();
-
-    expect(mockClipboard.copy).toHaveBeenCalled();
-    expect(mockNotifications.show).toHaveBeenCalledWith(
-      expect.stringContaining('copié(s) dans le presse-papier'),
+    expect(service.getLogs).toHaveBeenLastCalledWith(expect.objectContaining({ nodeId: 'other' }));
+    expect(service.createLogStream).toHaveBeenLastCalledWith(
+      expect.objectContaining({ nodeId: 'other' }),
+      expect.any(Function),
     );
+    expect(fixture.componentInstance['displayedEntries']()).toHaveLength(0);
+    fixture.destroy();
+    expect(stream.observed).toBe(false);
   });
-
-  it('exports logs to txt and json files', () => {
-    const fixture = TestBed.createComponent(SystemLogViewerComponent);
+  it('clears the local display and never deletes server logs', () => {
+    const fixture = setup();
+    fixture.componentInstance.clearLogs();
     fixture.detectChanges();
-
-    const comp = fixture.componentInstance;
-    comp.exportTxt();
-    expect(mockFileDownload.save).toHaveBeenCalledWith(
-      expect.any(Blob),
-      expect.stringMatching(/^system-logs-.*\.txt$/),
-    );
-
-    comp.exportJson();
-    expect(mockFileDownload.save).toHaveBeenCalledWith(
-      expect.any(Blob),
-      expect.stringMatching(/^system-logs-.*\.json$/),
-    );
+    expect(fixture.componentInstance['filteredEntries']()).toHaveLength(0);
+    expect(fixture.nativeElement.textContent).toContain('Aucun événement');
   });
 });

@@ -88,6 +88,13 @@ describe('SystemLogsService', () => {
     req.flush({ categories: ['Encoding.Api', 'Encoding.Core'] });
   });
 
+  it('reports malformed category responses as errors, never undefined arrays', () => {
+    let error: unknown;
+    service.getCategories().subscribe({ error: (value) => (error = value) });
+    httpMock.expectOne('/api/v1/system/logs/categories').flush({ categories: null });
+    expect(error).toBeInstanceOf(Error);
+  });
+
   it('queries categories with nodeId if specified', () => {
     service.getCategories('node-123').subscribe((categories) => {
       expect(categories).toEqual(['WorkerNode']);

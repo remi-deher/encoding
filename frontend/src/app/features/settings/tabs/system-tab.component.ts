@@ -6,7 +6,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
-import { ThemeService } from '../../../core/theme/theme.service';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 import { NotificationService } from '../../../shared/services/notification.service';
 
 interface HealthCheckEntry {
@@ -33,102 +34,72 @@ interface ClusterIdentityResponse {
 @Component({
   selector: 'app-system-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, ResourceSheetComponent],
+  imports: [
+    MatButtonModule,
+    ResourceSheetComponent,
+    MatExpansionModule,
+    ConfigurationSectionComponent,
+  ],
   template: `
-    <header class="tab-header">
-      <div>
-        <h2>Système & Santé</h2>
-        <p>Affichage, identité du cluster et état des services sur ce nœud.</p>
-      </div>
-      <button matButton="tonal" type="button" [disabled]="refreshing()" (click)="refreshAll()">
+    <app-configuration-section
+      title="Santé du système"
+      description="État des services sur le nœud consulté."
+    >
+      <button section-actions matButton="tonal" [disabled]="refreshing()" (click)="refreshAll()">
         {{ refreshing() ? 'Actualisation…' : 'Actualiser la santé' }}
       </button>
-    </header>
-    <section class="appearance" aria-labelledby="theme-title">
-      <div>
-        <h3 id="theme-title">Thème visuel</h3>
-        <p>Choisissez l’apparence de cette interface.</p>
-      </div>
-      <div class="theme-options" role="group" aria-label="Thème visuel">
-        <button
-          matButton="outlined"
-          type="button"
-          [attr.aria-pressed]="!theme.isDark()"
-          (click)="theme.set('light')"
-        >
-          Thème clair
-        </button>
-        <button
-          matButton="outlined"
-          type="button"
-          [attr.aria-pressed]="theme.isDark()"
-          (click)="theme.set('dark')"
-        >
-          Thème sombre
-        </button>
-      </div>
-    </section>
-    <app-resource-sheet
-      ariaLabel="Identité du cluster"
-      title="Identité du cluster"
-      [sections]="clusterSections()"
-    />
-    <app-resource-sheet
-      ariaLabel="Diagnostics système"
-      title="Composants d’exploitation"
-      subtitle="Dernier contrôle des services de ce nœud."
-      [sections]="healthSections()"
-    />
+      @if (health(); as value) {
+        <p class="health-overview" [class.degraded]="value.status !== 'healthy'" role="status">
+          {{ healthLabel(value.status) }}
+          @if (lastChecked()) {
+            · Dernier contrôle : {{ lastChecked() }}
+          }
+        </p>
+      } @else {
+        <p role="status">
+          {{ refreshing() ? 'Chargement des diagnostics…' : 'Diagnostics indisponibles.' }}
+        </p>
+      }
+      <app-resource-sheet
+        ariaLabel="Diagnostics système"
+        title="Services"
+        [sections]="healthSections()"
+      />
+      <mat-expansion-panel
+        ><mat-expansion-panel-header
+          ><mat-panel-title>Identité du cluster</mat-panel-title></mat-expansion-panel-header
+        ><app-resource-sheet
+          ariaLabel="Identité du cluster"
+          title="Installation"
+          [sections]="clusterSections()"
+      /></mat-expansion-panel>
+    </app-configuration-section>
   `,
   styles: `
     :host {
-      display: grid;
-      gap: var(--space-5);
-      min-width: 0;
+      display: block;
     }
-    h2,
-    h3,
-    p {
-      margin: 0;
+    .health-overview {
+      padding: var(--space-3) var(--space-4);
+      background: var(--success-soft);
+      color: var(--success);
+      border-radius: var(--radius-md);
+      margin: 0 0 var(--space-4);
     }
-    h2 {
-      font-size: var(--font-title-lg);
+    .health-overview.degraded {
+      background: var(--warning-soft);
+      color: var(--warning);
     }
-    h3 {
-      font-size: var(--font-title);
-    }
-    p {
-      color: var(--text-secondary);
-      line-height: 1.5;
-      margin-top: var(--space-2);
-    }
-    .tab-header,
-    .appearance {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: var(--space-4);
-    }
-    .appearance {
-      padding: var(--space-5);
+    mat-expansion-panel {
+      margin-top: var(--space-4);
       background: var(--surface-container-low);
-      border-radius: var(--radius-xl);
-    }
-    .theme-options {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-2);
-    }
-    .theme-options button[aria-pressed='true'] {
-      background: var(--accent-soft);
-      color: var(--accent-strong);
+      box-shadow: none;
     }
   `,
 })
 export class SystemTabComponent {
   private readonly http = inject(HttpClient);
-  protected readonly theme = inject(ThemeService);
+  protected readonly lastChecked = signal('');
   private readonly notifications = inject(NotificationService);
 
   protected readonly refreshing = signal(false);
@@ -162,8 +133,7 @@ export class SystemTabComponent {
       caption: check.description || undefined,
       items: [
         {
-          label: this.healthLabel(check.status),
-          detail: `${check.durationMs} ms`,
+          label: `${check.durationMs} ms`,
           badges: [
             {
               label: this.healthLabel(check.status),
@@ -193,18 +163,19 @@ export class SystemTabComponent {
 
   async refreshAll(): Promise<void> {
     this.refreshing.set(true);
-    try {
-      const [cl, hl] = await Promise.all([
-        firstValueFrom(this.http.get<ClusterIdentityResponse>('/api/v1/cluster')),
-        firstValueFrom(this.http.get<HealthDetailsResponse>('/health/details')),
-      ]);
-      this.cluster.set(cl);
-      this.health.set(hl);
-    } catch {
+    const outcomes = await Promise.allSettled([
+      firstValueFrom(this.http.get<ClusterIdentityResponse>('/api/v1/cluster')),
+      firstValueFrom(this.http.get<HealthDetailsResponse>('/health/details')),
+    ]);
+    const [identity, diagnostics] = outcomes;
+    this.cluster.set(identity.status === 'fulfilled' ? identity.value : null);
+    this.health.set(diagnostics.status === 'fulfilled' ? diagnostics.value : null);
+    this.lastChecked.set(
+      diagnostics.status === 'fulfilled' ? new Date().toLocaleTimeString('fr-FR') : '',
+    );
+    if (outcomes.some((result) => result.status === 'rejected'))
       this.notifications.show('Impossible d’actualiser certains diagnostics système.');
-    } finally {
-      this.refreshing.set(false);
-    }
+    this.refreshing.set(false);
   }
 
   protected formatCheckName(name: string): string {
