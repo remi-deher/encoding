@@ -232,6 +232,10 @@ export class AiToolsTabComponent implements OnInit {
   saveSettings(): void {
     if (!this.isAdmin() || this.savingSettings()) return;
     if (
+      !Number.isInteger(this.timeoutSeconds()) ||
+      !Number.isInteger(this.subtitleBatchSize()) ||
+      !Number.isInteger(this.assistantConversationRetentionDays()) ||
+      !Number.isInteger(this.assistantActivityRetentionDays()) ||
       this.timeoutSeconds() < 10 ||
       this.timeoutSeconds() > 600 ||
       this.subtitleBatchSize() < 5 ||
@@ -252,6 +256,13 @@ export class AiToolsTabComponent implements OnInit {
       this.notifications.show(
         'Le mode local uniquement exige Ollama comme moteur effectif pour cet usage.',
       );
+      return;
+    }
+    if (
+      (this.defaultProvider() === 'ollama' && !this.ollamaEnabled()) ||
+      (this.defaultProvider() === 'openai' && !this.openAiEnabled())
+    ) {
+      this.notifications.show('Le moteur par défaut doit être activé avant l’enregistrement.');
       return;
     }
     this.savingSettings.set(true);
@@ -285,9 +296,14 @@ export class AiToolsTabComponent implements OnInit {
         this.editor.reset();
         this.refreshTools();
       },
-      error: () => {
+      error: (error: HttpErrorResponse) => {
         this.savingSettings.set(false);
-        this.notifications.show('Impossible d’enregistrer les paramètres IA.');
+        const title: unknown = error.error?.title;
+        this.notifications.show(
+          typeof title === 'string' && title.trim()
+            ? title
+            : 'Impossible d’enregistrer les paramètres IA.',
+        );
       },
     });
   }

@@ -18,7 +18,7 @@
       <button matButton="text" (click)="loadSettings()">Réessayer</button>
     }
   } @else {
-    <form #settingsForm="ngForm" (ngSubmit)="saveSettings()">
+    <form id="ai-settings-form" #settingsForm="ngForm" (ngSubmit)="saveSettings()">
       <div class="default-provider">
         <span class="step-number" aria-hidden="true">01</span>
         <div>
@@ -242,21 +242,6 @@
           événements chiffrés restent dans le journal append-only.
         </p>
       </mat-expansion-panel>
-      @if (isAdmin() && hasUnsavedChanges() && !editor.state()) {
-        <footer class="save-bar">
-          <span>Modifications non enregistrées</span>
-          <div>
-            <button matButton="text" type="button" (click)="discardChanges()">Annuler</button
-            ><button
-              matButton="filled"
-              type="submit"
-              [disabled]="savingSettings() || settingsForm.invalid"
-            >
-              {{ savingSettings() ? 'Enregistrement…' : 'Enregistrer les paramètres' }}
-            </button>
-          </div>
-        </footer>
-      }
     </form>
     <mat-expansion-panel class="advanced"
       ><mat-expansion-panel-header
@@ -438,4 +423,20 @@
 
 @if (isAdmin()) {
   <app-ai-model-catalog />
+}
+@if (isAdmin() && hasUnsavedChanges() && !editor.state()) {
+  <footer class="save-bar">
+    <span>Modifications non enregistrées</span>
+    <div>
+      <button matButton="text" type="button" (click)="discardChanges()">Annuler</button>
+      <button
+        matButton="filled"
+        type="submit"
+        form="ai-settings-form"
+        [disabled]="savingSettings()"
+      >
+        {{ savingSettings() ? 'Enregistrement…' : 'Enregistrer les paramètres' }}
+      </button>
+    </div>
+  </footer>
 }

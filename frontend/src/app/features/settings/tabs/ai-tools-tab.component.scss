@@ -107,13 +107,15 @@ footer {
 }
 .save-bar {
   position: sticky;
-  bottom: var(--space-4);
+  bottom: 0;
+  z-index: 10;
   justify-content: space-between;
   align-items: center;
   padding: var(--space-4);
   background: var(--surface-container-high);
   border-radius: var(--radius-md);
   margin-top: var(--space-4);
+  box-shadow: var(--elevation-2);
 }
 .save-bar > div {
   display: flex;
