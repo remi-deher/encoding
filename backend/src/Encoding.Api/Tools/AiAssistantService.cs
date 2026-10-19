@@ -508,6 +508,17 @@ public sealed class AiAssistantService(
                 ReasoningEffort = request.ReasoningEffort ?? savedConversation.ReasoningEffort,
                 NodeId = request.NodeId ?? savedConversation.NodeId,
             };
+            if (savedConversation.Provider != conversation.Provider
+                && !string.IsNullOrWhiteSpace(conversation.Model)
+                && conversation.Model != savedConversation.Model)
+            {
+                var availableSelection = (await OptionsAsync(ct)).Models.Any(option =>
+                    option.Provider == conversation.Provider && option.Model == conversation.Model
+                    && option.NodeId == conversation.NodeId
+                    && (request.ReasoningEffort is null || option.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal)));
+                if (!availableSelection)
+                    throw new ArgumentException("Le fournisseur, le modèle, le nœud ou l’effort choisi n’est pas disponible.");
+            }
         }
 
         var session = await cluster.GetSessionAsync(conversation.Id, ct);
