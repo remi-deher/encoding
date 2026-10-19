@@ -190,7 +190,7 @@ import { AuthService } from '../../../core/auth/auth.service';
                   }
                   @if (!tool.isInstalled) {
                     <p>Installez l’outil officiel sur ce nœud pour y ajouter une connexion.</p>
-                  } @else if (tool.id === 'codex-cli') {
+                  } @else {
                     @if (isAdmin()) {
                       <button
                         matButton="tonal"
@@ -198,40 +198,18 @@ import { AuthService } from '../../../core/auth/auth.service';
                         [disabled]="connecting()"
                         (click)="startAuth(tool)"
                       >
-                        {{ connecting() ? 'Préparation de la connexion…' : 'Associer mon compte' }}
+                        {{ connecting() ? 'Préparation de la connexion…' : 'Se connecter' }}
                       </button>
                     }
                     <p class="help">
-                      Le lien et le code sont fournis par Codex. Aucun identifiant n’est partagé
-                      entre les nœuds.
+                      @if (tool.id === 'codex-cli') {
+                        Le lien et le code sont fournis par Codex. Aucun identifiant n’est partagé
+                        entre les nœuds.
+                      } @else {
+                        La commande Claude Code ouvre une connexion navigateur. Le lien est affiché
+                        ici; si la CLI demande un code, vous pourrez le coller pour ce nœud.
+                      }
                     </p>
-                  } @else {
-                    <p>
-                      Sur votre poste, générez un jeton avec <code>claude setup-token</code>, puis
-                      enregistrez-le ici pour ce nœud.
-                    </p>
-                    @if (isAdmin()) {
-                      <mat-form-field appearance="outline"
-                        ><mat-label>Jeton Claude Code</mat-label
-                        ><input
-                          matInput
-                          type="password"
-                          autocomplete="new-password"
-                          name="claudeToken"
-                          [(ngModel)]="claudeToken"
-                          [ngModelOptions]="{ standalone: true }"
-                      /></mat-form-field>
-                      <div>
-                        <button
-                          matButton="tonal"
-                          type="button"
-                          [disabled]="connecting() || !claudeToken().trim()"
-                          (click)="saveClaudeToken()"
-                        >
-                          Enregistrer la connexion
-                        </button>
-                      </div>
-                    }
                   }
                 } @else {
                   <p>État local indisponible. Actualisez les connexions.</p>
@@ -348,7 +326,6 @@ export class AiToolsTabComponent implements OnInit {
   readonly hasOpenAiApiKey = signal(false);
   readonly timeoutSeconds = signal(120);
   readonly subtitleBatchSize = signal(80);
-  readonly claudeToken = signal('');
 
   private savedFingerprint = '';
   private fingerprint(): string {
@@ -366,7 +343,7 @@ export class AiToolsTabComponent implements OnInit {
   hasUnsavedChanges(): boolean {
     return (
       !this.loadingSettings() &&
-      (this.fingerprint() !== this.savedFingerprint || this.claudeToken().length > 0)
+      this.fingerprint() !== this.savedFingerprint
     );
   }
   beforeUnload(event: BeforeUnloadEvent): void {
@@ -457,24 +434,6 @@ export class AiToolsTabComponent implements OnInit {
         ref.afterClosed().subscribe(() => this.refreshTools());
       },
       error: (error: HttpErrorResponse) => {
-        this.connecting.set(false);
-        this.notifications.show(this.authError(error));
-        this.refreshTools();
-      },
-    });
-  }
-  saveClaudeToken(): void {
-    if (!this.isAdmin()) return;
-    this.connecting.set(true);
-    this.aiService.saveClaudeToken(this.claudeToken().trim()).subscribe({
-      next: () => {
-        this.claudeToken.set('');
-        this.connecting.set(false);
-        this.notifications.show('Connexion Claude enregistrée sur ce nœud.');
-        this.refreshTools();
-      },
-      error: (error: HttpErrorResponse) => {
-        this.claudeToken.set('');
         this.connecting.set(false);
         this.notifications.show(this.authError(error));
         this.refreshTools();

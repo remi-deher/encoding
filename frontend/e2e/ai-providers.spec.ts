@@ -113,7 +113,7 @@ test('Codex only shows the supplied code and closing cancels the attempt', async
     .locator('app-ai-tools-tab')
     .getByRole('tab', { name: /Codex CLI/ })
     .click();
-  await page.getByRole('button', { name: 'Associer mon compte', exact: true }).click();
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('ABCD-12345')).toBeVisible();
   await expect(dialog.getByRole('link')).toHaveAttribute(
@@ -215,7 +215,7 @@ test('Codex displays the server diagnostic instead of a generic network error', 
     .locator('app-ai-tools-tab')
     .getByRole('tab', { name: /Codex CLI/ })
     .click();
-  await page.getByRole('button', { name: 'Associer mon compte', exact: true }).click();
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
   await expect(page.getByText(title, { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });

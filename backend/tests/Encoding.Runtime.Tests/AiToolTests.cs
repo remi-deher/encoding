@@ -40,7 +40,8 @@ public sealed class AiToolTests
         File.WriteAllText(Path.Combine(fixture.Runtime.Profile("codex-cli"), "credentials.json"), "{}");
         Assert.Equal("unconfigured", (await service.GetStatusAsync("codex-cli")).State);
         await Assert.ThrowsAsync<ArgumentException>(() => service.GetStatusAsync("../other"));
-        await Assert.ThrowsAsync<ArgumentException>(() => service.StartDeviceAuthAsync("claude-cli", CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartDeviceAuthAsync("claude-cli", CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.StartDeviceAuthAsync("unknown", CancellationToken.None));
     }
 
     [Fact]

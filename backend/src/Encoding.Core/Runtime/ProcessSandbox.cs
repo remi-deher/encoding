@@ -44,7 +44,7 @@ public static class ProcessSandbox
                 if (Syscall(445, rulesFd, 1, buffer, 0) != 0) throw new IOException("Sandbox rule rejected.");
             }
             Allow(Path.GetFullPath(args[1]), all);
-            foreach (var path in new[] { "/usr", "/bin", "/lib", "/lib64", "/proc", "/sys", "/etc/passwd", "/etc/ssl/certs", "/etc/resolv.conf", "/etc/hosts", "/etc/nsswitch.conf", "/etc/ld.so.cache", "/dev/urandom", "/dev/random" }) Allow(path, read);
+            foreach (var path in new[] { "/usr", "/bin", "/lib", "/lib64", "/proc", "/sys", "/etc/passwd", "/etc/ssl/certs", "/etc/ssl/openssl.cnf", "/usr/lib/ssl/openssl.cnf", "/etc/resolv.conf", "/etc/hosts", "/etc/nsswitch.conf", "/etc/ld.so.cache", "/dev/urandom", "/dev/random" }) Allow(path, read);
             Allow("/dev/null", (1UL << 1) | (1UL << 2));
             foreach (var path in Directory.EnumerateFiles(AppContext.BaseDirectory).Where(path => path.EndsWith(".dll") || path.EndsWith(".deps.json") || path.EndsWith(".runtimeconfig.json"))) Allow(path, read);
             Allow(args[2], read);
