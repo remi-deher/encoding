@@ -126,7 +126,7 @@ test('Codex only shows the supplied code and closing cancels the attempt', async
     .locator('app-ai-tools-tab')
     .getByRole('button', { name: 'Configurer Codex CLI', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Associer mon compte', exact: true }).click();
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: /Associer/ });
   await expect(dialog.getByText('ABCD-12345')).toBeVisible();
   await expect(dialog.getByRole('link')).toHaveAttribute(
@@ -229,7 +229,47 @@ test('Codex displays the server diagnostic instead of a generic network error', 
     .locator('app-ai-tools-tab')
     .getByRole('button', { name: 'Configurer Codex CLI', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Associer mon compte', exact: true }).click();
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
   await expect(page.getByText(title, { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog', { name: /Associer/ })).toHaveCount(0);
+});
+
+test('Claude browser authentication accepts the return code from the redesigned drawer', async ({
+  page,
+}) => {
+  let submitted: unknown;
+  await page.route('**/api/v1/tools/ai/claude-cli/auth/device-code/start', (route) =>
+    route.fulfill({
+      json: {
+        toolId: 'claude-cli',
+        prompt: {
+          userCode: null,
+          verificationUri: 'https://claude.ai/oauth/authorize',
+          requiresInput: true,
+          expiresInSeconds: 60,
+          intervalSeconds: 5,
+        },
+      },
+    }),
+  );
+  await page.route('**/api/v1/tools/ai/claude-cli/auth/device-code/status', (route) =>
+    route.fulfill({ json: { toolId: 'claude-cli', state: 'pending' } }),
+  );
+  await page.route('**/api/v1/tools/ai/claude-cli/auth/input', async (route) => {
+    submitted = route.request().postDataJSON();
+    await route.fulfill({ json: { accepted: true } });
+  });
+  await page.goto('/settings?tab=ai');
+  await page.getByRole('button', { name: 'Configurer Claude Code', exact: true }).click();
+  await expect(page.getByLabel('Jeton Claude Code')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: /Associer/ });
+  await expect(dialog.getByRole('link')).toHaveAttribute(
+    'href',
+    'https://claude.ai/oauth/authorize',
+  );
+  await dialog.getByLabel('Code de retour Claude').fill('return-code');
+  await dialog.getByRole('button', { name: 'Transmettre le code à Claude Code' }).click();
+  await expect.poll(() => submitted).toEqual({ input: 'return-code' });
+  await expect(dialog.getByText('Code transmis. Claude Code vérifie la connexion…')).toBeVisible();
 });

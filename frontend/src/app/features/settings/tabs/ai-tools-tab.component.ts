@@ -64,7 +64,6 @@ export class AiToolsTabComponent implements OnInit {
   }
   discardChanges(): void {
     if (this.savedSettings) this.applySettings(this.savedSettings);
-    this.claudeToken.set('');
   }
   providerStatus(id: string): string {
     if (id === 'ollama')
@@ -106,7 +105,6 @@ export class AiToolsTabComponent implements OnInit {
   readonly hasOpenAiApiKey = signal(false);
   readonly timeoutSeconds = signal(120);
   readonly subtitleBatchSize = signal(80);
-  readonly claudeToken = signal('');
 
   private savedFingerprint = '';
   private fingerprint(): string {
@@ -122,10 +120,7 @@ export class AiToolsTabComponent implements OnInit {
     ]);
   }
   hasUnsavedChanges(): boolean {
-    return (
-      !this.loadingSettings() &&
-      (this.fingerprint() !== this.savedFingerprint || this.claudeToken().length > 0)
-    );
+    return !this.loadingSettings() && this.fingerprint() !== this.savedFingerprint;
   }
   beforeUnload(event: BeforeUnloadEvent): void {
     if (this.hasUnsavedChanges()) event.preventDefault();
@@ -232,24 +227,6 @@ export class AiToolsTabComponent implements OnInit {
         ref.afterClosed().subscribe(() => this.refreshTools());
       },
       error: (error: HttpErrorResponse) => {
-        this.connecting.set(false);
-        this.notifications.show(this.authError(error));
-        this.refreshTools();
-      },
-    });
-  }
-  saveClaudeToken(): void {
-    if (!this.isAdmin()) return;
-    this.connecting.set(true);
-    this.aiService.saveClaudeToken(this.claudeToken().trim()).subscribe({
-      next: () => {
-        this.claudeToken.set('');
-        this.connecting.set(false);
-        this.notifications.show('Connexion Claude enregistrée sur ce nœud.');
-        this.refreshTools();
-      },
-      error: (error: HttpErrorResponse) => {
-        this.claudeToken.set('');
         this.connecting.set(false);
         this.notifications.show(this.authError(error));
         this.refreshTools();

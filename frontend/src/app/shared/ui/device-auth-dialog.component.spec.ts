@@ -10,20 +10,23 @@ describe('DeviceAuthDialogComponent', () => {
   const close = vi.fn();
   const status = vi.fn();
   const cancel = vi.fn();
+  const submit = vi.fn();
   beforeEach(() => {
     close.mockReset();
     status.mockReset();
     cancel.mockReset();
+    submit.mockReset();
     cancel.mockReturnValue(of({}));
+    submit.mockReturnValue(of({ accepted: true }));
   });
-  async function setup(state: string) {
+  async function setup(state: string, data?: unknown) {
     status.mockReturnValue(of({ state }));
     await TestBed.configureTestingModule({
       imports: [DeviceAuthDialogComponent],
       providers: [
         {
           provide: MAT_DIALOG_DATA,
-          useValue: {
+          useValue: data ?? {
             toolId: 'codex-cli',
             toolName: 'Codex',
             prompt: {
@@ -35,7 +38,10 @@ describe('DeviceAuthDialogComponent', () => {
           },
         },
         { provide: MatDialogRef, useValue: { close } },
-        { provide: AiToolsService, useValue: { getDeviceAuthStatus: status, cancelAuth: cancel } },
+        {
+          provide: AiToolsService,
+          useValue: { getDeviceAuthStatus: status, cancelAuth: cancel, submitAuthInput: submit },
+        },
         { provide: ClipboardService, useValue: { copy: vi.fn() } },
         { provide: NotificationService, useValue: { show: vi.fn() } },
       ],
@@ -63,6 +69,28 @@ describe('DeviceAuthDialogComponent', () => {
     const fixture = await setup('failed');
     expect(fixture.componentInstance.expired()).toBe(true);
     expect(close).not.toHaveBeenCalled();
+    fixture.destroy();
+  });
+
+  it('affiche le lien Claude et transmet le code demandé à la CLI', async () => {
+    const fixture = await setup('pending', {
+      toolId: 'claude-cli',
+      toolName: 'Claude Code',
+      prompt: {
+        userCode: null,
+        verificationUri: 'https://claude.com/oauth/authorize?flow=test',
+        expiresInSeconds: 900,
+        intervalSeconds: 5,
+        requiresInput: true,
+      },
+    });
+    expect(fixture.nativeElement.querySelector('a')?.getAttribute('href')).toBe(
+      'https://claude.com/oauth/authorize?flow=test',
+    );
+    fixture.componentInstance.authInput.set('return-code');
+    fixture.componentInstance.submitInput();
+    expect(submit).toHaveBeenCalledWith('claude-cli', 'return-code');
+    expect(fixture.componentInstance.inputSubmitted()).toBe(true);
     fixture.destroy();
   });
 });
