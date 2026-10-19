@@ -53,7 +53,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     {
         "availability" => await LocalAsync(ct),
         "quotas" => await LocalQuotasAsync(ct),
-        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct, localOnly: true),
+        "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct),
         "execute" => await ExecuteAsync(value.Deserialize<AiExecuteRequest>()!, ct),
         _ => throw new ArgumentException("Opération IA inconnue.")
     };
