@@ -34,9 +34,11 @@
     </p>
   }
   @if (health(); as health) {
-    <div class="health-banner-section">
-      <app-health-banner [title]="health.title" [tone]="health.tone" [issues]="health.issues" />
-    </div>
+    @if (health.issues.length > 0) {
+      <div class="health-banner-section">
+        <app-health-banner [title]="health.title" [tone]="health.tone" [issues]="health.issues" />
+      </div>
+    }
   }
 
   <section

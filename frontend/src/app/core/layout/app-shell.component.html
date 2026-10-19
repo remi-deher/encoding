@@ -119,7 +119,7 @@
             </nav>
           </div>
 
-          <div class="topbar-end">
+          <div class="topbar-search">
             <button
               type="button"
               class="topbar-search-pill"
@@ -133,7 +133,9 @@
               <span class="search-trigger-placeholder">Rechercher…</span>
               <kbd class="search-shortcut" aria-hidden="true">⌘K</kbd>
             </button>
+          </div>
 
+          <div class="topbar-end">
             <a
               class="topbar-cluster-pill"
               routerLink="/nodes"
@@ -150,17 +152,16 @@
               <span class="cluster-indicator-label">{{ clusterLabel() }}</span>
             </a>
 
-            @if (activeExecutionCount() > 0) {
-              <a
-                class="topbar-tasks-pill"
-                routerLink="/tasks"
-                [queryParams]="{ view: 'active' }"
-                [attr.aria-label]="activeExecutionCount() + ' traitement(s) en cours'"
-              >
-                <span class="tasks-pulse-dot" aria-hidden="true"></span>
-                <span>{{ activeExecutionCount() }} en cours</span>
-              </a>
-            }
+            <a
+              class="topbar-tasks-pill"
+              routerLink="/tasks"
+              [queryParams]="{ view: 'active' }"
+              [attr.aria-label]="activeJobsLabel()"
+              [matTooltip]="activeJobsLabel()"
+            >
+              <span class="tasks-pulse-dot" aria-hidden="true"></span>
+              <span>{{ activeJobsLabel() }}</span>
+            </a>
 
             <app-theme-toggle class="topbar-theme-toggle" />
             <app-user-menu [collapsed]="true" />

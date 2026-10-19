@@ -324,6 +324,13 @@ export class AppShellComponent {
   protected readonly activeExecutionCount = computed(
     () => this.executionState().data?.activeCount ?? 0,
   );
+  protected readonly activeJobsLabel = computed(() => {
+    const state = this.executionState();
+    if (state.status === 'loading') return 'Jobs : …';
+    if (state.status === 'error') return 'Jobs : indisponibles';
+    const count = state.data?.activeCount ?? 0;
+    return `${count} job${count === 1 ? '' : 's'} en cours`;
+  });
 
   protected openSearchPalette(): void {
     if (this.paletteDialogRef) {

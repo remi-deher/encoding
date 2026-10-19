@@ -377,9 +377,9 @@ button.assistant-launcher {
   max-width: 1680px;
   margin-inline: auto;
   padding: 10px clamp(16px, 2.5vw, 40px) 6px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 26%) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
   background: color-mix(in srgb, var(--page-background) 88%, transparent);
   backdrop-filter: blur(10px);
@@ -428,7 +428,18 @@ button.assistant-launcher {
   font-weight: 700;
 }
 
+.topbar-search {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+
+  .topbar-search-pill {
+    width: 100%;
+  }
+}
+
 .topbar-end {
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -657,5 +668,37 @@ button.assistant-launcher {
   .main-content {
     padding-inline: 12px;
     padding-block: 8px 24px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .shell-topbar {
+    grid-template-columns: minmax(0, 1fr) 42px auto;
+  }
+  .topbar-search .topbar-search-pill {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  .topbar-search .search-trigger-placeholder,
+  .topbar-search .search-shortcut {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .shell-topbar {
+    grid-template-columns: minmax(0, 1fr) 38px auto;
+    gap: 6px;
+    padding-inline: 12px;
+  }
+  .topbar-cluster-pill {
+    display: none;
+  }
+  .topbar-tasks-pill {
+    padding-inline: 8px;
+    white-space: nowrap;
+  }
+  .topbar-end {
+    gap: 4px;
   }
 }
