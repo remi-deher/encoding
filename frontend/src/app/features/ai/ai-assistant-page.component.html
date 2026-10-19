@@ -152,7 +152,7 @@
         </div>
       }
     </div>
-    <footer class="conversation-footer">
+    <footer class="conversation-footer" [class.model-settings-open]="modelSettingsOpen()">
       <div class="source-bar">
         <mat-chip-set aria-label="Ressources jointes">
           @if (detail(); as current) {
@@ -444,20 +444,20 @@
         [cancelling]="cancelling()"
         [resuming]="resumingRequest()"
         [canSend]="canSend()"
-        [attachmentOpen]="contextPickerOpen()"
+        [attachmentName]="attachmentName()"
+        (settingsOpenChange)="modelSettingsOpen.set($event)"
         (typeChange)="selectType($event)"
         (modelChange)="selectModel($event)"
         (effortChange)="selectEffort($event)"
         (send)="send()"
         (cancel)="cancelRequest()"
         (attach)="toggleContextPicker()"
+        (fileSelected)="selectAttachment($event)"
+        (fileRemoved)="removeAttachment()"
         (refresh)="loadAssistantOptions(true)"
         (tools)="toolsOpen.set(!toolsOpen())"
         (newConversation)="startNewConversation()"
       />
-      @if (!detail() && !selectedResource()) {
-        <p class="context-hint">Posez votre question : l’assistant cherchera le contexte utile dans Encoding.</p>
-      }
     </footer>
   </mat-drawer-content>
 </mat-drawer-container>

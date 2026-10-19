@@ -13,5 +13,5 @@ html = html.replace(
   () => `<script type="module">${js.replace(/<\/script/gi, '<\\/script')}</script>`,
 );
 html = html.replace('<base href="/">', '<base href="./">');
-await writeFile(resolve(root, 'maquette-widget-ia.html'), html);
-console.log(resolve(root, 'maquette-widget-ia.html'));
+await writeFile(resolve(root, 'maquette-widget-ia-v2.html'), html);
+console.log(resolve(root, 'maquette-widget-ia-v2.html'));

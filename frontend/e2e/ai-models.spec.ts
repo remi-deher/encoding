@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 const nodeId = '00000000-0000-0000-0000-000000000002';
 const conversationId = '00000000000000000000000000000002.00000000000000000000000000000003';
@@ -37,6 +37,10 @@ const models = [
     nodeName: 'Salon',
   },
 ];
+
+async function openModelSettings(container: Locator): Promise<void> {
+  await container.getByRole('button', { name: /^Modèle/ }).click();
+}
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
@@ -117,6 +121,8 @@ test('backend models and reasoning drive each turn while old turns retain observ
   });
   await page.goto(`/ai/assistant?conversation=${conversationId}`);
   const assistant = page.locator('app-ai-assistant-page').first();
+  await openModelSettings(assistant);
+  const modelButton = assistant.getByRole('button', { name: /^Modèle/ });
   const model = assistant.getByRole('combobox', { name: 'Modèle', exact: true });
   await expect(model).toContainText('Modèle fourni A');
   await assistant.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
@@ -140,11 +146,7 @@ test('backend models and reasoning drive each turn while old turns retain observ
     reasoningEffort: 'max',
     nodeId,
   });
-  await expect(model).toBeDisabled();
-  await expect(
-    assistant.getByRole('combobox', { name: 'Fournisseur IA', exact: true }),
-  ).toBeDisabled();
-  await expect(reasoning).toBeDisabled();
+  await expect(modelButton).toBeDisabled();
   release!();
   await expect(assistant.getByText('Nouvelle réponse', { exact: true })).toBeVisible();
   for (const details of await assistant.locator('details.response-details').all())
@@ -155,7 +157,7 @@ test('backend models and reasoning drive each turn while old turns retain observ
   await expect(
     assistant.getByText('Modèle utilisé : confirmed-model-b', { exact: true }),
   ).toBeVisible();
-  await expect(model).toBeEnabled();
+  await expect(modelButton).toBeEnabled();
   for (const details of await assistant.locator('details.response-details').all())
     await details.locator('summary').click();
   const result = await new AxeBuilder({ page })
@@ -168,7 +170,7 @@ test('backend models and reasoning drive each turn while old turns retain observ
       nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })),
     })),
   ).toEqual([]);
-  await model.scrollIntoViewIfNeeded();
+  await modelButton.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('assistant-models.png'), fullPage: true });
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
@@ -213,6 +215,7 @@ test('unavailable catalog blocks a new turn and refresh preserves the selected c
   );
   await assistant.getByRole('button', { name: 'Options de la conversation' }).click();
   await page.getByRole('menuitem', { name: 'Actualiser les modèles' }).click();
+  await openModelSettings(assistant);
   await expect(assistant.getByRole('combobox', { name: 'Modèle', exact: true })).toContainText(
     'Modèle fourni A',
   );
@@ -318,6 +321,7 @@ test('network retries keep the selected model and request id while validation er
   });
   await page.goto(`/ai/assistant?conversation=${conversationId}`);
   const assistant = page.locator('app-ai-assistant-page').first();
+  await openModelSettings(assistant);
   const model = assistant.getByRole('combobox', { name: 'Modèle', exact: true });
   await assistant.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
@@ -328,9 +332,9 @@ test('network retries keep the selected model and request id while validation er
   await expect(
     assistant.getByRole('button', { name: 'Reprendre la demande', exact: true }),
   ).toBeVisible();
-  await expect(model).toBeDisabled();
+  await expect(assistant.getByRole('button', { name: /^Modèle/ })).toBeDisabled();
   await assistant.getByRole('button', { name: 'Reprendre la demande', exact: true }).click();
-  await expect(model).toBeEnabled();
+  await expect(assistant.getByRole('button', { name: /^Modèle/ })).toBeEnabled();
   expect(requests).toHaveLength(2);
   expect(requests[1]).toEqual(requests[0]);
   expect(requests[1]).toMatchObject({
@@ -436,9 +440,11 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   expect(panelBounds.height).toBeLessThanOrEqual(520);
   expect(Math.abs(panelBounds.x + panelBounds.width - (after.x + after.width))).toBeLessThan(1);
   expect(Math.abs(panelBounds.y + panelBounds.height + 16 - after.y)).toBeLessThan(1);
+  await openModelSettings(widget);
   await widget.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
-  await widget.getByRole('button', { name: 'Joindre une ressource' }).click();
+  await widget.getByRole('button', { name: 'Options de la conversation' }).click();
+  await page.getByRole('menuitem', { name: 'Joindre une ressource Encoding' }).click();
   await widget.getByRole('combobox', { name: 'Type de ressource' }).click();
   await page.getByRole('option', { name: 'Nœud', exact: true }).click();
   await widget.getByRole('combobox', { name: 'Ressource', exact: true }).click();
