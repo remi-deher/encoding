@@ -39,7 +39,6 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
     {
         if (runtime.Find(id) is null) return new(id, "unconfigured", ErrorMessage: "Outil non installé.");
         if (!runtime.CanRun) return new(id, "failed", ErrorMessage: "Landlock est requis pour exécuter les outils IA sur ce nœud Linux.");
-        if (id == "claude-cli" && !runtime.HasClaudeToken) return new(id, "unconfigured");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         try
@@ -152,7 +151,7 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
                 ? $"La CLI a terminé avec le code {result.ExitCode}. Consultez les journaux système de ce nœud."
                 : promptRecognized
                     ? verified?.ErrorMessage ?? "La CLI n’a pas confirmé la connexion. Relancez l’association."
-                    : "La CLI a terminé sans fournir d’invitation de connexion reconnue. Consultez les journaux système de ce nœud.";
+                    : $"La CLI a terminé avec le code {result.ExitCode} sans fournir d’invitation de connexion reconnue. Consultez les journaux système de ce nœud.";
             log.Log(session.State == "authorized" ? LogLevel.Information : LogLevel.Warning,
                 "AI CLI auth {Attempt}: provider={Provider}, exit={ExitCode}, elapsedMs={ElapsedMs}, stdoutChars={OutputChars}, stderrChars={ErrorChars}, urlRecognized={HasUrl}, codeRecognized={HasCode}, inputSubmitted={InputSubmitted}",
                 session.Id, session.ToolId, result.ExitCode, session.Timer.ElapsedMilliseconds, result.Output.Length, result.Error.Length, session.HasUrl, session.HasCode, session.InputSubmitted);
