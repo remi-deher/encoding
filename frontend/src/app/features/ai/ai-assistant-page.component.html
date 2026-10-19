@@ -1,0 +1,290 @@
+@if (!panelMode()) {
+  <app-page-header
+    title="Assistant"
+    description="Posez une question sur un flow publié, une exécution ou un nœud. La ressource consultée reste attachée à la conversation."
+  >
+    <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
+  </app-page-header>
+} @else {
+  <app-page-header
+    title="Assistant"
+    description="Conversations privées, conservées à la fermeture du panneau."
+  >
+    <a
+      page-actions
+      matButton="text"
+      [routerLink]="['/ai/assistant']"
+      [queryParams]="detail() ? { conversation: detail()!.conversation.id } : {}"
+      >Ouvrir la page</a
+    >
+  </app-page-header>
+}
+
+<div class="assistant-layout">
+  <aside class="conversation-panel" aria-label="Conversations privées">
+    <div class="conversation-heading">
+      <h2>Conversations</h2>
+      <button
+        matButton="tonal"
+        type="button"
+        [disabled]="sending()"
+        (click)="startNewConversation()"
+      >
+        Nouvelle
+      </button>
+    </div>
+    @if (loadingConversations()) {
+      <p class="muted" role="status">Chargement…</p>
+    } @else if (conversations().length === 0) {
+      <p class="muted">Vos conversations apparaîtront ici.</p>
+    } @else {
+      <nav aria-label="Conversations IA">
+        @for (conversation of conversations(); track conversation.id) {
+          <button
+            class="conversation-link"
+            [class.is-active]="detail()?.conversation.id === conversation.id"
+            [disabled]="sending()"
+            type="button"
+            (click)="openConversation(conversation.id)"
+          >
+            <strong>{{ conversation.title }}</strong>
+            <span>{{ conversation.source.label }}</span>
+          </button>
+        }
+      </nav>
+    }
+  </aside>
+
+  <section class="chat-panel" aria-label="Échange avec l’assistant">
+    @if (detail(); as current) {
+      <header class="chat-heading">
+        <div>
+          <h2>{{ current.conversation.title }}</h2>
+          <p>Contexte attaché :</p>
+          <ul class="attached-sources" aria-label="Ressources consultées">
+            @for (
+              source of conversationSources(current.conversation);
+              track source.kind + source.resourceId
+            ) {
+              <li>
+                <a [routerLink]="source.href">{{ source.label }}</a>
+                @if (isAdmin() && source.kind === 'flow' && source.version) {
+                  @if (hasDraftFor(source)) {
+                    <button matButton="text" type="button" [disabled]="actionBusy()" (click)="publishFlowFromAssistant(source)">
+                      Publier le brouillon…
+                    </button>
+                  }
+                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="deleteFlowFromAssistant(source)">
+                    Supprimer le flow…
+                  </button>
+                }
+                @if (isAdmin() && canStartLibrary(source)) {
+                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="startLibraryFromAssistant(source)">
+                    Lancer les traitements…
+                  </button>
+                }
+                @if (isAdmin() && isCancelableExecution(source)) {
+                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="cancelExecutionFromAssistant(source)">
+                    Annuler l’exécution…
+                  </button>
+                }
+                @if (conversationSources(current.conversation).length > 1) {
+                  <button
+                    matButton="text"
+                    type="button"
+                    [disabled]="updatingSources() || hasPendingRequest()"
+                    (click)="removeConversationSource(source)"
+                  >
+                    Retirer
+                  </button>
+                }
+              </li>
+            }
+          </ul>
+        </div>
+        <a matButton="text" [routerLink]="current.conversation.source.href">Ouvrir la ressource</a>
+      </header>
+      <div class="add-context-controls" aria-label="Ajouter une ressource au contexte">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Type de ressource à ajouter</mat-label>
+          <mat-select
+            name="additionalResourceType"
+            [ngModel]="selectedResourceType()"
+            (ngModelChange)="selectResourceType($event)"
+            [disabled]="updatingSources() || hasPendingRequest()"
+          >
+            <mat-option value="flow">Flow publié</mat-option>
+            <mat-option value="execution">Exécution</mat-option>
+            <mat-option value="node">Nœud</mat-option>
+            <mat-option value="library">Bibliothèque</mat-option>
+          </mat-select>
+        </mat-form-field>
+        @if (!loadingSelectedResource() && resourceOptions().length > 0) {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Ressource</mat-label>
+            <mat-select
+              name="additionalResourceId"
+              [(ngModel)]="selectedResourceId"
+              [disabled]="updatingSources() || hasPendingRequest()"
+            >
+              @for (resource of resourceOptions(); track resource.id) {
+                <mat-option [value]="resource.id">{{ resource.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+        <button
+          matButton="tonal"
+          type="button"
+          [disabled]="!selectedResource() || updatingSources() || hasPendingRequest()"
+          (click)="addSelectedResource()"
+        >
+          Ajouter au contexte
+        </button>
+      </div>
+      @if (actionMessage(); as message) {
+        <p class="muted" role="status">{{ message }}</p>
+      }
+      <div class="message-list" aria-live="polite">
+        @for (turn of current.turns; track turn.requestId) {
+          <article class="message user-message">
+            <h3>Vous</h3>
+            <p>{{ turn.userPrompt }}</p>
+          </article>
+          <article class="message assistant-message">
+            <h3>Assistant</h3>
+            <p>{{ turn.content }}</p>
+            @for (
+              source of turn.sources ?? [current.conversation.source];
+              track source.kind + source.resourceId
+            ) {
+              <a [routerLink]="source.href">Source : {{ source.label }}</a>
+            }
+          </article>
+        }
+        @if (pendingPrompt(); as pending) {
+          <article class="message user-message">
+            <h3>Vous</h3>
+            <p>{{ pending }}</p>
+          </article>
+        }
+        @if (sending()) {
+          <p class="thinking" role="status"><mat-spinner diameter="20" /> Réponse en cours…</p>
+        }
+      </div>
+    } @else {
+      <div class="new-conversation">
+        <h2>Quel contexte consulter ?</h2>
+        <p>
+          Choisissez une ressource accessible en lecture. Le contexte restera attaché à cet échange.
+        </p>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Type de ressource</mat-label>
+          <mat-select
+            name="resourceType"
+            [ngModel]="selectedResourceType()"
+            (ngModelChange)="selectResourceType($event)"
+          >
+            <mat-option value="flow">Flow publié</mat-option>
+            <mat-option value="execution">Exécution</mat-option>
+            <mat-option value="node">Nœud</mat-option>
+            <mat-option value="library">Bibliothèque</mat-option>
+          </mat-select>
+        </mat-form-field>
+        @if (loadingSelectedResource()) {
+          <p class="muted" role="status">Chargement des ressources…</p>
+        } @else if (resourceOptions().length === 0) {
+          <div class="empty-state">
+            <p>Aucune ressource de ce type n’est disponible pour le contexte de l’assistant.</p>
+            @switch (selectedResourceType()) {
+              @case ('flow') {
+                <a matButton="text" routerLink="/flows">Parcourir les flows</a>
+              }
+              @case ('execution') {
+                <a matButton="text" routerLink="/tasks">Parcourir les exécutions</a>
+              }
+              @case ('node') {
+                <a matButton="text" routerLink="/nodes">Parcourir les nœuds</a>
+              }
+              @case ('library') {
+                <a matButton="text" routerLink="/libraries">Parcourir les bibliothèques</a>
+              }
+            }
+          </div>
+        } @else {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Ressource</mat-label>
+            <mat-select name="resourceId" [(ngModel)]="selectedResourceId">
+              @for (resource of resourceOptions(); track resource.id) {
+                <mat-option [value]="resource.id">{{ resource.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+        <p class="data-disclosure">
+          {{ resourceDisclosure() }} Votre question et ces informations seront transmises au
+          fournisseur IA configuré par défaut, qui peut être externe à votre installation.
+        </p>
+      </div>
+    }
+
+    @if (errorMessage(); as error) {
+      <div class="error-message" role="alert">{{ error }}</div>
+    }
+
+    <mat-form-field class="read-tool-picker" appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Outils de lecture pour ce message</mat-label>
+      <mat-select
+        name="readTools"
+        multiple
+        [ngModel]="selectedReadTools()"
+        (ngModelChange)="setSelectedReadTools($event)"
+      >
+        @for (tool of readTools; track tool.name) {
+          <mat-option
+            [value]="tool.name"
+            [disabled]="tool.name === 'get_flow' && selectedResourceType() !== 'flow'"
+            >{{ tool.label }}</mat-option
+          >
+        }
+      </mat-select>
+      <mat-hint
+        >Jusqu’à trois outils choisis ici ; l’assistant peut aussi demander un outil de lecture
+        adapté. Les résultats seront cités.</mat-hint
+      >
+    </mat-form-field>
+
+    <form class="composer" (ngSubmit)="send()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Votre question</mat-label>
+        <textarea
+          matInput
+          name="prompt"
+          rows="3"
+          maxlength="4000"
+          [(ngModel)]="prompt"
+          [disabled]="sending() || hasPendingRequest() || (loadingSelectedResource() && !detail())"
+        ></textarea>
+        <mat-hint align="end">{{ prompt().length }}/4000</mat-hint>
+      </mat-form-field>
+      <button matButton="filled" type="submit" [disabled]="!canSend()">
+        {{
+          sending() ? 'Réponse en cours…' : resumingRequest() ? 'Reprendre la demande' : 'Envoyer'
+        }}
+      </button>
+      @if (sending()) {
+        <button matButton="text" type="button" [disabled]="cancelling()" (click)="cancelRequest()">
+          {{ cancelling() ? 'Interruption demandée…' : 'Interrompre' }}
+        </button>
+      }
+    </form>
+    <p class="privacy-note">
+      Votre question, les définitions de flows, les métadonnées des nœuds et bibliothèques, ainsi
+      que les événements et journaux d’exécution liés aux ressources consultées peuvent être
+      transmis au fournisseur affecté à cet usage, qui peut être externe à votre installation.
+      Certains événements peuvent contenir des chemins. Les sous-titres ne sont pas joints comme
+      source dédiée dans ce parcours. La conversation reste privée à votre compte ; l’assistant ne
+      peut modifier aucune ressource.
+    </p>
+  </section>
+</div>

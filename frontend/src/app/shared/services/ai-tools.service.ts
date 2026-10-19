@@ -6,6 +6,15 @@ import {
   AiClusterQuotas,
   AiSessionPage,
   AiSessionState,
+  AiAssistantConversation,
+  AiAssistantConversationDetail,
+  AiAssistantActivity,
+  AiAssistantMessageRequest,
+  AiAssistantMessageResponse,
+  AiAssistantConfirmActionRequest,
+  AiAssistantPrepareActionRequest,
+  AiAssistantPreparedAction,
+  AiAssistantSourcesRequest,
   AiSettings,
   AiSettingsUpdateRequest,
   AiToolInfo,
@@ -22,6 +31,104 @@ import {
 })
 export class AiToolsService {
   private readonly http = inject(HttpClient);
+
+  listAssistantConversations(): Observable<readonly AiAssistantConversation[]> {
+    return this.http.get<readonly AiAssistantConversation[]>(
+      '/api/v1/tools/ai/assistant/conversations',
+    );
+  }
+
+  listAssistantActivity(): Observable<readonly AiAssistantActivity[]> {
+    return this.http.get<readonly AiAssistantActivity[]>('/api/v1/tools/ai/assistant/activity');
+  }
+
+  getAssistantConversation(id: string): Observable<AiAssistantConversationDetail> {
+    return this.http.get<AiAssistantConversationDetail>(
+      `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}`,
+    );
+  }
+
+  updateAssistantSources(
+    id: string,
+    request: AiAssistantSourcesRequest,
+  ): Observable<AiAssistantConversation> {
+    return this.http.put<AiAssistantConversation>(
+      `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}/sources`,
+      request,
+    );
+  }
+
+  sendAssistantMessage(request: AiAssistantMessageRequest): Observable<AiAssistantMessageResponse> {
+    return this.http.post<AiAssistantMessageResponse>(
+      '/api/v1/tools/ai/assistant/messages',
+      request,
+    );
+  }
+
+  cancelAssistantRequest(requestId: string): Observable<void> {
+    return this.http.post<void>(
+      `/api/v1/tools/ai/assistant/requests/${encodeURIComponent(requestId)}/cancel`,
+      {},
+    );
+  }
+
+  prepareAssistantFlowDeletion(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
+    return this.http.post<AiAssistantPreparedAction>(
+      '/api/v1/tools/ai/assistant/actions/delete-flow/prepare', request,
+    );
+  }
+
+  prepareAssistantFlowPublish(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
+    return this.http.post<AiAssistantPreparedAction>(
+      '/api/v1/tools/ai/assistant/actions/publish-flow/prepare', request,
+    );
+  }
+
+  confirmAssistantFlowPublish(request: AiAssistantConfirmActionRequest): Observable<{ readonly published: boolean }> {
+    return this.http.post<{ readonly published: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/publish-flow/confirm', request,
+    );
+  }
+
+  confirmAssistantFlowDeletion(request: AiAssistantConfirmActionRequest): Observable<{ readonly deleted: boolean }> {
+    return this.http.post<{ readonly deleted: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/delete-flow/confirm', request,
+    );
+  }
+
+  prepareAssistantExecutionCancellation(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
+    return this.http.post<AiAssistantPreparedAction>(
+      '/api/v1/tools/ai/assistant/actions/cancel-execution/prepare', request,
+    );
+  }
+
+  prepareAssistantLibraryStart(request: AiAssistantPrepareActionRequest): Observable<AiAssistantPreparedAction> {
+    return this.http.post<AiAssistantPreparedAction>(
+      '/api/v1/tools/ai/assistant/actions/start-library/prepare', request,
+    );
+  }
+
+  confirmAssistantLibraryStart(request: AiAssistantConfirmActionRequest): Observable<{ readonly queued: number; readonly skipped: number }> {
+    return this.http.post<{ readonly queued: number; readonly skipped: number }>(
+      '/api/v1/tools/ai/assistant/actions/start-library/confirm', request,
+    );
+  }
+
+  confirmAssistantExecutionCancellation(request: AiAssistantConfirmActionRequest): Observable<{ readonly cancellationRequested: boolean }> {
+    return this.http.post<{ readonly cancellationRequested: boolean }>(
+      '/api/v1/tools/ai/assistant/actions/cancel-execution/confirm', request,
+    );
+  }
+
+  recordFlowProposalDecision(
+    requestId: string,
+    decision: 'applied-to-editor' | 'rejected',
+  ): Observable<unknown> {
+    return this.http.post(
+      `/api/v1/tools/ai/assistant/activity/${encodeURIComponent(requestId)}/proposal`,
+      { decision },
+    );
+  }
 
   listSessions(offset = 0): Observable<AiSessionPage> {
     return this.http.get<AiSessionPage>('/api/v1/tools/ai/sessions', { params: { offset } });

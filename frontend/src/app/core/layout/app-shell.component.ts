@@ -7,10 +7,12 @@ import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
@@ -25,6 +27,7 @@ import { AuthService } from '../auth/auth.service';
 import { UserMenuComponent } from '../auth/user-menu.component';
 import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 import { SearchPaletteDialogComponent } from './search-palette-dialog.component';
+import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.component';
 
 @Component({
   selector: 'app-shell',
@@ -39,6 +42,7 @@ import { SearchPaletteDialogComponent } from './search-palette-dialog.component'
     RouterOutlet,
     ThemeToggleComponent,
     UserMenuComponent,
+    AiAssistantPageComponent,
   ],
   templateUrl: './app-shell.component.html',
   host: {
@@ -95,6 +99,9 @@ export class AppShellComponent {
       const context = this.navigationEnd();
       this.navigationOpened.set(!compact && !context.authMode && !context.workspaceMode);
     });
+    effect(() => {
+      if (this.assistantRouteActive()) this.assistantPanelOpen.set(false);
+    });
   }
 
   private readonly dynamicTitle = inject(PageTitle);
@@ -107,6 +114,47 @@ export class AppShellComponent {
   protected readonly subSectionLabel = computed(() => this.navigationEnd().subLabel);
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
+  protected readonly assistantRouteActive = computed(() =>
+    this.navigationEnd().url.startsWith('/ai/assistant'),
+  );
+  protected readonly showAssistantBubble = computed(
+    () =>
+      Boolean(this.currentUser()) &&
+      !this.authMode() &&
+      !this.workspaceMode() &&
+      !this.assistantRouteActive(),
+  );
+  protected readonly assistantWidgetMounted = signal(false);
+  protected readonly assistantPanelOpen = signal(false);
+  private readonly assistantLauncher =
+    viewChild<ElementRef<HTMLButtonElement>>('assistantLauncher');
+  private readonly assistantCloseButton =
+    viewChild<ElementRef<HTMLButtonElement>>('assistantCloseButton');
+  private focusReturnElement: HTMLElement | null = null;
+
+  protected toggleAssistantPanel(): void {
+    if (this.assistantPanelOpen()) {
+      this.closeAssistantPanel();
+      return;
+    }
+    this.focusReturnElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!this.assistantWidgetMounted()) this.assistantWidgetMounted.set(true);
+    this.assistantPanelOpen.set(true);
+    if (this.isCompactNavigation()) this.navigationOpened.set(false);
+    setTimeout(() => this.assistantCloseButton()?.nativeElement.focus());
+  }
+
+  protected closeAssistantPanel(): void {
+    this.assistantPanelOpen.set(false);
+    setTimeout(() => {
+      const target = this.focusReturnElement?.isConnected
+        ? this.focusReturnElement
+        : this.assistantLauncher()?.nativeElement;
+      target?.focus();
+      this.focusReturnElement = null;
+    });
+  }
 
   private readonly auth = inject(AuthService);
   protected readonly currentUser = this.auth.user;
@@ -170,6 +218,11 @@ export class AppShellComponent {
   }
 
   protected onGlobalSearchShortcut(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.assistantPanelOpen()) {
+      event.preventDefault();
+      this.closeAssistantPanel();
+      return;
+    }
     if (
       event.key.toLocaleLowerCase() === 'k' &&
       (event.metaKey || event.ctrlKey) &&

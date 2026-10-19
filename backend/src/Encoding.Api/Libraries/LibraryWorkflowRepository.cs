@@ -2,6 +2,8 @@ using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
 
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Nodes;
@@ -193,10 +195,15 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         if(await done.ExecuteNonQueryAsync(ct)!=1) return false; await tx.CommitAsync(ct); return true;
     }
     public Task<(int Queued,int Skipped)?> EnqueueAsync(Guid library,IReadOnlyList<Guid> ids,int assignmentRevision,CancellationToken ct)=>QueueAsync(library,ids,assignmentRevision,false,ct);
+    public Task<(int Queued,int Skipped)?> EnqueueConfirmedAsync(Guid library,IReadOnlyList<Guid> ids,int assignmentRevision,Guid confirmationId,CancellationToken ct)
+    {
+        if (confirmationId == Guid.Empty) throw new ArgumentException("Identifiant de confirmation invalide.", nameof(confirmationId));
+        return QueueAsync(library,ids,assignmentRevision,false,ct,actionId:confirmationId);
+    }
     public async Task EnqueueAutomaticallyAsync(Guid library,CancellationToken ct)=>await QueueAsync(library,[],null,true,ct);
     /// <summary>Mise en file déclenchée par un service externe : fichiers choisis, flow actuellement attribué, sans retraiter une empreinte déjà reçue.</summary>
     public Task<(int Queued,int Skipped)?> EnqueueTriggeredAsync(Guid library,IReadOnlyList<Guid> ids,CancellationToken ct)=>QueueAsync(library,ids,null,false,ct,true);
-    private async Task<(int Queued,int Skipped)?> QueueAsync(Guid library,IReadOnlyList<Guid> ids,int? assignmentRevision,bool automatic,CancellationToken ct,bool skipReceipted=false)
+    private async Task<(int Queued,int Skipped)?> QueueAsync(Guid library,IReadOnlyList<Guid> ids,int? assignmentRevision,bool automatic,CancellationToken ct,bool skipReceipted=false,Guid? actionId=null)
     {
         if(!automatic && (ids.Count is <1 or >10000 || ids.Distinct().Count()!=ids.Count)) return null;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
@@ -220,7 +227,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         int queued=0;
         foreach(var file in files)
         {
-            var execution=Guid.NewGuid();
+            var execution=actionId is { } confirmedAction ? ConfirmedExecutionId(confirmedAction,file.Id) : Guid.NewGuid();
             if(!await RuntimeRepository.EnqueueInTransactionAsync(new(execution,library,file.Path,flow.Id,flow.Version),flow,c,tx,ct))continue;
             queued++;
             await using var receipt=Sql.Command("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) VALUES(@library,@file,@flow,@version,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",c,tx);
@@ -230,5 +237,11 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
         await tx.CommitAsync(ct);
         if(queued>0) broadcaster?.Publish();
         return(queued,files.Count-queued);
+    }
+
+    private static Guid ConfirmedExecutionId(Guid confirmationId, Guid fileId)
+    {
+        var bytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(confirmationId.ToString("N") + "/" + fileId.ToString("N")));
+        return new Guid(bytes.AsSpan(0, 16));
     }
 }

@@ -170,7 +170,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         if (inserted) await AddEvent(c, tx, request.Id, Guid.NewGuid(), 0, "queued", "En attente du moteur d’exécution.", ct);
         return inserted;
     }
-    public async Task<bool> CancelAsync(Guid id, CancellationToken ct)
+    public async Task<bool> CancelAsync(Guid id, CancellationToken ct, int? expectedRevision = null)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
         await using var cmd = Sql.Command("""
@@ -178,8 +178,9 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
    detail=CASE WHEN state='queued' THEN 'Annulée avant démarrage.' ELSE 'Annulation demandée ; attente de confirmation du worker.' END,
    finished_at=CASE WHEN state='queued' THEN clock_timestamp() ELSE NULL END,
    updated_at=clock_timestamp(),revision=revision+1 WHERE id=@id AND state IN ('queued','running')
+   AND (@expectedRevision IS NULL OR revision=@expectedRevision)
    RETURNING revision,state,detail
-   """, c, tx); cmd.Parameters.AddWithValue("id", id);
+   """, c, tx); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("expectedRevision", (object?)expectedRevision ?? DBNull.Value);
         int revision; string state, detail;
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { if (!await r.ReadAsync(ct)) return false; revision = r.GetInt32(0); state = r.GetString(1); detail = r.GetString(2); }
         await AddEvent(c, tx, id, Guid.NewGuid(), revision, state, detail, ct); await tx.CommitAsync(ct);

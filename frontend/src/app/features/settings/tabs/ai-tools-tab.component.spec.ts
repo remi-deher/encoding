@@ -47,6 +47,8 @@ describe('AiToolsTabComponent', () => {
     hasOpenAiApiKey: true,
     timeoutSeconds: 120,
     subtitleBatchSize: 50,
+    assistantConversationRetentionDays: 90,
+    assistantActivityRetentionDays: 30,
   };
 
   async function setup() {
@@ -124,6 +126,23 @@ describe('AiToolsTabComponent', () => {
     );
     expect(notificationServiceMock.show).toHaveBeenCalledWith(
       expect.stringContaining('enregistrée avec succès'),
+    );
+  });
+
+  it('enregistre les fournisseurs par usage et la politique locale', async () => {
+    const { component } = await setup();
+    component.assistantProvider.set('ollama');
+    component.flowProvider.set('openai');
+    component.assistantLocalOnly.set(true);
+    component.saveSettings();
+
+    expect(aiServiceMock.updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assistantProvider: 'ollama',
+        flowProvider: 'openai',
+        assistantLocalOnly: true,
+        flowLocalOnly: false,
+      }),
     );
   });
 });

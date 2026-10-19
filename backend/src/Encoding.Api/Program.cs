@@ -98,6 +98,8 @@ builder.Services.AddSingleton<AiQuotaService>();
 builder.Services.AddSingleton<AiClusterStore>();
 builder.Services.AddSingleton<AiClusterTransport>();
 builder.Services.AddSingleton<AiClusterService>();
+builder.Services.AddSingleton<AiAssistantService>();
+builder.Services.AddHostedService<AiAssistantRetentionService>();
 builder.Services.AddHttpClient("AiCluster", client => client.Timeout = Timeout.InfiniteTimeSpan)
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<DeviceCodeAuthService>();
@@ -248,6 +250,7 @@ app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
 app.MapMcpEndpoints();
 app.MapAiToolEndpoints();
+app.MapAiAssistantEndpoints();
 app.MapOpenApiEndpoints();
 
 app.MapFallbackToFile("index.html").AllowAnonymous();

@@ -47,6 +47,10 @@ public sealed class AiClusterStore(DbDataSource database, ClusterReconciliationR
     }
     public async Task SaveAsync<T>(string key, T value, CancellationToken ct) =>
         await journal.SetRegisterAsync("ai/" + key, JsonSerializer.Serialize(await ProtectAsync(value, key, ct)), ct);
+
+    /// <summary>Réplique un tombstone. Les anciennes versions restent dans le journal append-only jusqu'à leur purge coordonnée.</summary>
+    public Task DeleteAsync(string key, CancellationToken ct) =>
+        journal.SetRegisterAsync("ai/" + key, "null", ct);
     public async Task<IReadOnlyList<T>> ListSessionsAsync<T>(int offset, int limit, CancellationToken ct)
     {
         // Bounded pagination over the existing encrypted registers, ordered by their last observed update.
@@ -68,6 +72,30 @@ public sealed class AiClusterStore(DbDataSource database, ClusterReconciliationR
         await using var command = database.CreateCommand("SELECT value FROM cluster_sync_registers WHERE register_key=@key");
         command.Parameters.AddWithValue("key", "ai/" + key);
         var value = await command.ExecuteScalarAsync(ct);
-        return value is null or DBNull ? default : await UnprotectAsync<T>(JsonSerializer.Deserialize<string>((string)value)!, key, ct);
+        if (value is null or DBNull) return default;
+        var encoded = JsonSerializer.Deserialize<string>((string)value);
+        return encoded is null ? default : await UnprotectAsync<T>(encoded, key, ct);
+    }
+
+    public async Task<IReadOnlyList<T>> ReadPrefixAsync<T>(string prefix, CancellationToken ct)
+    {
+        await using var command = database.CreateCommand("SELECT register_key,value FROM cluster_sync_registers WHERE register_key LIKE @prefix AND value <> 'null' ORDER BY register_key LIMIT 1000");
+        command.Parameters.AddWithValue("prefix", "ai/" + prefix + "%");
+        var values = new List<(string Key, string Encoded)>();
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct)) values.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        var result = new List<T>(values.Count);
+        foreach (var (key, value) in values)
+        {
+            var purpose = key["ai/".Length..];
+            var encoded = JsonSerializer.Deserialize<string>(value);
+            if (encoded is null) continue;
+            var item = await UnprotectAsync<T>(encoded, purpose, ct);
+            if (item is not null) result.Add(item);
+        }
+        return result;
     }
 }

@@ -73,6 +73,12 @@ export interface AiSettings {
   readonly hasOpenAiApiKey?: boolean;
   readonly timeoutSeconds: number;
   readonly subtitleBatchSize: number;
+  readonly assistantProvider?: string | null;
+  readonly flowProvider?: string | null;
+  readonly assistantLocalOnly?: boolean;
+  readonly flowLocalOnly?: boolean;
+  readonly assistantConversationRetentionDays: number;
+  readonly assistantActivityRetentionDays: number;
 }
 
 export interface AiSettingsUpdateRequest {
@@ -84,6 +90,12 @@ export interface AiSettingsUpdateRequest {
   readonly openAiApiKey?: string | null;
   readonly timeoutSeconds?: number;
   readonly subtitleBatchSize?: number;
+  readonly assistantProvider?: string | null;
+  readonly flowProvider?: string | null;
+  readonly assistantLocalOnly?: boolean;
+  readonly flowLocalOnly?: boolean;
+  readonly assistantConversationRetentionDays?: number;
+  readonly assistantActivityRetentionDays?: number;
 }
 
 export interface AiNodeAvailability {
@@ -94,6 +106,113 @@ export interface AiNodeAvailability {
 }
 export interface AiClusterView {
   readonly nodes: readonly AiNodeAvailability[];
+}
+
+export interface AiAssistantSource {
+  readonly kind: 'flow' | 'execution' | 'node' | 'library' | 'tool';
+  readonly resourceId: string;
+  readonly label: string;
+  readonly href: string;
+  readonly version?: number | null;
+}
+
+export interface AiAssistantConversation {
+  readonly id: string;
+  readonly provider: string;
+  readonly title: string;
+  readonly source: AiAssistantSource;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly additionalSources?: readonly AiAssistantSource[] | null;
+}
+
+export interface AiAssistantTurn {
+  readonly requestId: string;
+  readonly userPrompt: string;
+  readonly content: string;
+  readonly sources?: readonly AiAssistantSource[] | null;
+}
+
+export interface AiAssistantConversationDetail {
+  readonly conversation: AiAssistantConversation;
+  readonly turns: readonly AiAssistantTurn[];
+  readonly pendingTurn?: AiAssistantPendingTurn | null;
+}
+
+export interface AiAssistantPendingTurn {
+  readonly requestId: string;
+  readonly userPrompt: string;
+  readonly isRunning: boolean;
+}
+
+export interface AiAssistantMessageRequest {
+  readonly requestId: string;
+  readonly userPrompt: string;
+  readonly conversationId?: string | null;
+  readonly resourceType?: 'flow' | 'execution' | 'node' | 'library' | null;
+  readonly resourceId?: string | null;
+  readonly resourceVersion?: number | null;
+  readonly toolCalls?: readonly AiAssistantToolCall[];
+}
+
+export interface AiAssistantToolCall {
+  readonly name:
+    'list_flows' | 'get_flow' | 'list_nodes' | 'list_executions' | 'get_libraries_overview';
+  readonly flowId?: string | null;
+  readonly state?: 'queued' | 'running' | 'failed' | 'completed' | null;
+  readonly limit?: number | null;
+}
+
+export interface AiAssistantSourcesRequest {
+  readonly sources: readonly {
+    readonly type: string;
+    readonly id: string;
+    readonly version?: number | null;
+  }[];
+}
+
+export interface AiAssistantMessageResponse {
+  readonly success: boolean;
+  readonly conversation: AiAssistantConversation;
+  readonly requestId: string;
+  readonly content?: string | null;
+  readonly errorMessage?: string | null;
+  readonly sources: readonly AiAssistantSource[];
+}
+
+export interface AiAssistantPrepareActionRequest {
+  readonly resourceId: string;
+  readonly expectedVersion: number;
+}
+
+export interface AiAssistantPreparedAction {
+  readonly confirmationToken: string;
+  readonly summary: string;
+  readonly expiresAt: string;
+}
+
+export interface AiAssistantConfirmActionRequest {
+  readonly confirmationToken: string;
+}
+
+export interface AiAssistantActivity {
+  readonly requestId: string;
+  readonly conversationId: string | null;
+  readonly provider: string;
+  readonly status:
+    | 'running'
+    | 'succeeded'
+    | 'failed'
+    | 'cancelled'
+    | 'proposal-ready'
+    | 'applied-to-editor'
+    | 'rejected';
+  readonly startedAt: string;
+  readonly updatedAt: string;
+  readonly durationMilliseconds: number | null;
+  readonly errorCategory: string | null;
+  readonly operation?: string;
+  readonly tools?: readonly string[] | null;
 }
 
 export interface AiUsage {
