@@ -47,6 +47,8 @@ describe('AiToolsTabComponent', () => {
     hasOpenAiApiKey: true,
     timeoutSeconds: 120,
     subtitleBatchSize: 50,
+    assistantConversationRetentionDays: 90,
+    assistantActivityRetentionDays: 30,
   };
 
   async function setup() {
