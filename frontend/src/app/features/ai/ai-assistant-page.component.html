@@ -220,7 +220,10 @@
           >
         }
       </mat-select>
-      <mat-hint>Jusqu’à trois outils MCP en lecture seule ; les résultats seront cités.</mat-hint>
+      <mat-hint
+        >Jusqu’à trois outils choisis ici ; l’assistant peut aussi demander un outil de lecture
+        adapté. Les résultats seront cités.</mat-hint
+      >
     </mat-form-field>
 
     <form class="composer" (ngSubmit)="send()">
@@ -248,8 +251,8 @@
       }
     </form>
     <p class="privacy-note">
-      Votre question, les données des ressources et les résultats des outils sélectionnés sont
-      transmis au fournisseur affecté à cet usage, qui peut être externe à votre installation. La
+      Votre question, les données des ressources et les résultats des outils consultés sont transmis
+      au fournisseur affecté à cet usage, qui peut être externe à votre installation. La
       conversation reste privée à votre compte ; l’assistant ne peut modifier aucune ressource.
     </p>
   </section>
