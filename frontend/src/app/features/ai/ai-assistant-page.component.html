@@ -56,6 +56,53 @@
   </aside>
 
   <section class="chat-panel" aria-label="Échange avec l’assistant">
+    <div class="assistant-model-controls" aria-label="Modèle utilisé par l’assistant">
+      @if (detail(); as current) {
+        <div class="model-summary">
+          <span class="model-summary-label">Modèle de cette conversation</span>
+          <strong>{{ conversationModelLabel(current.conversation) }}</strong>
+          @if (current.conversation.reasoningEffort) {
+            <span>Effort : {{ effortLabel(current.conversation.reasoningEffort) }}</span>
+          }
+        </div>
+      } @else {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Modèle</mat-label>
+          <mat-select
+            name="assistantModel"
+            [ngModel]="selectedModelKey()"
+            (ngModelChange)="selectModel($event)"
+            [disabled]="loadingAssistantOptions() || sending() || hasPendingRequest()"
+          >
+            @for (option of assistantOptions()?.models ?? []; track modelOptionKey(option)) {
+              <mat-option [value]="modelOptionKey(option)">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        @if (reasoningEfforts().length > 0) {
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Effort de raisonnement</mat-label>
+            <mat-select
+              name="assistantReasoningEffort"
+              [ngModel]="selectedReasoningEffort()"
+              (ngModelChange)="selectEffort($event)"
+              [disabled]="sending() || hasPendingRequest()"
+            >
+              <mat-option [value]="null">Automatique</mat-option>
+              @for (effort of reasoningEfforts(); track effort) {
+                <mat-option [value]="effort">{{ effortLabel(effort) }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+        @if (loadingAssistantOptions()) {
+          <span class="muted" role="status">Chargement des modèles configurés…</span>
+        } @else if (!assistantOptions()?.models?.length) {
+          <span class="muted">Aucun modèle IA disponible dans la configuration.</span>
+        }
+      }
+    </div>
+
     @if (detail(); as current) {
       <header class="chat-heading">
         <div>
@@ -70,21 +117,41 @@
                 <a [routerLink]="source.href">{{ source.label }}</a>
                 @if (isAdmin() && source.kind === 'flow' && source.version) {
                   @if (hasDraftFor(source)) {
-                    <button matButton="text" type="button" [disabled]="actionBusy()" (click)="publishFlowFromAssistant(source)">
+                    <button
+                      matButton="text"
+                      type="button"
+                      [disabled]="actionBusy()"
+                      (click)="publishFlowFromAssistant(source)"
+                    >
                       Publier le brouillon…
                     </button>
                   }
-                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="deleteFlowFromAssistant(source)">
+                  <button
+                    matButton="text"
+                    type="button"
+                    [disabled]="actionBusy()"
+                    (click)="deleteFlowFromAssistant(source)"
+                  >
                     Supprimer le flow…
                   </button>
                 }
                 @if (isAdmin() && canStartLibrary(source)) {
-                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="startLibraryFromAssistant(source)">
+                  <button
+                    matButton="text"
+                    type="button"
+                    [disabled]="actionBusy()"
+                    (click)="startLibraryFromAssistant(source)"
+                  >
                     Lancer les traitements…
                   </button>
                 }
                 @if (isAdmin() && isCancelableExecution(source)) {
-                  <button matButton="text" type="button" [disabled]="actionBusy()" (click)="cancelExecutionFromAssistant(source)">
+                  <button
+                    matButton="text"
+                    type="button"
+                    [disabled]="actionBusy()"
+                    (click)="cancelExecutionFromAssistant(source)"
+                  >
                     Annuler l’exécution…
                   </button>
                 }
@@ -222,8 +289,8 @@
           </mat-form-field>
         }
         <p class="data-disclosure">
-          {{ resourceDisclosure() }} Votre question et ces informations seront transmises au
-          fournisseur IA configuré par défaut, qui peut être externe à votre installation.
+          {{ resourceDisclosure() }} Votre question et ces informations seront transmises au modèle
+          choisi, qui peut être hébergé en dehors de votre installation.
         </p>
       </div>
     }

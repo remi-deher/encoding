@@ -8,7 +8,8 @@ public sealed record AiPrompt(
     double Temperature = 0.3,
     string? SessionId = null,
     Guid? RequestId = null,
-    AiSessionScope? Scope = null);
+    AiSessionScope? Scope = null,
+    string? ReasoningEffort = null);
 
 /// <summary>Result returned by an AI text client.</summary>
 public sealed record AiCompletionResult(

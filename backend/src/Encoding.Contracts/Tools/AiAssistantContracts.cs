@@ -16,7 +16,15 @@ public sealed record AiAssistantConversation(
     AiAssistantSource Source,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<AiAssistantSource>? AdditionalSources = null);
+    IReadOnlyList<AiAssistantSource>? AdditionalSources = null,
+    string? Model = null,
+    string? ReasoningEffort = null);
+
+public sealed record AiAssistantModelOption(string Provider, string? Model, string Label,
+    IReadOnlyList<string> ReasoningEfforts);
+
+public sealed record AiAssistantOptions(string DefaultProvider, string? DefaultModel,
+    IReadOnlyList<AiAssistantModelOption> Models);
 
 public sealed record AiAssistantResourceReference(string Type, Guid Id, int? Version = null);
 
@@ -56,7 +64,10 @@ public sealed record AiAssistantMessageRequest(
     string? ResourceType = null,
     Guid? ResourceId = null,
     int? ResourceVersion = null,
-    IReadOnlyList<AiAssistantToolCall>? ToolCalls = null);
+    IReadOnlyList<AiAssistantToolCall>? ToolCalls = null,
+    string? Provider = null,
+    string? Model = null,
+    string? ReasoningEffort = null);
 
 public sealed record AiAssistantMessageResponse(
     bool Success,

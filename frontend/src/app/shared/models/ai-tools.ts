@@ -103,6 +103,7 @@ export interface AiNodeAvailability {
   readonly name: string;
   readonly providers: readonly string[];
   readonly reachable: boolean;
+  readonly models?: Readonly<Record<string, string | null>>;
 }
 export interface AiClusterView {
   readonly nodes: readonly AiNodeAvailability[];
@@ -124,6 +125,21 @@ export interface AiAssistantConversation {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly additionalSources?: readonly AiAssistantSource[] | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
+}
+
+export interface AiAssistantModelOption {
+  readonly provider: string;
+  readonly model?: string | null;
+  readonly label: string;
+  readonly reasoningEfforts: readonly string[];
+}
+
+export interface AiAssistantOptions {
+  readonly defaultProvider: string;
+  readonly defaultModel?: string | null;
+  readonly models: readonly AiAssistantModelOption[];
 }
 
 export interface AiAssistantTurn {
@@ -153,6 +169,9 @@ export interface AiAssistantMessageRequest {
   readonly resourceId?: string | null;
   readonly resourceVersion?: number | null;
   readonly toolCalls?: readonly AiAssistantToolCall[];
+  readonly provider?: string | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
 }
 
 export interface AiAssistantToolCall {

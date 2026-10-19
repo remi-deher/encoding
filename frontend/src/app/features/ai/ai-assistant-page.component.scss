@@ -88,6 +88,37 @@
   padding: var(--space-5);
 }
 
+.assistant-model-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container);
+}
+
+.assistant-model-controls mat-form-field {
+  flex: 1 1 14rem;
+  min-width: min(14rem, 100%);
+}
+
+.model-summary {
+  display: grid;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-size: var(--font-label);
+}
+
+.model-summary strong {
+  color: var(--text-primary);
+}
+
+.model-summary-label {
+  color: var(--text-muted);
+}
+
 .chat-heading {
   padding-bottom: var(--space-4);
 }
@@ -252,6 +283,10 @@
 :host(.assistant-panel-mode) .chat-panel {
   min-height: 28rem;
   padding: var(--space-3);
+}
+
+:host(.assistant-panel-mode) .assistant-model-controls mat-form-field {
+  flex-basis: 10rem;
 }
 
 :host(.assistant-panel-mode) .add-context-controls {

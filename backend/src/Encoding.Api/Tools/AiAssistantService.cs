@@ -34,6 +34,52 @@ public sealed class AiAssistantService(
     McpService mcp,
     IDataProtectionProvider protection)
 {
+    public async Task<AiAssistantOptions> OptionsAsync(CancellationToken ct)
+    {
+        var settings = await cluster.GetSettingsAsync(ct);
+        var view = await cluster.ViewAsync(ct);
+        var providerNames = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["codex-cli"] = "Codex CLI",
+            ["claude-cli"] = "Claude CLI",
+            ["openai"] = "OpenAI compatible",
+            ["ollama"] = "Ollama",
+        };
+        var nodes = settings.AssistantLocalOnly ? view.Nodes.Take(1) : view.Nodes;
+        var options = nodes
+            .Where(node => node.Reachable)
+            .SelectMany(node => node.Providers.Select(provider =>
+            {
+                var model = node.Models?.GetValueOrDefault(provider);
+                if ((provider is "openai" or "ollama") && string.IsNullOrWhiteSpace(model)) return null;
+                if (!providerNames.TryGetValue(provider, out var providerName)) return null;
+                if (settings.AssistantLocalOnly && provider != "ollama") return null;
+                return new AiAssistantModelOption(
+                    provider,
+                    model,
+                    string.IsNullOrWhiteSpace(model) ? $"{providerName} · modèle par défaut" : $"{providerName} · {model}",
+                    ReasoningEfforts(provider, model));
+            }))
+            .OfType<AiAssistantModelOption>()
+            .DistinctBy(option => (option.Provider, option.Model))
+            .ToArray();
+        var defaultProvider = settings.AssistantProvider ?? settings.DefaultProvider;
+        var defaultModel = options.FirstOrDefault(option => option.Provider == defaultProvider)?.Model;
+        return new(defaultProvider, defaultModel, options);
+    }
+
+    private static IReadOnlyList<string> ReasoningEfforts(string provider, string? model) => provider switch
+    {
+        "codex-cli" => ["low", "medium", "high", "xhigh"],
+        "claude-cli" => ["low", "medium", "high"],
+        "openai" when model is not null && (model.StartsWith("o1", StringComparison.OrdinalIgnoreCase)
+            || model.StartsWith("o3", StringComparison.OrdinalIgnoreCase)
+            || model.StartsWith("o4", StringComparison.OrdinalIgnoreCase)
+            || model.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase))
+            => ["low", "medium", "high"],
+        _ => [],
+    };
+
     private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
     private readonly IDataProtector actionProtector = protection.CreateProtector("Encoding.AiAssistantAction.v1");
     private const string ConversationPrefix = "assistant/conversations/";
@@ -397,8 +443,13 @@ public sealed class AiAssistantService(
             }
             else
             {
-                var settings = await cluster.GetSettingsAsync(ct);
-                var provider = settings.AssistantProvider ?? settings.DefaultProvider;
+                var options = await OptionsAsync(ct);
+                var provider = request.Provider ?? options.DefaultProvider;
+                var model = request.Provider is null && request.Model is null ? options.DefaultModel : request.Model;
+                var selectedOption = options.Models.FirstOrDefault(option => option.Provider == provider && option.Model == model)
+                    ?? throw new ArgumentException("Le fournisseur ou le modèle choisi n’est pas configuré ou disponible dans le cluster.");
+                if (request.ReasoningEffort is not null && !selectedOption.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal))
+                    throw new ArgumentException("L’effort choisi n’est pas pris en charge par ce modèle.");
                 var now = DateTimeOffset.UtcNow;
                 conversation = new(
                     id,
@@ -406,7 +457,9 @@ public sealed class AiAssistantService(
                     CreateTitle(request.UserPrompt),
                     context.Source,
                     now,
-                    now);
+                    now,
+                    Model: model,
+                    ReasoningEffort: request.ReasoningEffort);
                 await SaveConversationAsync(ownerId, conversation, ct);
             }
         }
@@ -420,6 +473,9 @@ public sealed class AiAssistantService(
                 || request.ResourceId is { } resourceId && resourceId != savedConversation.Source.ResourceId
                 || request.ResourceVersion is { } version && version != savedConversation.Source.Version)
                 throw new ArgumentException("Le contexte d’une conversation est fixe. Ouvrez une nouvelle conversation pour une autre ressource.");
+            if (request.Provider is not null && (request.Provider != savedConversation.Provider
+                || request.Model != savedConversation.Model || request.ReasoningEffort != savedConversation.ReasoningEffort))
+                throw new ArgumentException("Le fournisseur, le modèle et l’effort sont fixes pour une conversation. Ouvrez un nouvel échange pour les modifier.");
             conversation = savedConversation;
         }
 
@@ -540,7 +596,7 @@ public sealed class AiAssistantService(
                 var plannerSessionId = $"{conversation.Id.Split('.')[0]}.{plannerRequestId:N}";
                 var planner = await cluster.GenerateAsync(
                     conversation.Provider,
-                    new AiPrompt(BuildToolPlannerPrompt(), contextualPrompt, SessionId: plannerSessionId, RequestId: plannerRequestId),
+                    new AiPrompt(BuildToolPlannerPrompt(), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId, RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort),
                     requestCancellation.Token,
                     localOnly: policy.AssistantLocalOnly);
                 if (!planner.Success)
@@ -597,7 +653,7 @@ public sealed class AiAssistantService(
             await SaveActivityAsync(ownerId, activity, ct);
             result = await cluster.GenerateAsync(
                 conversation.Provider,
-                new AiPrompt(systemPrompt, contextualPrompt, SessionId: conversation.Id, RequestId: request.RequestId),
+                new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId, ReasoningEffort: conversation.ReasoningEffort),
                 requestCancellation.Token,
                 localOnly: policy.AssistantLocalOnly);
         }
