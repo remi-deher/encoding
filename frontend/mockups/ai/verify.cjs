@@ -17,7 +17,10 @@ const { chromium, expect } = require('@playwright/test');
       await page.getByRole('option', { name: model, exact: true }).click();
       await expect(page.getByRole('combobox')).toContainText(model);
     }
-    await page.getByRole('button', { name: 'Expliquer mon flow HEVC' }).click();
+    await expect(page.getByText('Conversations privées', { exact: true })).toHaveCount(0);
+    await page
+      .getByRole('textbox', { name: 'Votre message à l’assistant' })
+      .fill('Expliquer mon flow HEVC');
     await page.getByRole('button', { name: 'Envoyer' }).click();
     await page.getByText('Message simulé.', { exact: false }).waitFor();
     await page.getByRole('combobox', { name: 'Modèle de la conversation' }).click();
@@ -39,8 +42,17 @@ const { chromium, expect } = require('@playwright/test');
 
     await page.getByRole('tab', { name: 'Activité' }).click();
     await page.getByRole('button', { name: 'Ouvrir la conversation' }).click();
-    await page.getByRole('button', { name: 'Retirer le flow du contexte' }).click();
-    await page.getByRole('button', { name: 'Ajouter le flow de démo' }).click();
+    await page.getByRole('button', { name: 'Retirer Flow · HEVC · v3', exact: true }).click();
+    await page.getByRole('button', { name: 'Joindre une ressource' }).click();
+    for (const resource of ['Flow · HEVC · v3', 'Nœud · Maison']) {
+      await page.getByRole('combobox', { name: 'Ressource', exact: true }).click();
+      await page.getByRole('option', { name: resource, exact: true }).click();
+      await page.getByRole('button', { name: 'Joindre', exact: true }).click();
+      await expect(
+        page.getByRole('button', { name: 'Retirer ' + resource, exact: true }),
+      ).toBeVisible();
+    }
+    await page.getByRole('button', { name: 'Joindre une ressource' }).click();
     await page.getByRole('button', { name: 'Nouvelle conversation' }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: 'mockups/ai/mobile.png', fullPage: true });

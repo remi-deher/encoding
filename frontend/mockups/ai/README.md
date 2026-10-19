@@ -12,7 +12,7 @@ npm exec ng build -- --configuration development --browser mockups/ai/main.ts --
 node mockups/serve.mjs dist/ai-mockup/browser 4318
 ```
 
-Ouvrir http://127.0.0.1:4318. Explorer les suggestions, envoyer un message simulé, ouvrir une conversation, retirer/rattacher le flow, naviguer entre les onglets et basculer le thème.
+Ouvrir http://127.0.0.1:4318. Saisir un message simulé, ouvrir une conversation, joindre ou retirer des ressources, naviguer entre les onglets et basculer le thème. Le bouton « Joindre une ressource » ouvre un sélecteur regroupant flows, nœuds, bibliothèques et exécutions. Les ressources déjà jointes ne peuvent pas être ajoutées en double.
 
 Vérification ciblée (serveur lancé) :
 
@@ -23,7 +23,7 @@ node mockups/ai/verify.cjs
 
 Ce script vérifie le parcours, l’absence de débordement horizontal à 390 px, les erreurs navigateur et l’accessibilité WCAG AA du thème clair sur mobile. Il produit les captures ordinateur et mobile. Les valeurs de quotas indisponibles restent explicitement indisponibles.
 
-L’intégration finale devra réutiliser les services IA et les confirmations existantes. Le sélecteur liste les modèles de démonstration par fournisseur (GPT 6.1, Claude Opus, Sonnet et Haiku) et reste accessible pendant la conversation. L’intégration devra alimenter la liste depuis les modèles disponibles et prendre en charge le changement de modèle côté backend. Les ressources de démonstration restent limitées à un flow pour cette proposition.
+L’intégration finale devra réutiliser les services IA et les confirmations existantes. Le sélecteur liste les modèles de démonstration par fournisseur (GPT 6.1, Claude Opus, Sonnet et Haiku) et reste accessible pendant la conversation. L’intégration devra alimenter la liste depuis les modèles disponibles et prendre en charge le changement de modèle côté backend. Les ressources proposées sont des exemples fictifs pour chaque catégorie.
 
 Pour générer le fichier HTML autonome après compilation : `node mockups/ai/package.mjs`.
 Le résultat est `dist/ai-mockup/browser/maquette-ia.html`.

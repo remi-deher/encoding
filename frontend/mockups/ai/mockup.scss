@@ -158,15 +158,6 @@ small {
   font-size: var(--font-display-md);
   margin-bottom: var(--space-5);
 }
-.suggestions {
-  display: grid;
-  gap: var(--space-2);
-}
-.suggestions button {
-  min-height: 44px;
-  height: auto;
-  text-align: left;
-}
 .composer {
   padding: var(--space-4);
   display: grid;
@@ -315,4 +306,15 @@ small {
   border-radius: var(--radius-lg);
   display: grid;
   gap: var(--space-4);
+}
+
+.resource-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.resource-picker mat-form-field {
+  flex: 1;
+  min-width: 0;
 }

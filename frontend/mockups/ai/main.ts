@@ -34,7 +34,42 @@ class AiMockup {
   readonly notice = inject(NotificationService);
   readonly tab = signal('assistant');
   readonly started = signal(false);
-  readonly context = signal(true);
+  readonly resourcePickerOpen = signal(false);
+  readonly selectedResource = signal('');
+  readonly attachedResources = signal<string[]>(['flow-hevc']);
+  readonly resourceGroups = [
+    {
+      label: 'Flows',
+      resources: [
+        { id: 'flow-hevc', label: 'Flow · HEVC · v3' },
+        { id: 'flow-audio', label: 'Flow · Normalisation audio · v1' },
+      ],
+    },
+    {
+      label: 'Nœuds',
+      resources: [
+        { id: 'node-maison', label: 'Nœud · Maison' },
+        { id: 'node-worker', label: 'Nœud · Worker GPU' },
+      ],
+    },
+    { label: 'Bibliothèques', resources: [{ id: 'library-films', label: 'Bibliothèque · Films' }] },
+    { label: 'Exécutions', resources: [{ id: 'execution-1042', label: 'Exécution · #1042' }] },
+  ];
+  resourceLabel(id: string) {
+    return (
+      this.resourceGroups.flatMap((group) => group.resources).find((resource) => resource.id === id)
+        ?.label ?? id
+    );
+  }
+  attachResource() {
+    const id = this.selectedResource();
+    if (!id || this.attachedResources().includes(id)) return;
+    this.attachedResources.update((resources) => [...resources, id]);
+    this.selectedResource.set('');
+  }
+  removeResource(id: string) {
+    this.attachedResources.update((resources) => resources.filter((resource) => resource !== id));
+  }
   readonly prompt = signal('');
   readonly messages = signal<string[]>([]);
   readonly model = signal('gpt-6.1');
@@ -67,11 +102,6 @@ class AiMockup {
       this.model.set(fallback?.id ?? '');
     }
   }
-  readonly suggestions = [
-    'Expliquer mon flow HEVC',
-    'Comprendre une exécution échouée',
-    'Créer un flow à partir de mon besoin',
-  ];
   send() {
     if (!this.prompt().trim()) return;
     this.messages.update((items) => [...items, this.prompt().trim()]);

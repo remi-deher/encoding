@@ -49,13 +49,6 @@
                 <div class="spark">✦</div>
                 <h2>Que souhaitez-vous<br />améliorer aujourd’hui ?</h2>
               </div>
-              <div class="suggestions">
-                @for (suggestion of suggestions; track suggestion) {
-                  <button matButton="tonal" (click)="prompt.set(suggestion)">
-                    {{ suggestion }} ↗
-                  </button>
-                }
-              </div>
             } @else {
               <div class="bubble user">Comment optimiser mon flow HEVC sans perdre le HDR ?</div>
               <article class="answer">
@@ -93,6 +86,51 @@
                 (ngModelChange)="prompt.set($event)"
               ></textarea>
             </mat-form-field>
+            <button
+              matButton="text"
+              type="button"
+              [attr.aria-expanded]="resourcePickerOpen()"
+              aria-controls="resource-picker"
+              (click)="resourcePickerOpen.set(!resourcePickerOpen())"
+            >
+              ＋ Joindre une ressource
+            </button>
+            @if (resourcePickerOpen()) {
+              <section
+                id="resource-picker"
+                class="resource-picker"
+                aria-label="Joindre une ressource"
+              >
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Ressource</mat-label>
+                  <mat-select
+                    name="resource"
+                    [ngModel]="selectedResource()"
+                    (ngModelChange)="selectedResource.set($event)"
+                  >
+                    @for (group of resourceGroups; track group.label) {
+                      <mat-optgroup [label]="group.label">
+                        @for (resource of group.resources; track resource.id) {
+                          <mat-option
+                            [value]="resource.id"
+                            [disabled]="attachedResources().includes(resource.id)"
+                            >{{ resource.label }}</mat-option
+                          >
+                        }
+                      </mat-optgroup>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <button
+                  matButton="tonal"
+                  type="button"
+                  [disabled]="!selectedResource()"
+                  (click)="attachResource()"
+                >
+                  Joindre
+                </button>
+              </section>
+            }
             <div class="compose-actions">
               <mat-form-field appearance="outline" subscriptSizing="dynamic"
                 ><mat-label>Modèle de la conversation</mat-label
@@ -116,16 +154,18 @@
         <aside class="context">
           <h2>Contexte</h2>
           <mat-chip-set aria-label="Ressources attachées">
-            @if (context()) {
-              <mat-chip (removed)="context.set(false)"
-                >Flow · HEVC · v3<button matChipRemove aria-label="Retirer le flow du contexte">
+            @for (id of attachedResources(); track id) {
+              <mat-chip (removed)="removeResource(id)"
+                >{{ resourceLabel(id)
+                }}<button matChipRemove [attr.aria-label]="'Retirer ' + resourceLabel(id)">
                   ×
                 </button></mat-chip
               >
-            }</mat-chip-set
-          ><button matButton="tonal" [disabled]="context()" (click)="context.set(true)">
-            ＋ Ajouter le flow de démo
-          </button>
+            }
+          </mat-chip-set>
+          @if (!attachedResources().length) {
+            <p>Aucune ressource jointe</p>
+          }
         </aside>
       </div>
     }
