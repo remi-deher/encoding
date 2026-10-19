@@ -66,6 +66,16 @@ export class AiToolsService {
     );
   }
 
+  recordFlowProposalDecision(
+    requestId: string,
+    decision: 'applied-to-editor' | 'rejected',
+  ): Observable<unknown> {
+    return this.http.post(
+      `/api/v1/tools/ai/assistant/activity/${encodeURIComponent(requestId)}/proposal`,
+      { decision },
+    );
+  }
+
   forkSession(id: string): Observable<{ readonly id: string }> {
     return this.http.post<{ readonly id: string }>(
       `/api/v1/tools/ai/sessions/${encodeURIComponent(id)}/fork`,

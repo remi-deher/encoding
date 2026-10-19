@@ -24,6 +24,8 @@ public sealed record AiAssistantToolCall(string Name, Guid? FlowId = null, strin
 
 public sealed record AiAssistantToolResult(string Name, string Label, string Href, JsonElement Data);
 
+public sealed record AiAssistantProposalDecision(string Decision);
+
 public sealed record AiAssistantTurn(
     Guid RequestId,
     string UserPrompt,

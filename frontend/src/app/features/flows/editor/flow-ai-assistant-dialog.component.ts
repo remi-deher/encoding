@@ -17,6 +17,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { FlowDocument } from '../../../shared/models/flow-validation';
 import { FlowSimulation } from '../../../shared/services/flow-simulation';
+import { NotificationService } from '../../../shared/services/notification.service';
 
 export interface FlowAiAssistantDialogData {
   readonly mediaType: string;
@@ -375,6 +376,7 @@ export class FlowAiAssistantDialogComponent {
   readonly data = inject<FlowAiAssistantDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject(MatDialogRef<FlowAiAssistantDialogComponent>);
   private readonly aiService = inject(AiToolsService);
+  private readonly notifications = inject(NotificationService);
   protected readonly simulation = inject(FlowSimulation);
 
   readonly mode = signal<'generate' | 'refactor' | 'explain'>('generate');
@@ -382,6 +384,7 @@ export class FlowAiAssistantDialogComponent {
   readonly loading = signal(false);
   readonly explanation = signal<string | null>(null);
   readonly proposal = signal<FlowDocument | null>(null);
+  readonly proposalRequestId = signal<string | null>(null);
   readonly proposalChanges = computed(() => {
     const current = this.data.currentFlow;
     const proposed = this.proposal();
@@ -449,11 +452,14 @@ export class FlowAiAssistantDialogComponent {
     this.errorMessage.set(null);
     this.explanation.set(null);
     this.proposal.set(null);
+    this.proposalRequestId.set(null);
   }
 
   applyProposal(): void {
     const flow = this.proposal();
-    if (flow) this.dialogRef.close({ flow });
+    if (!flow) return;
+    this.recordProposalDecision('applied-to-editor');
+    this.dialogRef.close({ flow });
   }
 
   simulateProposal(flow: FlowDocument): void {
@@ -471,10 +477,20 @@ export class FlowAiAssistantDialogComponent {
   }
 
   discardProposal(): void {
+    this.recordProposalDecision('rejected');
     this.proposal.set(null);
     this.errorMessage.set(null);
     this.requestId = crypto.randomUUID();
     this.lastPrompt = '';
+  }
+
+  private recordProposalDecision(decision: 'applied-to-editor' | 'rejected'): void {
+    const requestId = this.proposalRequestId();
+    if (!requestId) return;
+    this.aiService.recordFlowProposalDecision(requestId, decision).subscribe({
+      error: () => this.notifications.show('La décision est appliquée, mais son suivi IA n’a pas pu être mis à jour.'),
+    });
+    this.proposalRequestId.set(null);
   }
 
   formatFlow(flow: FlowDocument): string {
@@ -515,6 +531,7 @@ export class FlowAiAssistantDialogComponent {
     this.errorMessage.set(null);
     this.explanation.set(null);
     this.proposal.set(null);
+    this.proposalRequestId.set(null);
 
     const currentMode = this.mode();
     if (currentMode === 'generate') {
@@ -532,6 +549,7 @@ export class FlowAiAssistantDialogComponent {
             if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
             if (res.success && res.flow) {
+              this.proposalRequestId.set(res.requestId ?? null);
               this.proposal.set(res.flow);
             } else {
               this.errorMessage.set(res.explanation || 'Impossible de générer un flow valide.');
@@ -557,6 +575,7 @@ export class FlowAiAssistantDialogComponent {
             if (res.success) this.requestId = crypto.randomUUID();
             this.loading.set(false);
             if (res.success && res.flow) {
+              this.proposalRequestId.set(res.requestId ?? null);
               this.proposal.set(res.flow);
             } else {
               this.errorMessage.set(

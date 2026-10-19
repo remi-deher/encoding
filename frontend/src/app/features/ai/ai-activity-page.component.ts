@@ -171,6 +171,9 @@ export class AiActivityPageComponent {
         {
           running: 'En cours',
           succeeded: 'Réussie',
+          'proposal-ready': 'Proposition prête',
+          'applied-to-editor': 'Appliquée à l’éditeur',
+          rejected: 'Rejetée',
           failed: 'Échouée',
           cancelled: 'Annulée',
         } as Record<string, string>

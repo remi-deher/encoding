@@ -29,7 +29,7 @@ public static class FlowAiEndpoints
             try
             {
                 var response = await service.GenerateFlowAsync(request with { RequestId = requestId }, ct, settings.FlowLocalOnly);
-                await activity.RecordOperationActivityAsync(user, requestId, "flow-generation", provider, response.Success ? "succeeded" : "failed", startedAt,
+                await activity.RecordOperationActivityAsync(user, requestId, "flow-generation", provider, response.Success ? "proposal-ready" : "failed", startedAt,
                     response.Success ? null : "invalid-result", ct);
                 return Results.Ok(response);
             }
@@ -55,7 +55,7 @@ public static class FlowAiEndpoints
             try
             {
                 var response = await service.RefactorFlowAsync(request with { RequestId = requestId }, ct, settings.FlowLocalOnly);
-                await activity.RecordOperationActivityAsync(user, requestId, "flow-refactor", provider, response.Success ? "succeeded" : "failed", startedAt,
+                await activity.RecordOperationActivityAsync(user, requestId, "flow-refactor", provider, response.Success ? "proposal-ready" : "failed", startedAt,
                     response.Success ? null : "invalid-result", ct);
                 return Results.Ok(response);
             }

@@ -91,6 +91,24 @@ public sealed class AiAssistantService(
         catch (ObjectDisposedException) { return false; }
     }
 
+    public async Task<bool> UpdateFlowProposalActivityAsync(
+        Guid requestId,
+        string decision,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        if (decision is not ("applied-to-editor" or "rejected"))
+            throw new ArgumentException("Décision de proposition invalide.");
+        var ownerId = OwnerId(user);
+        var key = ActivityPrefix + ownerId + "/" + requestId.ToString("N");
+        var stored = await store.ReadAsync<StoredActivity>(key, ct);
+        if (stored is null || stored.Activity.Operation is not ("flow-generation" or "flow-refactor")) return false;
+        if (stored.Activity.Status == decision) return true;
+        if (stored.Activity.Status != "proposal-ready") return false;
+        await SaveActivityAsync(ownerId, stored.Activity with { Status = decision, UpdatedAt = DateTimeOffset.UtcNow }, ct);
+        return true;
+    }
+
     public async Task<AiAssistantConversationDetail?> GetAsync(string id, ClaimsPrincipal user, CancellationToken ct)
     {
         if (!IsSessionId(id)) return null;

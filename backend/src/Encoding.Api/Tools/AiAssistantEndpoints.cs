@@ -52,6 +52,12 @@ public static class AiAssistantEndpoints
             await GuardAsync(async () => Results.Ok(await mcp.CallAssistantReadToolAsync(call, ct))))
         .AllowAssistantConversation()
         .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
+
+        group.MapPost("/activity/{requestId:guid}/proposal", async (Guid requestId, AiAssistantProposalDecision request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () => await service.UpdateFlowProposalActivityAsync(requestId, request.Decision, http.User, ct)
+                ? Results.Ok(new { requestId, status = request.Decision })
+                : Results.Conflict(new { title = "Cette proposition n’est plus en attente de décision." })))
+        .AllowAssistantConversation();
     }
 
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)

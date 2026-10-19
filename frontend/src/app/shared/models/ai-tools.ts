@@ -179,7 +179,7 @@ export interface AiAssistantActivity {
   readonly requestId: string;
   readonly conversationId: string | null;
   readonly provider: string;
-  readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+  readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'proposal-ready' | 'applied-to-editor' | 'rejected';
   readonly startedAt: string;
   readonly updatedAt: string;
   readonly durationMilliseconds: number | null;
