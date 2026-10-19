@@ -1,6 +1,6 @@
 # IA & fournisseurs — audit et proposition
 
-Date : 18 octobre 2026. Statut : audit initial et proposition conservés pour référence. L’implémentation réalisée ensuite est décrite dans [0071](../architecture/0071-ai-cli-tools-and-headless-authentication.md).
+Date : 18 octobre 2026. Statut : audit initial et proposition conservés pour référence. La décision a évolué : les deux CLI utilisent désormais leurs commandes natives de connexion, dont le parcours navigateur Claude `claude auth login`. L’implémentation actuelle est décrite dans [0071](../architecture/0071-ai-cli-tools-and-headless-authentication.md).
 
 ## Diagnostic dans le dépôt
 
@@ -34,7 +34,7 @@ Utiliser `CODEX_HOME` pour le contexte Codex et `CLAUDE_CONFIG_DIR` pour le cont
 
 1. Créer deux adaptateurs de connexion. Valider l'identifiant de fournisseur et la présence/version du binaire avant le démarrage. Retourner « outil absent » plutôt qu'une session fictive.
 2. Pour Codex, lancer la commande officielle et lire les deux flux pendant son exécution, avec nettoyage ANSI, buffers bornés et extraction des seules instructions attendues. Fournir URL/code réels à l'UI ; ne pas exposer de sortie brute contenant des secrets. Si la version ne permet pas une extraction fiable, afficher une erreur explicite et proposer la commande sur le nœud.
-3. Pour Claude headless, guider la génération locale avec `claude setup-token`, recevoir le jeton via un champ secret et un endpoint administrateur, puis l'injecter uniquement dans les processus Claude. Ne jamais le retourner dans les GET, journaux ou messages d'erreur. Vérifier le comportement de `auth status` avec cette méthode sur la version embarquée ; distinguer « secret enregistré » de « accès vérifié ».
+3. Proposition historique remplacée par l'association navigateur `claude auth login`, décrite dans [0071](../architecture/0071-ai-cli-tools-and-headless-authentication.md). L'ancienne voie `claude setup-token` n'est plus présentée dans l'interface.
 4. Supprimer le bouton de simulation et l'endpoint de validation arbitraire en production. Remplacer les marqueurs historiques par « connexion à revérifier ». Ne déclarer la connexion réussie qu'après la fin du parcours et le contrôle de la CLI ; proposer séparément un test distant explicite, susceptible de consommer du quota.
 5. Piloter expiration/annulation et arrêt de l'arbre de processus. Sérialiser les connexions par couple nœud/fournisseur ; reprendre proprement après un redémarrage, sans conserver une attente fictive. Les sessions doivent rester liées au nœud qui les exécute, même lorsque le navigateur contacte un autre serveur du cluster.
 6. Protéger les dossiers de secrets (répertoire 0700, fichiers 0600 sur Linux), les conserver sur volume persistant et ne pas répliquer les secrets via le maillage. Déconnecter via l'outil et supprimer le secret local géré ; ne pas confondre déconnexion locale et révocation globale du compte chez le fournisseur.

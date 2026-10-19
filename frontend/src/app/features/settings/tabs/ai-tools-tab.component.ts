@@ -1,4 +1,3 @@
-import { CategoryTabsComponent } from '../../../shared/ui/category-tabs.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -7,6 +6,8 @@ import {
   computed,
   inject,
   signal,
+  TemplateRef,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,7 +18,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatExpansionModule } from '@angular/material/expansion';
-import { MatMenuModule } from '@angular/material/menu';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
+import { SettingsEditor } from '../settings-editor';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import {
@@ -34,21 +36,45 @@ import { AuthService } from '../../../core/auth/auth.service';
   host: { '(window:beforeunload)': 'beforeUnload($event)' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    CategoryTabsComponent,
+    ConfigurationSectionComponent,
     FormsModule,
     MatButtonModule,
-    MatFormFieldModule,
     MatIconModule,
+    MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
     MatProgressSpinnerModule,
     MatExpansionModule,
-    MatMenuModule,
   ],
   templateUrl: './ai-tools-tab.component.html',
   styleUrl: './ai-tools-tab.component.scss',
 })
 export class AiToolsTabComponent implements OnInit {
+  protected readonly editor = inject(SettingsEditor);
+  private readonly providerEditor = viewChild.required<TemplateRef<unknown>>('providerEditor');
+  readonly settingsError = signal(false);
+  private savedSettings: AiSettings | null = null;
+  openProvider(id: string): void {
+    this.selectedProvider.set(id);
+    void this.editor.open({
+      title: this.selectedName(),
+      content: this.providerEditor(),
+      dirty: () => this.hasUnsavedChanges(),
+      busy: () => this.savingSettings() || this.connecting(),
+      onClosed: () => this.discardChanges(),
+    });
+  }
+  discardChanges(): void {
+    if (this.savedSettings) this.applySettings(this.savedSettings);
+  }
+  providerStatus(id: string): string {
+    if (id === 'ollama')
+      return this.ollamaBaseUrl() && this.ollamaModel() ? 'Configuré' : 'Non configuré';
+    if (id === 'openai')
+      return this.openAiBaseUrl() && this.openAiModel() ? 'Configuré' : 'Non configuré';
+    const tool = this.tools().find((item) => item.id === id);
+    return tool ? this.authLabel(tool.authStatus.state) : 'État indisponible';
+  }
   private readonly aiService = inject(AiToolsService);
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(MatDialog);
@@ -73,12 +99,6 @@ export class AiToolsTabComponent implements OnInit {
     this.tools().find((t) => t.id === this.selectedProvider()),
   );
   readonly defaultProvider = signal('ollama');
-  readonly providerTabs = computed(() =>
-    this.providers.map((provider) => ({
-      value: provider.id,
-      label: provider.name + (this.defaultProvider() === provider.id ? ' · par défaut' : ''),
-    })),
-  );
   readonly ollamaBaseUrl = signal('');
   readonly ollamaModel = signal('');
   readonly openAiBaseUrl = signal('');
@@ -87,7 +107,6 @@ export class AiToolsTabComponent implements OnInit {
   readonly hasOpenAiApiKey = signal(false);
   readonly timeoutSeconds = signal(120);
   readonly subtitleBatchSize = signal(80);
-  readonly claudeToken = signal('');
 
   private savedFingerprint = '';
   private fingerprint(): string {
@@ -103,16 +122,17 @@ export class AiToolsTabComponent implements OnInit {
     ]);
   }
   hasUnsavedChanges(): boolean {
-    return (
-      !this.loadingSettings() &&
-      (this.fingerprint() !== this.savedFingerprint || this.claudeToken().length > 0)
-    );
+    return !this.loadingSettings() && this.fingerprint() !== this.savedFingerprint;
   }
   beforeUnload(event: BeforeUnloadEvent): void {
     if (this.hasUnsavedChanges()) event.preventDefault();
   }
   ngOnInit(): void {
     this.refreshTools();
+    this.loadSettings();
+  }
+  loadSettings(): void {
+    this.settingsError.set(false);
     this.aiService.getSettings().subscribe({
       next: (settings) => {
         this.applySettings(settings);
@@ -120,6 +140,7 @@ export class AiToolsTabComponent implements OnInit {
         this.loadingSettings.set(false);
       },
       error: () => {
+        this.settingsError.set(true);
         this.notifications.show('Impossible de charger les paramètres IA.');
       },
     });
@@ -144,6 +165,8 @@ export class AiToolsTabComponent implements OnInit {
     });
   }
   private applySettings(settings: AiSettings): void {
+    this.savedSettings = settings;
+    this.openAiApiKey.set('');
     this.defaultProvider.set(settings.defaultProvider);
     this.ollamaBaseUrl.set(settings.ollamaBaseUrl);
     this.ollamaModel.set(settings.ollamaModel);
@@ -155,7 +178,16 @@ export class AiToolsTabComponent implements OnInit {
     this.savedFingerprint = this.fingerprint();
   }
   saveSettings(): void {
-    if (!this.isAdmin()) return;
+    if (!this.isAdmin() || this.savingSettings()) return;
+    if (
+      this.timeoutSeconds() < 10 ||
+      this.timeoutSeconds() > 600 ||
+      this.subtitleBatchSize() < 5 ||
+      this.subtitleBatchSize() > 200
+    ) {
+      this.notifications.show('Vérifiez les limites du cluster.');
+      return;
+    }
     this.savingSettings.set(true);
     const request: AiSettingsUpdateRequest = {
       defaultProvider: this.defaultProvider(),
@@ -174,6 +206,7 @@ export class AiToolsTabComponent implements OnInit {
         this.savedFingerprint = this.fingerprint();
         this.savingSettings.set(false);
         this.notifications.show('Configuration IA enregistrée avec succès.');
+        this.editor.reset();
         this.refreshTools();
       },
       error: () => {
@@ -196,24 +229,6 @@ export class AiToolsTabComponent implements OnInit {
         ref.afterClosed().subscribe(() => this.refreshTools());
       },
       error: (error: HttpErrorResponse) => {
-        this.connecting.set(false);
-        this.notifications.show(this.authError(error));
-        this.refreshTools();
-      },
-    });
-  }
-  saveClaudeToken(): void {
-    if (!this.isAdmin()) return;
-    this.connecting.set(true);
-    this.aiService.saveClaudeToken(this.claudeToken().trim()).subscribe({
-      next: () => {
-        this.claudeToken.set('');
-        this.connecting.set(false);
-        this.notifications.show('Connexion Claude enregistrée sur ce nœud.');
-        this.refreshTools();
-      },
-      error: (error: HttpErrorResponse) => {
-        this.claudeToken.set('');
         this.connecting.set(false);
         this.notifications.show(this.authError(error));
         this.refreshTools();
