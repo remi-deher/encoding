@@ -34,7 +34,9 @@ public sealed class AiAssistantService(
         string OwnerId,
         AiAssistantConversation Conversation,
         IReadOnlyDictionary<Guid, IReadOnlyList<AiAssistantSource>>? TurnSources = null,
-        IReadOnlyDictionary<Guid, string>? UserPrompts = null);
+        IReadOnlyDictionary<Guid, string>? UserPrompts = null,
+        IReadOnlyDictionary<Guid, string>? TurnPromptSnapshots = null,
+        IReadOnlyDictionary<Guid, string>? TurnToolCalls = null);
     private sealed record ResolvedContext(AiAssistantSource Source, string Data);
 
     public async Task<IReadOnlyList<AiAssistantConversation>> ListAsync(ClaimsPrincipal user, CancellationToken ct)
@@ -203,43 +205,61 @@ public sealed class AiAssistantService(
 
         var session = await cluster.GetSessionAsync(conversation.Id, ct);
         var legacySession = session is not null && session.SystemPrompt != BuildSystemPrompt();
-        var sources = ConversationSources(conversation).ToArray();
-        if (legacySession && conversation.AdditionalSources is { Count: > 0 })
-            throw new InvalidOperationException("Cette ancienne conversation ne peut pas recevoir de nouvelles ressources. Créez une nouvelle conversation.");
-        var resolved = new List<ResolvedContext>();
-        foreach (var source in sources)
-        {
-            if (legacySession)
-            {
-                resolved.Add(new(source, string.Empty));
-                continue;
-            }
-            var context = await ResolveContextAsync(source.Kind, source.ResourceId, source.Version, ct);
-            if (context is null) return null;
-            resolved.Add(context);
-        }
-        if (!legacySession && resolved.Sum(context => (long)context.Data.Length) > 80_000)
-            throw new ArgumentException("La ressource dépasse la taille de contexte prise en charge.");
-
         var requestedTools = request.ToolCalls ?? Array.Empty<AiAssistantToolCall>();
         if (requestedTools.Count > 3 || requestedTools.Select(tool => tool.Name).Distinct().Count() != requestedTools.Count)
             throw new ArgumentException("Une demande peut consulter jusqu’à trois outils de lecture distincts.");
         if (legacySession && requestedTools.Count > 0)
             throw new InvalidOperationException("Cette ancienne conversation ne prend pas en charge les outils de lecture. Créez une nouvelle conversation.");
-        var toolContexts = new List<ResolvedContext>();
-        foreach (var tool in requestedTools)
-        {
-            var result = await mcp.CallAssistantReadToolAsync(tool, ct);
-            var data = JsonSerializer.Serialize(result.Data);
-            toolContexts.Add(new(new AiAssistantSource("tool", Guid.NewGuid(), result.Label, result.Href), data));
-        }
-        if (resolved.Sum(context => (long)context.Data.Length) + toolContexts.Sum(context => (long)context.Data.Length) > 80_000)
-            throw new ArgumentException("Les ressources et outils dépassent la taille de contexte prise en charge.");
-        var allContexts = resolved.Concat(toolContexts).ToArray();
-        var allSources = allContexts.Select(context => context.Source).ToArray();
-
+        var storedConversation = await ReadConversationAsync(ownerId, conversation.Id, ct);
+        var savedUserPrompt = storedConversation?.UserPrompts?.GetValueOrDefault(request.RequestId);
+        if (savedUserPrompt is not null && savedUserPrompt != request.UserPrompt)
+            throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre message.");
+        var serializedToolCalls = JsonSerializer.Serialize(requestedTools);
+        var savedToolCalls = storedConversation?.TurnToolCalls?.GetValueOrDefault(request.RequestId);
+        if (savedToolCalls is not null && savedToolCalls != serializedToolCalls)
+            throw new ArgumentException("Cet identifiant de requête est déjà associé à d’autres outils ou paramètres.");
+        var savedPromptSnapshot = storedConversation?.TurnPromptSnapshots?.GetValueOrDefault(request.RequestId);
+        IReadOnlyList<AiAssistantSource> allSources;
+        string contextualPrompt;
         var systemPrompt = session?.SystemPrompt ?? BuildSystemPrompt();
-        var contextualPrompt = legacySession ? request.UserPrompt : BuildContextualPrompt(request.UserPrompt, allContexts);
+        if (savedPromptSnapshot is not null)
+        {
+            contextualPrompt = savedPromptSnapshot;
+            allSources = storedConversation?.TurnSources?.GetValueOrDefault(request.RequestId) ?? [conversation.Source];
+        }
+        else
+        {
+            var sources = ConversationSources(conversation).ToArray();
+            if (legacySession && conversation.AdditionalSources is { Count: > 0 })
+                throw new InvalidOperationException("Cette ancienne conversation ne peut pas recevoir de nouvelles ressources. Créez une nouvelle conversation.");
+            var resolved = new List<ResolvedContext>();
+            foreach (var source in sources)
+            {
+                if (legacySession)
+                {
+                    resolved.Add(new(source, string.Empty));
+                    continue;
+                }
+                var context = await ResolveContextAsync(source.Kind, source.ResourceId, source.Version, ct);
+                if (context is null) return null;
+                resolved.Add(context);
+            }
+            if (!legacySession && resolved.Sum(context => (long)context.Data.Length) > 80_000)
+                throw new ArgumentException("La ressource dépasse la taille de contexte prise en charge.");
+
+            var toolContexts = new List<ResolvedContext>();
+            foreach (var tool in requestedTools)
+            {
+                var result = await mcp.CallAssistantReadToolAsync(tool, ct);
+                var data = JsonSerializer.Serialize(result.Data);
+                toolContexts.Add(new(new AiAssistantSource("tool", Guid.NewGuid(), result.Label, result.Href), data));
+            }
+            if (resolved.Sum(context => (long)context.Data.Length) + toolContexts.Sum(context => (long)context.Data.Length) > 80_000)
+                throw new ArgumentException("Les ressources et outils dépassent la taille de contexte prise en charge.");
+            var allContexts = resolved.Concat(toolContexts).ToArray();
+            allSources = allContexts.Select(context => context.Source).ToArray();
+            contextualPrompt = legacySession ? request.UserPrompt : BuildContextualPrompt(request.UserPrompt, allContexts);
+        }
         var existingTurn = session?.Turns.FirstOrDefault(turn => turn.RequestId == request.RequestId);
         if (existingTurn is not null && existingTurn.UserPrompt != contextualPrompt)
             throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre message ou contexte.");
@@ -247,14 +267,19 @@ public sealed class AiAssistantService(
             && pendingPrompt.RequestId == request.RequestId
             && pendingPrompt.UserPrompt != contextualPrompt)
             throw new ArgumentException("Cet identifiant de requête est déjà associé à un autre message ou contexte.");
-        var storedConversation = await ReadConversationAsync(ownerId, conversation.Id, ct);
         var turnSources = storedConversation?.TurnSources?.ToDictionary(pair => pair.Key, pair => pair.Value)
             ?? new Dictionary<Guid, IReadOnlyList<AiAssistantSource>>();
         turnSources[request.RequestId] = allSources;
         var userPrompts = storedConversation?.UserPrompts?.ToDictionary(pair => pair.Key, pair => pair.Value)
             ?? new Dictionary<Guid, string>();
         userPrompts[request.RequestId] = request.UserPrompt;
-        await SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts);
+        var turnPromptSnapshots = storedConversation?.TurnPromptSnapshots?.ToDictionary(pair => pair.Key, pair => pair.Value)
+            ?? new Dictionary<Guid, string>();
+        turnPromptSnapshots[request.RequestId] = contextualPrompt;
+        var turnToolCalls = storedConversation?.TurnToolCalls?.ToDictionary(pair => pair.Key, pair => pair.Value)
+            ?? new Dictionary<Guid, string>();
+        turnToolCalls[request.RequestId] = serializedToolCalls;
+        await SaveConversationAsync(ownerId, conversation, ct, turnSources, userPrompts, turnPromptSnapshots, turnToolCalls);
         var startedAt = DateTimeOffset.UtcNow;
         var activity = new AiAssistantActivity(request.RequestId, conversation.Id, conversation.Provider,
             "running", startedAt, startedAt, null, null, Tools: requestedTools.Select(tool => tool.Name).ToArray());
@@ -373,15 +398,17 @@ public sealed class AiAssistantService(
         AiAssistantConversation conversation,
         CancellationToken ct,
         IReadOnlyDictionary<Guid, IReadOnlyList<AiAssistantSource>>? turnSources = null,
-        IReadOnlyDictionary<Guid, string>? userPrompts = null)
+        IReadOnlyDictionary<Guid, string>? userPrompts = null,
+        IReadOnlyDictionary<Guid, string>? turnPromptSnapshots = null,
+        IReadOnlyDictionary<Guid, string>? turnToolCalls = null)
     {
         await store.SaveAsync(SessionOwnerKey(conversation.Id), ownerId, ct);
-        var existing = turnSources is null || userPrompts is null
-            ? await ReadConversationAsync(ownerId, conversation.Id, ct)
-            : null;
+        var existing = await ReadConversationAsync(ownerId, conversation.Id, ct);
         await store.SaveAsync(ConversationKey(ownerId, conversation.Id),
             new StoredConversation(ownerId, conversation, turnSources ?? existing?.TurnSources,
-                userPrompts ?? existing?.UserPrompts), ct);
+                userPrompts ?? existing?.UserPrompts,
+                turnPromptSnapshots ?? existing?.TurnPromptSnapshots,
+                turnToolCalls ?? existing?.TurnToolCalls), ct);
     }
 
     private sealed record StoredActivity(string OwnerId, AiAssistantActivity Activity);
