@@ -16,6 +16,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { FlowDocument } from '../../../shared/models/flow-validation';
+import { FlowSimulation } from '../../../shared/services/flow-simulation';
 
 export interface FlowAiAssistantDialogData {
   readonly mediaType: string;
@@ -25,6 +26,7 @@ export interface FlowAiAssistantDialogData {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-ai-assistant-dialog',
+  providers: [FlowSimulation],
   imports: [
     CommonModule,
     FormsModule,
@@ -165,6 +167,40 @@ export interface FlowAiAssistantDialogData {
               <summary>Examiner la définition complète</summary>
               <pre>{{ formatFlow(proposed) }}</pre>
             </details>
+            <section class="proposal-simulation" aria-labelledby="proposal-simulation-title">
+              <h4 id="proposal-simulation-title">Vérification du comportement</h4>
+              <p>
+                Simulation déterministe avec un profil fictif H.264 1080p et AAC stéréo. Les
+                résultats supposés ne prouvent ni l’exécution réelle ni la disponibilité d’un outil.
+              </p>
+              <button
+                matButton="tonal"
+                type="button"
+                [disabled]="simulation.busy()"
+                (click)="simulateProposal(proposed)"
+              >
+                {{ simulation.busy() ? 'Simulation…' : 'Simuler cette proposition' }}
+              </button>
+              @if (simulation.error()) {
+                <p role="alert">{{ simulation.error() }}</p>
+              }
+              @if (simulation.result(); as result) {
+                <div class="simulation-result" role="status">
+                  <strong>{{ simulationStatus(result.status) }}</strong>
+                  <p>{{ result.detail }}</p>
+                  @if (result.steps.length) {
+                    <ol>
+                      @for (step of result.steps; track $index) {
+                        <li>
+                          {{ step.name }} — {{ step.detail }}
+                          @if (step.assumed) { <span>(résultat supposé)</span> }
+                        </li>
+                      }
+                    </ol>
+                  }
+                </div>
+              }
+            </section>
             <div class="proposal-actions">
               <button matButton="text" type="button" (click)="discardProposal()">Rejeter</button>
               <button matButton="filled" type="button" (click)="applyProposal()">
@@ -311,6 +347,22 @@ export interface FlowAiAssistantDialogData {
         overflow: auto;
         white-space: pre-wrap;
       }
+      .proposal-simulation {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: var(--radius-md, 12px);
+        background: var(--surface-container-low, #222);
+      }
+      .proposal-simulation h4,
+      .proposal-simulation p {
+        margin-top: 0;
+      }
+      .simulation-result {
+        margin-top: 12px;
+      }
+      .simulation-result ol {
+        padding-inline-start: 22px;
+      }
       .proposal-actions {
         display: flex;
         justify-content: flex-end;
@@ -323,6 +375,7 @@ export class FlowAiAssistantDialogComponent {
   readonly data = inject<FlowAiAssistantDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject(MatDialogRef<FlowAiAssistantDialogComponent>);
   private readonly aiService = inject(AiToolsService);
+  protected readonly simulation = inject(FlowSimulation);
 
   readonly mode = signal<'generate' | 'refactor' | 'explain'>('generate');
   readonly prompt = signal('');
@@ -401,6 +454,20 @@ export class FlowAiAssistantDialogComponent {
   applyProposal(): void {
     const flow = this.proposal();
     if (flow) this.dialogRef.close({ flow });
+  }
+
+  simulateProposal(flow: FlowDocument): void {
+    this.simulation.prepare(flow);
+    void this.simulation.run(this.simulation.profile());
+  }
+
+  simulationStatus(status: string): string {
+    return ({
+      completed: 'Simulation terminée',
+      waiting: 'Simulation en attente d’une hypothèse',
+      failed: 'Échec simulé',
+      invalid: 'Flow invalide pour la simulation',
+    } as Record<string, string>)[status] ?? 'État de simulation inconnu';
   }
 
   discardProposal(): void {
