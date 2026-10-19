@@ -49,7 +49,9 @@ public sealed class AiSettingsService
             throw new ArgumentException("Les limites IA sont invalides.");
         if (update.AssistantConversationRetentionDays is < 1 or > 3650 || update.AssistantActivityRetentionDays is < 1 or > 3650)
             throw new ArgumentException("Les délais de rétention IA doivent être compris entre 1 et 3 650 jours.");
-        foreach (var url in new[] { update.OllamaBaseUrl, update.OpenAiBaseUrl }.OfType<string>())
+        foreach (var url in new[] { update.OllamaBaseUrl, update.OpenAiBaseUrl }
+                     .OfType<string>()
+                     .Where(url => !string.IsNullOrWhiteSpace(url)))
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || !string.IsNullOrEmpty(uri.UserInfo))
                 throw new ArgumentException("L’adresse du fournisseur doit être une URL HTTP(S) sans identifiants.");
         lock (syncRoot)
