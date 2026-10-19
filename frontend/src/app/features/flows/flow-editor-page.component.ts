@@ -260,9 +260,7 @@ export class FlowEditorPageComponent {
   private nextConnectionId = 1;
 
   private readonly validationFlowId =
-    this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId)
-      ? this.flowId
-      : createUuid();
+    this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId) ? this.flowId : createUuid();
 
   private readonly savedGraph = signal<string | null>(null);
   private readonly savedDocumentKey = signal<string | null>(null);
