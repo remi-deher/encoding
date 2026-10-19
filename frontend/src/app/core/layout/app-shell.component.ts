@@ -127,6 +127,15 @@ export class AppShellComponent {
   );
   protected readonly assistantWidgetMounted = signal(false);
   protected readonly assistantPanelOpen = signal(false);
+  private readonly assistantPanelOpening = signal(false);
+  protected readonly assistantPanelGeometry = signal<{
+    left: number;
+    top: number;
+    originX: number;
+    originY: number;
+    scaleX: number;
+    scaleY: number;
+  } | null>(null);
   protected readonly assistantLauncherPosition = signal(this.readAssistantLauncherPosition());
   protected readonly assistantLauncherDragging = signal(false);
   private readonly assistantLauncher = viewChild('assistantLauncher', {
@@ -215,6 +224,7 @@ export class AppShellComponent {
   protected onWindowResize(): void {
     const position = this.assistantLauncherPosition();
     if (position) this.setAssistantLauncherPosition(position.left, position.top, true);
+    if (this.assistantPanelOpen()) this.updateAssistantPanelGeometry();
   }
 
   private setAssistantLauncherPosition(left: number, top: number, persist: boolean): void {
@@ -265,16 +275,61 @@ export class AppShellComponent {
   }
 
   protected toggleAssistantPanel(): void {
+    if (this.assistantPanelOpening()) return;
     if (this.assistantPanelOpen()) {
       this.closeAssistantPanel();
       return;
     }
     this.focusReturnElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (!this.assistantWidgetMounted()) this.assistantWidgetMounted.set(true);
-    this.assistantPanelOpen.set(true);
     if (this.isCompactNavigation()) this.navigationOpened.set(false);
+    this.updateAssistantPanelGeometry();
+    if (!this.assistantWidgetMounted()) {
+      this.assistantPanelOpening.set(true);
+      this.assistantWidgetMounted.set(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => this.activateAssistantPanel()));
+      return;
+    }
+    this.activateAssistantPanel();
+  }
+
+  private activateAssistantPanel(): void {
+    this.assistantPanelOpening.set(false);
+    this.assistantPanelOpen.set(true);
     setTimeout(() => this.assistantCloseButton()?.nativeElement.focus());
+  }
+
+  private updateAssistantPanelGeometry(): void {
+    const button = this.assistantLauncher()?.nativeElement;
+    if (!button) return;
+
+    const launcher = button.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const panelWidth = Math.min(380, Math.max(1, viewportWidth - 32));
+    const panelHeight = Math.min(520, Math.max(1, viewportHeight - 112));
+    const margin = 16;
+    const gap = 16;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+    const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+    const left = clamp(launcher.right - panelWidth, margin, maxLeft);
+    let top = launcher.top - panelHeight - gap;
+    if (top < margin) {
+      const below = launcher.bottom + gap;
+      top = below <= maxTop ? below : clamp(top, margin, maxTop);
+    }
+    const originX = clamp(launcher.left + launcher.width / 2 - left, 0, panelWidth);
+    const originY = clamp(launcher.top + launcher.height / 2 - top, 0, panelHeight);
+
+    this.assistantPanelGeometry.set({
+      left,
+      top,
+      originX,
+      originY,
+      scaleX: Math.min(1, launcher.width / panelWidth),
+      scaleY: Math.min(1, launcher.height / panelHeight),
+    });
   }
 
   protected closeAssistantPanel(): void {
