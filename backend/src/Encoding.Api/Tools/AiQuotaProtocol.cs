@@ -27,7 +27,7 @@ public static class AiQuotaProtocol
         return await ClaudeResponseAsync(reader, "quota-read", ct);
     }
 
-    private static async Task<JsonElement> CodexResponseAsync(Frames reader, int id, CancellationToken ct)
+    internal static async Task<JsonElement> CodexResponseAsync(Frames reader, int id, CancellationToken ct)
     {
         while (true)
         {
@@ -41,7 +41,7 @@ public static class AiQuotaProtocol
         }
     }
 
-    private static async Task<JsonElement> ClaudeResponseAsync(Frames reader, string id, CancellationToken ct)
+    internal static async Task<JsonElement> ClaudeResponseAsync(Frames reader, string id, CancellationToken ct)
     {
         while (true)
         {
@@ -55,7 +55,7 @@ public static class AiQuotaProtocol
         }
     }
 
-    private static async Task SendAsync(StreamWriter input, object value, CancellationToken ct)
+    internal static async Task SendAsync(StreamWriter input, object value, CancellationToken ct)
     {
         await input.WriteLineAsync(JsonSerializer.Serialize(value).AsMemory(), ct);
         await input.FlushAsync(ct);
@@ -121,7 +121,7 @@ public static class AiQuotaProtocol
     private static string? Text(JsonElement value, string name) => value.ValueKind == JsonValueKind.Object
         && value.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String ? field.GetString()?[..Math.Min(field.GetString()!.Length, 160)] : null;
 
-    private sealed class Frames(StreamReader output)
+    internal sealed class Frames(StreamReader output)
     {
         private int total;
         public async Task<JsonElement> ReadAsync(CancellationToken ct)

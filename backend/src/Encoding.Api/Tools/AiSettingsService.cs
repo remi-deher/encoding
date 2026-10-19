@@ -95,8 +95,8 @@ public sealed class AiSettingsService
 
         return new AiSettingsDto(
             DefaultProvider: configuration["AiTools:DefaultProvider"] ?? "codex-cli",
-            OllamaBaseUrl: configuration["AiTools:Ollama:BaseUrl"] ?? "http://127.0.0.1:11434/v1/",
-            OllamaModel: configuration["AiTools:Ollama:Model"] ?? "llama3.2",
+            OllamaBaseUrl: configuration["AiTools:Ollama:BaseUrl"] ?? "",
+            OllamaModel: configuration["AiTools:Ollama:Model"] ?? "",
             OpenAiBaseUrl: configuration["AiTools:OpenAi:BaseUrl"] ?? "https://api.openai.com/v1/",
             OpenAiModel: configuration["AiTools:OpenAi:Model"] ?? "gpt-4o-mini",
             OpenAiApiKey: configuration["AiTools:OpenAi:ApiKey"],

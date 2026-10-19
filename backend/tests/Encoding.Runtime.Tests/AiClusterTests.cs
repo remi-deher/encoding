@@ -170,6 +170,120 @@ public sealed class AiClusterTests
         await Assert.ThrowsAsync<ArgumentException>(() => mesh.Second.Service.DispatchAsync("save-token", JsonSerializer.SerializeToElement(new { token = "x" }), Ct));
     }
 
+    [Fact]
+    public async Task ModelCatalogAndPolicyUsePeerTransportAndNoCredentialsAreExposed()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var catalog = await mesh.First.Service.ModelsAsync(false, Ct);
+        var remote = Assert.Single(catalog.Nodes, n => n.NodeId == mesh.Second.Identity.PeerId);
+        Assert.Equal(2, Assert.Single(remote.Providers).Models.Count);
+        Assert.DoesNotContain("private-api-key", JsonSerializer.Serialize(catalog));
+        await mesh.First.Service.UpdateModelPolicyAsync(new("openai", "other-model", false), Ct);
+        await mesh.First.Service.UpdateModelPolicyAsync(new("openai", "gpt-4o-mini", false), Ct);
+        Assert.Equal(2, (await mesh.First.Service.ModelPolicyAsync(Ct)).DisabledModels.Count);
+        var events = await mesh.First.Journal.GetEventsAfterAsync(mesh.ClusterId, new Dictionary<Guid, long>(), 32, Ct);
+        await mesh.Second.Journal.ApplyIncomingAsync(events, Ct);
+        Assert.Equal(2, (await mesh.Second.Service.ModelPolicyAsync(Ct)).DisabledModels.Count);
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.GenerateAsync("openai", new("s", "u", Model: "other-model"), Ct));
+        await mesh.First.Service.UpdateModelPolicyAsync(new("openai", "other-model", true), Ct);
+        Assert.Single((await mesh.First.Service.ModelPolicyAsync(Ct)).DisabledModels);
+    }
+
+    [Fact]
+    public async Task ConversationTurnsCanChangeModelsButReplayAndPendingRequestsKeepTheirSelection()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var node = mesh.Second.Identity.PeerId;
+        var firstPrompt = new AiPrompt("instructions", "first", Model: "gpt-4o-mini", NodeId: node);
+        var first = await mesh.First.Service.GenerateAsync("openai", firstPrompt, Ct, allowModelChanges: true);
+        Assert.True(first.Success, first.ErrorMessage);
+        var next = new AiPrompt("instructions", "second", Model: "other-model", SessionId: first.SessionId, RequestId: Guid.NewGuid(), NodeId: node);
+        var second = await mesh.Second.Service.GenerateAsync("openai", next, Ct, allowModelChanges: true);
+        Assert.True(second.Success, second.ErrorMessage);
+        var session = await mesh.First.Service.GetSessionAsync(first.SessionId!, Ct);
+        Assert.Equal("gpt-4o-mini", session!.Turns[0].Selection!.Model);
+        Assert.Equal("other-model", session.Turns[1].Selection!.Model);
+        Assert.Equal(node, session.Turns[1].ExecutorNodeId);
+        Assert.Contains("first", mesh.Factory.LastPrompt);
+        var replay = await mesh.First.Service.GenerateAsync("openai", firstPrompt with { SessionId = first.SessionId, RequestId = first.RequestId }, Ct, allowModelChanges: true);
+        Assert.Equal(first.Content, replay.Content);
+        Assert.Equal(2, mesh.Factory.Inferences);
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.GenerateAsync("openai", firstPrompt with { Model = "other-model", SessionId = first.SessionId, RequestId = first.RequestId }, Ct, allowModelChanges: true));
+        var pendingId = Guid.NewGuid();
+        var pendingPrompt = next with { UserPrompt = "third", RequestId = pendingId };
+        await mesh.First.Store.SaveAsync("session/" + first.SessionId, session with {
+            PendingRequest = pendingId, PendingPrompt = pendingPrompt, AttemptDeadline = DateTimeOffset.UtcNow.AddMinutes(1)
+        }, Ct);
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.GenerateAsync("openai", pendingPrompt with { Model = "gpt-4o-mini" }, Ct, allowModelChanges: true));
+    }
+
+    [Fact]
+    public async Task AssistantOptionsUseTheDiscoveredCatalogAndFilterDisabledModels()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var assistant = new AiAssistantService(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
+            null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
+        var options = await assistant.OptionsAsync(Ct);
+        Assert.Equal(2, options.Models.Count);
+        Assert.All(options.Models, option => {
+            Assert.Equal(mesh.Second.Identity.PeerId, option.NodeId);
+            Assert.Empty(option.ReasoningEfforts);
+            Assert.False(option.ReasoningKnown);
+        });
+        await mesh.First.Service.UpdateModelPolicyAsync(new("openai", "other-model", false), Ct);
+        Assert.Single((await assistant.OptionsAsync(Ct)).Models);
+    }
+
+    [Fact]
+    public async Task AssistantPersistsPerTurnSelectionsAndObservedModelWithoutRewritingOldTurns()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        mesh.Factory.ReportModel = true;
+        var resourceId = Guid.NewGuid();
+        var nodes = new NodeRepository(mesh.First.Database.Db);
+        await nodes.EnrollAsync(new(resourceId, "worker", [Encoding.Contracts.Nodes.NodeRole.Worker], 1, [], "node-secret"), true, Ct);
+        var assistant = new AiAssistantService(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
+            null!, null!, null!, null!, nodes, new NodePresenceOptions(TimeSpan.FromMinutes(2)), null!, new EphemeralDataProtectionProvider());
+        mesh.First.Assistant = assistant;
+        var remoteAssistant = new AiAssistantService(mesh.Second.Store, mesh.Second.Service, mesh.Second.Transport,
+            null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
+        mesh.Second.Assistant = remoteAssistant;
+        var user = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([
+            new(System.Security.Claims.ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new(System.Security.Claims.ClaimTypes.Role, "admin")], "test"));
+        var request = new AiAssistantMessageRequest(Guid.NewGuid(), "first question", ResourceType: "node", ResourceId: resourceId,
+            Provider: "openai", Model: "gpt-4o-mini", NodeId: mesh.Second.Identity.PeerId);
+        var first = await assistant.SendAsync(request, user, Ct);
+        Assert.True(first!.Success, first.ErrorMessage);
+        Assert.Equal("resolved-test-model", first.ActualModel);
+        await Assert.ThrowsAsync<ArgumentException>(() => assistant.SendAsync(request with { Model = "other-model" }, user, Ct));
+        var second = await remoteAssistant.SendAsync(new(Guid.NewGuid(), "second question", ConversationId: first.Conversation.Id,
+            Provider: "openai", Model: "other-model", NodeId: mesh.Second.Identity.PeerId), user, Ct);
+        Assert.True(second!.Success, second.ErrorMessage);
+        var detail = await assistant.GetAsync(first.Conversation.Id, user, Ct);
+        Assert.Equal("gpt-4o-mini", detail!.Turns[0].Selection!.Model);
+        Assert.Equal("other-model", detail.Turns[1].Selection!.Model);
+        Assert.Equal("other-model", detail.Conversation.Model);
+        Assert.All(detail.Turns, turn => Assert.Equal("resolved-test-model", turn.ActualModel));
+        var replay = await assistant.SendAsync(request with { ConversationId = first.Conversation.Id }, user, Ct);
+        Assert.True(replay!.Success);
+        Assert.Equal("other-model", replay.Conversation.Model);
+        Assert.Equal("other-model", (await assistant.GetAsync(first.Conversation.Id, user, Ct))!.Conversation.Model);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => assistant.SendAsync(request with { ConversationId = first.Conversation.Id, Model = "other-model" }, user, Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => remoteAssistant.SendAsync(new(Guid.NewGuid(), "invalid effort", ConversationId: first.Conversation.Id,
+            Provider: "openai", Model: "other-model", ReasoningEffort: "high", NodeId: mesh.Second.Identity.PeerId), user, Ct));
+        mesh.Factory.BlockInferences = true;
+        var cancelledRequest = Guid.NewGuid();
+        var sending = remoteAssistant.SendAsync(new(cancelledRequest, "third question", ConversationId: first.Conversation.Id,
+            Provider: "openai", Model: "other-model", NodeId: mesh.Second.Identity.PeerId), user, Ct);
+        await mesh.Factory.InferenceStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(await remoteAssistant.CancelRequestAsync(cancelledRequest, user, Ct));
+        Assert.False((await sending)!.Success);
+        Assert.Equal(2, (await assistant.GetAsync(first.Conversation.Id, user, Ct))!.Turns.Count);
+
+    }
+
     private sealed class Node : IAsyncDisposable
     {
         public TestDatabase Database = null!;
@@ -184,6 +298,8 @@ public sealed class AiClusterTests
         public DeviceCodeAuthService Auth = null!;
         public AiSettingsService Settings = null!;
         public AiClientFactory Clients = null!;
+        public AiModelCatalogService Catalog = null!;
+        public AiAssistantService? Assistant;
         public IConfiguration Configuration = null!;
         public LocalNodeRegistry LocalNode = null!;
         public static async Task<Node> CreateAsync(Guid cluster, string name, string other, MeshFactory factory, byte[] key, bool connected)
@@ -207,11 +323,13 @@ public sealed class AiClusterTests
             node.Auth = new(node.Profile.Runtime);
             node.Settings = new(node.Configuration);
             node.Clients = new(node.Configuration, factory, node.Settings, node.Profile.Runtime);
+            node.Catalog = new(node.Profile.Runtime, node.Settings, factory);
             node.LocalNode = new(new NodeRepository(node.Database.Db));
             node.Service = node.NewService();
             return node;
         }
-        public AiClusterService NewService() => new(Transport, Store, Auth, Settings, Clients, Configuration, LocalNode, new AiQuotaService(Profile.Runtime));
+        public AiClusterService NewService() => new(Transport, Store, Auth, Settings, Clients, Configuration, LocalNode, new AiQuotaService(Profile.Runtime), Catalog,
+            new ServiceCollection().AddSingleton<AiAssistantService>(_ => Assistant ?? throw new InvalidOperationException("Assistant not configured")).BuildServiceProvider());
         public async ValueTask DisposeAsync() { Auth.Dispose(); Identity.Dispose(); Key.Dispose(); await Database.DisposeAsync(); Profile.Dispose(); }
     }
     private sealed class Mesh : IAsyncDisposable
@@ -241,6 +359,9 @@ public sealed class AiClusterTests
     {
         public readonly Dictionary<string, Node> Nodes = [];
         public int Inferences;
+        public bool ReportModel;
+        public bool BlockInferences;
+        public TaskCompletionSource InferenceStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public string LastPrompt = "";
         public HttpClient CreateClient(string name) => new(new Handler(this, name)) { Timeout = Timeout.InfiniteTimeSpan };
         private sealed class Handler(MeshFactory factory, string name) : HttpMessageHandler
@@ -249,11 +370,18 @@ public sealed class AiClusterTests
             {
                 if (name == "AiClient")
                 {
+                    if (request.Method == HttpMethod.Get)
+                        return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { data = new[] { new { id = "gpt-4o-mini" }, new { id = "other-model" } } }) };
                     factory.Inferences++;
+                    if (factory.BlockInferences)
+                    {
+                        factory.InferenceStarted.TrySetResult();
+                        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                    }
                     factory.LastPrompt = await request.Content!.ReadAsStringAsync(ct);
                     if (request.Headers.Authorization?.Parameter == "broken-test-key")
                         return new(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("Provider unavailable") };
-                    return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { choices = new[] { new { message = new { content = "answer from remote model" } } } }) };
+                    return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = factory.ReportModel ? "resolved-test-model" : null, choices = new[] { new { message = new { content = "answer from remote model" } } } }) };
                 }
                 var node = factory.Nodes[request.RequestUri!.Host];
                 var http = new DefaultHttpContext();
