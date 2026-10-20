@@ -887,6 +887,7 @@ public sealed class AiAssistantService(
                 var plannerRequestId = DeriveRequestId(
                     conversation.Id + "/" + request.RequestId.ToString("N"), "assistant-read-tool-planner");
                 var plannerSessionId = $"{conversation.Id.Split('.')[0]}.{plannerRequestId:N}";
+                await store.SaveAsync(SessionOwnerKey(plannerSessionId), ownerId, requestCancellation.Token);
                 var planner = await cluster.GenerateAsync(
                     conversation.Provider,
                     new AiPrompt(BuildToolPlannerPrompt(user.IsInRole("admin")), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId, RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
