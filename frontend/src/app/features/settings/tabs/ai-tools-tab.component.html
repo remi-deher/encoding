@@ -61,7 +61,9 @@
               [ngModel]="effortValue('default')"
               (ngModelChange)="changeEffort('default', $event)"
               [disabled]="
-                !isAdmin() || loadingModelCatalog() || !reasoningChoices(defaultProvider(), modelValue('default')).length
+                !isAdmin() ||
+                loadingModelCatalog() ||
+                !reasoningChoices(defaultProvider(), modelValue('default')).length
               "
             >
               <mat-option value="">Valeur par défaut du modèle</mat-option>

@@ -120,7 +120,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var now = DateTimeOffset.UtcNow;
         var providers = new[] { "codex-cli", "claude-cli", "openai", "ollama" };
         return peerUrls.Select((url, index) => new AiNodeAvailability(
-            new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(url)).AsSpan(0, 16)),
+            new Guid(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)).AsSpan(0, 16)),
             $"Nœud distant {index + 1}", [], true,
             Catalogs: providers.Select(provider => new AiModelCatalog(provider, "loading", [], null, now,
                 "Chargement des capacités annoncées par le nœud.")).ToArray())).ToArray();
