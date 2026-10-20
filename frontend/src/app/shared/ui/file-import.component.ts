@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { MatIconModule } from '@angular/material/icon';
+import { IconComponent } from './icon.component';
 import { MatButtonModule } from '@angular/material/button';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-file-import',
-  imports: [MatButtonModule, MatIconModule],
+  imports: [MatButtonModule, IconComponent],
   template: `
     <input
       #picker
@@ -16,7 +16,7 @@ import { MatButtonModule } from '@angular/material/button';
       (change)="select(picker)"
     />
     <button matButton="outlined" type="button" [disabled]="busy()" (click)="picker.click()">
-      <mat-icon aria-hidden="true">upload_file</mat-icon>
+      <app-icon aria-hidden="true" name="upload" />
       {{ busy() ? 'Lecture en cours…' : label() }}
     </button>
     @if (description()) {
@@ -24,6 +24,9 @@ import { MatButtonModule } from '@angular/material/button';
     }
   `,
   styles: `
+    app-icon {
+      margin-inline-end: var(--space-2);
+    }
     p {
       color: var(--text-secondary);
       font-size: var(--font-body);

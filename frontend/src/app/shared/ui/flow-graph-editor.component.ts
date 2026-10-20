@@ -38,7 +38,6 @@ import { NgTemplateOutlet } from '@angular/common';
 import { CdkDrag, CdkDragHandle, CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatExpansionPanel, MatExpansionModule } from '@angular/material/expansion';
 import { NotificationService } from '../services/notification.service';
 import {
   FLOW_COMPONENT_KIND_LABELS,
@@ -77,7 +76,6 @@ import {
     CdkDropList,
     MatButtonModule,
     MatMenuModule,
-    MatExpansionModule,
   ],
   templateUrl: './flow-graph-editor.component.html',
   styleUrl: './flow-graph-editor.component.scss',
@@ -103,16 +101,8 @@ export class FlowGraphEditorComponent {
       return;
     this.configurationRequested.emit(node.id);
   }
-  protected foldAllBranches(fold: boolean): void {
-    this.foldedBranches.set(
-      fold
-        ? new Set(
-            this.visualNodes().flatMap((node) =>
-              node.component.outputs.map((output) => node.id + ':' + output.id),
-            ),
-          )
-        : new Set(),
-    );
+  protected branchColumns(count: number): string {
+    return `repeat(${count}, minmax(440px, 1fr))`;
   }
   readonly layoutKey = input('flow');
   readonly duplicateRequested = output<string>();
@@ -137,18 +127,13 @@ export class FlowGraphEditorComponent {
   protected readonly contextMenu = signal<ContextActionMenuData | null>(null);
   private contextNode?: FlowGraphNode;
   private contextEdgeId?: string;
-  private readonly branchPanels = viewChildren(MatExpansionPanel);
   readonly paletteRequested = output<void>();
   protected backgroundMenu(position: ContextActionPosition): void {
     this.contextNode = undefined;
     this.contextEdgeId = undefined;
     this.contextMenu.set({
       ...position,
-      items: [
-        { id: 'palette', label: 'Ajouter une étape' },
-        { id: 'expand', label: 'Déplier toutes les branches' },
-        { id: 'collapse', label: 'Replier toutes les branches' },
-      ],
+      items: [{ id: 'palette', label: 'Ajouter une étape' }],
     });
   }
   protected edgeMenu(event: { id: string; position: ContextActionPosition }): void {
@@ -237,8 +222,6 @@ export class FlowGraphEditorComponent {
       edgeId = this.contextEdgeId;
     this.contextMenu.set(null);
     if (action === 'palette') this.paletteRequested.emit();
-    if (action === 'expand') this.branchPanels().forEach((p) => p.open());
-    if (action === 'collapse') this.branchPanels().forEach((p) => p.close());
     if (action === 'insert' && edgeId) this.insertOnConnection(edgeId);
     if (action === 'disconnect' && edgeId) this.connectionRemoved.emit(edgeId);
     if (action === 'ai-edge' && edgeId) {
@@ -388,7 +371,7 @@ export class FlowGraphEditorComponent {
     this.drawingSize.set({ width: root.clientWidth, height: root.offsetHeight });
     const obstacles = this.cards()
       .map((card) => card.nativeElement)
-      .filter((card) => !card.closest('mat-expansion-panel:not(.mat-expanded)'))
+      .filter((card) => !card.closest('.branch-lane')?.querySelector('[aria-expanded="false"]'))
       .map((card) => {
         const bounds = card.getBoundingClientRect();
         return {
@@ -409,8 +392,8 @@ export class FlowGraphEditorComponent {
       )?.nativeElement;
       if (!source || !target) return [];
       if (
-        source.closest('mat-expansion-panel:not(.mat-expanded)') ||
-        target.closest('mat-expansion-panel:not(.mat-expanded)')
+        source.closest('.branch-lane')?.querySelector('[aria-expanded="false"]') ||
+        target.closest('.branch-lane')?.querySelector('[aria-expanded="false"]')
       )
         return [];
       const a = source.getBoundingClientRect(),

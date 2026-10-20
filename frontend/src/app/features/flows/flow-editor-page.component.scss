@@ -1,6 +1,6 @@
 :host {
   display: block;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -66,6 +66,8 @@
 }
 
 .component-editor-delete {
+  margin-inline-end: auto;
+  align-self: center;
   min-height: 36px;
   padding: 0 14px;
   border: 1px solid var(--danger);

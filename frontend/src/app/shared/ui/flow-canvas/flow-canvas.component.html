@@ -38,7 +38,18 @@
         aria-hidden="true"
       >
         @for (edge of connections(); track edge.id) {
-          <path [attr.d]="path(edge)" />
+          <path
+            class="wire"
+            [class.highlighted]="
+              selectedNodeId() === edge.sourceNodeId || selectedNodeId() === edge.targetNodeId
+            "
+            [class.muted]="
+              selectedNodeId() &&
+              selectedNodeId() !== edge.sourceNodeId &&
+              selectedNodeId() !== edge.targetNodeId
+            "
+            [attr.d]="path(edge)"
+          />
           <path
             class="wire-hit"
             [attr.d]="path(edge)"
@@ -63,6 +74,7 @@
           [style.--node-color]="colors(node.component).color"
           cdkDrag
           [cdkDragScale]="scale()"
+          (cdkDragMoved)="dragging(node, $event)"
           (cdkDragEnded)="move(node, $event)"
           appContextActions
           (contextActions)="menu($event, node)"

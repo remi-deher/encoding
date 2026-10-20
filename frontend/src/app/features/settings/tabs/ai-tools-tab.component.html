@@ -9,7 +9,7 @@
     [disabled]="loadingTools()"
     (click)="refreshTools()"
   >
-    <mat-icon>refresh</mat-icon>Actualiser les connexions
+    <app-icon name="refresh" />Actualiser les connexions
   </button>
   @if (loadingSettings()) {
     <p role="status">Chargement des paramètres…</p>
@@ -195,9 +195,12 @@
       <div class="provider-list">
         @for (provider of providers; track provider.id) {
           <div class="provider-row">
-            <mat-icon class="provider-icon" aria-hidden="true">{{
-              provider.id === 'ollama' ? 'dns' : provider.id === 'openai' ? 'api' : 'terminal'
-            }}</mat-icon>
+            <app-icon
+              class="provider-icon"
+              [name]="
+                provider.id === 'ollama' ? 'server' : provider.id === 'openai' ? 'api' : 'terminal'
+              "
+            />
             <div>
               <h3>{{ provider.name }}</h3>
               <p>{{ clusterLabel(provider.id) }}</p>
@@ -342,7 +345,7 @@
         <div class="node-list">
           @for (node of view.nodes; track node.nodeId) {
             <div class="node-row">
-              <mat-icon aria-hidden="true">dns</mat-icon><strong>{{ node.name }}</strong
+              <app-icon aria-hidden="true" name="server" /><strong>{{ node.name }}</strong
               ><span>{{
                 node.providers.length
                   ? providerNames(node.providers)

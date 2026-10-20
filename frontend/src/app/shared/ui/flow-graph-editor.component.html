@@ -15,8 +15,6 @@
   <button mat-menu-item (click)="toggleDensity()">
     {{ compactView() ? 'Afficher les détails des blocs' : 'Alléger les blocs' }}
   </button>
-  <button mat-menu-item (click)="foldAllBranches(true)">Replier les branches</button>
-  <button mat-menu-item (click)="foldAllBranches(false)">Déplier les branches</button>
 </ng-template>
 @if (viewMode() === 'canvas') {
   <app-flow-canvas
@@ -377,34 +375,52 @@
           </article>
 
           @if (step.branches.length) {
-            <div class="branches" [style.--branch-count]="step.branches.length">
+            <div
+              class="branches"
+              [style.--branch-count]="step.branches.length"
+              [style.--branch-columns]="branchColumns(step.branches.length)"
+            >
               @for (branch of step.branches; track branch.output.id) {
-                <mat-expansion-panel
-                  [expanded]="!branchFolded(step.node.id, branch.output.id)"
-                  (opened)="foldBranch(step.node.id, branch.output.id, false)"
-                  (closed)="foldBranch(step.node.id, branch.output.id, true)"
-                >
-                  <mat-expansion-panel-header>
-                    <mat-panel-title>{{ branch.output.label }}</mat-panel-title>
-                    <mat-panel-description
-                      >{{ branch.sequence.steps.length }} étape(s)</mat-panel-description
-                    >
-                  </mat-expansion-panel-header>
-
-                  @if (!branch.sequence.steps.length) {
-                    <p class="branch-empty">
-                      {{
-                        isConnected(step.node, branch.output)
-                          ? 'Rejoint directement la suite commune.'
-                          : 'Fin de cette branche.'
-                      }}
-                    </p>
+                <section class="branch-lane">
+                  <button
+                    mat-button
+                    class="branch-heading"
+                    type="button"
+                    [attr.aria-expanded]="!branchFolded(step.node.id, branch.output.id)"
+                    [attr.aria-label]="
+                      (branchFolded(step.node.id, branch.output.id) ? 'Déplier' : 'Replier') +
+                      ' le chemin ' +
+                      branch.output.label
+                    "
+                    (click)="
+                      foldBranch(
+                        step.node.id,
+                        branch.output.id,
+                        !branchFolded(step.node.id, branch.output.id)
+                      )
+                    "
+                  >
+                    <app-icon
+                      [name]="branchFolded(step.node.id, branch.output.id) ? 'right' : 'down'"
+                    />
+                    {{ branch.output.label }}
+                  </button>
+                  @if (!branchFolded(step.node.id, branch.output.id)) {
+                    @if (!branch.sequence.steps.length) {
+                      <p class="branch-empty">
+                        {{
+                          isConnected(step.node, branch.output)
+                            ? 'Cette sortie rejoint directement la suite commune.'
+                            : 'Ce chemin se termine ici.'
+                        }}
+                      </p>
+                    }
+                    <ng-container
+                      [ngTemplateOutlet]="sequenceTemplate"
+                      [ngTemplateOutletContext]="{ sequence: branch.sequence }"
+                    />
                   }
-                  <ng-container
-                    [ngTemplateOutlet]="sequenceTemplate"
-                    [ngTemplateOutletContext]="{ sequence: branch.sequence }"
-                  />
-                </mat-expansion-panel>
+                </section>
               }
             </div>
             @if (
@@ -428,8 +444,13 @@
                 >
               }
               @if (!isConnected(step.node, output) || !showConnections()) {
-                <button mat-button type="button" (click)="add(step.node, output)">
-                  ＋ Ajouter une étape
+                <button
+                  class="unconnected-output"
+                  mat-button
+                  type="button"
+                  (click)="add(step.node, output)"
+                >
+                  {{ output.label }} · Ajouter une étape
                 </button>
               }
             </div>
