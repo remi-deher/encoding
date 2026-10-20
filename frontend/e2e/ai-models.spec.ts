@@ -287,10 +287,12 @@ test('administrators disable discovered models through the backend policy', asyn
   await toggle.click();
   await expect(toggle).not.toBeChecked();
   expect(saved).toEqual({ provider: 'codex-cli', model: 'server-model-a', enabled: false });
-  await panel.getByRole('button', { name: 'Actualiser les modèles' }).click();
-  await expect(toggle).not.toBeChecked();
-  await toggle.click();
-  await expect(toggle).toBeChecked();
+  await page.reload();
+  const reloadedPanel = page.locator('app-ai-model-catalog');
+  const reloadedToggle = reloadedPanel.getByRole('switch', { name: 'Modèle fourni A' });
+  await expect(reloadedToggle).not.toBeChecked();
+  await reloadedToggle.click();
+  await expect(reloadedToggle).toBeChecked();
   const result = await new AxeBuilder({ page })
     .include('app-ai-model-catalog')
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])

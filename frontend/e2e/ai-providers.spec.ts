@@ -5,7 +5,24 @@ test.beforeEach(async ({ page }) => {
   // Catch-all routes must be registered first: Playwright evaluates routes in reverse order.
   await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/v1/tools/ai/models*', (route) =>
-    route.fulfill({ json: { nodes: [], policy: { disabledModels: [] } } }),
+    route.fulfill({
+      json: {
+        nodes: [
+          {
+            nodeId: 'first',
+            name: 'Salon',
+            providers: [
+              {
+                provider: 'ollama',
+                state: 'available',
+                models: [{ id: 'llama3.2', label: 'Llama 3.2', reasoningEfforts: [] }],
+              },
+            ],
+          },
+        ],
+        policy: { disabledModels: [] },
+      },
+    }),
   );
   await page.route('**/api/v1/system/logs/categories*', (route) =>
     route.fulfill({ json: { categories: [] } }),
@@ -83,7 +100,7 @@ test('provider settings remain focused, accessible and usable in both themes', a
   editor = page.getByRole('dialog', { name: 'OpenAI / API compatible', exact: true });
   await expect(editor.getByLabel('Clé API', { exact: true })).toHaveAttribute('type', 'password');
   await expect(editor.getByLabel('Adresse du serveur')).toHaveCount(0);
-  await expect(tab.getByRole('combobox', { name: 'Moteur du cluster' })).toContainText('Ollama');
+  await expect(tab.getByRole('combobox', { name: 'Type d’IA' })).toContainText('Ollama');
   await expect(tab.getByText('Simuler', { exact: false })).toHaveCount(0);
   await editor.getByRole('button', { name: 'Fermer le panneau' }).click();
   for (const theme of ['light', 'dark']) {

@@ -71,6 +71,11 @@ test.beforeEach(async ({ page }) => {
                 state: 'available',
                 models: [{ id: 'qwen3:8b', label: 'Qwen 3 8B', reasoningEfforts: [] }],
               },
+              {
+                provider: 'openai',
+                state: 'available',
+                models: [{ id: 'gpt-4o-mini', label: 'GPT-4o mini', reasoningEfforts: [] }],
+              },
             ],
           },
         ],
@@ -229,7 +234,7 @@ test('discard protection applies to tab clicks and browser history, without doub
 }) => {
   await page.goto('/settings?tab=interface');
   await page.getByRole('tab', { name: 'Connexions', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Moteur du cluster', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Type d’IA', exact: true }).click();
   await page.getByRole('option', { name: 'OpenAI / API compatible', exact: true }).click();
   await page.goBack();
   let confirmation = page.getByRole('dialog', { name: 'Quitter sans enregistrer ?', exact: true });
