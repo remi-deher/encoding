@@ -13,26 +13,43 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     private readonly ConcurrentDictionary<Guid, Lazy<Task<AiCompletionResult>>> running = new();
     public async Task<AiNodeAvailability> LocalAsync(CancellationToken ct)
     {
-        var tools = await auth.ListToolsAsync(ct);
-        var providers = tools.Where(t => t.IsInstalled && t.AuthStatus.State == "authorized").Select(t => t.Id).ToList();
-        var local = settings.GetSettings();
+        using var preparation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        preparation.CancelAfter(TimeSpan.FromSeconds(20));
+        var token = preparation.Token;
+        var providers = new List<string>();
         var models = new Dictionary<string, string?>(StringComparer.Ordinal);
-        if (!local.CodexEnabled) providers.Remove("codex-cli");
-        if (!local.ClaudeEnabled) providers.Remove("claude-cli");
-        if (local.OllamaEnabled && !string.IsNullOrWhiteSpace(local.OllamaBaseUrl) && !string.IsNullOrWhiteSpace(local.OllamaModel))
+        IReadOnlyList<AiModelCatalog>? catalogs = null;
+        string? name = null;
+        try
         {
-            providers.Add("ollama");
-            models["ollama"] = local.OllamaModel;
+            var tools = await auth.ListToolsAsync(token);
+            providers.AddRange(tools.Where(t => t.IsInstalled && t.AuthStatus.State == "authorized").Select(t => t.Id));
+            var local = await GetSettingsAsync(token);
+            if (!local.CodexEnabled) providers.Remove("codex-cli");
+            if (!local.ClaudeEnabled) providers.Remove("claude-cli");
+            if (local.OllamaEnabled && !string.IsNullOrWhiteSpace(local.OllamaBaseUrl) && !string.IsNullOrWhiteSpace(local.OllamaModel))
+            {
+                providers.Add("ollama");
+                models["ollama"] = local.OllamaModel;
+            }
+            if (local.OpenAiEnabled && !string.IsNullOrWhiteSpace(local.OpenAiBaseUrl) && !string.IsNullOrWhiteSpace(local.OpenAiModel) && !string.IsNullOrWhiteSpace(local.OpenAiApiKey))
+            {
+                providers.Add("openai");
+                models["openai"] = local.OpenAiModel;
+            }
+            name = await localNode.ResolveDisplayNameAsync(token);
+            if (modelCatalog is not null)
+                catalogs = await Task.WhenAll(providers.Select(provider => modelCatalog.ReadAsync(provider,
+                    provider is "codex-cli" or "claude-cli" ? auth.ConnectionRevision(provider) : "http", false, token)));
         }
-        if (local.OpenAiEnabled && !string.IsNullOrWhiteSpace(local.OpenAiBaseUrl) && !string.IsNullOrWhiteSpace(local.OpenAiModel) && !string.IsNullOrWhiteSpace(local.OpenAiApiKey))
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            providers.Add("openai");
-            models["openai"] = local.OpenAiModel;
+            // Preparation has one shared budget. Expired catalog reads are unavailable for this observation.
+            catalogs = modelCatalog is null ? null : providers.Select(provider => new AiModelCatalog(provider, "unavailable", [], null,
+                DateTimeOffset.UtcNow, "Préparation du catalogue dépassée." )).ToArray();
         }
-        var displayName = await localNode.ResolveDisplayNameAsync(ct);
-        var catalogs = modelCatalog is null ? null : await Task.WhenAll(providers.Select(provider =>
-            modelCatalog.ReadAsync(provider, tools.FirstOrDefault(t => t.Id == provider)?.AuthStatus.ToString() ?? "http", false, ct)));
-        return new(transport.LocalId, displayName ?? configuration["Node:Name"] ?? Environment.MachineName, providers, Models: models, Catalogs: catalogs);
+        return new(transport.LocalId, name ?? configuration["Node:Name"] ?? Environment.MachineName,
+            providers.Distinct(StringComparer.Ordinal).ToArray(), Models: models, Catalogs: catalogs);
     }
     public async Task<AiClusterView> ViewAsync(CancellationToken ct)
     {
@@ -267,6 +284,10 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         deadline.CancelAfter(request.Deadline - DateTimeOffset.UtcNow);
         try
         {
+            var localSettings = await GetSettingsAsync(deadline.Token);
+            if (request.Provider == "codex-cli" && !localSettings.CodexEnabled
+                || request.Provider == "claude-cli" && !localSettings.ClaudeEnabled)
+                return new(false, "", "Ce fournisseur est désactivé dans le cluster.");
             var local = await LocalAsync(deadline.Token);
             if (!Supports(local, request.Provider, request.Prompt)) return new(false, "", "Modèle ou fournisseur indisponible sur ce nœud.");
             var effectiveModel = request.Prompt.Model ?? local.Models?.GetValueOrDefault(request.Provider)
@@ -274,7 +295,11 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             if ((await ModelPolicyAsync(deadline.Token)).DisabledModels.Any(m => m.Provider == request.Provider && m.Model == effectiveModel))
                 return new(false, "", "Ce modèle est désactivé dans le cluster.");
             var shared = await GetSettingsAsync(deadline.Token);
-            settings.UpdateSettings(new(DefaultProvider: shared.DefaultProvider, TimeoutSeconds: shared.TimeoutSeconds, SubtitleBatchSize: shared.SubtitleBatchSize));
+            if (request.Provider == "codex-cli" && !shared.CodexEnabled
+                || request.Provider == "claude-cli" && !shared.ClaudeEnabled)
+                return new(false, "", "Ce fournisseur est désactivé dans le cluster.");
+            settings.UpdateSettings(new(DefaultProvider: shared.DefaultProvider, TimeoutSeconds: shared.TimeoutSeconds,
+                SubtitleBatchSize: shared.SubtitleBatchSize, CodexEnabled: shared.CodexEnabled, ClaudeEnabled: shared.ClaudeEnabled));
             return (await factory.CreateLocalClient(request.Provider).GenerateTextAsync(request.Prompt, deadline.Token)) with { ExecutorNodeId = transport.LocalId };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return new(false, "", "Bail d’exécution IA expiré."); }

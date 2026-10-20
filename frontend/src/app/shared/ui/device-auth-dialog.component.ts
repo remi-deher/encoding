@@ -30,6 +30,7 @@ export interface DeviceAuthDialogData {
   readonly toolId: string;
   readonly toolName: string;
   readonly prompt: DeviceAuthPrompt;
+  readonly attemptId?: string | null;
 }
 
 @Component({
@@ -231,7 +232,7 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
     clearInterval(this.polling);
     this.subscription?.unsubscribe();
     if (!this.isAuthorized())
-      this.aiService.cancelAuth(this.data.toolId).subscribe({
+      this.aiService.cancelAuth(this.data.toolId, this.data.attemptId).subscribe({
         error: () =>
           this.notifications.show(
             'La tentative expirera automatiquement si son annulation n’a pas pu être confirmée.',
@@ -254,7 +255,7 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
     const value = this.authInput().trim();
     if (!value || this.submittingInput() || this.inputSubmitted()) return;
     this.submittingInput.set(true);
-    this.aiService.submitAuthInput(this.data.toolId, value).subscribe({
+    this.aiService.submitAuthInput(this.data.toolId, value, this.data.attemptId).subscribe({
       next: () => {
         this.authInput.set('');
         this.inputSubmitted.set(true);
@@ -279,15 +280,16 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
     this.subscription = this.aiService.getDeviceAuthStatus(this.data.toolId).subscribe({
       next: (status) => {
         this.isChecking.set(false);
-        if (status.state === 'authorized') {
+        const attemptState = status.attemptState ?? status.state;
+        if (attemptState === 'authorized') {
           this.isAuthorized.set(true);
           clearInterval(this.polling);
           this.notifications.show('Compte associé sur ce nœud.');
           this.dialogRef.close({ success: true });
-        } else if (status.state === 'failed' || status.state === 'expired') {
+        } else if (attemptState === 'failed' || attemptState === 'expired') {
           this.expired.set(true);
           this.statusMessage.set(
-            status.errorMessage || 'La connexion a échoué ou a expiré. Relancez l’association.',
+            status.attemptErrorMessage || status.errorMessage || 'La connexion a échoué ou a expiré. Relancez l’association.',
           );
           clearInterval(this.polling);
         }

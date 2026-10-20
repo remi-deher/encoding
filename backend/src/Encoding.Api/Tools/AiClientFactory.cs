@@ -1,4 +1,5 @@
 using Encoding.Contracts.Tools;
+using Microsoft.Extensions.Logging;
 
 namespace Encoding.Api.Tools;
 
@@ -7,7 +8,8 @@ public sealed class AiClientFactory(
     IHttpClientFactory httpClientFactory,
     AiSettingsService? settingsService = null,
     AiCliRuntime? cliRuntime = null,
-    IServiceProvider? services = null)
+    IServiceProvider? services = null,
+    ILoggerFactory? loggerFactory = null)
 {
     private readonly AiSettingsService settingsService = settingsService ?? new AiSettingsService(configuration);
 
@@ -52,7 +54,8 @@ public sealed class AiClientFactory(
 
         if (provider is not ("codex-cli" or "claude-cli" or "claude")) throw new ArgumentException("Fournisseur IA inconnu.");
         return new CliAiTextClient(toolId, cliRuntime ?? new AiCliRuntime(configuration,
-            new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider()), settings.TimeoutSeconds);
+            new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider()), settings.TimeoutSeconds,
+            loggerFactory?.CreateLogger<CliAiTextClient>());
     }
 
     private sealed class ClusterClient(AiClusterService cluster, string? provider, bool localOnly) : IAiTextClient
