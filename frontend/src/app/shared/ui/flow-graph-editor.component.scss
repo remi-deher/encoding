@@ -268,24 +268,23 @@
   font-size: 12px;
 }
 .view-switch {
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
   top: 0;
   z-index: 5;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
-  padding: 8px;
-  background: var(--surface-container);
-  position: sticky;
+  padding: 0;
+  background: var(--surface-container-high);
+  position: static;
   left: 0;
   font-size: var(--font-label);
 }
 .view-switch button[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--accent);
-}
-.view-switch span {
-  color: var(--text-secondary);
 }
 .step-selected {
   outline: 2px solid var(--accent);
@@ -294,7 +293,7 @@
 app-flow-canvas {
   display: flex;
   width: 100%;
-  height: calc(100% - 64px);
+  height: 100%;
 }
 :host {
   height: 100%;
@@ -304,11 +303,43 @@ app-flow-canvas {
   .step-name {
     font-size: 20px;
   }
-  .view-switch span {
-    flex-basis: 100%;
-  }
 }
 
 .branches > mat-expansion-panel:not(.mat-expanded) {
   width: 440px;
+}
+
+.structured-editor {
+  min-height: 100%;
+}
+.structured-editor_compact .step-band {
+  display: flex;
+  padding: 4px 12px;
+  background: transparent;
+}
+.structured-editor_compact .step-kind,
+.structured-editor_compact .step-provider {
+  display: none;
+}
+.structured-editor_compact .step-card {
+  background: var(--surface-container);
+  border: none;
+  border-radius: var(--radius-lg);
+}
+.step-config-summary {
+  margin: 4px 20px 12px;
+  color: var(--text-secondary);
+  font-size: var(--font-label);
+  overflow-wrap: anywhere;
+}
+.palette-drop-hint {
+  position: absolute;
+  z-index: 6;
+  top: 4px;
+  left: 8px;
+  max-width: 420px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-container-highest);
+  pointer-events: none;
 }

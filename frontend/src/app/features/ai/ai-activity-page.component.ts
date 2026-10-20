@@ -16,7 +16,9 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
       title="Activité IA"
       description="Historique des demandes de l’assistant et des flows."
     >
-      <a page-actions matButton="text" routerLink="/ai">Vue d’ensemble IA</a>
+      <a page-actions matButton="text" routerLink="/" [queryParams]="{ view: 'ai' }"
+        >Vue d’ensemble</a
+      >
     </app-page-header>
     <section class="activity-list" aria-label="Demandes récentes">
       @if (loading()) {

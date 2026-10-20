@@ -109,11 +109,11 @@
             <nav class="topbar-breadcrumb" aria-label="Fil d’Ariane">
               @if (sectionGroup()) {
                 <span class="breadcrumb-group">{{ sectionGroup() }}</span>
-                <span class="breadcrumb-sep" aria-hidden="true">›</span>
+                <span class="breadcrumb-sep" aria-hidden="true"><app-icon name="right" /></span>
               }
               <span class="breadcrumb-current">{{ pageTitle() || 'Encoding' }}</span>
               @if (subSectionLabel()) {
-                <span class="breadcrumb-sep" aria-hidden="true">›</span>
+                <span class="breadcrumb-sep" aria-hidden="true"><app-icon name="right" /></span>
                 <span class="breadcrumb-sub">{{ subSectionLabel() }}</span>
               }
             </nav>

@@ -1,3 +1,9 @@
+import { IconComponent } from '../icon.component';
+import { FlowSimulationStatusComponent } from '../flow-simulation-status.component';
+import { SimulationResult } from '../../models/flow-simulation';
+import { MediaType } from '../../models/media-type';
+import { flowBlockSummary } from '../../models/flow-block-summary';
+import { FlowComponentDrop, FlowPaletteDrop } from '../flow-palette-drag';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -6,6 +12,7 @@ import {
   input,
   output,
   ElementRef,
+  TemplateRef,
   viewChild,
   inject,
   DestroyRef,
@@ -34,6 +41,9 @@ import { NotificationService } from '../../services/notification.service';
   selector: 'app-flow-canvas',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    FlowComponentDrop,
+    IconComponent,
+    FlowSimulationStatusComponent,
     CdkDrag,
     CdkDragHandle,
     MatButtonModule,
@@ -44,6 +54,26 @@ import { NotificationService } from '../../services/notification.service';
   styleUrl: './flow-canvas.component.scss',
 })
 export class FlowCanvasComponent {
+  readonly mediaType = input<MediaType>('video');
+  readonly simulationResult = input<SimulationResult | null>(null);
+  readonly simulationDetailsRequested = output<void>();
+  protected summary(node: FlowGraphNode): string {
+    return flowBlockSummary(node, this.mediaType());
+  }
+  readonly componentDropped = output<FlowPaletteDrop>();
+  protected dropComponent(event: FlowPaletteDrop): void {
+    const view = this.viewport()?.nativeElement;
+    if (!view) return;
+    const rect = view.getBoundingClientRect();
+    this.componentDropped.emit({
+      ...event,
+      position: {
+        x: Math.max(24, (event.point.x - rect.left + view.scrollLeft) / this.scale()),
+        y: Math.max(24, (event.point.y - rect.top + view.scrollTop) / this.scale()),
+      },
+    });
+  }
+  readonly toolbar = viewChild<TemplateRef<unknown>>('toolbar');
   readonly nodes = input.required<readonly FlowGraphNode[]>();
   readonly connections = input.required<readonly FlowGraphConnection[]>();
   readonly selectedNodeId = input<string | null>(null);

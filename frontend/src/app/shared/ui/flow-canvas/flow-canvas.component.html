@@ -1,16 +1,21 @@
-<div class="canvas-tools" role="toolbar" aria-label="Navigation du canvas">
-  <button mat-button (click)="zoom(-0.1)" aria-label="Dézoomer">−</button
-  ><span>{{ (scale() * 100).toFixed(0) }} %</span
-  ><button mat-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button
-  ><button mat-button (click)="fit()">Tout afficher</button>
-  @if (pending(); as selection) {
-    <span role="status">{{ selection.output.label }} → choisissez une entrée</span
-    ><button mat-button (click)="pending.set(null)">Annuler la liaison</button>
-  }
-</div>
+<ng-template #toolbar>
+  <div class="canvas-tools" role="toolbar" aria-label="Navigation du canvas">
+    <button mat-button (click)="zoom(-0.1)" aria-label="Dézoomer">−</button
+    ><span>{{ (scale() * 100).toFixed(0) }} %</span
+    ><button mat-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button
+    ><button mat-button (click)="fit()">Tout afficher</button>
+    @if (pending(); as selection) {
+      <span role="status"
+        >{{ selection.output.label }} <app-icon name="forward" /> choisissez une entrée</span
+      ><button mat-button (click)="pending.set(null)">Annuler la liaison</button>
+    }
+  </div>
+</ng-template>
 <div
   #viewport
   class="canvas-viewport"
+  appFlowComponentDrop
+  (componentDropped)="dropComponent($event)"
   role="region"
   (scroll)="navigate()"
   (pointerdown)="pan($event)"
@@ -78,7 +83,7 @@
           <header>
             <button cdkDragHandle class="drag" aria-label="Déplacer l’étape" title="Déplacer">
               ⠿</button
-            ><span>{{ node.component.pluginName }}</span
+            ><span class="canvas-plugin">{{ node.component.pluginName }}</span
             ><button
               class="more"
               (click)="menuButton($event, node)"
@@ -88,6 +93,14 @@
             </button>
           </header>
           <strong>{{ node.name || node.component.name }}</strong>
+          @if (summary(node)) {
+            <p class="canvas-config-summary">{{ summary(node) }}</p>
+          }
+          <app-flow-simulation-status
+            [node]="node"
+            [result]="simulationResult()"
+            (detailsRequested)="simulationDetailsRequested.emit()"
+          />
           @for (port of node.component.outputs; track port.id) {
             <div class="output-row">
               <button
@@ -117,9 +130,10 @@
   @for (edge of connections(); track edge.id) {
     <button
       mat-button
+      [attr.aria-label]="'Liaison ' + edge.sourceOutputId + ' vers ' + edge.targetNodeId"
       (click)="menu({ x: $event.clientX, y: $event.clientY, origin: viewport }, undefined, edge)"
     >
-      Liaison {{ edge.sourceOutputId }} → {{ edge.targetNodeId }}
+      Liaison {{ edge.sourceOutputId }} <app-icon name="forward" /> {{ edge.targetNodeId }}
     </button>
   }
 </div>

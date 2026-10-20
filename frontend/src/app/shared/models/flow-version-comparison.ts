@@ -25,7 +25,7 @@ export function compareFlowVersions(
     } else
       differences.push({
         label: path,
-        detail: (JSON.stringify(a) ?? 'Absent') + ' → ' + (JSON.stringify(b) ?? 'Absent'),
+        detail: (JSON.stringify(a) ?? 'Absent') + ' vers ' + (JSON.stringify(b) ?? 'Absent'),
       });
   };
   visit(normalize(before), normalize(after), '');

@@ -1,17 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
-import {
-  AiAssistantActivity,
-  AiClusterView,
-  AiSettings,
-  AiToolInfo,
-} from '../../shared/models/ai-tools';
+import { AiClusterView, AiSettings, AiToolInfo } from '../../shared/models/ai-tools';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 
 interface ProviderSummary {
   readonly id: string;
@@ -29,17 +22,10 @@ const PROVIDERS = [
 ] as const;
 
 @Component({
-  selector: 'app-ai-workspace-page',
+  selector: 'app-ai-provider-overview',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, MatButtonModule, MatProgressSpinnerModule, PageHeaderComponent, RouterLink],
+  imports: [MatButtonModule, MatProgressSpinnerModule, RouterLink],
   template: `
-    <app-page-header
-      title="Intelligence artificielle"
-      description="État observé des fournisseurs IA et de leurs connexions dans le cluster."
-    >
-      <a page-actions matButton="filled" routerLink="/ai/assistant">Ouvrir l’assistant</a>
-    </app-page-header>
-
     <div class="ai-workspace">
       @if (loading()) {
         <div class="loading" role="status">
@@ -134,36 +120,6 @@ const PROVIDERS = [
             }
           </article>
         </section>
-
-        <section class="surface-panel activity-panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Activité IA</h2>
-              <p>Consultez l’historique de l’assistant et des opérations sur les flows.</p>
-            </div>
-            <a matButton="text" routerLink="/ai/activity">Voir l’activité</a>
-          </div>
-          @if (recentActivity() === null) {
-            <p class="empty-activity">L’activité récente est indisponible.</p>
-          } @else if (recentActivity()?.length === 0) {
-            <p class="empty-activity">Aucune demande récente de l’assistant.</p>
-          } @else {
-            <ul class="recent-activity-list">
-              @for (item of recentActivity()?.slice(0, 5) ?? []; track item.requestId) {
-                <li>
-                  <span
-                    ><strong>{{ operationName(item.operation) }}</strong> ·
-                    {{ providerName(item.provider) }} · {{ activityStatus(item.status) }}</span
-                  >
-                  <time [dateTime]="item.updatedAt">{{ item.updatedAt | date: 'short' }}</time>
-                  <a [routerLink]="['/ai/activity']" [queryParams]="{ request: item.requestId }"
-                    >Voir le détail</a
-                  >
-                </li>
-              }
-            </ul>
-          }
-        </section>
       }
     </div>
   `,
@@ -208,16 +164,14 @@ const PROVIDERS = [
     .provider-copy p,
     .empty-state p,
     .scope-note,
-    .unknown-state,
-    .empty-activity {
+    .unknown-state {
       margin: 4px 0 0;
       color: var(--text-muted);
       font-size: var(--font-body);
       line-height: 1.5;
     }
     .provider-list,
-    .node-list,
-    .recent-activity-list {
+    .node-list {
       display: grid;
       gap: 3px;
       margin: 0;
@@ -225,8 +179,7 @@ const PROVIDERS = [
       list-style: none;
     }
     .provider-row,
-    .node-row,
-    .recent-activity-list li {
+    .node-row {
       min-width: 0;
       padding: var(--space-3) var(--space-4);
       display: flex;
@@ -279,15 +232,6 @@ const PROVIDERS = [
     .node-row {
       align-items: flex-start;
     }
-    .recent-activity-list li {
-      flex-wrap: wrap;
-    }
-    .recent-activity-list time {
-      color: var(--text-muted);
-    }
-    .recent-activity-list a {
-      color: var(--accent-strong);
-    }
     .node-row strong {
       color: var(--text-primary);
     }
@@ -337,11 +281,6 @@ const PROVIDERS = [
     .notice p {
       margin: 4px 0 0;
     }
-    .empty-activity {
-      padding: var(--space-4);
-      border-radius: var(--radius-md);
-      background: var(--surface-container);
-    }
     @media (max-width: 760px) {
       .overview-grid {
         grid-template-columns: minmax(0, 1fr);
@@ -366,14 +305,13 @@ const PROVIDERS = [
     }
   `,
 })
-export class AiWorkspacePageComponent {
+export class AiProviderOverviewComponent {
   private readonly aiTools = inject(AiToolsService);
   protected readonly loading = signal(true);
   protected readonly loadFailed = signal(false);
   protected readonly tools = signal<readonly AiToolInfo[] | null>(null);
   protected readonly cluster = signal<AiClusterView | null>(null);
   protected readonly settings = signal<AiSettings | null>(null);
-  protected readonly recentActivity = signal<readonly AiAssistantActivity[] | null>(null);
   protected readonly providersUnavailable = computed(
     () => this.tools() === null || this.settings() === null,
   );
@@ -446,19 +384,17 @@ export class AiWorkspacePageComponent {
     this.refresh();
   }
 
-  protected refresh(): void {
+  refresh(): void {
     this.loading.set(true);
     this.loadFailed.set(false);
     forkJoin({
       tools: this.aiTools.listTools().pipe(catchError(() => of(null))),
       cluster: this.aiTools.getCluster().pipe(catchError(() => of(null))),
       settings: this.aiTools.getSettings().pipe(catchError(() => of(null))),
-      activity: this.aiTools.listAssistantActivity().pipe(catchError(() => of(null))),
-    }).subscribe(({ tools, cluster, settings, activity }) => {
+    }).subscribe(({ tools, cluster, settings }) => {
       this.tools.set(tools);
       this.cluster.set(cluster);
       this.settings.set(settings);
-      this.recentActivity.set(activity);
       this.loadFailed.set(tools === null || cluster === null || settings === null);
       this.loading.set(false);
     });
@@ -467,39 +403,6 @@ export class AiWorkspacePageComponent {
   protected providerNames(ids: readonly string[]): string {
     if (!ids.length) return 'Aucun fournisseur déclaré';
     return ids.map((id) => PROVIDERS.find((provider) => provider.id === id)?.name ?? id).join(', ');
-  }
-
-  protected providerName(id: string): string {
-    return PROVIDERS.find((provider) => provider.id === id)?.name ?? id;
-  }
-
-  protected activityStatus(status: string): string {
-    return (
-      (
-        {
-          running: 'En cours',
-          succeeded: 'Réussie',
-          'proposal-ready': 'Proposition prête',
-          'applied-to-editor': 'Appliquée à l’éditeur',
-          rejected: 'Rejetée',
-          failed: 'Échouée',
-          cancelled: 'Annulée',
-        } as Record<string, string>
-      )[status] ?? status
-    );
-  }
-
-  protected operationName(operation?: string): string {
-    return (
-      (
-        {
-          assistant: 'Assistant',
-          'flow-generation': 'Génération de flow',
-          'flow-refactor': 'Modification de flow',
-          'flow-explain': 'Explication de flow',
-        } as Record<string, string>
-      )[operation ?? 'assistant'] ?? 'Opération IA'
-    );
   }
 
   private unknownProvider(id: string, name: string): ProviderSummary {

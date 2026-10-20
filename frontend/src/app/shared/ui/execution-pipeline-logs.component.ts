@@ -1,3 +1,4 @@
+import { IconComponent } from './icon.component';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { ChangeDetectionStrategy, Component, input, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,7 +9,7 @@ import { NotificationService } from '../services/notification.service';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-execution-pipeline-logs',
-  imports: [MatButtonModule, MatExpansionModule],
+  imports: [IconComponent, MatButtonModule, MatExpansionModule],
   template: `
     <section class="pipeline-logs" aria-label="Pipeline et journaux de commandes">
       <header class="pipeline-logs__header">
@@ -127,7 +128,9 @@ import { NotificationService } from '../services/notification.service';
               @if (nextExecutedStep(step, $index); as next) {
                 <div class="pipeline-link" [attr.aria-label]="'Liaison vers ' + next.nodeName">
                   <span>{{ step.outputLabel ?? 'Suite' }}</span>
-                  <span class="pipeline-link__arrow" aria-hidden="true">↓</span>
+                  <span class="pipeline-link__arrow" aria-hidden="true"
+                    ><app-icon name="down"
+                  /></span>
                 </div>
               }
             </li>

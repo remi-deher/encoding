@@ -1,3 +1,5 @@
+import { IconComponent } from '../../shared/ui/icon.component';
+import { AiProviderOverviewComponent } from '../ai/ai-provider-overview.component';
 import {
   ExecutionTracking,
   INITIAL_EXECUTION_TRACKING,
@@ -26,12 +28,13 @@ import {
   TemplateRef,
   computed,
   inject,
+  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
@@ -52,6 +55,8 @@ type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [HomeExecutions],
   imports: [
+    IconComponent,
+    AiProviderOverviewComponent,
     MatButtonModule,
     DatePipe,
     DetailDrawerComponent,
@@ -70,7 +75,10 @@ type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
 export class HomePageComponent {
   private readonly router = inject(Router);
   protected readonly flowActionOpen = signal(false);
-  protected readonly overviewView = signal<OverviewView>('general');
+  private readonly overviewParams = toSignal(inject(ActivatedRoute).queryParamMap);
+  protected readonly overviewView = linkedSignal<OverviewView>(() =>
+    this.overviewParams()?.get('view') === 'ai' ? 'ai' : 'general',
+  );
   protected readonly flowCreationForm = signal<
     import('../../shared/ui/record-form.component').RecordFormData | null
   >(null);
@@ -102,6 +110,7 @@ export class HomePageComponent {
 
   private readonly executionTracking = inject(ExecutionTracking);
   private readonly aiTools = inject(AiToolsService);
+  private readonly providerOverview = viewChild(AiProviderOverviewComponent);
   protected readonly aiOptions = signal<AiAssistantOptions | null>(null);
   protected readonly aiActivity = signal<readonly AiAssistantActivity[]>([]);
   protected readonly aiConversations = signal<readonly AiAssistantConversation[]>([]);
@@ -119,7 +128,9 @@ export class HomePageComponent {
     [...new Set((this.aiOptions()?.models ?? []).map((model) => model.provider))].sort(),
   );
   protected readonly aiProviderNames = computed(() =>
-    this.aiProviders().map((provider) => this.providerLabel(provider)).join(' · '),
+    this.aiProviders()
+      .map((provider) => this.providerLabel(provider))
+      .join(' · '),
   );
   protected readonly aiRunningCount = computed(
     () => this.aiActivity().filter((activity) => activity.status === 'running').length,
@@ -128,14 +139,10 @@ export class HomePageComponent {
     () => this.aiActivity().filter((activity) => activity.status === 'failed').length,
   );
   protected readonly recentAiActivity = computed(() =>
-    [...this.aiActivity()]
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .slice(0, 5),
+    [...this.aiActivity()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
   );
   protected readonly recentAiConversations = computed(() =>
-    [...this.aiConversations()]
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .slice(0, 5),
+    [...this.aiConversations()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
   );
   protected readonly executionState = toSignal(this.executionTracking.state$, {
     initialValue: INITIAL_EXECUTION_TRACKING,
@@ -295,5 +302,6 @@ export class HomePageComponent {
     this.executionTracking.refresh();
     this.homeExecutions.refresh();
     this.refreshAiOverview();
+    this.providerOverview()?.refresh();
   }
 }

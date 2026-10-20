@@ -14,6 +14,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 
 @Component({
   selector: 'app-detail-drawer',
+  host: { '[class.drawer-fill]': 'fill()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatSidenavModule, NgTemplateOutlet],
   template: `
@@ -26,7 +27,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
         class="detail-drawer-panel"
         [class.detail-drawer-panel_standard]="size() === 'standard'"
         position="end"
-        mode="over"
+        [mode]="mode()"
         [opened]="opened()"
         [disableClose]="!dismissible()"
         [attr.role]="modal() ? 'dialog' : 'complementary'"
@@ -77,6 +78,27 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       width: 100%;
     }
 
+    :host(.drawer-fill) {
+      height: 100%;
+      min-height: 0;
+    }
+    :host(.drawer-fill) .detail-drawer-container,
+    :host(.drawer-fill) mat-drawer-content {
+      height: 100%;
+    }
+    :host(.drawer-fill) .detail-drawer-container.mat-drawer-container {
+      position: relative;
+      overflow: hidden;
+      z-index: auto;
+    }
+    :host(.drawer-fill) .detail-drawer-panel.mat-drawer {
+      position: absolute;
+      width: min(560px, 100%);
+      max-width: 100%;
+    }
+    :host(.drawer-fill) .drawer-panel {
+      height: 100%;
+    }
     .detail-drawer-container {
       width: 100%;
     }
@@ -214,6 +236,8 @@ export class DetailDrawerComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   /** `standard` : tiroir de 560 px pour une fiche ; `wide` : jusqu'à 1 000 px pour un éditeur. */
+  readonly fill = input(false);
+  readonly mode = input<'side' | 'over'>('over');
   readonly size = input<'standard' | 'wide'>('wide');
   /** Avec un voile, un clic extérieur ferme le tiroir si celui-ci est dismissible. */
   readonly modal = input(false);

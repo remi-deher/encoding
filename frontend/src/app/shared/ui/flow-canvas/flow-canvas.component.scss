@@ -9,8 +9,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  padding: 0;
   background: var(--surface-container);
   font-size: var(--font-label);
 }
@@ -160,4 +161,22 @@ strong {
 }
 .cdk-drag-preview {
   box-shadow: var(--elevation-3);
+}
+
+.connection-list:not(:focus-within) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.canvas-plugin {
+  visibility: hidden;
+}
+.canvas-config-summary {
+  margin: 4px 16px 12px;
+  color: var(--text-secondary);
+  font-size: var(--font-label);
+  overflow-wrap: anywhere;
 }

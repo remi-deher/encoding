@@ -1,3 +1,4 @@
+import { IconComponent } from '../../shared/ui/icon.component';
 import { FlowEditorAssistant } from '../../shared/services/flow-editor-assistant.service';
 import { FlowAiAssistantPanelComponent } from '../../features/flows/editor/flow-ai-assistant-panel.component';
 import {
@@ -36,6 +37,7 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IconComponent,
     MatButtonModule,
     MatDialogModule,
     MatSidenavModule,

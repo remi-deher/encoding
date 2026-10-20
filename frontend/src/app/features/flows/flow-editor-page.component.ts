@@ -1,3 +1,7 @@
+import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
+import { MatButtonModule } from '@angular/material/button';
+import { FlowComponentDrop, FlowPaletteDrop } from '../../shared/ui/flow-palette-drag';
+import { NgTemplateOutlet } from '@angular/common';
 import { toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { timer, switchMap, catchError, of, from, firstValueFrom } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -17,6 +21,7 @@ import {
   DestroyRef,
   effect,
   inject,
+  viewChild,
   signal,
   untracked,
 } from '@angular/core';
@@ -151,6 +156,10 @@ type ComponentDestination =
     '(window:keydown)': 'onWindowKeyDown($event)',
   },
   imports: [
+    NgTemplateOutlet,
+    MatButtonModule,
+    DetailDrawerComponent,
+    FlowComponentDrop,
     FlowCommandBarComponent,
     FlowPaletteDockComponent,
     ComponentConfigurationFormComponent,
@@ -172,7 +181,9 @@ export class FlowEditorPageComponent {
   private readonly pageTitleService = inject(PageTitle);
 
   // Workbench shell state
-  protected readonly paletteOpen = signal(true);
+  protected readonly graphEditor = viewChild(FlowGraphEditorComponent);
+  protected readonly paletteOpen = signal(false);
+  protected readonly palettePinned = signal(false);
   protected readonly trayOpen = signal(false);
   protected readonly trayTab = signal<'simulation' | 'diagnostics'>('simulation');
   protected readonly validationIssues = signal<readonly FlowValidationIssue[]>([]);
@@ -346,6 +357,7 @@ export class FlowEditorPageComponent {
           mediaType: this.flowMediaType(),
         };
       untracked(() => {
+        this.simulator.invalidate();
         if (!ready) {
           this.editHistory.set([]);
           this.editHistoryIndex.set(-1);
@@ -537,7 +549,7 @@ export class FlowEditorPageComponent {
       void this.saveFlow();
     } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
       event.preventDefault();
-      this.paletteOpen.update((v) => !v);
+      this.togglePalette();
     } else if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault();
       void this.openSimulator();
@@ -568,6 +580,15 @@ export class FlowEditorPageComponent {
     this.componentDestination.set(null);
   }
 
+  protected openPalette(): void {
+    this.configuringNodeId.set(undefined);
+    this.paletteOpen.set(true);
+  }
+  protected togglePalette(): void {
+    if (this.paletteOpen()) this.paletteOpen.set(false);
+    else this.openPalette();
+  }
+
   protected closeComponentEditor(): void {
     this.configuringNodeId.set(undefined);
   }
@@ -577,26 +598,32 @@ export class FlowEditorPageComponent {
     this.configuringNodeId.set(undefined);
   }
 
-  protected async onPaletteComponentSelected(component: FlowComponentDefinition): Promise<void> {
-    if (!this.componentDestination()) {
-      this.notifications.show(
-        'Pour placer ce composant, cliquez sur un point de sortie (+) ou insérez une suite sur le flow.',
-      );
-      return;
+  protected onPaletteComponentDropped(event: FlowPaletteDrop): void {
+    if (this.loadState() !== 'ready') return;
+    if (event.sourceNodeId && event.output) {
+      this.componentDestination.set({
+        kind: 'branch',
+        sourceNodeId: event.sourceNodeId,
+        output: event.output,
+      });
+      this.addComponent(event.component);
+    } else {
+      this.addComponent(event.component, event.position ?? { x: 0, y: 0 });
     }
-    this.addComponent(component);
+  }
+
+  protected async onPaletteComponentSelected(component: FlowComponentDefinition): Promise<void> {
+    const previous = this.nodes().length;
+    this.addComponent(component, this.componentDestination() ? undefined : { x: 0, y: 0 });
+    if (this.nodes().length > previous && !this.palettePinned()) this.paletteOpen.set(false);
   }
 
   protected async onPalettePackSelected(summary: FlowComponentPackSummary): Promise<void> {
-    if (!this.componentDestination()) {
-      this.notifications.show(
-        'Pour insérer ce pack, cliquez sur un point de sortie (+) ou insérez une suite sur le flow.',
-      );
-      return;
-    }
     try {
       const pack = await this.packApi.get(summary.id);
+      const previous = this.nodes().length;
       await this.insertPack(pack);
+      if (this.nodes().length > previous && !this.palettePinned()) this.paletteOpen.set(false);
     } catch (error) {
       this.notifications.show(
         error instanceof HttpErrorResponse
@@ -606,23 +633,41 @@ export class FlowEditorPageComponent {
     }
   }
 
-  protected async openSimulator(): Promise<void> {
+  protected async openSimulator(configure = false): Promise<void> {
+    const nodes = this.nodes(),
+      connections = this.connections(),
+      packs = this.componentPacks();
     try {
       const definition = await this.serverValidation.document(
         this.validationFlowId,
         this.storedVersion() + 1,
         this.flowTitle(),
         this.flowMediaType(),
-        this.nodes(),
-        this.connections(),
-        this.componentPacks(),
+        nodes,
+        connections,
+        packs,
       );
+      if (
+        nodes !== this.nodes() ||
+        connections !== this.connections() ||
+        packs !== this.componentPacks()
+      ) {
+        this.notifications.show('Le flow a changé pendant la préparation. Relancez le test.');
+        return;
+      }
       this.simulator.prepare(definition);
       this.trayTab.set('simulation');
-      this.trayOpen.set(true);
+      this.trayOpen.set(configure);
+      if (!configure) await this.runSimulation(this.simulator.profile());
     } catch {
       this.notifications.show('Impossible de préparer le test du flow.');
     }
+  }
+
+  protected async runSimulation(values: FlowComponentConfiguration, resume = false): Promise<void> {
+    if (resume) await this.simulator.continue(values);
+    else await this.simulator.run(values);
+    this.trayOpen.set(this.simulator.result()?.status !== 'completed' || !!this.simulator.error());
   }
 
   protected openPackCreation(): void {
@@ -644,7 +689,7 @@ export class FlowEditorPageComponent {
     readonly output: FlowComponentOutput;
   }): void {
     this.componentDestination.set({ kind: 'branch', ...event });
-    this.paletteOpen.set(true);
+    this.openPalette();
   }
 
   protected onContinuationRequested(sources: readonly FlowContinuationSource[]): void {
@@ -675,8 +720,10 @@ export class FlowEditorPageComponent {
   }
 
   private async insertPack(pack: FlowComponentPackDetails): Promise<void> {
-    const destination = this.componentDestination();
-    if (!destination) return;
+    const destination: ComponentDestination = this.componentDestination() ?? {
+      kind: 'continuation',
+      sources: [],
+    };
     if (pack.pack.mediaType !== this.flowMediaType()) {
       this.notifications.show('Ce pack n’est pas compatible avec le type de média du flow.');
       return;
@@ -778,14 +825,17 @@ export class FlowEditorPageComponent {
     this.componentDestination.set(null);
   }
 
-  protected addComponent(component: FlowComponentDefinition): void {
+  protected addComponent(
+    component: FlowComponentDefinition,
+    position?: { x: number; y: number },
+  ): void {
     if (component.kind === 'input') return;
     if (!isFlowComponentCompatible(component, this.flowMediaType())) {
       this.notifications.show('Ce bloc n’est pas compatible avec le type de média du flow.');
       return;
     }
     const destination = this.componentDestination();
-    if (!destination) return;
+    if (!destination && !position) return;
     const node: FlowGraphNode = {
       id: `flow-node-${this.nextNodeId++}`,
       component,
@@ -794,6 +844,13 @@ export class FlowEditorPageComponent {
         getFlowConfigurationSchema(component.configurationSchema, this.flowMediaType()),
       ),
     };
+    if (position) {
+      this.setGraph([...this.nodes(), node], this.connections());
+      this.graphEditor()?.setCanvasPosition({ nodeId: node.id, position });
+      this.componentDestination.set(null);
+      return;
+    }
+    if (!destination) return;
     const packOwner =
       destination.kind === 'branch'
         ? this.componentPacks().find((pack) => pack.nodeIds.includes(destination.sourceNodeId))
@@ -963,6 +1020,7 @@ export class FlowEditorPageComponent {
   }
 
   protected onConfigurationRequested(nodeId: string): void {
+    this.paletteOpen.set(false);
     this.configuringNodeId.set(nodeId);
   }
 
