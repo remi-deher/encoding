@@ -28,7 +28,7 @@ public sealed class McpSessionManagerTests
     {
         var manager = new McpSessionManager();
         Assert.True(manager.TryCreateSession("session-1", "owner-1", out _));
-        using var document = JsonDocument.Parse("{\"request\":\"same\"}");
+        using var document = JsonDocument.Parse("\"same\"");
         var results = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() =>
         {
             var accepted = manager.TryReserveRequest("session-1", "owner-1", document.RootElement, out var duplicate, out var limitReached);
