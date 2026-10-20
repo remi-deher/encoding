@@ -27,7 +27,12 @@ public static class McpEndpoints
             http.Response.Headers["X-Accel-Buffering"] = "no";
 
             var sessionId = Guid.NewGuid().ToString("N");
-            var reader = sessionManager.CreateSession(sessionId);
+            var ownerId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(ownerId) || !sessionManager.TryCreateSession(sessionId, ownerId, out var reader))
+            {
+                http.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                return;
+            }
 
             try
             {
@@ -62,17 +67,28 @@ public static class McpEndpoints
         {
             if (string.IsNullOrWhiteSpace(sessionId))
                 return Results.BadRequest("Paramètre 'sessionId' manquant.");
+            if (request.Id is null && request.Method != "notifications/initialized")
+                return Results.BadRequest("Une requête MCP sur le transport SSE doit contenir un identifiant JSON-RPC.");
+
+            var ownerId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(ownerId)
+                || !sessionManager.TryReserveRequest(sessionId, ownerId, request.Id, out var duplicate, out var limitReached))
+                return Results.NotFound($"Session MCP '{sessionId}' expirée, introuvable ou inaccessible.");
+            if (duplicate)
+                return Results.Conflict("L'identifiant JSON-RPC a déjà été traité pour cette session.");
+            if (limitReached)
+                return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
             var response = await mcpService.HandleMessageAsync(request, user, ct);
             if (response is not null)
             {
-                var delivered = await sessionManager.SendMessageAsync(sessionId, response, ct);
+                var delivered = await sessionManager.SendMessageAsync(sessionId, ownerId, response, ct);
                 if (!delivered)
                     return Results.NotFound($"Session MCP '{sessionId}' expirée ou introuvable.");
             }
 
             return Results.Accepted();
-        }).AllowViewer().WithName("McpMessage");
+        }).AllowViewer().WithName("McpMessage").WithMetadata(new RequestSizeLimitAttribute(1_048_576));
 
         // Transport HTTP direct (sans SSE) : Requête/Réponse JSON-RPC unitaire
         group.MapPost("", async (
@@ -83,6 +99,6 @@ public static class McpEndpoints
         {
             var response = await mcpService.HandleMessageAsync(request, user, ct);
             return response is not null ? Results.Ok(response) : Results.NoContent();
-        }).AllowViewer().WithName("McpDirect");
+        }).AllowViewer().WithName("McpDirect").WithMetadata(new RequestSizeLimitAttribute(1_048_576));
     }
 }

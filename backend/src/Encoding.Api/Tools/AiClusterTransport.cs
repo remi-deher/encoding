@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Encoding.Api.Auth;
 using Encoding.Api.Infrastructure;
+using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
@@ -49,6 +50,26 @@ public sealed class AiClusterTransport(ClusterPeerIdentityStore identity, Cluste
         var reply = JsonSerializer.Deserialize<AiRpcReply>(body) ?? throw new InvalidOperationException("Réponse IA vide.");
         if (reply.Id != id) throw new InvalidOperationException("Réponse IA inattendue.");
         return await store.UnprotectAsync<T>(reply.Payload, "reply/" + id, cancellation.Token);
+    }
+
+    public async Task<T> CallNodeAsync<T>(Guid nodeId, string operation, object value, TimeSpan timeout, CancellationToken ct)
+    {
+        if (nodeId == Guid.Empty || nodeId == LocalId)
+            throw new ArgumentException("Le nœud coordinateur distant est invalide.");
+        foreach (var url in await PeersAsync(ct))
+        {
+            try
+            {
+                var node = await CallAsync<AiNodeAvailability>(url, "availability", new { }, TimeSpan.FromSeconds(15), ct);
+                if (node.NodeId == nodeId)
+                    return await CallAsync<T>(url, operation, value, timeout, ct);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Keep searching known peer endpoints; never run the request on another coordinator.
+            }
+        }
+        throw new InvalidOperationException("Le coordinateur de cette conversation est indisponible. Réessayez lorsque ce nœud sera joignable.");
     }
 
     public async Task<IResult> ReceiveAsync(HttpContext http, AiClusterService service, CancellationToken ct)

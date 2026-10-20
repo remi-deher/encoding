@@ -881,7 +881,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected cancelRequest(): void {
     if (!this.requestId || this.cancelling()) return;
     this.cancelling.set(true);
-    this.aiTools.cancelAssistantRequest(this.requestId).subscribe({
+    this.aiTools.cancelAssistantRequest(this.requestId, this.conversationId()).subscribe({
       next: () => this.cancelling.set(false),
       error: (error: HttpErrorResponse) => {
         this.cancelling.set(false);

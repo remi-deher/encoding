@@ -172,6 +172,7 @@ internal static partial class Harness
             builder.Services.AddSingleton(new ExecutionWaitRepository(db, presenceOptions)); builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
             builder.Services.AddSingleton(new LibraryProcessingRepository(db)); builder.Services.AddSingleton(workflowRepo);
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(presenceOptions);
+            builder.Services.AddSingleton(eligibility); builder.Services.AddSingleton(new NodeRepository(db));
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton(flowRepo); builder.Services.AddSingleton(new FlowArchiveService(flowRepo, validator));
             builder.Services.AddSingleton(new FlowTemplateRepository(db));
             builder.Services.AddSingleton(PeerClusterOptions.From(new ConfigurationBuilder().Build(), directory));

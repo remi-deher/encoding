@@ -23,6 +23,59 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         return (await cmd.ScalarBoolAsync(ct));
     }
 
+    /// <summary>Returns the saved configuration only when this worker owns the active invocation of the exact translation block.</summary>
+    public async Task<IReadOnlyDictionary<string,JsonElement>?> AiSubtitleTranslationConfigurationAsync(
+        Guid executionId, Guid workerId, RuntimeAiSubtitleTranslationRequest request, CancellationToken ct)
+    {
+        if (executionId == Guid.Empty || workerId == Guid.Empty || request.Epoch < 1 || request.InvocationId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.FlowNodeId) || request.FlowNodeId.Length > 128) return null;
+        await using var command = dataSource.CreateCommand("""
+            SELECT e.flow_definition::text
+            FROM executions e
+            JOIN execution_work w ON w.execution_id=e.id
+            JOIN execution_steps s ON s.execution_id=e.id
+            WHERE e.id=@execution AND e.state='running'
+              AND w.worker_node_id=@worker AND w.lease_epoch=@epoch AND w.lease_until>clock_timestamp()
+              AND s.node_id=@flow_node AND s.invocation_id=@invocation AND s.completed_at IS NULL
+            """);
+        command.Parameters.AddWithValue("execution", executionId);
+        command.Parameters.AddWithValue("worker", workerId);
+        command.Parameters.AddWithValue("epoch", request.Epoch);
+        command.Parameters.AddWithValue("flow_node", request.FlowNodeId);
+        command.Parameters.AddWithValue("invocation", request.InvocationId);
+        if (await command.ExecuteScalarAsync(ct) is not string serialized) return null;
+        var flow = JsonSerializer.Deserialize<FlowDefinition>(serialized, Json);
+        var node = flow?.Nodes.SingleOrDefault(item => item.Id == request.FlowNodeId);
+        if (node is null || node.Component.PluginId != "ai" || node.Component.ComponentId != "ai-translate-subtitles") return null;
+        return node.Configuration;
+    }
+
+    public async Task<IReadOnlyDictionary<string,JsonElement>?> AiMetadataConfigurationAsync(
+        Guid executionId, Guid workerId, RuntimeAiMetadataEnrichmentRequest request, CancellationToken ct)
+    {
+        if (executionId == Guid.Empty || workerId == Guid.Empty || request.Epoch < 1 || request.InvocationId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.FlowNodeId) || request.FlowNodeId.Length > 128) return null;
+        await using var command = dataSource.CreateCommand("""
+            SELECT e.flow_definition::text FROM executions e
+            JOIN execution_work w ON w.execution_id=e.id
+            JOIN execution_steps s ON s.execution_id=e.id
+            WHERE e.id=@execution AND e.state='running' AND w.worker_node_id=@worker AND w.lease_epoch=@epoch
+              AND w.lease_until>clock_timestamp() AND s.node_id=@flow_node AND s.invocation_id=@invocation
+              AND s.completed_at IS NULL
+            """);
+        command.Parameters.AddWithValue("execution", executionId);
+        command.Parameters.AddWithValue("worker", workerId);
+        command.Parameters.AddWithValue("epoch", request.Epoch);
+        command.Parameters.AddWithValue("flow_node", request.FlowNodeId);
+        command.Parameters.AddWithValue("invocation", request.InvocationId);
+        if (await command.ExecuteScalarAsync(ct) is not string serialized) return null;
+        var flow = JsonSerializer.Deserialize<FlowDefinition>(serialized, Json);
+        if (flow?.MediaType != request.MediaType) return null;
+        var node = flow?.Nodes.SingleOrDefault(item => item.Id == request.FlowNodeId);
+        if (node is null || node.Component.PluginId != "ai" || node.Component.ComponentId != "ai-metadata-enricher") return null;
+        return node.Configuration;
+    }
+
     public async Task<bool> EnqueueAsync(EnqueueMediaRequest request,FlowDefinition flow,CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
@@ -320,7 +373,9 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
           SELECT invocation_id,checkpoint::text FROM execution_steps WHERE execution_id=@id AND node_id=@node
           """,c,tx);
         start.Parameters.AddWithValue("id",id); start.Parameters.AddWithValue("node",request.NodeId); start.Parameters.AddWithValue("invocation",Guid.NewGuid());
-        start.Parameters.AddWithValue("idempotent",node.Component.PluginId is "nodes" or "conditions" || node.Component.PluginId=="base" && node.Component.ComponentId!="base-script");
+        start.Parameters.AddWithValue("idempotent",node.Component.PluginId is "nodes" or "conditions"
+            || node.Component.PluginId=="base" && node.Component.ComponentId!="base-script"
+            || node.Component.PluginId=="ai" && (node.Component.ComponentId is "ai-translate-subtitles" or "ai-metadata-enricher"));
         await using var r=await start.ExecuteReaderAsync(ct); await r.ReadAsync(ct);
         var result=new StartedRuntimeStep(r.GetGuid(0),r.IsDBNull(1)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(1),Json));
         await r.DisposeAsync(); await tx.CommitAsync(ct); return result;

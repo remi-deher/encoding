@@ -20,7 +20,8 @@ public sealed class FlowAiGeneratorService(
         var systemPrompt = promptBuilder.BuildSystemPrompt(request.MediaType);
         var userPrompt = $"Génère un flow complet pour le média '{request.MediaType}' répondant à cette demande :\n\"{request.UserPrompt}\"";
 
-        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId, Scope: new("flow-create")), ct);
+        var initialPrompt = new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId, Scope: new("flow-create"));
+        var aiResult = await client.GenerateTextAsync(initialPrompt, ct);
         FlowAiResponse Reply(FlowAiResponse response) => response with { SessionId = aiResult.SessionId, RequestId = aiResult.RequestId };
         if (!aiResult.Success)
         {
@@ -28,20 +29,18 @@ public sealed class FlowAiGeneratorService(
         }
 
         var json = ExtractJson(aiResult.Content);
-        if (json is null)
-        {
-            return Reply(new FlowAiResponse(false, null, "L’IA n’a pas retourné de JSON valide."));
-        }
-
-        var (def, val) = TryValidate(json);
-        if (val is not null && val.IsValid && def is not null)
+        (FlowDefinition? def, FlowValidationResult? val) = json is null ? (null, null) : TryValidate(json);
+        if (val is { IsValid: true } && def is not null)
         {
             return Reply(new FlowAiResponse(true, def));
         }
 
-        // Boucle d'auto-réparation (1 tour)
-        var issuesText = string.Join("\n", val?.Issues.Select(i => $"- [{i.Code}] {i.Path}: {i.Message}") ?? []);
-        var repairResult = await RepairAsync(client, systemPrompt, aiResult, json, issuesText, ct);
+        // Une tentative bornée répare aussi les sorties qui ne contiennent pas de JSON extractible.
+        var issuesText = val is null
+            ? "La réponse ne contient pas d’objet JSON valide."
+            : string.Join("\n", val.Issues.Select(i => $"- [{i.Code}] {i.Path}: {i.Message}"));
+        var repairResult = await RepairAsync(client, initialPrompt, aiResult, json ?? aiResult.Content, issuesText, ct);
+        IReadOnlyList<FlowValidationIssue>? latestIssues = null;
         if (repairResult.Success)
         {
             var repairedJson = ExtractJson(repairResult.Content);
@@ -52,10 +51,14 @@ public sealed class FlowAiGeneratorService(
                 {
                     return Reply(new FlowAiResponse(true, repDef));
                 }
+                latestIssues = repVal?.Issues;
             }
         }
 
-        return Reply(new FlowAiResponse(false, null, "Le flow généré ne respecte pas le catalogue après une tentative de réparation.", val?.Issues));
+        var failure = repairResult.Success
+            ? "Le flow généré ne respecte pas le catalogue après une tentative de réparation."
+            : repairResult.ErrorMessage ?? "La tentative de réparation du flow a échoué.";
+        return Reply(new FlowAiResponse(false, null, failure, latestIssues));
     }
 
     public async Task<FlowAiResponse> RefactorFlowAsync(FlowAiRefactorRequest request, CancellationToken ct = default, bool localOnly = false)
@@ -65,7 +68,8 @@ public sealed class FlowAiGeneratorService(
         var systemPrompt = promptBuilder.BuildSystemPrompt(request.CurrentFlow.MediaType);
         var userPrompt = $"Modifie ce flow existant selon l'instruction suivante : \"{request.UserPrompt}\".\n\nFlow actuel :\n{currentJson}";
 
-        var aiResult = await client.GenerateTextAsync(new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId, Scope: new("flow-edit", FlowId: request.CurrentFlow.Id)), ct);
+        var initialPrompt = new AiPrompt(systemPrompt, userPrompt, SessionId: request.SessionId, RequestId: request.RequestId, Scope: new("flow-edit", FlowId: request.CurrentFlow.Id));
+        var aiResult = await client.GenerateTextAsync(initialPrompt, ct);
         FlowAiResponse Reply(FlowAiResponse response) => response with { SessionId = aiResult.SessionId, RequestId = aiResult.RequestId };
         if (!aiResult.Success)
         {
@@ -73,12 +77,7 @@ public sealed class FlowAiGeneratorService(
         }
 
         var json = ExtractJson(aiResult.Content);
-        if (json is null)
-        {
-            return Reply(new FlowAiResponse(false, null, "L'IA n'a pas retourné de JSON valide."));
-        }
-
-        var (def, val) = TryValidate(json);
+        (FlowDefinition? def, FlowValidationResult? val) = json is null ? (null, null) : TryValidate(json);
         if (val is not null && val.IsValid && def is not null)
         {
             def = PreserveRefactorIdentity(def, request.CurrentFlow);
@@ -87,8 +86,11 @@ public sealed class FlowAiGeneratorService(
             val = identityValidation;
         }
 
-        var issuesText = string.Join("\n", val?.Issues.Select(i => $"- [{i.Code}] {i.Path}: {i.Message}") ?? []);
-        var repairResult = await RepairAsync(client, systemPrompt, aiResult, json, issuesText, ct);
+        var issuesText = val is null
+            ? "La réponse ne contient pas d’objet JSON valide."
+            : string.Join("\n", val.Issues.Select(i => $"- [{i.Code}] {i.Path}: {i.Message}"));
+        var repairResult = await RepairAsync(client, initialPrompt, aiResult, json ?? aiResult.Content, issuesText, ct);
+        IReadOnlyList<FlowValidationIssue>? latestIssues = null;
         if (repairResult.Success)
         {
             var repairedJson = ExtractJson(repairResult.Content);
@@ -102,10 +104,15 @@ public sealed class FlowAiGeneratorService(
                     if (identityValidation is { IsValid: true }) return Reply(new FlowAiResponse(true, repDef));
                     val = identityValidation;
                 }
+                else val = repVal;
+                latestIssues = val?.Issues;
             }
         }
 
-        return Reply(new FlowAiResponse(false, def, "Le flow modifié ne respecte pas le catalogue après une tentative de réparation.", val?.Issues));
+        var failure = repairResult.Success
+            ? "Le flow modifié ne respecte pas le catalogue après une tentative de réparation."
+            : repairResult.ErrorMessage ?? "La tentative de réparation du flow a échoué.";
+        return Reply(new FlowAiResponse(false, def, failure, latestIssues));
     }
 
     public async Task<FlowAiResponse> ExplainFlowAsync(FlowAiExplainRequest request, CancellationToken ct = default, bool localOnly = false)
@@ -137,17 +144,29 @@ public sealed class FlowAiGeneratorService(
 
     private static Task<AiCompletionResult> RepairAsync(
         IAiTextClient client,
-        string systemPrompt,
+        AiPrompt originalPrompt,
         AiCompletionResult original,
         string invalidJson,
         string issuesText,
         CancellationToken ct)
     {
-        var repairPrompt = $"Le JSON précédent contient les erreurs suivantes :\n{issuesText}\n\nCorrige le document JSON et renvoie UNIQUEMENT l'objet JSON valide sans texte additionnel :\n{invalidJson}";
         var operationId = original.RequestId ?? Guid.NewGuid();
         var repairId = CreateRepairRequestId(operationId);
-        return client.GenerateTextAsync(new AiPrompt(systemPrompt, repairPrompt,
-            SessionId: original.SessionId, RequestId: repairId), ct);
+        if (invalidJson.Length > 80_000 || issuesText.Length > 12_000
+            || originalPrompt.SystemPrompt.Length + invalidJson.Length + issuesText.Length > 110_000)
+        {
+            return Task.FromResult(new AiCompletionResult(false, string.Empty,
+                "La sortie à réparer dépasse la taille maximale autorisée.",
+                SessionId: original.SessionId ?? originalPrompt.SessionId, RequestId: repairId));
+        }
+
+        var repairPrompt = $"Le JSON précédent contient les erreurs suivantes :\n{issuesText}\n\nCorrige le document JSON et renvoie UNIQUEMENT l'objet JSON valide sans texte additionnel :\n{invalidJson}";
+        return client.GenerateTextAsync(originalPrompt with
+        {
+            UserPrompt = repairPrompt,
+            SessionId = original.SessionId ?? originalPrompt.SessionId,
+            RequestId = repairId,
+        }, ct);
     }
 
     private static Guid CreateRepairRequestId(Guid operationId)

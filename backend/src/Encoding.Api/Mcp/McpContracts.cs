@@ -18,8 +18,8 @@ public sealed record McpJsonRpcRequest(
 public sealed record McpJsonRpcResponse(
     [property: JsonPropertyName("jsonrpc")] string JsonRpc,
     [property: JsonPropertyName("id")] JsonElement? Id,
-    [property: JsonPropertyName("result")] object? Result = null,
-    [property: JsonPropertyName("error")] McpJsonRpcError? Error = null)
+    [property: JsonPropertyName("result"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] object? Result = null,
+    [property: JsonPropertyName("error"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] McpJsonRpcError? Error = null)
 {
     public static McpJsonRpcResponse Success(JsonElement? id, object result) =>
         new("2.0", id, Result: result);

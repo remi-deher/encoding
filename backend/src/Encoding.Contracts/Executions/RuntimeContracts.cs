@@ -9,6 +9,15 @@ public sealed record RuntimeLease(Guid ExecutionId, int Attempt, int Revision, l
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null,
     RuntimeWaitProbe? Probe = null);
 public sealed record RuntimeFence(long Epoch);
+public sealed record RuntimeAiSubtitleItem(string Id, string Text);
+public sealed record RuntimeAiSubtitleTranslationRequest(long Epoch, Guid InvocationId, string FlowNodeId,
+    int BatchIndex, IReadOnlyList<RuntimeAiSubtitleItem> Items);
+public sealed record RuntimeAiSubtitleTranslationResponse(bool Success,
+    IReadOnlyList<RuntimeAiSubtitleItem>? Items = null, string? ErrorCode = null, string? ErrorMessage = null);
+public sealed record RuntimeAiMetadataEnrichmentRequest(long Epoch, Guid InvocationId, string FlowNodeId,
+    string FileName, string MediaType, JsonElement Metadata);
+public sealed record RuntimeAiMetadataEnrichmentResponse(bool Success, JsonElement? Metadata = null,
+    string? ErrorCode = null, string? ErrorMessage = null);
 public sealed record RuntimeLeaseStatus(bool CancelRequested, int Revision, DateTimeOffset ExpiresAt);
 public sealed record RuntimeSourceState(string? SourceSha256, IReadOnlyDictionary<string,string>? Inputs = null);
 public sealed record RuntimeTransfer(Guid ExecutionId, long Epoch, string Root, string MediaPath, string? SourceSha256,
@@ -37,7 +46,7 @@ public sealed record ExecutionPipelineStepResponse(string NodeId, string NodeNam
 public sealed record StartRuntimeStep(long Epoch, string NodeId);
 public sealed record StartedRuntimeStep(Guid InvocationId, RuntimeCheckpoint? Completed);
 public sealed record CompleteRuntimeStep(long Epoch, Guid EventId, int ExpectedRevision, RuntimeCheckpoint Checkpoint,
-    IReadOnlyList<RuntimeCommandLog>? Commands = null);
+    IReadOnlyList<RuntimeCommandLog>? Commands = null, bool CleanupAiSessions = false);
 public sealed record FinishRuntimeExecution(long Epoch, Guid EventId, int ExpectedRevision, string State, string Detail, string? ResultSha256, string? Extension,
     JsonElement? BeforeMetadata = null, JsonElement? AfterMetadata = null, int? DeferMinutes = null,
     IReadOnlyList<RuntimeStepCommand>? Commands = null);

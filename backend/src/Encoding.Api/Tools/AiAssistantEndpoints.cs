@@ -47,9 +47,20 @@ public static class AiAssistantEndpoints
             }))
         .AllowAssistantConversation();
 
-        group.MapPost("/messages", async (AiAssistantMessageRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+        group.MapPost("/messages", async (AiAssistantMessageRequest request, HttpContext http, AiAssistantService service, AiClusterTransport transport, CancellationToken ct) =>
             await GuardAsync(async () =>
             {
+                if (TryCoordinatorId(request.ConversationId) is { } coordinatorId && coordinatorId != transport.LocalId)
+                {
+                    if (!Guid.TryParse(http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var ownerId)
+                        || ownerId == Guid.Empty)
+                        return Results.BadRequest(new { title = "Identité utilisateur indisponible." });
+                    var forwarded = await transport.CallNodeAsync<AiAssistantForwardResponse>(coordinatorId, "assistant-message",
+                        new AiAssistantForwardRequest(request, ownerId, http.User.IsInRole("admin")), TimeSpan.FromMinutes(35), ct);
+                    if (forwarded.InvalidRequest) return Results.BadRequest(new { title = forwarded.Error });
+                    if (forwarded.Error is not null) return Results.Conflict(new { title = forwarded.Error });
+                    return forwarded.Result is null ? Results.NotFound() : Results.Ok(forwarded.Result);
+                }
                 var result = await service.SendAsync(request, http.User, ct);
                 return result is null ? Results.NotFound() : Results.Ok(result);
             }))
@@ -57,10 +68,29 @@ public static class AiAssistantEndpoints
         .AllowAssistantConversation()
         .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
 
-        group.MapPost("/requests/{requestId:guid}/cancel", async (Guid requestId, HttpContext http, AiAssistantService service, CancellationToken ct) =>
-            await service.CancelRequestAsync(requestId, http.User, ct)
-                ? Results.Accepted(value: new { requestId, state = "cancellation-requested" })
-                : Results.Conflict(new { title = "Aucune demande active ne correspond à cet identifiant." }))
+        group.MapPost("/requests/{requestId:guid}/cancel", async (Guid requestId, HttpContext http, AiAssistantService service, AiClusterTransport transport, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                var coordinatorId = TryCoordinatorId(http.Request.Query["conversationId"].ToString())
+                    ?? await service.GetRequestCoordinatorIdAsync(requestId, http.User, ct);
+                if (coordinatorId is null)
+                    return Results.Conflict(new { title = "Aucune demande active ne correspond à cet identifiant." });
+
+                bool cancelled;
+                if (coordinatorId == transport.LocalId)
+                    cancelled = await service.CancelRequestAsync(requestId, http.User, ct);
+                else
+                {
+                    if (!Guid.TryParse(http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var ownerId)
+                        || ownerId == Guid.Empty)
+                        return Results.BadRequest(new { title = "Identité utilisateur indisponible." });
+                    cancelled = await transport.CallNodeAsync<bool>(coordinatorId.Value, "assistant-cancel",
+                        new AiAssistantForwardCancel(ownerId, requestId), TimeSpan.FromSeconds(15), ct);
+                }
+                return cancelled
+                    ? Results.Accepted(value: new { requestId, state = "cancellation-requested" })
+                    : Results.Conflict(new { title = "Aucune demande active ne correspond à cet identifiant." });
+            }))
         .AllowAssistantConversation();
 
         group.MapPost("/tools/call", async (AiAssistantToolCall call, McpService mcp, CancellationToken ct) =>
@@ -161,6 +191,14 @@ public static class AiAssistantEndpoints
                 ? Results.Ok(new { requestId, status = request.Decision })
                 : Results.Conflict(new { title = "Cette proposition n’est plus en attente de décision." })))
         .AllowAssistantConversation();
+    }
+
+    private static Guid? TryCoordinatorId(string? conversationId)
+    {
+        var parts = conversationId?.Split('.');
+        return parts is { Length: 2 } && Guid.TryParseExact(parts[0], "N", out var coordinatorId) && coordinatorId != Guid.Empty
+            ? coordinatorId
+            : null;
     }
 
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)

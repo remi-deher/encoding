@@ -53,6 +53,15 @@ public sealed class McpService(
 
     public async Task<McpJsonRpcResponse?> HandleMessageAsync(McpJsonRpcRequest request, ClaimsPrincipal user, CancellationToken ct)
     {
+        if (request.JsonRpc != "2.0" || string.IsNullOrWhiteSpace(request.Method)
+            || request.Id is { } suppliedId && suppliedId.ValueKind is not (JsonValueKind.String or JsonValueKind.Number or JsonValueKind.Null)
+            || request.Params is { } suppliedParams && suppliedParams.ValueKind != JsonValueKind.Object)
+            return McpJsonRpcResponse.Failure(null, -32600, "Requête JSON-RPC invalide.");
+        if (request.Params is { } boundedParams && boundedParams.GetRawText().Length > 1_048_576)
+            return McpJsonRpcResponse.Failure(request.Id, -32600, "Les paramètres JSON-RPC dépassent la taille maximale autorisée.");
+        // JSON-RPC notifications never receive a response and must not trigger a tool mutation.
+        if (request.Id is null)
+            return null;
         try
         {
             return request.Method switch
@@ -123,12 +132,15 @@ public sealed class McpService(
         if (request.Params is not { } parameters || parameters.ValueKind != JsonValueKind.Object)
             return McpJsonRpcResponse.Failure(request.Id, -32602, "Paramètres invalides pour tools/call");
 
-        if (!parameters.TryGetProperty("name", out var nameProp) || nameProp.GetString() is not { Length: > 0 } toolName)
+        if (!parameters.TryGetProperty("name", out var nameProp) || nameProp.ValueKind != JsonValueKind.String
+            || nameProp.GetString() is not { Length: > 0 } toolName)
             return McpJsonRpcResponse.Failure(request.Id, -32602, "Le nom de l'outil est requis dans tools/call");
 
-        var arguments = parameters.TryGetProperty("arguments", out var argsProp) && argsProp.ValueKind == JsonValueKind.Object
+        if (parameters.TryGetProperty("arguments", out var argsProp) && argsProp.ValueKind != JsonValueKind.Object)
+            return McpJsonRpcResponse.Failure(request.Id, -32602, "Les arguments de tools/call doivent être un objet.");
+        var arguments = parameters.TryGetProperty("arguments", out argsProp)
             ? argsProp
-            : default;
+            : JsonSerializer.SerializeToElement(new { }, JsonOptions);
 
         var callResult = await ExecuteOperationAsync(toolName, arguments, user.IsInRole("admin"), ct);
 

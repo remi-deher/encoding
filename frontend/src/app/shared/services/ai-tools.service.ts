@@ -98,9 +98,10 @@ export class AiToolsService {
     );
   }
 
-  cancelAssistantRequest(requestId: string): Observable<void> {
+  cancelAssistantRequest(requestId: string, conversationId?: string | null): Observable<void> {
+    const query = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
     return this.http.post<void>(
-      `/api/v1/tools/ai/assistant/requests/${encodeURIComponent(requestId)}/cancel`,
+      `/api/v1/tools/ai/assistant/requests/${encodeURIComponent(requestId)}/cancel${query}`,
       {},
     );
   }
