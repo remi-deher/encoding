@@ -71,7 +71,7 @@ type ConfigurationFormGroup = FormGroup<
           [ngTemplateOutletContext]="{ visibleFields: primaryFields() }"
         />
         @if (advancedFields().length) {
-          <details class="advanced-settings">
+          <details class="advanced-settings" [open]="advancedInvalid()">
             <summary>Réglages avancés · {{ advancedFields().length }}</summary>
             <ng-container
               [ngTemplateOutlet]="fieldTemplate"
@@ -453,13 +453,28 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   readonly progressiveDisclosure = input(false);
   protected primaryFields(): readonly FlowComponentConfigurationField[] {
     return this.progressiveDisclosure()
-      ? this.fields.filter((field) => field.inline || field.required)
+      ? this.fields.filter((field) => this.isPrimary(field))
       : this.fields;
   }
   protected advancedFields(): readonly FlowComponentConfigurationField[] {
     return this.progressiveDisclosure()
-      ? this.fields.filter((field) => !field.inline && !field.required)
+      ? this.fields.filter((field) => !this.isPrimary(field))
       : [];
+  }
+  private isPrimary(field: FlowComponentConfigurationField): boolean {
+    return !!(
+      field.inline ||
+      field.required ||
+      ['condition-tree', 'script-reference', 'encoding-profile', 'video-encoder'].includes(
+        field.type,
+      ) ||
+      (field.type === 'text' && field.id === 'code')
+    );
+  }
+  protected advancedInvalid(): boolean {
+    return this.advancedFields().some(
+      (field) => this.isFieldVisible(field) && this.form.controls[field.id]?.invalid,
+    );
   }
   readonly saved = output<FlowComponentConfiguration>();
   readonly cancelled = output<void>();

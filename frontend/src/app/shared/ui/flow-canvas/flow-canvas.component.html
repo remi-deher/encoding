@@ -1,16 +1,18 @@
-<ng-template #toolbar>
-  <div class="canvas-tools" role="toolbar" aria-label="Navigation du canvas">
-    <button mat-button (click)="zoom(-0.1)" aria-label="Dézoomer">−</button
-    ><span>{{ (scale() * 100).toFixed(0) }} %</span
-    ><button mat-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button
-    ><button mat-button (click)="fit()">Tout afficher</button>
-    @if (pending(); as selection) {
-      <span role="status"
-        >{{ selection.output.label }} <app-icon name="forward" /> choisissez une entrée</span
-      ><button mat-button (click)="pending.set(null)">Annuler la liaison</button>
-    }
-  </div>
-</ng-template>
+<div class="canvas-tools" role="toolbar" aria-label="Navigation du canvas">
+  <button mat-button (click)="zoom(-0.1)" aria-label="Dézoomer">−</button
+  ><span>{{ (scale() * 100).toFixed(0) }} %</span
+  ><button mat-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button
+  ><button mat-button (click)="fit()">Tout afficher</button>
+  <button mat-button (click)="autoLayout()"><app-icon name="sort" />Disposition automatique</button>
+  @if (canUndoLayout()) {
+    <button mat-button (click)="undoLayout()">Annuler la disposition</button>
+  }
+  @if (pending(); as selection) {
+    <span role="status"
+      >{{ selection.output.label }} <app-icon name="forward" /> choisissez une entrée</span
+    ><button mat-button (click)="pending.set(null)">Annuler la liaison</button>
+  }
+</div>
 <div
   #viewport
   class="canvas-viewport"
@@ -19,13 +21,19 @@
   role="region"
   (scroll)="navigate()"
   (pointerdown)="pan($event)"
+  (wheel)="wheel($event)"
   appContextActions
   (contextActions)="menu($event)"
   tabindex="0"
   aria-label="Canvas libre du flow"
 >
-  <div [style.width.px]="size().width * scale()" [style.height.px]="size().height * scale()">
+  <div
+    class="canvas-frame"
+    [style.width.px]="size().width * scale()"
+    [style.height.px]="size().height * scale()"
+  >
     <div
+      #canvasSurface
       class="canvas-surface"
       [style.width.px]="size().width"
       [style.height.px]="size().height"
@@ -66,12 +74,14 @@
       </svg>
       @for (node of nodes(); track node.id) {
         <article
+          #canvasCard
           class="canvas-node"
           [class.selected]="selectedNodeId() === node.id"
           [attr.data-node-id]="node.id"
           [style.left.px]="position(node).x"
           [style.top.px]="position(node).y"
           [style.--node-color]="colors(node.component).color"
+          [style.--output-count]="node.component.outputs.length"
           cdkDrag
           [cdkDragScale]="scale()"
           (cdkDragMoved)="dragging(node, $event)"
@@ -81,11 +91,12 @@
           tabindex="0"
           (click)="selectNode.emit(node.id)"
           (dblclick)="edit(node)"
-          (keydown.enter)="edit(node)"
+          (keydown.enter)="$event.target === $event.currentTarget && edit(node)"
         >
           @if (node.component.kind !== 'input') {
             <button
               class="port input"
+              data-port="input"
               [attr.data-canvas-input]="node.id"
               [class.valid]="canFinish(node)"
               (click)="$event.stopPropagation(); finish(node.id)"
@@ -95,7 +106,8 @@
           <header>
             <button cdkDragHandle class="drag" aria-label="Déplacer l’étape" title="Déplacer">
               ⠿</button
-            ><span class="canvas-plugin">{{ node.component.pluginName }}</span
+            ><span class="canvas-plugin"
+              >{{ kindLabels[node.component.kind] }} · {{ node.component.pluginName }}</span
             ><button
               class="more"
               (click)="menuButton($event, node)"
@@ -104,7 +116,18 @@
               ⋯
             </button>
           </header>
-          <strong>{{ node.name || node.component.name }}</strong>
+          <div class="canvas-heading">
+            <button class="canvas-title" (click)="$event.stopPropagation(); edit(node)">
+              {{ node.name || node.component.name }}
+            </button>
+            <button
+              mat-icon-button
+              (click)="$event.stopPropagation(); edit(node)"
+              [attr.aria-label]="'Configurer ' + (node.name || node.component.name)"
+            >
+              <app-icon name="settings" />
+            </button>
+          </div>
           @if (summary(node)) {
             <p class="canvas-config-summary">{{ summary(node) }}</p>
           }
@@ -113,31 +136,55 @@
             [result]="simulationResult()"
             (detailsRequested)="simulationDetailsRequested.emit()"
           />
-          @for (port of node.component.outputs; track port.id) {
-            <div class="output-row">
-              <button
-                mat-button
-                (click)="
-                  $event.stopPropagation(); insert.emit({ sourceNodeId: node.id, output: port })
-                "
-                [attr.aria-label]="'Ajouter sur la sortie ' + port.label"
-              >
-                {{ port.label }} ＋</button
-              ><button
-                class="port output"
-                (pointerdown)="begin(node, port, $event)"
-                (click)="$event.stopPropagation()"
-                (keydown.enter)="begin(node, port)"
-                (keydown.space)="$event.preventDefault(); begin(node, port)"
-                [attr.aria-label]="'Créer une liaison depuis ' + port.label"
-              ></button>
-            </div>
-          }
+          <div class="canvas-outputs" [style.--output-count]="node.component.outputs.length">
+            @for (port of node.component.outputs; track port.id) {
+              <div class="output-row">
+                <button
+                  mat-button
+                  (click)="
+                    $event.stopPropagation(); insert.emit({ sourceNodeId: node.id, output: port })
+                  "
+                  [attr.aria-label]="'Ajouter sur la sortie ' + port.label"
+                >
+                  {{ port.label }} ＋</button
+                ><button
+                  class="port output"
+                  [attr.data-port]="'output:' + port.id"
+                  (pointerdown)="begin(node, port, $event)"
+                  (click)="$event.stopPropagation()"
+                  (keydown.enter)="begin(node, port)"
+                  (keydown.space)="$event.preventDefault(); begin(node, port)"
+                  [attr.aria-label]="'Créer une liaison depuis ' + port.label"
+                ></button>
+              </div>
+            }
+          </div>
         </article>
       }
     </div>
   </div>
 </div>
+<button class="minimap" aria-label="Naviguer dans la minicarte" (click)="miniNavigate($event)">
+  <span>Vue d’ensemble</span>
+  <svg [attr.viewBox]="miniViewBox()" preserveAspectRatio="none" aria-hidden="true">
+    @for (node of nodes(); track node.id) {
+      <rect
+        [attr.x]="position(node).x"
+        [attr.y]="position(node).y"
+        [attr.width]="nodeSize(node).width"
+        [attr.height]="nodeSize(node).height"
+        [class.mini-selected]="selectedNodeId() === node.id"
+      />
+    }
+    <rect
+      class="mini-viewport"
+      [attr.x]="overview().x"
+      [attr.y]="overview().y"
+      [attr.width]="overview().width"
+      [attr.height]="overview().height"
+    />
+  </svg>
+</button>
 <div class="connection-list" role="group" aria-label="Actions accessibles sur les liaisons">
   @for (edge of connections(); track edge.id) {
     <button
