@@ -3,7 +3,9 @@
   "id": "conditions",
   "version": "1.2.0",
   "name": "Conditions",
-  "supportedHostContractVersions": [1],
+  "supportedHostContractVersions": [
+    1
+  ],
   "components": [
     {
       "id": "conditions-match",
@@ -12,23 +14,51 @@
       "description": "Combine des règles dans des groupes ET / OU imbriqués. Les préréglages restent entièrement modifiables. Un scan est demandé uniquement pour les critères média.",
       "kind": "condition",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "image", "music", "subtitles"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
       "outputs": [
-        { "id": "yes", "label": "Oui", "description": "Les conditions sont satisfaites." },
-        { "id": "no", "label": "Non", "description": "Les conditions ne sont pas satisfaites." },
-        { "id": "error", "label": "Erreur", "description": "Une donnée nécessaire est absente ou ne permet pas la comparaison." }
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "Les conditions sont satisfaites."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "Les conditions ne sont pas satisfaites."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Une donnée nécessaire est absente ou ne permet pas la comparaison."
+        }
       ],
       "configurationSchema": {
         "version": 1,
         "fields": [
-          { "id": "rules", "type": "condition-tree", "label": "Conditions", "required": true, "inline": true,
-            "description": "Les comparaisons textuelles ignorent la casse. Les langues utilisent les codes du média, par exemple fra. Pour les données facultatives, utilisez d'abord est renseigné / est absent." }
+          {
+            "id": "rules",
+            "type": "condition-tree",
+            "label": "Conditions",
+            "required": true,
+            "inline": true,
+            "description": "Les comparaisons textuelles ignorent la casse. Les langues utilisent les codes du média, par exemple fra. Pour les données facultatives, utilisez d'abord est renseigné / est absent.",
+            "importance": "basic",
+            "section": "Paramètres"
+          }
         ]
       },
       "requiredTools": [],
       "requiresMedia": false,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.0.0", "1.1.0"]
+      "compatiblePluginVersions": [
+        "1.0.0",
+        "1.1.0"
+      ]
     },
     {
       "id": "conditions-video-codec",
@@ -37,11 +67,26 @@
       "description": "Vérifie le codec de la première piste vidéo du média.",
       "kind": "condition",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "image"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "image"
+      ],
       "outputs": [
-        { "id": "yes", "label": "Oui", "description": "La vidéo utilise ce codec." },
-        { "id": "no", "label": "Non", "description": "La vidéo n'utilise pas ce codec." },
-        { "id": "error", "label": "Erreur", "description": "Aucune piste vidéo n'est présente." }
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "La vidéo utilise ce codec."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "La vidéo n'utilise pas ce codec."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Aucune piste vidéo n'est présente."
+        }
       ],
       "configurationSchema": {
         "version": 1,
@@ -54,27 +99,51 @@
             "inline": true,
             "defaultValue": "hevc",
             "options": [
-              { "value": "hevc", "label": "H.265 / HEVC" },
-              { "value": "h264", "label": "H.264 / AVC" },
-              { "value": "av1", "label": "AV1" },
-              { "value": "vp9", "label": "VP9" },
-              { "value": "mpeg2video", "label": "MPEG-2" },
-              { "value": "vc1", "label": "VC-1" }
-            ]
+              {
+                "value": "hevc",
+                "label": "H.265 / HEVC"
+              },
+              {
+                "value": "h264",
+                "label": "H.264 / AVC"
+              },
+              {
+                "value": "av1",
+                "label": "AV1"
+              },
+              {
+                "value": "vp9",
+                "label": "VP9"
+              },
+              {
+                "value": "mpeg2video",
+                "label": "MPEG-2"
+              },
+              {
+                "value": "vc1",
+                "label": "VC-1"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "invert",
             "type": "boolean",
             "label": "Inverser la condition (N'est pas)",
             "required": false,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0"]
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "conditions-audio-codec",
@@ -83,11 +152,26 @@
       "description": "Vérifie le codec des pistes audio du média.",
       "kind": "condition",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "music"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
       "outputs": [
-        { "id": "yes", "label": "Oui", "description": "Le codec recherché est présent." },
-        { "id": "no", "label": "Non", "description": "Le codec recherché n'est pas présent." },
-        { "id": "error", "label": "Erreur", "description": "Aucune piste audio n'est présente." }
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "Le codec recherché est présent."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "Le codec recherché n'est pas présent."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Aucune piste audio n'est présente."
+        }
       ],
       "configurationSchema": {
         "version": 1,
@@ -100,17 +184,49 @@
             "inline": true,
             "defaultValue": "eac3",
             "options": [
-              { "value": "eac3", "label": "E-AC-3 / Dolby Digital Plus" },
-              { "value": "ac3", "label": "AC-3 / Dolby Digital" },
-              { "value": "aac", "label": "AAC" },
-              { "value": "truehd", "label": "Dolby TrueHD" },
-              { "value": "dts", "label": "DTS" },
-              { "value": "dtshd", "label": "DTS-HD" },
-              { "value": "flac", "label": "FLAC" },
-              { "value": "mp3", "label": "MP3" },
-              { "value": "opus", "label": "Opus" },
-              { "value": "vorbis", "label": "Vorbis" }
-            ]
+              {
+                "value": "eac3",
+                "label": "E-AC-3 / Dolby Digital Plus"
+              },
+              {
+                "value": "ac3",
+                "label": "AC-3 / Dolby Digital"
+              },
+              {
+                "value": "aac",
+                "label": "AAC"
+              },
+              {
+                "value": "truehd",
+                "label": "Dolby TrueHD"
+              },
+              {
+                "value": "dts",
+                "label": "DTS"
+              },
+              {
+                "value": "dtshd",
+                "label": "DTS-HD"
+              },
+              {
+                "value": "flac",
+                "label": "FLAC"
+              },
+              {
+                "value": "mp3",
+                "label": "MP3"
+              },
+              {
+                "value": "opus",
+                "label": "Opus"
+              },
+              {
+                "value": "vorbis",
+                "label": "Vorbis"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "scope",
@@ -119,24 +235,39 @@
             "required": true,
             "defaultValue": "any",
             "options": [
-              { "value": "any", "label": "Au moins une piste" },
-              { "value": "first", "label": "Première piste uniquement" },
-              { "value": "all", "label": "Toutes les pistes" }
-            ]
+              {
+                "value": "any",
+                "label": "Au moins une piste"
+              },
+              {
+                "value": "first",
+                "label": "Première piste uniquement"
+              },
+              {
+                "value": "all",
+                "label": "Toutes les pistes"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "invert",
             "type": "boolean",
             "label": "Inverser la condition (N'est pas)",
             "required": false,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0"]
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "conditions-video-resolution",
@@ -145,11 +276,26 @@
       "description": "Vérifie la définition d'image du flux vidéo.",
       "kind": "condition",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "image"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "image"
+      ],
       "outputs": [
-        { "id": "yes", "label": "Oui", "description": "La résolution correspond au critère." },
-        { "id": "no", "label": "Non", "description": "La résolution ne correspond pas au critère." },
-        { "id": "error", "label": "Erreur", "description": "Aucune piste vidéo n'est présente." }
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "La résolution correspond au critère."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "La résolution ne correspond pas au critère."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Aucune piste vidéo n'est présente."
+        }
       ],
       "configurationSchema": {
         "version": 1,
@@ -162,11 +308,25 @@
             "inline": true,
             "defaultValue": "1080p",
             "options": [
-              { "value": "4k", "label": "4K / UHD (2160p)" },
-              { "value": "1080p", "label": "Full HD (1080p)" },
-              { "value": "720p", "label": "HD (720p)" },
-              { "value": "sd", "label": "SD (< 720p)" }
-            ]
+              {
+                "value": "4k",
+                "label": "4K / UHD (2160p)"
+              },
+              {
+                "value": "1080p",
+                "label": "Full HD (1080p)"
+              },
+              {
+                "value": "720p",
+                "label": "HD (720p)"
+              },
+              {
+                "value": "sd",
+                "label": "SD (< 720p)"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "operator",
@@ -175,17 +335,30 @@
             "required": true,
             "defaultValue": "gte",
             "options": [
-              { "value": "gte", "label": "Au moins (≥)" },
-              { "value": "eq", "label": "Exactement (=)" },
-              { "value": "lte", "label": "Au plus (≤)" }
-            ]
+              {
+                "value": "gte",
+                "label": "Au moins (≥)"
+              },
+              {
+                "value": "eq",
+                "label": "Exactement (=)"
+              },
+              {
+                "value": "lte",
+                "label": "Au plus (≤)"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0"]
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "conditions-audio-channels",
@@ -194,11 +367,26 @@
       "description": "Vérifie le nombre de canaux audio des pistes.",
       "kind": "condition",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "music"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
       "outputs": [
-        { "id": "yes", "label": "Oui", "description": "Le nombre de canaux correspond." },
-        { "id": "no", "label": "Non", "description": "Le nombre de canaux ne correspond pas." },
-        { "id": "error", "label": "Erreur", "description": "Aucune piste audio n'est présente." }
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "Le nombre de canaux correspond."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "Le nombre de canaux ne correspond pas."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Aucune piste audio n'est présente."
+        }
       ],
       "configurationSchema": {
         "version": 1,
@@ -211,11 +399,25 @@
             "inline": true,
             "defaultValue": "6",
             "options": [
-              { "value": "8", "label": "7.1 (8 canaux)" },
-              { "value": "6", "label": "5.1 (6 canaux)" },
-              { "value": "2", "label": "Stéréo (2 canaux)" },
-              { "value": "1", "label": "Mono (1 canal)" }
-            ]
+              {
+                "value": "8",
+                "label": "7.1 (8 canaux)"
+              },
+              {
+                "value": "6",
+                "label": "5.1 (6 canaux)"
+              },
+              {
+                "value": "2",
+                "label": "Stéréo (2 canaux)"
+              },
+              {
+                "value": "1",
+                "label": "Mono (1 canal)"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "operator",
@@ -224,10 +426,21 @@
             "required": true,
             "defaultValue": "gte",
             "options": [
-              { "value": "gte", "label": "Au moins (≥)" },
-              { "value": "eq", "label": "Exactement (=)" },
-              { "value": "lte", "label": "Au plus (≤)" }
-            ]
+              {
+                "value": "gte",
+                "label": "Au moins (≥)"
+              },
+              {
+                "value": "eq",
+                "label": "Exactement (=)"
+              },
+              {
+                "value": "lte",
+                "label": "Au plus (≤)"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "scope",
@@ -236,16 +449,26 @@
             "required": true,
             "defaultValue": "first",
             "options": [
-              { "value": "first", "label": "Première piste uniquement" },
-              { "value": "any", "label": "Au moins une piste" }
-            ]
+              {
+                "value": "first",
+                "label": "Première piste uniquement"
+              },
+              {
+                "value": "any",
+                "label": "Au moins une piste"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0"]
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "conditions-audio-language",
@@ -254,11 +477,26 @@
       "description": "Vérifie si une langue spécifique est présente dans les pistes audio.",
       "kind": "condition",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "music"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
       "outputs": [
-        { "id": "yes", "label": "Oui", "description": "La langue recherchée est présente." },
-        { "id": "no", "label": "Non", "description": "La langue recherchée n'est pas présente." },
-        { "id": "error", "label": "Erreur", "description": "Aucune piste audio n'est présente." }
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "La langue recherchée est présente."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "La langue recherchée n'est pas présente."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Aucune piste audio n'est présente."
+        }
       ],
       "configurationSchema": {
         "version": 1,
@@ -271,18 +509,53 @@
             "inline": true,
             "defaultValue": "fra",
             "options": [
-              { "value": "fra", "label": "Français (fra/fre)" },
-              { "value": "eng", "label": "Anglais (eng)" },
-              { "value": "jpn", "label": "Japonais (jpn)" },
-              { "value": "deu", "label": "Allemand (deu/ger)" },
-              { "value": "spa", "label": "Espagnol (spa)" },
-              { "value": "ita", "label": "Italien (ita)" },
-              { "value": "por", "label": "Portugais (por)" },
-              { "value": "rus", "label": "Russe (rus)" },
-              { "value": "zho", "label": "Chinois (zho/chi)" },
-              { "value": "kor", "label": "Coréen (kor)" },
-              { "value": "und", "label": "Indéterminée (und)" }
-            ]
+              {
+                "value": "fra",
+                "label": "Français (fra/fre)"
+              },
+              {
+                "value": "eng",
+                "label": "Anglais (eng)"
+              },
+              {
+                "value": "jpn",
+                "label": "Japonais (jpn)"
+              },
+              {
+                "value": "deu",
+                "label": "Allemand (deu/ger)"
+              },
+              {
+                "value": "spa",
+                "label": "Espagnol (spa)"
+              },
+              {
+                "value": "ita",
+                "label": "Italien (ita)"
+              },
+              {
+                "value": "por",
+                "label": "Portugais (por)"
+              },
+              {
+                "value": "rus",
+                "label": "Russe (rus)"
+              },
+              {
+                "value": "zho",
+                "label": "Chinois (zho/chi)"
+              },
+              {
+                "value": "kor",
+                "label": "Coréen (kor)"
+              },
+              {
+                "value": "und",
+                "label": "Indéterminée (und)"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "scope",
@@ -291,23 +564,35 @@
             "required": true,
             "defaultValue": "any",
             "options": [
-              { "value": "any", "label": "Au moins une piste" },
-              { "value": "first", "label": "Première piste uniquement" }
-            ]
+              {
+                "value": "any",
+                "label": "Au moins une piste"
+              },
+              {
+                "value": "first",
+                "label": "Première piste uniquement"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "invert",
             "type": "boolean",
             "label": "Inverser la condition (N'est pas)",
             "required": false,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": ["1.1.0"]
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "conditions-video-hdr",
@@ -316,11 +601,26 @@
       "description": "Vérifie si la vidéo utilise un format HDR (Dolby Vision, HDR10, HDR10+, HLG) ou SDR.",
       "kind": "condition",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "image"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "image"
+      ],
       "outputs": [
-        { "id": "yes", "label": "Oui", "description": "Le format correspond au critère." },
-        { "id": "no", "label": "Non", "description": "Le format ne correspond pas au critère." },
-        { "id": "error", "label": "Erreur", "description": "Aucune piste vidéo n'est présente." }
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "Le format correspond au critère."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "Le format ne correspond pas au critère."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Aucune piste vidéo n'est présente."
+        }
       ],
       "configurationSchema": {
         "version": 1,
@@ -333,20 +633,42 @@
             "inline": true,
             "defaultValue": "any-hdr",
             "options": [
-              { "value": "any-hdr", "label": "Tout format HDR" },
-              { "value": "dolby-vision", "label": "Dolby Vision" },
-              { "value": "hdr10", "label": "HDR10" },
-              { "value": "hdr10plus", "label": "HDR10+" },
-              { "value": "hlg", "label": "HLG" },
-              { "value": "sdr", "label": "SDR (non HDR)" }
-            ]
+              {
+                "value": "any-hdr",
+                "label": "Tout format HDR"
+              },
+              {
+                "value": "dolby-vision",
+                "label": "Dolby Vision"
+              },
+              {
+                "value": "hdr10",
+                "label": "HDR10"
+              },
+              {
+                "value": "hdr10plus",
+                "label": "HDR10+"
+              },
+              {
+                "value": "hlg",
+                "label": "HLG"
+              },
+              {
+                "value": "sdr",
+                "label": "SDR (non HDR)"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "invert",
             "type": "boolean",
             "label": "Inverser la condition (N'est pas)",
             "required": false,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -362,11 +684,26 @@
       "description": "Vérifie la profondeur de couleur de la vidéo (8-bit, 10-bit, 12-bit).",
       "kind": "condition",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "image"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "image"
+      ],
       "outputs": [
-        { "id": "yes", "label": "Oui", "description": "La profondeur correspond." },
-        { "id": "no", "label": "Non", "description": "La profondeur ne correspond pas." },
-        { "id": "error", "label": "Erreur", "description": "Aucune piste vidéo n'est présente." }
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "La profondeur correspond."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "La profondeur ne correspond pas."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Aucune piste vidéo n'est présente."
+        }
       ],
       "configurationSchema": {
         "version": 1,
@@ -379,17 +716,30 @@
             "inline": true,
             "defaultValue": "10-bit",
             "options": [
-              { "value": "10-bit", "label": "10 bits (Main 10)" },
-              { "value": "8-bit", "label": "8 bits (Standard)" },
-              { "value": "12-bit", "label": "12 bits" }
-            ]
+              {
+                "value": "10-bit",
+                "label": "10 bits (Main 10)"
+              },
+              {
+                "value": "8-bit",
+                "label": "8 bits (Standard)"
+              },
+              {
+                "value": "12-bit",
+                "label": "12 bits"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "invert",
             "type": "boolean",
             "label": "Inverser la condition (N'est pas)",
             "required": false,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

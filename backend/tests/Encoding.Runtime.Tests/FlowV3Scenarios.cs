@@ -15,7 +15,7 @@ internal static class FlowV3Scenarios
     internal static string TemplatePath() => Path.Combine(Harness.RepositoryRoot(), "..", "docs", "operations", "flow-templates", "hevc-aac-ass.flow.json");
 
     internal static string Json(FlowDefinition flow) =>
-        JsonSerializer.Serialize(flow, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }) + "\n";
+        JsonSerializer.Serialize(flow, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }).Replace("\r\n", "\n") + "\n";
 
     public static void Run(FlowComponentRegistry registry, FlowDefinitionValidator validator, RuntimeEligibility eligibility)
     {
@@ -26,7 +26,7 @@ internal static class FlowV3Scenarios
         // Le fichier importable est exactement ce graphe (ENCODING_UPDATE_TEMPLATE=1 le régénère après un changement voulu).
         var expected = Json(flow);
         if (Environment.GetEnvironmentVariable("ENCODING_UPDATE_TEMPLATE") == "1") { Directory.CreateDirectory(Path.GetDirectoryName(TemplatePath())!); File.WriteAllText(TemplatePath(), expected); }
-        Check(File.Exists(TemplatePath()) && File.ReadAllText(TemplatePath()) == expected, "docs/operations/flow-templates/hevc-aac-ass.flow.json matches the tested flow (regenerate with ENCODING_UPDATE_TEMPLATE=1).");
+        Check(File.Exists(TemplatePath()) && File.ReadAllText(TemplatePath()).Replace("\r\n", "\n") == expected, "docs/operations/flow-templates/hevc-aac-ass.flow.json matches the tested flow (regenerate with ENCODING_UPDATE_TEMPLATE=1).");
         var imported = validator.ValidateDocument(JsonDocument.Parse(File.ReadAllText(TemplatePath())).RootElement);
         Check(imported.Result.IsValid && imported.Definition is not null && imported.Definition.Id == FlowV3Template.FlowId, "The importable file passes the import validation.");
 

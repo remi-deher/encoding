@@ -12,7 +12,7 @@ describe('Flow inspector progressive disclosure', () => {
       version: 1,
       fields: [
         { id: 'rules', label: 'Règles du média', type: 'condition-tree', conditionFields: [] },
-        { id: 'note', label: 'Note', type: 'text' },
+        { id: 'note', label: 'Note', type: 'text', importance: 'advanced' },
       ],
     });
     await fixture.whenStable();
@@ -22,12 +22,48 @@ describe('Flow inspector progressive disclosure', () => {
     expect(fixture.nativeElement.querySelector('details').textContent).toContain('Note');
   });
 
+  it('shows optional business options and preserves hidden mode values', async () => {
+    const fixture = TestBed.createComponent(ComponentConfigurationFormComponent);
+    fixture.componentRef.setInput('progressiveDisclosure', true);
+    fixture.componentRef.setInput('schema', {
+      version: 1,
+      fields: [
+        {
+          id: 'mode',
+          label: 'Mode',
+          type: 'select',
+          options: [{ value: 'timer', label: 'Délai' }],
+          defaultValue: 'timer',
+        },
+        { id: 'rate', label: 'Fréquence', type: 'number', defaultValue: 48000 },
+        {
+          id: 'node',
+          label: 'Worker',
+          type: 'text',
+          visibleWhenFieldId: 'mode',
+          visibleWhenValue: 'node',
+        },
+      ],
+    });
+    fixture.componentRef.setInput('values', { node: 'saved-node' });
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('details')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Fréquence');
+    expect(fixture.nativeElement.textContent).not.toContain('Worker');
+    const saved = vi.fn();
+    fixture.componentInstance.saved.subscribe(saved);
+    fixture.nativeElement.querySelector('form').dispatchEvent(new Event('submit'));
+    expect(saved.mock.calls[0][0].node).toBe('saved-node');
+  });
+
   it('reveals an invalid advanced option so a disabled submit can be corrected', async () => {
     const fixture = TestBed.createComponent(ComponentConfigurationFormComponent);
     fixture.componentRef.setInput('progressiveDisclosure', true);
     fixture.componentRef.setInput('schema', {
       version: 1,
-      fields: [{ id: 'limit', label: 'Limite', type: 'number', min: 1, max: 10 }],
+      fields: [
+        { id: 'limit', label: 'Limite', type: 'number', min: 1, max: 10, importance: 'advanced' },
+      ],
     });
     fixture.componentRef.setInput('values', { limit: 99 });
     await fixture.whenStable();

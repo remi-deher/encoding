@@ -87,6 +87,8 @@ interface FlowComponentConfigurationFieldBase {
   readonly required?: boolean;
   /** Show this field in the common block, in schema order. */
   readonly inline?: boolean;
+  readonly importance?: 'basic' | 'advanced';
+  readonly section?: string;
   readonly visibleWhenFieldId?: string;
   readonly visibleWhenValue?: string;
   readonly visibleWhenEmpty?: boolean;

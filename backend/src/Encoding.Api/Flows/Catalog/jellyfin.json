@@ -63,7 +63,9 @@
             "type": "text",
             "label": "ID de l’élément Jellyfin",
             "required": false,
-            "description": "Laisser vide pour viser le fichier traité."
+            "description": "Laisser vide pour viser le fichier traité.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -136,7 +138,9 @@
             "type": "text",
             "label": "ID de l’élément Jellyfin",
             "required": false,
-            "description": "Laisser vide pour viser le fichier traité."
+            "description": "Laisser vide pour viser le fichier traité.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -188,7 +192,9 @@
                 "value": "global",
                 "label": "Toute lecture sur Jellyfin"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

@@ -160,3 +160,5 @@ Les encodeurs vidéo sont décrits par un catalogue partagé et les profils de q
 La section **Modèles** contient des copies immuables de versions publiées de flows. Un flow créé depuis un modèle reçoit un nouvel identifiant ; voir [0025](docs/architecture/0025-flow-templates.md).
 
 Les groupes de nœuds sont manuels ou automatiques selon les caractéristiques déclarées du worker. Les étiquettes de groupe sont héritées par leurs membres ; les étiquettes propres au nœud prévalent. Les blocs de sélection appliquent ensemble le filtre de groupe et les étiquettes au moment de l’attribution ; voir [0034](docs/architecture/0034-node-groups-and-labels.md).
+
+La configuration des composants distingue les paramètres essentiels, avancés et inline ; sections et sélecteurs sont déclaratifs et partagés. Voir [0078](docs/architecture/0078-flow-component-usability.md).

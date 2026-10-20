@@ -35,21 +35,27 @@
             "type": "text",
             "label": "Identifiant du nœud (facultatif)",
             "description": "Copiez l’identifiant depuis la fiche du nœud.",
-            "placeholder": "UUID du worker"
+            "placeholder": "UUID du worker",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "targetGroupId",
             "type": "text",
             "label": "Identifiant du groupe (facultatif)",
             "description": "Le worker doit appartenir à ce groupe manuel ou automatique.",
-            "placeholder": "UUID du groupe"
+            "placeholder": "UUID du groupe",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "requiredLabels",
             "type": "text",
             "label": "Étiquettes requises (facultatif)",
             "description": "Toutes les conditions doivent correspondre. Syntaxe : gpu ou gpu=nvidia,region=eu.",
-            "placeholder": "gpu=nvidia,region=eu"
+            "placeholder": "gpu=nvidia,region=eu",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -91,28 +97,36 @@
             "label": "Identifiant de l’outil",
             "description": "Ex. ffmpeg, imagemagick, python ou javascript.",
             "required": true,
-            "placeholder": "ffmpeg"
+            "placeholder": "ffmpeg",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "minimumVersion",
             "type": "text",
             "label": "Version minimale",
             "description": "Facultatif. Comparaison de version numérique, par exemple 7.1.0.",
-            "placeholder": "7.1.0"
+            "placeholder": "7.1.0",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "requiredCapability",
             "type": "text",
             "label": "Accélération requise",
             "description": "Facultatif. Valeur déclarée par l’outil sur le worker, par exemple nvenc ou vaapi.",
-            "placeholder": "nvenc"
+            "placeholder": "nvenc",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "requiredEncoder",
             "type": "text",
             "label": "Encodeur ou codec requis",
             "description": "Facultatif. Exige un codec (ex. av1, hevc, h264) ou un encodeur précis (ex. libsvtav1, hevc_nvenc) disponible sur le worker.",
-            "placeholder": "av1"
+            "placeholder": "av1",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -171,28 +185,36 @@
                 "value": "selector",
                 "label": "Un groupe et/ou des étiquettes"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "targetNodeId",
             "type": "text",
             "label": "Identifiant du nœud",
             "description": "Facultatif : remplace le nœud défini dans la configuration du plugin ou du flow. Le worker courant ne peut pas être sa propre cible.",
-            "placeholder": "UUID du worker"
+            "placeholder": "UUID du worker",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "targetGroupId",
             "type": "text",
             "label": "Identifiant du groupe",
             "description": "Le destinataire doit appartenir à ce groupe.",
-            "placeholder": "UUID du groupe"
+            "placeholder": "UUID du groupe",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "requiredLabels",
             "type": "text",
             "label": "Étiquettes requises",
             "description": "Toutes les conditions doivent correspondre : gpu=nvidia,region=eu.",
-            "placeholder": "gpu=nvidia,region=eu"
+            "placeholder": "gpu=nvidia,region=eu",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -211,15 +233,57 @@
       "description": "Autorise un nombre borné de nouvelles tentatives depuis le début du flow si un worker perd sa connexion. Les tentatives ont chacune leurs propres sorties.",
       "kind": "action",
       "mediaType": "general",
-      "supportedFlowMediaTypes": ["video", "image", "music", "subtitles"],
-      "outputs": [{"id":"success","label":"Suite","description":"La règle de relance est activée pour ce flow."}],
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "La règle de relance est activée pour ce flow."
+        }
+      ],
       "configurationSchema": {
         "version": 1,
         "fields": [
-          {"id":"maxRetries","type":"number","label":"Nombre maximal de relances","defaultValue":1,"min":1,"max":10,"inline":true},
-          {"id":"targetNodeId","type":"text","label":"Worker précis (facultatif)","placeholder":"UUID du worker"},
-          {"id":"targetGroupId","type":"text","label":"Groupe de workers (facultatif)","placeholder":"UUID du groupe"},
-          {"id":"requiredLabels","type":"text","label":"Étiquettes requises (facultatif)","placeholder":"gpu=nvidia,region=eu"}
+          {
+            "id": "maxRetries",
+            "type": "number",
+            "label": "Nombre maximal de relances",
+            "defaultValue": 1,
+            "min": 1,
+            "max": 10,
+            "inline": true,
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "targetNodeId",
+            "type": "text",
+            "label": "Worker précis (facultatif)",
+            "placeholder": "UUID du worker",
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "targetGroupId",
+            "type": "text",
+            "label": "Groupe de workers (facultatif)",
+            "placeholder": "UUID du groupe",
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "requiredLabels",
+            "type": "text",
+            "label": "Étiquettes requises (facultatif)",
+            "placeholder": "gpu=nvidia,region=eu",
+            "importance": "basic",
+            "section": "Paramètres"
+          }
         ]
       },
       "requiredTools": [],
@@ -268,7 +332,9 @@
                 "value": "prefer",
                 "label": "Préférence : accès direct si disponible"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -291,13 +357,13 @@
             "value": "eligible",
             "label": "Un autre worker éligible"
           },
-        {
-          "value": "node",
-          "label": "Un nœud précis"
-        },
-        {
-          "value": "selector",
-          "label": "Un groupe et/ou des étiquettes"
+          {
+            "value": "node",
+            "label": "Un nœud précis"
+          },
+          {
+            "value": "selector",
+            "label": "Un groupe et/ou des étiquettes"
           }
         ]
       },

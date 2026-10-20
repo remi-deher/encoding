@@ -47,7 +47,9 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "trackType",
@@ -72,34 +74,44 @@
                 "value": "subtitles",
                 "label": "Sous-titres"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "trackIds",
             "label": "Identifiants des pistes",
             "type": "text",
             "required": false,
-            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi."
+            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "language",
             "label": "Filtrer par langue",
             "type": "text",
             "required": false,
-            "description": "Facultatif, par exemple fra ou eng."
+            "description": "Facultatif, par exemple fra ou eng.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "title",
             "label": "Titre du conteneur",
             "type": "text",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "keepAttachments",
             "label": "Conserver les pièces jointes",
             "type": "boolean",
             "inline": true,
-            "defaultValue": true
+            "defaultValue": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -154,7 +166,9 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "trackType",
@@ -179,21 +193,27 @@
                 "value": "subtitles",
                 "label": "Sous-titres"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "trackIds",
             "label": "Identifiants des pistes",
             "type": "text",
             "required": false,
-            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi."
+            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "language",
             "label": "Filtrer par langue",
             "type": "text",
             "required": false,
-            "description": "Facultatif, par exemple fra ou eng."
+            "description": "Facultatif, par exemple fra ou eng.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -240,7 +260,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -295,14 +317,18 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "trackOrder",
             "label": "Ordre des identifiants",
             "type": "text",
             "required": true,
-            "description": "Identifiants séparés par des virgules, par exemple 0,2,1,3."
+            "description": "Identifiants séparés par des virgules, par exemple 0,2,1,3.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -357,7 +383,9 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "trackId",
@@ -366,34 +394,44 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "language",
             "label": "Langue",
             "type": "text",
             "required": true,
-            "description": "Code de langue, par exemple fra ou eng."
+            "description": "Code de langue, par exemple fra ou eng.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "trackName",
             "label": "Nom de la piste",
             "type": "text",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "defaultTrack",
             "label": "Piste par défaut",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "forcedTrack",
             "label": "Piste forcée",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -448,13 +486,17 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "title",
             "label": "Titre du conteneur",
             "type": "text",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -499,7 +541,9 @@
             "label": "Identifiants des pièces jointes",
             "type": "text",
             "required": false,
-            "description": "Séparés par des virgules ; vide pour toutes les pièces jointes."
+            "description": "Séparés par des virgules ; vide pour toutes les pièces jointes.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -554,14 +598,18 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "attachmentIds",
             "label": "Identifiants des pièces jointes",
             "type": "text",
             "required": false,
-            "description": "Séparés par des virgules ; vide pour toutes les pièces jointes."
+            "description": "Séparés par des virgules ; vide pour toutes les pièces jointes.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -616,7 +664,9 @@
                 "value": "simple",
                 "label": "Texte simple"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -671,14 +721,18 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "sourceFile",
             "label": "Fichier à ajouter",
             "type": "text",
             "required": true,
-            "description": "Référence à un fichier local ou à un résultat produit par le flow."
+            "description": "Référence à un fichier local ou à un résultat produit par le flow.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

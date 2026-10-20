@@ -106,7 +106,9 @@
             "required": false,
             "min": 1,
             "step": 1,
-            "description": "Laisser vide pour vérifier le fichier traité."
+            "description": "Laisser vide pour vérifier le fichier traité.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -146,7 +148,9 @@
             "required": false,
             "min": 1,
             "step": 1,
-            "description": "Laisser vide pour utiliser le série qui contient le fichier traité."
+            "description": "Laisser vide pour utiliser le série qui contient le fichier traité.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

@@ -47,13 +47,17 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "encodingProfile",
             "label": "Profil de qualité",
             "type": "encoding-profile",
-            "description": "Les valeurs du profil sont intégrées au flow et restent stables après publication."
+            "description": "Les valeurs du profil sont intégrées au flow et restent stables après publication.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "encoderMode",
@@ -69,14 +73,18 @@
                 "value": "specific",
                 "label": "Encodeur précis"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "encoderId",
             "label": "Encodeur précis",
             "type": "video-encoder",
             "visibleWhenFieldId": "encoderMode",
-            "visibleWhenValue": "specific"
+            "visibleWhenValue": "specific",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "videoCodec",
@@ -97,7 +105,9 @@
                 "value": "h264",
                 "label": "H.264"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "quality",
@@ -115,7 +125,9 @@
               23,
               26,
               28
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Paramètres"
           },
           {
             "id": "preset",
@@ -137,7 +149,9 @@
                 "value": "fast",
                 "label": "Rapide"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Paramètres"
           },
           {
             "id": "hardwareAcceleration",
@@ -163,7 +177,9 @@
                 "value": "vaapi",
                 "label": "VAAPI"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Paramètres"
           },
           {
             "id": "qualityTier",
@@ -192,7 +208,9 @@
                 "value": "compact",
                 "label": "Compacité maximale (CRF 26 / 4K CRF 29)"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "colorDepth",
@@ -217,21 +235,27 @@
                 "value": "8-bit",
                 "label": "8 bits (Standard)"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveHdr",
             "label": "Préserver les métadonnées HDR",
             "type": "boolean",
             "defaultValue": true,
-            "description": "Injecte automatiquement les espaces colorimétriques BT.2020 et courbes SMPTE ST 2084 pour éviter l'image délavée."
+            "description": "Injecte automatiquement les espaces colorimétriques BT.2020 et courbes SMPTE ST 2084 pour éviter l'image délavée.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "retryWithCpu",
             "label": "Repli sur CPU si l’encodage matériel échoue",
             "type": "boolean",
             "defaultValue": false,
-            "description": "Si un encodeur matériel est sélectionné et que FFmpeg échoue, relance une fois avec le même codec sur CPU. Utilise d’abord la cible CPU du profil, puis les encodeurs CPU compatibles disponibles. Désactivez l’option pour conserver la sortie Erreur."
+            "description": "Si un encodeur matériel est sélectionné et que FFmpeg échoue, relance une fois avec le même codec sur CPU. Utilise d’abord la cible CPU du profil, puis les encodeurs CPU compatibles disponibles. Désactivez l’option pour conserver la sortie Erreur.",
+            "importance": "advanced",
+            "section": "Exécution"
           }
         ]
       },
@@ -288,7 +312,9 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "width",
@@ -297,7 +323,9 @@
             "inline": true,
             "defaultValue": 1920,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "height",
@@ -306,7 +334,9 @@
             "inline": true,
             "defaultValue": 1080,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -369,7 +399,9 @@
               }
             ],
             "description": "Le mode plan combine le filtre de rognage à base-transcode-video sans réécriture intermédiaire.",
-            "required": true
+            "required": true,
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "samplePoints",
@@ -380,7 +412,9 @@
             "max": 20,
             "step": 1,
             "description": "Nombre de segments temporels analysés sur la vidéo.",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "threshold",
@@ -391,7 +425,9 @@
             "max": 100,
             "step": 1,
             "description": "Seuil de noirceur pour cropdetect (24 par défaut).",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "roundMultiple",
@@ -402,7 +438,9 @@
             "max": 32,
             "step": 2,
             "description": "Multiple auquel arrondir la largeur et la hauteur (2 ou 16).",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -465,7 +503,9 @@
               }
             ],
             "description": "Le mode plan applique le désentrelacement pendant l'encodage sans passe séparée.",
-            "required": true
+            "required": true,
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "algorithm",
@@ -483,7 +523,9 @@
               }
             ],
             "description": "Filtre FFmpeg de désentrelacement.",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "detectionFrames",
@@ -494,7 +536,9 @@
             "max": 10000,
             "step": 100,
             "description": "Nombre de trames analysées pour la détection idet.",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "interlaceThresholdPercent",
@@ -505,7 +549,9 @@
             "max": 100,
             "step": 1,
             "description": "Pourcentage minimum de trames entrelacées pour activer le filtre (10% par défaut).",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -554,7 +600,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "width",
@@ -563,7 +611,9 @@
             "inline": true,
             "defaultValue": 640,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "height",
@@ -572,7 +622,9 @@
             "inline": true,
             "defaultValue": 360,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -637,21 +689,27 @@
                 "value": "subtitles",
                 "label": "Sous-titres"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "trackIds",
             "label": "Identifiants des pistes",
             "type": "text",
             "required": false,
-            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi."
+            "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "language",
             "label": "Filtrer par langue",
             "type": "text",
             "required": false,
-            "description": "Facultatif, par exemple fra ou eng."
+            "description": "Facultatif, par exemple fra ou eng.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -709,7 +767,9 @@
             "max": 100,
             "step": 1,
             "description": "Pourcentage minimum de réduction requis (ex: 10 pour 10% d'économie).",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "actionOnFailure",
@@ -727,7 +787,9 @@
               }
             ],
             "description": "Permet de restaurer la source d'origine pour ne pas publier un fichier plus gros.",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -778,7 +840,9 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "container",
@@ -795,7 +859,9 @@
                 "value": "mp4",
                 "label": "MP4"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

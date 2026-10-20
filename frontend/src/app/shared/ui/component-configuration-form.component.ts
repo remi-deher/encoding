@@ -83,6 +83,9 @@ type ConfigurationFormGroup = FormGroup<
           <div class="configuration-fields">
             @for (field of visibleFields; track field.id) {
               @if (isFieldVisible(field)) {
+                @if (field.section && visibleFields[$index - 1]?.section !== field.section) {
+                  <h3>{{ field.section }}</h3>
+                }
                 @switch (field.type) {
                   @case ('condition-tree') {
                     <section
@@ -302,6 +305,20 @@ type ConfigurationFormGroup = FormGroup<
         <p class="empty-configuration">Ce composant ne demande aucun réglage.</p>
       }
 
+      @if (progressiveDisclosure()) {
+        <section aria-label="Résumé des paramètres">
+          <h3>Configuration effective</h3>
+          <p>
+            Les valeurs du formulaire incluent les valeurs par défaut du composant. Les champs
+            masqués sont conservés.
+          </p>
+          <ul>
+            @for (line of configurationSummary(); track line) {
+              <li>{{ line }}</li>
+            }
+          </ul>
+        </section>
+      }
       <div class="form-actions">
         <ng-content select="[form-secondary-actions]" />
         <button matButton="text" type="button" (click)="cancelled.emit()">Annuler</button>
@@ -462,14 +479,27 @@ export class ComponentConfigurationFormComponent implements OnChanges {
       : [];
   }
   private isPrimary(field: FlowComponentConfigurationField): boolean {
-    return !!(
-      field.inline ||
-      field.required ||
-      ['condition-tree', 'script-reference', 'encoding-profile', 'video-encoder'].includes(
-        field.type,
-      ) ||
-      (field.type === 'text' && field.id === 'code')
-    );
+    return field.importance !== 'advanced';
+  }
+  protected configurationSummary(): readonly string[] {
+    return this.fields
+      .filter(
+        (field) => this.isFieldVisible(field) && field.type !== 'secret' && field.id !== 'code',
+      )
+      .flatMap((field) => {
+        const value = this.form.controls[field.id]?.value;
+        if (value === null || value === undefined || value === '' || typeof value === 'object')
+          return [];
+        const label =
+          field.type === 'select'
+            ? (field.options.find((option) => option.value === value)?.label ?? String(value))
+            : typeof value === 'boolean'
+              ? value
+                ? 'Oui'
+                : 'Non'
+              : String(value);
+        return [field.label + ' : ' + label];
+      });
   }
   protected advancedInvalid(): boolean {
     return this.advancedFields().some(

@@ -75,7 +75,9 @@ public sealed record FlowConfigurationField(
     IReadOnlyList<ConditionPreset>? ConditionPresets = null,
     string? VisibleWhenFieldId = null,
     string? VisibleWhenValue = null,
-    bool VisibleWhenEmpty = false);
+    bool VisibleWhenEmpty = false,
+    string? Importance = null,
+    string? Section = null);
 
 public sealed record FlowSelectOption(
     string Value,

@@ -48,7 +48,9 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "trackId",
@@ -57,7 +59,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "audioCodec",
@@ -82,7 +86,9 @@
                 "value": "ac3",
                 "label": "AC-3"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "bitrateKbps",
@@ -92,7 +98,9 @@
             "defaultValue": 192,
             "min": 32,
             "max": 1536,
-            "step": 32
+            "step": 32,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "channels",
@@ -117,7 +125,9 @@
                 "value": "8",
                 "label": "7.1"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -173,7 +183,9 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "trackId",
@@ -182,7 +194,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "targetLoudness",
@@ -192,7 +206,9 @@
             "defaultValue": -16,
             "min": -30,
             "max": -5,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "truePeak",
@@ -202,7 +218,9 @@
             "defaultValue": -1.5,
             "min": -9,
             "max": 0,
-            "step": 0.1
+            "step": 0.1,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -250,7 +268,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "audioCodec",
@@ -275,7 +295,9 @@
                 "value": "opus",
                 "label": "Opus"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -335,13 +357,17 @@
                 "label": "Opération autonome"
               }
             ],
-            "description": "Ajouter les conversions au plan, puis utiliser Exécuter le traitement ; ou les réaliser immédiatement."
+            "description": "Ajouter les conversions au plan, puis utiliser Exécuter le traitement ; ou les réaliser immédiatement.",
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "keepStereoAc3",
             "label": "Conserver la stéréo AC-3",
             "type": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "unknownLayout",
@@ -357,7 +383,9 @@
                 "value": "fail",
                 "label": "Refuser"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Paramètres"
           },
           {
             "id": "sampleRate",
@@ -366,7 +394,9 @@
             "defaultValue": 48000,
             "min": 0,
             "max": 192000,
-            "step": 1000
+            "step": 1000,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -421,34 +451,44 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "sourceFile",
             "label": "Fichier à ajouter",
             "type": "text",
             "required": true,
-            "description": "Référence à un fichier local ou à un résultat produit par le flow."
+            "description": "Référence à un fichier local ou à un résultat produit par le flow.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "language",
             "label": "Langue",
             "type": "text",
             "required": true,
-            "description": "Code de langue, par exemple fra ou eng."
+            "description": "Code de langue, par exemple fra ou eng.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "trackName",
             "label": "Nom de la piste",
             "type": "text",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "defaultTrack",
             "label": "Piste par défaut",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -499,7 +539,9 @@
             "type": "text",
             "defaultValue": "fra,fre,eng,jpn,und",
             "description": "Codes langues ISO-639 séparés par des virgules (ex: fra,eng,jpn).",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "keepUndefinedAudio",
@@ -507,7 +549,9 @@
             "type": "boolean",
             "defaultValue": true,
             "description": "Préserver les pistes audio dont la langue n'est pas renseignée.",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "keepFirstAudioIfNoneMatch",
@@ -515,7 +559,9 @@
             "type": "boolean",
             "defaultValue": true,
             "description": "Si aucune langue audio ne correspond, conserve la 1ère piste pour éviter un fichier muet.",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "allowedSubtitleLanguages",
@@ -523,7 +569,9 @@
             "type": "text",
             "defaultValue": "fra,fre,eng",
             "description": "Codes langues des sous-titres à conserver, séparés par des virgules.",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "keepForcedSubtitles",
@@ -531,7 +579,9 @@
             "type": "boolean",
             "defaultValue": true,
             "description": "Conserver les sous-titres forcés quelle que soit leur langue.",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -582,7 +632,9 @@
             "type": "boolean",
             "defaultValue": true,
             "description": "Retirer les pistes audio identifiées comme commentaires du réalisateur ou de l'équipe.",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "removeSubtitleCommentary",
@@ -590,7 +642,9 @@
             "type": "boolean",
             "defaultValue": true,
             "description": "Retirer les sous-titres identifiés comme commentaires.",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "customKeywords",
@@ -598,7 +652,9 @@
             "type": "text",
             "defaultValue": "",
             "description": "Mots-clés additionnels séparés par virgules (en plus de commentary, director, visual impaired, etc.).",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

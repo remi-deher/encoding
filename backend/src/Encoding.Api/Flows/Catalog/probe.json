@@ -41,14 +41,18 @@
             "type": "text",
             "required": true,
             "description": "Nom de la variable accessible aux actions et conditions suivantes.",
-            "defaultValue": "mediaDetails"
+            "defaultValue": "mediaDetails",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "refreshMetadata",
             "label": "Actualiser les métadonnées",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -97,14 +101,18 @@
             "type": "text",
             "required": true,
             "description": "Nom de la variable accessible aux actions et conditions suivantes.",
-            "defaultValue": "mediaDetails"
+            "defaultValue": "mediaDetails",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "refreshMetadata",
             "label": "Actualiser les métadonnées",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -151,7 +159,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "resultVariable",
@@ -159,14 +169,18 @@
             "type": "text",
             "required": true,
             "description": "Nom de la variable accessible aux actions et conditions suivantes.",
-            "defaultValue": "mediaDetails"
+            "defaultValue": "mediaDetails",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "refreshMetadata",
             "label": "Actualiser les métadonnées",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -214,7 +228,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "resultVariable",
@@ -222,14 +238,18 @@
             "type": "text",
             "required": true,
             "description": "Nom de la variable accessible aux actions et conditions suivantes.",
-            "defaultValue": "mediaDetails"
+            "defaultValue": "mediaDetails",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "refreshMetadata",
             "label": "Actualiser les métadonnées",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -277,14 +297,18 @@
             "type": "text",
             "required": true,
             "description": "Nom de la variable accessible aux actions et conditions suivantes.",
-            "defaultValue": "mediaDetails"
+            "defaultValue": "mediaDetails",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "refreshMetadata",
             "label": "Actualiser les métadonnées",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -331,7 +355,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "resultVariable",
@@ -339,14 +365,18 @@
             "type": "text",
             "required": true,
             "description": "Nom de la variable accessible aux actions et conditions suivantes.",
-            "defaultValue": "mediaDetails"
+            "defaultValue": "mediaDetails",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "refreshMetadata",
             "label": "Actualiser les métadonnées",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -394,7 +424,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "resultVariable",
@@ -402,14 +434,18 @@
             "type": "text",
             "required": true,
             "description": "Nom de la variable accessible aux actions et conditions suivantes.",
-            "defaultValue": "mediaDetails"
+            "defaultValue": "mediaDetails",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "refreshMetadata",
             "label": "Actualiser les métadonnées",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -499,12 +535,29 @@
             "type": "select",
             "defaultValue": "any",
             "options": [
-              { "value": "any", "label": "Tout codec" },
-              { "value": "hevc", "label": "HEVC" },
-              { "value": "hevc-or-source", "label": "HEVC ou codec source conservé" },
-              { "value": "h264", "label": "H.264" },
-              { "value": "av1", "label": "AV1" }
-            ]
+              {
+                "value": "any",
+                "label": "Tout codec"
+              },
+              {
+                "value": "hevc",
+                "label": "HEVC"
+              },
+              {
+                "value": "hevc-or-source",
+                "label": "HEVC ou codec source conservé"
+              },
+              {
+                "value": "h264",
+                "label": "H.264"
+              },
+              {
+                "value": "av1",
+                "label": "AV1"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "durationToleranceSeconds",
@@ -513,40 +566,52 @@
             "defaultValue": 2,
             "min": 0,
             "max": 600,
-            "step": 0.5
+            "step": 0.5,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveTrackCounts",
             "label": "Conserver le nombre de pistes vidéo et audio",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveSubtitleCount",
             "label": "Conserver le nombre de pistes de sous-titres",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "allowedAudioCodecs",
             "label": "Codecs audio autorisés",
             "type": "text",
             "defaultValue": "",
-            "description": "Liste séparée par des virgules. Laisser vide pour accepter tous les codecs."
+            "description": "Liste séparée par des virgules. Laisser vide pour accepter tous les codecs.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "forbiddenAudioCodecs",
             "label": "Codecs audio interdits",
             "type": "text",
             "defaultValue": "eac3",
-            "description": "Liste séparée par des virgules. Laisser vide pour ne pas filtrer les codecs audio."
+            "description": "Liste séparée par des virgules. Laisser vide pour ne pas filtrer les codecs audio.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "allowedSubtitleCodecs",
             "label": "Codecs de sous-titres autorisés",
             "type": "text",
             "defaultValue": "ass,ssa,hdmv_pgs_subtitle,dvd_subtitle,dvb_subtitle",
-            "description": "Liste séparée par des virgules. Laisser vide pour accepter tous les codecs."
+            "description": "Liste séparée par des virgules. Laisser vide pour accepter tous les codecs.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "maxAudioChannels",
@@ -555,44 +620,58 @@
             "defaultValue": 0,
             "min": 0,
             "max": 64,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveAudioChannels",
             "label": "Conserver le nombre de canaux par piste audio",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveAudioLayout",
             "label": "Conserver la disposition audio et le LFE",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveSubtitleMetadata",
             "label": "Conserver les langues, titres et indicateurs des sous-titres",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveChapterCount",
             "label": "Conserver le nombre de chapitres",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveOriginalAttachments",
             "label": "Conserver les pièces jointes d'origine",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "requiredAttachmentNames",
             "label": "Pièces jointes requises",
             "type": "text",
             "defaultValue": "",
-            "description": "Noms de fichiers séparés par des virgules, par exemple Arial.ttf."
+            "description": "Noms de fichiers séparés par des virgules, par exemple Arial.ttf.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "maxOutputSizeGrowthPercent",
@@ -601,20 +680,26 @@
             "defaultValue": 0,
             "min": 0,
             "max": 1000,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "compareAssEvents",
             "label": "Comparer les événements des sous-titres texte",
             "type": "boolean",
             "defaultValue": false,
-            "description": "Compare début, fin et texte des événements après conversion temporaire en ASS."
+            "description": "Compare début, fin et texte des événements après conversion temporaire en ASS.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "verifyDecoding",
             "label": "Décoder les pistes vidéo et audio après assemblage",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

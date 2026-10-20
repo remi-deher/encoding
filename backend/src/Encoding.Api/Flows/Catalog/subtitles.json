@@ -37,7 +37,9 @@
             "label": "Identifiants des pistes",
             "type": "text",
             "required": false,
-            "description": "Séparés par des virgules ; vide pour toutes les pistes de sous-titres."
+            "description": "Séparés par des virgules ; vide pour toutes les pistes de sous-titres.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -97,49 +99,63 @@
                 "label": "Aucun : ne pas toucher aux styles"
               }
             ],
-            "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices »."
+            "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices ».",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "convertSrt",
             "label": "Convertir les SRT en ASS",
             "type": "boolean",
             "defaultValue": true,
-            "description": "Applique le profil aux pistes SRT, WebVTT et mov_text."
+            "description": "Applique le profil aux pistes SRT, WebVTT et mov_text.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "upgradeAss",
             "label": "Mettre à niveau les ASS simples",
             "type": "boolean",
             "defaultValue": true,
-            "description": "Remplace l’en-tête et les quatre styles communs ; les événements sont conservés."
+            "description": "Remplace l’en-tête et les quatre styles communs ; les événements sont conservés.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "removeDuplicates",
             "label": "Retirer les doublons",
             "type": "boolean",
             "defaultValue": true,
-            "description": "Une piste dont le texte et les horaires (à 0,1 s près) sont inclus dans une autre piste de même langue et mêmes marqueurs est retirée."
+            "description": "Une piste dont le texte et les horaires (à 0,1 s près) sont inclus dans une autre piste de même langue et mêmes marqueurs est retirée.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "inferForced",
             "label": "Déduire les pistes forcées",
             "type": "boolean",
             "defaultValue": true,
-            "description": "Une piste courte (10 % ou moins) dont le texte est à 90 % ou plus dans la plus complète de même langue est marquée forcée."
+            "description": "Une piste courte (10 % ou moins) dont le texte est à 90 % ou plus dans la plus complète de même langue est marquée forcée.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "setTitles",
             "label": "Nommer les pistes",
             "type": "boolean",
             "defaultValue": true,
-            "description": "Désactivez-le si le bloc « Noms de pistes » nomme les pistes ensuite."
+            "description": "Désactivez-le si le bloc « Noms de pistes » nomme les pistes ensuite.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "frenchDefault",
             "label": "Sous-titre français par défaut",
             "type": "boolean",
             "defaultValue": true,
-            "description": "Quand l’unique audio de référence n’est pas français, le sous-titre français (complet de préférence, non forcé) est marqué par défaut."
+            "description": "Quand l’unique audio de référence n’est pas français, le sous-titre français (complet de préférence, non forcé) est marqué par défaut.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -194,14 +210,18 @@
             "label": "Jeu de polices",
             "type": "text",
             "defaultValue": "Crunchyroll",
-            "description": "Nom du sous-dossier du dossier de polices du nœud."
+            "description": "Nom du sous-dossier du dossier de polices du nœud.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "fonts",
             "label": "Polices",
             "type": "text",
             "defaultValue": "TrebuchetMSBold.ttf, TrebuchetMSBoldItalic.ttf, ArialBold.ttf",
-            "description": "Noms de fichiers séparés par des virgules. Vide : toutes les polices (.ttf, .otf, .ttc) du jeu."
+            "description": "Noms de fichiers séparés par des virgules. Vide : toutes les polices (.ttf, .otf, .ttc) du jeu.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -256,34 +276,44 @@
                 "value": "direct",
                 "label": "Opération autonome"
               }
-            ]
+            ],
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "sourceFile",
             "label": "Fichier à ajouter",
             "type": "text",
             "required": true,
-            "description": "Référence à un fichier local ou à un résultat produit par le flow."
+            "description": "Référence à un fichier local ou à un résultat produit par le flow.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "language",
             "label": "Langue",
             "type": "text",
             "required": true,
-            "description": "Code de langue, par exemple fra ou eng."
+            "description": "Code de langue, par exemple fra ou eng.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "trackName",
             "label": "Nom de la piste",
             "type": "text",
-            "required": false
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "forcedTrack",
             "label": "Sous-titres forcés",
             "type": "boolean",
             "inline": true,
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -343,33 +373,43 @@
                 "label": "Relever les titres d’origine"
               }
             ],
-            "description": "Placez « Relever » avant les blocs qui renomment ou convertissent des pistes ; « Appliquer » s’en sert ensuite pour garder la variante (VFF, VFQ) et les marqueurs."
+            "description": "Placez « Relever » avant les blocs qui renomment ou convertissent des pistes ; « Appliquer » s’en sert ensuite pour garder la variante (VFF, VFQ) et les marqueurs.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "audioTemplate",
             "label": "Modèle des pistes audio",
             "type": "text",
             "defaultValue": "{language} {variant} / {codec} / {layout} / {flags}",
-            "description": "Jetons : {language}, {variant}, {codec}, {layout}, {flags}. Les segments séparés par « / » qui restent vides sont retirés."
+            "description": "Jetons : {language}, {variant}, {codec}, {layout}, {flags}. Les segments séparés par « / » qui restent vides sont retirés.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "subtitleTemplate",
             "label": "Modèle des sous-titres",
             "type": "text",
             "defaultValue": "{language} {variant} / {codec} / {flags}",
-            "description": "Mêmes jetons ; {layout} reste vide."
+            "description": "Mêmes jetons ; {layout} reste vide.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "singleDefaultAudio",
             "label": "Une seule piste audio par défaut",
             "type": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "defaultAudioLanguage",
             "label": "Langue de la piste audio par défaut",
             "type": "text",
-            "description": "Code de langue (fr, en, ja…). Vide : conserver la piste déjà par défaut, sinon la première hors commentaire."
+            "description": "Code de langue (fr, en, ja…). Vide : conserver la piste déjà par défaut, sinon la première hors commentaire.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

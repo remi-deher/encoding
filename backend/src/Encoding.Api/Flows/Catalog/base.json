@@ -217,7 +217,9 @@
             "id": "scriptReference",
             "label": "Script de la bibliothèque",
             "type": "script-reference",
-            "description": "Choisissez une version publiée. Son code est copié dans le flow et reste figé avec sa version."
+            "description": "Choisissez une version publiée. Son code est copié dans le flow et reste figé avec sa version.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "language",
@@ -233,7 +235,9 @@
                 "value": "python",
                 "label": "Python"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "code",
@@ -241,7 +245,9 @@
             "type": "text",
             "multiline": true,
             "required": true,
-            "description": "Le script disposera du contexte média et des services du moteur. Son exécution attend le contrat des scripts."
+            "description": "Le script disposera du contexte média et des services du moteur. Son exécution attend le contrat des scripts.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "timeoutSeconds",
@@ -249,14 +255,18 @@
             "type": "number",
             "defaultValue": 60,
             "min": 1,
-            "max": 86400
+            "max": 86400,
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "useTools",
             "label": "Outils média (tools)",
             "type": "boolean",
             "defaultValue": false,
-            "description": "Ajoute l’aide tools au script : tools.run('ffmpeg', [...]) lance ffmpeg, ffprobe, mkvmerge, mkvextract, mkvpropedit, mediainfo ou magick dans le dossier de travail isolé du script. Exige un worker qui annonce script-tools."
+            "description": "Ajoute l’aide tools au script : tools.run('ffmpeg', [...]) lance ffmpeg, ffprobe, mkvmerge, mkvextract, mkvpropedit, mediainfo ou magick dans le dossier de travail isolé du script. Exige un worker qui annonce script-tools.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -316,13 +326,17 @@
                   "video"
                 ]
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveUnchangedTracks",
             "label": "Conserver les pistes non modifiées",
             "type": "boolean",
-            "defaultValue": true
+            "defaultValue": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -374,7 +388,9 @@
             "id": "forceProcessing",
             "label": "Traiter même si le média est conforme",
             "type": "boolean",
-            "defaultValue": false
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -414,13 +430,17 @@
             "type": "number",
             "defaultValue": 2,
             "min": 1,
-            "max": 1440
+            "max": 1440,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "reason",
             "label": "Motif du report",
             "type": "text",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -472,12 +492,16 @@
                 "value": "failed",
                 "label": "Échec"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "message",
             "label": "Message pour l’historique",
-            "type": "text"
+            "type": "text",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -526,13 +550,17 @@
             "id": "name",
             "label": "Nom de la variable",
             "type": "text",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "value",
             "label": "Valeur",
             "type": "text",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -599,7 +627,9 @@
                 "value": "block",
                 "label": "Une condition de plugin est remplie"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "delayMinutes",
@@ -608,13 +638,21 @@
             "description": "Mode « délai ».",
             "defaultValue": 30,
             "min": 1,
-            "max": 10080
+            "max": 10080,
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "timer"
           },
           {
             "id": "nodeId",
             "label": "Identifiant du worker",
             "type": "text",
-            "description": "Mode « worker ». Vide : n’importe quel worker (obligatoire pour « hors ligne »)."
+            "description": "Mode « worker ». Vide : n’importe quel worker (obligatoire pour « hors ligne »).",
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "nodeState"
           },
           {
             "id": "nodeStatus",
@@ -634,7 +672,11 @@
                 "value": "idle",
                 "label": "Libre (capacité disponible)"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "nodeState"
           },
           {
             "id": "workloadMetric",
@@ -650,7 +692,11 @@
                 "value": "queued",
                 "label": "Tâches en file"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "workload"
           },
           {
             "id": "workloadScope",
@@ -666,7 +712,11 @@
                 "value": "library",
                 "label": "Bibliothèque du fichier"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "workload"
           },
           {
             "id": "workloadOperator",
@@ -682,7 +732,11 @@
                 "value": "gte",
                 "label": "Supérieur ou égal au seuil"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "workload"
           },
           {
             "id": "workloadThreshold",
@@ -691,19 +745,31 @@
             "description": "Mode « charge de travail ».",
             "defaultValue": 0,
             "min": 0,
-            "max": 100000
+            "max": 100000,
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "workload"
           },
           {
             "id": "blockNodeId",
             "label": "Bloc à surveiller",
             "type": "text",
-            "description": "Mode « condition ». Identifiant d’une condition de plugin du flow (par exemple « Lecture en cours »). Elle est réévaluée par un worker éligible."
+            "description": "Mode « condition ». Identifiant d’une condition de plugin du flow (par exemple « Lecture en cours »). Elle est réévaluée par un worker éligible.",
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "block"
           },
           {
             "id": "blockOutputs",
             "label": "Sorties qui valent « remplie »",
             "type": "text",
-            "description": "Mode « condition ». Sorties du bloc séparées par des virgules, par exemple idle."
+            "description": "Mode « condition ». Sorties du bloc séparées par des virgules, par exemple idle.",
+            "importance": "basic",
+            "section": "Paramètres",
+            "visibleWhenFieldId": "mode",
+            "visibleWhenValue": "block"
           },
           {
             "id": "pollSeconds",
@@ -712,7 +778,9 @@
             "description": "Fréquence de réévaluation des conditions autres qu’un délai.",
             "defaultValue": 60,
             "min": 15,
-            "max": 3600
+            "max": 3600,
+            "importance": "advanced",
+            "section": "Exécution"
           },
           {
             "id": "maxWaitMinutes",
@@ -720,7 +788,9 @@
             "type": "number",
             "description": "Vide : attente illimitée.",
             "min": 1,
-            "max": 43200
+            "max": 43200,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "mediaPolicy",
@@ -741,7 +811,9 @@
                 "label": "Écraser le média en cours (si la bibliothèque l’autorise)"
               }
             ],
-            "description": "Le média reste réservé pendant l’attente. Le choix s’applique à la publication du résultat : l’écrasement passe par la politique de remplacement de la bibliothèque (sauvegarde, période de grâce)."
+            "description": "Le média reste réservé pendant l’attente. Le choix s’applique à la publication du résultat : l’écrasement passe par la politique de remplacement de la bibliothèque (sauvegarde, période de grâce).",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -796,7 +868,9 @@
             "type": "text",
             "defaultValue": "",
             "description": "Nom du disque : lettres minuscules, chiffres, points, tirets ou espaces (64 caractères au plus).",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -842,7 +916,9 @@
             "type": "text",
             "defaultValue": "",
             "description": "Nom du disque pris plus tôt par « Verrou de disque ».",
-            "required": true
+            "required": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
