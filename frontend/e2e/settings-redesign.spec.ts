@@ -58,6 +58,26 @@ test.beforeEach(async ({ page }) => {
       },
     }),
   );
+  await page.route('**/api/v1/tools/ai/models*', (route) =>
+    route.fulfill({
+      json: {
+        nodes: [
+          {
+            nodeId: 'node-one',
+            name: 'Atelier',
+            providers: [
+              {
+                provider: 'ollama',
+                state: 'available',
+                models: [{ id: 'qwen3:8b', label: 'Qwen 3 8B', reasoningEfforts: [] }],
+              },
+            ],
+          },
+        ],
+        policy: { disabledModels: [] },
+      },
+    }),
+  );
   await page.route('**/api/v1/tools/ai/quotas', (route) => route.fulfill({ json: { nodes: [] } }));
   await page.route('**/api/v1/tools/ai/sessions?offset=*', (route) =>
     route.fulfill({ json: { items: [], offset: 0, hasMore: false } }),
