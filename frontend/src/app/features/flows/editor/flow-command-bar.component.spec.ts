@@ -86,9 +86,20 @@ describe('FlowCommandBarComponent', () => {
     fixture.componentInstance.togglePalette.subscribe(paletteSpy);
     fixture.componentInstance.toggleTray.subscribe(traySpy);
 
-    const buttons = fixture.nativeElement.querySelectorAll('.dock-toggle-btn');
-    buttons[0].click();
-    buttons[1].click();
+    (
+      fixture.nativeElement.querySelector(
+        '[aria-label="Basculer la palette de blocs"]',
+      ) as HTMLButtonElement
+    ).click();
+    (
+      fixture.nativeElement.querySelector(
+        '[aria-label="Autres actions du flow"]',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    (
+      document.querySelector('[aria-label="Basculer le volet de simulation"]') as HTMLButtonElement
+    ).click();
 
     expect(paletteSpy).toHaveBeenCalledTimes(1);
     expect(traySpy).toHaveBeenCalledTimes(1);

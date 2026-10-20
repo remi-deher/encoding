@@ -182,7 +182,7 @@ export class FlowSimulationPanelComponent {
         return {
           section: 'Conditions évaluées (avec arrêt dès que le groupe est décidé)',
           label: `${index + 1}. ${label}${observation.rule.variableName ? ' · ' + observation.rule.variableName : ''} · ${observation.rule.scope === 'source' ? 'Origine' : 'Courant'}`,
-          value: `${JSON.stringify(observation.actual) ?? 'Absent'} ${operator} ${JSON.stringify(observation.rule.value) ?? ''} → ${observation.error ?? (observation.result ? 'Oui' : 'Non')}`,
+          value: `${JSON.stringify(observation.actual) ?? 'Absent'} ${operator} ${JSON.stringify(observation.rule.value) ?? ''} vers ${observation.error ?? (observation.result ? 'Oui' : 'Non')}`,
         };
       }),
       { section: 'Contexte après cette étape', label: 'Worker simulé', value: step.workerNodeId },

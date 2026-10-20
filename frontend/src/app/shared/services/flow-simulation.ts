@@ -37,7 +37,15 @@ export class FlowSimulation {
   readonly busy = signal(false);
   readonly error = signal('');
 
+  private generation = 0;
+  invalidate(): void {
+    this.generation++;
+    this.result.set(null);
+    this.error.set('');
+  }
+
   prepare(definition: FlowDocument): void {
+    this.invalidate();
     this.definition = definition;
     this.assumptions = {};
     this.result.set(null);
@@ -102,6 +110,7 @@ export class FlowSimulation {
   }
   private async simulate(): Promise<void> {
     if (!this.definition) return;
+    const generation = this.generation;
     this.busy.set(true);
     this.error.set('');
     try {
@@ -112,8 +121,9 @@ export class FlowSimulation {
           assumptions: this.assumptions,
         }),
       );
-      this.result.set(result);
+      if (generation === this.generation) this.result.set(result);
     } catch (error) {
+      if (generation !== this.generation) return;
       if (error instanceof HttpErrorResponse && error.status === 422)
         this.result.set(error.error as SimulationResult);
       else this.showError(error);

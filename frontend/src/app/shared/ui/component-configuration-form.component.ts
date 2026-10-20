@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { flowFieldValidator } from './flow-configuration-controls';
 import { flowConfigurationValue } from '../models/flow-configuration';
 import {
@@ -44,6 +45,7 @@ type ConfigurationFormGroup = FormGroup<
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-component-configuration-form',
   imports: [
+    NgTemplateOutlet,
     MatButtonModule,
     MatCheckboxModule,
     MatFormFieldModule,
@@ -64,222 +66,238 @@ type ConfigurationFormGroup = FormGroup<
         </mat-form-field>
       }
       @if (fields.length) {
-        <div class="configuration-fields">
-          @for (field of fields; track field.id) {
-            @if (isFieldVisible(field)) {
-              @switch (field.type) {
-                @case ('condition-tree') {
-                  <section
-                    class="condition-field"
-                    [attr.aria-label]="field.label"
-                    [attr.inert]="busy() ? '' : null"
-                  >
-                    <h3>{{ field.label }}</h3>
-                    @if (field.description) {
-                      <p>{{ field.description }}</p>
-                    }
-                    <app-condition-tree-editor
-                      [value]="conditionValue(field.id)"
-                      [fields]="field.conditionFields"
-                      [presets]="field.conditionPresets ?? []"
-                      (valueChange)="setConditionValue(field.id, $event)"
-                    />
-                  </section>
-                }
-                @case ('boolean') {
-                  <div class="boolean-field">
-                    <mat-checkbox [formControlName]="field.id">{{ field.label }}</mat-checkbox>
-                    @if (field.description) {
-                      <p class="field-description">{{ field.description }}</p>
-                    }
-                  </div>
-                }
-                @case ('select') {
-                  <app-schema-form-field
-                    [label]="field.label"
-                    type="select"
-                    [control]="form.controls[field.id]"
-                    [options]="field.options"
-                    [hint]="field.description ?? ''"
-                    [error]="configurationFieldError(field.id)"
-                    (selectionChanged)="onSelectFieldChanged(field.id)"
-                  />
-                }
-                @case ('script-reference') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>{{ field.label }}</mat-label>
-                    <mat-select
-                      [formControlName]="field.id"
-                      [disabled]="busy() || scriptSelectionBusy()"
-                      (selectionChange)="selectScriptVersion(field.id, $event.value)"
-                    >
-                      <mat-option value="">Code intégré au flow</mat-option>
-                      @for (script of scripts(); track script.id) {
-                        @for (version of script.versions; track version.version) {
-                          <mat-option [value]="script.id + '@' + version.version">
-                            {{ version.name }} · v{{ version.version }} ·
-                            {{ version.language === 'python' ? 'Python' : 'JavaScript' }}
-                          </mat-option>
-                        }
-                      }
-                      @if (scripts().length === 0) {
-                        <mat-option disabled
-                          >Aucune version publiée. Créez-en une dans Librairies /
-                          Scripts.</mat-option
-                        >
-                      }
-                    </mat-select>
-                    @if (scriptLoadMessage()) {
-                      <mat-hint>{{ scriptLoadMessage() }}</mat-hint>
-                    } @else if (field.description) {
-                      <mat-hint>{{ field.description }}</mat-hint>
-                    }
-                  </mat-form-field>
-                }
-                @case ('encoding-profile') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>{{ field.label }}</mat-label>
-                    <mat-select
-                      [value]="profileReference(field.id)"
-                      [disabled]="busy() || encodingProfileBusy()"
-                      (selectionChange)="selectEncodingProfile(field.id, $event.value)"
-                    >
-                      @for (profile of encodingProfiles(); track profile.id) {
-                        @for (version of profile.versions; track version.version) {
-                          <mat-option [value]="profile.id + '@' + version.version">
-                            {{ version.name }} · v{{ version.version }}
-                            @if (profile.isBuiltIn) {
-                              · Intégré
-                            }
-                          </mat-option>
-                        }
-                      }
-                    </mat-select>
-                    @if (encodingProfileMessage()) {
-                      <mat-hint>{{ encodingProfileMessage() }}</mat-hint>
-                    } @else if (field.description) {
-                      <mat-hint>{{ field.description }}</mat-hint>
-                    }
-                  </mat-form-field>
-                  @if (field.id === 'encodingProfile' && profilePreviewEncoders().length) {
+        <ng-container
+          [ngTemplateOutlet]="fieldTemplate"
+          [ngTemplateOutletContext]="{ visibleFields: primaryFields() }"
+        />
+        @if (advancedFields().length) {
+          <details class="advanced-settings">
+            <summary>Réglages avancés · {{ advancedFields().length }}</summary>
+            <ng-container
+              [ngTemplateOutlet]="fieldTemplate"
+              [ngTemplateOutletContext]="{ visibleFields: advancedFields() }"
+            />
+          </details>
+        }
+        <ng-template #fieldTemplate let-visibleFields="visibleFields">
+          <div class="configuration-fields">
+            @for (field of visibleFields; track field.id) {
+              @if (isFieldVisible(field)) {
+                @switch (field.type) {
+                  @case ('condition-tree') {
                     <section
-                      class="profile-target-preview"
-                      aria-label="Réglages du profil pour cet encodeur"
+                      class="condition-field"
+                      [attr.aria-label]="field.label"
+                      [attr.inert]="busy() ? '' : null"
                     >
-                      <h3>{{ profilePreviewTitle() }}</h3>
-                      @if (textValue('encoderMode') !== 'specific') {
-                        <p>
-                          Le worker utilisera le premier encodeur vérifié disponible selon la
-                          priorité du profil.
-                        </p>
+                      <h3>{{ field.label }}</h3>
+                      @if (field.description) {
+                        <p>{{ field.description }}</p>
                       }
-                      @for (encoder of profilePreviewEncoders(); track encoder.id) {
-                        @if (profileTarget(encoder.id); as target) {
-                          <div class="profile-target-row">
-                            <strong>{{ encoder.name }}</strong>
-                            <span
-                              >{{ encoder.qualityMode }} ({{ encoder.qualityOption }}) :
-                              {{ target.quality }}</span
-                            >
-                            @if (encoder.presetOption && target.preset) {
-                              <span
-                                >{{ encoder.presetOption }} :
-                                {{ profilePreset(encoder, target.preset) }}</span
-                              >
-                            }
-                            <span>Priorité {{ target.priority + 1 }}</span>
-                          </div>
-                        }
-                      }
+                      <app-condition-tree-editor
+                        [value]="conditionValue(field.id)"
+                        [fields]="field.conditionFields"
+                        [presets]="field.conditionPresets ?? []"
+                        (valueChange)="setConditionValue(field.id, $event)"
+                      />
                     </section>
                   }
-                }
-                @case ('video-encoder') {
-                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                    <mat-label>{{ field.label }}</mat-label>
-                    <mat-select [formControlName]="field.id">
-                      @for (encoder of availableProfileEncoders(); track encoder.id) {
-                        <mat-option [value]="encoder.id">{{ encoder.name }}</mat-option>
-                      }
-                    </mat-select>
-                    <mat-hint
-                      >Seuls les encodeurs réglés dans le profil pour ce codec sont
-                      proposés.</mat-hint
-                    >
-                  </mat-form-field>
-                }
-                @case ('number') {
-                  <app-schema-form-field
-                    [label]="field.label"
-                    type="number"
-                    [control]="form.controls[field.id]"
-                    [hint]="field.description ?? ''"
-                    [error]="configurationFieldError(field.id)"
-                    [min]="field.min"
-                    [max]="field.max"
-                    [step]="field.step"
-                  />
-                }
-                @case ('text') {
-                  @if (field.id === 'code') {
-                    <section class="code-field" [attr.aria-label]="field.label">
-                      <h3>{{ field.label }}</h3>
+                  @case ('boolean') {
+                    <div class="boolean-field">
+                      <mat-checkbox [formControlName]="field.id">{{ field.label }}</mat-checkbox>
                       @if (field.description) {
                         <p class="field-description">{{ field.description }}</p>
                       }
-                      <app-code-editor
-                        [value]="textValue(field.id)"
-                        [language]="scriptLanguage()"
-                        [disabled]="busy()"
-                        [label]="field.label"
-                        (valueChange)="setTextValue(field.id, $event)"
-                      />
-                      @if (form.controls[field.id].invalid && form.controls[field.id].touched) {
-                        <p class="field-error">
-                          {{ form.controls[field.id].errors?.['configuration'] }}
-                        </p>
-                      }
-                    </section>
-                  } @else {
+                    </div>
+                  }
+                  @case ('select') {
                     <app-schema-form-field
                       [label]="field.label"
-                      [type]="field.multiline ? 'textarea' : 'text'"
+                      type="select"
+                      [control]="form.controls[field.id]"
+                      [options]="field.options"
+                      [hint]="field.description ?? ''"
+                      [error]="configurationFieldError(field.id)"
+                      (selectionChanged)="onSelectFieldChanged(field.id)"
+                    />
+                  }
+                  @case ('script-reference') {
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>{{ field.label }}</mat-label>
+                      <mat-select
+                        [formControlName]="field.id"
+                        [disabled]="busy() || scriptSelectionBusy()"
+                        (selectionChange)="selectScriptVersion(field.id, $event.value)"
+                      >
+                        <mat-option value="">Code intégré au flow</mat-option>
+                        @for (script of scripts(); track script.id) {
+                          @for (version of script.versions; track version.version) {
+                            <mat-option [value]="script.id + '@' + version.version">
+                              {{ version.name }} · v{{ version.version }} ·
+                              {{ version.language === 'python' ? 'Python' : 'JavaScript' }}
+                            </mat-option>
+                          }
+                        }
+                        @if (scripts().length === 0) {
+                          <mat-option disabled
+                            >Aucune version publiée. Créez-en une dans Librairies /
+                            Scripts.</mat-option
+                          >
+                        }
+                      </mat-select>
+                      @if (scriptLoadMessage()) {
+                        <mat-hint>{{ scriptLoadMessage() }}</mat-hint>
+                      } @else if (field.description) {
+                        <mat-hint>{{ field.description }}</mat-hint>
+                      }
+                    </mat-form-field>
+                  }
+                  @case ('encoding-profile') {
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>{{ field.label }}</mat-label>
+                      <mat-select
+                        [value]="profileReference(field.id)"
+                        [disabled]="busy() || encodingProfileBusy()"
+                        (selectionChange)="selectEncodingProfile(field.id, $event.value)"
+                      >
+                        @for (profile of encodingProfiles(); track profile.id) {
+                          @for (version of profile.versions; track version.version) {
+                            <mat-option [value]="profile.id + '@' + version.version">
+                              {{ version.name }} · v{{ version.version }}
+                              @if (profile.isBuiltIn) {
+                                · Intégré
+                              }
+                            </mat-option>
+                          }
+                        }
+                      </mat-select>
+                      @if (encodingProfileMessage()) {
+                        <mat-hint>{{ encodingProfileMessage() }}</mat-hint>
+                      } @else if (field.description) {
+                        <mat-hint>{{ field.description }}</mat-hint>
+                      }
+                    </mat-form-field>
+                    @if (field.id === 'encodingProfile' && profilePreviewEncoders().length) {
+                      <section
+                        class="profile-target-preview"
+                        aria-label="Réglages du profil pour cet encodeur"
+                      >
+                        <h3>{{ profilePreviewTitle() }}</h3>
+                        @if (textValue('encoderMode') !== 'specific') {
+                          <p>
+                            Le worker utilisera le premier encodeur vérifié disponible selon la
+                            priorité du profil.
+                          </p>
+                        }
+                        @for (encoder of profilePreviewEncoders(); track encoder.id) {
+                          @if (profileTarget(encoder.id); as target) {
+                            <div class="profile-target-row">
+                              <strong>{{ encoder.name }}</strong>
+                              <span
+                                >{{ encoder.qualityMode }} ({{ encoder.qualityOption }}) :
+                                {{ target.quality }}</span
+                              >
+                              @if (encoder.presetOption && target.preset) {
+                                <span
+                                  >{{ encoder.presetOption }} :
+                                  {{ profilePreset(encoder, target.preset) }}</span
+                                >
+                              }
+                              <span>Priorité {{ target.priority + 1 }}</span>
+                            </div>
+                          }
+                        }
+                      </section>
+                    }
+                  }
+                  @case ('video-encoder') {
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>{{ field.label }}</mat-label>
+                      <mat-select [formControlName]="field.id">
+                        @for (encoder of availableProfileEncoders(); track encoder.id) {
+                          <mat-option [value]="encoder.id">{{ encoder.name }}</mat-option>
+                        }
+                      </mat-select>
+                      <mat-hint
+                        >Seuls les encodeurs réglés dans le profil pour ce codec sont
+                        proposés.</mat-hint
+                      >
+                    </mat-form-field>
+                  }
+                  @case ('number') {
+                    <app-schema-form-field
+                      [label]="field.label"
+                      type="number"
+                      [numericValue]="true"
                       [control]="form.controls[field.id]"
                       [hint]="field.description ?? ''"
                       [error]="configurationFieldError(field.id)"
-                      [placeholder]="field.placeholder ?? ''"
-                      [rows]="6"
+                      [min]="field.min"
+                      [max]="field.max"
+                      [step]="field.step"
                     />
                   }
-                }
-                @case ('secret') {
-                  <app-schema-form-field
-                    [label]="field.label"
-                    type="password"
-                    autocomplete="new-password"
-                    [control]="form.controls[field.id]"
-                    [hint]="
-                      configuredSecrets().includes(field.id)
-                        ? 'Laissez vide pour conserver le secret enregistré.'
-                        : (field.description ?? '')
-                    "
-                    [error]="configurationFieldError(field.id)"
-                    [placeholder]="field.placeholder ?? ''"
-                  />
-                  @if (configuredSecrets().includes(field.id)) {
-                    <mat-checkbox
-                      [checked]="secretsToClear.has(field.id)"
-                      [disabled]="field.required && !form.controls[field.id].value"
-                      (change)="setSecretCleared(field.id, $event.checked)"
-                    >
-                      Supprimer le secret enregistré
-                    </mat-checkbox>
+                  @case ('text') {
+                    @if (field.id === 'code') {
+                      <section class="code-field" [attr.aria-label]="field.label">
+                        <h3>{{ field.label }}</h3>
+                        @if (field.description) {
+                          <p class="field-description">{{ field.description }}</p>
+                        }
+                        <app-code-editor
+                          [value]="textValue(field.id)"
+                          [language]="scriptLanguage()"
+                          [disabled]="busy()"
+                          [label]="field.label"
+                          (valueChange)="setTextValue(field.id, $event)"
+                        />
+                        @if (form.controls[field.id].invalid && form.controls[field.id].touched) {
+                          <p class="field-error">
+                            {{ form.controls[field.id].errors?.['configuration'] }}
+                          </p>
+                        }
+                      </section>
+                    } @else {
+                      <app-schema-form-field
+                        [label]="field.label"
+                        [type]="field.multiline ? 'textarea' : 'text'"
+                        [control]="form.controls[field.id]"
+                        [hint]="field.description ?? ''"
+                        [error]="configurationFieldError(field.id)"
+                        [placeholder]="field.placeholder ?? ''"
+                        [rows]="6"
+                      />
+                    }
+                  }
+                  @case ('secret') {
+                    <app-schema-form-field
+                      [label]="field.label"
+                      type="password"
+                      autocomplete="new-password"
+                      [control]="form.controls[field.id]"
+                      [hint]="
+                        configuredSecrets().includes(field.id)
+                          ? 'Laissez vide pour conserver le secret enregistré.'
+                          : (field.description ?? '')
+                      "
+                      [error]="configurationFieldError(field.id)"
+                      [placeholder]="field.placeholder ?? ''"
+                    />
+                    @if (configuredSecrets().includes(field.id)) {
+                      <mat-checkbox
+                        [checked]="secretsToClear.has(field.id)"
+                        [disabled]="field.required && !form.controls[field.id].value"
+                        (change)="setSecretCleared(field.id, $event.checked)"
+                      >
+                        Supprimer le secret enregistré
+                      </mat-checkbox>
+                    }
                   }
                 }
               }
             }
-          }
-        </div>
+          </div>
+        </ng-template>
       } @else {
         <p class="empty-configuration">Ce composant ne demande aucun réglage.</p>
       }
@@ -318,6 +336,21 @@ type ConfigurationFormGroup = FormGroup<
   styles: `
     :host {
       display: block;
+    }
+    .configuration-form {
+      display: grid;
+      gap: var(--space-4);
+    }
+    .advanced-settings {
+      margin-block: var(--space-4);
+      padding: var(--space-3);
+      border-radius: var(--radius-lg);
+      background: var(--surface-container-low);
+    }
+    .advanced-settings summary {
+      cursor: pointer;
+      padding: 10px 0;
+      font-weight: 600;
     }
     .configuration-fields {
       display: grid;
@@ -413,6 +446,17 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   readonly connectionTestBusy = input(false);
   readonly connectionTestMessage = input('');
   readonly connectionTestSuccess = input(false);
+  readonly progressiveDisclosure = input(false);
+  protected primaryFields(): readonly FlowComponentConfigurationField[] {
+    return this.progressiveDisclosure()
+      ? this.fields.filter((field) => field.inline || field.required)
+      : this.fields;
+  }
+  protected advancedFields(): readonly FlowComponentConfigurationField[] {
+    return this.progressiveDisclosure()
+      ? this.fields.filter((field) => !field.inline && !field.required)
+      : [];
+  }
   readonly saved = output<FlowComponentConfiguration>();
   readonly cancelled = output<void>();
   readonly savedWithSecrets = output<{

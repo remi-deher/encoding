@@ -1,3 +1,4 @@
+import { IconComponent } from '../ui/icon.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -41,6 +42,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
   selector: 'app-execution-monitor-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IconComponent,
     DataTableComponent,
     DetailDrawerComponent,
     DetailFieldListComponent,
@@ -67,16 +69,17 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       <div class="monitor-content-layout">
         <aside class="monitor-toolbar" aria-label="Recherche dans les tâches">
           <h2>Rechercher</h2>
-          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="monitor-search-field">
+          <mat-form-field
+            appearance="outline"
+            subscriptSizing="dynamic"
+            class="monitor-search-field"
+          >
             <mat-label>Média, bibliothèque, flow…</mat-label>
-            <input
-              matInput
-              type="search"
-              [value]="searchQuery()"
-              (input)="onSearchInput($event)"
-            />
+            <input matInput type="search" [value]="searchQuery()" (input)="onSearchInput($event)" />
           </mat-form-field>
-          <p class="monitor-search-hint">La recherche couvre aussi les workers, les états et les détails.</p>
+          <p class="monitor-search-hint">
+            La recherche couvre aussi les workers, les états et les détails.
+          </p>
         </aside>
 
         <mat-tab-group
@@ -84,102 +87,102 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
           [selectedIndex]="selectedIndex()"
           (selectedIndexChange)="onSelectedIndexChange($event)"
         >
-        <mat-tab>
-          <ng-template mat-tab-label>
-            À traiter <span class="tab-count">{{ queueCount() }}</span>
-          </ng-template>
-          <div class="tab-content">
-            <app-data-table
-              [columns]="queueColumns()"
-              [rows]="filteredQueueRows()"
-              [selectable]="true"
-              [selectionActions]="selectionActions()"
-              [rowOpenable]="true"
-              rowOpenLabel="Voir"
-              (rowOpen)="openExecution($event)"
-              (selectionAction)="selectionAction.emit($event)"
-              emptyMessage="La file d’attente est vide."
-            />
-          </div>
-        </mat-tab>
+          <mat-tab>
+            <ng-template mat-tab-label>
+              À traiter <span class="tab-count">{{ queueCount() }}</span>
+            </ng-template>
+            <div class="tab-content">
+              <app-data-table
+                [columns]="queueColumns()"
+                [rows]="filteredQueueRows()"
+                [selectable]="true"
+                [selectionActions]="selectionActions()"
+                [rowOpenable]="true"
+                rowOpenLabel="Voir"
+                (rowOpen)="openExecution($event)"
+                (selectionAction)="selectionAction.emit($event)"
+                emptyMessage="La file d’attente est vide."
+              />
+            </div>
+          </mat-tab>
 
-        <mat-tab>
-          <ng-template mat-tab-label>
-            En cours <span class="tab-count">{{ activeCount() }}</span>
-          </ng-template>
-          <div class="tab-content">
-            <app-data-table
-              [columns]="activeColumns()"
-              [rows]="filteredActiveRows()"
-              [selectable]="true"
-              [selectionActions]="selectionActions()"
-              [rowOpenable]="true"
-              rowOpenLabel="Voir"
-              (rowOpen)="openExecution($event)"
-              (selectionAction)="selectionAction.emit($event)"
-              emptyMessage="Aucun flow n’est actuellement traité par un worker."
-            />
-          </div>
-        </mat-tab>
+          <mat-tab>
+            <ng-template mat-tab-label>
+              En cours <span class="tab-count">{{ activeCount() }}</span>
+            </ng-template>
+            <div class="tab-content">
+              <app-data-table
+                [columns]="activeColumns()"
+                [rows]="filteredActiveRows()"
+                [selectable]="true"
+                [selectionActions]="selectionActions()"
+                [rowOpenable]="true"
+                rowOpenLabel="Voir"
+                (rowOpen)="openExecution($event)"
+                (selectionAction)="selectionAction.emit($event)"
+                emptyMessage="Aucun flow n’est actuellement traité par un worker."
+              />
+            </div>
+          </mat-tab>
 
-        <mat-tab>
-          <ng-template mat-tab-label>
-            Erreurs <span class="tab-count">{{ errorCount() }}</span>
-          </ng-template>
-          <div class="tab-content">
-            <app-data-table
-              [columns]="errorColumns()"
-              [rows]="filteredErrorRows()"
-              [rowActions]="errorActions()"
-              [selectable]="true"
-              [selectionActions]="selectionActions()"
-              [rowOpenable]="true"
-              rowOpenLabel="Voir"
-              emptyMessage="Aucune exécution en erreur."
-              (rowOpen)="openExecution($event)"
-              (selectionAction)="selectionAction.emit($event)"
-              (rowAction)="errorAction.emit($event)"
-            />
-          </div>
-        </mat-tab>
+          <mat-tab>
+            <ng-template mat-tab-label>
+              Erreurs <span class="tab-count">{{ errorCount() }}</span>
+            </ng-template>
+            <div class="tab-content">
+              <app-data-table
+                [columns]="errorColumns()"
+                [rows]="filteredErrorRows()"
+                [rowActions]="errorActions()"
+                [selectable]="true"
+                [selectionActions]="selectionActions()"
+                [rowOpenable]="true"
+                rowOpenLabel="Voir"
+                emptyMessage="Aucune exécution en erreur."
+                (rowOpen)="openExecution($event)"
+                (selectionAction)="selectionAction.emit($event)"
+                (rowAction)="errorAction.emit($event)"
+              />
+            </div>
+          </mat-tab>
 
-        <mat-tab>
-          <ng-template mat-tab-label>
-            Annulés <span class="tab-count">{{ cancelledCount() }}</span>
-          </ng-template>
-          <div class="tab-content">
-            <app-data-table
-              [columns]="cancelledColumns()"
-              [rows]="filteredCancelledRows()"
-              [selectable]="true"
-              [selectionActions]="selectionActions()"
-              [rowOpenable]="true"
-              rowOpenLabel="Voir"
-              (rowOpen)="openExecution($event)"
-              (selectionAction)="selectionAction.emit($event)"
-              emptyMessage="Aucune exécution annulée."
-            />
-          </div>
-        </mat-tab>
+          <mat-tab>
+            <ng-template mat-tab-label>
+              Annulés <span class="tab-count">{{ cancelledCount() }}</span>
+            </ng-template>
+            <div class="tab-content">
+              <app-data-table
+                [columns]="cancelledColumns()"
+                [rows]="filteredCancelledRows()"
+                [selectable]="true"
+                [selectionActions]="selectionActions()"
+                [rowOpenable]="true"
+                rowOpenLabel="Voir"
+                (rowOpen)="openExecution($event)"
+                (selectionAction)="selectionAction.emit($event)"
+                emptyMessage="Aucune exécution annulée."
+              />
+            </div>
+          </mat-tab>
 
-        <mat-tab>
-          <ng-template mat-tab-label>
-            Historique <span class="tab-count">{{ historyCount() }}</span>
-          </ng-template>
-          <div class="tab-content">
-            <app-data-table
-              [columns]="historyColumns()"
-              [rows]="filteredHistoryRows()"
-              [selectable]="true"
-              [selectionActions]="selectionActions()"
-              [rowOpenable]="true"
-              rowOpenLabel="Voir"
-              (rowOpen)="openExecution($event)"
-              (selectionAction)="selectionAction.emit($event)"
-              emptyMessage="Aucune exécution réussie."
-            />
-          </div>
-        </mat-tab>
+          <mat-tab>
+            <ng-template mat-tab-label>
+              Historique <span class="tab-count">{{ historyCount() }}</span>
+            </ng-template>
+            <div class="tab-content">
+              <app-data-table
+                [columns]="historyColumns()"
+                [rows]="filteredHistoryRows()"
+                [selectable]="true"
+                [selectionActions]="selectionActions()"
+                [rowOpenable]="true"
+                rowOpenLabel="Voir"
+                (rowOpen)="openExecution($event)"
+                (selectionAction)="selectionAction.emit($event)"
+                emptyMessage="Aucune exécution réussie."
+              />
+            </div>
+          </mat-tab>
         </mat-tab-group>
       </div>
     </section>
@@ -203,7 +206,7 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
               <span class="comparison-label">Taille source</span>
               <strong class="comparison-value">{{ exec['beforeSize'] || '—' }}</strong>
             </div>
-            <div class="comparison-arrow" aria-hidden="true">→</div>
+            <div class="comparison-arrow" aria-hidden="true"><app-icon name="forward" /></div>
             <div class="comparison-card">
               <span class="comparison-label">Taille finale</span>
               <strong class="comparison-value">{{ exec['afterSize'] || '—' }}</strong>

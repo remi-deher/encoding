@@ -1,3 +1,4 @@
+import { IconComponent } from '../../../shared/ui/icon.component';
 import { ChangeDetectionStrategy, Component, input, model, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -13,152 +14,155 @@ export interface FlowValidationIssue {
 @Component({
   selector: 'app-flow-simulation-tray',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatTooltipModule, FlowSimulationPanelComponent],
+  imports: [IconComponent, MatButtonModule, MatTooltipModule, FlowSimulationPanelComponent],
   template: `
-    <section
-      class="simulation-tray"
-      [class.simulation-tray_expanded]="opened()"
-      aria-label="Volet de simulation et diagnostics"
-    >
-      <header class="tray-header">
-        <div class="tabs-group" role="tablist">
-          <button
-            type="button"
-            class="tab-btn"
-            [class.tab-btn_active]="activeTab() === 'simulation'"
-            (click)="selectTab('simulation')"
-            role="tab"
-            [attr.aria-selected]="activeTab() === 'simulation'"
-          >
-            <span class="tab-glyph" aria-hidden="true">▷</span>
-            <span class="tab-label">Simulateur de flow</span>
-            @if (result(); as res) {
-              <span class="status-indicator-pill" [attr.data-status]="res.status">
-                {{ res.status }}
-              </span>
-            }
-          </button>
+    @if (opened()) {
+      <section
+        class="simulation-tray"
+        [class.simulation-tray_expanded]="opened()"
+        aria-label="Volet de simulation et diagnostics"
+      >
+        <header class="tray-header">
+          <div class="tabs-group" role="group" aria-label="Simulation et diagnostic">
+            <button
+              type="button"
+              class="tab-btn"
+              [class.tab-btn_active]="activeTab() === 'simulation'"
+              (click)="selectTab('simulation')"
+              [attr.aria-pressed]="activeTab() === 'simulation'"
+            >
+              <span class="tab-glyph" aria-hidden="true">▷</span>
+              <span class="tab-label">Simulation</span>
+              @if (result(); as res) {
+                <span class="status-indicator-pill" [attr.data-status]="res.status">
+                  {{ res.status }}
+                </span>
+              }
+            </button>
 
-          <button
-            type="button"
-            class="tab-btn"
-            [class.tab-btn_active]="activeTab() === 'diagnostics'"
-            (click)="selectTab('diagnostics')"
-            role="tab"
-            [attr.aria-selected]="activeTab() === 'diagnostics'"
-          >
-            <span class="tab-glyph" aria-hidden="true">✔</span>
-            <span class="tab-label">Diagnostics backend</span>
-            @if (validationIssues().length > 0) {
-              <span class="issues-count-badge" role="status">
+            <button
+              type="button"
+              class="tab-btn"
+              [class.tab-btn_active]="activeTab() === 'diagnostics'"
+              (click)="selectTab('diagnostics')"
+              [attr.aria-pressed]="activeTab() === 'diagnostics'"
+            >
+              <span class="tab-glyph" aria-hidden="true">✔</span>
+              <span class="tab-label">Vérification du flow</span>
+              @if (validationIssues().length > 0) {
+                <span class="issues-count-badge" role="status">
+                  {{ validationIssues().length }}
+                </span>
+              } @else if (isValid() === true) {
+                <span class="valid-badge" aria-hidden="true">✔</span>
+              }
+            </button>
+          </div>
+
+          <div class="tray-status-hint">
+            @if (validating()) {
+              <span class="hint-text">Vérification en cours…</span>
+            } @else if (validationIssues().length > 0) {
+              <span class="hint-text hint-text_warning">
                 {{ validationIssues().length }}
+                {{ validationIssues().length > 1 ? 'anomalies signalées' : 'anomalie signalée' }}
               </span>
             } @else if (isValid() === true) {
-              <span class="valid-badge" aria-hidden="true">✔</span>
+              <span class="hint-text hint-text_success">Flow vérifié</span>
+            } @else {
+              <span class="hint-text">Simulez le parcours ou lancez une vérification</span>
             }
-          </button>
-        </div>
+          </div>
 
-        <div class="tray-status-hint">
-          @if (validating()) {
-            <span class="hint-text">Vérification en cours…</span>
-          } @else if (validationIssues().length > 0) {
-            <span class="hint-text hint-text_warning">
-              {{ validationIssues().length }}
-              {{ validationIssues().length > 1 ? 'anomalies signalées' : 'anomalie signalée' }}
-            </span>
-          } @else if (isValid() === true) {
-            <span class="hint-text hint-text_success">Graphe validé par le backend</span>
-          } @else {
-            <span class="hint-text">Simulez le parcours ou lancez une vérification</span>
-          }
-        </div>
+          <div class="header-actions">
+            <button
+              type="button"
+              class="toggle-tray-btn"
+              (click)="toggleExpanded()"
+              [attr.aria-expanded]="opened()"
+              [attr.aria-label]="opened() ? 'Réduire' : 'Déplier'"
+              matTooltip="{{ opened() ? 'Réduire le volet' : 'Agrandir le volet' }}"
+            >
+              <span class="chevron-glyph" aria-hidden="true"
+                ><app-icon [name]="opened() ? 'down' : 'up'"
+              /></span>
+              <span class="toggle-btn-label">{{ opened() ? 'Réduire' : 'Déplier' }}</span>
+            </button>
+          </div>
+        </header>
 
-        <div class="header-actions">
-          <button
-            type="button"
-            class="toggle-tray-btn"
-            (click)="toggleExpanded()"
-            [attr.aria-expanded]="opened()"
-            matTooltip="{{ opened() ? 'Réduire le volet' : 'Agrandir le volet' }}"
-          >
-            <span class="chevron-glyph" aria-hidden="true">{{ opened() ? '▼' : '▲' }}</span>
-            <span class="toggle-btn-label">{{ opened() ? 'Réduire' : 'Déplier' }}</span>
-          </button>
-        </div>
-      </header>
-
-      @if (opened()) {
-        <div class="tray-body">
-          @if (activeTab() === 'simulation') {
-            <div class="simulation-content">
-              <app-flow-simulation-panel
-                [nodes]="nodes()"
-                [profile]="profile()"
-                [result]="result()"
-                [busy]="busy()"
-                [error]="error() ?? ''"
-                (runRequested)="runRequested.emit($event)"
-                (continueRequested)="continueRequested.emit($event)"
-                (fileSelected)="fileSelected.emit($event)"
-                (closed)="openedChange.emit(false)"
-              />
-            </div>
-          } @else {
-            <div class="diagnostics-content">
-              <div class="diagnostics-toolbar">
-                <span class="diag-summary">
-                  @if (validating()) {
-                    Analyse du flow par le moteur backend…
-                  } @else if (isValid() === true) {
-                    Le backend confirme la validité de l’ensemble des blocs, sorties et
-                    reconnecteurs.
-                  } @else if (validationIssues().length > 0) {
-                    Certains éléments doivent être corrigés avant de pouvoir publier le flow :
-                  } @else {
-                    Aucune vérification n’a encore été lancée pour cette version.
-                  }
-                </span>
-
-                <button
-                  matButton="tonal"
-                  type="button"
-                  [disabled]="validating()"
-                  (click)="revalidateRequested.emit()"
-                >
-                  {{ validating() ? 'Vérification en cours…' : 'Relancer la vérification' }}
-                </button>
+        @if (opened()) {
+          <div class="tray-body">
+            @if (activeTab() === 'simulation') {
+              <div class="simulation-content">
+                <app-flow-simulation-panel
+                  [nodes]="nodes()"
+                  [profile]="profile()"
+                  [result]="result()"
+                  [busy]="busy()"
+                  [error]="error() ?? ''"
+                  (runRequested)="runRequested.emit($event)"
+                  (continueRequested)="continueRequested.emit($event)"
+                  (fileSelected)="fileSelected.emit($event)"
+                  (closed)="openedChange.emit(false)"
+                />
               </div>
+            } @else {
+              <div class="diagnostics-content">
+                <div class="diagnostics-toolbar">
+                  <span class="diag-summary">
+                    @if (validating()) {
+                      Vérification du flow…
+                    } @else if (isValid() === true) {
+                      Le backend confirme la validité de l’ensemble des blocs, sorties et
+                      reconnecteurs.
+                    } @else if (validationIssues().length > 0) {
+                      Certains éléments doivent être corrigés avant de pouvoir publier le flow :
+                    } @else {
+                      Aucune vérification n’a encore été lancée pour cette version.
+                    }
+                  </span>
 
-              @if (validationIssues().length > 0) {
-                <div class="issues-list" role="list">
-                  @for (issue of validationIssues(); track issue.path + issue.message) {
-                    <div class="issue-item" role="listitem">
-                      <span class="issue-icon" aria-hidden="true">⚠️</span>
-                      <div class="issue-content">
-                        <strong class="issue-path">{{ issue.path || 'Graphe' }}</strong>
-                        <span class="issue-message">{{ issue.message }}</span>
+                  <button
+                    matButton="tonal"
+                    type="button"
+                    [disabled]="validating()"
+                    (click)="revalidateRequested.emit()"
+                  >
+                    {{ validating() ? 'Vérification en cours…' : 'Relancer la vérification' }}
+                  </button>
+                </div>
+
+                @if (validationIssues().length > 0) {
+                  <div class="issues-list" role="list">
+                    @for (issue of validationIssues(); track issue.path + issue.message) {
+                      <div class="issue-item" role="listitem">
+                        <span class="issue-icon" aria-hidden="true">⚠️</span>
+                        <div class="issue-content">
+                          <strong class="issue-path">{{ issue.path || 'Graphe' }}</strong>
+                          <span class="issue-message">{{ issue.message }}</span>
+                        </div>
                       </div>
-                    </div>
-                  }
-                </div>
-              } @else if (isValid() === true) {
-                <div class="valid-banner">
-                  <span class="valid-icon" aria-hidden="true">✔</span>
-                  <div>
-                    <h4 class="valid-title">Graphe prêt pour exécution</h4>
-                    <p class="valid-desc">
-                      Toutes les connexions, entrées, sorties et configurations requises sont
-                      conformes.
-                    </p>
+                    }
                   </div>
-                </div>
-              }
-            </div>
-          }
-        </div>
-      }
-    </section>
+                } @else if (isValid() === true) {
+                  <div class="valid-banner">
+                    <span class="valid-icon" aria-hidden="true">✔</span>
+                    <div>
+                      <h4 class="valid-title">Flow prêt à être utilisé</h4>
+                      <p class="valid-desc">
+                        Toutes les connexions, entrées, sorties et configurations requises sont
+                        conformes.
+                      </p>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
   `,
   styles: `
     :host {
@@ -176,7 +180,7 @@ export interface FlowValidationIssue {
       transition: max-height 0.25s var(--motion-emphasized);
 
       &_expanded {
-        max-height: min(56vh, 720px);
+        max-height: min(45vh, 560px);
       }
     }
 
@@ -217,7 +221,7 @@ export interface FlowValidationIssue {
       }
 
       &_active {
-        background: var(--surface);
+        background: var(--surface-container-highest);
         color: var(--accent);
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       }
@@ -228,7 +232,7 @@ export interface FlowValidationIssue {
     }
 
     .status-indicator-pill {
-      font-size: 10px;
+      font-size: var(--font-label);
       padding: 1px 6px;
       border-radius: var(--radius-pill);
       background: var(--surface-container-highest);
@@ -260,7 +264,7 @@ export interface FlowValidationIssue {
       border-radius: 999px;
       background: var(--danger);
       color: var(--on-danger);
-      font-size: 10px;
+      font-size: var(--font-label);
       font-weight: 700;
     }
 
@@ -297,9 +301,9 @@ export interface FlowValidationIssue {
       padding: 4px 10px;
       border-radius: var(--radius-pill);
       border: 1px solid var(--border-subtle);
-      background: var(--surface);
+      background: var(--surface-container-highest);
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: var(--font-label);
       font-weight: 600;
       cursor: pointer;
 
@@ -310,12 +314,12 @@ export interface FlowValidationIssue {
     }
 
     .chevron-glyph {
-      font-size: 10px;
+      font-size: var(--font-label);
     }
 
     .tray-body {
       overflow-y: auto;
-      max-height: calc(min(56vh, 720px) - 44px);
+      max-height: calc(min(45vh, 560px) - 44px);
       padding: 16px 20px 24px;
       background: var(--surface-container-lowest);
       overscroll-behavior: contain;
@@ -359,7 +363,7 @@ export interface FlowValidationIssue {
       padding: 10px 14px;
       border-radius: var(--radius-md);
       background: var(--danger-soft);
-      border: 1px solid var(--danger);
+
       font-size: 12px;
     }
 
@@ -389,7 +393,6 @@ export interface FlowValidationIssue {
       padding: 16px;
       border-radius: var(--radius-lg);
       background: var(--success-soft);
-      border: 1px solid var(--success);
     }
 
     .valid-icon {

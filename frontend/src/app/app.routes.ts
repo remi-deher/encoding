@@ -82,22 +82,8 @@ const applicationRoutes: Routes = [
   },
   {
     path: 'ai',
-    loadComponent: () =>
-      import('./features/ai/ai-workspace-page.component').then(
-        (module) => module.AiWorkspacePageComponent,
-      ),
-    data: {
-      title: 'Intelligence artificielle',
-      navigation: {
-        group: 'Intelligence artificielle',
-        label: 'Vue d’ensemble',
-        glyph: '✦',
-        exact: true,
-        order: 1,
-        keywords: ['assistant', 'ia', 'fournisseurs', 'activité'],
-      },
-      description: 'Consultez les connexions IA déclarées sur les nœuds du cluster.',
-    },
+    pathMatch: 'full',
+    redirectTo: '/?view=ai',
   },
   {
     path: 'libraries/encoding-profiles',

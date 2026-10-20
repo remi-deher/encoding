@@ -1,3 +1,4 @@
+import { IconComponent } from '../../shared/ui/icon.component';
 import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
 import {
@@ -187,6 +188,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
   selector: 'app-node-catalog-page',
   providers: [LocalNodeController],
   imports: [
+    IconComponent,
     DataTableComponent,
     ResourceCardComponent,
     DetailFieldListComponent,
@@ -438,7 +440,7 @@ export class NodeCatalogPageComponent {
   protected readonly createFormData: RecordFormData = {
     title: 'Ajouter un nœud',
     description:
-      'Examinez les demandes des nœuds avant de les accepter. Si un nœud n’apparaît pas, générez une clé depuis sa page Nœuds (« Cluster → Rejoindre un cluster ») et saisissez-la ici ; elle expire au bout de 10 minutes.',
+      'Examinez les demandes des nœuds avant de les accepter. Si un nœud n’apparaît pas, générez une clé depuis sa page Nœuds (« Cluster puis Rejoindre un cluster ») et saisissez-la ici ; elle expire au bout de 10 minutes.',
     submitLabel: 'Accepter le nœud',
     reviewTitle: 'Vérifier le jumelage',
     fields: [

@@ -287,7 +287,7 @@ export interface DataTableListActionEvent {
                   [attr.aria-label]="cardSortDescending() ? 'Tri décroissant' : 'Tri croissant'"
                   (click)="cardSortDescending.set(!cardSortDescending())"
                 >
-                  {{ cardSortDescending() ? 'Z → A' : 'A → Z' }}
+                  {{ cardSortDescending() ? 'Z à A' : 'A à Z' }}
                 </button>
               </div>
             }
@@ -341,7 +341,7 @@ export interface DataTableListActionEvent {
                         class="resource-open"
                         (click)="openRow(row, $event)"
                       >
-                        {{ rowOpenLabel() }} <span aria-hidden="true">→</span>
+                        {{ rowOpenLabel() }}
                       </button>
                     }
                     @if (
@@ -452,7 +452,7 @@ export interface DataTableListActionEvent {
                   [attr.aria-label]="cardSortDescending() ? 'Tri décroissant' : 'Tri croissant'"
                   (click)="cardSortDescending.set(!cardSortDescending())"
                 >
-                  {{ cardSortDescending() ? 'Z → A' : 'A → Z' }}
+                  {{ cardSortDescending() ? 'Z à A' : 'A à Z' }}
                 </button>
               </div>
             }

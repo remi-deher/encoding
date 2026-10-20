@@ -103,8 +103,9 @@ test('guided and canvas share additions, deletion, undo and selections', async (
 test('connections can be removed, dragged and observed in both views', async ({ page }) => {
   await setup(page);
   await page.getByRole('button', { name: 'Canvas', exact: true }).click();
-  const link = page.getByRole('button', { name: 'Liaison success → Fin', exact: true }).first();
-  await link.click();
+  const link = page.getByRole('button', { name: 'Liaison success vers Fin', exact: true }).first();
+  await link.focus();
+  await link.press('Enter');
   await page.getByRole('menuitem', { name: 'Supprimer la liaison', exact: true }).click();
   const source = page.locator('.canvas-node[data-node-id="Action A"] .output');
   const target = page.locator('.canvas-node[data-node-id="Fin"] .input');
@@ -123,7 +124,7 @@ test('connections can be removed, dragged and observed in both views', async ({ 
   await page.mouse.down();
   await page.mouse.up();
   await expect(
-    page.getByRole('button', { name: 'Liaison success → Fin', exact: true }),
+    page.getByRole('button', { name: 'Liaison success vers Fin', exact: true }),
   ).toHaveCount(2);
   await page.getByRole('button', { name: 'Guidé', exact: true }).click();
   await expect(page.locator('.step-card')).toHaveCount(5);
@@ -144,7 +145,7 @@ test('AI uses the widget and only applies a reviewed proposal', async ({ page })
       },
     }),
   );
-  await page.getByRole('button', { name: "Ouvrir l'assistant IA", exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
   const panel = page.getByLabel('Panneau de l’assistant IA', { exact: true });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('Flow complet : Flow de test');
@@ -249,7 +250,7 @@ test('stale AI proposals cannot overwrite changes made while reviewing', async (
       },
     }),
   );
-  await page.getByRole('button', { name: "Ouvrir l'assistant IA", exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
   const panel = page.getByLabel('Panneau de l’assistant IA', { exact: true });
   await panel.locator('textarea').fill('Modifier');
   await panel.getByRole('button', { name: 'Préparer les changements', exact: true }).click();
@@ -320,7 +321,8 @@ test('canvas placement stays fixed when a connection changes or the view switche
       );
   await expect(page.locator('.canvas-node')).toHaveCount(5);
   const before = await positions();
-  await page.getByRole('button', { name: 'Liaison success → Décision', exact: true }).click();
+  await page.getByRole('button', { name: 'Liaison success vers Décision', exact: true }).focus();
+  await page.getByRole('button', { name: 'Liaison success vers Décision', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Supprimer la liaison', exact: true }).click();
   await expect.poll(positions).toEqual(before);
   await page.getByRole('button', { name: 'Guidé', exact: true }).click();
@@ -331,7 +333,7 @@ test('canvas placement stays fixed when a connection changes or the view switche
   await source.click();
   await page.locator('.canvas-node[data-node-id="Décision"] .input').click();
   await expect(
-    page.getByRole('button', { name: 'Liaison success → Décision', exact: true }),
+    page.getByRole('button', { name: 'Liaison success vers Décision', exact: true }),
   ).toHaveCount(1);
   await expect.poll(positions).toEqual(before);
 });
@@ -346,4 +348,251 @@ test('canvas exposes accessible controls and connection actions', async ({ page 
       .analyze()
   ).violations;
   expect(violations).toEqual([]);
+});
+
+test('editor keeps navigation above the vertical flow and opens tools on demand', async ({
+  page,
+}) => {
+  await setup(page);
+  const header = page.getByRole('toolbar', { name: 'Commandes du flow', exact: true });
+  await expect(header.getByRole('button', { name: 'Guidé', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(
+    header.getByRole('button', { name: "Ouvrir l'assistant IA", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator('.simulation-tray')).toHaveCount(0);
+  await header.getByRole('button', { name: 'Canvas', exact: true }).click();
+  await expect(header.getByRole('button', { name: 'Tout afficher', exact: true })).toBeVisible();
+  expect((await page.locator('.connection-list').boundingBox())?.height).toBeLessThanOrEqual(1);
+  await header.getByRole('button', { name: 'Autres actions du flow', exact: true }).click();
+  await page
+    .getByRole('menuitem', { name: 'Basculer le volet de simulation', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Vérification du flow', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Réduire', exact: true }).click();
+  await expect(page.locator('.simulation-tray')).toHaveCount(0);
+});
+
+async function dragPaletteAction(
+  page: Page,
+  target: () => Promise<{ x: number; y: number }>,
+  name = 'action',
+) {
+  if (await page.locator('.palette-dock_collapsed').count()) {
+    await page.getByRole('button', { name: 'Basculer la palette de blocs', exact: true }).click();
+  }
+  const card = page.locator('.component-card').filter({
+    has: page.locator('.component-title').filter({ hasText: new RegExp('^' + name + '$') }),
+  });
+  await card.scrollIntoViewIfNeeded();
+  const rect = (await card.boundingBox())!;
+  await page.mouse.move(rect.x + 40, rect.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(rect.x + 48, rect.y + 30, { steps: 4 });
+  const point = await target();
+  await page.mouse.move(point.x, point.y, { steps: 20 });
+  await page.mouse.up();
+}
+async function guidedDropPoint(page: Page) {
+  const port = page.locator('.step-card[data-node-id="Entrée"] .output-action');
+  await port.scrollIntoViewIfNeeded();
+  const rect = (await port.boundingBox())!;
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
+test('palette drag inserts on guided outputs and supports undo', async ({ page }) => {
+  await setup(page);
+  await dragPaletteAction(page, () => guidedDropPoint(page));
+  await expect(page.locator('.step-card')).toHaveCount(6);
+  await expect(page.locator('.detached')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Annuler la dernière modification', exact: true }).click();
+  await expect(page.locator('.step-card')).toHaveCount(5);
+});
+test('palette drag places canvas blocks and cancels outside the workspace', async ({ page }) => {
+  await setup(page);
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+  await dragPaletteAction(page, async () => {
+    const rect = (await page.locator('.canvas-viewport').boundingBox())!;
+    return { x: rect.x + 90, y: rect.y + 280 };
+  });
+  await expect(page.locator('.canvas-node')).toHaveCount(6);
+  const added = page.locator('.canvas-node[data-node-id^="flow-node-"]');
+  await expect(added).toHaveCSS('left', '90px');
+  await expect(added).toHaveCSS('top', '280px');
+  await dragPaletteAction(page, async () => ({ x: 25, y: 25 }));
+  await expect(page.locator('.canvas-node')).toHaveCount(6);
+  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
+  await expect(page.locator('.detached .step-card')).toHaveCount(1);
+});
+test('palette drag refuses a terminal block before an existing continuation', async ({ page }) => {
+  await setup(page);
+  await dragPaletteAction(page, () => guidedDropPoint(page), 'finish');
+  await expect(page.locator('.step-card')).toHaveCount(5);
+  await expect(
+    page.getByText('Une étape terminale ne peut pas être insérée avant une suite.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+});
+
+test('palette drag accepts empty guided workspace without connecting the block', async ({
+  page,
+}) => {
+  await setup(page);
+  await dragPaletteAction(page, async () => {
+    const rect = (await page.locator('.workbench-canvas').boundingBox())!;
+    return { x: rect.x + 4, y: rect.y + 4 };
+  });
+  await expect(page.locator('.step-card')).toHaveCount(6);
+  await expect(page.locator('.detached .step-card')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Annuler la dernière modification', exact: true }).click();
+  await expect(page.locator('.step-card')).toHaveCount(5);
+  await expect(page.locator('.detached')).toHaveCount(0);
+});
+
+test('friendly editor opens the inspector beside the flow and closes the palette', async ({
+  page,
+}, info) => {
+  await setup(page);
+  await expect(page.locator('.palette-dock_collapsed')).toHaveCount(1);
+  await expect(page.locator('app-flow-inline-parameters')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Vérifier', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Basculer la palette de blocs', exact: true }).click();
+  await page.locator('.step-card[data-node-id="Entrée"] .step-name').click();
+  const inspector = page.getByRole('complementary', { name: 'Entrée', exact: true });
+  await expect(inspector).toBeVisible();
+  await expect(page.locator('.palette-dock_collapsed')).toHaveCount(1);
+  await expect(inspector.getByLabel('Nom du bloc', { exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath('inspector.png'), fullPage: true });
+  await page.evaluate(() => (document.documentElement.dataset['theme'] = 'dark'));
+  await page.screenshot({ path: info.outputPath('inspector-dark.png'), fullPage: true });
+  await inspector.getByRole('button', { name: 'Fermer le panneau', exact: true }).click();
+  await expect(inspector).toBeHidden();
+  await expect(page.locator('.step-card[data-node-id="Entrée"]')).toBeVisible();
+});
+
+test('palette closes after a click insertion and can be pinned for successive additions', async ({
+  page,
+}) => {
+  await setup(page);
+  const add = page.getByRole('button', { name: 'Basculer la palette de blocs', exact: true });
+  await add.click();
+  await page
+    .locator('.component-card')
+    .filter({ has: page.locator('.component-title').filter({ hasText: /^action$/ }) })
+    .click();
+  await expect(page.locator('.step-card')).toHaveCount(6);
+  await expect(page.locator('.palette-dock_collapsed')).toHaveCount(1);
+  await add.click();
+  await page
+    .getByRole('button', { name: 'Garder la palette ouverte après un ajout', exact: true })
+    .click();
+  await page
+    .locator('.component-card')
+    .filter({ has: page.locator('.component-title').filter({ hasText: /^action$/ }) })
+    .click();
+  await expect(page.locator('.step-card')).toHaveCount(7);
+  await expect(page.locator('.palette-dock_collapsed')).toHaveCount(0);
+});
+
+test('successful test displays the taken path on blocks without keeping a bottom panel', async ({
+  page,
+}, info) => {
+  await setup(page);
+  await page.route('**/api/v1/flows/simulate', (r) =>
+    r.fulfill({
+      json: {
+        status: 'completed',
+        detail: 'Parcours terminé',
+        steps: [
+          {
+            nodeId: 'Entrée',
+            name: 'Entrée',
+            outputId: 'success',
+            detail: 'Entrée parcourue',
+            assumed: false,
+            workerNodeId: 'worker',
+            context: {
+              extension: 'mkv',
+              variables: {},
+              beforeMetadata: {},
+              currentMetadata: {},
+              plan: [],
+            },
+          },
+        ],
+      },
+    }),
+  );
+  await page.getByRole('button', { name: 'Tester', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Étape parcourue · Voir les détails du test', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.simulation-tray')).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('tested-flow.png'), fullPage: true });
+  await page
+    .getByRole('button', { name: 'Étape parcourue · Voir les détails du test', exact: true })
+    .click();
+  await expect(page.locator('.simulation-tray')).toBeVisible();
+  await page.getByRole('button', { name: 'Réduire', exact: true }).click();
+  await page.getByRole('button', { name: 'Actions de Action A', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Dupliquer', exact: true }).click();
+  await expect(page.locator('app-flow-simulation-status button')).toHaveCount(0);
+});
+
+test('inspector preserves optional advanced settings while editing a common setting', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route('**/api/v1/flows/components', (r) =>
+    r.fulfill({
+      json: [
+        {
+          id: 'base',
+          version: '1.0.0',
+          name: 'Base',
+          components: components.map((c) =>
+            c.id === 'action'
+              ? {
+                  ...c,
+                  configurationSchema: {
+                    version: 1,
+                    fields: [
+                      {
+                        id: 'quality',
+                        label: 'Qualité',
+                        type: 'number',
+                        required: true,
+                        inline: true,
+                        defaultValue: 20,
+                      },
+                      {
+                        id: 'option',
+                        label: 'Option avancée',
+                        type: 'text',
+                        defaultValue: 'Conserver',
+                      },
+                    ],
+                  },
+                }
+              : c,
+          ),
+        },
+      ],
+    }),
+  );
+  await page.reload();
+  const card = page.locator('.step-card[data-node-id="Action A"]');
+  await expect(card).toContainText('Qualité : 20');
+  await card.locator('.step-name').click();
+  const inspector = page.getByRole('complementary', { name: 'Action A', exact: true });
+  await inspector.getByLabel('Qualité', { exact: true }).fill('22');
+  await expect(inspector.getByLabel('Option avancée', { exact: true })).toBeHidden();
+  await inspector.getByText('Réglages avancés · 1', { exact: true }).click();
+  await expect(inspector.getByLabel('Option avancée', { exact: true })).toHaveValue('Conserver');
+  await inspector.getByRole('button', { name: 'Appliquer les réglages', exact: true }).click();
+  await expect(card).toContainText('Qualité : 22');
 });

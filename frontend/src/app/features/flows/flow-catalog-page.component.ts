@@ -180,7 +180,7 @@ export class FlowCatalogPageComponent {
         this.actionOpen.set(false);
         this.dialog.open(ConfirmationDialogComponent, {
           data: {
-            title: 'Comparaison v' + before.version + ' → v' + after.version,
+            title: 'Comparaison v' + before.version + ' et v' + after.version,
             mode: 'information',
             items: differences.slice(0, 100),
             emptyMessage: 'Aucune différence de définition.',

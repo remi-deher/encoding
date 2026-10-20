@@ -151,3 +151,38 @@ test('initial outage displays unavailable metrics without claiming an empty hist
   await expect(home).not.toContainText('Aucune exécution en cours.');
   await expect(home).not.toContainText('Aucun traitement terminé.');
 });
+
+test('AI overview is integrated into home and the former route redirects there', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/tools/ai/settings', (r) =>
+    r.fulfill({
+      json: {
+        defaultProvider: 'ollama',
+        ollamaBaseUrl: 'http://localhost:11434',
+        ollamaModel: 'local',
+        openAiBaseUrl: '',
+        openAiModel: '',
+      },
+    }),
+  );
+  await page.route('**/api/v1/tools/ai/cluster', (r) =>
+    r.fulfill({ json: { nodes: [{ nodeId: 'n1', name: 'Studio', providers: ['ollama'] }] } }),
+  );
+  await page.goto('/ai');
+  await expect(page).toHaveURL(/\/\?view=ai$/);
+  await expect(page.locator('app-home-page')).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Vue d’ensemble', exact: true, includeHidden: true }),
+  ).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Fournisseurs', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nœuds déclarants', exact: true })).toBeVisible();
+  await expect(page.locator('app-ai-provider-overview')).toContainText('Studio');
+  await page.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Fournisseurs', exact: true })).toBeVisible();
+  await page.route('**/api/v1/tools/ai/settings', (r) => r.abort());
+  await page.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'État IA partiellement indisponible' }),
+  ).toBeVisible();
+});

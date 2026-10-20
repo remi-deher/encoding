@@ -14,7 +14,11 @@
   } @else {
     <ol class="preview__nodes">
       @for (node of previewNodes(); track node.id) {
-        <li class="preview-node" [style.--node-color]="node.color" [style.--node-background]="node.background">
+        <li
+          class="preview-node"
+          [style.--node-color]="node.color"
+          [style.--node-background]="node.background"
+        >
           <div class="preview-node__heading">
             <span class="preview-node__kind">{{ node.kind }}</span>
             <span class="preview-node__plugin">{{ node.plugin }}</span>
@@ -27,7 +31,10 @@
           @if (node.configuration.length > 0) {
             <dl class="preview-node__configuration">
               @for (item of node.configuration; track item.label) {
-                <div><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div>
+                <div>
+                  <dt>{{ item.label }}</dt>
+                  <dd>{{ item.value }}</dd>
+                </div>
               }
             </dl>
           }
@@ -36,7 +43,11 @@
             @if (node.connections.length > 0) {
               <ul class="preview-node__connections" aria-label="Liaisons sortantes">
                 @for (connection of node.connections; track $index) {
-                  <li><span>{{ connection.label }}</span><span aria-hidden="true">→</span><strong>{{ connection.target }}</strong></li>
+                  <li>
+                    <span>{{ connection.label }}</span
+                    ><span aria-hidden="true"><app-icon name="forward" /></span
+                    ><strong>{{ connection.target }}</strong>
+                  </li>
                 }
               </ul>
             } @else if (node.hasOutputs) {
