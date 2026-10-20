@@ -1,3 +1,4 @@
+import { IconComponent } from '../icon.component';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import {
   FLOW_COMPONENT_KIND_LABELS,
@@ -50,7 +51,7 @@ function sameReference(
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-preview',
-  imports: [],
+  imports: [IconComponent],
   templateUrl: './flow-preview.html',
   styleUrl: './flow-preview.scss',
 })

@@ -804,7 +804,7 @@ export class FlowAiAssistantPanelComponent {
       })
       .map(([, node]) => nodeLabel(node));
     const connectionLabel = (connection: FlowDocument['connections'][number]) =>
-      `${connection.sourceNodeId} · ${connection.sourceOutputId} → ${connection.targetNodeId}`;
+      `${connection.sourceNodeId} · ${connection.sourceOutputId} vers ${connection.targetNodeId}`;
     const key = (connection: FlowDocument['connections'][number]) =>
       `${connection.sourceNodeId}|${connection.sourceOutputId}|${connection.targetNodeId}`;
     const currentConnections = new Set(current.connections.map(key));

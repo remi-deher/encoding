@@ -1,19 +1,30 @@
-<div class="view-switch" role="toolbar" aria-label="Vues du flow">
-  <button mat-button [attr.aria-pressed]="viewMode() === 'guided'" (click)="switchView('guided')">
-    Guidé
+<ng-template #toolbar
+  ><div class="view-switch" role="group" aria-label="Vues du flow">
+    <button mat-button [attr.aria-pressed]="viewMode() === 'guided'" (click)="switchView('guided')">
+      Guidé
+    </button>
+    <button mat-button [attr.aria-pressed]="viewMode() === 'canvas'" (click)="switchView('canvas')">
+      Canvas
+    </button>
+  </div>
+  @if (viewMode() === 'canvas') {
+    <ng-container [ngTemplateOutlet]="canvas()?.toolbar() ?? null" />
+  }
+</ng-template>
+<ng-template #options>
+  <button mat-menu-item (click)="toggleDensity()">
+    {{ compactView() ? 'Afficher les détails des blocs' : 'Alléger les blocs' }}
   </button>
-  <button mat-button [attr.aria-pressed]="viewMode() === 'canvas'" (click)="switchView('canvas')">
-    Canvas
-  </button>
-  <span>{{
-    viewMode() === 'guided'
-      ? 'Placement vertical automatique · Défilement horizontal'
-      : 'Placement libre · Reliez une sortie à une entrée'
-  }}</span>
-</div>
+  <button mat-menu-item (click)="foldAllBranches(true)">Replier les branches</button>
+  <button mat-menu-item (click)="foldAllBranches(false)">Déplier les branches</button>
+</ng-template>
 @if (viewMode() === 'canvas') {
   <app-flow-canvas
+    (componentDropped)="componentDropped.emit($event)"
     [nodes]="visualNodes()"
+    [mediaType]="mediaType()"
+    [simulationResult]="simulationResult()"
+    (simulationDetailsRequested)="simulationDetailsRequested.emit()"
     [connections]="visualConnections()"
     [positions]="canvasPositions()"
     [selectedNodeId]="selectedNodeId()"
@@ -34,25 +45,29 @@
     appContextActions
     (contextActions)="backgroundMenu($event)"
     class="structured-editor"
+    appFlowComponentDrop
+    (componentDropped)="componentDropped.emit($event)"
     [class.structured-editor_compact]="compactView()"
     aria-label="Composition du flow par étapes"
   >
-    <div class="connection-tools">
-      <button mat-button type="button" (click)="toggleConnections()">
-        {{ showConnections() ? 'Masquer les liaisons' : 'Afficher les liaisons' }}
-      </button>
-      <button mat-button type="button" (click)="toggleDensity()">
-        {{ compactView() ? 'Vue détaillée' : 'Vue compacte' }}
-      </button>
-      @if (pendingConnection(); as pending) {
-        <span role="status"
-          >Sortie {{ pending.output.label }} : choisissez le point d’entrée d’une étape.</span
-        >
-        <button mat-button type="button" (click)="pendingConnection.set(null)">
-          Annuler la liaison
-        </button>
-      }
-    </div>
+    @if (paletteDrag.component()) {
+      <p class="palette-drop-hint" role="status">
+        Déposez sur une sortie pour insérer une étape, ou dans une zone vide pour ajouter un bloc à
+        relier.
+      </p>
+    }
+    @if (pendingConnection()) {
+      <div class="connection-tools">
+        @if (pendingConnection(); as pending) {
+          <span role="status"
+            >Sortie {{ pending.output.label }} : choisissez le point d’entrée d’une étape.</span
+          >
+          <button mat-button type="button" (click)="pendingConnection.set(null)">
+            Annuler la liaison
+          </button>
+        }
+      </div>
+    }
     @if (showConnections()) {
       <app-flow-links
         [size]="drawingSize()"
@@ -73,9 +88,9 @@
       [ngTemplateOutletContext]="{ sequence: structured().main }"
     />
     @if (structured().detached.length) {
-      <section class="detached" aria-label="Blocs non reliés à l’entrée">
+      <section class="detached" aria-label="Étapes à raccorder">
         <h2>Blocs non reliés à l’entrée</h2>
-        <p>Ces blocs sont conservés. Reliez-les depuis le menu de sortie d’une étape.</p>
+        <p>Ces étapes sont conservées sans liaison. Vous pouvez les raccorder à votre parcours.</p>
         @for (sequence of structured().detached; track sequence.id) {
           <ng-container
             [ngTemplateOutlet]="sequenceTemplate"
@@ -128,7 +143,7 @@
             appContextActions
             (contextActions)="openNodeMenu($event, step.node)"
             [class.step-selected]="selectedNodeId() === step.node.id"
-            (click)="selectedNodeId.set(step.node.id)"
+            (click)="selectStep(step.node, $event)"
             #stepCard
             [style.--step-color]="colors(step.node.component).color"
             [style.--step-background]="colors(step.node.component).background"
@@ -220,6 +235,14 @@
                 ⋯
               </button>
             </div>
+            @if (compactView() && summary(step.node)) {
+              <p class="step-config-summary">{{ summary(step.node) }}</p>
+            }
+            <app-flow-simulation-status
+              [node]="step.node"
+              [result]="simulationResult()"
+              (detailsRequested)="simulationDetailsRequested.emit()"
+            />
             @if (incomingCount(step.node) > 1) {
               <p class="continuation-label">{{ incomingCount(step.node) }} liaisons entrantes</p>
             }
@@ -231,7 +254,9 @@
                 </button>
                 @if (packExpanded(pack)) {
                   <section class="pack-expanded" [attr.aria-label]="'Contenu du pack ' + pack.name">
-                    <p class="pack-boundary">Entrée du pack → {{ packRootLabel(pack) }}</p>
+                    <p class="pack-boundary">
+                      Entrée du pack <app-icon name="forward" /> {{ packRootLabel(pack) }}
+                    </p>
                     <ng-container
                       [ngTemplateOutlet]="sequenceTemplate"
                       [ngTemplateOutletContext]="{ sequence: packContents(pack).main }"
@@ -241,7 +266,10 @@
                     }
                     <div class="pack-boundary pack-outputs">
                       @for (port of pack.outputs; track port.id) {
-                        <span>{{ port.label }} ← {{ nodeLabel(port.sourceNodeId) }}</span>
+                        <span
+                          >{{ port.label }} <app-icon name="back" />
+                          {{ nodeLabel(port.sourceNodeId) }}</span
+                        >
                       }
                     </div>
                   </section>
@@ -267,7 +295,7 @@
                     [attr.aria-label]="'Monter ' + (step.node.name || step.node.component.name)"
                     (click)="move(sequence, index, index - 1)"
                   >
-                    ↑ Monter
+                    <app-icon name="up" /> Monter
                   </button>
                 }
                 @if (canMove(sequence, index, index + 1)) {
@@ -277,7 +305,7 @@
                     [attr.aria-label]="'Descendre ' + (step.node.name || step.node.component.name)"
                     (click)="move(sequence, index, index + 1)"
                   >
-                    ↓ Descendre
+                    <app-icon name="down" /> Descendre
                   </button>
                 }
               </div>
@@ -287,6 +315,8 @@
               @for (output of step.node.component.outputs; track output.id) {
                 <div
                   class="output-action"
+                  appFlowComponentDrop
+                  (componentDropped)="add(step.node, output, $event)"
                   [class.output-connected]="isConnected(step.node, output)"
                 >
                   <button
@@ -393,7 +423,9 @@
           } @else if (primaryOutput(step.node); as output) {
             <div class="insertion">
               @if (step.continuationOutput && step.continuationOutput.label !== 'Suite') {
-                <span class="continuation-label">↓ {{ step.continuationOutput.label }}</span>
+                <span class="continuation-label"
+                  ><app-icon name="down" /> {{ step.continuationOutput.label }}</span
+                >
               }
               @if (!isConnected(step.node, output) || !showConnections()) {
                 <button mat-button type="button" (click)="add(step.node, output)">

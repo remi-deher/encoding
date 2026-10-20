@@ -1,10 +1,14 @@
 <app-management-catalog-template
   [title]="title()"
-  [detailOpen]="pageTab() === 'groups' ? selectedGroupForDetail() !== null : selectedNode() !== null"
+  [detailOpen]="
+    pageTab() === 'groups' ? selectedGroupForDetail() !== null : selectedNode() !== null
+  "
   [actionOpen]="pageTab() === 'groups' ? groupFormOpen() : local.flow() !== null || actionOpen()"
   [actionTitle]="
     pageTab() === 'groups'
-      ? (groupEditing() ? 'Modifier le groupe' : 'Nouveau groupe de nœuds')
+      ? groupEditing()
+        ? 'Modifier le groupe'
+        : 'Nouveau groupe de nœuds'
       : local.flow() === 'join'
         ? 'Rejoindre un cluster'
         : local.flow() === 'create'
@@ -20,19 +24,19 @@
           ? 'Ce nœud devient le premier membre du nouveau cluster.'
           : actionDescription()
   "
-  [detailTitle]="pageTab() === 'groups' ? (selectedGroupForDetail()?.name ?? 'Détails du groupe') : detailTitle()"
-  [detailDescription]="pageTab() === 'groups' ? 'Membres et critères résolus du groupe' : detailDescription()"
+  [detailTitle]="
+    pageTab() === 'groups' ? (selectedGroupForDetail()?.name ?? 'Détails du groupe') : detailTitle()
+  "
+  [detailDescription]="
+    pageTab() === 'groups' ? 'Membres et critères résolus du groupe' : detailDescription()
+  "
   [catalogState]="pageState()"
   [catalogMessage]="catalogMessage()"
   [drawerSize]="pageTab() === 'groups' && groupFormOpen() ? 'wide' : 'standard'"
   [drawerModal]="true"
   (detailClosed)="pageTab() === 'groups' ? closeGroupDetail() : onDetailClosed()"
   (actionClosed)="pageTab() === 'groups' ? closeGroupForm() : closeCreateNode()"
-  [showToolbar]="
-    pageTab() === 'cluster' &&
-    !local.standalone() &&
-    clusterIdentity() !== null
-  "
+  [showToolbar]="pageTab() === 'cluster' && !local.standalone() && clusterIdentity() !== null"
   filterLabel="Membres du cluster actuel"
   [showPageHeader]="pageTab() !== 'node'"
 >
@@ -149,11 +153,7 @@
         <p>Rattachement annulé : {{ failure }}</p>
       </div>
     }
-    @if (
-      pageTab() === 'cluster' &&
-      !local.standalone() &&
-      clusterIdentity()
-    ) {
+    @if (pageTab() === 'cluster' && !local.standalone() && clusterIdentity()) {
       <app-summary-tiles label="Synthèse du cluster" [tiles]="summaryTiles()" />
     }
   </ng-container>
@@ -187,7 +187,8 @@
             } @else {
               <h3 class="empty-title">Aucun groupe de nœuds</h3>
               <p class="empty-desc">
-                Les groupes permettent d’organiser vos serveurs et workers, d’attribuer des étiquettes partagées et de contraindre l’exécution des flows.
+                Les groupes permettent d’organiser vos serveurs et workers, d’attribuer des
+                étiquettes partagées et de contraindre l’exécution des flows.
               </p>
               @if (isAdmin()) {
                 <button matButton="filled" type="button" (click)="createGroup()">
@@ -327,180 +328,180 @@
         [selectedIndex]="selectedNodeTabIndex()"
         (selectedIndexChange)="selectedNodeTabIndex.set($event)"
       >
-      <mat-tab label="Général">
-        @if (generalSheet(); as sheet) {
-          <app-resource-sheet
-            ariaLabel="Informations générales du nœud"
-            [title]="sheet.title"
-            [subtitle]="sheet.subtitle"
-            [sections]="sheet.sections"
-          />
-        }
-      </mat-tab>
-      @if (rawNode()?.roles?.includes('worker')) {
-        <mat-tab label="Traitement">
-          <div class="node-processing-tab">
-            <app-detail-card-grid
-              [cards]="processingCards()"
-              [initiallyExpanded]="true"
-              [collapsible]="false"
-              [cardContentTemplates]="{
-                'node-processing-limit': processingLimitContent,
-                'node-processing-calendar': processingCalendarContent,
-              }"
-              ariaLabel="Réglages de traitement du nœud"
+        <mat-tab label="Général">
+          @if (generalSheet(); as sheet) {
+            <app-resource-sheet
+              ariaLabel="Informations générales du nœud"
+              [title]="sheet.title"
+              [subtitle]="sheet.subtitle"
+              [sections]="sheet.sections"
             />
-            <p class="node-tab-note">
-              Les plafonds de bibliothèque et de couple nœud et bibliothèque s’appliquent aussi.
-              Hors des plages du calendrier, aucun nouveau traitement ne démarre ; ceux en cours ne
-              sont pas interrompus.
-            </p>
-          </div>
-          <ng-template #processingLimitContent>
-            @if (processingForm(); as form) {
-              <app-record-form
-                [data]="form"
-                [busy]="processingBusy()"
-                (submitted)="saveNodeProcessing($event)"
-              />
-            } @else {
-              <p role="status">Chargement de la limite du nœud…</p>
-            }
-          </ng-template>
-          <ng-template #processingCalendarContent>
-            @if (nodeProcessingState(); as settings) {
-              <app-weekly-schedule-form
-                [schedule]="settings.schedule"
-                [busy]="scheduleBusy()"
-                (saved)="saveNodeSchedule($event)"
-              />
-            } @else {
-              <p role="status">Chargement du calendrier…</p>
-            }
-          </ng-template>
-        </mat-tab>
-      }
-      <mat-tab label="Capacités">
-        <app-detail-field-list [fields]="capabilityFields()" layout="cards" />
-        <app-detail-card-grid
-          [cards]="capabilityCards()"
-          [initiallyExpanded]="false"
-          ariaLabel="Outils et capacités de traitement"
-          emptyMessage="Aucune capacité déclarée par ce nœud."
-        />
-        <p class="node-tab-note capability-note">
-          Les encodeurs « utilisables » ont réussi un test synthétique ; les bibliothèques, limites
-          et règles d’attribution déterminent aussi l’éligibilité à une tâche.
-        </p>
-      </mat-tab>
-      <mat-tab label="Bibliothèques">
-        @if (selectedNode(); as node) {
-          <section class="node-libraries" aria-label="Bibliothèques autorisées sur ce nœud">
-            <header class="node-libraries-heading">
-              <div>
-                <h3>Accès autorisés par le serveur</h3>
-                <p>
-                  Le serveur déclare les bibliothèques et autorise les nœuds. Configurez ici le
-                  chemin visible depuis {{ node.name }}.
-                </p>
-              </div>
-              <button matButton="filled" type="button" (click)="openAddLibrary()">
-                Déclarer une bibliothèque
-              </button>
-            </header>
-            @if (availableLibraries().length) {
-              <div class="add-library-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>Bibliothèque déjà déclarée</mat-label>
-                  <mat-select
-                    [value]="selectedAvailableLibraryId()"
-                    (selectionChange)="selectedAvailableLibraryId.set($event.value)"
-                  >
-                    @for (library of availableLibraries(); track library.id) {
-                      <mat-option [value]="library.id">{{ library.name }}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-                <button
-                  matButton="outlined"
-                  type="button"
-                  [disabled]="!selectedAvailableLibraryId()"
-                  (click)="addExistingLibrary()"
-                >
-                  Ajouter au nœud
-                </button>
-              </div>
-            }
-            @if (nodeLibraryLoading()) {
-              <p role="status">Chargement des bibliothèques autorisées…</p>
-            } @else if (nodeLibraryRows().length) {
-              <app-data-table
-                [columns]="nodeLibraryColumns"
-                [rows]="nodeLibraryRows()"
-                [rowActions]="nodeLibraryActions"
-                [separateRowActionColumns]="true"
-                (rowAction)="onNodeLibraryAction($event)"
-                (toggleChange)="onNodeLibraryToggle($event)"
-                emptyMessage="Aucune bibliothèque autorisée sur ce nœud."
-              />
-            } @else {
-              <div class="node-libraries-empty">
-                <strong>Aucune bibliothèque autorisée</strong>
-                <p>
-                  Choisissez une bibliothèque déjà déclarée par le serveur ou créez-en une nouvelle.
-                </p>
-              </div>
-            }
-          </section>
-        }
-      </mat-tab>
-      <mat-tab label="Avancé">
-        <div class="node-processing-tab">
-          @if (lifecycleText(); as text) {
-            <p class="node-tab-note" role="status">{{ text }}</p>
           }
-          <div class="node-tab-actions">
-            @if (rawNode()?.lifecycle === 'quarantined') {
-              <app-drawer-action-button
-                label="Lever la quarantaine"
-                [disabled]="lifecycleBusy()"
-                (activated)="clearQuarantine()"
+        </mat-tab>
+        @if (rawNode()?.roles?.includes('worker')) {
+          <mat-tab label="Traitement">
+            <div class="node-processing-tab">
+              <app-detail-card-grid
+                [cards]="processingCards()"
+                [initiallyExpanded]="true"
+                [collapsible]="false"
+                [cardContentTemplates]="{
+                  'node-processing-limit': processingLimitContent,
+                  'node-processing-calendar': processingCalendarContent,
+                }"
+                ariaLabel="Réglages de traitement du nœud"
               />
-            } @else {
-              <app-drawer-action-button
-                [label]="
-                  rawNode()?.lifecycle === 'draining' ? 'Reprendre le travail' : 'Vidanger le nœud'
-                "
-                [disabled]="lifecycleBusy()"
-                (activated)="toggleDraining()"
-              />
-            }
-          </div>
-          <p class="node-tab-note">
-            Retirer le nœud révoque son identité et refuse ses baux actifs, sans supprimer
-            l’historique. Il ne peut pas être réactivé par un simple signal de présence.
-          </p>
-          <div class="node-tab-actions">
-            <app-drawer-action-button
-              label="Supprimer le nœud"
-              tone="danger"
-              [disabled]="removalBusy()"
-              (activated)="confirmNodeRemoval()"
-            />
-          </div>
-        </div>
-      </mat-tab>
-      <mat-tab label="Journaux">
-        @if (selectedNode(); as node) {
-          <div class="node-logs-tab">
-            <app-system-log-viewer
-              [nodeId]="node.id"
-              [title]="'Journaux de ' + node.name"
-            />
-          </div>
+              <p class="node-tab-note">
+                Les plafonds de bibliothèque et de couple nœud et bibliothèque s’appliquent aussi.
+                Hors des plages du calendrier, aucun nouveau traitement ne démarre ; ceux en cours
+                ne sont pas interrompus.
+              </p>
+            </div>
+            <ng-template #processingLimitContent>
+              @if (processingForm(); as form) {
+                <app-record-form
+                  [data]="form"
+                  [busy]="processingBusy()"
+                  (submitted)="saveNodeProcessing($event)"
+                />
+              } @else {
+                <p role="status">Chargement de la limite du nœud…</p>
+              }
+            </ng-template>
+            <ng-template #processingCalendarContent>
+              @if (nodeProcessingState(); as settings) {
+                <app-weekly-schedule-form
+                  [schedule]="settings.schedule"
+                  [busy]="scheduleBusy()"
+                  (saved)="saveNodeSchedule($event)"
+                />
+              } @else {
+                <p role="status">Chargement du calendrier…</p>
+              }
+            </ng-template>
+          </mat-tab>
         }
-      </mat-tab>
-    </mat-tab-group>
+        <mat-tab label="Capacités">
+          <app-detail-field-list [fields]="capabilityFields()" layout="cards" />
+          <app-detail-card-grid
+            [cards]="capabilityCards()"
+            [initiallyExpanded]="false"
+            ariaLabel="Outils et capacités de traitement"
+            emptyMessage="Aucune capacité déclarée par ce nœud."
+          />
+          <p class="node-tab-note capability-note">
+            Les encodeurs « utilisables » ont réussi un test synthétique ; les bibliothèques,
+            limites et règles d’attribution déterminent aussi l’éligibilité à une tâche.
+          </p>
+        </mat-tab>
+        <mat-tab label="Bibliothèques">
+          @if (selectedNode(); as node) {
+            <section class="node-libraries" aria-label="Bibliothèques autorisées sur ce nœud">
+              <header class="node-libraries-heading">
+                <div>
+                  <h3>Accès autorisés par le serveur</h3>
+                  <p>
+                    Le serveur déclare les bibliothèques et autorise les nœuds. Configurez ici le
+                    chemin visible depuis {{ node.name }}.
+                  </p>
+                </div>
+                <button matButton="filled" type="button" (click)="openAddLibrary()">
+                  Déclarer une bibliothèque
+                </button>
+              </header>
+              @if (availableLibraries().length) {
+                <div class="add-library-row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Bibliothèque déjà déclarée</mat-label>
+                    <mat-select
+                      [value]="selectedAvailableLibraryId()"
+                      (selectionChange)="selectedAvailableLibraryId.set($event.value)"
+                    >
+                      @for (library of availableLibraries(); track library.id) {
+                        <mat-option [value]="library.id">{{ library.name }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <button
+                    matButton="outlined"
+                    type="button"
+                    [disabled]="!selectedAvailableLibraryId()"
+                    (click)="addExistingLibrary()"
+                  >
+                    Ajouter au nœud
+                  </button>
+                </div>
+              }
+              @if (nodeLibraryLoading()) {
+                <p role="status">Chargement des bibliothèques autorisées…</p>
+              } @else if (nodeLibraryRows().length) {
+                <app-data-table
+                  [columns]="nodeLibraryColumns"
+                  [rows]="nodeLibraryRows()"
+                  [rowActions]="nodeLibraryActions"
+                  [separateRowActionColumns]="true"
+                  (rowAction)="onNodeLibraryAction($event)"
+                  (toggleChange)="onNodeLibraryToggle($event)"
+                  emptyMessage="Aucune bibliothèque autorisée sur ce nœud."
+                />
+              } @else {
+                <div class="node-libraries-empty">
+                  <strong>Aucune bibliothèque autorisée</strong>
+                  <p>
+                    Choisissez une bibliothèque déjà déclarée par le serveur ou créez-en une
+                    nouvelle.
+                  </p>
+                </div>
+              }
+            </section>
+          }
+        </mat-tab>
+        <mat-tab label="Avancé">
+          <div class="node-processing-tab">
+            @if (lifecycleText(); as text) {
+              <p class="node-tab-note" role="status">{{ text }}</p>
+            }
+            <div class="node-tab-actions">
+              @if (rawNode()?.lifecycle === 'quarantined') {
+                <app-drawer-action-button
+                  label="Lever la quarantaine"
+                  [disabled]="lifecycleBusy()"
+                  (activated)="clearQuarantine()"
+                />
+              } @else {
+                <app-drawer-action-button
+                  [label]="
+                    rawNode()?.lifecycle === 'draining'
+                      ? 'Reprendre le travail'
+                      : 'Vidanger le nœud'
+                  "
+                  [disabled]="lifecycleBusy()"
+                  (activated)="toggleDraining()"
+                />
+              }
+            </div>
+            <p class="node-tab-note">
+              Retirer le nœud révoque son identité et refuse ses baux actifs, sans supprimer
+              l’historique. Il ne peut pas être réactivé par un simple signal de présence.
+            </p>
+            <div class="node-tab-actions">
+              <app-drawer-action-button
+                label="Supprimer le nœud"
+                tone="danger"
+                [disabled]="removalBusy()"
+                (activated)="confirmNodeRemoval()"
+              />
+            </div>
+          </div>
+        </mat-tab>
+        <mat-tab label="Journaux">
+          @if (selectedNode(); as node) {
+            <div class="node-logs-tab">
+              <app-system-log-viewer [nodeId]="node.id" [title]="'Journaux de ' + node.name" />
+            </div>
+          }
+        </mat-tab>
+      </mat-tab-group>
     }
   </ng-template>
   <ng-template #actionContent>
@@ -568,9 +569,9 @@
           <span>Étape 1 sur 2</span>
           <h3>Repérer le nœud</h3>
           <p>
-            Sur le nœud à ajouter, ouvrez la page Nœuds puis « Cluster → Rejoindre un cluster » :
-            ajoutez l’adresse de ce cluster puis choisissez « Demander à rejoindre ». La demande
-            apparaîtra ici pour vérification.
+            Sur le nœud à ajouter, ouvrez la page Nœuds puis « Cluster
+            <app-icon name="forward" /> Rejoindre un cluster » : ajoutez l’adresse de ce cluster
+            puis choisissez « Demander à rejoindre ». La demande apparaîtra ici pour vérification.
           </p>
         </div>
         @if (enrollmentRows().length) {
@@ -586,8 +587,9 @@
           />
         } @else {
           <p class="enrollment-empty" role="status">
-            Aucune demande en attente. Depuis le nœud à ajouter, ouvrez Nœuds → Cluster → Rejoindre
-            un cluster. Les demandes et leurs clés expirent après 10 minutes.
+            Aucune demande en attente. Depuis le nœud à ajouter, ouvrez Nœuds
+            <app-icon name="forward" /> Cluster <app-icon name="forward" /> Rejoindre un cluster.
+            Les demandes et leurs clés expirent après 10 minutes.
           </p>
         }
         <button matButton="text" type="button" (click)="showPairingKey()">
@@ -651,7 +653,7 @@
     } @else if (enrollmentView() === 'key') {
       <div class="pairing-key-header">
         <button matButton="text" type="button" (click)="showPendingRequests()">
-          ← Retour aux demandes
+          <app-icon name="back" /> Retour aux demandes
         </button>
       </div>
       <app-record-form

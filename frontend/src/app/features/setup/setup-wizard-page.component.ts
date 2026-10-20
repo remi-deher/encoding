@@ -1,3 +1,4 @@
+import { IconComponent } from '../../shared/ui/icon.component';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -15,7 +16,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-setup-wizard-page',
   providers: [LocalNodeController],
-  imports: [CommonModule, FormsModule, MatButtonModule, MatProgressBarModule],
+  imports: [IconComponent, CommonModule, FormsModule, MatButtonModule, MatProgressBarModule],
   template: `
     <section class="setup-studio" aria-label="Assistant de premier démarrage">
       @if (busy()) {
@@ -297,7 +298,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     [disabled]="busy()"
                     (click)="submitStandalone()"
                   >
-                    Accéder au tableau de bord →
+                    Accéder au tableau de bord <app-icon name="forward" />
                   </button>
                 </div>
               </div>
@@ -336,7 +337,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                   [disabled]="busy()"
                   (click)="submitCreateCluster()"
                 >
-                  Créer le cluster et continuer →
+                  Créer le cluster et continuer <app-icon name="forward" />
                 </button>
               </div>
             }
@@ -438,7 +439,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                   [disabled]="busy()"
                   (click)="submitJoinFinish()"
                 >
-                  Terminer et ouvrir l’application →
+                  Terminer et ouvrir l’application <app-icon name="forward" />
                 </button>
               </div>
             }

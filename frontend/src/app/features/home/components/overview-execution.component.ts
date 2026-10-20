@@ -1,3 +1,4 @@
+import { IconComponent } from '../../../shared/ui/icon.component';
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -8,7 +9,7 @@ import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component'
 @Component({
   selector: 'app-overview-execution',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, MatProgressBarModule, RouterLink, StatusBadgeComponent],
+  imports: [IconComponent, DatePipe, MatProgressBarModule, RouterLink, StatusBadgeComponent],
   template: `
     <article class="job">
       <header>
@@ -54,8 +55,8 @@ import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component'
                   ? 'errors'
                   : 'active',
           }"
-          >Voir le traitement ↗</a
-        >
+          >Voir le traitement <app-icon name="outward"
+        /></a>
       </footer>
     </article>
   `,

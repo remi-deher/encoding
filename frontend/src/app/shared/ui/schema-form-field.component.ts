@@ -34,6 +34,16 @@ export type SchemaFormFieldType =
           [attr.placeholder]="placeholder() || null"
           [attr.maxlength]="maxLength() ?? null"
         ></textarea>
+      } @else if (type() === 'number' && numericValue()) {
+        <input
+          matInput
+          type="number"
+          [formControl]="control()"
+          [attr.placeholder]="placeholder() || null"
+          [attr.min]="min() ?? null"
+          [attr.max]="max() ?? null"
+          [attr.step]="step() ?? null"
+        />
       } @else {
         <input
           matInput
@@ -67,6 +77,8 @@ export type SchemaFormFieldType =
   `,
 })
 export class SchemaFormFieldComponent {
+  /** Opt in for number-valued controls; record forms keep their existing string contract. */
+  readonly numericValue = input(false);
   readonly label = input.required<string>();
   readonly type = input.required<SchemaFormFieldType>();
   readonly control = input.required<FormControl<any>>();

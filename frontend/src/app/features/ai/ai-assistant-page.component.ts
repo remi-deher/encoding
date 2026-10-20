@@ -1,3 +1,4 @@
+import { IconComponent } from '../../shared/ui/icon.component';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { map, Observable } from 'rxjs';
@@ -68,6 +69,7 @@ interface AssistantResourceOption {
   selector: 'app-ai-assistant-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    IconComponent,
     FormsModule,
     MatButtonModule,
     MatFormFieldModule,
@@ -155,7 +157,10 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly modelSettingsOpen = signal(false);
   protected readonly attachments = signal<readonly AiAssistantFileAttachment[]>([]);
   protected readonly attachmentName = computed(
-    () => this.attachments().map((file) => file.name).join(', ') || null,
+    () =>
+      this.attachments()
+        .map((file) => file.name)
+        .join(', ') || null,
   );
   protected readonly loadingFlows = signal(true);
   protected readonly loadingExecutions = signal(true);
@@ -410,7 +415,9 @@ export class AiAssistantPageComponent implements OnDestroy {
         return;
       }
       if (next.reduce((sum, item) => sum + item.content.length, 0) > 1_000_000) {
-        this.errorMessage.set('Le contenu joint dépasse la capacité de contexte de 1 000 000 caractères.');
+        this.errorMessage.set(
+          'Le contenu joint dépasse la capacité de contexte de 1 000 000 caractères.',
+        );
         return;
       }
       this.attachments.set(next);
@@ -421,15 +428,15 @@ export class AiAssistantPageComponent implements OnDestroy {
   }
 
   protected removeAttachment(name?: string): void {
-    this.attachments.update((files) =>
-      name ? files.filter((file) => file.name !== name) : [],
-    );
+    this.attachments.update((files) => (name ? files.filter((file) => file.name !== name) : []));
   }
 
   private isSupportedAssistantFile(name: string): boolean {
     const lower = name.toLocaleLowerCase();
     if (/^(dockerfile|makefile|\.env(?:\.[\w-]+)?)$/.test(lower)) return true;
-    return /\.(txt|md|markdown|rst|csv|tsv|log|out|json|jsonc|json5|ya?ml|xml|toml|ini|conf|config|properties|srt|ass|ssa|vtt|sub|smi|sami|ttml|dfxp|mpl|lrc|sbv|ffmetadata|ffpreset|ffscript|ffconcat|filter|m3u8?|nfo|prx|avs|avsi|vpy|qpfile|chapters|edl|cue|xspf|pls|mpd|csproj|sln|props|targets|editorconfig|gitignore|cs|fs|vb|tsx?|jsx?|mjs|cjs|pyw?|sh|bash|zsh|ps1|psm1|bat|cmd|sql|html?|css|scss|less|proto|graphql|gql)$/i.test(lower);
+    return /\.(txt|md|markdown|rst|csv|tsv|log|out|json|jsonc|json5|ya?ml|xml|toml|ini|conf|config|properties|srt|ass|ssa|vtt|sub|smi|sami|ttml|dfxp|mpl|lrc|sbv|ffmetadata|ffpreset|ffscript|ffconcat|filter|m3u8?|nfo|prx|avs|avsi|vpy|qpfile|chapters|edl|cue|xspf|pls|mpd|csproj|sln|props|targets|editorconfig|gitignore|cs|fs|vb|tsx?|jsx?|mjs|cjs|pyw?|sh|bash|zsh|ps1|psm1|bat|cmd|sql|html?|css|scss|less|proto|graphql|gql)$/i.test(
+      lower,
+    );
   }
 
   protected deleteFlowFromAssistant(source: AiAssistantSource): void {
@@ -733,9 +740,7 @@ export class AiAssistantPageComponent implements OnDestroy {
       },
       error: (error: HttpErrorResponse) => {
         this.deletingConversationId.set(null);
-        this.errorMessage.set(
-          this.errorText(error, 'Impossible de supprimer cette conversation.'),
-        );
+        this.errorMessage.set(this.errorText(error, 'Impossible de supprimer cette conversation.'));
       },
     });
   }
@@ -1161,9 +1166,10 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.aiTools.getAssistantOptions().subscribe({
       next: (options) => {
         this.assistantOptions.set(options);
-        const catalogLoading = options.catalogs?.some((node) =>
-          node.providers.some((catalog) => catalog.state === 'loading'),
-        ) ?? false;
+        const catalogLoading =
+          options.catalogs?.some((node) =>
+            node.providers.some((catalog) => catalog.state === 'loading'),
+          ) ?? false;
         this.loadingAssistantOptions.set(catalogLoading);
         if (!catalogLoading && !this.detail()) this.selectDefaultModel();
         if (catalogLoading)
@@ -1180,9 +1186,11 @@ export class AiAssistantPageComponent implements OnDestroy {
       (option) =>
         option.provider === options.defaultProvider &&
         option.model === options.defaultModel &&
-        (!options.defaultReasoningEffort || option.reasoningEfforts.includes(options.defaultReasoningEffort)),
+        (!options.defaultReasoningEffort ||
+          option.reasoningEfforts.includes(options.defaultReasoningEffort)),
     );
-    const selected = preferredModel ??
+    const selected =
+      preferredModel ??
       options.models.find(
         (option) =>
           option.provider === options.defaultProvider && option.model === options.defaultModel,
@@ -1192,8 +1200,8 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.selectedModelKey.set(selected ? this.modelOptionKey(selected) : '');
     this.selectedReasoningEffort.set(
       selected?.reasoningEfforts.includes(options.defaultReasoningEffort ?? '')
-        ? options.defaultReasoningEffort ?? null
-        : selected?.defaultReasoningEffort ?? null,
+        ? (options.defaultReasoningEffort ?? null)
+        : (selected?.defaultReasoningEffort ?? null),
     );
   }
 

@@ -1,3 +1,5 @@
+import { IconComponent } from '../../../shared/ui/icon.component';
+import { MatMenuModule } from '@angular/material/menu';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,19 +9,18 @@ import { MediaType } from '../../../shared/models/media-type';
 @Component({
   selector: 'app-flow-command-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatButtonModule, MatTooltipModule],
+  imports: [RouterLink, MatButtonModule, MatTooltipModule, MatMenuModule, IconComponent],
   template: `
     <header class="command-bar" role="toolbar" aria-label="Commandes du flow">
       <div class="command-group navigation-group">
         <a
-          matButton="text"
+          mat-icon-button
           routerLink="/flows"
           class="back-link"
           aria-label="Retourner au catalogue des flows"
           matTooltip="Retourner au catalogue des flows"
         >
-          <span class="back-icon" aria-hidden="true">←</span>
-          <span class="back-label">Flows</span>
+          <app-icon name="back" />
         </a>
 
         <div class="title-container">
@@ -45,7 +46,7 @@ import { MediaType } from '../../../shared/models/media-type';
               aria-label="Renommer le flow"
             >
               {{ title() }}
-              <span class="edit-hint" aria-hidden="true">✎</span>
+              <app-icon class="edit-hint" name="edit" />
             </h1>
           }
 
@@ -92,142 +93,106 @@ import { MediaType } from '../../../shared/models/media-type';
         </div>
       </div>
 
-      <div class="command-group tool-actions">
+      <div class="command-group workbench-actions">
+        <ng-content select="[editor-views]" />
         <button
-          matButton="text"
+          mat-icon-button
+          type="button"
           [disabled]="!canUndo()"
           (click)="undoRequested.emit()"
           aria-label="Annuler la dernière modification"
+          matTooltip="Annuler (Ctrl+Z)"
         >
-          ↶ Annuler
+          <app-icon name="undo" />
         </button>
         <button
-          matButton="text"
+          mat-icon-button
+          type="button"
           [disabled]="!canRedo()"
           (click)="redoRequested.emit()"
           aria-label="Rétablir la modification"
+          matTooltip="Rétablir (Ctrl+Maj+Z)"
         >
-          ↷ Rétablir
+          <app-icon name="redo" />
         </button>
-        @if (canRestoreAiProposal()) {
-          <button
-            matButton="tonal"
-            type="button"
-            class="tool-btn"
-            (click)="restoreAiProposalRequested.emit()"
-            aria-label="Restaurer le flow avant la proposition IA"
-            matTooltip="Restaurer l’état du flow avant l’application de la proposition IA"
-          >
-            <span class="btn-icon" aria-hidden="true">↶</span>
-            <span>Annuler la proposition</span>
-          </button>
-        }
+        <span class="mobile-toolbar-break" aria-hidden="true"></span>
         <button
           matButton="tonal"
           type="button"
-          class="tool-btn"
+          class="add-action"
+          (click)="togglePalette.emit()"
+          [attr.aria-pressed]="paletteOpen()"
+          aria-label="Basculer la palette de blocs"
+          matTooltip="Ajouter une étape (Ctrl+B)"
+        >
+          <app-icon name="add" /> Ajouter<span class="add-suffix"> une étape</span>
+        </button>
+        <button
+          matButton="tonal"
+          type="button"
           [disabled]="disabled() || simulatorBusy()"
           (click)="simulateRequested.emit()"
-          matTooltip="Simuler le parcours des branches avec un profil de test (Ctrl+Entrée)"
+          matTooltip="Tester le parcours (Ctrl+Entrée)"
         >
-          <span class="btn-icon" aria-hidden="true">▷</span>
-          <span>Tester</span>
+          <app-icon name="play" /> Tester
         </button>
-
-        <button
-          matButton="outlined"
-          type="button"
-          class="tool-btn"
-          [disabled]="disabled() || validating()"
-          (click)="validateRequested.emit()"
-          matTooltip="Vérifier la validité du graphe et des composants auprès du backend"
-        >
-          <span class="btn-icon" aria-hidden="true">✔</span>
-          <span>{{ validating() ? 'Vérification…' : 'Vérifier' }}</span>
-        </button>
-
-        @if (canCreatePack()) {
-          <button
-            matButton="outlined"
-            type="button"
-            class="tool-btn"
-            [disabled]="disabled() || saving()"
-            (click)="packCreationRequested.emit()"
-            matTooltip="Créer un pack réutilisable depuis cette version publiée"
-          >
-            <span class="btn-icon" aria-hidden="true">⊞</span>
-            <span>Pack</span>
-          </button>
-        }
-
-        <button
-          matButton="outlined"
-          type="button"
-          class="tool-btn"
-          [disabled]="disabled() || saving()"
-          (click)="aiAssistantRequested.emit()"
-          matTooltip="Assistant IA : générer, modifier ou expliquer le flow"
-          aria-label="Ouvrir l'assistant IA"
-        >
-          <span class="btn-icon" aria-hidden="true">✨</span>
-          <span>Assistant IA</span>
-        </button>
-
-        <button
-          matButton="text"
-          type="button"
-          class="toggle-btn"
-          [class.toggle-btn_active]="showConnections()"
-          (click)="toggleConnections.emit()"
-          matTooltip="Afficher ou masquer les lignes de raccordement SVG"
-        >
-          <span class="btn-icon" aria-hidden="true">☍</span>
-          <span>Liaisons</span>
-        </button>
-      </div>
-
-      <div class="command-group workbench-actions">
-        <div class="dock-toggles" role="group" aria-label="Affichage des volets du workbench">
-          <button
-            type="button"
-            class="dock-toggle-btn"
-            [class.dock-toggle-btn_active]="paletteOpen()"
-            (click)="togglePalette.emit()"
-            matTooltip="Afficher/masquer la palette de blocs (Ctrl+B)"
-            aria-label="Basculer la palette de blocs"
-          >
-            <span class="btn-glyph" aria-hidden="true">▦</span>
-            <span class="toggle-label">Palette</span>
-          </button>
-
-          <button
-            type="button"
-            class="dock-toggle-btn"
-            [class.dock-toggle-btn_active]="trayOpen()"
-            (click)="toggleTray.emit()"
-            matTooltip="Afficher/masquer le volet de simulation et diagnostics"
-            aria-label="Basculer le volet de simulation"
-          >
-            <span class="btn-glyph" aria-hidden="true">≡</span>
-            <span class="toggle-label">Simulation</span>
-          </button>
-        </div>
-
         <button
           matButton="filled"
           type="button"
           class="save-btn"
           [disabled]="saving() || disabled() || !canSave()"
           (click)="saveRequested.emit()"
-          matTooltip="Enregistrer ou publier le flow (Ctrl+S)"
+          matTooltip="Enregistrer (Ctrl+S)"
         >
-          @if (saving()) {
-            <span>Enregistrement…</span>
-          } @else {
-            <span class="save-icon" aria-hidden="true">💾</span>
-            <span>Enregistrer</span>
-          }
+          <app-icon name="save" /> {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
         </button>
+        <button
+          mat-icon-button
+          type="button"
+          [matMenuTriggerFor]="moreMenu"
+          aria-label="Autres actions du flow"
+          matTooltip="Autres actions"
+        >
+          <app-icon name="more" />
+        </button>
+        <mat-menu #moreMenu="matMenu">
+          <button
+            mat-menu-item
+            [disabled]="disabled() || validating()"
+            (click)="validateRequested.emit()"
+          >
+            <app-icon name="check" /> {{ validating() ? 'Vérification…' : 'Vérifier le flow' }}
+          </button>
+          @if (canCreatePack()) {
+            <button
+              mat-menu-item
+              [disabled]="disabled() || saving()"
+              (click)="packCreationRequested.emit()"
+            >
+              <app-icon name="pack" /> Créer un pack
+            </button>
+          }
+          <button mat-menu-item (click)="simulationSettingsRequested.emit()">
+            <app-icon name="settings" /> Profil de test
+          </button>
+          <button
+            mat-menu-item
+            (click)="toggleTray.emit()"
+            aria-label="Basculer le volet de simulation"
+          >
+            <app-icon name="play" /> Résultats du test
+          </button>
+          <button mat-menu-item (click)="toggleConnections.emit()">
+            <app-icon name="link" />
+            {{ showConnections() ? 'Masquer les liaisons' : 'Afficher les liaisons' }}
+          </button>
+          <ng-content select="[editor-options]" />
+          @if (canRestoreAiProposal()) {
+            <button mat-menu-item (click)="restoreAiProposalRequested.emit()">
+              <app-icon name="undo" /> Annuler la proposition IA
+            </button>
+          }
+        </mat-menu>
       </div>
     </header>
   `,
@@ -236,278 +201,166 @@ import { MediaType } from '../../../shared/models/media-type';
       display: block;
       width: 100%;
     }
-
     .command-bar {
-      min-height: 58px;
-      padding: 6px 16px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      gap: 8px 16px;
+      min-height: 56px;
+      padding: 8px 16px;
       background: var(--surface-container);
-      border-bottom: 1px solid var(--border-subtle);
-      box-shadow: var(--elevation-1);
     }
-
     .command-group {
       display: flex;
       align-items: center;
-      gap: 10px;
-    }
-
-    .navigation-group {
-      flex: 1 1 auto;
+      gap: 8px;
       min-width: 0;
     }
-
+    .navigation-group {
+      flex: 1 1 320px;
+    }
     .back-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--text-secondary);
-      font-weight: 600;
-      text-decoration: none;
-      padding: 0 10px;
-      height: 36px;
-      border-radius: var(--radius-pill);
-      transition: background 0.15s ease;
-
-      &:hover {
-        background: var(--surface-container-high);
-        color: var(--text-primary);
-      }
+      color: var(--text-primary);
+      flex-shrink: 0;
     }
-
-    .back-icon {
-      font-size: 16px;
-    }
-
     .title-container {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
-      gap: 10px;
+      flex-wrap: wrap;
+      gap: 8px;
       min-width: 0;
     }
-
     .flow-title {
       margin: 0;
+      padding: 4px;
       font-size: var(--font-title-lg);
       font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--text-primary);
-      display: inline-flex;
+      display: flex;
       align-items: center;
       gap: 8px;
       cursor: pointer;
       border-radius: var(--radius-sm);
-      padding: 2px 6px;
-      transition: background 0.15s ease;
-
-      &:hover {
-        background: var(--surface-container-high);
-      }
-
-      &:focus-visible {
-        outline: 2px solid var(--accent);
-      }
+      overflow-wrap: anywhere;
     }
-
+    .flow-title:focus-visible {
+      outline: 2px solid var(--accent);
+    }
     .edit-hint {
-      font-size: 13px;
-      opacity: 0.5;
+      opacity: 0.6;
+      width: 16px;
+      height: 16px;
     }
-
     .title-input {
-      font-size: var(--font-title-lg);
+      min-width: 0;
+      max-width: 100%;
+      font: inherit;
       font-weight: 700;
-      font-family: inherit;
-      color: var(--text-primary);
       background: var(--surface-container-highest);
+      color: var(--text-primary);
+      padding: 8px;
       border: 1px solid var(--accent);
       border-radius: var(--radius-sm);
-      padding: 4px 8px;
-      outline: none;
-      min-width: 220px;
     }
-
     .status-pills {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 6px;
     }
-
-    .media-type-pill {
-      display: inline-flex;
-      align-items: center;
-      padding: 3px 10px;
-      border-radius: var(--radius-pill);
-      font-size: var(--font-label);
-      font-weight: 600;
-      background: var(--surface-container-highest);
-      color: var(--text-secondary);
-      text-transform: capitalize;
-    }
-
-    .state-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 3px 10px;
-      border-radius: var(--radius-pill);
-      font-size: var(--font-label);
-      font-weight: 600;
-
-      &_unsaved {
-        background: var(--warning-soft);
-        color: var(--warning);
-      }
-
-      &_published {
-        background: var(--success-soft);
-        color: var(--success);
-      }
-
-      &_draft {
-        background: var(--accent-soft);
-        color: var(--accent);
-      }
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-
-      &_amber {
-        background: var(--warning);
-        box-shadow: 0 0 6px var(--warning);
-        animation: pulse 1.8s infinite ease-in-out;
-      }
-
-      &_green {
-        background: var(--success);
-      }
-
-      &_blue {
-        background: var(--accent);
-      }
-    }
-
-    @keyframes pulse {
-      0%,
-      100% {
-        opacity: 1;
-        transform: scale(1);
-      }
-      50% {
-        opacity: 0.45;
-        transform: scale(0.85);
-      }
-    }
-
+    .media-type-pill,
+    .state-pill,
     .backup-pill {
-      font-size: 11px;
-      color: var(--text-muted);
-      padding: 2px 6px;
-      border-radius: var(--radius-xs);
-      background: var(--surface-container-low);
-
-      &_ready {
-        color: var(--success);
-      }
-
-      &_failed {
-        color: var(--danger);
-      }
-    }
-
-    .tool-actions {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 6px;
-    }
-
-    .btn-icon {
-      margin-right: 4px;
-      font-size: 13px;
-    }
-
-    .toggle-btn {
-      color: var(--text-secondary);
+      padding: 4px 10px;
       border-radius: var(--radius-pill);
-
-      &_active {
-        background: var(--surface-container-highest);
-        color: var(--accent);
-        font-weight: 600;
-      }
-    }
-
-    .workbench-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .dock-toggles {
-      display: inline-flex;
-      align-items: center;
-      background: var(--surface-container-high);
-      border-radius: var(--radius-pill);
-      padding: 2px;
-      border: 1px solid var(--border-subtle);
-    }
-
-    .dock-toggle-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 5px 10px;
-      border: none;
-      background: transparent;
-      color: var(--text-muted);
       font-size: var(--font-label);
-      font-weight: 600;
-      border-radius: var(--radius-pill);
-      cursor: pointer;
-      transition: all 0.16s ease;
-
-      &:hover {
-        color: var(--text-primary);
-        background: var(--surface-container-highest);
+      background: var(--surface-container-high);
+      color: var(--text-secondary);
+    }
+    .state-pill_unsaved {
+      background: var(--warning-soft);
+      color: var(--text-primary);
+    }
+    .state-pill_published {
+      background: var(--success-soft);
+      color: var(--text-primary);
+    }
+    .state-pill_draft {
+      background: var(--accent-soft);
+      color: var(--text-primary);
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .status-dot_green {
+      background: var(--success);
+    }
+    .status-dot_amber {
+      background: var(--warning);
+    }
+    .status-dot_blue {
+      background: var(--accent);
+    }
+    .backup-pill_ready {
+      color: var(--success);
+    }
+    .backup-pill_failed {
+      color: var(--danger);
+    }
+    .workbench-actions {
+      flex-wrap: wrap;
+    }
+    .workbench-actions > button {
+      flex-shrink: 0;
+    }
+    .workbench-actions button:not(.mat-mdc-icon-button) app-icon {
+      margin-inline-end: 6px;
+    }
+    .mobile-toolbar-break {
+      display: none;
+    }
+    @media (max-width: 768px) {
+      .command-bar {
+        padding: 6px 8px;
+        gap: 4px;
       }
-
-      &_active {
-        background: var(--surface);
-        color: var(--accent);
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+      .navigation-group {
+        flex-basis: 100%;
       }
-    }
-
-    .btn-glyph {
-      font-size: 14px;
-    }
-
-    .save-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 600;
-    }
-
-    .save-icon {
-      font-size: 14px;
-    }
-
-    @media (max-width: 960px) {
-      .toggle-label {
+      .flow-title {
+        font-size: var(--font-title-sm);
+      }
+      .workbench-actions {
+        gap: 4px;
+        flex-wrap: wrap;
+        width: 100%;
+        overflow: visible;
+        padding-block: 4px;
+      }
+      .workbench-actions > * {
+        flex-shrink: 0;
+      }
+      .mobile-toolbar-break {
+        display: block;
+        flex-basis: 100%;
+        height: 0;
+      }
+      .save-btn app-icon {
         display: none;
       }
-      .dock-toggle-btn {
-        padding: 6px 8px;
+      .add-suffix {
+        display: none;
+      }
+      .workbench-actions > button:not(.mat-mdc-icon-button) {
+        padding-inline: 10px;
+      }
+      .backup-pill {
+        display: none;
       }
     }
   `,
@@ -541,8 +394,8 @@ export class FlowCommandBarComponent {
   readonly saveRequested = output<void>();
   readonly validateRequested = output<void>();
   readonly simulateRequested = output<void>();
+  readonly simulationSettingsRequested = output<void>();
   readonly packCreationRequested = output<void>();
-  readonly aiAssistantRequested = output<void>();
   readonly restoreAiProposalRequested = output<void>();
   readonly canRestoreAiProposal = input(false);
   readonly togglePalette = output<void>();

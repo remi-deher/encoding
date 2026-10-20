@@ -1,4 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { model } from '@angular/core';
+import { IconComponent } from '../../../shared/ui/icon.component';
+import { CdkDrag } from '@angular/cdk/drag-drop';
+import { FlowPaletteDrag } from '../../../shared/ui/flow-palette-drag';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
@@ -12,11 +24,12 @@ import { MediaType } from '../../../shared/models/media-type';
 @Component({
   selector: 'app-flow-palette-dock',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatTooltipModule],
+  imports: [IconComponent, CdkDrag, MatButtonModule, MatTooltipModule],
   template: `
     <aside
       class="palette-dock"
       [class.palette-dock_collapsed]="!opened()"
+      [class.palette-dock_dragging]="paletteDrag.component() !== null"
       aria-label="Palette des composants du flow"
     >
       @if (opened()) {
@@ -25,13 +38,23 @@ import { MediaType } from '../../../shared/models/media-type';
             <span class="dock-glyph" aria-hidden="true">▦</span>
             <h2 class="dock-title">Composants & Packs</h2>
             <button
+              mat-icon-button
+              type="button"
+              [attr.aria-pressed]="pinned()"
+              aria-label="Garder la palette ouverte après un ajout"
+              matTooltip="Garder la palette ouverte"
+              (click)="pinned.set(!pinned())"
+            >
+              <app-icon name="pin" />
+            </button>
+            <button
               type="button"
               class="dock-close-btn"
               (click)="openedChange.emit(false)"
               matTooltip="Masquer la palette (Ctrl+B)"
               aria-label="Masquer la palette"
             >
-              ‹
+              <app-icon name="close" />
             </button>
           </div>
 
@@ -194,7 +217,7 @@ import { MediaType } from '../../../shared/models/media-type';
                   <div class="pack-card-meta">
                     <span class="meta-tag">Média : {{ pack.mediaType }}</span>
                   </div>
-                  <button type="button" class="insert-pack-btn">Insérer le pack →</button>
+                  <button type="button" class="insert-pack-btn">Insérer le pack</button>
                 </div>
               } @empty {
                 <p class="empty-state">
@@ -207,6 +230,12 @@ import { MediaType } from '../../../shared/models/media-type';
               @for (component of filteredComponents(); track component.id) {
                 <div
                   class="component-card"
+                  cdkDrag
+                  [cdkDragDisabled]="isUnavailable(component) || component.kind === 'input'"
+                  [cdkDragStartDelay]="{ mouse: 0, touch: 200 }"
+                  (cdkDragStarted)="paletteDrag.component.set(component)"
+                  (cdkDragMoved)="paletteDrag.move($event.pointerPosition)"
+                  (cdkDragEnded)="paletteDrag.finish($event.dropPoint); $event.source.reset()"
                   tabindex="0"
                   role="button"
                   [style.--component-accent]="colors(component).color"
@@ -260,6 +289,12 @@ import { MediaType } from '../../../shared/models/media-type';
       &_collapsed {
         width: 0;
         border-right: none;
+      }
+    }
+    @media (max-width: 768px) {
+      .palette-dock_dragging {
+        width: 48px;
+        transition: none;
       }
     }
     .dock-header {
@@ -478,6 +513,13 @@ import { MediaType } from '../../../shared/models/media-type';
         border-color: var(--border-strong);
       }
     }
+    .component-card.cdk-drag:not(.cdk-drag-disabled) {
+      cursor: grab;
+    }
+    .component-card.cdk-drag-preview {
+      box-shadow: var(--elevation-3);
+      cursor: grabbing;
+    }
     .component-card_unavailable {
       opacity: 0.68;
       border-style: dashed;
@@ -576,6 +618,7 @@ import { MediaType } from '../../../shared/models/media-type';
   `,
 })
 export class FlowPaletteDockComponent {
+  protected readonly paletteDrag = inject(FlowPaletteDrag);
   readonly opened = input(true);
   readonly components = input<readonly FlowComponentDefinition[]>([]);
   readonly otherMediaComponents = input<readonly FlowComponentDefinition[]>([]);
@@ -585,6 +628,7 @@ export class FlowPaletteDockComponent {
   readonly destinationLabel = input<string | null>(null);
 
   readonly openedChange = output<boolean>();
+  readonly pinned = model(false);
   readonly componentSelected = output<FlowComponentDefinition>();
   readonly packSelected = output<FlowComponentPackSummary>();
   readonly cancelInsertion = output<void>();

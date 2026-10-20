@@ -1,3 +1,8 @@
+import { IconComponent } from './icon.component';
+import { FlowSimulationStatusComponent } from './flow-simulation-status.component';
+import { SimulationResult } from '../models/flow-simulation';
+import { flowBlockSummary } from '../models/flow-block-summary';
+import { FlowComponentDrop, FlowPaletteDrop, FlowPaletteDrag } from './flow-palette-drag';
 import { layoutFlowCanvas } from '../models/flow-canvas';
 import { FlowCanvasComponent } from './flow-canvas/flow-canvas.component';
 import { ContextActionsDirective, ContextActionPosition } from './context-actions.directive';
@@ -21,6 +26,7 @@ import {
   output,
   inject,
   ElementRef,
+  TemplateRef,
   viewChildren,
   viewChild,
   signal,
@@ -58,6 +64,9 @@ import {
   selector: 'app-flow-graph-editor',
   imports: [
     NgTemplateOutlet,
+    IconComponent,
+    FlowSimulationStatusComponent,
+    FlowComponentDrop,
     FlowCanvasComponent,
     ContextActionsDirective,
     ContextActionMenuComponent,
@@ -74,6 +83,37 @@ import {
   styleUrl: './flow-graph-editor.component.scss',
 })
 export class FlowGraphEditorComponent {
+  protected readonly paletteDrag = inject(FlowPaletteDrag);
+  readonly componentDropped = output<FlowPaletteDrop>();
+  protected readonly canvas = viewChild(FlowCanvasComponent);
+  readonly toolbar = viewChild<TemplateRef<unknown>>('toolbar');
+  readonly simulationResult = input<SimulationResult | null>(null);
+  readonly simulationDetailsRequested = output<void>();
+  readonly options = viewChild<TemplateRef<unknown>>('options');
+  protected summary(node: FlowGraphNode): string {
+    return flowBlockSummary(node, this.mediaType());
+  }
+  protected selectStep(node: FlowGraphNode, event: MouseEvent): void {
+    this.selectedNodeId.set(node.id);
+    if (
+      !(event.target instanceof Element) ||
+      event.target.closest('button, input, select, textarea, a') ||
+      node.component.kind === 'pack'
+    )
+      return;
+    this.configurationRequested.emit(node.id);
+  }
+  protected foldAllBranches(fold: boolean): void {
+    this.foldedBranches.set(
+      fold
+        ? new Set(
+            this.visualNodes().flatMap((node) =>
+              node.component.outputs.map((output) => node.id + ':' + output.id),
+            ),
+          )
+        : new Set(),
+    );
+  }
   readonly layoutKey = input('flow');
   readonly duplicateRequested = output<string>();
   readonly aiRequested = output<string>();
@@ -150,7 +190,7 @@ export class FlowGraphEditorComponent {
     }
     if (changed) this.canvasPositions.set(positions);
   }
-  protected setCanvasPosition(event: { nodeId: string; position: FlowGraphPosition }): void {
+  setCanvasPosition(event: { nodeId: string; position: FlowGraphPosition }): void {
     this.canvasPositions.update((positions) =>
       new Map(positions).set(event.nodeId, event.position),
     );
@@ -283,9 +323,7 @@ export class FlowGraphEditorComponent {
   private readonly inputs = viewChildren<ElementRef<HTMLElement>>('inputPort');
   private observer?: ResizeObserver;
   private readonly compactPreference = signal<boolean | null>(null);
-  protected readonly compactView = computed(
-    () => this.compactPreference() ?? this.nodes().length >= 10,
-  );
+  protected readonly compactView = computed(() => this.compactPreference() ?? true);
   protected readonly expandedPacks = signal<ReadonlySet<string>>(new Set());
   protected readonly pendingConnection = signal<FlowContinuationSource | null>(null);
   protected readonly drawnConnections = signal<readonly FlowLinkDrawing[]>([]);
@@ -520,7 +558,7 @@ export class FlowGraphEditorComponent {
       }),
     );
   }
-  protected add(node: FlowGraphNode, output: FlowComponentOutput): void {
+  protected add(node: FlowGraphNode, output: FlowComponentOutput, drop?: FlowPaletteDrop): void {
     const binding = this.packForVisualNode(node)?.outputs.find(
       (candidate) => candidate.id === output.id,
     );
@@ -530,7 +568,9 @@ export class FlowGraphEditorComponent {
           .find((candidate) => candidate.id === sourceNodeId)
           ?.component.outputs.find((candidate) => candidate.id === binding.sourceOutputId)
       : output;
-    if (actualOutput) this.branchComponentRequested.emit({ sourceNodeId, output: actualOutput });
+    if (!actualOutput) return;
+    if (drop) this.componentDropped.emit({ ...drop, sourceNodeId, output: actualOutput });
+    else this.branchComponentRequested.emit({ sourceNodeId, output: actualOutput });
   }
   protected disconnect(node: FlowGraphNode, output: FlowComponentOutput): void {
     const binding = this.packForVisualNode(node)?.outputs.find(

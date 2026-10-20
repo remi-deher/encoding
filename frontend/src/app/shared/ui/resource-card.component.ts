@@ -1,3 +1,4 @@
+import { IconComponent } from './icon.component';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -61,7 +62,7 @@ export interface ResourceCardMeter {
 @Component({
   selector: 'app-resource-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatButtonModule, MatCheckboxModule, MatMenuModule, StatusBadgeComponent],
+  imports: [IconComponent, MatButtonModule, MatCheckboxModule, MatMenuModule, StatusBadgeComponent],
   template: `
     <article class="resource-card" [class.is-selected]="active()" [attr.aria-label]="title()">
       <header class="resource-card-head">
@@ -74,7 +75,12 @@ export interface ResourceCardMeter {
           />
         }
         @if (osFamily(); as os) {
-          <div class="resource-card-os-icon" [attr.data-os]="os" [attr.title]="osLabel()" aria-hidden="true">
+          <div
+            class="resource-card-os-icon"
+            [attr.data-os]="os"
+            [attr.title]="osLabel()"
+            aria-hidden="true"
+          >
             @switch (os) {
               @case ('linux') {
                 <svg viewBox="0 0 24 24" class="os-svg">
@@ -124,7 +130,10 @@ export interface ResourceCardMeter {
               <span class="resource-card-badge">{{ badge }}</span>
             }
             @for (acc of acceleratorBadges(); track acc.label) {
-              <span class="resource-card-badge resource-card-badge_accelerator" [attr.data-tone]="acc.tone ?? 'neutral'">
+              <span
+                class="resource-card-badge resource-card-badge_accelerator"
+                [attr.data-tone]="acc.tone ?? 'neutral'"
+              >
                 {{ acc.label }}
               </span>
             }
@@ -284,7 +293,9 @@ export interface ResourceCardMeter {
 
         <footer class="resource-card-foot">
           <span class="resource-card-note">{{ note() }}</span>
-          <button matButton="text" type="button" (click)="open.emit()">{{ openLabel() }} ›</button>
+          <button matButton="text" type="button" (click)="open.emit()">
+            {{ openLabel() }} <app-icon name="right" />
+          </button>
         </footer>
       }
     </article>

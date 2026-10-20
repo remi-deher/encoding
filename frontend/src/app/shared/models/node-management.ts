@@ -301,13 +301,17 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
             else if (av1Sw) codecBadges.push({ label: 'AV1 (CPU)', tone: 'neutral' });
 
             // HEVC / H.265
-            const hevcHw = ['hevc_nvenc', 'hevc_qsv', 'hevc_vaapi'].some((id) => usableChecks.has(id));
+            const hevcHw = ['hevc_nvenc', 'hevc_qsv', 'hevc_vaapi'].some((id) =>
+              usableChecks.has(id),
+            );
             const hevcSw = usableChecks.has('libx265') || rawEncoders.has('libx265');
             if (hevcHw) codecBadges.push({ label: 'HEVC / H.265 (Matériel)', tone: 'success' });
             else if (hevcSw) codecBadges.push({ label: 'HEVC / H.265 (CPU)', tone: 'neutral' });
 
             // H.264
-            const h264Hw = ['h264_nvenc', 'h264_qsv', 'h264_vaapi'].some((id) => usableChecks.has(id));
+            const h264Hw = ['h264_nvenc', 'h264_qsv', 'h264_vaapi'].some((id) =>
+              usableChecks.has(id),
+            );
             const h264Sw = usableChecks.has('libx264') || rawEncoders.has('libx264');
             if (h264Hw) codecBadges.push({ label: 'H.264 (Matériel)', tone: 'success' });
             else if (h264Sw) codecBadges.push({ label: 'H.264 (CPU)', tone: 'neutral' });
@@ -483,7 +487,7 @@ export function clusterJoinSteps(data: JoinPresentation): readonly GuidedStep[] 
     {
       id: 'waiting',
       label: 'Approbation',
-      description: `Demande envoyée à ${name}. Un administrateur doit la vérifier depuis Nœuds → Cluster → Demandes de rattachement.`,
+      description: `Demande envoyée à ${name}. Un administrateur doit la vérifier depuis Nœuds, puis Cluster, puis Demandes de rattachement.`,
       heroCode: code
         ? {
             code,
@@ -500,7 +504,9 @@ export function clusterJoinSteps(data: JoinPresentation): readonly GuidedStep[] 
           'Le rattachement précédent est conservé pendant la vérification',
           [
             { label: 'Nœud demandeur', description: data.status?.name ?? 'Ce nœud' },
-            ...(code ? [] : [{ label: 'Code à comparer', description: 'Lecture du code de vérification…' }]),
+            ...(code
+              ? []
+              : [{ label: 'Code à comparer', description: 'Lecture du code de vérification…' }]),
             ...(expiry ? [{ label: 'Demande valable jusqu’au', description: expiry }] : []),
             ...(data.pairing?.pairingKey || data.status?.pairingKey
               ? [
@@ -558,8 +564,7 @@ export function reconciliationBannerPresentation(
   if (!status.enabled) {
     return {
       title: 'Synchronisation entre serveurs inactive',
-      description:
-        `${status.disabledReason ?? 'Le rattachement du serveur au cluster n’est pas terminé.'} Sans ce maillage, chaque serveur ne voit que ses données locales.`,
+      description: `${status.disabledReason ?? 'Le rattachement du serveur au cluster n’est pas terminé.'} Sans ce maillage, chaque serveur ne voit que ses données locales.`,
       isAlert: true,
     };
   }
