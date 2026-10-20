@@ -598,7 +598,7 @@ public sealed class AiAssistantService(
                 || name.Equals(".editorconfig", StringComparison.OrdinalIgnoreCase)
                 || name.Equals(".env", StringComparison.OrdinalIgnoreCase)
                 || name.StartsWith(".env.", StringComparison.OrdinalIgnoreCase);
-            var bytes = Encoding.UTF8.GetByteCount(content);
+            var bytes = System.Text.Encoding.UTF8.GetByteCount(content);
             if (name.Length is 0 or > 180 || (!supportedName && !AssistantTextFileExtensions.Contains(extension)))
                 throw new ArgumentException($"Le fichier « {name} » n’est pas dans un format texte pris en charge par l’assistant.");
             if (bytes > MaxAssistantFileBytes)
