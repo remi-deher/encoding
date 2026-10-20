@@ -77,7 +77,8 @@ public sealed record FlowConfigurationField(
     string? VisibleWhenValue = null,
     bool VisibleWhenEmpty = false,
     string? Importance = null,
-    string? Section = null);
+    string? Section = null,
+    string? Editor = null);
 
 public sealed record FlowSelectOption(
     string Value,

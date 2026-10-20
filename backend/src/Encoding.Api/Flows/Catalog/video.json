@@ -700,7 +700,8 @@
             "required": false,
             "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "indices"
           },
           {
             "id": "language",
@@ -709,7 +710,8 @@
             "required": false,
             "description": "Facultatif, par exemple fra ou eng.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "language"
           }
         ]
       },

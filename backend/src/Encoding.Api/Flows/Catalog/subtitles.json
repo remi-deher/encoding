@@ -39,7 +39,8 @@
             "required": false,
             "description": "Séparés par des virgules ; vide pour toutes les pistes de sous-titres.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "indices"
           }
         ]
       },
@@ -212,7 +213,8 @@
             "defaultValue": "Crunchyroll",
             "description": "Nom du sous-dossier du dossier de polices du nœud.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "font-set"
           },
           {
             "id": "fonts",
@@ -287,7 +289,8 @@
             "required": true,
             "description": "Référence à un fichier local ou à un résultat produit par le flow.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "artifact"
           },
           {
             "id": "language",
@@ -296,7 +299,8 @@
             "required": true,
             "description": "Code de langue, par exemple fra ou eng.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "language"
           },
           {
             "id": "trackName",
@@ -409,7 +413,8 @@
             "type": "text",
             "description": "Code de langue (fr, en, ja…). Vide : conserver la piste déjà par défaut, sinon la première hors commentaire.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "language"
           }
         ]
       },

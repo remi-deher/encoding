@@ -85,7 +85,8 @@
             "required": false,
             "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "indices"
           },
           {
             "id": "language",
@@ -94,7 +95,8 @@
             "required": false,
             "description": "Facultatif, par exemple fra ou eng.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "language"
           },
           {
             "id": "title",
@@ -204,7 +206,8 @@
             "required": false,
             "description": "Identifiants séparés par des virgules ; vide pour toutes les pistes du type choisi.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "indices"
           },
           {
             "id": "language",
@@ -213,7 +216,8 @@
             "required": false,
             "description": "Facultatif, par exemple fra ou eng.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "language"
           }
         ]
       },
@@ -405,7 +409,8 @@
             "required": true,
             "description": "Code de langue, par exemple fra ou eng.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "language"
           },
           {
             "id": "trackName",
@@ -543,7 +548,8 @@
             "required": false,
             "description": "Séparés par des virgules ; vide pour toutes les pièces jointes.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "indices"
           }
         ]
       },
@@ -609,7 +615,8 @@
             "required": false,
             "description": "Séparés par des virgules ; vide pour toutes les pièces jointes.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "indices"
           }
         ]
       },
@@ -732,7 +739,8 @@
             "required": true,
             "description": "Référence à un fichier local ou à un résultat produit par le flow.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "artifact"
           }
         ]
       },

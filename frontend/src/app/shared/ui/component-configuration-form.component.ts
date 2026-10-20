@@ -1,3 +1,5 @@
+import { ConfigurationReferenceFieldComponent } from './configuration-reference-field/configuration-reference-field.component';
+import { ConfigurationChoice } from '../models/configuration-choice';
 import { NgTemplateOutlet } from '@angular/common';
 import { flowFieldValidator } from './flow-configuration-controls';
 import { flowConfigurationValue } from '../models/flow-configuration';
@@ -46,6 +48,7 @@ type ConfigurationFormGroup = FormGroup<
   selector: 'app-component-configuration-form',
   imports: [
     NgTemplateOutlet,
+    ConfigurationReferenceFieldComponent,
     MatButtonModule,
     MatCheckboxModule,
     MatFormFieldModule,
@@ -241,7 +244,16 @@ type ConfigurationFormGroup = FormGroup<
                     />
                   }
                   @case ('text') {
-                    @if (field.id === 'code') {
+                    @if (field.editor) {
+                      <app-configuration-reference-field
+                        [field]="field"
+                        [value]="textValue(field.id)"
+                        [disabled]="busy()"
+                        [contextOptions]="referenceOptions()[field.editor] ?? []"
+                        [error]="configurationFieldError(field.id)"
+                        (valueChange)="setTextValue(field.id, $event)"
+                      />
+                    } @else if (field.id === 'code') {
                       <section class="code-field" [attr.aria-label]="field.label">
                         <h3>{{ field.label }}</h3>
                         @if (field.description) {
@@ -456,6 +468,7 @@ type ConfigurationFormGroup = FormGroup<
 export class ComponentConfigurationFormComponent implements OnChanges {
   private readonly scriptLibrary = inject(FlowScripts);
   private readonly profileLibrary = inject(EncodingProfiles);
+  readonly referenceOptions = input<Readonly<Record<string, readonly ConfigurationChoice[]>>>({});
   readonly schema = input.required<FlowComponentConfigurationSchema | undefined>();
   readonly values = input<FlowComponentConfiguration>({});
   readonly configuredSecrets = input<readonly string[]>([]);

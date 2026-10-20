@@ -97,6 +97,7 @@ public sealed class FlowComponentRegistry
                     || component.Outputs.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != component.Outputs.Count
                     || component.ConfigurationSchema.Fields.Select(f => f.Id).Distinct(StringComparer.Ordinal).Count() != component.ConfigurationSchema.Fields.Count
                     || component.ConfigurationSchema.Fields.Any(f => f.Importance is not (null or "basic" or "advanced")
+                        || f.Editor is not (null or "languages" or "language" or "node" or "node-group" or "flow-node" or "indices" or "labels" or "artifact" or "font-set")
                         || f.VisibleWhenFieldId is not null && !component.ConfigurationSchema.Fields.Any(other => other.Id == f.VisibleWhenFieldId))
                     || component.ConfigurationSchema.Fields.Any(f => f.Type is not ("text" or "number" or "boolean" or "select" or "condition-tree" or "script-reference" or "encoding-profile" or "video-encoder")))
                     throw new InvalidOperationException($"Descripteur invalide : {component.Id}.");

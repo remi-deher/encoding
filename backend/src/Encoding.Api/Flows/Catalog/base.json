@@ -652,7 +652,8 @@
             "importance": "basic",
             "section": "Paramètres",
             "visibleWhenFieldId": "mode",
-            "visibleWhenValue": "nodeState"
+            "visibleWhenValue": "nodeState",
+            "editor": "node"
           },
           {
             "id": "nodeStatus",
@@ -759,7 +760,8 @@
             "importance": "basic",
             "section": "Paramètres",
             "visibleWhenFieldId": "mode",
-            "visibleWhenValue": "block"
+            "visibleWhenValue": "block",
+            "editor": "flow-node"
           },
           {
             "id": "blockOutputs",

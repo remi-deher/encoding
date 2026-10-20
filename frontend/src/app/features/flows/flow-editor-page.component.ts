@@ -194,6 +194,13 @@ export class FlowEditorPageComponent {
   );
 
   protected readonly configuringNodeId = signal<string | undefined>(undefined);
+  protected configurationReferences() {
+    return {
+      'flow-node': this.nodes()
+        .filter((node) => node.component.kind === 'condition')
+        .map((node) => ({ value: node.id, label: node.name || node.component.name })),
+    };
+  }
   protected readonly nodes = signal<readonly FlowGraphNode[]>([]);
   protected readonly connections = signal<readonly FlowGraphConnection[]>([]);
   protected readonly componentPacks = signal<readonly FlowComponentPackInstance[]>([]);

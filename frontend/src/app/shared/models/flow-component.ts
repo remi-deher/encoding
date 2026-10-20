@@ -89,6 +89,16 @@ interface FlowComponentConfigurationFieldBase {
   readonly inline?: boolean;
   readonly importance?: 'basic' | 'advanced';
   readonly section?: string;
+  readonly editor?:
+    | 'languages'
+    | 'language'
+    | 'node'
+    | 'node-group'
+    | 'flow-node'
+    | 'indices'
+    | 'labels'
+    | 'artifact'
+    | 'font-set';
   readonly visibleWhenFieldId?: string;
   readonly visibleWhenValue?: string;
   readonly visibleWhenEmpty?: boolean;

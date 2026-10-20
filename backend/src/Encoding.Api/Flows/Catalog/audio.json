@@ -462,7 +462,8 @@
             "required": true,
             "description": "Référence à un fichier local ou à un résultat produit par le flow.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "artifact"
           },
           {
             "id": "language",
@@ -471,7 +472,8 @@
             "required": true,
             "description": "Code de langue, par exemple fra ou eng.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "language"
           },
           {
             "id": "trackName",
@@ -541,7 +543,8 @@
             "description": "Codes langues ISO-639 séparés par des virgules (ex: fra,eng,jpn).",
             "required": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "languages"
           },
           {
             "id": "keepUndefinedAudio",
@@ -571,7 +574,8 @@
             "description": "Codes langues des sous-titres à conserver, séparés par des virgules.",
             "required": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "editor": "languages"
           },
           {
             "id": "keepForcedSubtitles",
