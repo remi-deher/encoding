@@ -632,8 +632,8 @@ button.assistant-launcher {
     width: 100%;
     max-width: none;
     min-height: 0;
-    padding: var(--space-3) var(--space-4);
-    overflow: auto;
+    padding: 0;
+    overflow: hidden;
   }
 }
 

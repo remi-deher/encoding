@@ -19,7 +19,7 @@ import {
   afterRenderEffect,
   untracked,
 } from '@angular/core';
-import { CdkDrag, CdkDragHandle, CdkDragEnd } from '@angular/cdk/drag-drop';
+import { CdkDrag, CdkDragHandle, CdkDragEnd, CdkDragMove } from '@angular/cdk/drag-drop';
 import { MatButtonModule } from '@angular/material/button';
 import {
   FlowGraphNode,
@@ -105,6 +105,19 @@ export class FlowCanvasComponent {
     ),
   }));
   protected readonly scale = signal(1);
+  private readonly liveDrag = signal<{ id: string; x: number; y: number } | null>(null);
+  protected dragging(node: FlowGraphNode, event: CdkDragMove): void {
+    this.liveDrag.set({
+      id: node.id,
+      x: event.distance.x / this.scale(),
+      y: event.distance.y / this.scale(),
+    });
+  }
+  private wirePosition(node: FlowGraphNode): FlowGraphPosition {
+    const p = this.position(node),
+      drag = this.liveDrag();
+    return drag?.id === node.id ? { x: p.x + drag.x, y: p.y + drag.y } : p;
+  }
   protected readonly pending = signal<{ node: FlowGraphNode; output: FlowComponentOutput } | null>(
     null,
   );
@@ -158,6 +171,7 @@ export class FlowCanvasComponent {
       },
     });
     event.source.reset();
+    this.liveDrag.set(null);
   }
   protected zoom(delta: number): void {
     this.scale.update((s) => Math.max(0.2, Math.min(1.75, s + delta)));
@@ -197,6 +211,7 @@ export class FlowCanvasComponent {
       y = event.clientY,
       left = view.scrollLeft,
       top = view.scrollTop;
+    event.preventDefault();
     view.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => {
       view.scrollLeft = left - (e.clientX - x);
@@ -215,8 +230,8 @@ export class FlowCanvasComponent {
     const a = this.nodes().find((n) => n.id === edge.sourceNodeId),
       b = this.nodes().find((n) => n.id === edge.targetNodeId);
     if (!a || !b) return '';
-    const s = this.position(a),
-      t = this.position(b),
+    const s = this.wirePosition(a),
+      t = this.wirePosition(b),
       i = a.component.outputs.findIndex((o) => o.id === edge.sourceOutputId),
       y = s.y + 100 + i * 40;
     return `M ${s.x + 300} ${y} C ${s.x + 380} ${y} ${t.x - 80} ${t.y + 50} ${t.x} ${t.y + 50}`;
@@ -225,7 +240,7 @@ export class FlowCanvasComponent {
     const pending = this.pending(),
       p = this.pointer();
     if (!pending || !p) return '';
-    const a = this.position(pending.node),
+    const a = this.wirePosition(pending.node),
       y =
         a.y +
         100 +

@@ -147,16 +147,19 @@
         (instanceNameChange)="renameNode($event)"
         (saved)="saveNodeConfiguration($event)"
         (cancelled)="closeComponentEditor()"
-      />
-      @if (current.component.kind !== 'input') {
-        <button
-          matButton="text"
-          class="component-editor-delete"
-          (click)="deleteConfiguredNode(current.id)"
-        >
-          Supprimer ce bloc
-        </button>
-      }
+      >
+        @if (current.component.kind !== 'input') {
+          <button
+            matButton="text"
+            class="component-editor-delete"
+            form-secondary-actions
+            type="button"
+            (click)="deleteConfiguredNode(current.id)"
+          >
+            Supprimer ce bloc
+          </button>
+        }
+      </app-component-configuration-form>
     }
   </ng-template>
   <!-- Modal Dialog : Création de Pack -->

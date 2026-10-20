@@ -4,7 +4,7 @@
 
 La refonte conserve un seul graphe métier dans la page d’édition : nœuds, configurations, connexions et instances de packs. Deux vues du composant partagé `FlowGraphEditor` émettent les mêmes commandes vers cette page. Aucun changement de vue ne réécrit les connexions.
 
-- **Guidé** conserve les séquences, branches dépliables, suites communes, renvois et paramètres déclaratifs de 0010. Les colonnes ont une largeur minimale et s’étendent horizontalement dans le workspace ; elles ne sont plus comprimées ou empilées selon la profondeur. Le déplacement de séquences reste soumis aux invariants de 0010.
+- **Guidé** conserve les séquences, branches repliables, suites communes, renvois et paramètres déclaratifs de 0010. Les branches n’ont pas de panneau ni de compteur : leur libellé replie ou déplie directement leur chemin. Les colonnes gardent la largeur nécessaire aux blocs et s’étendent horizontalement dans le workspace. Une convergence apparaît après le chemin le plus long. Le déplacement de séquences reste soumis aux invariants de 0010.
 - **Canvas** permet le placement libre des blocs, le panoramique, le zoom et une surface extensible. Les positions sont des préférences locales du navigateur, indexées par identifiant de flow ; elles ne modifient ni la définition portable ni la sémantique d’exécution. Le placement initial est une projection déterministe qui conserve aussi les blocs détachés et les brouillons invalides.
 
 Les ajouts, suppressions, duplications et modifications utilisent les mutations communes de la page. Une copie est initialement détachée et conserve les paramètres, sans copier les liaisons. Les entrées et les frontières de packs ne se dupliquent pas individuellement. Les packs restent des blocs composites ; leurs ports externes sont traduits vers les composants réels avant la validation et la mutation.
@@ -13,7 +13,7 @@ La palette utilise le glisser-déposer CDK dans les deux vues. Déposer sur une 
 
 ## Présentation et inspection
 
-La palette est fermée par défaut. « Ajouter une étape » l’ouvre ; un ajout par clic la referme, sauf si elle est épinglée. L’ouverture de l’inspecteur ferme toujours la palette. Un clic sur le titre d’un bloc ouvre le tiroir partagé, contenu dans le workspace ; le flow reste visible à côté sur ordinateur. Les blocs sont allégés par défaut : titre, synthèse de trois paramètres scalaires déclarés inline au maximum et sorties. Les scripts, secrets et objets imbriqués restent dans l’inspecteur. Le menu permet de consulter les détails et de replier ou déplier les branches sans changer le graphe.
+La palette est fermée par défaut. « Ajouter une étape » l’ouvre ; un ajout par clic la referme, sauf si elle est épinglée. L’ouverture de l’inspecteur ferme toujours la palette. Un clic sur le titre d’un bloc ouvre le tiroir partagé, contenu dans le workspace ; le flow reste visible à côté sur ordinateur. Les blocs sont allégés par défaut : titre, synthèse de trois paramètres scalaires déclarés inline au maximum et sorties. Les scripts, secrets et objets imbriqués restent dans l’inspecteur. Le repli d’une branche est accessible directement depuis son libellé.
 
 Le formulaire commun active dans l’éditeur une divulgation progressive : champs requis ou déclarés inline d’abord, autres champs dans « Réglages avancés ». Tous les contrôles restent dans le même formulaire, avec leurs valeurs et validations ; le rendu complet reste le défaut des autres usages. Les champs numériques de configuration activent le contrat numérique du champ partagé, tandis que les formulaires de fiches conservent leur contrat texte.
 
@@ -23,7 +23,7 @@ Le formulaire commun active dans l’éditeur une divulgation progressive : cham
 
 Les sorties du catalogue restent la source de vérité. Une seule liaison est permise par sortie, plusieurs sorties peuvent rejoindre une entrée et les cycles libres sont refusés par le validateur partagé. Dans Canvas, glisser d’une sortie libre vers une entrée ou sélectionner successivement les deux points réalise la même commande. Une sortie occupée doit être explicitement déconnectée avant un nouveau raccordement.
 
-Les liaisons possèdent des actions accessibles par menu et au clavier. Guidé conserve le routage orthogonal avec évitement des cartes ; les chemins convergents rejoignent un même segment vertical avant l’entrée de l’étape commune. Les suites communes représentent des chemins alternatifs séquentiels, jamais une barrière de synchronisation parallèle.
+Les liaisons possèdent des actions accessibles par menu et au clavier. Guidé conserve le routage orthogonal avec évitement des cartes ; les chemins convergents rejoignent un même segment vertical avant l’entrée de l’étape commune. Le bouton « Étape » est placé sur la liaison, entre les blocs, avec un espace suffisant autour de son contrôle. Une sortie sans liaison reste proposée depuis son libellé ; elle ne crée aucune branche visible tant qu’elle n’est pas raccordée. Les suites communes représentent des chemins alternatifs séquentiels, jamais une barrière de synchronisation parallèle.
 
 ## Actions contextuelles et historique
 

@@ -1,6 +1,12 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 const ICONS = {
+  upload: 'M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6',
+  copy: 'M9 9h12v12H9ZM15 5V3H3v12h2',
+  refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-2l2 3M4 16l2 3a7 7 0 0 0 12-2',
+  server: 'M3 3h18v7H3Zm0 11h18v7H3ZM7 6h.01M7 17h.01',
+  terminal: 'm5 7 4 5-4 5M12 17h7',
+  api: 'm8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18',
   back: 'M19 12H5m7-7-7 7 7 7',
   forward: 'M5 12h14m-7-7 7 7-7 7',
   outward: 'M7 17 17 7M7 7h10v10',

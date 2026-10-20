@@ -16,7 +16,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
+import { IconComponent } from '../../../shared/ui/icon.component';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
@@ -50,7 +50,7 @@ import { aiEffortLabel, aiTypeLabel } from '../../ai/components/ai-model-selecti
     AiSessionHistoryComponent,
     FormsModule,
     MatButtonModule,
-    MatIconModule,
+    IconComponent,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,

@@ -1,6 +1,7 @@
 import { ContextActionsDirective, ContextActionPosition } from './context-actions.directive';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { IconComponent } from './icon.component';
 export interface FlowLinkDrawing {
   readonly id: string;
   readonly path: string;
@@ -10,7 +11,7 @@ export interface FlowLinkDrawing {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-links',
-  imports: [MatButtonModule, ContextActionsDirective],
+  imports: [MatButtonModule, ContextActionsDirective, IconComponent],
   templateUrl: './flow-links.html',
   styleUrl: './flow-links.scss',
 })

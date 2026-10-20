@@ -2,6 +2,8 @@
   display: block;
 }
 .structured-editor {
+  padding-block: var(--space-5);
+  box-sizing: border-box;
   width: max-content;
   min-width: 100%;
   margin-inline: auto;
@@ -26,7 +28,7 @@
   min-height: 12px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 76px;
 }
 .step-unit {
   min-width: 440px;
@@ -192,15 +194,27 @@
 }
 .branches {
   display: grid;
-  grid-template-columns: repeat(var(--branch-count), max-content);
-  gap: 16px;
+  grid-template-columns: var(--branch-columns);
+  gap: 56px;
   align-items: start;
-  margin: 28px 0 12px;
-}
-.branches > mat-expansion-panel {
-  min-width: 440px;
   width: max-content;
-  margin: 0;
+  margin: 28px auto 12px;
+}
+.branch-lane {
+  min-width: 0;
+}
+.branch-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 40px;
+  margin: 0 auto 16px;
+  padding: 0 12px;
+}
+.branch-lane > .sequence {
+  margin-top: 0;
 }
 .continuation-label {
   text-align: center;
@@ -212,6 +226,9 @@
   flex-direction: column;
   align-items: center;
   margin-top: 20px;
+}
+.insertion > button {
+  min-height: 40px;
 }
 .shared-reference {
   padding: 12px;
@@ -303,10 +320,6 @@ app-flow-canvas {
   .step-name {
     font-size: 20px;
   }
-}
-
-.branches > mat-expansion-panel:not(.mat-expanded) {
-  width: 440px;
 }
 
 .structured-editor {
