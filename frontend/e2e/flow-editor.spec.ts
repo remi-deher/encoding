@@ -318,21 +318,22 @@ test('canvas placement stays fixed when a connection changes or the view switche
           ]),
         ),
       );
+  await expect(page.locator('.canvas-node')).toHaveCount(5);
   const before = await positions();
   await page.getByRole('button', { name: 'Liaison success → Décision', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Supprimer la liaison', exact: true }).click();
-  expect(await positions()).toEqual(before);
+  await expect.poll(positions).toEqual(before);
   await page.getByRole('button', { name: 'Guidé', exact: true }).click();
   await expect(page.locator('.step-card')).toHaveCount(5);
   await page.getByRole('button', { name: 'Canvas', exact: true }).click();
-  expect(await positions()).toEqual(before);
+  await expect.poll(positions).toEqual(before);
   const source = page.locator('.canvas-node[data-node-id="Entrée"] .output');
   await source.click();
   await page.locator('.canvas-node[data-node-id="Décision"] .input').click();
   await expect(
     page.getByRole('button', { name: 'Liaison success → Décision', exact: true }),
   ).toHaveCount(1);
-  expect(await positions()).toEqual(before);
+  await expect.poll(positions).toEqual(before);
 });
 
 test('canvas exposes accessible controls and connection actions', async ({ page }) => {
