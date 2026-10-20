@@ -84,6 +84,16 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
                 var message = ValidateField(field, value, flow.MediaType,allowIncompleteConditions);
                 if (message is not null) Issue("field.invalid", path + "/configuration/" + Pointer(field.Id), message);
             }
+            if (node.Component?.ComponentId == "audio-convert-by-rules")
+            {
+                try { AudioRuleOptions.From(node.Configuration); }
+                catch (AudioRuleException error) { Issue("field.invalid", path + "/configuration/rules", error.Message); }
+            }
+            if (node.Configuration.TryGetValue("styleProfile", out var style) && style.ValueKind == JsonValueKind.String && style.GetString() == "custom")
+            {
+                try { AssStyleSettings.From(node.Configuration); }
+                catch (SubtitleException error) { Issue("field.invalid", path + "/configuration/fontFamily", error.Message); }
+            }
             if ((node.Component?.PluginId is "base" or "video") && (node.Component.ComponentId is "base-transcode-video" or "video-transcode"))
             {
                 var profile = TryGetEncodingProfile(node.Configuration);
@@ -280,6 +290,20 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
         if (empty) return field.Required ? "Ce paramètre est obligatoire." : null;
         switch (field.Type)
         {
+            case "record-list":
+                if (value.ValueKind != JsonValueKind.Array) return "Une liste de règles est attendue.";
+                if (value.GetArrayLength() < (field.MinItems ?? 0) || value.GetArrayLength() > (field.MaxItems ?? 64)) return "Nombre de lignes hors limites.";
+                foreach (var row in value.EnumerateArray())
+                {
+                    if (row.ValueKind != JsonValueKind.Object) return "Chaque ligne doit être un objet.";
+                    if (row.EnumerateObject().Any(property => !(field.ItemFields ?? []).Any(child => child.Id == property.Name))) return "Paramètre inconnu dans la ligne.";
+                    foreach (var child in field.ItemFields ?? [])
+                    {
+                        var childValue = row.TryGetProperty(child.Id, out var stored) ? stored : child.DefaultValue ?? default;
+                        if (ValidateField(child, childValue, mediaType, allowIncompleteConditions) is { } error) return child.Label + " : " + error;
+                    }
+                }
+                return null;
             case "condition-tree": return ConditionTree.Validate(value,mediaType,allowIncompleteConditions);
             case "text":
                 if(field.Id=="sourceFile" && value.ValueKind==JsonValueKind.String) {

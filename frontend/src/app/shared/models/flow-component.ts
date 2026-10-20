@@ -104,7 +104,15 @@ interface FlowComponentConfigurationFieldBase {
   readonly visibleWhenEmpty?: boolean;
 }
 
+export type FlowConfigurationRecord = Readonly<Record<string, string | number | boolean | null>>;
 export type FlowComponentConfigurationField =
+  | (FlowComponentConfigurationFieldBase & {
+      readonly type: 'record-list';
+      readonly itemFields: readonly FlowComponentConfigurationField[];
+      readonly defaultValue?: readonly FlowConfigurationRecord[];
+      readonly minItems?: number;
+      readonly maxItems?: number;
+    })
   | (FlowComponentConfigurationFieldBase & {
       readonly type: 'condition-tree';
       readonly defaultValue?: ConditionGroup;
@@ -192,7 +200,13 @@ export function getFlowConfigurationSchema(
 }
 
 export type FlowComponentConfigurationValue =
-  string | number | boolean | null | ConditionGroup | EncodingProfileSnapshot;
+  | string
+  | number
+  | boolean
+  | null
+  | ConditionGroup
+  | EncodingProfileSnapshot
+  | readonly FlowConfigurationRecord[];
 export type FlowComponentConfiguration = Readonly<Record<string, FlowComponentConfigurationValue>>;
 
 export function createDefaultFlowComponentConfiguration(

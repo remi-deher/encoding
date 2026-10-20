@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "subtitles",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Sous-titres",
   "supportedHostContractVersions": [
     1
@@ -54,7 +54,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -100,6 +101,10 @@
               {
                 "value": "none",
                 "label": "Aucun : ne pas toucher aux styles"
+              },
+              {
+                "value": "custom",
+                "label": "Style personnalisé (instantané du flow)"
               }
             ],
             "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices ».",
@@ -159,6 +164,52 @@
             "description": "Quand l’unique audio de référence n’est pas français, le sous-titre français (complet de préférence, non forcé) est marqué par défaut.",
             "importance": "basic",
             "section": "Titres et indicateurs"
+          },
+          {
+            "id": "fontFamily",
+            "label": "Famille de police",
+            "type": "text",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "defaultValue": "Trebuchet MS",
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontSize",
+            "label": "Taille sur une référence de 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 6,
+            "max": 80,
+            "defaultValue": 23,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontOutline",
+            "label": "Contour sur 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 0,
+            "max": 10,
+            "defaultValue": 2.5,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontMargin",
+            "label": "Marge basse sur 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 0,
+            "max": 100,
+            "defaultValue": 20,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
           }
         ]
       },
@@ -177,7 +228,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -241,7 +293,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -337,7 +390,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -436,7 +490,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -482,11 +537,61 @@
               {
                 "value": "none",
                 "label": "Aucun : ne pas toucher aux styles"
+              },
+              {
+                "value": "custom",
+                "label": "Style personnalisé (instantané du flow)"
               }
             ],
             "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices ».",
             "importance": "basic",
             "section": "Paramètres"
+          },
+          {
+            "id": "fontFamily",
+            "label": "Famille de police",
+            "type": "text",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "defaultValue": "Trebuchet MS",
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontSize",
+            "label": "Taille sur une référence de 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 6,
+            "max": 80,
+            "defaultValue": 23,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontOutline",
+            "label": "Contour sur 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 0,
+            "max": 10,
+            "defaultValue": 2.5,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontMargin",
+            "label": "Marge basse sur 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 0,
+            "max": 100,
+            "defaultValue": 20,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
           }
         ]
       },
@@ -504,7 +609,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "subtitles-style-ass",
@@ -549,11 +656,61 @@
               {
                 "value": "none",
                 "label": "Aucun : ne pas toucher aux styles"
+              },
+              {
+                "value": "custom",
+                "label": "Style personnalisé (instantané du flow)"
               }
             ],
             "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices ».",
             "importance": "basic",
             "section": "Paramètres"
+          },
+          {
+            "id": "fontFamily",
+            "label": "Famille de police",
+            "type": "text",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "defaultValue": "Trebuchet MS",
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontSize",
+            "label": "Taille sur une référence de 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 6,
+            "max": 80,
+            "defaultValue": 23,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontOutline",
+            "label": "Contour sur 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 0,
+            "max": 10,
+            "defaultValue": 2.5,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "fontMargin",
+            "label": "Marge basse sur 360 lignes",
+            "type": "number",
+            "importance": "basic",
+            "section": "Style personnalisé",
+            "min": 0,
+            "max": 100,
+            "defaultValue": 20,
+            "visibleWhenFieldId": "styleProfile",
+            "visibleWhenValue": "custom"
           }
         ]
       },
@@ -571,7 +728,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "subtitles-remove-duplicates",
@@ -618,7 +777,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "subtitles-detect-forced",
@@ -665,7 +826,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "subtitles-name-tracks",
@@ -726,7 +889,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "subtitles-default-audio",
@@ -778,7 +943,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     },
     {
       "id": "subtitles-snapshot-track-titles",
@@ -820,7 +987,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     }
   ]
 }

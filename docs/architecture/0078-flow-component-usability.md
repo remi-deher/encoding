@@ -32,3 +32,10 @@ Subtitles 1.1.0 ajoute sept opérations ciblées. FlowOperationConfiguration imp
 
 Les métadonnées editor restent compatibles avec les valeurs textuelles existantes. Les choix observés ne remplacent jamais une référence inconnue. Les chemins de travail et noms de jeux de polices restent saisissables : leur présence effective dépend du worker et est vérifiée lors du traitement.
 
+
+## Options de traitement
+
+Le champ record-list est une liste bornée d’objets à champs primitifs déclaratifs. Le backend valide les lignes et rejette les clés inconnues. La première règle audio correspondante décide ; aucune correspondance conserve la piste. Les étapes résultantes réutilisent le plan FFmpeg et les contrôles de disposition/LFE.
+
+Le redimensionnement conserve son comportement historique par défaut ; les résolutions prédéfinies et la réduction sans agrandissement sont explicites. La normalisation conserve le mode personnalisé et une passe par défaut ; deux passes analysent la source avant application des mesures finies. Les styles ASS personnalisés sont des instantanés de paramètres inclus dans la version du flow ; les compositions complexes restent préservées.
+

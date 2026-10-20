@@ -279,7 +279,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
-                    else if(id is "base-audio-rules" or "audio-rules")
+                    else if(id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules")
                     {
                         await EnsureScanAsync();
                         var rules=AudioRuleOptions.From(c); var audioPlan=AudioRulePlanner.Plan(context.CurrentMetadata!.Value,rules);
@@ -447,11 +447,19 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     else
                     {
                         await EnsureScanAsync();
-                        if(MediaActions.Text(c,"processingMode","direct")=="plan")
+                        IReadOnlyList<RuntimePlanStep> requested = [new(id,c,node.Id)];
+                        if (c.ContainsKey("trackSelection")) requested = MediaTrackSelection.Expand(requested, context.CurrentMetadata!.Value);
+                        if (id is "base-resize-video" or "video-resize")
+                        {
+                            var video = context.CurrentMetadata!.Value.GetProperty("streams").EnumerateArray().FirstOrDefault(stream => MediaTrackSelection.Text(stream,"codec_type") == "video");
+                            if (video.ValueKind == JsonValueKind.Object && !VideoResizePolicy.ShouldResize(c, MediaTrackSelection.Number(video,"width"), MediaTrackSelection.Number(video,"height"))) requested = [];
+                        }
+                        if (requested.Count == 0) output = "unchanged";
+                        else if(MediaActions.Text(c,"processingMode","direct")=="plan")
                         {
                             if(variables.TryGetValue("plan.tool",out var selected) && (IsFfmpegPlan(id)!=(selected.GetString()=="ffmpeg")))
                                 throw new MediaToolException("outil du plan incompatible avec cette action",1);
-                            context=context with { Plan=[..context.Plan,new RuntimePlanStep(id,c,node.Id)] };
+                            context=context with { Plan=[..context.Plan,..requested] };
                         }
                         else
                         {

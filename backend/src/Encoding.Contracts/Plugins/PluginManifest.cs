@@ -78,7 +78,10 @@ public sealed record FlowConfigurationField(
     bool VisibleWhenEmpty = false,
     string? Importance = null,
     string? Section = null,
-    string? Editor = null);
+    string? Editor = null,
+    IReadOnlyList<FlowConfigurationField>? ItemFields = null,
+    int? MinItems = null,
+    int? MaxItems = null);
 
 public sealed record FlowSelectOption(
     string Value,

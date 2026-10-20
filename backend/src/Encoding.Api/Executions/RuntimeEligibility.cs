@@ -58,7 +58,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             var component=registry.Resolve(node.Component);
 
             var matches = capabilities.Any(c =>
-                (c.ToolId == "plugin/" + pluginId && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component)))
+                (!isAliased && c.ToolId == "plugin/" + pluginId && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component)))
                 || (pluginId == "ai" && (componentId is "ai-translate-subtitles" or "ai-metadata-enricher") && c.ToolId == "ai-runtime" && c.Version == "1.0.0")
                 || (isAliased && c.ToolId == "plugin/" + targetPluginId)
                 || (isAliased && c.ToolId == "plugin/base" && IsBaseVersionSatisfied(c.Version, componentId))
@@ -144,6 +144,8 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                     else if(MediaCodecPolicy.VideoEncoder(codec,hardware,encoders) is null) return false;
                 }
             }
+            if (node.Component.ComponentId == "audio-convert-by-rules" && node.Configuration.TryGetValue("rules", out var audioRules) && audioRules.ValueKind == JsonValueKind.Array
+                && audioRules.EnumerateArray().Any(rule => MediaTrackSelection.Text(rule, "action") != "copy" && MediaCodecPolicy.AudioEncoder(MediaTrackSelection.Text(rule, "codec"), encoders) is null)) return false;
             if((node.Component.ComponentId is "base-audio-rules" or "audio-rules") && (MediaCodecPolicy.AudioEncoder("aac",encoders) is null || MediaCodecPolicy.AudioEncoder("ac3",encoders) is null)) return false;
             if((node.Component.ComponentId is "base-transcode-audio" or "audio-transcode") && node.Configuration.TryGetValue("audioCodec",out var audio)
                 && MediaCodecPolicy.AudioEncoder(audio.GetString()!,encoders) is null) return false;

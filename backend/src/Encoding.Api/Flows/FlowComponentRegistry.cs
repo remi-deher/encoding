@@ -96,10 +96,14 @@ public sealed class FlowComponentRegistry
                     || component.ConfigurationSchema.Version != 1
                     || component.Outputs.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != component.Outputs.Count
                     || component.ConfigurationSchema.Fields.Select(f => f.Id).Distinct(StringComparer.Ordinal).Count() != component.ConfigurationSchema.Fields.Count
+                    || component.ConfigurationSchema.Fields.Any(f => f.Type == "record-list" &&
+                        (f.ItemFields is null || f.ItemFields.Count == 0 || f.ItemFields.Any(child => child.Type is not ("text" or "number" or "boolean" or "select"))
+                        || f.ItemFields.Select(child => child.Id).Distinct().Count() != f.ItemFields.Count
+                        || (f.MinItems ?? 0) < 0 || (f.MaxItems ?? 64) > 64 || (f.MinItems ?? 0) > (f.MaxItems ?? 64)))
                     || component.ConfigurationSchema.Fields.Any(f => f.Importance is not (null or "basic" or "advanced")
                         || f.Editor is not (null or "languages" or "language" or "node" or "node-group" or "flow-node" or "indices" or "labels" or "artifact" or "font-set")
                         || f.VisibleWhenFieldId is not null && !component.ConfigurationSchema.Fields.Any(other => other.Id == f.VisibleWhenFieldId))
-                    || component.ConfigurationSchema.Fields.Any(f => f.Type is not ("text" or "number" or "boolean" or "select" or "condition-tree" or "script-reference" or "encoding-profile" or "video-encoder")))
+                    || component.ConfigurationSchema.Fields.Any(f => f.Type is not ("text" or "number" or "boolean" or "select" or "condition-tree" or "script-reference" or "encoding-profile" or "video-encoder" or "record-list")))
                     throw new InvalidOperationException($"Descripteur invalide : {component.Id}.");
                 var reference = new FlowComponentReference(
                     installed.Id,

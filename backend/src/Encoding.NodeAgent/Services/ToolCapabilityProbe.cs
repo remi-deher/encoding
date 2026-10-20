@@ -33,9 +33,9 @@ public sealed class ToolCapabilityProbe(
             var list = new List<NodeToolCapability>
             {
                 new("plugin/base", "1.7.0", ["general"], ["cpu"]),
-                new("plugin/video", "1.1.0", ["general"], []),
-                new("plugin/audio", "1.0.0", ["general"], []),
-                new("plugin/subtitles", "1.1.0", ["general"], []),
+                new("plugin/video", "1.2.0", ["general"], []),
+                new("plugin/audio", "1.1.0", ["general"], []),
+                new("plugin/subtitles", "1.2.0", ["general"], []),
                 new("plugin/mkv", "1.0.0", ["general"], []),
                 new("plugin/images", "1.0.0", ["general"], []),
                 new("plugin/probe", "1.0.0", ["general"], []),

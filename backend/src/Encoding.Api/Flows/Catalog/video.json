@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "video",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Vidéo",
   "supportedHostContractVersions": [
     1
@@ -269,7 +269,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -292,11 +293,46 @@
           "id": "error",
           "label": "Erreur",
           "description": "L’action n’a pas pu terminer son traitement."
+        },
+        {
+          "id": "unchanged",
+          "label": "Aucune modification",
+          "description": "Aucune piste correspondante ou dimensions déjà conformes : le média est conservé."
         }
       ],
       "configurationSchema": {
         "version": 1,
         "fields": [
+          {
+            "id": "resolution",
+            "label": "Résolution maximale",
+            "type": "select",
+            "importance": "basic",
+            "section": "Paramètres",
+            "options": [
+              {
+                "value": "custom",
+                "label": "Dimensions personnalisées"
+              },
+              {
+                "value": "720p",
+                "label": "720p"
+              },
+              {
+                "value": "1080p",
+                "label": "1080p"
+              },
+              {
+                "value": "1440p",
+                "label": "1440p"
+              },
+              {
+                "value": "2160p",
+                "label": "4K UHD"
+              }
+            ],
+            "defaultValue": "custom"
+          },
           {
             "id": "processingMode",
             "label": "Mode de traitement",
@@ -325,7 +361,9 @@
             "min": 1,
             "step": 1,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "visibleWhenFieldId": "resolution",
+            "visibleWhenValue": "custom"
           },
           {
             "id": "height",
@@ -336,7 +374,18 @@
             "min": 1,
             "step": 1,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "visibleWhenFieldId": "resolution",
+            "visibleWhenValue": "custom"
+          },
+          {
+            "id": "onlyIfLarger",
+            "label": "Réduire uniquement, sans agrandir",
+            "type": "boolean",
+            "importance": "basic",
+            "section": "Paramètres",
+            "defaultValue": false,
+            "description": "Ignore le redimensionnement si le média est déjà contenu dans les dimensions maximales."
           }
         ]
       },
@@ -350,7 +399,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -454,7 +504,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -565,7 +616,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -638,7 +690,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -725,7 +778,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -799,7 +853,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -876,7 +931,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
     }
   ]
 }

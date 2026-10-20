@@ -1,5 +1,7 @@
 import { ConfigurationReferenceFieldComponent } from './configuration-reference-field/configuration-reference-field.component';
 import { ConfigurationChoice } from '../models/configuration-choice';
+import { ConfigurationRecordListComponent } from './configuration-record-list/configuration-record-list.component';
+import { FlowConfigurationRecord } from '../models/flow-component';
 import { NgTemplateOutlet } from '@angular/common';
 import { flowFieldValidator } from './flow-configuration-controls';
 import { flowConfigurationValue } from '../models/flow-configuration';
@@ -48,6 +50,7 @@ type ConfigurationFormGroup = FormGroup<
   selector: 'app-component-configuration-form',
   imports: [
     NgTemplateOutlet,
+    ConfigurationRecordListComponent,
     ConfigurationReferenceFieldComponent,
     MatButtonModule,
     MatCheckboxModule,
@@ -90,6 +93,17 @@ type ConfigurationFormGroup = FormGroup<
                   <h3>{{ field.section }}</h3>
                 }
                 @switch (field.type) {
+                  @case ('record-list') {
+                    <app-configuration-record-list
+                      [field]="field"
+                      [value]="recordListValue(field.id)"
+                      [disabled]="busy()"
+                      (valueChange)="setRecordListValue(field.id, $event)"
+                    />
+                    @if (configurationFieldError(field.id)) {
+                      <p role="alert">{{ configurationFieldError(field.id) }}</p>
+                    }
+                  }
                   @case ('condition-tree') {
                     <section
                       class="condition-field"
@@ -586,6 +600,14 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     this.connectionTestRequested.emit(this.form.getRawValue());
   }
 
+  protected recordListValue(id: string): readonly FlowConfigurationRecord[] {
+    const value = this.form.controls[id]?.value;
+    return Array.isArray(value) ? value : [];
+  }
+  protected setRecordListValue(id: string, value: readonly FlowConfigurationRecord[]): void {
+    this.form.controls[id].setValue(value);
+    this.form.controls[id].markAsDirty();
+  }
   protected conditionValue(fieldId: string): ConditionGroup | undefined {
     const value = this.form.controls[fieldId]?.value;
     return value && typeof value === 'object' && 'kind' in value ? value : undefined;
@@ -613,7 +635,13 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   protected isFieldVisible(field: FlowComponentConfigurationField): boolean {
     if (!field.visibleWhenFieldId) return true;
     const value = this.form.controls[field.visibleWhenFieldId]?.value;
-    if (field.visibleWhenEmpty) return value === undefined || value === null || value === '';
+    if (field.visibleWhenEmpty)
+      return (
+        value === undefined ||
+        value === null ||
+        value === '' ||
+        (Array.isArray(value) && value.length === 0)
+      );
     return field.visibleWhenValue === undefined || value === field.visibleWhenValue;
   }
 

@@ -82,7 +82,7 @@
       "name": "Noms de pistes d\u0027origine",
       "component": {
         "pluginId": "subtitles",
-        "pluginVersion": "1.1.0",
+        "pluginVersion": "1.2.0",
         "componentId": "subtitles-track-names",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -111,7 +111,7 @@
       "name": "Vid\u00E9o HEVC",
       "component": {
         "pluginId": "video",
-        "pluginVersion": "1.1.0",
+        "pluginVersion": "1.2.0",
         "componentId": "video-transcode",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -131,7 +131,7 @@
       "name": "Audio par r\u00E8gles",
       "component": {
         "pluginId": "audio",
-        "pluginVersion": "1.0.0",
+        "pluginVersion": "1.1.0",
         "componentId": "audio-rules",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -158,7 +158,7 @@
       "name": "Sous-titres ASS",
       "component": {
         "pluginId": "subtitles",
-        "pluginVersion": "1.1.0",
+        "pluginVersion": "1.2.0",
         "componentId": "subtitles-manage",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -172,7 +172,7 @@
       "name": "Polices",
       "component": {
         "pluginId": "subtitles",
-        "pluginVersion": "1.1.0",
+        "pluginVersion": "1.2.0",
         "componentId": "subtitles-add-fonts",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -186,7 +186,7 @@
       "name": "Noms de pistes",
       "component": {
         "pluginId": "subtitles",
-        "pluginVersion": "1.1.0",
+        "pluginVersion": "1.2.0",
         "componentId": "subtitles-track-names",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
