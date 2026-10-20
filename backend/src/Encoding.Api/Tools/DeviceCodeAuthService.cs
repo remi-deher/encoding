@@ -317,6 +317,7 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             {
                 if (previous is null) runtime.DeleteClaudeToken();
                 else await File.WriteAllBytesAsync(path, previous, CancellationToken.None);
+                ConnectionChanged("claude-cli");
                 throw;
             }
         }
