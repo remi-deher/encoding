@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Encoding.Api.Auth;
 using Encoding.Api.Infrastructure;
+using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
@@ -15,6 +16,7 @@ public sealed class AiClusterTransport(ClusterPeerIdentityStore identity, Cluste
     AiClusterStore store, IHttpClientFactory clients, IConfiguration configuration)
 {
     public const string Path = "/api/v1/cluster/ai/exchange";
+    private const int MaxRpcBytes = 16 * 1024 * 1024;
     public Guid LocalId => identity.PeerId;
     public async Task<IReadOnlyList<string>> PeersAsync(CancellationToken ct) =>
         (await peers.GetPeerEndpointsAsync(ct)).Concat(health.GetStatus().Peers.Select(p => p.Url))
@@ -50,6 +52,26 @@ public sealed class AiClusterTransport(ClusterPeerIdentityStore identity, Cluste
         return await store.UnprotectAsync<T>(reply.Payload, "reply/" + id, cancellation.Token);
     }
 
+    public async Task<T> CallNodeAsync<T>(Guid nodeId, string operation, object value, TimeSpan timeout, CancellationToken ct)
+    {
+        if (nodeId == Guid.Empty || nodeId == LocalId)
+            throw new ArgumentException("Le nœud coordinateur distant est invalide.");
+        foreach (var url in await PeersAsync(ct))
+        {
+            try
+            {
+                var node = await CallAsync<AiNodeAvailability>(url, "availability", new { }, TimeSpan.FromSeconds(15), ct);
+                if (node.NodeId == nodeId)
+                    return await CallAsync<T>(url, operation, value, timeout, ct);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Keep searching known peer endpoints; never run the request on another coordinator.
+            }
+        }
+        throw new InvalidOperationException("Le coordinateur de cette conversation est indisponible. Réessayez lorsque ce nœud sera joignable.");
+    }
+
     public async Task<IResult> ReceiveAsync(HttpContext http, AiClusterService service, CancellationToken ct)
     {
         var bytes = await ReadAsync(http.Request.Body, ct);
@@ -77,7 +99,7 @@ public sealed class AiClusterTransport(ClusterPeerIdentityStore identity, Cluste
         int count;
         while ((count = await stream.ReadAsync(buffer, ct)) > 0)
         {
-            if (output.Length + count > 1024 * 1024) throw new ArgumentException("Message IA trop volumineux.");
+            if (output.Length + count > MaxRpcBytes) throw new ArgumentException("Message IA trop volumineux.");
             await output.WriteAsync(buffer.AsMemory(0, count), ct);
         }
         return output.ToArray();

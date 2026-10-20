@@ -1,5 +1,6 @@
 using Encoding.Api.Flows;
 using Encoding.Api.Tools;
+using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Tools;
 using Encoding.NodeAgent.Runtime;
@@ -120,21 +121,55 @@ public sealed class AiToolTests
     }
 
     [Fact]
-    public void FlowComponentRegistry_Registers_AiComponents()
+    public async Task RuntimeSubtitleTranslation_UsesBoundedBatches_AndKeepsCueTiming()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "subtitle-translation-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var sourcePath = Path.Combine(directory, "source.srt");
+            var source = string.Join("\n\n", Enumerable.Range(1, 21).Select(index =>
+                $"{index}\n00:00:{index:00},000 --> 00:00:{index:00},900\nCue {index}"));
+            await File.WriteAllTextAsync(sourcePath, source);
+            var configuration = new Dictionary<string, System.Text.Json.JsonElement>
+            {
+                ["batchSize"] = System.Text.Json.JsonSerializer.SerializeToElement(20),
+            };
+            var batchIndexes = new List<int>();
+            var outcome = await Encoding.NodeAgent.Runtime.Media.SubtitleTranslation.TranslateAsync(
+                configuration, sourcePath, directory, "translate-node",
+                (batchIndex, items) =>
+                {
+                    batchIndexes.Add(batchIndex);
+                    return Task.FromResult(new RuntimeAiSubtitleTranslationResponse(true,
+                        items.Select(item => item with { Text = "FR " + item.Text }).ToArray()));
+                }, CancellationToken.None);
+
+            Assert.Equal(new[] { 0, 1 }, batchIndexes);
+            Assert.NotNull(outcome.File);
+            var translated = await File.ReadAllTextAsync(outcome.File!);
+            Assert.Contains("1\n00:00:01,000 --> 00:00:01,900\nFR Cue 1", translated);
+            Assert.Contains("21\n00:00:21,000 --> 00:00:21,900\nFR Cue 21", translated);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void FlowComponentRegistry_AdvertisesOnlyAiComponentsWithRuntimeHandlers()
     {
         var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
-        var translateComp = registry.FindReference("ai-translate-subtitles");
-        Assert.NotNull(translateComp);
-        Assert.Equal("ai", translateComp.PluginId);
-
-        var enrichComp = registry.FindReference("ai-metadata-enricher");
-        Assert.NotNull(enrichComp);
-        Assert.Equal("ai", enrichComp.PluginId);
-
-        // Legacy aliases
-        var legacyTranslate = registry.FindReference("base-ai-translate-subtitles");
-        Assert.NotNull(legacyTranslate);
-        Assert.Equal("ai", legacyTranslate.PluginId);
+        Assert.NotNull(registry.FindReference("ai-translate-subtitles"));
+        Assert.NotNull(registry.FindReference("ai-metadata-enricher"));
+        Assert.Null(registry.FindReference("base-ai-translate-subtitles"));
+        Assert.Null(registry.FindReference("base-ai-metadata-enricher"));
+        var components = registry.Plugins.Single(plugin => plugin.Id == "ai").Components;
+        var translation = Assert.Single(components, component => component.Id == "ai-translate-subtitles");
+        Assert.Equal("video", translation.MediaType);
+        Assert.Contains("video", translation.SupportedFlowMediaTypes);
+        Assert.Contains("subtitles", translation.SupportedFlowMediaTypes);
+        var metadata = Assert.Single(components, component => component.Id == "ai-metadata-enricher");
+        Assert.Contains("video", metadata.SupportedFlowMediaTypes);
+        Assert.Contains("music", metadata.SupportedFlowMediaTypes);
     }
 
     [Fact]

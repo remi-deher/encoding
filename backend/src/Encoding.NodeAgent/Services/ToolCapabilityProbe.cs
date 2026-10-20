@@ -39,7 +39,7 @@ public sealed class ToolCapabilityProbe(
                 new("plugin/mkv", "1.0.0", ["general"], []),
                 new("plugin/images", "1.0.0", ["general"], []),
                 new("plugin/probe", "1.0.0", ["general"], []),
-                new("plugin/ai", "1.0.0", ["general"], []),
+                new("ai-runtime", "1.0.0", ["subtitles", "video", "music"], []),
                 new("plugin/nodes", "1.3.0", ["general"], []),
                 new("plugin/conditions", "1.2.0", ["general"], [])
             };

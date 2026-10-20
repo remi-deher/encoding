@@ -186,6 +186,45 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     {
                         // Scheduling enforces these constraints before assigning the file to this worker.
                     }
+                    else if(node.Component.PluginId=="ai" && id=="ai-metadata-enricher")
+                    {
+                        await EnsureScanAsync();
+                        var response=await client.PostAsync<RuntimeAiMetadataEnrichmentResponse>(
+                            $"executions/{lease.ExecutionId:D}/ai/metadata/enrich",
+                            new RuntimeAiMetadataEnrichmentRequest(lease.Epoch,started.InvocationId,node.Id,
+                                Path.GetFileName(current),lease.Flow.MediaType,context.CurrentMetadata!.Value),job.Token);
+                        if(response is not { Success:true, Metadata:{ } metadata }) output=response?.ErrorCode??"error";
+                        else
+                        {
+                            var sidecarName=Path.GetFileNameWithoutExtension(current)+".metadata.json";
+                            var sidecar=Path.Combine(directory,sidecarName);
+                            await File.WriteAllTextAsync(sidecar,JsonSerializer.Serialize(metadata,new JsonSerializerOptions(JsonSerializerDefaults.Web){WriteIndented=true}),job.Token);
+                            await ApplyOutcomeAsync(new(null,[sidecar]),node.Id);
+                        }
+                    }
+                    else if(node.Component.PluginId=="ai" && id=="ai-translate-subtitles")
+                    {
+                        await EnsureScanAsync();
+                        try
+                        {
+                            var translate = new Func<int,IReadOnlyList<RuntimeAiSubtitleItem>,Task<RuntimeAiSubtitleTranslationResponse>>(
+                                async (batchIndex,items)=>await client.PostAsync<RuntimeAiSubtitleTranslationResponse>(
+                                    $"executions/{lease.ExecutionId:D}/ai/subtitles/translate",
+                                    new RuntimeAiSubtitleTranslationRequest(lease.Epoch,started.InvocationId,node.Id,batchIndex,items),job.Token)
+                                    ?? new RuntimeAiSubtitleTranslationResponse(false,ErrorCode:"error"));
+                            var outcome=lease.Flow.MediaType=="video"
+                                ? await SubtitleTranslation.TranslateEmbeddedAsync(c,current,directory,node.Id,context.CurrentMetadata!.Value,tools,translate,job.Token)
+                                : await SubtitleTranslation.TranslateAsync(c,current,directory,node.Id,translate,job.Token);
+                            if(outcome.ErrorCode is { } aiError) output=aiError;
+                            else if(outcome.File is { } translated) await ApplyOutcomeAsync(new(translated,[]),node.Id);
+                            else output="unchanged";
+                        }
+                        catch(HttpRequestException exception) when((int?)exception.StatusCode==429)
+                        {
+                            output="rateLimit";
+                            logger.LogInformation("Le fournisseur IA a limité le bloc de traduction {Node}; le fichier source est conservé.",node.Id);
+                        }
+                    }
                     else if(node.Component.PluginId is not ("base" or "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" or "ai"))
                     {
                         await EnsureScanAsync();
@@ -454,7 +493,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 try
                 {
                     var request=new CompleteRuntimeStep(lease.Epoch,eventId,Volatile.Read(ref revision),checkpoint,
-                        commandCapture.ForStep(node.Id,started.InvocationId));
+                        commandCapture.ForStep(node.Id,started.InvocationId),
+                        node.Component.ComponentId=="ai-translate-subtitles" && node.Component.PluginId=="ai");
                     for(var retry=0;;retry++)
                     {
                         try

@@ -116,6 +116,9 @@ builder.Services.AddHttpClient(Encoding.Api.Nodes.LocalNodeEndpoints.HttpClientN
     .AddHttpMessageHandler<LocalAgentAuthenticationHandler>();
 builder.Services.AddHttpClient("PluginConnectionTest", client => client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient("MetadataSources", client => client.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<AiMetadataEnrichmentService>();
 builder.Services.AddSingleton<RuntimeEligibility>();
 builder.Services.AddSingleton<RuntimeRepository>();
 builder.Services.AddSingleton<DiskLockRepository>();

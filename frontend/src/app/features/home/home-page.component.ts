@@ -37,6 +37,15 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { OverviewExecutionComponent } from './components/overview-execution.component';
+import { AiToolsService } from '../../shared/services/ai-tools.service';
+import {
+  AiAssistantActivity,
+  AiAssistantConversation,
+  AiAssistantOptions,
+} from '../../shared/models/ai-tools';
+import { catchError, forkJoin, of } from 'rxjs';
+
+type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
 
 @Component({
   selector: 'app-home-page',
@@ -61,6 +70,7 @@ import { OverviewExecutionComponent } from './components/overview-execution.comp
 export class HomePageComponent {
   private readonly router = inject(Router);
   protected readonly flowActionOpen = signal(false);
+  protected readonly overviewView = signal<OverviewView>('general');
   protected readonly flowCreationForm = signal<
     import('../../shared/ui/record-form.component').RecordFormData | null
   >(null);
@@ -91,6 +101,42 @@ export class HomePageComponent {
   }
 
   private readonly executionTracking = inject(ExecutionTracking);
+  private readonly aiTools = inject(AiToolsService);
+  protected readonly aiOptions = signal<AiAssistantOptions | null>(null);
+  protected readonly aiActivity = signal<readonly AiAssistantActivity[]>([]);
+  protected readonly aiConversations = signal<readonly AiAssistantConversation[]>([]);
+  protected readonly aiOverviewLoading = signal(true);
+  protected readonly aiOverviewPartial = signal(false);
+  protected readonly aiProviderCount = computed(
+    () => new Set((this.aiOptions()?.models ?? []).map((model) => model.provider)).size,
+  );
+  protected readonly aiDefaultModel = computed(() => this.aiOptions()?.defaultModel || '—');
+  protected readonly aiDefaultProvider = computed(() => {
+    const provider = this.aiOptions()?.defaultProvider;
+    return provider ? this.providerLabel(provider) : 'Fournisseur non défini';
+  });
+  protected readonly aiProviders = computed(() =>
+    [...new Set((this.aiOptions()?.models ?? []).map((model) => model.provider))].sort(),
+  );
+  protected readonly aiProviderNames = computed(() =>
+    this.aiProviders().map((provider) => this.providerLabel(provider)).join(' · '),
+  );
+  protected readonly aiRunningCount = computed(
+    () => this.aiActivity().filter((activity) => activity.status === 'running').length,
+  );
+  protected readonly aiFailedCount = computed(
+    () => this.aiActivity().filter((activity) => activity.status === 'failed').length,
+  );
+  protected readonly recentAiActivity = computed(() =>
+    [...this.aiActivity()]
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 5),
+  );
+  protected readonly recentAiConversations = computed(() =>
+    [...this.aiConversations()]
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 5),
+  );
   protected readonly executionState = toSignal(this.executionTracking.state$, {
     initialValue: INITIAL_EXECUTION_TRACKING,
   });
@@ -117,6 +163,51 @@ export class HomePageComponent {
   protected readonly state = toSignal(this.overview.state$, {
     initialValue: INITIAL_CLUSTER_OVERVIEW,
   });
+
+  constructor() {
+    this.refreshAiOverview();
+  }
+
+  protected refreshAiOverview(): void {
+    this.aiOverviewLoading.set(true);
+    forkJoin({
+      options: this.aiTools.getAssistantOptions().pipe(catchError(() => of(null))),
+      activity: this.aiTools.listAssistantActivity().pipe(catchError(() => of(null))),
+      conversations: this.aiTools.listAssistantConversations().pipe(catchError(() => of(null))),
+    }).subscribe(({ options, activity, conversations }) => {
+      if (options) this.aiOptions.set(options);
+      if (activity) this.aiActivity.set(activity);
+      if (conversations) this.aiConversations.set(conversations);
+      this.aiOverviewPartial.set(!options || !activity || !conversations);
+      this.aiOverviewLoading.set(false);
+    });
+  }
+
+  protected providerLabel(provider: string): string {
+    const labels: Readonly<Record<string, string>> = {
+      openai: 'OpenAI',
+      anthropic: 'Anthropic',
+      claude: 'Claude',
+      ollama: 'Ollama',
+      gemini: 'Gemini',
+      google: 'Google',
+      openrouter: 'OpenRouter',
+    };
+    return labels[provider.toLocaleLowerCase()] ?? provider;
+  }
+
+  protected activityStatusLabel(status: AiAssistantActivity['status']): string {
+    const labels: Readonly<Record<AiAssistantActivity['status'], string>> = {
+      running: 'En cours',
+      succeeded: 'Terminée',
+      failed: 'Échec',
+      cancelled: 'Annulée',
+      'proposal-ready': 'À confirmer',
+      'applied-to-editor': 'Appliquée',
+      rejected: 'Refusée',
+    };
+    return labels[status] ?? status;
+  }
   protected readonly standalone = computed(
     () => this.state().snapshot?.identity.standalone ?? false,
   );
@@ -203,5 +294,6 @@ export class HomePageComponent {
     this.overview.refresh();
     this.executionTracking.refresh();
     this.homeExecutions.refresh();
+    this.refreshAiOverview();
   }
 }

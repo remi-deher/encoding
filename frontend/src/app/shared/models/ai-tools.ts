@@ -11,14 +11,17 @@ export interface DeviceAuthPrompt {
 export interface DeviceAuthStatus {
   readonly toolId: string;
   readonly state: 'unconfigured' | 'pending' | 'authorized' | 'expired' | 'failed';
+  readonly attemptState?: 'pending' | 'authorized' | 'expired' | 'failed' | null;
   readonly accountName?: string | null;
   readonly authenticatedAt?: string | null;
   readonly errorMessage?: string | null;
+  readonly attemptErrorMessage?: string | null;
 }
 
 export interface DeviceAuthStartResponse {
   readonly toolId: string;
   readonly prompt: DeviceAuthPrompt;
+  readonly attemptId?: string | null;
 }
 
 export interface AiToolInfo {
@@ -118,7 +121,7 @@ export interface AiClusterView {
 }
 
 export interface AiAssistantSource {
-  readonly kind: 'flow' | 'execution' | 'node' | 'library' | 'tool';
+  readonly kind: 'application' | 'flow' | 'execution' | 'node' | 'library' | 'tool';
   readonly resourceId: string;
   readonly label: string;
   readonly href: string;
@@ -197,6 +200,12 @@ export interface AiAssistantMessageRequest {
   readonly model?: string | null;
   readonly reasoningEffort?: string | null;
   readonly nodeId?: string | null;
+  readonly attachments?: readonly AiAssistantFileAttachment[];
+}
+
+export interface AiAssistantFileAttachment {
+  readonly name: string;
+  readonly content: string;
 }
 
 export interface AiAssistantToolCall {

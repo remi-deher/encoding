@@ -63,14 +63,20 @@ export class AiToolsService {
     return this.http.get<readonly AiAssistantActivity[]>('/api/v1/tools/ai/assistant/activity');
   }
 
-  getAssistantActivity(requestId: string): Observable<AiAssistantActivity> {
-    return this.http.get<AiAssistantActivity>(
+  getAssistantActivity(requestId: string): Observable<AiAssistantActivity | null> {
+    return this.http.get<AiAssistantActivity | null>(
       `/api/v1/tools/ai/assistant/activity/${encodeURIComponent(requestId)}`,
     );
   }
 
   getAssistantConversation(id: string): Observable<AiAssistantConversationDetail> {
     return this.http.get<AiAssistantConversationDetail>(
+      `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}`,
+    );
+  }
+
+  deleteAssistantConversation(id: string): Observable<void> {
+    return this.http.delete<void>(
       `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}`,
     );
   }
@@ -92,9 +98,10 @@ export class AiToolsService {
     );
   }
 
-  cancelAssistantRequest(requestId: string): Observable<void> {
+  cancelAssistantRequest(requestId: string, conversationId?: string | null): Observable<void> {
+    const query = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
     return this.http.post<void>(
-      `/api/v1/tools/ai/assistant/requests/${encodeURIComponent(requestId)}/cancel`,
+      `/api/v1/tools/ai/assistant/requests/${encodeURIComponent(requestId)}/cancel${query}`,
       {},
     );
   }
@@ -231,15 +238,15 @@ export class AiToolsService {
     return this.http.get<AiClusterView>('/api/v1/tools/ai/cluster');
   }
 
-  submitAuthInput(toolId: string, input: string): Observable<{ readonly accepted: boolean }> {
+  submitAuthInput(toolId: string, input: string, attemptId?: string | null): Observable<{ readonly accepted: boolean }> {
     return this.http.post<{ readonly accepted: boolean }>(
       `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/input`,
-      { input },
+      { input, attemptId },
     );
   }
 
-  cancelAuth(toolId: string): Observable<unknown> {
-    return this.http.post(`/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/cancel`, {});
+  cancelAuth(toolId: string, attemptId?: string | null): Observable<unknown> {
+    return this.http.post(`/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/cancel`, { attemptId });
   }
 
   listTools(): Observable<readonly AiToolInfo[]> {

@@ -34,6 +34,8 @@ public sealed record AiAssistantSourcesRequest(IReadOnlyList<AiAssistantResource
 public sealed record AiAssistantToolCall(string Name, Guid? FlowId = null, string? State = null, int? Limit = null,
     JsonElement? Arguments = null);
 
+public sealed record AiAssistantFileAttachment(string Name, string Content);
+
 public sealed record AiAssistantToolResult(string Name, string Label, string Href, JsonElement Data);
 
 public sealed record AiAssistantProposalDecision(string Decision);
@@ -70,7 +72,8 @@ public sealed record AiAssistantMessageRequest(
     IReadOnlyList<AiAssistantToolCall>? ToolCalls = null,
     string? Provider = null,
     string? Model = null,
-    string? ReasoningEffort = null, Guid? NodeId = null);
+    string? ReasoningEffort = null, Guid? NodeId = null,
+    IReadOnlyList<AiAssistantFileAttachment>? Attachments = null);
 
 public sealed record AiAssistantMessageResponse(
     bool Success,

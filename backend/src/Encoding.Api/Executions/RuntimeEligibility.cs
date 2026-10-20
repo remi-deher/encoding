@@ -58,9 +58,10 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
 
             var matches = capabilities.Any(c =>
                 (c.ToolId == "plugin/" + pluginId && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component)))
+                || (pluginId == "ai" && (componentId is "ai-translate-subtitles" or "ai-metadata-enricher") && c.ToolId == "ai-runtime" && c.Version == "1.0.0")
                 || (isAliased && c.ToolId == "plugin/" + targetPluginId)
                 || (isAliased && c.ToolId == "plugin/base" && IsBaseVersionSatisfied(c.Version, componentId))
-                || (node.Component.PluginId is "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" or "ai" && c.ToolId == "plugin/base" && c.Version == "1.6.0"));
+                || (node.Component.PluginId is "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" && c.ToolId == "plugin/base" && c.Version == "1.6.0"));
 
             if (!matches) return false;
             if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node")

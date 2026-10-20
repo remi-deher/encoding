@@ -22,15 +22,15 @@ public static class AiToolEndpoints
             await GuardAsync(async () => { quotas.Invalidate(id); models.Invalidate(id); return Results.Ok(await service.StartDeviceAuthAsync(id, ct)); }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapPost("/{id}/auth/input", async (string id, AiCliAuthInputRequest request, DeviceCodeAuthService service, CancellationToken ct) =>
-            await GuardAsync(async () => { await service.SubmitAuthInputAsync(id, request.Input, ct); return Results.Ok(new { accepted = true }); }))
+            await GuardAsync(async () => { await service.SubmitAuthInputAsync(id, request.Input, ct, request.AttemptId); return Results.Ok(new { accepted = true }); }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapGet("/{id}/auth/device-code/status", async (string id, DeviceCodeAuthService service, CancellationToken ct) => await GuardAsync(async () => Results.Ok(await service.GetStatusAsync(id, ct))));
         group.MapPost("/claude-cli/auth/token", async (ClaudeTokenRequest request, DeviceCodeAuthService service, AiQuotaService quotas, AiModelCatalogService models, CancellationToken ct) =>
             await GuardAsync(async () => { quotas.Invalidate("claude-cli"); models.Invalidate("claude-cli"); try { await service.SaveClaudeTokenAsync(request.Token, ct); return Results.Ok(new { saved = true }); } finally { quotas.Invalidate("claude-cli"); models.Invalidate("claude-cli"); } }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        group.MapPost("/{id}/auth/cancel", (string id, DeviceCodeAuthService service) =>
+        group.MapPost("/{id}/auth/cancel", async (string id, AiCliAuthCancelRequest request, DeviceCodeAuthService service) =>
         {
-            service.Cancel(id);
+            await service.CancelAsync(id, request.AttemptId);
             return Results.Ok();
         }).RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapDelete("/{id}/auth", async (string id, DeviceCodeAuthService service, AiQuotaService quotas, AiModelCatalogService models, CancellationToken ct) =>
@@ -58,12 +58,18 @@ public static class AiToolEndpoints
                 return Results.Ok(await service.ForkSessionAsync(id, ct));
             }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        group.MapPost("/generate", async (AiGenerateRequest request, AiClusterService service, CancellationToken ct) =>
-            await GuardAsync(async () => Results.Ok(await service.GenerateAsync(request.Provider, request.Prompt, ct, allowModelChanges: request.AllowModelChanges))))
+        group.MapPost("/generate", async (AiGenerateRequest request, AiClusterService service, AiAssistantService assistant, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                if (request.Prompt.SessionId is { } sessionId && await assistant.IsAssistantConversationAsync(sessionId, ct))
+                    return Results.NotFound();
+                return Results.Ok(await service.GenerateAsync(request.Provider, request.Prompt, ct, allowModelChanges: request.AllowModelChanges));
+            }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy).RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
         // Signed peer admission + AES-GCM payload are checked inside ReceiveAsync, independently of user sessions.
         app.MapPost(AiClusterTransport.Path, async (HttpContext http, AiClusterTransport transport, AiClusterService service, CancellationToken ct) =>
             await GuardAsync(() => transport.ReceiveAsync(http, service, ct)))
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(20 * 1024 * 1024))
             .AllowAnonymous().RequireRateLimiting(AuthExtensions.ClusterMeshPolicy);
     }
     private static IResult PublicSettings(AiSettingsDto settings) => Results.Ok(new

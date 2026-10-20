@@ -28,6 +28,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDialog } from '@angular/material/dialog';
 import {
   AiAssistantConversation,
   AiAssistantConversationDetail,
@@ -35,6 +36,7 @@ import {
   AiAssistantSource,
   AiAssistantToolCall,
   AiAssistantOptions,
+  AiAssistantFileAttachment,
   AiTurnModelSelection,
 } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
@@ -46,6 +48,7 @@ import {
 } from '../../shared/models/flow-validation';
 import { FlowComponentDefinition } from '../../shared/models/flow-component';
 import { FlowPreviewComponent } from '../../shared/ui/flow-preview/flow-preview';
+import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
 import { ClusterApi } from '../../shared/services/cluster-api';
 import { ExecutionTracking } from '../../shared/services/execution-tracking';
@@ -54,8 +57,8 @@ import { AuthService } from '../../core/auth/auth.service';
 import { createUuid } from '../../shared/utils/uuid';
 
 type AssistantResourceType = 'flow' | 'execution' | 'node' | 'library';
-
 interface AssistantResourceOption {
+  readonly type: AssistantResourceType;
   readonly id: string;
   readonly label: string;
   readonly version?: number;
@@ -85,6 +88,7 @@ interface AssistantResourceOption {
 export class AiAssistantPageComponent implements OnDestroy {
   readonly panelMode = input(false);
   private readonly aiTools = inject(AiToolsService);
+  private readonly dialog = inject(MatDialog);
   private readonly flowValidation = inject(FlowValidation);
   private readonly clusterApi = inject(ClusterApi);
   private readonly executionTracking = inject(ExecutionTracking);
@@ -98,7 +102,40 @@ export class AiAssistantPageComponent implements OnDestroy {
     { initialValue: false },
   );
   protected readonly historyOpen = signal(false);
-  protected readonly toolsOpen = signal(false);
+  protected readonly selectedResourceType = signal<AssistantResourceType>('flow');
+  protected readonly selectedResourceId = signal('');
+  protected readonly selectedResource = signal<AssistantResourceOption | null>(null);
+  protected readonly resourceOptions = computed<readonly AssistantResourceOption[]>(() => {
+    switch (this.selectedResourceType()) {
+      case 'flow':
+        return this.flows()
+          .filter((flow) => !flow.isDraft)
+          .map((flow) => ({
+            type: 'flow',
+            id: flow.id,
+            label: `${flow.name} · v${flow.version}`,
+            version: flow.version,
+          }));
+      case 'execution':
+        return this.executions().map((item) => ({
+          type: 'execution',
+          id: item.id,
+          label: `${item.flow} · ${item.state}`,
+        }));
+      case 'node':
+        return this.nodes().map((item) => ({
+          type: 'node',
+          id: item.id,
+          label: item.displayName || item.name,
+        }));
+      case 'library':
+        return this.libraries().map((item) => ({
+          type: 'library',
+          id: item.id,
+          label: item.name,
+        }));
+    }
+  });
   private readonly followTail = signal(true);
   private readonly messageThread = viewChild<ElementRef<HTMLElement>>('messageThread');
   protected readonly isAdmin = inject(AuthService).isAdmin;
@@ -114,19 +151,18 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly selectedModelKey = signal('');
   protected readonly selectedReasoningEffort = signal<string | null>(null);
   protected readonly loadingAssistantOptions = signal(true);
-  protected readonly selectedResourceType = signal<AssistantResourceType>('flow');
-  protected readonly selectedResourceId = signal('');
-  protected readonly contextPickerOpen = signal(false);
-  protected readonly contextSearch = signal('');
   protected readonly prompt = signal('');
   protected readonly modelSettingsOpen = signal(false);
-  protected readonly attachmentName = signal<string | null>(null);
-  private readonly attachmentText = signal<string | null>(null);
+  protected readonly attachments = signal<readonly AiAssistantFileAttachment[]>([]);
+  protected readonly attachmentName = computed(
+    () => this.attachments().map((file) => file.name).join(', ') || null,
+  );
   protected readonly loadingFlows = signal(true);
   protected readonly loadingExecutions = signal(true);
   protected readonly loadingNodes = signal(true);
   protected readonly loadingLibraries = signal(true);
   protected readonly loadingConversations = signal(true);
+  protected readonly deletingConversationId = signal<string | null>(null);
   protected readonly loadingDetail = signal(false);
   protected readonly sending = signal(false);
   protected readonly cancelling = signal(false);
@@ -164,44 +200,14 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly previewLoading = signal(false);
   protected readonly previewError = signal<string | null>(null);
   private progressPollTimer: ReturnType<typeof setTimeout> | null = null;
-  protected readonly resourceOptions = computed<readonly AssistantResourceOption[]>(() => {
-    switch (this.selectedResourceType()) {
-      case 'flow':
-        return this.flows().map((flow) => ({
-          id: flow.id,
-          label: `${flow.name} · version ${flow.version}`,
-          version: flow.version,
-        }));
-      case 'execution':
-        return this.executions().map((execution) => ({
-          id: execution.id,
-          label: `${execution.media} · ${execution.state} · ${execution.id.slice(0, 8)}`,
-        }));
-      case 'node':
-        return this.nodes().map((node) => ({
-          id: node.id,
-          label: `${node.displayName || node.name} · ${node.lifecycle ?? node.status}`,
-        }));
-      case 'library':
-        return this.libraries()
-          .filter((library) => library.isActive)
-          .map((library) => ({
-            id: library.id,
-            label: `${library.name}${library.flowName ? ` · ${library.flowName}` : ' · aucun flow attribué'}`,
-          }));
-    }
-  });
-  protected readonly selectedResource = computed(
-    () =>
-      this.resourceOptions().find((resource) => resource.id === this.selectedResourceId()) ?? null,
-  );
-  protected readonly filteredResourceOptions = computed(() => {
-    const search = this.contextSearch().trim().toLocaleLowerCase();
-    return search
-      ? this.resourceOptions().filter((resource) =>
-          resource.label.toLocaleLowerCase().includes(search),
-        )
-      : this.resourceOptions();
+  protected readonly hasFlowContext = computed(() => {
+    const conversation = this.detail()?.conversation;
+    return (
+      this.selectedResource()?.type === 'flow' ||
+      (conversation
+        ? this.conversationSources(conversation).some((source) => source.kind === 'flow')
+        : false)
+    );
   });
   protected readonly selectedModelOption = computed(
     () =>
@@ -212,36 +218,12 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly reasoningEfforts = computed(
     () => this.selectedModelOption()?.reasoningEfforts ?? [],
   );
-  protected readonly loadingSelectedResource = computed(() => {
-    switch (this.selectedResourceType()) {
-      case 'flow':
-        return this.loadingFlows();
-      case 'execution':
-        return this.loadingExecutions();
-      case 'node':
-        return this.loadingNodes();
-      case 'library':
-        return this.loadingLibraries();
-    }
-  });
-  protected readonly resourceDisclosure = computed(() => {
-    switch (this.selectedResourceType()) {
-      case 'flow':
-        return 'La définition de flow publiée et votre question seront transmises.';
-      case 'execution':
-        return 'L’état, les événements, le pipeline et les journaux de commande disponibles seront transmis.';
-      case 'node':
-        return 'La présence, les rôles, les capacités déclarées et les informations matérielles du nœud seront transmises.';
-      case 'library':
-        return 'L’état de la bibliothèque, son affectation de flow et jusqu’à 10 000 fichiers détectés seront transmis.';
-    }
-  });
   protected readonly canSend = computed(
     () =>
       !this.sending() &&
       !this.loadingDetail() &&
       Boolean(this.prompt().trim()) &&
-      this.prompt().trim().length + (this.attachmentText()?.length ?? 0) <= 4000 &&
+      this.prompt().trim().length <= 4000 &&
       (this.hasPendingRequest() ||
         (!this.loadingAssistantOptions() && Boolean(this.selectedModelOption()))) &&
       (!this.hasPendingRequest() || this.prompt() === this.requestDraftPrompt),
@@ -301,10 +283,10 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected startNewConversation(): void {
     if (this.sending()) return;
     this.closePreview();
-    this.selectedResourceId.set('');
     this.historyOpen.set(false);
     this.followTail.set(true);
     this.detail.set(null);
+    this.selectedResource.set(null);
     this.errorMessage.set(null);
     this.pendingActionProposal.set(null);
     this.prompt.set('');
@@ -317,8 +299,6 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.requestId = '';
     this.requestSelection = null;
     this.selectedReasoningEffort.set(null);
-    this.contextPickerOpen.set(false);
-    this.contextSearch.set('');
     this.selectDefaultModel();
     if (this.panelMode()) return;
     void this.router.navigate([], {
@@ -340,85 +320,113 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.selectedReasoningEffort.set(value || null);
   }
 
-  protected toggleContextPicker(): void {
-    this.contextPickerOpen.update((open) => !open);
-    this.contextSearch.set('');
+  protected openWorkspace(): void {
+    this.previewFlow.set(null);
+    this.previewTitle.set('Espace de travail');
+    this.previewLoading.set(false);
+    this.previewError.set(null);
+    this.previewOpen.set(true);
+  }
+
+  protected selectResourceType(type: AssistantResourceType): void {
+    this.selectedResourceType.set(type);
+    this.selectedResourceId.set('');
+  }
+
+  protected addResourceToContext(): void {
+    const option = this.resourceOptions().find((item) => item.id === this.selectedResourceId());
+    if (!option) return;
+    const source: AiAssistantSource = {
+      kind: option.type,
+      resourceId: option.id,
+      label: option.label,
+      href: {
+        flow: '/flows',
+        execution: '/tasks',
+        node: '/nodes',
+        library: '/libraries',
+      }[option.type],
+      version: option.version,
+    };
+    const current = this.detail()?.conversation;
+    const sources = current ? this.conversationSources(current) : [];
+    if (
+      sources.some((item) => item.kind === source.kind && item.resourceId === source.resourceId) ||
+      (!current &&
+        this.selectedResource()?.type === source.kind &&
+        this.selectedResource()?.id === source.resourceId)
+    ) {
+      this.errorMessage.set('Cette ressource est déjà jointe à la conversation.');
+      return;
+    }
+    if (sources.length + (this.selectedResource() ? 1 : 0) >= 5) {
+      this.errorMessage.set('Vous pouvez joindre jusqu’à cinq ressources.');
+      return;
+    }
+    if (current) this.updateConversationSources([...sources, source]);
+    else this.selectedResource.set(option);
+    this.selectedResourceId.set('');
+    this.errorMessage.set(null);
+  }
+
+  protected removeSelectedResource(): void {
+    this.selectedResource.set(null);
+  }
+
+  protected async selectAttachments(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    for (const file of files) await this.selectAttachment(file);
   }
 
   protected async selectAttachment(file: File): Promise<void> {
-    if (!/\.(txt|md|csv|json|log|yaml|yml)$/i.test(file.name) || file.size > 8_000) {
+    if (!this.isSupportedAssistantFile(file.name) || file.size > 8 * 1024 * 1024) {
       this.errorMessage.set(
-        'Choisissez un fichier texte (.txt, .md, .csv, .json, .log ou .yaml) de 8 Ko maximum.',
+        `« ${file.name} » n’est pas un format texte pris en charge ou dépasse 8 Mo.`,
       );
+      return;
+    }
+    if (this.attachments().length >= 5) {
+      this.errorMessage.set('Vous pouvez joindre jusqu’à cinq fichiers par message.');
       return;
     }
     try {
       const content = await file.text();
-      const attachment = `\n\n[Contenu du fichier : ${file.name}]\n${content}`;
-      if (attachment.length > 3000) {
-        this.errorMessage.set('Le contenu du fichier dépasse la limite de 3 000 caractères.');
+      if (this.attachments().some((item) => item.name === file.name)) {
+        this.errorMessage.set(`« ${file.name} » est déjà joint.`);
         return;
       }
-      if (this.prompt().trim().length + attachment.length > 4000) {
-        this.errorMessage.set('Le message et le fichier dépassent la limite de 4 000 caractères.');
+      const next = [...this.attachments(), { name: file.name, content }];
+      const totalBytes = next.reduce(
+        (sum, item) => sum + new TextEncoder().encode(item.content).length,
+        0,
+      );
+      if (totalBytes > 16 * 1024 * 1024) {
+        this.errorMessage.set('Les fichiers joints dépassent la limite cumulée de 16 Mo.');
         return;
       }
-      this.attachmentName.set(file.name);
-      this.attachmentText.set(attachment);
+      if (next.reduce((sum, item) => sum + item.content.length, 0) > 1_000_000) {
+        this.errorMessage.set('Le contenu joint dépasse la capacité de contexte de 1 000 000 caractères.');
+        return;
+      }
+      this.attachments.set(next);
       this.errorMessage.set(null);
     } catch {
       this.errorMessage.set('Impossible de lire ce fichier.');
     }
   }
 
-  protected removeAttachment(): void {
-    this.attachmentName.set(null);
-    this.attachmentText.set(null);
-  }
-
-  protected isSourceAttached(resource: AssistantResourceOption): boolean {
-    const conversation = this.detail()?.conversation;
-    return (
-      conversation !== null &&
-      conversation !== undefined &&
-      this.conversationSources(conversation).some(
-        (source) =>
-          source.kind === this.selectedResourceType() && source.resourceId === resource.id,
-      )
+  protected removeAttachment(name?: string): void {
+    this.attachments.update((files) =>
+      name ? files.filter((file) => file.name !== name) : [],
     );
   }
 
-  protected addResourceToContext(resource: AssistantResourceOption): void {
-    if (
-      this.isSourceAttached(resource) ||
-      this.updatingSources() ||
-      this.hasPendingRequest() ||
-      this.sending()
-    )
-      return;
-    const current = this.detail()?.conversation;
-    if (!current) return;
-    const sources = this.conversationSources(current);
-    if (sources.length >= 5) {
-      this.errorMessage.set('Une conversation peut consulter au maximum cinq ressources.');
-      return;
-    }
-    const href = {
-      flow: '/flows',
-      execution: '/tasks',
-      node: '/nodes',
-      library: '/libraries',
-    }[this.selectedResourceType()];
-    this.updateConversationSources([
-      ...sources,
-      {
-        kind: this.selectedResourceType(),
-        resourceId: resource.id,
-        version: resource.version,
-        label: resource.label,
-        href,
-      },
-    ]);
+  private isSupportedAssistantFile(name: string): boolean {
+    const lower = name.toLocaleLowerCase();
+    if (/^(dockerfile|makefile|\.env(?:\.[\w-]+)?)$/.test(lower)) return true;
+    return /\.(txt|md|markdown|rst|csv|tsv|log|out|json|jsonc|json5|ya?ml|xml|toml|ini|conf|config|properties|srt|ass|ssa|vtt|sub|smi|sami|ttml|dfxp|mpl|lrc|sbv|ffmetadata|ffpreset|ffscript|ffconcat|filter|m3u8?|nfo|prx|avs|avsi|vpy|qpfile|chapters|edl|cue|xspf|pls|mpd|csproj|sln|props|targets|editorconfig|gitignore|cs|fs|vb|tsx?|jsx?|mjs|cjs|pyw?|sh|bash|zsh|ps1|psm1|bat|cmd|sql|html?|css|scss|less|proto|graphql|gql)$/i.test(lower);
   }
 
   protected deleteFlowFromAssistant(source: AiAssistantSource): void {
@@ -637,6 +645,8 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   protected openConversation(id: string, updateUrl = true): void {
     this.closePreview();
+    this.selectedResource.set(null);
+    this.removeAttachment();
     this.pendingActionProposal.set(null);
     this.historyOpen.set(false);
     this.followTail.set(true);
@@ -647,13 +657,8 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.aiTools.getAssistantConversation(id).subscribe({
       next: (detail) => {
         this.detail.set(detail);
-        this.contextPickerOpen.set(false);
-        this.contextSearch.set('');
         this.selectedModelKey.set(this.modelOptionKey(detail.conversation));
         this.selectedReasoningEffort.set(detail.conversation.reasoningEffort ?? null);
-        if (detail.conversation.source.kind !== 'tool')
-          this.selectedResourceType.set(detail.conversation.source.kind);
-        this.selectedResourceId.set('');
         this.requestSelection = null;
         if (detail.pendingTurn) {
           this.requestSelection = detail.conversation;
@@ -694,13 +699,49 @@ export class AiAssistantPageComponent implements OnDestroy {
     });
   }
 
+  protected confirmDeleteConversation(conversation: AiAssistantConversation): void {
+    if (this.sending() || this.deletingConversationId()) return;
+    this.dialog
+      .open(ConfirmationDialogComponent, {
+        data: {
+          title: `Supprimer « ${conversation.title} » ?`,
+          message: 'Cette conversation et son historique seront supprimés définitivement.',
+          confirmLabel: 'Supprimer',
+          headerColor: 'var(--danger)',
+          confirmColor: 'warn',
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed: boolean) => {
+        if (confirmed) this.deleteConversation(conversation);
+      });
+  }
+
+  private deleteConversation(conversation: AiAssistantConversation): void {
+    if (this.deletingConversationId()) return;
+    this.deletingConversationId.set(conversation.id);
+    this.errorMessage.set(null);
+    this.aiTools.deleteAssistantConversation(conversation.id).subscribe({
+      next: () => {
+        this.deletingConversationId.set(null);
+        this.conversations.update((items) => items.filter((item) => item.id !== conversation.id));
+        if (this.detail()?.conversation.id === conversation.id) this.startNewConversation();
+        this.loadConversations();
+      },
+      error: (error: HttpErrorResponse) => {
+        this.deletingConversationId.set(null);
+        this.errorMessage.set(
+          this.errorText(error, 'Impossible de supprimer cette conversation.'),
+        );
+      },
+    });
+  }
+
   protected send(): void {
     const message = this.prompt().trim();
     if (!message || !this.canSend()) return;
     const outgoingPrompt =
-      this.requestPrompt && this.hasPendingRequest()
-        ? this.requestPrompt
-        : `${message}${this.attachmentText() ?? ''}`;
+      this.requestPrompt && this.hasPendingRequest() ? this.requestPrompt : message;
     if (this.requestDraftPrompt !== message || !this.requestId) {
       this.requestDraftPrompt = message;
       this.requestPrompt = outgoingPrompt;
@@ -708,7 +749,13 @@ export class AiAssistantPageComponent implements OnDestroy {
     }
 
     const activeConversation = this.detail()?.conversation ?? null;
-    const selectedResource = this.selectedResource();
+    const flowId = activeConversation
+      ? (this.conversationSources(activeConversation).find((source) => source.kind === 'flow')
+          ?.resourceId ??
+        (this.selectedResource()?.type === 'flow' ? this.selectedResource()?.id : null))
+      : this.selectedResource()?.type === 'flow'
+        ? (this.selectedResource()?.id ?? null)
+        : null;
     const selectedModel = this.selectedModelOption();
     this.requestSelection ??= selectedModel
       ? {
@@ -719,8 +766,6 @@ export class AiAssistantPageComponent implements OnDestroy {
         }
       : activeConversation;
     this.followTail.set(true);
-    this.contextPickerOpen.set(false);
-    this.toolsOpen.set(false);
     this.sending.set(true);
     this.cancelling.set(false);
     this.pendingPrompt.set(message);
@@ -734,24 +779,21 @@ export class AiAssistantPageComponent implements OnDestroy {
         requestId: this.requestId,
         userPrompt: outgoingPrompt,
         conversationId: activeConversation?.id,
-        resourceType: activeConversation
-          ? undefined
-          : selectedResource
-            ? this.selectedResourceType()
-            : undefined,
-        resourceId: activeConversation ? undefined : (selectedResource?.id ?? undefined),
-        resourceVersion: activeConversation ? undefined : (selectedResource?.version ?? undefined),
+        resourceType: activeConversation ? undefined : this.selectedResource()?.type,
+        resourceId: activeConversation ? undefined : this.selectedResource()?.id,
+        resourceVersion: activeConversation ? undefined : this.selectedResource()?.version,
         toolCalls: this.selectedReadTools().map(
           (name) =>
             ({
               name,
-              ...(name === 'get_flow' ? { flowId: selectedResource?.id ?? null } : {}),
+              ...(name === 'get_flow' ? { flowId } : {}),
             }) as AiAssistantToolCall,
         ),
         provider: this.requestSelection?.provider,
         model: this.requestSelection?.model,
         reasoningEffort: this.requestSelection?.reasoningEffort,
         nodeId: this.requestSelection?.nodeId,
+        attachments: this.attachments(),
       })
       .subscribe({
         next: (response) => {
@@ -799,6 +841,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.hasPendingRequest.set(false);
             this.resumingRequest.set(false);
             this.selectedReadTools.set([]);
+            this.selectedResource.set(null);
           } else {
             this.pendingPrompt.set(message);
             this.hasPendingRequest.set(true);
@@ -838,7 +881,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected cancelRequest(): void {
     if (!this.requestId || this.cancelling()) return;
     this.cancelling.set(true);
-    this.aiTools.cancelAssistantRequest(this.requestId).subscribe({
+    this.aiTools.cancelAssistantRequest(this.requestId, this.conversationId()).subscribe({
       next: () => this.cancelling.set(false),
       error: (error: HttpErrorResponse) => {
         this.cancelling.set(false);
@@ -960,6 +1003,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected closePreview(): void {
     this.previewOpen.set(false);
     this.previewFlow.set(null);
+    this.previewLoading.set(false);
     this.previewError.set(null);
   }
 
@@ -968,12 +1012,14 @@ export class AiAssistantPageComponent implements OnDestroy {
     const poll = () =>
       this.aiTools.getAssistantActivity(requestId).subscribe({
         next: (activity) => {
-          this.requestProgress.set(activity.progress ?? activity.status);
-          this.requestProgressDetail.set(
-            activity.progressDetail ?? this.progressLabel(activity.progress ?? activity.status),
-          );
+          if (activity) {
+            this.requestProgress.set(activity.progress ?? activity.status);
+            this.requestProgressDetail.set(
+              activity.progressDetail ?? this.progressLabel(activity.progress ?? activity.status),
+            );
+          }
           if (this.sending() && this.requestId === requestId)
-            this.progressPollTimer = window.setTimeout(poll, 900);
+            this.progressPollTimer = window.setTimeout(poll, activity ? 900 : 500);
         },
         error: () => {
           if (this.sending() && this.requestId === requestId)
@@ -1017,18 +1063,16 @@ export class AiAssistantPageComponent implements OnDestroy {
     });
   }
 
-  protected selectResourceType(type: AssistantResourceType): void {
-    this.selectedResourceType.set(type);
-    this.selectedResourceId.set('');
-    this.contextSearch.set('');
-    if (type !== 'flow')
-      this.selectedReadTools.update((tools) => tools.filter((tool) => tool !== 'get_flow'));
-  }
-
   protected conversationSources(
     conversation: AiAssistantConversation,
   ): readonly AiAssistantSource[] {
     return [conversation.source, ...(conversation.additionalSources ?? [])];
+  }
+
+  protected visibleConversationSources(
+    conversation: AiAssistantConversation,
+  ): readonly AiAssistantSource[] {
+    return this.conversationSources(conversation).filter((source) => source.kind !== 'application');
   }
 
   protected removeConversationSource(source: AiAssistantSource): void {
@@ -1055,7 +1099,6 @@ export class AiAssistantPageComponent implements OnDestroy {
       .subscribe({
         next: (updated) => {
           this.detail.update((detail) => (detail ? { ...detail, conversation: updated } : detail));
-          this.selectedResourceId.set('');
           this.updatingSources.set(false);
         },
         error: (error: HttpErrorResponse) => {
