@@ -1,9 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { FlowComponentDefinition } from '../../../shared/models/flow-component';
+import {
+  FlowComponentDefinition,
+  isFlowComponentCompatible,
+} from '../../../shared/models/flow-component';
 import { FlowComponentPackSummary } from '../../../shared/models/flow-component-packs';
 import { flowComponentColors } from '../../../shared/models/flow-presentation';
+import { MediaType } from '../../../shared/models/media-type';
 
 @Component({
   selector: 'app-flow-palette-dock',
@@ -123,6 +127,18 @@ import { flowComponentColors } from '../../../shared/models/flow-presentation';
             >
               Logique
             </button>
+            @if (otherMediaComponents().length) {
+              <button
+                type="button"
+                class="chip-btn chip-btn_other"
+                [class.chip-btn_active]="activeCategory() === 'others'"
+                (click)="activeCategory.set('others')"
+                role="tab"
+                [attr.aria-selected]="activeCategory() === 'others'"
+              >
+                Autres médias ({{ otherMediaComponents().length }})
+              </button>
+            }
             <button
               type="button"
               class="chip-btn chip-btn_packs"
@@ -133,6 +149,29 @@ import { flowComponentColors } from '../../../shared/models/flow-presentation';
             >
               Packs ({{ packCatalog().length }})
             </button>
+          </div>
+
+          <div class="plugin-filter">
+            <label for="flow-palette-plugin">Filtrer par plugin</label>
+            <select
+              id="flow-palette-plugin"
+              class="plugin-select"
+              [value]="activePlugin()"
+              (change)="onPluginChange($event)"
+            >
+              <option value="all">
+                Tous les plugins ({{ components().length + otherMediaComponents().length }} blocs)
+              </option>
+              @for (plugin of pluginOptions(); track plugin.id) {
+                <option [value]="plugin.id">
+                  {{ plugin.name }} ({{ plugin.available + plugin.other }})
+                </option>
+              }
+            </select>
+            <p class="catalog-summary">
+              {{ components().length }} compatibles · {{ otherMediaComponents().length }} autres
+              médias · {{ pluginOptions().length }} plugins
+            </p>
           </div>
         </div>
 
@@ -171,9 +210,11 @@ import { flowComponentColors } from '../../../shared/models/flow-presentation';
                   tabindex="0"
                   role="button"
                   [style.--component-accent]="colors(component).color"
-                  (click)="componentSelected.emit(component)"
-                  (keydown.enter)="componentSelected.emit(component)"
-                  matTooltip="{{ component.description }}"
+                  [class.component-card_unavailable]="isUnavailable(component)"
+                  [attr.aria-disabled]="isUnavailable(component)"
+                  (click)="selectComponent(component)"
+                  (keydown.enter)="selectComponent(component)"
+                  [matTooltip]="componentTooltip(component)"
                 >
                   <div class="component-card-top">
                     <span class="component-kind">{{ kindLabel(component.kind) }}</span>
@@ -186,7 +227,11 @@ import { flowComponentColors } from '../../../shared/models/flow-presentation';
                       {{ component.outputs.length }}
                       {{ component.outputs.length > 1 ? 'sorties' : 'sortie' }}
                     </span>
-                    <span class="add-hint">+ Ajouter</span>
+                    @if (isUnavailable(component)) {
+                      <span class="unavailable-tag">Autre type de flow</span>
+                    } @else {
+                      <span class="add-hint">+ Ajouter</span>
+                    }
                   </div>
                 </div>
               } @empty {
@@ -340,6 +385,38 @@ import { flowComponentColors } from '../../../shared/models/flow-presentation';
       flex-wrap: wrap;
       gap: 4px;
     }
+    .plugin-filter {
+      display: grid;
+      gap: 4px;
+    }
+    .plugin-filter label {
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .plugin-select {
+      width: 100%;
+      min-width: 0;
+      height: 34px;
+      padding: 0 9px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text-primary);
+      font: inherit;
+      font-size: 12px;
+    }
+    .plugin-select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .catalog-summary {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 10px;
+    }
     .chip-btn {
       padding: 2px 7px;
       border-radius: var(--radius-pill);
@@ -360,40 +437,127 @@ import { flowComponentColors } from '../../../shared/models/flow-presentation';
       &_packs {
         border-style: dashed;
       }
+      &_other {
+        border-style: dashed;
+      }
     }
-    .dock-body { flex: 1; overflow-y: auto; padding: 10px; }
-    .catalog-list { display: flex; flex-direction: column; gap: 8px; }
-    .component-card, .pack-card {
-      padding: 10px 12px; background: var(--surface); border-radius: var(--radius-md);
-      cursor: pointer; display: flex; flex-direction: column; gap: 4px;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      &:hover { transform: translateY(-1px); box-shadow: var(--elevation-1); }
-      &:focus-visible { outline: 2px solid var(--accent); }
+    .dock-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .catalog-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .component-card,
+    .pack-card {
+      padding: 10px 12px;
+      background: var(--surface);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--elevation-1);
+      }
+      &:focus-visible {
+        outline: 2px solid var(--accent);
+      }
     }
     .component-card {
       border: 1px solid var(--border-subtle);
       border-left: 4px solid var(--component-accent, var(--accent));
-      &:hover { border-color: var(--border-strong); }
+      &:hover {
+        border-color: var(--border-strong);
+      }
     }
-    .component-card-top, .pack-card-header, .component-card-footer {
-      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    .component-card_unavailable {
+      opacity: 0.68;
+      border-style: dashed;
+      cursor: not-allowed;
+      &:hover {
+        transform: none;
+        box-shadow: none;
+      }
     }
-    .component-card-top { font-size: 10px; }
-    .component-kind { font-weight: 700; color: var(--component-accent, var(--accent)); text-transform: uppercase; letter-spacing: 0.04em; }
-    .component-plugin, .outputs-tag, .pack-card-meta { color: var(--text-muted); font-size: 10px; }
-    .component-title, .pack-name { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+    .component-card-top,
+    .pack-card-header,
+    .component-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .component-card-top {
+      font-size: 10px;
+    }
+    .component-kind {
+      font-weight: 700;
+      color: var(--component-accent, var(--accent));
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .component-plugin,
+    .outputs-tag,
+    .pack-card-meta {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+    .component-plugin {
+      padding: 2px 6px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+    }
+    .component-title,
+    .pack-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
     .component-desc {
-      margin: 0; font-size: 11px; color: var(--text-secondary); line-height: 1.35;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      margin: 0;
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
     .component-card-footer {
-      margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border-subtle); font-size: 10px;
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px dashed var(--border-subtle);
+      font-size: 10px;
     }
-    .add-hint, .insert-pack-btn { color: var(--accent); font-weight: 600; }
-    .pack-card { border: 1px dashed var(--accent); }
+    .add-hint,
+    .insert-pack-btn {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .unavailable-tag {
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .pack-card {
+      border: 1px dashed var(--accent);
+    }
     .pack-badge {
-      font-size: 10px; padding: 2px 6px; border-radius: var(--radius-pill); background: var(--accent-soft);
-      color: var(--accent); font-weight: 600;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: var(--radius-pill);
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
     }
     .insert-pack-btn {
       align-self: flex-end;
@@ -414,6 +578,8 @@ import { flowComponentColors } from '../../../shared/models/flow-presentation';
 export class FlowPaletteDockComponent {
   readonly opened = input(true);
   readonly components = input<readonly FlowComponentDefinition[]>([]);
+  readonly otherMediaComponents = input<readonly FlowComponentDefinition[]>([]);
+  readonly flowMediaType = input<MediaType>('video');
   readonly packCatalog = input<readonly FlowComponentPackSummary[]>([]);
   readonly insertionPending = input(false);
   readonly destinationLabel = input<string | null>(null);
@@ -425,23 +591,91 @@ export class FlowPaletteDockComponent {
 
   protected readonly searchQuery = signal('');
   protected readonly activeCategory = signal<
-    'all' | 'video' | 'audio' | 'subtitles' | 'general' | 'packs'
+    'all' | 'video' | 'audio' | 'subtitles' | 'general' | 'others' | 'packs'
   >('all');
+  protected readonly activePlugin = signal('all');
+  protected readonly pluginOptions = computed(() => {
+    const counts = new Map<string, { name: string; available: number; other: number }>();
+    for (const component of this.components()) {
+      const current = counts.get(component.pluginId) ?? {
+        name: component.pluginName,
+        available: 0,
+        other: 0,
+      };
+      counts.set(component.pluginId, {
+        name: component.pluginName,
+        available: current.available + 1,
+        other: current.other,
+      });
+    }
+    for (const component of this.otherMediaComponents()) {
+      const current = counts.get(component.pluginId) ?? {
+        name: component.pluginName,
+        available: 0,
+        other: 0,
+      };
+      counts.set(component.pluginId, {
+        name: component.pluginName,
+        available: current.available,
+        other: current.other + 1,
+      });
+    }
+    return [...counts.entries()]
+      .map(([id, plugin]) => ({ id, ...plugin }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'fr'));
+  });
 
   protected readonly filteredComponents = computed(() => {
     const query = this.searchQuery().trim().toLowerCase();
     const category = this.activeCategory();
-    return this.components().filter((comp) => {
-      const matchCat = category === 'all' || comp.mediaType === category;
+    const plugin = this.activePlugin();
+    const source = category === 'others' ? this.otherMediaComponents() : this.components();
+    return source.filter((comp) => {
+      const matchCat = category === 'all' || category === 'others' || comp.mediaType === category;
       if (!matchCat) return false;
+      if (plugin !== 'all' && comp.pluginId !== plugin) return false;
       if (!query) return true;
       return (
+        comp.id.toLowerCase().includes(query) ||
         comp.name.toLowerCase().includes(query) ||
         comp.description.toLowerCase().includes(query) ||
-        comp.pluginName.toLowerCase().includes(query)
+        comp.pluginName.toLowerCase().includes(query) ||
+        comp.pluginId.toLowerCase().includes(query)
       );
     });
   });
+
+  protected onPluginChange(event: Event): void {
+    this.activePlugin.set((event.target as HTMLSelectElement).value);
+  }
+
+  protected isUnavailable(component: FlowComponentDefinition): boolean {
+    return !isFlowComponentCompatible(component, this.flowMediaType());
+  }
+
+  protected componentTooltip(component: FlowComponentDefinition): string {
+    if (!this.isUnavailable(component)) return component.description;
+    const supported = component.supportedFlowMediaTypes?.length
+      ? component.supportedFlowMediaTypes.map((type) => this.mediaTypeLabel(type)).join(', ')
+      : this.mediaTypeLabel(component.mediaType as MediaType);
+    return `Non disponible dans un flow ${this.mediaTypeLabel(this.flowMediaType())}. Compatible avec : ${supported}.`;
+  }
+
+  protected selectComponent(component: FlowComponentDefinition): void {
+    if (this.isUnavailable(component)) return;
+    this.componentSelected.emit(component);
+  }
+
+  private mediaTypeLabel(type: MediaType): string {
+    return (
+      {
+        video: 'vidéo',
+        image: 'image',
+        music: 'musique',
+        subtitles: 'sous-titres',
+      }[type] ?? 'générique'
+    );
+  }
 
   protected readonly filteredPacks = computed(() => {
     const query = this.searchQuery().trim().toLowerCase();

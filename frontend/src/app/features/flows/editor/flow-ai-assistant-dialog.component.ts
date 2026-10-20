@@ -11,8 +11,6 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatChipsModule } from '@angular/material/chips';
-import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { FlowDocument } from '../../../shared/models/flow-validation';
@@ -38,53 +36,113 @@ export interface FlowAiAssistantDialogData {
     MatDialogTitle,
     MatFormFieldModule,
     MatInputModule,
-    MatChipsModule,
-    MatIconModule,
     MatProgressSpinnerModule,
   ],
   template: `
     <section class="app-dialog flow-ai-dialog">
       <header class="app-dialog-header">
+        <span class="assistant-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="m12 2 1.55 6.45L20 10l-6.45 1.55L12 18l-1.55-6.45L4 10l6.45-1.55L12 2Z" />
+            <path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" />
+          </svg>
+        </span>
         <div class="app-dialog-heading">
-          <p class="app-dialog-eyebrow">Intelligence Artificielle & Génération</p>
-          <h2 mat-dialog-title>Assistant de Flow</h2>
+          <p class="app-dialog-eyebrow">Assistant de flow</p>
+          <h2 mat-dialog-title>Assistant de flow</h2>
+          <p class="dialog-description">
+            @if (mode() === 'generate') {
+              Décrivez le résultat attendu et l’assistant préparera un flow adapté à votre média.
+            } @else if (mode() === 'refactor') {
+              Décrivez les changements souhaités pour faire évoluer le flow actuel.
+            } @else {
+              Demandez une synthèse des étapes, des conditions et des connexions de ce flow.
+            }
+          </p>
         </div>
+        <button
+          class="dialog-close"
+          type="button"
+          aria-label="Fermer l’assistant"
+          (click)="close()"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
       </header>
 
       <mat-dialog-content class="app-dialog-body flow-ai-body">
-        <div class="mode-tabs">
-          <button
-            type="button"
-            mat-button
-            [class.active-tab]="mode() === 'generate'"
-            (click)="setMode('generate')"
-          >
-            <mat-icon>auto_awesome</mat-icon> Nouveau flow
-          </button>
-          @if (data.currentFlow) {
+        @if (data.currentFlow) {
+          <div class="mode-selector" role="group" aria-label="Action de l’assistant">
             <button
+              class="mode-card"
+              [class.selected]="mode() === 'generate'"
+              [attr.aria-pressed]="mode() === 'generate'"
               type="button"
-              mat-button
-              [class.active-tab]="mode() === 'refactor'"
+              (click)="setMode('generate')"
+            >
+              <span class="mode-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="4" width="16" height="16" rx="3" />
+                  <path d="M12 8v8M8 12h8" />
+                </svg>
+              </span>
+              <span class="mode-copy">
+                <strong>Nouveau flow</strong>
+                <span>Créer un traitement à partir d’une consigne</span>
+              </span>
+              <span class="mode-indicator" aria-hidden="true"></span>
+            </button>
+            <button
+              class="mode-card"
+              [class.selected]="mode() === 'refactor'"
+              [attr.aria-pressed]="mode() === 'refactor'"
+              type="button"
               (click)="setMode('refactor')"
             >
-              <mat-icon>edit_note</mat-icon> Modifier ce flow
+              <span class="mode-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M4 19.5V20h.5l11.2-11.2-1.5-1.5L3 18.5v1Z" />
+                  <path
+                    d="m17.2 4.8 2 2a1.4 1.4 0 0 1 0 2l-1.5 1.5-4-4L15.2 4.8a1.4 1.4 0 0 1 2 0Z"
+                  />
+                  <path d="M4 4h7M4 8h4M4 12h2" />
+                </svg>
+              </span>
+              <span class="mode-copy">
+                <strong>Modifier ce flow</strong>
+                <span>Ajuster les étapes du flow existant</span>
+              </span>
+              <span class="mode-indicator" aria-hidden="true"></span>
             </button>
             <button
+              class="mode-card"
+              [class.selected]="mode() === 'explain'"
+              [attr.aria-pressed]="mode() === 'explain'"
               type="button"
-              mat-button
-              [class.active-tab]="mode() === 'explain'"
               (click)="setMode('explain')"
             >
-              <mat-icon>help_outline</mat-icon> Expliquer ce flow
+              <span class="mode-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M9.8 9a2.3 2.3 0 1 1 3.9 1.7c-1.2 1-1.7 1.4-1.7 2.8M12 17h.01" />
+                </svg>
+              </span>
+              <span class="mode-copy">
+                <strong>Expliquer ce flow</strong>
+                <span>Comprendre les étapes et leurs liens</span>
+              </span>
+              <span class="mode-indicator" aria-hidden="true"></span>
             </button>
-          }
-        </div>
+          </div>
+        }
 
         @if (mode() !== 'explain') {
           <div class="suggestions-container">
-            <span class="suggestions-title">Suggestions rapides :</span>
-            <div class="chips-row">
+            <div class="suggestions-heading">
+              <span class="suggestions-title">Pour commencer</span>
+              <span class="suggestions-hint">Choisissez un exemple ou écrivez votre consigne</span>
+            </div>
+            <div class="suggestions-list" role="group" aria-label="Exemples de consignes">
               @for (suggestion of suggestions; track suggestion) {
                 <button type="button" class="suggestion-chip" (click)="applySuggestion(suggestion)">
                   {{ suggestion }}
@@ -94,20 +152,24 @@ export interface FlowAiAssistantDialogData {
           </div>
 
           <mat-form-field appearance="outline" class="prompt-field">
-            <mat-label>Décrivez votre besoin en quelques mots</mat-label>
+            <mat-label>Que doit faire votre flow ?</mat-label>
             <textarea
               matInput
-              rows="4"
+              rows="5"
               [ngModel]="prompt()"
               (ngModelChange)="prompt.set($event)"
-              placeholder="Ex: Convertir en HEVC 10-bit si nécessaire, normaliser l'audio en AAC stéréo et conserver les sous-titres complets et forcés..."
+              placeholder="Ex. Convertir les vidéos en HEVC, normaliser l’audio en AAC stéréo et conserver les sous-titres français."
             ></textarea>
+            <mat-hint>Précisez les codecs, langues ou conditions importantes pour vous.</mat-hint>
           </mat-form-field>
         } @else {
-          <p class="explain-intro">
-            L'IA va analyser l'ensemble des blocs, conditions et connexions de votre flow actuel
-            pour en rédiger une synthèse pédagogique.
-          </p>
+          <div class="explain-card">
+            <span class="explain-icon" aria-hidden="true">i</span>
+            <p>
+              L’assistant analysera les blocs, les conditions et les connexions pour vous présenter
+              le parcours du flow dans un langage clair.
+            </p>
+          </div>
         }
 
         @if (explanation()) {
@@ -205,13 +267,16 @@ export interface FlowAiAssistantDialogData {
                 </div>
               }
             </section>
-            <p class="proposal-applied" role="status">Proposition appliquée à l’éditeur. Vous pouvez continuer la conversation pour l’ajuster.</p>
+            <p class="proposal-applied" role="status">
+              Proposition appliquée à l’éditeur. Vous pouvez continuer la conversation pour
+              l’ajuster.
+            </p>
           </section>
         }
 
         @if (errorMessage()) {
           <div class="error-box">
-            <mat-icon>error_outline</mat-icon>
+            <span class="error-mark" aria-hidden="true">!</span>
             <span>{{ errorMessage() }}</span>
           </div>
         }
@@ -227,29 +292,46 @@ export interface FlowAiAssistantDialogData {
           </button>
         }
         @if (loading()) {
-          <div class="loading-state">
+          <div class="loading-state" role="status" aria-live="polite">
             <mat-spinner diameter="24"></mat-spinner>
-            <span>L'IA analyse le catalogue et compose le graphe...</span>
+            <span>L’assistant analyse le catalogue et prépare le flow…</span>
           </div>
         }
       </mat-dialog-content>
 
-      <mat-dialog-actions align="end">
-        <button matButton="text" type="button" [disabled]="loading()" (click)="close()">
+      <mat-dialog-actions class="app-dialog-footer flow-ai-footer" align="end">
+        <span class="footer-note">{{ data.mediaType }}</span>
+        <button
+          class="cancel-action"
+          matButton="text"
+          type="button"
+          [disabled]="loading()"
+          (click)="close()"
+        >
           Annuler
         </button>
         <button
+          class="submit-action"
           matButton="filled"
           type="button"
           [disabled]="loading() || proposal() || (mode() !== 'explain' && !prompt().trim())"
           (click)="submit()"
         >
-          <mat-icon>{{ mode() === 'explain' ? 'visibility' : 'auto_fix_high' }}</mat-icon>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            @if (mode() === 'explain') {
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12s3.2-5 9-5 9 5 9 5-3.2 5-9 5-9-5-9-5Z" />
+              <circle cx="12" cy="12" r="2" />
+            } @else {
+              <path d="m12 2 1.55 6.45L20 10l-6.45 1.55L12 18l-1.55-6.45L4 10l6.45-1.55L12 2Z" />
+              <path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" />
+            }
+          </svg>
           {{
             mode() === 'explain'
-              ? 'Expliquer'
+              ? 'Analyser le flow'
               : mode() === 'refactor'
-                ? 'Préparer une proposition'
+                ? 'Préparer les changements'
                 : 'Générer le flow'
           }}
         </button>
@@ -259,98 +341,303 @@ export interface FlowAiAssistantDialogData {
   styles: [
     `
       .flow-ai-dialog {
-        min-width: 440px;
-        max-width: 640px;
+        min-width: 0;
+        max-width: none;
+      }
+      .flow-ai-dialog .app-dialog-header {
+        align-items: flex-start;
+        padding: 24px 28px 20px;
+      }
+      .assistant-mark {
+        width: 44px;
+        height: 44px;
+        flex: 0 0 44px;
+        display: grid;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border-subtle));
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface));
+        color: var(--accent-strong);
+      }
+      .assistant-mark svg {
+        width: 24px;
+        height: 24px;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.5;
+      }
+      .dialog-description {
+        max-width: 620px;
+        margin: 6px 0 0;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+      .dialog-close {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+        display: grid;
+        place-items: center;
+        margin: -4px -8px 0 0;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+      }
+      .dialog-close:hover {
+        background: var(--surface-container);
+        color: var(--text-primary);
+      }
+      .dialog-close span {
+        font-size: 1.8rem;
+        line-height: 1;
       }
       .flow-ai-body {
         display: flex;
         flex-direction: column;
-        gap: 16px;
-        padding: 16px 0;
+        gap: 22px;
+        padding-top: 4px !important;
       }
-      .mode-tabs {
+      .mode-selector {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .mode-card {
+        min-width: 0;
+        min-height: 108px;
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr) 14px;
+        align-items: start;
+        gap: 11px;
+        padding: 15px 13px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 14px;
+        background: var(--surface);
+        color: var(--text-secondary);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color 150ms ease,
+          background 150ms ease,
+          box-shadow 150ms ease;
+      }
+      .mode-card:hover {
+        border-color: var(--border-strong);
+        background: var(--surface-container-low);
+      }
+      .mode-card.selected {
+        border-color: var(--accent);
+        background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+      }
+      .mode-card:focus-visible,
+      .suggestion-chip:focus-visible,
+      .dialog-close:focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--accent) 48%, transparent);
+        outline-offset: 2px;
+      }
+      .mode-icon {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        border-radius: 11px;
+        background: var(--surface-container);
+        color: var(--accent-strong);
+      }
+      .selected .mode-icon {
+        background: var(--accent-soft);
+      }
+      .mode-icon svg {
+        width: 20px;
+        height: 20px;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.7;
+      }
+      .mode-copy {
+        min-width: 0;
         display: flex;
-        gap: 8px;
-        border-bottom: 1px solid var(--mat-sys-outline-variant, #333);
-        padding-bottom: 8px;
+        flex-direction: column;
+        gap: 5px;
       }
-      .mode-tabs button {
-        border-radius: 6px;
+      .mode-copy strong {
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        line-height: 1.3;
       }
-      .active-tab {
-        background: var(--mat-sys-secondary-container, #2c3e50);
-        color: var(--mat-sys-on-secondary-container, #fff);
+      .mode-copy > span {
+        color: var(--text-muted);
+        font-size: 0.77rem;
+        line-height: 1.4;
+      }
+      .mode-indicator {
+        width: 13px;
+        height: 13px;
+        margin-top: 2px;
+        border: 1.5px solid var(--border-strong);
+        border-radius: 50%;
+      }
+      .selected .mode-indicator {
+        border: 4px solid var(--accent);
+        background: var(--surface);
       }
       .suggestions-container {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
+      }
+      .suggestions-heading {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 4px 10px;
       }
       .suggestions-title {
-        font-size: 0.85rem;
-        color: var(--mat-sys-on-surface-variant, #aaa);
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        font-weight: 700;
       }
-      .chips-row {
+      .suggestions-hint {
+        color: var(--text-muted);
+        font-size: 0.8rem;
+      }
+      .suggestions-list {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 8px;
       }
       .suggestion-chip {
-        background: var(--mat-sys-surface-container, #222);
-        border: 1px solid var(--mat-sys-outline-variant, #444);
-        color: var(--mat-sys-on-surface, #ddd);
-        padding: 4px 10px;
-        border-radius: 16px;
-        font-size: 0.82rem;
+        max-width: 100%;
+        padding: 8px 12px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 999px;
+        background: var(--surface-container-low);
+        color: var(--text-secondary);
+        font: inherit;
+        font-size: 0.8rem;
+        line-height: 1.3;
         cursor: pointer;
-        transition: background 0.2s;
+        text-align: left;
+        transition:
+          border-color 150ms ease,
+          background 150ms ease,
+          color 150ms ease;
       }
       .suggestion-chip:hover {
-        background: var(--mat-sys-surface-container-high, #333);
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--accent-strong);
       }
       .prompt-field {
         width: 100%;
+      }
+      .prompt-field textarea {
+        min-height: 132px;
+        line-height: 1.55;
+        resize: vertical;
+      }
+      .explain-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 18px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 14px;
+        background: var(--surface-container-low);
+      }
+      .explain-card p {
+        margin: 0;
+        color: var(--text-secondary);
+        line-height: 1.55;
+      }
+      .explain-icon {
+        width: 24px;
+        height: 24px;
+        flex: 0 0 24px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        font-weight: 800;
       }
       .loading-state {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 12px;
-        background: var(--mat-sys-surface-container, #1f1f1f);
-        border-radius: 8px;
+        padding: 14px 16px;
+        border: 1px solid var(--border-subtle);
+        background: var(--surface-container-low);
+        border-radius: 12px;
+        color: var(--text-secondary);
         font-size: 0.9rem;
       }
       .error-box {
         display: flex;
-        align-items: center;
-        gap: 8px;
-        color: var(--mat-sys-error, #f44336);
+        align-items: flex-start;
+        gap: 10px;
+        padding: 13px 15px;
+        border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border-subtle));
+        border-radius: 12px;
+        background: var(--danger-soft);
+        color: var(--danger-strong);
         font-size: 0.9rem;
+        line-height: 1.45;
+      }
+      .error-mark {
+        width: 19px;
+        height: 19px;
+        flex: 0 0 19px;
+        display: grid;
+        place-items: center;
+        border: 1.5px solid currentColor;
+        border-radius: 50%;
+        font-size: 0.78rem;
+        font-weight: 800;
+        line-height: 1;
       }
       .explanation-box {
-        padding: 12px 16px;
-        background: var(--mat-sys-surface-container-high, #222);
-        border-radius: 8px;
-        line-height: 1.5;
+        padding: 18px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 14px;
+        background: var(--surface-container-low);
+        line-height: 1.6;
+      }
+      .explanation-box h4 {
+        margin: 0 0 8px;
+        color: var(--text-primary);
+      }
+      .explanation-box p {
+        margin: 0;
       }
       .proposal-box {
-        padding: 16px;
-        border: 1px solid var(--mat-sys-outline-variant, #555);
-        border-radius: 8px;
+        padding: 18px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 14px;
+        background: var(--surface-container-low);
       }
       .proposal-box h3 {
-        margin: 0;
+        margin: 0 0 8px;
+        color: var(--text-primary);
       }
       .proposal-box pre {
         max-height: 260px;
         overflow: auto;
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
       .proposal-simulation {
         margin-top: 16px;
-        padding: 12px;
+        padding: 16px;
         border-radius: var(--radius-md, 12px);
-        background: var(--surface-container-low, #222);
+        background: var(--surface-container);
       }
       .proposal-simulation h4,
       .proposal-simulation p {
@@ -362,10 +649,70 @@ export interface FlowAiAssistantDialogData {
       .simulation-result ol {
         padding-inline-start: 22px;
       }
-      .proposal-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
+      .flow-ai-footer {
+        gap: 10px;
+      }
+      .footer-note {
+        margin-right: auto;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        text-transform: capitalize;
+      }
+      .cancel-action {
+        color: var(--text-secondary);
+      }
+      .submit-action svg {
+        width: 18px;
+        height: 18px;
+        margin-right: 7px;
+        vertical-align: -4px;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.7;
+      }
+      @media (max-width: 760px) {
+        .mode-selector {
+          grid-template-columns: 1fr;
+        }
+        .mode-card {
+          min-height: 76px;
+        }
+      }
+      @media (max-width: 600px) {
+        .flow-ai-dialog .app-dialog-header {
+          gap: 11px;
+          padding: 18px 18px 16px;
+        }
+        .assistant-mark {
+          width: 38px;
+          height: 38px;
+          flex-basis: 38px;
+          border-radius: 12px;
+        }
+        .dialog-close {
+          margin-right: -8px;
+        }
+        .dialog-description {
+          font-size: 0.85rem;
+        }
+        .flow-ai-footer {
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+        .footer-note {
+          display: none;
+        }
+        .flow-ai-footer button {
+          min-width: 0;
+          padding-inline: 12px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .mode-card,
+        .suggestion-chip {
+          transition: none;
+        }
       }
     `,
   ],

@@ -176,7 +176,7 @@ export interface FlowValidationIssue {
       transition: max-height 0.25s var(--motion-emphasized);
 
       &_expanded {
-        max-height: 46vh;
+        max-height: min(56vh, 720px);
       }
     }
 
@@ -315,9 +315,15 @@ export interface FlowValidationIssue {
 
     .tray-body {
       overflow-y: auto;
-      max-height: calc(46vh - 44px);
+      max-height: calc(min(56vh, 720px) - 44px);
       padding: 16px 20px 24px;
       background: var(--surface-container-lowest);
+      overscroll-behavior: contain;
+    }
+
+    .simulation-content {
+      width: min(100%, 1120px);
+      margin-inline: auto;
     }
 
     .diagnostics-content {
@@ -410,6 +416,9 @@ export interface FlowValidationIssue {
       }
       .tray-status-hint {
         display: none;
+      }
+      .tray-body {
+        padding: 12px;
       }
     }
   `,

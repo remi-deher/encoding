@@ -73,6 +73,7 @@ export class FlowGraphEditorComponent {
   }>();
   readonly nodes = input.required<readonly FlowGraphNode[]>();
   readonly connections = input.required<readonly FlowGraphConnection[]>();
+  readonly showConnections = input(false);
   readonly componentPacks = input<readonly FlowComponentPackInstance[]>([]);
   readonly configurationRequested = output<string>();
   readonly branchComponentRequested = output<{
@@ -86,6 +87,7 @@ export class FlowGraphEditorComponent {
   readonly continuationRequested = output<readonly FlowContinuationSource[]>();
   readonly connectionRequested = output<FlowConnectionRequest>();
   readonly connectionsChanged = output<readonly FlowGraphConnection[]>();
+  readonly showConnectionsChange = output<boolean>();
   readonly nodeRemoved = output<string>();
   readonly connectionRemoved = output<string>();
   private readonly cards = viewChildren<ElementRef<HTMLElement>>('stepCard');
@@ -112,11 +114,22 @@ export class FlowGraphEditorComponent {
   private readonly ports = viewChildren<ElementRef<HTMLElement>>('outputPort');
   private readonly inputs = viewChildren<ElementRef<HTMLElement>>('inputPort');
   private observer?: ResizeObserver;
-  protected readonly showConnections = signal(true);
+  private readonly compactPreference = signal<boolean | null>(null);
+  protected readonly compactView = computed(
+    () => this.compactPreference() ?? this.nodes().length >= 10,
+  );
   protected readonly expandedPacks = signal<ReadonlySet<string>>(new Set());
   protected readonly pendingConnection = signal<FlowContinuationSource | null>(null);
   protected readonly drawnConnections = signal<readonly FlowLinkDrawing[]>([]);
   protected readonly drawingSize = signal({ width: 0, height: 0 });
+
+  protected toggleDensity(): void {
+    this.compactPreference.set(!this.compactView());
+  }
+
+  protected toggleConnections(): void {
+    this.showConnectionsChange.emit(!this.showConnections());
+  }
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.observer?.disconnect());
@@ -242,7 +255,7 @@ export class FlowGraphEditorComponent {
       targetNodeId: this.packForVisualNode(node)?.inputNodeId ?? node.id,
     });
     this.pendingConnection.set(null);
-    this.showConnections.set(true);
+    this.showConnectionsChange.emit(true);
   }
   protected readonly colors = flowComponentColors;
   protected openConfiguration(node: FlowGraphNode, event: Event): void {
