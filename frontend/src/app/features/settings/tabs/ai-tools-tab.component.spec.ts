@@ -11,7 +11,7 @@ import { AiSettings, AiToolInfo } from '../../../shared/models/ai-tools';
 
 describe('AiToolsTabComponent', () => {
   let aiServiceMock: {
-    getModelCatalog: ReturnType<typeof vi.fn>;
+    getSettingsModelCatalog: ReturnType<typeof vi.fn>;
     listSessions: ReturnType<typeof vi.fn>;
     getQuotas: ReturnType<typeof vi.fn>;
     getCluster: ReturnType<typeof vi.fn>;
@@ -54,7 +54,9 @@ describe('AiToolsTabComponent', () => {
 
   async function setup() {
     aiServiceMock = {
-      getModelCatalog: vi.fn().mockReturnValue(of({ nodes: [], policy: { disabledModels: [] } })),
+      getSettingsModelCatalog: vi.fn().mockReturnValue(
+        of({ nodes: [], policy: { disabledModels: [] } }),
+      ),
       listSessions: vi.fn().mockReturnValue(of({ items: [], offset: 0, hasMore: false })),
       getQuotas: vi.fn().mockReturnValue(of({ nodes: [] })),
       getCluster: vi.fn().mockReturnValue(of({ nodes: [] })),
