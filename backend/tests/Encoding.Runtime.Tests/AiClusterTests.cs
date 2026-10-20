@@ -429,7 +429,7 @@ public sealed class AiClusterTests
 
     private static Guid DerivePlannerRequestId(string conversationId, Guid requestId)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(conversationId + "/" + requestId.ToString("N")
+        var bytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(conversationId + "/" + requestId.ToString("N")
             + "/assistant-read-tool-planner"));
         var derived = new Guid(bytes.AsSpan(0, 16));
         return derived == Guid.Empty ? new Guid(bytes.AsSpan(16, 16)) : derived;
@@ -437,7 +437,7 @@ public sealed class AiClusterTests
 
     private static Guid DeriveRepairRequestId(Guid requestId)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"flow-repair-v1:{requestId:N}"));
+        var bytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"flow-repair-v1:{requestId:N}"));
         return new Guid(bytes.AsSpan(0, 16));
     }
 
@@ -565,7 +565,7 @@ public sealed class AiClusterTests
                         return new(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("Provider unavailable") };
                     var queued = factory.replies.TryDequeue(out var next)
                         ? next
-                        : ("answer from remote model", HttpStatusCode.OK);
+                        : (Content: "answer from remote model", Status: HttpStatusCode.OK);
                     if (queued.Status != HttpStatusCode.OK)
                         return new(queued.Status) { Content = new StringContent("Provider temporarily unavailable") };
                     var reply = queued.Content!;
