@@ -123,6 +123,7 @@ const action = (
   tool: Tool,
   mediaType: FlowComponentDefinition['mediaType'],
   fields: readonly Field[] = [],
+  pluginId = 'base',
 ): FlowComponentDefinition => ({
   id,
   name,
@@ -130,8 +131,8 @@ const action = (
   kind: 'action',
   mediaType,
   supportedFlowMediaTypes: supportedFlowMediaTypes(tool, mediaType, id),
-  pluginId: 'base',
-  pluginName: 'Base',
+  pluginId,
+  pluginName: pluginId === 'video' ? 'Vidéo' : 'Base',
   executionToolId: tool,
   executionToolName: toolNames[tool],
   outputs: [
@@ -146,7 +147,7 @@ const action = (
         'base-transcode-audio',
         'base-normalize-audio',
         'base-resize-video',
-        'base-remux-media',
+        'video-remux-media',
         'base-remux-matroska',
         'base-add-audio-track',
         'base-add-subtitle-track',
@@ -208,6 +209,7 @@ export const MEDIA_TOOL_ACTIONS: readonly FlowComponentDefinition[] = [
         ['qsv', 'Intel Quick Sync'],
         ['vaapi', 'VAAPI'],
       ]),
+      boolean('retryWithCpu', 'Repli sur CPU si l’encodage matériel échoue', false),
     ],
   ),
   action(
@@ -257,7 +259,7 @@ export const MEDIA_TOOL_ACTIONS: readonly FlowComponentDefinition[] = [
     ],
   ),
   action(
-    'base-remux-media',
+    'video-remux-media',
     'Changer de conteneur',
     'Copie les pistes compatibles dans un conteneur MKV ou MP4.',
     'ffmpeg',
@@ -268,6 +270,7 @@ export const MEDIA_TOOL_ACTIONS: readonly FlowComponentDefinition[] = [
         ['mp4', 'MP4'],
       ]),
     ],
+    'video',
   ),
   action(
     'base-extract-audio',

@@ -170,6 +170,15 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(context.CurrentMetadata is null) await EnsureScanAsync();
                         output=MediaConditionEvaluator.Evaluate(node.Component.ComponentId,c,context.CurrentMetadata);
                     }
+                    else if(node.Component.PluginId=="probe" && id=="probe-validate-output")
+                    {
+                        await EnsureScanAsync();
+                        var report=await actions.ValidateOutputAsync(current,original,context.BeforeMetadata!.Value,context.CurrentMetadata!.Value,c,directory,job.Token);
+                        output=report.GetProperty("valid").GetBoolean()?"valid":"invalid";
+                        variables["validation."+node.Id]=report;
+                        var issues=report.GetProperty("issues").EnumerateArray().Select(issue=>issue.GetString()).Where(issue=>!string.IsNullOrWhiteSpace(issue)).ToArray();
+                        logger.LogInformation("Contrôles après assemblage {Node} : {Result}{Issues}",node.Id,output,issues.Length==0?"":" — "+string.Join("; ",issues));
+                    }
                     else if(RuntimeWaitPolicy.IsWait(node)) { wait=RuntimeWaitPolicy.Resolve(node); output="resumed"; }
                     else if(RuntimeHandoffPolicy.IsHandoff(node))
                     {
@@ -420,7 +429,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         {
                             var plan=context.Plan.ToList();
                             if(plan.Count==0 && variables.TryGetValue("plan.tool",out var selectedTool) && selectedTool.GetString()=="mkvtoolnix") plan.Add(new("base-remux-matroska",new Dictionary<string,JsonElement>()));
-                            if(plan.Count==0) plan.Add(new("base-remux-media",new Dictionary<string,JsonElement>{["container"]=JsonSerializer.SerializeToElement(context.Extension.TrimStart('.'))}));
+                            if(plan.Count==0) plan.Add(new("video-remux-media",new Dictionary<string,JsonElement>{["container"]=JsonSerializer.SerializeToElement(context.Extension.TrimStart('.'))}));
                             var index=0;
                             while(index<plan.Count)
                             {
@@ -480,7 +489,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 {
                     logger.LogInformation("Échec de l’outil pendant l’étape {Node}: {Detail}",node.Id,exception.Message);
                     // Une sortie « error » non reliée n'existe pas pour le serveur : l'échec est terminal (0015) au lieu d'un checkpoint refusé qui rejouerait l'exécution.
-                    if(node.Component.PluginId is not ("base" or "conditions") || FlowPath.NextNodeId(lease.Flow,node.Id,"error") is null) throw;
+                    if(node.Component.PluginId is not ("base" or "conditions" or "probe") || FlowPath.NextNodeId(lease.Flow,node.Id,"error") is null) throw;
                     output="error";
                     await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
                 }

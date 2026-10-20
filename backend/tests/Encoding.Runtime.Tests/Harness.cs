@@ -89,8 +89,8 @@ internal static partial class Harness
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
-        new("plugin/base", "1.6.0", ["general"], []),
-        new("plugin/video", "1.0.0", ["general"], []),
+        new("plugin/base", "1.7.0", ["general"], []),
+        new("plugin/video", "1.1.0", ["general"], []),
         new("plugin/audio", "1.0.0", ["general"], []),
         new("plugin/subtitles", "1.0.0", ["general"], []),
         new("plugin/nodes", "1.3.0", ["general"], []),

@@ -55,7 +55,10 @@ export class ExecutionDetailPolling {
                       rows: events.map((event) => ({
                         id: event.id,
                         revision: event.revision,
-                        state: EXECUTION_STATE_LABELS[event.state],
+                        state:
+                          event.state === 'media.published'
+                            ? 'Média publié'
+                            : EXECUTION_STATE_LABELS[event.state],
                         detail: event.detail,
                         createdAt: this.date(event.createdAt),
                       })),

@@ -31,12 +31,21 @@ internal static class FlowV3Template
             Node("defer-disk", "Reporter : disque occupé", "base", "base-defer-processing", new() { ["delayMinutes"] = J(2), ["reason"] = J("Disque occupé par un autre traitement") }),
             Node("snapshot", "Noms de pistes d'origine", "subtitles", "subtitles-track-names", new() { ["mode"] = J("snapshot") }),
             Node("prepare", "Préparer le plan FFmpeg", "base", "base-prepare-processing", new() { ["tool"] = J("ffmpeg"), ["preserveUnchangedTracks"] = J(true) }),
-            Node("video", "Vidéo HEVC", "video", "video-transcode", new() { ["processingMode"] = J("plan"), ["encoderMode"] = J("automatic"), ["videoCodec"] = J("hevc") }),
+            Node("video", "Vidéo HEVC", "video", "video-transcode", new() { ["processingMode"] = J("plan"), ["encoderMode"] = J("automatic"), ["videoCodec"] = J("hevc"), ["hardwareAcceleration"] = J("qsv"), ["retryWithCpu"] = J(true), ["colorDepth"] = J("auto"), ["preserveHdr"] = J(true) }),
             Node("audio", "Audio par règles", "audio", "audio-rules", new() { ["processingMode"] = J("plan"), ["unknownLayout"] = J("infer") }),
             Node("execute", "Exécuter le plan (une écriture)", "base", "base-execute-processing"),
             Node("subtitles", "Sous-titres ASS", "subtitles", "subtitles-manage", new() { ["styleProfile"] = J("crunchyroll") }),
             Node("fonts", "Polices", "subtitles", "subtitles-add-fonts", new() { ["fontSet"] = J("Crunchyroll") }),
             Node("names", "Noms de pistes", "subtitles", "subtitles-track-names", new() { ["mode"] = J("apply"), ["singleDefaultAudio"] = J(true) }),
+            Node("validate-output", "Contrôles après assemblage", "probe", "probe-validate-output", new()
+            {
+                ["requiredVideoCodec"] = J("hevc"), ["durationToleranceSeconds"] = J(2), ["preserveTrackCounts"] = J(true),
+                ["allowedAudioCodecs"] = J("aac,ac3"), ["forbiddenAudioCodecs"] = J("eac3"),
+                ["allowedSubtitleCodecs"] = J("ass,ssa,hdmv_pgs_subtitle,dvd_subtitle,dvb_subtitle"),
+                ["maxAudioChannels"] = J(6),
+                ["preserveAudioChannels"] = J(true), ["preserveAudioLayout"] = J(true), ["preserveChapterCount"] = J(true),
+                ["preserveOriginalAttachments"] = J(true)
+            }),
             Node("done", "Terminé", "base", "base-complete-flow", new() { ["result"] = J("success") }),
             Node("fail", "Échec", "base", "base-complete-flow", new() { ["result"] = J("failed"), ["message"] = J("Une étape du flow a échoué ; la source est intacte.") }),
         };
@@ -52,7 +61,8 @@ internal static class FlowV3Template
         Link("execute", "success", "subtitles"); Link("execute", "skipped", "subtitles"); Link("execute", "error", "fail");
         Link("subtitles", "success", "fonts"); Link("subtitles", "unchanged", "fonts"); Link("subtitles", "error", "fail");
         Link("fonts", "success", "names"); Link("fonts", "unchanged", "names"); Link("fonts", "error", "fail");
-        Link("names", "success", "done"); Link("names", "unchanged", "done"); Link("names", "error", "fail");
+        Link("names", "success", "validate-output"); Link("names", "unchanged", "validate-output"); Link("names", "error", "fail");
+        Link("validate-output", "valid", "done"); Link("validate-output", "invalid", "fail"); Link("validate-output", "error", "fail");
         return new(1, FlowId, 1, "HEVC + AAC/AC3 + ASS (Crunchyroll)", "video", nodes, edges);
     }
 }

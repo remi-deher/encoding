@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "video",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Vidéo",
   "supportedHostContractVersions": [
     1
@@ -225,6 +225,13 @@
             "type": "boolean",
             "defaultValue": true,
             "description": "Injecte automatiquement les espaces colorimétriques BT.2020 et courbes SMPTE ST 2084 pour éviter l'image délavée."
+          },
+          {
+            "id": "retryWithCpu",
+            "label": "Repli sur CPU si l’encodage matériel échoue",
+            "type": "boolean",
+            "defaultValue": false,
+            "description": "Si un encodeur matériel est sélectionné et que FFmpeg échoue, relance une fois avec le même codec sur CPU. Utilise d’abord la cible CPU du profil, puis les encodeurs CPU compatibles disponibles. Désactivez l’option pour conserver la sortie Erreur."
           }
         ]
       },
@@ -237,7 +244,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
     },
     {
       "id": "video-resize",
@@ -310,7 +319,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
     },
     {
       "id": "video-auto-crop",
@@ -404,7 +415,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
     },
     {
       "id": "video-deinterlace",
@@ -505,7 +518,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
     },
     {
       "id": "video-thumbnail",
@@ -570,7 +585,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
     },
     {
       "id": "video-verify-decoding",
@@ -647,7 +664,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
     },
     {
       "id": "video-file-size-guard",
@@ -715,6 +734,80 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
+      "compatiblePluginVersions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "video-remux-media",
+      "version": "1.0.0",
+      "name": "Changer de conteneur",
+      "description": "Copie les pistes compatibles dans un conteneur MKV ou MP4.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "L’action a terminé son traitement."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’action n’a pas pu terminer son traitement."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "processingMode",
+            "label": "Mode de traitement",
+            "type": "select",
+            "defaultValue": "plan",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "options": [
+              {
+                "value": "plan",
+                "label": "Ajouter au plan"
+              },
+              {
+                "value": "direct",
+                "label": "Opération autonome"
+              }
+            ]
+          },
+          {
+            "id": "container",
+            "label": "Conteneur",
+            "type": "select",
+            "inline": true,
+            "defaultValue": "mkv",
+            "options": [
+              {
+                "value": "mkv",
+                "label": "Matroska (MKV)"
+              },
+              {
+                "value": "mp4",
+                "label": "MP4"
+              }
+            ]
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
       "compatiblePluginVersions": []
     }
   ]

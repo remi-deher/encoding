@@ -51,9 +51,10 @@ internal static class FlowV3Scenarios
         var worker = Guid.NewGuid();
         NodeToolCapability[] Caps(string baseVersion, string plexVersion, bool mkv = true, bool ffmpeg = true) => [
             new("plugin/base", baseVersion, ["general"], []),
-            new("plugin/video", "1.0.0", ["general"], []),
+            new("plugin/video", "1.1.0", ["general"], []),
             new("plugin/audio", "1.0.0", ["general"], []),
             new("plugin/subtitles", "1.0.0", ["general"], []),
+            new("plugin/probe", "1.0.0", ["general"], []),
             new("plugin/plex", plexVersion, ["general"], ["process"]),
             new("ffprobe", "7.0", ["video"], []),
             .. ffmpeg ? new[] { new NodeToolCapability("ffmpeg", "7.0", ["video"], ["cpu"], ["libx265", "aac", "ac3"]) } : [],

@@ -72,6 +72,14 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                     variables[Text("name")] = FlowVariableValue.Parse(Text("value"));
                     detail = $"Variable « {Text("name")} » définie.";
                 }
+                else if (node.Component.PluginId == "probe" && id == "probe-validate-output")
+                {
+                    if (request.Assumptions?.GetValueOrDefault(node.Id) is not { } result)
+                        return new("waiting", "Choisissez le résultat des contrôles de sortie (Valide / Invalide / Erreur).", steps, node.Id);
+                    assumed = true; output = result.OutputId;
+                    detail = "Résultat supposé pour la validation post-assemblage ; le fichier n'est pas ouvert par le simulateur.";
+                    if (result.Variables is not null) foreach (var pair in result.Variables) variables[pair.Key] = pair.Value;
+                }
                 else if ((node.Component.PluginId is "base" or "probe") && (id.StartsWith("base-probe-", StringComparison.Ordinal) || id.StartsWith("probe-", StringComparison.Ordinal)))
                 {
                     variables[Text("resultVariable", "result")] = FlowMediaValues.Probe(id, context.CurrentMetadata!.Value,

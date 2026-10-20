@@ -10,7 +10,7 @@
       "name": "Fichier vid\u00E9o",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.6.0",
+        "pluginVersion": "1.7.0",
         "componentId": "base-input-video",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -38,7 +38,7 @@
       "name": "Reporter : lecture en cours",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.6.0",
+        "pluginVersion": "1.7.0",
         "componentId": "base-defer-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -53,7 +53,7 @@
       "name": "Verrou de disque",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.6.0",
+        "pluginVersion": "1.7.0",
         "componentId": "base-disk-lock",
         "componentVersion": "1.5.0",
         "configurationSchemaVersion": 1
@@ -67,7 +67,7 @@
       "name": "Reporter : disque occup\u00E9",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.6.0",
+        "pluginVersion": "1.7.0",
         "componentId": "base-defer-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -96,7 +96,7 @@
       "name": "Pr\u00E9parer le plan FFmpeg",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.6.0",
+        "pluginVersion": "1.7.0",
         "componentId": "base-prepare-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -111,7 +111,7 @@
       "name": "Vid\u00E9o HEVC",
       "component": {
         "pluginId": "video",
-        "pluginVersion": "1.0.0",
+        "pluginVersion": "1.1.0",
         "componentId": "video-transcode",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -119,7 +119,11 @@
       "configuration": {
         "processingMode": "plan",
         "encoderMode": "automatic",
-        "videoCodec": "hevc"
+        "videoCodec": "hevc",
+        "hardwareAcceleration": "qsv",
+        "retryWithCpu": true,
+        "colorDepth": "auto",
+        "preserveHdr": true
       }
     },
     {
@@ -142,7 +146,7 @@
       "name": "Ex\u00E9cuter le plan (une \u00E9criture)",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.6.0",
+        "pluginVersion": "1.7.0",
         "componentId": "base-execute-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -193,11 +197,35 @@
       }
     },
     {
+      "id": "validate-output",
+      "name": "Contr\u00F4les apr\u00E8s assemblage",
+      "component": {
+        "pluginId": "probe",
+        "pluginVersion": "1.0.0",
+        "componentId": "probe-validate-output",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "requiredVideoCodec": "hevc",
+        "durationToleranceSeconds": 2,
+        "preserveTrackCounts": true,
+        "allowedAudioCodecs": "aac,ac3",
+        "forbiddenAudioCodecs": "eac3",
+        "allowedSubtitleCodecs": "ass,ssa,hdmv_pgs_subtitle,dvd_subtitle,dvb_subtitle",
+        "maxAudioChannels": 6,
+        "preserveAudioChannels": true,
+        "preserveAudioLayout": true,
+        "preserveChapterCount": true,
+        "preserveOriginalAttachments": true
+      }
+    },
+    {
       "id": "done",
       "name": "Termin\u00E9",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.6.0",
+        "pluginVersion": "1.7.0",
         "componentId": "base-complete-flow",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -211,7 +239,7 @@
       "name": "\u00C9chec",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.6.0",
+        "pluginVersion": "1.7.0",
         "componentId": "base-complete-flow",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -383,17 +411,35 @@
       "id": "names-success",
       "sourceNodeId": "names",
       "sourceOutputId": "success",
-      "targetNodeId": "done"
+      "targetNodeId": "validate-output"
     },
     {
       "id": "names-unchanged",
       "sourceNodeId": "names",
       "sourceOutputId": "unchanged",
-      "targetNodeId": "done"
+      "targetNodeId": "validate-output"
     },
     {
       "id": "names-error",
       "sourceNodeId": "names",
+      "sourceOutputId": "error",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "validate-output-valid",
+      "sourceNodeId": "validate-output",
+      "sourceOutputId": "valid",
+      "targetNodeId": "done"
+    },
+    {
+      "id": "validate-output-invalid",
+      "sourceNodeId": "validate-output",
+      "sourceOutputId": "invalid",
+      "targetNodeId": "fail"
+    },
+    {
+      "id": "validate-output-error",
+      "sourceNodeId": "validate-output",
       "sourceOutputId": "error",
       "targetNodeId": "fail"
     }
