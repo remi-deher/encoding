@@ -41,7 +41,8 @@ public sealed record NodeInventory(
     int ProcessorCount,
     long MemoryMb,
     string? ProcessorModel = null,
-    IReadOnlyList<NodeGpu>? Gpus = null);
+    IReadOnlyList<NodeGpu>? Gpus = null,
+    IReadOnlyList<string>? FontSets = null);
 
 /// <summary>Processeur graphique déclaré par l'agent ; informations matérielles statiques, jamais une mesure de charge.</summary>
 public sealed record NodeGpu(string Name, string? Vendor = null, string? Driver = null, string? Device = null);

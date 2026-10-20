@@ -56,7 +56,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": true
     },
     {
       "id": "subtitles-manage",
@@ -109,7 +110,9 @@
             ],
             "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices ».",
             "importance": "basic",
-            "section": "Conversion et style"
+            "section": "Conversion et style",
+            "requiresPluginVersion": "1.2.0",
+            "requiresPluginVersionValue": "custom"
           },
           {
             "id": "convertSrt",
@@ -230,7 +233,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "subtitles-add-fonts",
@@ -295,7 +299,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "subtitles-add-track",
@@ -392,7 +397,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "subtitles-track-names",
@@ -492,7 +498,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "subtitles-convert-ass",
@@ -545,7 +552,9 @@
             ],
             "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices ».",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "requiresPluginVersion": "1.2.0",
+            "requiresPluginVersionValue": "custom"
           },
           {
             "id": "fontFamily",
@@ -611,7 +620,9 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "minimumRuntimePluginVersion": "1.1.0",
+      "producesFiles": false
     },
     {
       "id": "subtitles-style-ass",
@@ -664,7 +675,9 @@
             ],
             "description": "Le profil intégré est un réglage initial en lecture seule. Les polices qu’il utilise (Trebuchet MS Gras, Arial Gras) s’ajoutent avec le bloc « Polices ».",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Paramètres",
+            "requiresPluginVersion": "1.2.0",
+            "requiresPluginVersionValue": "custom"
           },
           {
             "id": "fontFamily",
@@ -730,7 +743,9 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "minimumRuntimePluginVersion": "1.1.0",
+      "producesFiles": false
     },
     {
       "id": "subtitles-remove-duplicates",
@@ -779,7 +794,9 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "minimumRuntimePluginVersion": "1.1.0",
+      "producesFiles": false
     },
     {
       "id": "subtitles-detect-forced",
@@ -828,7 +845,9 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "minimumRuntimePluginVersion": "1.1.0",
+      "producesFiles": false
     },
     {
       "id": "subtitles-name-tracks",
@@ -891,7 +910,9 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "minimumRuntimePluginVersion": "1.1.0",
+      "producesFiles": false
     },
     {
       "id": "subtitles-default-audio",
@@ -945,7 +966,9 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "minimumRuntimePluginVersion": "1.1.0",
+      "producesFiles": false
     },
     {
       "id": "subtitles-snapshot-track-titles",
@@ -989,7 +1012,9 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "minimumRuntimePluginVersion": "1.1.0",
+      "producesFiles": false
     }
   ]
 }

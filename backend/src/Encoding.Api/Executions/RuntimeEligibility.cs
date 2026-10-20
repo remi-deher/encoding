@@ -58,7 +58,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             var component=registry.Resolve(node.Component);
 
             var matches = capabilities.Any(c =>
-                (!isAliased && c.ToolId == "plugin/" + pluginId && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component)))
+                (!isAliased && c.ToolId == "plugin/" + pluginId && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component) || (pluginId is "audio" or "video" or "subtitles") && component?.CompatiblePluginVersions?.Contains(c.Version, StringComparer.Ordinal) == true))
                 || (pluginId == "ai" && (componentId is "ai-translate-subtitles" or "ai-metadata-enricher") && c.ToolId == "ai-runtime" && c.Version == "1.0.0")
                 || (isAliased && c.ToolId == "plugin/" + targetPluginId)
                 || (isAliased && c.ToolId == "plugin/base" && IsBaseVersionSatisfied(c.Version, componentId))
@@ -66,6 +66,11 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 || (node.Component.PluginId is "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" && c.ToolId == "plugin/base" && IsAtLeast(c.Version, "1.6.0")));
 
             if (!matches) return false;
+            if (node.Configuration.TryGetValue("sourceFile", out var fileReference) && fileReference.ValueKind == JsonValueKind.String
+                && fileReference.GetString()!.StartsWith(FlowArtifactReference.Prefix, StringComparison.Ordinal)
+                && !capabilities.Any(capability => capability.ToolId == FlowArtifactReference.Capability && IsAtLeast(capability.Version, "1.0.0"))) return false;
+            if (registry.MinimumRuntime(node.Component, node.Configuration) is { } runtimeRequirement
+                && !capabilities.Any(capability => capability.ToolId == "plugin/" + runtimeRequirement.PluginId && IsAtLeast(capability.Version, runtimeRequirement.Version))) return false;
             if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node")
             {
                 if(node.Configuration.TryGetValue("targetNodeId",out var target) && target.ValueKind==System.Text.Json.JsonValueKind.String

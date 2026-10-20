@@ -13,6 +13,7 @@ export interface FlowComponentDefinition {
   readonly compatiblePluginVersions?: readonly string[];
   readonly reference?: FlowComponentReference;
   readonly id: string;
+  readonly producesFiles?: boolean;
   readonly name: string;
   readonly description: string;
   readonly kind: FlowComponentKind;
@@ -89,6 +90,9 @@ interface FlowComponentConfigurationFieldBase {
   readonly inline?: boolean;
   readonly importance?: 'basic' | 'advanced';
   readonly section?: string;
+  readonly legacyOnly?: boolean;
+  readonly requiresPluginVersion?: string;
+  readonly requiresPluginVersionValue?: string;
   readonly editor?:
     | 'languages'
     | 'language'
@@ -213,11 +217,13 @@ export function createDefaultFlowComponentConfiguration(
   schema: FlowComponentConfigurationSchema | undefined,
 ): FlowComponentConfiguration {
   return Object.fromEntries(
-    (schema?.fields ?? []).flatMap((field) => {
-      if (field.defaultValue !== undefined) return [[field.id, field.defaultValue]];
-      if (field.type === 'boolean') return [[field.id, false]];
-      return [];
-    }),
+    (schema?.fields ?? [])
+      .filter((field) => !field.legacyOnly)
+      .flatMap((field) => {
+        if (field.defaultValue !== undefined) return [[field.id, field.defaultValue]];
+        if (field.type === 'boolean') return [[field.id, false]];
+        return [];
+      }),
   );
 }
 

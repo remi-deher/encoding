@@ -126,7 +126,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "mkv-remove-tracks",
@@ -230,7 +231,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "mkv-extract-track",
@@ -279,7 +281,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": true
     },
     {
       "id": "mkv-reorder-tracks",
@@ -345,7 +348,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "mkv-edit-track-properties",
@@ -449,7 +453,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "mkv-edit-matroska-metadata",
@@ -514,7 +519,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "mkv-extract-attachments",
@@ -562,7 +568,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": true
     },
     {
       "id": "mkv-remove-attachments",
@@ -629,7 +636,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "mkv-extract-chapters",
@@ -686,7 +694,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": true
     },
     {
       "id": "mkv-replace-chapters",
@@ -753,7 +762,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     }
   ]
 }

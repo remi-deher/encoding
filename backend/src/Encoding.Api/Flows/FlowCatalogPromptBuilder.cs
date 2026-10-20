@@ -56,6 +56,7 @@ public sealed class FlowCatalogPromptBuilder(FlowComponentRegistry registry)
                 foreach (var field in c.ConfigurationSchema.Fields)
                 {
                     var rules = new List<string> { field.Type, field.Required ? "obligatoire" : "facultatif" };
+                    if (field.LegacyOnly) rules.Add("historique : conserver uniquement dans un flow existant, ne pas ajouter");
                     if (field.DefaultValue is { } defaultValue) rules.Add($"défaut={defaultValue.GetRawText()}");
                     if (field.Min is { } min) rules.Add($"min={min}");
                     if (field.Max is { } max) rules.Add($"max={max}");
@@ -70,6 +71,12 @@ public sealed class FlowCatalogPromptBuilder(FlowComponentRegistry registry)
                         rules.Add($"visible si {visibleField} {(field.VisibleWhenEmpty ? "est vide ou " : string.Empty)}vaut {field.VisibleWhenValue}");
                     var description = !includeDescriptions || string.IsNullOrWhiteSpace(field.Description) ? string.Empty : $" — {field.Description}";
                     sb.AppendLine($"      - {field.Id} ({field.Label}) : {string.Join(", ", rules)}{description}");
+                    if (field.ItemFields is { } itemFields)
+                    {
+                        sb.AppendLine($"        liste : {field.MinItems ?? 0} à {field.MaxItems ?? 64} lignes, première règle correspondante selon le composant");
+                        foreach (var child in itemFields)
+                            sb.AppendLine($"        - {child.Id} ({child.Type}) : {child.Label}; défaut={child.DefaultValue?.GetRawText() ?? "null"}; min={child.Min}; max={child.Max}; choix=[{string.Join(", ", child.Options?.Select(option => option.Value) ?? [])}]" + (includeDescriptions ? " — " + child.Description : ""));
+                    }
                     if (field.ConditionFields is { Count: > 0 })
                         foreach (var condition in field.ConditionFields.Where(condition => condition.SupportedFlowMediaTypes.Contains(mediaType, StringComparer.OrdinalIgnoreCase)
                                      || condition.SupportedFlowMediaTypes.Contains("general", StringComparer.OrdinalIgnoreCase)))

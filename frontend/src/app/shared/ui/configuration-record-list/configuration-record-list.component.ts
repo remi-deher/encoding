@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -23,76 +23,95 @@ import {
     <h3>{{ field().label }}</h3>
     <p>{{ field().description }}</p>
     @for (row of value(); track $index; let rowIndex = $index) {
-      <section class="record" [attr.aria-label]="'Règle ' + (rowIndex + 1)">
-        <strong>Règle {{ rowIndex + 1 }}</strong>
-        @for (child of field().itemFields; track child.id) {
-          @if (visible(child, row)) {
-            @if (child.type === 'boolean') {
-              <mat-checkbox
-                [checked]="row[child.id] === true"
-                [disabled]="disabled()"
-                (change)="change(rowIndex, child, $event.checked)"
-                >{{ child.label }}</mat-checkbox
-              >
-            } @else {
-              <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                <mat-label>{{ child.label }}</mat-label>
-                @if (child.type === 'select') {
-                  <mat-select
-                    [value]="row[child.id]"
-                    [disabled]="disabled()"
-                    (selectionChange)="change(rowIndex, child, $event.value)"
-                  >
-                    @for (option of child.options; track option.value) {
-                      <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                    }
-                  </mat-select>
-                } @else {
-                  <input
-                    matInput
-                    [type]="child.type === 'number' ? 'number' : 'text'"
-                    [value]="row[child.id] ?? ''"
-                    [disabled]="disabled()"
-                    (input)="edit(rowIndex, child, $event)"
-                  />
-                }
-                @if (child.description) {
-                  <mat-hint>{{ child.description }}</mat-hint>
-                }
-              </mat-form-field>
+      <details
+        class="record"
+        [open]="rowIndex === expandedIndex()"
+        [attr.aria-label]="'Règle ' + (rowIndex + 1)"
+      >
+        <summary>
+          <strong>Règle {{ rowIndex + 1 }}</strong
+          ><span>{{ summary(row) }}</span>
+        </summary>
+        <div class="record-fields">
+          @for (child of field().itemFields; track child.id) {
+            @if (
+              visible(child, row) &&
+              (child.importance !== 'advanced' || advancedRows().has(rowIndex))
+            ) {
+              @if (child.type === 'boolean') {
+                <mat-checkbox
+                  [checked]="row[child.id] === true"
+                  [disabled]="disabled()"
+                  (change)="change(rowIndex, child, $event.checked)"
+                  >{{ child.label }}</mat-checkbox
+                >
+              } @else {
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>{{ child.label }}</mat-label>
+                  @if (child.type === 'select') {
+                    <mat-select
+                      [value]="row[child.id]"
+                      [disabled]="disabled()"
+                      (selectionChange)="change(rowIndex, child, $event.value)"
+                    >
+                      @for (option of child.options; track option.value) {
+                        <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                      }
+                    </mat-select>
+                  } @else {
+                    <input
+                      matInput
+                      [type]="child.type === 'number' ? 'number' : 'text'"
+                      [value]="row[child.id] ?? ''"
+                      [disabled]="disabled()"
+                      (input)="edit(rowIndex, child, $event)"
+                    />
+                  }
+                  @if (child.description) {
+                    <mat-hint>{{ child.description }}</mat-hint>
+                  }
+                </mat-form-field>
+              }
             }
           }
-        }
-        <div class="actions">
-          <button
-            matButton="text"
-            type="button"
-            [disabled]="disabled() || rowIndex === 0"
-            (click)="move(rowIndex, -1)"
-            [attr.aria-label]="'Monter la règle ' + (rowIndex + 1)"
-          >
-            Monter
+          <button matButton="text" type="button" (click)="toggleAdvanced(rowIndex)">
+            {{
+              advancedRows().has(rowIndex)
+                ? 'Réduire les options de sélection'
+                : 'Autres critères de sélection'
+            }}
           </button>
-          <button
-            matButton="text"
-            type="button"
-            [disabled]="disabled() || rowIndex === value().length - 1"
-            (click)="move(rowIndex, 1)"
-            [attr.aria-label]="'Descendre la règle ' + (rowIndex + 1)"
-          >
-            Descendre
-          </button>
-          <button
-            matButton="text"
-            type="button"
-            [disabled]="disabled() || value().length <= (field().minItems ?? 0)"
-            (click)="remove(rowIndex)"
-            [attr.aria-label]="'Supprimer la règle ' + (rowIndex + 1)"
-          >
-            Supprimer
-          </button>
+          <div class="actions">
+            <button
+              matButton="text"
+              type="button"
+              [disabled]="disabled() || rowIndex === 0"
+              (click)="move(rowIndex, -1)"
+              [attr.aria-label]="'Monter la règle ' + (rowIndex + 1)"
+            >
+              Monter
+            </button>
+            <button
+              matButton="text"
+              type="button"
+              [disabled]="disabled() || rowIndex === value().length - 1"
+              (click)="move(rowIndex, 1)"
+              [attr.aria-label]="'Descendre la règle ' + (rowIndex + 1)"
+            >
+              Descendre
+            </button>
+            <button
+              matButton="text"
+              type="button"
+              [disabled]="disabled() || value().length <= (field().minItems ?? 0)"
+              (click)="remove(rowIndex)"
+              [attr.aria-label]="'Supprimer la règle ' + (rowIndex + 1)"
+            >
+              Supprimer
+            </button>
+          </div>
         </div>
-      </section>
+      </details>
     }
     <button
       matButton="outlined"
@@ -109,12 +128,26 @@ import {
       min-width: 0;
     }
     .record {
-      display: grid;
-      gap: var(--space-3);
       padding: var(--space-4);
       margin-block: var(--space-3);
       background: var(--surface-container-low);
       border-radius: var(--radius-lg);
+    }
+    .record summary {
+      cursor: pointer;
+      min-height: 44px;
+      overflow-wrap: anywhere;
+    }
+    .record summary span {
+      display: block;
+      margin-top: var(--space-2);
+      color: var(--text-secondary);
+      font-size: var(--font-body);
+    }
+    .record-fields {
+      display: grid;
+      gap: var(--space-3);
+      padding-top: var(--space-3);
     }
     .actions {
       display: flex;
@@ -131,6 +164,33 @@ export class ConfigurationRecordListComponent {
   readonly value = input<readonly FlowConfigurationRecord[]>([]);
   readonly disabled = input(false);
   readonly valueChange = output<readonly FlowConfigurationRecord[]>();
+  protected readonly expandedIndex = signal(0);
+  protected readonly advancedRows = signal<ReadonlySet<number>>(new Set());
+  protected hasAdvanced(): boolean {
+    return this.field().itemFields.some((field) => field.importance === 'advanced');
+  }
+  protected toggleAdvanced(index: number): void {
+    const next = new Set(this.advancedRows());
+    next.has(index) ? next.delete(index) : next.add(index);
+    this.advancedRows.set(next);
+  }
+  protected summary(row: FlowConfigurationRecord): string {
+    return (
+      this.field()
+        .itemFields.filter((field) => field.importance !== 'advanced')
+        .flatMap((field) => {
+          if (!this.visible(field, row)) return [];
+          const value = row[field.id];
+          if (value === null || value === undefined || value === '' || value === 0) return [];
+          const label =
+            field.type === 'select'
+              ? (field.options.find((option) => option.value === value)?.label ?? String(value))
+              : String(value);
+          return [field.label + ' : ' + label];
+        })
+        .join(' · ') || 'Toutes les pistes, paramètres à définir'
+    );
+  }
   protected visible(field: FlowComponentConfigurationField, row: FlowConfigurationRecord): boolean {
     return (
       !field.visibleWhenFieldId ||
@@ -148,6 +208,7 @@ export class ConfigurationRecordListComponent {
           ? null
           : (value ?? (field.type === 'boolean' ? false : field.type === 'number' ? null : ''));
     }
+    this.expandedIndex.set(this.value().length);
     this.valueChange.emit([...this.value(), row]);
   }
   protected edit(index: number, field: FlowComponentConfigurationField, event: Event): void {

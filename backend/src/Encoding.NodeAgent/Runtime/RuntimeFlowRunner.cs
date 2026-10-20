@@ -80,6 +80,16 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             async Task<string> ExtraAsync(string path)
             {
+                if (FlowArtifactReference.TryParse(path, out var reference))
+                {
+                    await EnsureFilesAsync();
+                    var artifact = reference.Resolve(variables);
+                    var sha = artifact.GetProperty("sha256").GetString()!;
+                    var folder = Path.Combine(directory, "artifacts", sha); Directory.CreateDirectory(folder);
+                    var target = SafeMediaPaths.Resolve(folder, Path.GetFileName(artifact.GetProperty("name").GetString()!));
+                    if (!File.Exists(target)) await client.DownloadAsync(lease.ExecutionId, lease.Epoch, sha, target, job.Token);
+                    return target;
+                }
                 path=path.Replace('\\','/');
                 RuntimeSourceState state;
                 while(true)
@@ -95,11 +105,14 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             {
                 if(outcome.VideoEncodings is { Count: > 0 })
                     context=context with { VideoEncodings=[..(context.VideoEncodings??[]),..outcome.VideoEncodings] };
+                var artifactIndex = 0;
                 foreach(var additional in outcome.Additional)
                 {
                     var sha=await SafeMediaPaths.DigestAsync(additional,job.Token);
                     await client.PutAsync(lease.ExecutionId,lease.Epoch,additional,sha,false,job.Token);
-                    variables["artifact."+node+"."+Path.GetFileName(additional)]=JsonSerializer.SerializeToElement(new { sha256=sha,name=Path.GetFileName(additional) });
+                    var description = JsonSerializer.SerializeToElement(new { sha256=sha,name=Path.GetFileName(additional) });
+                    variables["artifact."+node+"."+Path.GetFileName(additional)]=description;
+                    variables[new FlowArtifactReference(node, artifactIndex++).VariableKey]=description;
                 }
                 if(outcome.Primary is { } candidate)
                 {

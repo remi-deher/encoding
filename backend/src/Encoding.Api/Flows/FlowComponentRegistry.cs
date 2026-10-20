@@ -93,6 +93,8 @@ public sealed class FlowComponentRegistry
             foreach (var component in installed.Components)
             {
                 if (string.IsNullOrWhiteSpace(component.Id) || string.IsNullOrWhiteSpace(component.Version)
+                    || component.MinimumRuntimePluginVersion is not null && !Version.TryParse(component.MinimumRuntimePluginVersion, out _)
+                    || component.ConfigurationSchema.Fields.Any(field => field.RequiresPluginVersion is not null && !Version.TryParse(field.RequiresPluginVersion, out _))
                     || component.ConfigurationSchema.Version != 1
                     || component.Outputs.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != component.Outputs.Count
                     || component.ConfigurationSchema.Fields.Select(f => f.Id).Distinct(StringComparer.Ordinal).Count() != component.ConfigurationSchema.Fields.Count
@@ -188,6 +190,26 @@ public sealed class FlowComponentRegistry
 
     public static bool TryGetLegacyAlias(string componentId, out (string PluginId, string ComponentId) target) =>
         LegacyAliases.TryGetValue(componentId, out target);
+
+    /// <summary>New effects require an observed runtime version, including through a historical Base alias.</summary>
+    public (string PluginId, string Version)? MinimumRuntime(FlowComponentReference reference, IReadOnlyDictionary<string, JsonElement> values)
+    {
+        var component = Resolve(reference);
+        if (component is null) return null;
+        var minimum = component.MinimumRuntimePluginVersion;
+        foreach (var field in component.ConfigurationSchema.Fields)
+        {
+            if (field.RequiresPluginVersion is null || !values.TryGetValue(field.Id, out var value)
+                || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) continue;
+            var active = field.RequiresPluginVersionValue is { } expected
+                ? value.ValueKind == JsonValueKind.String && value.GetString() == expected
+                : field.DefaultValue is not { } fallback || !JsonElement.DeepEquals(value, fallback);
+            if (active && (minimum is null || Version.Parse(field.RequiresPluginVersion) > Version.Parse(minimum)))
+                minimum = field.RequiresPluginVersion;
+        }
+        var pluginId = reference.PluginId == "base" && TryGetLegacyAlias(reference.ComponentId, out var alias) ? alias.PluginId : reference.PluginId;
+        return minimum is null ? null : (pluginId, minimum);
+    }
 
     public FlowComponentDescriptor? Resolve(FlowComponentReference reference)
     {

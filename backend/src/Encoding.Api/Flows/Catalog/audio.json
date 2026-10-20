@@ -77,7 +77,7 @@
                 "id": "sourceCodecs",
                 "label": "Codecs source",
                 "type": "text",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "defaultValue": "",
                 "description": "Exemple : dts,truehd. Vide : tous les codecs."
@@ -106,7 +106,7 @@
                 "id": "titleContains",
                 "label": "Le titre contient",
                 "type": "text",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "defaultValue": ""
               },
@@ -114,7 +114,7 @@
                 "id": "excludeCommentary",
                 "label": "Commentaires",
                 "type": "select",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "options": [
                   {
@@ -131,7 +131,8 @@
             ],
             "maxItems": 1,
             "defaultValue": [],
-            "description": "Sans règle : utiliser le numéro de piste. Avec une règle : appliquer à toutes les pistes correspondantes ; les autres restent copiées."
+            "description": "Sans règle : utiliser le numéro de piste. Avec une règle : appliquer à toutes les pistes correspondantes ; les autres restent copiées.",
+            "requiresPluginVersion": "1.1.0"
           },
           {
             "id": "trackId",
@@ -225,7 +226,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "audio-normalize",
@@ -297,7 +299,7 @@
                 "id": "sourceCodecs",
                 "label": "Codecs source",
                 "type": "text",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "defaultValue": "",
                 "description": "Exemple : dts,truehd. Vide : tous les codecs."
@@ -326,7 +328,7 @@
                 "id": "titleContains",
                 "label": "Le titre contient",
                 "type": "text",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "defaultValue": ""
               },
@@ -334,7 +336,7 @@
                 "id": "excludeCommentary",
                 "label": "Commentaires",
                 "type": "select",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "options": [
                   {
@@ -351,7 +353,8 @@
             ],
             "maxItems": 1,
             "defaultValue": [],
-            "description": "Sans règle : utiliser le numéro de piste. Avec une règle : appliquer à toutes les pistes correspondantes ; les autres restent copiées."
+            "description": "Sans règle : utiliser le numéro de piste. Avec une règle : appliquer à toutes les pistes correspondantes ; les autres restent copiées.",
+            "requiresPluginVersion": "1.1.0"
           },
           {
             "id": "trackId",
@@ -416,7 +419,8 @@
                 "label": "Écoute nocturne (−18 LUFS, plage réduite)"
               }
             ],
-            "defaultValue": "custom"
+            "defaultValue": "custom",
+            "requiresPluginVersion": "1.1.0"
           },
           {
             "id": "normalizationMethod",
@@ -434,7 +438,8 @@
                 "label": "Analyse puis normalisation mesurée"
               }
             ],
-            "defaultValue": "single"
+            "defaultValue": "single",
+            "requiresPluginVersion": "1.1.0"
           },
           {
             "id": "loudnessRange",
@@ -446,7 +451,8 @@
             "max": 50,
             "defaultValue": 7,
             "visibleWhenFieldId": "normalizationProfile",
-            "visibleWhenValue": "custom"
+            "visibleWhenValue": "custom",
+            "requiresPluginVersion": "1.1.0"
           }
         ]
       },
@@ -461,7 +467,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "audio-extract",
@@ -540,7 +547,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "producesFiles": true
     },
     {
       "id": "audio-rules",
@@ -641,7 +649,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "audio-add-track",
@@ -737,7 +746,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "audio-filter-languages",
@@ -834,7 +844,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "audio-remove-commentary",
@@ -909,7 +920,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "audio-convert-by-rules",
@@ -964,7 +976,7 @@
                 "id": "sourceCodecs",
                 "label": "Codecs source",
                 "type": "text",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "defaultValue": "",
                 "description": "Exemple : dts,truehd. Vide : tous les codecs."
@@ -993,7 +1005,7 @@
                 "id": "titleContains",
                 "label": "Le titre contient",
                 "type": "text",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "defaultValue": ""
               },
@@ -1001,7 +1013,7 @@
                 "id": "excludeCommentary",
                 "label": "Commentaires",
                 "type": "select",
-                "importance": "basic",
+                "importance": "advanced",
                 "section": "Paramètres",
                 "options": [
                   {
@@ -1063,7 +1075,7 @@
               },
               {
                 "id": "targetChannels",
-                "label": "Limite de canaux (0 : conserver)",
+                "label": "Limite de canaux (0, 2 ou 6)",
                 "type": "number",
                 "importance": "basic",
                 "section": "Paramètres",
@@ -1071,7 +1083,8 @@
                 "max": 6,
                 "defaultValue": 0,
                 "visibleWhenFieldId": "action",
-                "visibleWhenValue": "convert"
+                "visibleWhenValue": "convert",
+                "description": "0 : conserver ; 2 : stéréo ; 6 : au plus 5.1, LFE préservé quand il existe."
               },
               {
                 "id": "bitrateKbps",
@@ -1173,7 +1186,9 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "minimumRuntimePluginVersion": "1.1.0",
+      "producesFiles": false
     }
   ]
 }

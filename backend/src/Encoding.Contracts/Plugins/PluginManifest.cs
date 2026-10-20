@@ -42,7 +42,9 @@ public sealed record FlowComponentDescriptor(
     IReadOnlyList<FlowToolRequirement> RequiredTools,
     bool RequiresMedia,
     bool RequiresWriteAccess,
-    IReadOnlyList<string>? CompatiblePluginVersions = null);
+    IReadOnlyList<string>? CompatiblePluginVersions = null,
+    string? MinimumRuntimePluginVersion = null,
+    bool ProducesFiles = false);
 
 public sealed record FlowOutputDescriptor(string Id, string Label, string Description);
 
@@ -81,7 +83,10 @@ public sealed record FlowConfigurationField(
     string? Editor = null,
     IReadOnlyList<FlowConfigurationField>? ItemFields = null,
     int? MinItems = null,
-    int? MaxItems = null);
+    int? MaxItems = null,
+    string? RequiresPluginVersion = null,
+    string? RequiresPluginVersionValue = null,
+    bool LegacyOnly = false);
 
 public sealed record FlowSelectOption(
     string Value,

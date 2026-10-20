@@ -142,8 +142,29 @@ export class ConfigurationReferenceFieldComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     const editor = this.field().editor;
-    if (editor !== 'node' && editor !== 'node-group') return;
+    if (editor !== 'node' && editor !== 'node-group' && editor !== 'font-set') return;
     try {
+      if (editor === 'font-set') {
+        const nodes = await firstValueFrom(this.cluster.listNodes());
+        const names = [...new Set(nodes.flatMap((node) => node.inventory?.fontSets ?? []))];
+        this.observed.set(
+          names.map((name) => ({
+            value: name,
+            label:
+              name +
+              ' · ' +
+              nodes
+                .filter((node) => node.inventory?.fontSets?.includes(name))
+                .map((node) => (node.displayName || node.name) + ' (' + node.status + ')')
+                .join(', '),
+          })),
+        );
+        if (!names.length)
+          this.loadMessage.set(
+            'Aucun jeu de polices observé. Les workers anciens peuvent ne pas publier cet inventaire.',
+          );
+        return;
+      }
       const options =
         editor === 'node'
           ? (await firstValueFrom(this.cluster.listNodes()))

@@ -37,6 +37,7 @@ export interface NodeInventory {
   /** Informations matérielles statiques, absentes des agents antérieurs. */
   readonly processorModel?: string | null;
   readonly gpus?: readonly NodeGpu[] | null;
+  readonly fontSets?: readonly string[] | null;
 }
 export interface NodeGpu {
   readonly name: string;

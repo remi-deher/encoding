@@ -5,6 +5,35 @@ import { ComponentConfigurationFormComponent } from './component-configuration-f
 describe('Flow inspector progressive disclosure', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideHttpClient()] }));
 
+  it('preserves historical and unknown values instead of silently migrating the flow', async () => {
+    const fixture = TestBed.createComponent(ComponentConfigurationFormComponent);
+    fixture.componentRef.setInput('schema', {
+      version: 1,
+      fields: [
+        { id: 'mode', label: 'Mode', type: 'text' },
+        { id: 'mediaPolicy', label: 'Publication historique', type: 'text', legacyOnly: true },
+      ],
+    });
+    fixture.componentRef.setInput('values', {
+      mode: 'timer',
+      mediaPolicy: 'beside',
+      extension: 'preserved',
+    });
+    const saved = vi.fn();
+    fixture.componentInstance.saved.subscribe(saved);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).toContain('Publication historique');
+    fixture.nativeElement.querySelector('form').dispatchEvent(new Event('submit'));
+    expect(saved).toHaveBeenCalledWith({
+      mode: 'timer',
+      mediaPolicy: 'beside',
+      extension: 'preserved',
+    });
+    fixture.componentRef.setInput('values', { mode: 'timer' });
+    await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).not.toContain('Publication historique');
+  });
+
   it('keeps a condition editor in the primary settings even when the schema does not mark it inline', async () => {
     const fixture = TestBed.createComponent(ComponentConfigurationFormComponent);
     fixture.componentRef.setInput('progressiveDisclosure', true);

@@ -10,6 +10,39 @@ describe('Configuration references', () => {
     }),
   );
   afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('offers only observed font sets and retains a missing saved set', async () => {
+    const fixture = TestBed.createComponent(ConfigurationReferenceFieldComponent);
+    fixture.componentRef.setInput('field', {
+      id: 'fontSet',
+      type: 'text',
+      label: 'Jeu de polices',
+      editor: 'font-set',
+    });
+    fixture.componentRef.setInput('value', 'Saved but unavailable');
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/nodes')
+      .flush([
+        {
+          id: 'worker',
+          name: 'Worker',
+          roles: ['worker'],
+          status: 'online',
+          inventory: { fontSets: ['Anime'] },
+        },
+      ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input').value).toBe('Saved but unavailable');
+    const input = fixture.nativeElement.querySelector('input');
+    input.value = 'Anime';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    input.dispatchEvent(new Event('focusin'));
+    await fixture.whenStable();
+    expect(document.body.textContent).toContain('Anime');
+  });
   it('preserves an unavailable worker without silently selecting another', async () => {
     const fixture = TestBed.createComponent(ConfigurationReferenceFieldComponent);
     fixture.componentRef.setInput('field', {

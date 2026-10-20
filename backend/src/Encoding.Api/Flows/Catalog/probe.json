@@ -65,7 +65,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "probe-tracks",
@@ -125,7 +126,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "probe-video",
@@ -193,7 +195,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "probe-audio",
@@ -262,7 +265,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "probe-inspect-media",
@@ -321,7 +325,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "probe-inspect-hdr",
@@ -389,7 +394,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "probe-inspect-track",
@@ -458,7 +464,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     },
     {
       "id": "probe-export-report",
@@ -497,7 +504,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": true
     },
     {
       "id": "probe-validate-output",
@@ -722,7 +730,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "producesFiles": false
     }
   ]
 }

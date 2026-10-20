@@ -271,7 +271,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "video-resize",
@@ -331,7 +332,8 @@
                 "label": "4K UHD"
               }
             ],
-            "defaultValue": "custom"
+            "defaultValue": "custom",
+            "requiresPluginVersion": "1.2.0"
           },
           {
             "id": "processingMode",
@@ -385,7 +387,8 @@
             "importance": "basic",
             "section": "Paramètres",
             "defaultValue": false,
-            "description": "Ignore le redimensionnement si le média est déjà contenu dans les dimensions maximales."
+            "description": "Ignore le redimensionnement si le média est déjà contenu dans les dimensions maximales.",
+            "requiresPluginVersion": "1.2.0"
           }
         ]
       },
@@ -401,7 +404,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "video-auto-crop",
@@ -506,7 +510,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "video-deinterlace",
@@ -618,7 +623,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "video-thumbnail",
@@ -692,7 +698,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": true
     },
     {
       "id": "video-verify-decoding",
@@ -780,7 +787,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "video-file-size-guard",
@@ -855,7 +863,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     },
     {
       "id": "video-remux-media",
@@ -933,7 +942,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "producesFiles": false
     }
   ]
 }

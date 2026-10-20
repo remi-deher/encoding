@@ -33,6 +33,7 @@ public sealed class ToolCapabilityProbe(
             var list = new List<NodeToolCapability>
             {
                 new("plugin/base", "1.7.0", ["general"], ["cpu"]),
+                new(FlowArtifactReference.Capability, "1.0.0", ["general"], []),
                 new("plugin/video", "1.2.0", ["general"], []),
                 new("plugin/audio", "1.1.0", ["general"], []),
                 new("plugin/subtitles", "1.2.0", ["general"], []),

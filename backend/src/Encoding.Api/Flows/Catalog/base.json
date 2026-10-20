@@ -815,7 +815,8 @@
             ],
             "description": "Le média reste réservé pendant l’attente. Le choix s’applique à la publication du résultat : l’écrasement passe par la politique de remplacement de la bibliothèque (sauvegarde, période de grâce). Réglage historique : privilégiez la politique de bibliothèque.",
             "importance": "advanced",
-            "section": "Compatibilité : publication"
+            "section": "Compatibilité : publication",
+            "legacyOnly": true
           }
         ]
       },

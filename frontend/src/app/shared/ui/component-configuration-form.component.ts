@@ -497,12 +497,12 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   readonly progressiveDisclosure = input(false);
   protected primaryFields(): readonly FlowComponentConfigurationField[] {
     return this.progressiveDisclosure()
-      ? this.fields.filter((field) => this.isPrimary(field))
+      ? this.fields.filter((field) => this.isPrimary(field) && this.isFieldVisible(field))
       : this.fields;
   }
   protected advancedFields(): readonly FlowComponentConfigurationField[] {
     return this.progressiveDisclosure()
-      ? this.fields.filter((field) => !this.isPrimary(field))
+      ? this.fields.filter((field) => !this.isPrimary(field) && this.isFieldVisible(field))
       : [];
   }
   private isPrimary(field: FlowComponentConfigurationField): boolean {
@@ -565,7 +565,10 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     ) {
       this.secretsToClear = new Set();
       this.nameControl.setValue(this.instanceName() ?? '');
-      this.fields = this.schema()?.fields ?? [];
+      this.fields = (this.schema()?.fields ?? []).filter(
+        (field) =>
+          !field.legacyOnly || Object.prototype.hasOwnProperty.call(this.values(), field.id),
+      );
       const controls: Record<string, FormControl<FlowComponentConfigurationValue>> = {};
       for (const field of this.fields) {
         controls[field.id] = new FormControl(flowConfigurationValue(field, this.values()), {
@@ -590,7 +593,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     if (this.busy() || this.form.invalid || this.nameControl.invalid) return;
     if (this.instanceName() !== undefined)
       this.instanceNameChange.emit(this.nameControl.value.trim());
-    const values = this.form.getRawValue();
+    const values = { ...this.values(), ...this.form.getRawValue() };
     this.saved.emit(values);
     this.savedWithSecrets.emit({ values, clearSecrets: [...this.secretsToClear] });
   }

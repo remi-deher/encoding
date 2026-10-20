@@ -174,6 +174,17 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             while (pending.TryPop(out var id)) if (seen.Add(id)) foreach (var target in outgoing[id]) pending.Push(target);
             foreach (var id in ids) if (!seen.Contains(id)) Issue("node.unreachable", "/nodes", $"Bloc non relié à l’entrée : {id}.");
         }
+        foreach (var consumer in flow.Nodes.Where(node => node is not null && node.Configuration is not null))
+        {
+            if (!consumer.Configuration.TryGetValue("sourceFile", out var file) || file.ValueKind != JsonValueKind.String
+                || !FlowArtifactReference.TryParse(file.GetString(), out var reference)) continue;
+            if (!nodes.TryGetValue(reference.NodeId, out var producer) || !producer.ProducesFiles || reference.NodeId == consumer.Id)
+            { Issue("artifact.reference.invalid", "/nodes/" + consumer.Id + "/configuration/sourceFile", "Choisissez un bloc producteur de fichiers distinct de ce bloc."); continue; }
+            var reachable = new HashSet<string>(StringComparer.Ordinal); var pending = new Queue<string>(); pending.Enqueue(reference.NodeId);
+            while (pending.TryDequeue(out var current))
+                if (reachable.Add(current) && outgoing.TryGetValue(current, out var targets)) foreach (var target in targets) pending.Enqueue(target);
+            if (!reachable.Contains(consumer.Id)) Issue("artifact.reference.invalid", "/nodes/" + consumer.Id + "/configuration/sourceFile", "Le producteur doit précéder le consommateur sur un chemin du flow.");
+        }
         var packInstanceIds = new HashSet<string>(StringComparer.Ordinal);
         var packMembers = new Dictionary<string, FlowComponentPackInstance>(StringComparer.Ordinal);
         for (var packIndex = 0; packIndex < (flow.ComponentPacks?.Count ?? 0); packIndex++)
@@ -307,6 +318,8 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             case "condition-tree": return ConditionTree.Validate(value,mediaType,allowIncompleteConditions);
             case "text":
                 if(field.Id=="sourceFile" && value.ValueKind==JsonValueKind.String) {
+                    if (value.GetString()!.StartsWith(FlowArtifactReference.Prefix, StringComparison.Ordinal))
+                        return FlowArtifactReference.TryParse(value.GetString(), out _) ? null : "Référence de fichier produit invalide.";
                     try { Encoding.Contracts.Libraries.MediaPathRules.Normalize(value.GetString()); }
                     catch(ArgumentException e) { return e.Message; }
                 }
