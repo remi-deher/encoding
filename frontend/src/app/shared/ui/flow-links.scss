@@ -33,3 +33,14 @@ path {
   border: 1px solid var(--border-strong);
   box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
 }
+
+.link-hit {
+  stroke: transparent;
+  stroke-width: 18px;
+  pointer-events: stroke;
+  cursor: context-menu;
+}
+.arrow {
+  fill: var(--accent);
+  stroke: none;
+}

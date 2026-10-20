@@ -18,10 +18,10 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
-import { FlowAiAssistantDialogComponent } from './editor/flow-ai-assistant-dialog.component';
+import { FlowEditorAssistant } from '../../shared/services/flow-editor-assistant.service';
 import {
   GENERIC_FILE_INPUT,
   MEDIA_INPUT_COMPONENTS,
@@ -170,7 +170,6 @@ export class FlowEditorPageComponent {
   private readonly editorRouter = inject(Router);
   private readonly packApi = inject(FlowComponentPacks);
   private readonly pageTitleService = inject(PageTitle);
-  private readonly dialog = inject(MatDialog);
 
   // Workbench shell state
   protected readonly paletteOpen = signal(true);
@@ -180,7 +179,7 @@ export class FlowEditorPageComponent {
   protected readonly validationSuccess = signal<boolean | null>(null);
   private readonly connectionVisibilityOverride = signal<boolean | null>(null);
   protected readonly showFlowConnections = computed(
-    () => this.connectionVisibilityOverride() ?? this.connections().length < 12,
+    () => this.connectionVisibilityOverride() ?? true,
   );
 
   protected readonly configuringNodeId = signal<string | undefined>(undefined);
@@ -271,7 +270,7 @@ export class FlowEditorPageComponent {
   private nextNodeId = 1;
   private nextConnectionId = 1;
 
-  private readonly validationFlowId =
+  protected readonly validationFlowId =
     this.flowId && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(this.flowId) ? this.flowId : createUuid();
 
   private readonly savedGraph = signal<string | null>(null);
@@ -308,7 +307,60 @@ export class FlowEditorPageComponent {
     ],
   }));
 
+  private readonly editHistory = signal<
+    readonly {
+      nodes: readonly FlowGraphNode[];
+      connections: readonly FlowGraphConnection[];
+      packs: readonly FlowComponentPackInstance[];
+      name: string | null;
+      mediaType: MediaType;
+    }[]
+  >([]);
+  private readonly editHistoryIndex = signal(-1);
+  protected readonly canUndoEdit = computed(() => this.editHistoryIndex() > 0);
+  protected readonly canRedoEdit = computed(
+    () => this.editHistoryIndex() + 1 < this.editHistory().length,
+  );
+  protected undoEdit(redo = false): void {
+    const index = this.editHistoryIndex() + (redo ? 1 : -1),
+      state = this.editHistory()[index];
+    if (!state) return;
+    this.editHistoryIndex.set(index);
+    this.nodes.set(state.nodes);
+    this.connections.set(state.connections);
+    this.componentPacks.set(state.packs);
+    this.savedName.set(state.name);
+    this.flowMediaType.set(state.mediaType);
+    this.aiProposalRollback.set(null);
+    if (this.configuringNodeId() && !state.nodes.some((n) => n.id === this.configuringNodeId()))
+      this.configuringNodeId.set(undefined);
+  }
   constructor() {
+    effect(() => {
+      const ready = this.loadState() === 'ready',
+        state = {
+          nodes: this.nodes(),
+          connections: this.connections(),
+          packs: this.componentPacks(),
+          name: this.savedName(),
+          mediaType: this.flowMediaType(),
+        };
+      untracked(() => {
+        if (!ready) {
+          this.editHistory.set([]);
+          this.editHistoryIndex.set(-1);
+          return;
+        }
+        const history = this.editHistory(),
+          index = this.editHistoryIndex();
+        if (JSON.stringify(history[index]) === JSON.stringify(state)) return;
+        const next = [...history.slice(0, index + 1), state].slice(-60);
+        this.editHistory.set(next);
+        this.editHistoryIndex.set(next.length - 1);
+      });
+    });
+    this.flowAssistant.register(this, (nodeId) => this.prepareAiSession(nodeId));
+    inject(DestroyRef).onDestroy(() => this.flowAssistant.unregister(this));
     effect(() => {
       const title = this.flowTitle();
       this.pageTitleService.set(this, this.editorRouter.url, title);
@@ -468,6 +520,18 @@ export class FlowEditorPageComponent {
   }
 
   protected onWindowKeyDown(event: KeyboardEvent): void {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.key.toLowerCase() === 'z' &&
+      !(
+        event.target instanceof Element &&
+        event.target.closest('input,textarea,select,[contenteditable="true"],.cm-editor')
+      )
+    ) {
+      event.preventDefault();
+      this.undoEdit(event.shiftKey);
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
       void this.saveFlow();
@@ -1010,31 +1074,43 @@ export class FlowEditorPageComponent {
     });
   }
 
-  protected async openAiAssistant(): Promise<void> {
+  private readonly flowAssistant = inject(FlowEditorAssistant);
+  protected async openAiAssistant(nodeId?: string): Promise<void> {
+    await this.flowAssistant.open(nodeId);
+  }
+  private async prepareAiSession(nodeId?: string) {
     const currentDoc = await this.currentFlowDocument();
-    const dialogRef = this.dialog.open(FlowAiAssistantDialogComponent, {
-      width: 'min(760px, calc(100vw - 24px))',
-      maxWidth: 'calc(100vw - 24px)',
-      maxHeight: 'calc(100dvh - 24px)',
-      data: {
-        mediaType: this.flowMediaType(),
-        currentFlow: currentDoc,
-      },
-    });
-
-    dialogRef.afterClosed().subscribe(async (result: { flow?: FlowDocument } | undefined) => {
-      if (!result?.flow) return;
-      if (currentDoc) {
-        const latestDoc = await this.currentFlowDocument();
-        if (!latestDoc || JSON.stringify(latestDoc) !== JSON.stringify(currentDoc)) {
+    if (!currentDoc) {
+      this.notifications.show(
+        'Impossible de préparer le contexte du flow. Réessayez après le chargement du catalogue.',
+      );
+      return null;
+    }
+    const node = this.nodes().find((n) => n.id === nodeId);
+    return {
+      flow: currentDoc,
+      components: this.installedComponents(),
+      label: node
+        ? 'Étape sélectionnée : ' + (node.name || node.component.name)
+        : 'Flow complet : ' + this.flowTitle(),
+      prompt: node
+        ? 'Explique ou améliore l’étape ' +
+          (node.name || node.component.name) +
+          ' (identifiant ' +
+          node.id +
+          '). Conserve le reste du flow sauf nécessité explicitement expliquée.'
+        : '',
+      apply: async (proposal: FlowDocument) => {
+        const latest = await this.currentFlowDocument();
+        if (!latest || flowDocumentKey(latest) !== flowDocumentKey(currentDoc)) {
           this.notifications.show(
-            'Le flow a changé depuis la création de la proposition. Elle n’a pas été appliquée ; relancez l’assistant depuis l’état actuel.',
+            'Le flow a changé depuis la proposition. Relancez l’assistant pour conserver vos modifications.',
           );
-          return;
+          return false;
         }
-      }
-      await this.loadAiFlow(result.flow, currentDoc);
-    });
+        return this.loadAiFlow(proposal, currentDoc);
+      },
+    };
   }
 
   private async currentFlowDocument(): Promise<FlowDocument | null> {
@@ -1071,18 +1147,33 @@ export class FlowEditorPageComponent {
     }
   }
 
-  private async loadAiFlow(definition: FlowDocument, rollback: FlowDocument | null): Promise<void> {
+  private async loadAiFlow(
+    definition: FlowDocument,
+    rollback: FlowDocument | null,
+  ): Promise<boolean> {
+    const snapshot = this.graphSnapshot();
     try {
       const plugins = await this.serverValidation.catalog();
+      if (snapshot !== this.graphSnapshot()) {
+        this.notifications.show(
+          'Le flow a changé pendant la préparation. La proposition n’a pas été appliquée.',
+        );
+        return false;
+      }
       this.savedName.set(definition.name);
       this.flowMediaType.set(definition.mediaType);
       const nodes = this.mapDefinitionNodes(definition, plugins);
       this.updateGraphCounters(definition, nodes);
       this.setGraph(nodes, definition.connections);
+      this.componentPacks.set(definition.componentPacks ?? []);
       this.aiProposalRollback.set(rollback);
-      this.notifications.show("Flow généré par l'IA appliqué avec succès !");
+      this.notifications.show(
+        'Proposition IA appliquée aux deux vues. Enregistrez pour la publier.',
+      );
+      return true;
     } catch {
       this.notifications.show("Erreur lors de l'application du flow généré.");
+      return false;
     }
   }
 
@@ -1351,6 +1442,28 @@ export class FlowEditorPageComponent {
     );
   }
 
+  protected duplicateNode(nodeId: string): void {
+    const original = this.nodes().find((n) => n.id === nodeId);
+    if (
+      !original ||
+      original.component.kind === 'input' ||
+      original.component.kind === 'pack' ||
+      this.componentPacks().some((p) => p.nodeIds.includes(nodeId))
+    ) {
+      this.notifications.show(
+        'Cette étape appartient à une entrée ou à un pack et ne peut pas être dupliquée seule.',
+      );
+      return;
+    }
+    const node = {
+      ...original,
+      id: 'flow-node-' + this.nextNodeId++,
+      name: (original.name || original.component.name) + ' — Copie',
+      configuration: structuredClone(original.configuration),
+    };
+    this.setGraph([...this.nodes(), node], this.connections());
+    this.notifications.show('Copie ajoutée parmi les blocs non reliés, dans les deux vues.');
+  }
   protected removeNode(nodeId: string): void {
     const visualPack = this.componentPacks().find((pack) => `flow-pack-${pack.id}` === nodeId);
     if (visualPack) {

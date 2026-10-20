@@ -1,0 +1,130 @@
+<div class="canvas-tools" role="toolbar" aria-label="Navigation du canvas">
+  <button mat-button (click)="zoom(-0.1)" aria-label="Dézoomer">−</button
+  ><span>{{ (scale() * 100).toFixed(0) }} %</span
+  ><button mat-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button
+  ><button mat-button (click)="fit()">Tout afficher</button>
+  @if (pending(); as selection) {
+    <span role="status">{{ selection.output.label }} → choisissez une entrée</span
+    ><button mat-button (click)="pending.set(null)">Annuler la liaison</button>
+  }
+</div>
+<div
+  #viewport
+  class="canvas-viewport"
+  role="region"
+  (scroll)="navigate()"
+  (pointerdown)="pan($event)"
+  appContextActions
+  (contextActions)="menu($event)"
+  tabindex="0"
+  aria-label="Canvas libre du flow"
+>
+  <div [style.width.px]="size().width * scale()" [style.height.px]="size().height * scale()">
+    <div
+      class="canvas-surface"
+      [style.width.px]="size().width"
+      [style.height.px]="size().height"
+      [style.transform]="'scale(' + scale() + ')'"
+    >
+      <svg
+        class="wires"
+        [attr.width]="size().width"
+        [attr.height]="size().height"
+        aria-hidden="true"
+      >
+        @for (edge of connections(); track edge.id) {
+          <path [attr.d]="path(edge)" />
+          <path
+            class="wire-hit"
+            [attr.d]="path(edge)"
+            appContextActions
+            (contextActions)="menu($event, undefined, edge)"
+            (click)="
+              menu({ x: $event.clientX, y: $event.clientY, origin: viewport }, undefined, edge)
+            "
+          />
+        }
+        @if (pointer()) {
+          <path class="ghost" [attr.d]="ghost()" />
+        }
+      </svg>
+      @for (node of nodes(); track node.id) {
+        <article
+          class="canvas-node"
+          [class.selected]="selectedNodeId() === node.id"
+          [attr.data-node-id]="node.id"
+          [style.left.px]="position(node).x"
+          [style.top.px]="position(node).y"
+          [style.--node-color]="colors(node.component).color"
+          cdkDrag
+          [cdkDragScale]="scale()"
+          (cdkDragEnded)="move(node, $event)"
+          appContextActions
+          (contextActions)="menu($event, node)"
+          tabindex="0"
+          (click)="selectNode.emit(node.id)"
+          (dblclick)="edit(node)"
+          (keydown.enter)="edit(node)"
+        >
+          @if (node.component.kind !== 'input') {
+            <button
+              class="port input"
+              [attr.data-canvas-input]="node.id"
+              [class.valid]="canFinish(node)"
+              (click)="$event.stopPropagation(); finish(node.id)"
+              [attr.aria-label]="'Relier à ' + (node.name || node.component.name)"
+            ></button>
+          }
+          <header>
+            <button cdkDragHandle class="drag" aria-label="Déplacer l’étape" title="Déplacer">
+              ⠿</button
+            ><span>{{ node.component.pluginName }}</span
+            ><button
+              class="more"
+              (click)="menuButton($event, node)"
+              [attr.aria-label]="'Actions de ' + (node.name || node.component.name)"
+            >
+              ⋯
+            </button>
+          </header>
+          <strong>{{ node.name || node.component.name }}</strong>
+          @for (port of node.component.outputs; track port.id) {
+            <div class="output-row">
+              <button
+                mat-button
+                (click)="
+                  $event.stopPropagation(); insert.emit({ sourceNodeId: node.id, output: port })
+                "
+                [attr.aria-label]="'Ajouter sur la sortie ' + port.label"
+              >
+                {{ port.label }} ＋</button
+              ><button
+                class="port output"
+                (pointerdown)="begin(node, port, $event)"
+                (click)="$event.stopPropagation()"
+                (keydown.enter)="begin(node, port)"
+                (keydown.space)="$event.preventDefault(); begin(node, port)"
+                [attr.aria-label]="'Créer une liaison depuis ' + port.label"
+              ></button>
+            </div>
+          }
+        </article>
+      }
+    </div>
+  </div>
+</div>
+<div class="connection-list" role="group" aria-label="Actions accessibles sur les liaisons">
+  @for (edge of connections(); track edge.id) {
+    <button
+      mat-button
+      (click)="menu({ x: $event.clientX, y: $event.clientY, origin: viewport }, undefined, edge)"
+    >
+      Liaison {{ edge.sourceOutputId }} → {{ edge.targetNodeId }}
+    </button>
+  }
+</div>
+<app-context-action-menu
+  [context]="context()"
+  (action)="action($event)"
+  (closed)="context.set(null)"
+/>

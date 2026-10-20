@@ -1,6 +1,10 @@
 # 0010 — Éditeur de flow structuré
 
-## Décision
+## Évolution validée
+
+La décision [0077](0077-flow-editor-guided-canvas-and-contextual-ai.md) remplace les contraintes historiques de largeur, de suppression du canvas et de configuration modale décrites ci-dessous. Le graphe unique, les règles métier de projection, les packs et les raccordements typés restent conservés.
+
+## Décision initiale
 
 Le composant partagé FlowGraphEditor présente des séquences verticales avec branches Angular Material repliables et réorganisation de listes CDK. Cette décision remplace le canevas SVG de 0008 et la disposition Dagre. Les dépendances et le modèle de coordonnées propres au canevas sont retirés. Les positions historiques restent stockées sur les nœuds pour compatibilité ; elles ne pilotent plus l’interface.
 

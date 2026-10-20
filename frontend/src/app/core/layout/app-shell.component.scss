@@ -736,3 +736,14 @@ button.assistant-launcher {
     gap: 4px;
   }
 }
+
+.assistant-widget-panel.flow-assistant-panel {
+  width: min(640px, calc(100vw - 32px));
+  height: min(840px, calc(100dvh - 112px));
+}
+.assistant-widget-panel > app-flow-ai-assistant-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
