@@ -234,7 +234,7 @@ test('discard protection applies to tab clicks and browser history, without doub
 }) => {
   await page.goto('/settings?tab=interface');
   await page.getByRole('tab', { name: 'Connexions', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Type d’IA', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Type d’IA', exact: true }).first().click();
   await page.getByRole('option', { name: 'OpenAI / API compatible', exact: true }).click();
   await page.goBack();
   let confirmation = page.getByRole('dialog', { name: 'Quitter sans enregistrer ?', exact: true });

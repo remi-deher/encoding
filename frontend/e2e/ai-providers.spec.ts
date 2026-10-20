@@ -100,7 +100,9 @@ test('provider settings remain focused, accessible and usable in both themes', a
   editor = page.getByRole('dialog', { name: 'OpenAI / API compatible', exact: true });
   await expect(editor.getByLabel('Clé API', { exact: true })).toHaveAttribute('type', 'password');
   await expect(editor.getByLabel('Adresse du serveur')).toHaveCount(0);
-  await expect(tab.getByRole('combobox', { name: 'Type d’IA' })).toContainText('Ollama');
+  await expect(tab.getByRole('combobox', { name: 'Type d’IA', exact: true }).first()).toContainText(
+    'Ollama',
+  );
   await expect(tab.getByText('Simuler', { exact: false })).toHaveCount(0);
   await editor.getByRole('button', { name: 'Fermer le panneau' }).click();
   for (const theme of ['light', 'dark']) {
