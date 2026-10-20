@@ -688,7 +688,8 @@ public sealed class AiAssistantService(
                 var options = await OptionsAsync(ct);
                 var provider = request.Provider ?? options.DefaultProvider;
                 var model = request.Provider is null && request.Model is null ? options.DefaultModel : request.Model;
-                var selectedOption = options.Models.FirstOrDefault(option => option.Provider == provider && option.Model == model)
+                var selectedOption = options.Models.FirstOrDefault(option => option.Provider == provider && option.Model == model
+                    && (request.NodeId is null || option.NodeId == request.NodeId))
                     ?? throw new ArgumentException("Le fournisseur ou le modèle choisi n’est pas configuré ou disponible dans le cluster.");
                 if (request.ReasoningEffort is not null && !selectedOption.ReasoningEfforts.Contains(request.ReasoningEffort, StringComparer.Ordinal))
                     throw new ArgumentException("L’effort choisi n’est pas pris en charge par ce modèle.");
