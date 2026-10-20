@@ -25,7 +25,7 @@ public static class AiAssistantEndpoints
         group.MapGet("/activity/{requestId:guid}", async (Guid requestId, HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () => await service.GetActivityAsync(requestId, http.User, ct) is { } activity
                 ? Results.Ok(activity)
-                : Results.NotFound()));
+                : Results.NoContent()));
 
         group.MapGet("/conversations/{id}", async (string id, HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () =>
@@ -33,6 +33,11 @@ public static class AiAssistantEndpoints
                 var detail = await service.GetAsync(id, http.User, ct);
                 return detail is null ? Results.NotFound() : Results.Ok(detail);
             }));
+
+        group.MapDelete("/conversations/{id}", async (string id, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () => await service.DeleteConversationAsync(id, http.User, ct)
+                ? Results.NoContent()
+                : Results.NotFound()));
 
         group.MapPut("/conversations/{id}/sources", async (string id, AiAssistantSourcesRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () =>
@@ -48,6 +53,7 @@ public static class AiAssistantEndpoints
                 var result = await service.SendAsync(request, http.User, ct);
                 return result is null ? Results.NotFound() : Results.Ok(result);
             }))
+        .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(50 * 1024 * 1024))
         .AllowAssistantConversation()
         .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
 

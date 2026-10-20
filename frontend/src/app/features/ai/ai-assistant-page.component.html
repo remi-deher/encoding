@@ -1,7 +1,7 @@
 <mat-drawer-container
   class="assistant-layout"
-  [hasBackdrop]="compact()"
-  (backdropClick)="historyOpen.set(false)"
+  [hasBackdrop]="compact() || panelMode()"
+  (backdropClick)="historyOpen.set(false); closePreview()"
 >
   <mat-drawer
     class="conversation-panel"
@@ -38,33 +38,155 @@
     }
     <nav aria-label="Conversations IA">
       @for (conversation of conversations(); track conversation.id) {
-        <button
-          class="conversation-link"
-          type="button"
-          [class.is-active]="detail()?.conversation.id === conversation.id"
-          [disabled]="sending()"
-          (click)="openConversation(conversation.id)"
-        >
-          <strong>{{ conversation.title }}</strong
-          ><span>{{ conversation.source.label }}</span>
-        </button>
+        <div class="conversation-item">
+          <button
+            class="conversation-link"
+            type="button"
+            [class.is-active]="detail()?.conversation.id === conversation.id"
+            [disabled]="sending() || deletingConversationId() === conversation.id"
+            (click)="openConversation(conversation.id)"
+          >
+            <strong>{{ conversation.title }}</strong
+            ><span>{{ conversation.source.label }}</span>
+          </button>
+          <button
+            class="conversation-delete"
+            mat-icon-button
+            type="button"
+            [disabled]="sending() || deletingConversationId() !== null"
+            [attr.aria-label]="'Supprimer la conversation ' + conversation.title"
+            title="Supprimer la conversation"
+            (click)="confirmDeleteConversation(conversation)"
+          >
+            @if (deletingConversationId() === conversation.id) {
+              <mat-spinner diameter="16" />
+            } @else {
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            }
+          </button>
+        </div>
       }
     </nav>
   </mat-drawer>
   <mat-drawer
     class="preview-panel"
     position="end"
-    [mode]="compact() ? 'over' : 'side'"
+    [mode]="compact() || panelMode() ? 'over' : 'side'"
     [opened]="previewOpen()"
     (closedStart)="closePreview()"
-    aria-label="Aperçu de la ressource"
+    aria-label="Espace de travail de l’assistant"
   >
     <header class="preview-panel__header">
-      <h2>{{ previewTitle() }}</h2>
-      <button mat-icon-button type="button" aria-label="Fermer l’aperçu" (click)="closePreview()">
+      <h2>{{ previewFlow() ? previewTitle() : 'Espace de travail' }}</h2>
+      <button mat-icon-button type="button" aria-label="Fermer l’espace de travail" (click)="closePreview()">
         ×
       </button>
     </header>
+    @if (!previewFlow()) {
+      <section class="workspace-files" aria-label="Fichiers joints au prochain message">
+        <section class="workspace-resource" aria-label="Joindre une ressource">
+          <div class="workspace-files__heading">
+            <div>
+              <h3>Joindre une ressource</h3>
+              <p class="muted">Ajoutez un flow, une exécution, un nœud ou une bibliothèque au contexte.</p>
+            </div>
+          </div>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Type de ressource</mat-label>
+            <mat-select [ngModel]="selectedResourceType()" (ngModelChange)="selectResourceType($event)">
+              <mat-option value="flow">Flows</mat-option>
+              <mat-option value="execution">Exécutions</mat-option>
+              <mat-option value="node">Nœuds</mat-option>
+              <mat-option value="library">Bibliothèques</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <div class="resource-select-row">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Ressource</mat-label>
+              <mat-select [ngModel]="selectedResourceId()" (ngModelChange)="selectedResourceId.set($event)">
+                @for (resource of resourceOptions(); track resource.id) {
+                  <mat-option [value]="resource.id">{{ resource.label }}</mat-option>
+                }
+              </mat-select>
+              @if (!resourceOptions().length) {
+                <mat-hint>Aucune ressource disponible</mat-hint>
+              }
+            </mat-form-field>
+            <button matButton="tonal" type="button" [disabled]="!selectedResourceId() || sending() || updatingSources()" (click)="addResourceToContext()">
+              Joindre
+            </button>
+          </div>
+          @if (selectedResource(); as resource) {
+            <div class="selected-resource">
+              <span>{{ resource.label }}</span>
+              <button mat-icon-button type="button" aria-label="Retirer la ressource" (click)="removeSelectedResource()">×</button>
+            </div>
+          }
+          @if (detail(); as resourceDetail) {
+            @if (visibleConversationSources(resourceDetail.conversation).length) {
+              <h4>Ressources jointes</h4>
+              <ul class="workspace-file-list">
+                @for (source of visibleConversationSources(resourceDetail.conversation); track source.kind + source.resourceId) {
+                  <li><span aria-hidden="true">↗</span><span>{{ source.label }}</span></li>
+                }
+              </ul>
+            }
+          }
+        </section>
+        <section class="workspace-resource" aria-label="Outils de lecture">
+          <div class="workspace-files__heading">
+            <div>
+              <h3>Outils de lecture</h3>
+              <p class="muted">Choisissez les informations à récupérer pour le prochain message.</p>
+            </div>
+          </div>
+          <mat-form-field class="read-tool-picker" appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Outils de lecture pour ce message</mat-label>
+            <mat-select name="readTools" multiple [ngModel]="selectedReadTools()" (ngModelChange)="setSelectedReadTools($event)">
+              @for (tool of readTools; track tool.name) {
+                <mat-option [value]="tool.name" [disabled]="tool.name === 'get_flow' && !hasFlowContext()">{{ tool.label }}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>Jusqu’à trois outils ; l’assistant peut aussi choisir un outil adapté. Les résultats seront cités.</mat-hint>
+          </mat-form-field>
+        </section>
+        <div class="workspace-files__heading">
+          <div>
+            <h3>Fichiers</h3>
+            <p class="muted">Ajoutez des fichiers de configuration, flows, scripts ou sous-titres.</p>
+          </div>
+          <button matButton="tonal" type="button" [disabled]="sending() || hasPendingRequest()" (click)="assistantFileInput.click()">
+            Ajouter
+          </button>
+        </div>
+        <input
+          #assistantFileInput
+          class="visually-hidden"
+          type="file"
+          multiple
+          accept="Dockerfile,Makefile,.env,.txt,.md,.markdown,.rst,.csv,.tsv,.log,.out,.json,.jsonc,.json5,.yaml,.yml,.xml,.toml,.ini,.conf,.config,.properties,.srt,.ass,.ssa,.vtt,.sub,.smi,.sami,.ttml,.dfxp,.mpl,.lrc,.sbv,.ffmetadata,.ffpreset,.ffscript,.ffconcat,.filter,.m3u,.m3u8,.nfo,.prx,.avs,.avsi,.vpy,.qpfile,.chapters,.edl,.cue,.xspf,.pls,.mpd,.csproj,.sln,.props,.targets,.editorconfig,.gitignore,.cs,.fs,.vb,.ts,.tsx,.js,.jsx,.mjs,.cjs,.py,.pyw,.sh,.bash,.zsh,.ps1,.psm1,.bat,.cmd,.sql,.html,.htm,.css,.scss,.less,.proto,.graphql,.gql"
+          aria-label="Choisir des fichiers texte à joindre"
+          (change)="selectAttachments($event)"
+        />
+        @if (attachments().length) {
+          <ul class="workspace-file-list">
+            @for (file of attachments(); track file.name) {
+              <li>
+                <span aria-hidden="true">📄</span>
+                <span>{{ file.name }}</span>
+                <button mat-icon-button type="button" [disabled]="sending() || hasPendingRequest()" [attr.aria-label]="'Retirer ' + file.name" (click)="removeAttachment(file.name)">×</button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="muted">Aucun fichier joint. Limite : 8 Mo par fichier, 16 Mo au total (5 fichiers maximum).</p>
+        }
+        <p class="muted">Formats texte pris en charge : JSON/YAML/XML, SRT/ASS/SSA/VTT, flows, logs, scripts et configurations.</p>
+        <p class="muted">Les fichiers seront transmis au modèle avec votre prochain message.</p>
+      </section>
+    }
     @if (previewLoading()) {
       <p class="muted" role="status"><mat-spinner diameter="20" /> Chargement de l’aperçu…</p>
     } @else if (previewError(); as error) {
@@ -213,13 +335,14 @@
       }
     </div>
     <footer class="conversation-footer" [class.model-settings-open]="modelSettingsOpen()">
-      <div class="source-bar">
-        <mat-chip-set aria-label="Ressources jointes">
-          @if (detail(); as current) {
-            @for (
-              source of conversationSources(current.conversation);
-              track source.kind + source.resourceId
-            ) {
+      @if (detail(); as current) {
+        @if (visibleConversationSources(current.conversation).length) {
+          <div class="source-bar">
+            <mat-chip-set aria-label="Ressources jointes">
+              @for (
+                source of visibleConversationSources(current.conversation);
+                track source.kind + source.resourceId
+              ) {
               <span class="source-item"
                 ><mat-chip>{{ source.label }}</mat-chip
                 ><button
@@ -278,195 +401,10 @@
                   </button>
                 }
               </mat-menu>
-            }
-          } @else if (selectedResource(); as source) {
-            <mat-chip (removed)="selectedResourceId.set('')"
-              >{{ source.label
-              }}<button
-                matChipRemove
-                aria-label="Retirer la ressource"
-                [disabled]="sending() || hasPendingRequest()"
-              >
-                ×
-              </button></mat-chip
-            >
-          }
-        </mat-chip-set>
-      </div>
-      @if (contextPickerOpen()) {
-        <div class="attachment-panel">
-          @if (detail(); as current) {
-            <section
-              class="add-context-controls"
-              aria-label="Sélectionner une ressource pour le contexte"
-            >
-              <div class="context-picker-heading">
-                <div>
-                  <h3>Enrichir le contexte</h3>
-                  <p>Choisissez les ressources que l’assistant pourra consulter.</p>
-                </div>
-                <span class="muted" aria-live="polite">
-                  {{ conversationSources(current.conversation).length }} sur 5
-                </span>
-              </div>
-              <div class="context-categories" role="group" aria-label="Type de ressource">
-                <button
-                  matButton="text"
-                  type="button"
-                  [class.is-active]="selectedResourceType() === 'flow'"
-                  (click)="selectResourceType('flow')"
-                >
-                  Flows
-                </button>
-                <button
-                  matButton="text"
-                  type="button"
-                  [class.is-active]="selectedResourceType() === 'library'"
-                  (click)="selectResourceType('library')"
-                >
-                  Bibliothèques
-                </button>
-                <button
-                  matButton="text"
-                  type="button"
-                  [class.is-active]="selectedResourceType() === 'node'"
-                  (click)="selectResourceType('node')"
-                >
-                  Nœuds
-                </button>
-                <button
-                  matButton="text"
-                  type="button"
-                  [class.is-active]="selectedResourceType() === 'execution'"
-                  (click)="selectResourceType('execution')"
-                >
-                  Exécutions
-                </button>
-              </div>
-              <mat-form-field class="context-search" appearance="outline" subscriptSizing="dynamic">
-                <mat-label
-                  >Rechercher
-                  {{
-                    selectedResourceType() === 'flow'
-                      ? 'un flow'
-                      : selectedResourceType() === 'library'
-                        ? 'une bibliothèque'
-                        : selectedResourceType() === 'node'
-                          ? 'un nœud'
-                          : 'une exécution'
-                  }}</mat-label
-                >
-                <input
-                  matInput
-                  name="contextSearch"
-                  [ngModel]="contextSearch()"
-                  (ngModelChange)="contextSearch.set($event)"
-                />
-              </mat-form-field>
-              @if (loadingSelectedResource()) {
-                <p class="muted" role="status">Chargement des ressources…</p>
-              } @else if (filteredResourceOptions().length === 0) {
-                <p class="muted context-empty">Aucune ressource ne correspond à cette recherche.</p>
-              } @else {
-                <ul class="context-resource-list">
-                  @for (resource of filteredResourceOptions(); track resource.id) {
-                    <li>
-                      <button
-                        type="button"
-                        class="context-resource-option"
-                        [disabled]="
-                          isSourceAttached(resource) ||
-                          updatingSources() ||
-                          hasPendingRequest() ||
-                          conversationSources(current.conversation).length >= 5
-                        "
-                        (click)="addResourceToContext(resource)"
-                      >
-                        <span>{{ resource.label }}</span>
-                        <span>{{ isSourceAttached(resource) ? 'Ajoutée' : '+ Ajouter' }}</span>
-                      </button>
-                    </li>
-                  }
-                </ul>
               }
-            </section>
-          } @else {
-            <section class="add-context-controls" aria-label="Joindre une ressource">
-              <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                <mat-label>Type de ressource</mat-label>
-                <mat-select
-                  name="resourceType"
-                  [ngModel]="selectedResourceType()"
-                  (ngModelChange)="selectResourceType($event)"
-                >
-                  <mat-option value="flow">Flow publié</mat-option>
-                  <mat-option value="execution">Exécution</mat-option>
-                  <mat-option value="node">Nœud</mat-option>
-                  <mat-option value="library">Bibliothèque</mat-option>
-                </mat-select>
-              </mat-form-field>
-              @if (loadingSelectedResource()) {
-                <p class="muted" role="status">Chargement des ressources…</p>
-              } @else if (resourceOptions().length === 0) {
-                <div class="empty-state">
-                  <p>
-                    Aucune ressource de ce type n’est disponible pour le contexte de l’assistant.
-                  </p>
-                  @switch (selectedResourceType()) {
-                    @case ('flow') {
-                      <a matButton="text" routerLink="/flows">Parcourir les flows</a>
-                    }
-                    @case ('execution') {
-                      <a matButton="text" routerLink="/tasks">Parcourir les exécutions</a>
-                    }
-                    @case ('node') {
-                      <a matButton="text" routerLink="/nodes">Parcourir les nœuds</a>
-                    }
-                    @case ('library') {
-                      <a matButton="text" routerLink="/libraries">Parcourir les bibliothèques</a>
-                    }
-                  }
-                </div>
-              } @else {
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Ressource</mat-label>
-                  <mat-select name="resourceId" [(ngModel)]="selectedResourceId">
-                    @for (resource of resourceOptions(); track resource.id) {
-                      <mat-option [value]="resource.id">{{ resource.label }}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-              }
-
-              <p class="muted">{{ resourceDisclosure() }}</p>
-            </section>
-          }
-        </div>
-      }
-      @if (toolsOpen()) {
-        <section class="tool-panel" aria-label="Outils de lecture">
-          <mat-form-field class="read-tool-picker" appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Outils de lecture pour ce message</mat-label>
-            <mat-select
-              name="readTools"
-              multiple
-              [ngModel]="selectedReadTools()"
-              (ngModelChange)="setSelectedReadTools($event)"
-            >
-              @for (tool of readTools; track tool.name) {
-                <mat-option
-                  [value]="tool.name"
-                  [disabled]="tool.name === 'get_flow' && selectedResourceType() !== 'flow'"
-                  >{{ tool.label }}</mat-option
-                >
-              }
-            </mat-select>
-            <mat-hint
-              >Jusqu’à trois outils choisis ici ; l’assistant peut aussi demander un outil de
-              lecture adapté. Les résultats seront cités.</mat-hint
-            >
-          </mat-form-field>
-        </section>
+            </mat-chip-set>
+          </div>
+        }
       }
       @if (actionMessage(); as message) {
         <p class="muted" role="status">{{ message }}</p>
@@ -511,12 +449,8 @@
         (effortChange)="selectEffort($event)"
         (send)="send()"
         (cancel)="cancelRequest()"
-        (attach)="toggleContextPicker()"
-        (fileSelected)="selectAttachment($event)"
+        (attach)="openWorkspace()"
         (fileRemoved)="removeAttachment()"
-        (refresh)="loadAssistantOptions(true)"
-        (tools)="toolsOpen.set(!toolsOpen())"
-        (newConversation)="startNewConversation()"
       />
     </footer>
   </mat-drawer-content>

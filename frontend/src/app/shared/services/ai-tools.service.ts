@@ -63,14 +63,20 @@ export class AiToolsService {
     return this.http.get<readonly AiAssistantActivity[]>('/api/v1/tools/ai/assistant/activity');
   }
 
-  getAssistantActivity(requestId: string): Observable<AiAssistantActivity> {
-    return this.http.get<AiAssistantActivity>(
+  getAssistantActivity(requestId: string): Observable<AiAssistantActivity | null> {
+    return this.http.get<AiAssistantActivity | null>(
       `/api/v1/tools/ai/assistant/activity/${encodeURIComponent(requestId)}`,
     );
   }
 
   getAssistantConversation(id: string): Observable<AiAssistantConversationDetail> {
     return this.http.get<AiAssistantConversationDetail>(
+      `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}`,
+    );
+  }
+
+  deleteAssistantConversation(id: string): Observable<void> {
+    return this.http.delete<void>(
       `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}`,
     );
   }

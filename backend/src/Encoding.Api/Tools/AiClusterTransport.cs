@@ -15,6 +15,7 @@ public sealed class AiClusterTransport(ClusterPeerIdentityStore identity, Cluste
     AiClusterStore store, IHttpClientFactory clients, IConfiguration configuration)
 {
     public const string Path = "/api/v1/cluster/ai/exchange";
+    private const int MaxRpcBytes = 16 * 1024 * 1024;
     public Guid LocalId => identity.PeerId;
     public async Task<IReadOnlyList<string>> PeersAsync(CancellationToken ct) =>
         (await peers.GetPeerEndpointsAsync(ct)).Concat(health.GetStatus().Peers.Select(p => p.Url))
@@ -77,7 +78,7 @@ public sealed class AiClusterTransport(ClusterPeerIdentityStore identity, Cluste
         int count;
         while ((count = await stream.ReadAsync(buffer, ct)) > 0)
         {
-            if (output.Length + count > 1024 * 1024) throw new ArgumentException("Message IA trop volumineux.");
+            if (output.Length + count > MaxRpcBytes) throw new ArgumentException("Message IA trop volumineux.");
             await output.WriteAsync(buffer.AsMemory(0, count), ct);
         }
         return output.ToArray();
