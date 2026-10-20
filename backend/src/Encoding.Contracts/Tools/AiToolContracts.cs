@@ -78,7 +78,13 @@ public sealed record AiSettingsDto(
     bool OllamaEnabled = true,
     bool OpenAiEnabled = true,
     bool CodexEnabled = true,
-    bool ClaudeEnabled = true);
+    bool ClaudeEnabled = true,
+    string? DefaultModel = null,
+    string? DefaultReasoningEffort = null,
+    string? AssistantModel = null,
+    string? AssistantReasoningEffort = null,
+    string? FlowModel = null,
+    string? FlowReasoningEffort = null);
 
 /// <summary>Requête de mise à jour de la configuration de l'IA.</summary>
 public sealed record AiSettingsUpdateRequest(
@@ -99,4 +105,10 @@ public sealed record AiSettingsUpdateRequest(
     bool? OllamaEnabled = null,
     bool? OpenAiEnabled = null,
     bool? CodexEnabled = null,
-    bool? ClaudeEnabled = null);
+    bool? ClaudeEnabled = null,
+    string? DefaultModel = null,
+    string? DefaultReasoningEffort = null,
+    string? AssistantModel = null,
+    string? AssistantReasoningEffort = null,
+    string? FlowModel = null,
+    string? FlowReasoningEffort = null);

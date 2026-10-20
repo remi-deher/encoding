@@ -58,6 +58,31 @@ test.beforeEach(async ({ page }) => {
       },
     }),
   );
+  await page.route('**/api/v1/tools/ai/models*', (route) =>
+    route.fulfill({
+      json: {
+        nodes: [
+          {
+            nodeId: 'node-one',
+            name: 'Atelier',
+            providers: [
+              {
+                provider: 'ollama',
+                state: 'available',
+                models: [{ id: 'qwen3:8b', label: 'Qwen 3 8B', reasoningEfforts: [] }],
+              },
+              {
+                provider: 'openai',
+                state: 'available',
+                models: [{ id: 'gpt-4o-mini', label: 'GPT-4o mini', reasoningEfforts: [] }],
+              },
+            ],
+          },
+        ],
+        policy: { disabledModels: [] },
+      },
+    }),
+  );
   await page.route('**/api/v1/tools/ai/quotas', (route) => route.fulfill({ json: { nodes: [] } }));
   await page.route('**/api/v1/tools/ai/sessions?offset=*', (route) =>
     route.fulfill({ json: { items: [], offset: 0, hasMore: false } }),
@@ -209,8 +234,8 @@ test('discard protection applies to tab clicks and browser history, without doub
 }) => {
   await page.goto('/settings?tab=interface');
   await page.getByRole('tab', { name: 'Connexions', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Moteur du cluster', exact: true }).click();
-  await page.getByRole('option', { name: 'OpenAI / API compatible', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Type d’IA', exact: true }).first().click();
+  await page.getByRole('option', { name: 'OpenAI · API', exact: true }).click();
   await page.goBack();
   let confirmation = page.getByRole('dialog', { name: 'Quitter sans enregistrer ?', exact: true });
   await expect(confirmation).toBeVisible();

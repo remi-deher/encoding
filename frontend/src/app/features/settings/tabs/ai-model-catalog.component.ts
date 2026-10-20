@@ -1,6 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
-import { MatButtonModule } from '@angular/material/button';
+import { ChangeDetectionStrategy, Component, OnDestroy, inject, signal } from '@angular/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { AuthService } from '../../../core/auth/auth.service';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
@@ -10,19 +8,11 @@ import { AiClusterModelCatalog } from '../../../shared/models/ai-tools';
 @Component({
   selector: 'app-ai-model-catalog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, MatButtonModule, MatSlideToggleModule],
+  imports: [MatSlideToggleModule],
   template: `
     <section aria-labelledby="ai-models-title">
       <header>
         <h3 id="ai-models-title">Modèles disponibles</h3>
-        <button
-          matButton="tonal"
-          type="button"
-          [disabled]="loading() || saving()"
-          (click)="refresh(true)"
-        >
-          Actualiser les modèles
-        </button>
       </header>
       @if (loading()) {
         <p role="status">Lecture des catalogues fournisseurs…</p>
@@ -37,9 +27,6 @@ import { AiClusterModelCatalog } from '../../../shared/models/ai-tools';
             <h4>{{ provider.provider }}</h4>
             @if (provider.state !== 'available') {
               <p role="status">{{ provider.message ?? 'Catalogue indisponible' }}</p>
-            }
-            @if (provider.observedAt) {
-              <p>Observé le {{ provider.observedAt | date: 'dd/MM/yyyy HH:mm' }}</p>
             }
             @for (model of provider.models; track model.id) {
               <div class="model-row">
@@ -98,7 +85,7 @@ import { AiClusterModelCatalog } from '../../../shared/models/ai-tools';
     }
   `,
 })
-export class AiModelCatalogComponent {
+export class AiModelCatalogComponent implements OnDestroy {
   private readonly api = inject(AiToolsService);
   private readonly notifications = inject(NotificationService);
   protected readonly isAdmin = inject(AuthService).isAdmin;
@@ -106,20 +93,30 @@ export class AiModelCatalogComponent {
   protected readonly loading = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
   constructor() {
     this.refresh();
   }
-  protected refresh(force = false): void {
+  ngOnDestroy(): void {
+    if (this.pollTimer !== null) clearTimeout(this.pollTimer);
+  }
+  protected refresh(): void {
+    if (this.pollTimer !== null) clearTimeout(this.pollTimer);
+    this.pollTimer = null;
     this.loading.set(true);
     this.error.set(null);
-    this.api.getModelCatalog(force).subscribe({
+    this.api.getModelCatalog().subscribe({
       next: (catalog) => {
         this.catalog.set(catalog);
-        this.loading.set(false);
+        const catalogLoading = catalog.nodes.some((node) =>
+          node.providers.some((provider) => provider.state === 'loading'),
+        );
+        this.loading.set(catalogLoading);
+        if (catalogLoading) this.pollTimer = window.setTimeout(() => this.refresh(), 750);
       },
       error: () => {
         this.loading.set(false);
-        this.error.set('Impossible de lire les modèles. Réessayez avec Actualiser les modèles.');
+        this.error.set('Impossible de lire les modèles annoncés par les nœuds.');
       },
     });
   }

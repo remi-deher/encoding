@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text;
 using Encoding.Contracts.Tools;
 using Encoding.Api.Nodes;
 
@@ -14,6 +16,10 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> gates = new();
     private readonly ConcurrentDictionary<Guid, Lazy<Task<AiCompletionResult>>> running = new();
+    private readonly object viewSync = new();
+    private AiClusterView? cachedView;
+    private DateTimeOffset cachedViewAt;
+    private bool viewRefreshQueued;
     public async Task<AiNodeAvailability> LocalAsync(CancellationToken ct)
     {
         using var preparation = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -42,8 +48,16 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             }
             name = await localNode.ResolveDisplayNameAsync(token);
             if (modelCatalog is not null)
-                catalogs = await Task.WhenAll(providers.Select(provider => modelCatalog.ReadAsync(provider,
-                    provider is "codex-cli" or "claude-cli" ? auth.ConnectionRevision(provider) : "http", false, token)));
+            {
+                catalogs = providers.Select(provider => modelCatalog.ReadCachedOrRefresh(provider,
+                    provider is "codex-cli" or "claude-cli" ? auth.ConnectionRevision(provider) : "http")).ToArray();
+                var checkingCatalogs = tools.Where(tool => tool.IsInstalled && tool.AuthStatus.State == "checking"
+                        && (tool.Id != "codex-cli" || local.CodexEnabled)
+                        && (tool.Id != "claude-cli" || local.ClaudeEnabled))
+                    .Select(tool => new AiModelCatalog(tool.Id, "loading", [], null, DateTimeOffset.UtcNow,
+                        "Vérification de la connexion en cours."));
+                catalogs = catalogs.Concat(checkingCatalogs).ToArray();
+            }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -65,6 +79,52 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         nodes.AddRange(results.OfType<AiNodeAvailability>().Where(n => n.NodeId != transport.LocalId));
         return new(nodes.DistinctBy(n => n.NodeId).ToArray());
     }
+    public async Task<AiClusterView> CachedViewAsync(CancellationToken ct)
+    {
+        var local = await LocalAsync(ct);
+        var peerUrls = await transport.PeersAsync(ct);
+        AiClusterView? snapshot;
+        var startRefresh = false;
+        lock (viewSync)
+        {
+            snapshot = cachedView;
+            if (!viewRefreshQueued && (snapshot is null || cachedViewAt.AddMinutes(1) <= DateTimeOffset.UtcNow))
+            {
+                viewRefreshQueued = true;
+                startRefresh = true;
+            }
+        }
+        if (startRefresh) _ = RefreshViewInBackground();
+        var remoteNodes = snapshot?.Nodes.Where(node => node.NodeId != transport.LocalId).ToArray()
+            ?? CreateLoadingPeerNodes(peerUrls);
+        return new([local, .. remoteNodes]);
+    }
+
+    private async Task RefreshViewInBackground()
+    {
+        try
+        {
+            var snapshot = await ViewAsync(CancellationToken.None);
+            lock (viewSync)
+            {
+                cachedView = snapshot;
+                cachedViewAt = DateTimeOffset.UtcNow;
+            }
+        }
+        catch (Exception) { }
+        finally { lock (viewSync) viewRefreshQueued = false; }
+    }
+
+    private static AiNodeAvailability[] CreateLoadingPeerNodes(IReadOnlyList<string> peerUrls)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var providers = new[] { "codex-cli", "claude-cli", "openai", "ollama" };
+        return peerUrls.Select((url, index) => new AiNodeAvailability(
+            new Guid(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)).AsSpan(0, 16)),
+            $"Nœud distant {index + 1}", [], true,
+            Catalogs: providers.Select(provider => new AiModelCatalog(provider, "loading", [], null, now,
+                "Chargement des capacités annoncées par le nœud.")).ToArray())).ToArray();
+    }
     public async Task<AiNodeModelCatalog> LocalModelsAsync(bool refresh, CancellationToken ct)
     {
         if (refresh && modelCatalog is not null)
@@ -74,6 +134,13 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     }
     public async Task<AiClusterModelCatalog> ModelsAsync(bool refresh, CancellationToken ct)
     {
+        if (!refresh)
+        {
+            var view = await CachedViewAsync(ct);
+            return new(view.Nodes.Where(node => node.Reachable)
+                .Select(node => new AiNodeModelCatalog(node.NodeId, node.Name, node.Catalogs ?? []))
+                .ToArray(), await ModelPolicyAsync(ct));
+        }
         var local = LocalModelsAsync(refresh, ct);
         var remote = await Task.WhenAll((await transport.PeersAsync(ct)).Select(async url =>
         {
@@ -364,10 +431,16 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         return shared is null ? local : local with
         {
             DefaultProvider = shared.DefaultProvider,
+            DefaultModel = shared.DefaultModel,
+            DefaultReasoningEffort = shared.DefaultReasoningEffort,
             TimeoutSeconds = shared.TimeoutSeconds,
             SubtitleBatchSize = shared.SubtitleBatchSize,
             AssistantProvider = shared.AssistantProvider,
+            AssistantModel = shared.AssistantModel,
+            AssistantReasoningEffort = shared.AssistantReasoningEffort,
             FlowProvider = shared.FlowProvider,
+            FlowModel = shared.FlowModel,
+            FlowReasoningEffort = shared.FlowReasoningEffort,
             AssistantLocalOnly = shared.AssistantLocalOnly,
             FlowLocalOnly = shared.FlowLocalOnly,
             AssistantConversationRetentionDays = shared.AssistantConversationRetentionDays,

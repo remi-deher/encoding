@@ -68,6 +68,7 @@ export function settingsDomain(value: string | null): SettingsMainTab {
           label="Domaines des paramètres"
           [options]="mainTabs"
           [selected]="activeMainTab()"
+          variant="underline"
           (selectedChange)="onMainTabChange($event)"
         />
         <div

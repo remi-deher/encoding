@@ -10,7 +10,7 @@ export interface DeviceAuthPrompt {
 
 export interface DeviceAuthStatus {
   readonly toolId: string;
-  readonly state: 'unconfigured' | 'pending' | 'authorized' | 'expired' | 'failed';
+  readonly state: 'unconfigured' | 'pending' | 'checking' | 'authorized' | 'expired' | 'failed';
   readonly attemptState?: 'pending' | 'authorized' | 'expired' | 'failed' | null;
   readonly accountName?: string | null;
   readonly authenticatedAt?: string | null;
@@ -40,6 +40,8 @@ export interface FlowAiGenerateRequest {
   readonly provider?: string | null;
   readonly sessionId?: string | null;
   readonly requestId?: string | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
 }
 
 export interface FlowAiRefactorRequest {
@@ -48,6 +50,8 @@ export interface FlowAiRefactorRequest {
   readonly provider?: string | null;
   readonly sessionId?: string | null;
   readonly requestId?: string | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
 }
 
 export interface FlowAiExplainRequest {
@@ -55,6 +59,8 @@ export interface FlowAiExplainRequest {
   readonly provider?: string | null;
   readonly sessionId?: string | null;
   readonly requestId?: string | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
 }
 
 export interface FlowAiResponse {
@@ -86,6 +92,12 @@ export interface AiSettings {
   readonly openAiEnabled?: boolean;
   readonly codexEnabled?: boolean;
   readonly claudeEnabled?: boolean;
+  readonly defaultModel?: string | null;
+  readonly defaultReasoningEffort?: string | null;
+  readonly assistantModel?: string | null;
+  readonly assistantReasoningEffort?: string | null;
+  readonly flowModel?: string | null;
+  readonly flowReasoningEffort?: string | null;
 }
 
 export interface AiSettingsUpdateRequest {
@@ -107,6 +119,12 @@ export interface AiSettingsUpdateRequest {
   readonly openAiEnabled?: boolean;
   readonly codexEnabled?: boolean;
   readonly claudeEnabled?: boolean;
+  readonly defaultModel?: string | null;
+  readonly defaultReasoningEffort?: string | null;
+  readonly assistantModel?: string | null;
+  readonly assistantReasoningEffort?: string | null;
+  readonly flowModel?: string | null;
+  readonly flowReasoningEffort?: string | null;
 }
 
 export interface AiNodeAvailability {
@@ -158,6 +176,7 @@ export interface AiAssistantOptions {
   readonly defaultModel?: string | null;
   readonly models: readonly AiAssistantModelOption[];
   readonly catalogs?: readonly AiNodeModelCatalog[];
+  readonly defaultReasoningEffort?: string | null;
 }
 
 export interface AiTurnModelSelection {
@@ -335,7 +354,7 @@ export interface AiQuotaWindow {
 }
 export interface AiQuotaSnapshot {
   readonly provider: string;
-  readonly state: 'available' | 'unavailable' | 'stale';
+  readonly state: 'loading' | 'available' | 'unavailable' | 'stale';
   readonly windows: readonly AiQuotaWindow[];
   readonly observedAt: string | null;
   readonly checkedAt: string;
@@ -361,7 +380,7 @@ export interface AiDiscoveredModel {
 }
 export interface AiModelCatalog {
   readonly provider: string;
-  readonly state: 'available' | 'unavailable' | 'stale';
+  readonly state: 'loading' | 'available' | 'unavailable' | 'stale';
   readonly models: readonly AiDiscoveredModel[];
   readonly observedAt: string | null;
   readonly checkedAt: string;

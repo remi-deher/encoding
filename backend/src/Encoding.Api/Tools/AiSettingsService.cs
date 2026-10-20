@@ -29,6 +29,63 @@ public sealed class AiSettingsService
         }
     }
 
+    public void ValidateModelSelections(AiSettingsDto current, AiSettingsUpdateRequest update, AiClusterModelCatalog catalog)
+    {
+        var defaultProvider = update.DefaultProvider ?? current.DefaultProvider;
+        var assistantProvider = update.AssistantProvider is null
+            ? current.AssistantProvider
+            : update.AssistantProvider == "default" ? null : update.AssistantProvider;
+        var flowProvider = update.FlowProvider is null
+            ? current.FlowProvider
+            : update.FlowProvider == "default" ? null : update.FlowProvider;
+        var assistantLocalOnly = update.AssistantLocalOnly ?? current.AssistantLocalOnly;
+        var flowLocalOnly = update.FlowLocalOnly ?? current.FlowLocalOnly;
+
+        ValidateSelection("moteur par défaut",
+            (current.DefaultProvider, current.DefaultModel, current.DefaultReasoningEffort, false),
+            (defaultProvider, UpdateOptional(update.DefaultModel, current.DefaultModel), UpdateOptional(update.DefaultReasoningEffort, current.DefaultReasoningEffort), false), catalog);
+        ValidateSelection("assistant",
+            (current.AssistantProvider ?? current.DefaultProvider, current.AssistantModel, current.AssistantReasoningEffort, current.AssistantLocalOnly),
+            (assistantProvider ?? defaultProvider, UpdateOptional(update.AssistantModel, current.AssistantModel), UpdateOptional(update.AssistantReasoningEffort, current.AssistantReasoningEffort), assistantLocalOnly), catalog);
+        ValidateSelection("flows",
+            (current.FlowProvider ?? current.DefaultProvider, current.FlowModel, current.FlowReasoningEffort, current.FlowLocalOnly),
+            (flowProvider ?? defaultProvider, UpdateOptional(update.FlowModel, current.FlowModel), UpdateOptional(update.FlowReasoningEffort, current.FlowReasoningEffort), flowLocalOnly), catalog);
+    }
+
+    private static void ValidateSelection(
+        string usage,
+        (string Provider, string? Model, string? Effort, bool LocalOnly) current,
+        (string Provider, string? Model, string? Effort, bool LocalOnly) proposed,
+        AiClusterModelCatalog catalog)
+    {
+        if (current == proposed || proposed.Model is null && proposed.Effort is null && proposed.Provider == current.Provider)
+            return;
+
+        var nodes = proposed.LocalOnly ? catalog.Nodes.Take(1) : catalog.Nodes;
+        var discovered = nodes.SelectMany(node => node.Providers)
+            .Where(provider => provider.Provider == proposed.Provider && provider.State == "available")
+            .SelectMany(provider => provider.Models)
+            .Where(model => !catalog.Policy.DisabledModels.Any(disabled => disabled.Provider == proposed.Provider && disabled.Model == model.Id))
+            .ToArray();
+        AiDiscoveredModel[] matching;
+        if (proposed.Model is null)
+        {
+            var defaultModel = discovered.FirstOrDefault(model => model.IsDefault) ?? discovered.FirstOrDefault();
+            matching = defaultModel is null ? [] : [defaultModel];
+        }
+        else
+        {
+            matching = discovered.Where(model => model.Id == proposed.Model).ToArray();
+        }
+        if (matching.Length == 0)
+            throw new ArgumentException($"Le fournisseur ou le modèle sélectionné pour {usage} n’est pas annoncé comme disponible par le backend.");
+        if (proposed.Effort is not null && !matching.Any(model => model.ReasoningKnown && model.ReasoningEfforts.Contains(proposed.Effort, StringComparer.Ordinal)))
+            throw new ArgumentException($"L’effort de raisonnement sélectionné pour {usage} n’est pas annoncé comme disponible pour ce modèle.");
+    }
+
+    private static string? UpdateOptional(string? value, string? current) =>
+        value is null ? current : string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     public AiSettingsDto UpdateSettings(AiSettingsUpdateRequest update)
     {
         if (update.DefaultProvider is not null && update.DefaultProvider is not ("ollama" or "openai" or "codex-cli" or "claude-cli"))
@@ -79,7 +136,13 @@ public sealed class AiSettingsService
                 OllamaEnabled: ollamaEnabled,
                 OpenAiEnabled: openAiEnabled,
                 CodexEnabled: update.CodexEnabled ?? cachedSettings.CodexEnabled,
-                ClaudeEnabled: update.ClaudeEnabled ?? cachedSettings.ClaudeEnabled
+                ClaudeEnabled: update.ClaudeEnabled ?? cachedSettings.ClaudeEnabled,
+                DefaultModel: UpdateOptional(update.DefaultModel, cachedSettings.DefaultModel),
+                DefaultReasoningEffort: UpdateOptional(update.DefaultReasoningEffort, cachedSettings.DefaultReasoningEffort),
+                AssistantModel: UpdateOptional(update.AssistantModel, cachedSettings.AssistantModel),
+                AssistantReasoningEffort: UpdateOptional(update.AssistantReasoningEffort, cachedSettings.AssistantReasoningEffort),
+                FlowModel: UpdateOptional(update.FlowModel, cachedSettings.FlowModel),
+                FlowReasoningEffort: UpdateOptional(update.FlowReasoningEffort, cachedSettings.FlowReasoningEffort)
             );
 
             SaveSettings(next);

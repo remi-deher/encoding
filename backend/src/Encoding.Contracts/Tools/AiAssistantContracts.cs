@@ -25,7 +25,8 @@ public sealed record AiAssistantModelOption(string Provider, string? Model, stri
     string? DefaultReasoningEffort = null, bool ReasoningKnown = false, bool IsDefault = false);
 
 public sealed record AiAssistantOptions(string DefaultProvider, string? DefaultModel,
-    IReadOnlyList<AiAssistantModelOption> Models, IReadOnlyList<AiNodeModelCatalog>? Catalogs = null);
+    IReadOnlyList<AiAssistantModelOption> Models, IReadOnlyList<AiNodeModelCatalog>? Catalogs = null,
+    string? DefaultReasoningEffort = null);
 
 public sealed record AiAssistantResourceReference(string Type, Guid Id, int? Version = null);
 

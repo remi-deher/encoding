@@ -24,8 +24,9 @@ public static class FlowAiEndpoints
             }
             var requestId = request.RequestId ?? Guid.NewGuid();
             var settings = await cluster.GetSettingsAsync(ct);
-            var provider = settings.FlowProvider ?? request.Provider ?? settings.DefaultProvider;
-            request = request with { Provider = provider };
+            var provider = settings.FlowProvider ?? settings.DefaultProvider;
+            var selection = await ResolveModelSelectionAsync(settings, provider, cluster, ct);
+            request = request with { Provider = provider, Model = selection.Model, ReasoningEffort = selection.ReasoningEffort };
             var startedAt = DateTimeOffset.UtcNow;
             await activity.RecordOperationActivityAsync(user, requestId, "flow-generation", provider, "running", startedAt, null, ct);
             try
@@ -50,8 +51,9 @@ public static class FlowAiEndpoints
             }
             var requestId = request.RequestId ?? Guid.NewGuid();
             var settings = await cluster.GetSettingsAsync(ct);
-            var provider = settings.FlowProvider ?? request.Provider ?? settings.DefaultProvider;
-            request = request with { Provider = provider };
+            var provider = settings.FlowProvider ?? settings.DefaultProvider;
+            var selection = await ResolveModelSelectionAsync(settings, provider, cluster, ct);
+            request = request with { Provider = provider, Model = selection.Model, ReasoningEffort = selection.ReasoningEffort };
             var startedAt = DateTimeOffset.UtcNow;
             await activity.RecordOperationActivityAsync(user, requestId, "flow-refactor", provider, "running", startedAt, null, ct);
             try
@@ -114,8 +116,9 @@ public static class FlowAiEndpoints
             }
             var requestId = request.RequestId ?? Guid.NewGuid();
             var settings = await cluster.GetSettingsAsync(ct);
-            var provider = settings.FlowProvider ?? request.Provider ?? settings.DefaultProvider;
-            request = request with { Provider = provider };
+            var provider = settings.FlowProvider ?? settings.DefaultProvider;
+            var selection = await ResolveModelSelectionAsync(settings, provider, cluster, ct);
+            request = request with { Provider = provider, Model = selection.Model, ReasoningEffort = selection.ReasoningEffort };
             var startedAt = DateTimeOffset.UtcNow;
             await activity.RecordOperationActivityAsync(user, requestId, "flow-explain", provider, "running", startedAt, null, ct);
             try
@@ -162,4 +165,25 @@ public static class FlowAiEndpoints
 
     private static System.Text.Json.JsonElement? Element(JsonNode? node) => node is null ? null
         : JsonDocument.Parse(node.ToJsonString()).RootElement.Clone();
+
+    private static async Task<(string? Model, string? ReasoningEffort)> ResolveModelSelectionAsync(
+        AiSettingsDto settings, string provider, AiClusterService cluster, CancellationToken ct)
+    {
+        var model = settings.FlowModel ?? (settings.FlowProvider is null ? settings.DefaultModel : null);
+        var effort = settings.FlowReasoningEffort
+            ?? (settings.FlowProvider is null && (settings.FlowModel is null || settings.FlowModel == settings.DefaultModel)
+                ? settings.DefaultReasoningEffort : null);
+        var catalog = await cluster.ModelsAsync(false, ct);
+        var nodes = settings.FlowLocalOnly ? catalog.Nodes.Take(1) : catalog.Nodes;
+        var models = nodes.SelectMany(node => node.Providers)
+            .Where(item => item.Provider == provider && item.State == "available")
+            .SelectMany(item => item.Models)
+            .Where(item => !catalog.Policy.DisabledModels.Any(disabled => disabled.Provider == provider && disabled.Model == item.Id))
+            .DistinctBy(item => item.Id)
+            .ToArray();
+        var selected = model is null
+            ? models.FirstOrDefault(item => item.IsDefault) ?? models.FirstOrDefault()
+            : models.FirstOrDefault(item => item.Id == model);
+        return (model ?? selected?.Id, effort ?? selected?.DefaultReasoningEffort);
+    }
 }
