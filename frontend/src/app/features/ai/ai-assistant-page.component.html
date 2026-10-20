@@ -287,18 +287,6 @@
             }
           </article>
         }
-        @if (pendingPrompt(); as pending) {
-          <article class="message user-message">
-            <h3>Vous</h3>
-            <p>{{ pending }}</p>
-          </article>
-        }
-        @if (sending()) {
-          <div class="thinking" role="status">
-            <mat-spinner diameter="20" />
-            <span>{{ requestProgressDetail() ?? 'Préparation de votre demande' }}</span>
-          </div>
-        }
         @if (pendingActionProposal(); as proposal) {
           <section class="assistant-action-confirmation" aria-label="Action à confirmer">
             <h3>Action proposée</h3>
@@ -328,9 +316,22 @@
           </section>
         }
       } @else {
+      } @else if (!pendingPrompt()) {
         <div class="welcome">
           <span aria-hidden="true">✦</span>
           <h2>{{ panelMode() ? 'Comment puis-je vous aider ?' : 'Que souhaitez-vous faire ?' }}</h2>
+        </div>
+      }
+      @if (pendingPrompt(); as pending) {
+        <article class="message user-message">
+          <h3>Vous</h3>
+          <p>{{ pending }}</p>
+        </article>
+      }
+      @if (sending()) {
+        <div class="thinking" role="status">
+          <mat-spinner diameter="20" />
+          <span>{{ requestProgressDetail() ?? 'Réponse en cours…' }}</span>
         </div>
       }
     </div>
