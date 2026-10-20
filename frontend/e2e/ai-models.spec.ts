@@ -43,6 +43,7 @@ async function openModelSettings(container: Locator): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
+  // Catch-all routes must be registered first: Playwright evaluates routes in reverse order.
   await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/v1/auth/status', (route) =>
     route.fulfill({
@@ -239,7 +240,7 @@ test('administrators disable discovered models through the backend policy', asyn
   await page.route('**/api/v1/tools/ai/sessions?*', (route) =>
     route.fulfill({ json: { items: [], offset: 0, hasMore: false } }),
   );
-  await page.route('**/api/v1/tools/ai/models?*', (route) =>
+  await page.route('**/api/v1/tools/ai/models*', (route) =>
     route.fulfill({
       json: {
         nodes: [
@@ -286,10 +287,12 @@ test('administrators disable discovered models through the backend policy', asyn
   await toggle.click();
   await expect(toggle).not.toBeChecked();
   expect(saved).toEqual({ provider: 'codex-cli', model: 'server-model-a', enabled: false });
-  await panel.getByRole('button', { name: 'Actualiser les modèles' }).click();
-  await expect(toggle).not.toBeChecked();
-  await toggle.click();
-  await expect(toggle).toBeChecked();
+  await page.reload();
+  const reloadedPanel = page.locator('app-ai-model-catalog');
+  const reloadedToggle = reloadedPanel.getByRole('switch', { name: 'Modèle fourni A' });
+  await expect(reloadedToggle).not.toBeChecked();
+  await reloadedToggle.click();
+  await expect(reloadedToggle).toBeChecked();
   const result = await new AxeBuilder({ page })
     .include('app-ai-model-catalog')
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
@@ -442,7 +445,9 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   await openModelSettings(widget);
   await widget.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
-  await widget.getByRole('button', { name: 'Ressources, fichiers et outils de l’assistant' }).click();
+  await widget
+    .getByRole('button', { name: 'Ressources, fichiers et outils de l’assistant' })
+    .click();
   await widget.getByRole('combobox', { name: 'Type de ressource' }).click();
   await page.getByRole('option', { name: 'Nœuds', exact: true }).click();
   await widget.getByRole('combobox', { name: 'Ressource', exact: true }).click();

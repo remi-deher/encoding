@@ -234,9 +234,12 @@ export class AiAssistantPageComponent implements OnDestroy {
   private requestId = '';
   private requestSelection: AiTurnModelSelection | null = null;
   private pendingPollTimer: ReturnType<typeof setTimeout> | null = null;
+  private optionsPollTimer: ReturnType<typeof setTimeout> | null = null;
+
   ngOnDestroy(): void {
     if (this.pendingPollTimer !== null) clearTimeout(this.pendingPollTimer);
     this.stopProgressPolling();
+    if (this.optionsPollTimer !== null) clearTimeout(this.optionsPollTimer);
   }
 
   constructor() {
@@ -864,7 +867,7 @@ export class AiAssistantPageComponent implements OnDestroy {
             this.requestPrompt = '';
             this.requestDraftPrompt = '';
             this.requestSelection = null;
-            this.loadAssistantOptions(true);
+            this.loadAssistantOptions();
           } else {
             this.pendingPrompt.set(message);
             this.hasPendingRequest.set(true);
@@ -1151,13 +1154,20 @@ export class AiAssistantPageComponent implements OnDestroy {
     });
   }
 
-  protected loadAssistantOptions(refresh = false): void {
+  protected loadAssistantOptions(): void {
+    if (this.optionsPollTimer !== null) clearTimeout(this.optionsPollTimer);
+    this.optionsPollTimer = null;
     this.loadingAssistantOptions.set(true);
-    this.aiTools.getAssistantOptions(refresh).subscribe({
+    this.aiTools.getAssistantOptions().subscribe({
       next: (options) => {
         this.assistantOptions.set(options);
-        this.loadingAssistantOptions.set(false);
-        if (!this.detail()) this.selectDefaultModel();
+        const catalogLoading = options.catalogs?.some((node) =>
+          node.providers.some((catalog) => catalog.state === 'loading'),
+        ) ?? false;
+        this.loadingAssistantOptions.set(catalogLoading);
+        if (!catalogLoading && !this.detail()) this.selectDefaultModel();
+        if (catalogLoading)
+          this.optionsPollTimer = window.setTimeout(() => this.loadAssistantOptions(), 750);
       },
       error: () => this.loadingAssistantOptions.set(false),
     });
@@ -1166,7 +1176,13 @@ export class AiAssistantPageComponent implements OnDestroy {
   private selectDefaultModel(): void {
     const options = this.assistantOptions();
     if (!options) return;
-    const selected =
+    const preferredModel = options.models.find(
+      (option) =>
+        option.provider === options.defaultProvider &&
+        option.model === options.defaultModel &&
+        (!options.defaultReasoningEffort || option.reasoningEfforts.includes(options.defaultReasoningEffort)),
+    );
+    const selected = preferredModel ??
       options.models.find(
         (option) =>
           option.provider === options.defaultProvider && option.model === options.defaultModel,
@@ -1174,7 +1190,11 @@ export class AiAssistantPageComponent implements OnDestroy {
       options.models.find((option) => option.provider === options.defaultProvider) ??
       options.models[0];
     this.selectedModelKey.set(selected ? this.modelOptionKey(selected) : '');
-    this.selectedReasoningEffort.set(selected?.defaultReasoningEffort ?? null);
+    this.selectedReasoningEffort.set(
+      selected?.reasoningEfforts.includes(options.defaultReasoningEffort ?? '')
+        ? options.defaultReasoningEffort ?? null
+        : selected?.defaultReasoningEffort ?? null,
+    );
   }
 
   private setConversationUrl(id: string): void {

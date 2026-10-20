@@ -18,7 +18,12 @@ export interface CategoryTabOption {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [],
   template: `
-    <div class="category-tabs" [attr.aria-label]="label()" role="tablist">
+    <div
+      class="category-tabs"
+      [class.is-underline]="variant() === 'underline'"
+      [attr.aria-label]="label()"
+      role="tablist"
+    >
       @for (option of options(); track option.value; let index = $index) {
         <button
           #tabButton
@@ -45,6 +50,7 @@ export class CategoryTabsComponent {
   readonly label = input.required<string>();
   readonly options = input.required<readonly CategoryTabOption[]>();
   readonly selected = input.required<string>();
+  readonly variant = input<'pill' | 'underline'>('pill');
   readonly selectedChange = output<string>();
 
   private readonly tabButtons = viewChildren<ElementRef<HTMLButtonElement>>('tabButton');

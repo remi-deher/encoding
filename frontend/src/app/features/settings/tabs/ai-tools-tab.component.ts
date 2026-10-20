@@ -5,6 +5,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  OnDestroy,
   OnInit,
   computed,
   inject,
@@ -31,9 +32,12 @@ import {
   AiSettingsUpdateRequest,
   AiToolInfo,
   AiClusterView,
+  AiClusterModelCatalog,
+  AiDiscoveredModel,
 } from '../../../shared/models/ai-tools';
 import { DeviceAuthDialogComponent } from '../../../shared/ui/device-auth-dialog.component';
 import { AuthService } from '../../../core/auth/auth.service';
+import { aiEffortLabel, aiTypeLabel } from '../../ai/components/ai-model-selection';
 
 @Component({
   selector: 'app-ai-tools-tab',
@@ -57,7 +61,7 @@ import { AuthService } from '../../../core/auth/auth.service';
   templateUrl: './ai-tools-tab.component.html',
   styleUrl: './ai-tools-tab.component.scss',
 })
-export class AiToolsTabComponent implements OnInit {
+export class AiToolsTabComponent implements OnInit, OnDestroy {
   protected readonly editor = inject(SettingsEditor);
   private readonly providerEditor = viewChild.required<TemplateRef<unknown>>('providerEditor');
   readonly settingsError = signal(false);
@@ -105,8 +109,11 @@ export class AiToolsTabComponent implements OnInit {
     { id: 'codex-cli', name: 'Codex CLI' },
     { id: 'claude-cli', name: 'Claude Code' },
   ];
+  readonly usageOptions = ['assistant', 'flow'] as const;
   readonly tools = signal<readonly AiToolInfo[]>([]);
   readonly cluster = signal<AiClusterView | null>(null);
+  readonly modelCatalog = signal<AiClusterModelCatalog | null>(null);
+  readonly loadingModelCatalog = signal(false);
   readonly loadingTools = signal(false);
   readonly quotaRevision = signal(0);
   readonly loadingSettings = signal(true);
@@ -120,6 +127,8 @@ export class AiToolsTabComponent implements OnInit {
     this.tools().find((t) => t.id === this.selectedProvider()),
   );
   readonly defaultProvider = signal('codex-cli');
+  readonly defaultModel = signal<string | null>(null);
+  readonly defaultReasoningEffort = signal<string | null>(null);
   readonly ollamaBaseUrl = signal('');
   readonly ollamaModel = signal('');
   readonly openAiBaseUrl = signal('');
@@ -136,13 +145,20 @@ export class AiToolsTabComponent implements OnInit {
   readonly assistantActivityRetentionDays = signal(30);
   readonly assistantProvider = signal<string | null>(null);
   readonly flowProvider = signal<string | null>(null);
+  readonly assistantModel = signal<string | null>(null);
+  readonly assistantReasoningEffort = signal<string | null>(null);
+  readonly flowModel = signal<string | null>(null);
+  readonly flowReasoningEffort = signal<string | null>(null);
   readonly assistantLocalOnly = signal(false);
   readonly flowLocalOnly = signal(false);
 
   private savedFingerprint = '';
+  private modelCatalogPollTimer: ReturnType<typeof setTimeout> | null = null;
   private fingerprint(): string {
     return JSON.stringify([
       this.defaultProvider(),
+      this.defaultModel(),
+      this.defaultReasoningEffort(),
       this.ollamaBaseUrl(),
       this.ollamaModel(),
       this.openAiBaseUrl(),
@@ -157,7 +173,11 @@ export class AiToolsTabComponent implements OnInit {
       this.assistantConversationRetentionDays(),
       this.assistantActivityRetentionDays(),
       this.assistantProvider(),
+      this.assistantModel(),
+      this.assistantReasoningEffort(),
       this.flowProvider(),
+      this.flowModel(),
+      this.flowReasoningEffort(),
       this.assistantLocalOnly(),
       this.flowLocalOnly(),
     ]);
@@ -171,6 +191,9 @@ export class AiToolsTabComponent implements OnInit {
   ngOnInit(): void {
     this.refreshTools();
     this.loadSettings();
+  }
+  ngOnDestroy(): void {
+    if (this.modelCatalogPollTimer !== null) clearTimeout(this.modelCatalogPollTimer);
   }
   loadSettings(): void {
     this.settingsError.set(false);
@@ -189,6 +212,7 @@ export class AiToolsTabComponent implements OnInit {
   refreshTools(): void {
     this.quotaRevision.update((value) => value + 1);
     this.loadingTools.set(true);
+    this.loadModelCatalog();
     this.aiService.listTools().subscribe({
       next: (tools) => {
         this.tools.set(tools);
@@ -210,6 +234,8 @@ export class AiToolsTabComponent implements OnInit {
     this.savedSettings = settings;
     this.openAiApiKey.set('');
     this.defaultProvider.set(settings.defaultProvider);
+    this.defaultModel.set(settings.defaultModel ?? null);
+    this.defaultReasoningEffort.set(settings.defaultReasoningEffort ?? null);
     this.ollamaBaseUrl.set(settings.ollamaBaseUrl);
     this.ollamaModel.set(settings.ollamaModel);
     this.openAiBaseUrl.set(settings.openAiBaseUrl);
@@ -224,7 +250,11 @@ export class AiToolsTabComponent implements OnInit {
     this.assistantConversationRetentionDays.set(settings.assistantConversationRetentionDays ?? 90);
     this.assistantActivityRetentionDays.set(settings.assistantActivityRetentionDays ?? 30);
     this.assistantProvider.set(settings.assistantProvider ?? null);
+    this.assistantModel.set(settings.assistantModel ?? null);
+    this.assistantReasoningEffort.set(settings.assistantReasoningEffort ?? null);
     this.flowProvider.set(settings.flowProvider ?? null);
+    this.flowModel.set(settings.flowModel ?? null);
+    this.flowReasoningEffort.set(settings.flowReasoningEffort ?? null);
     this.assistantLocalOnly.set(settings.assistantLocalOnly ?? false);
     this.flowLocalOnly.set(settings.flowLocalOnly ?? false);
     this.savedFingerprint = this.fingerprint();
@@ -283,6 +313,12 @@ export class AiToolsTabComponent implements OnInit {
       assistantActivityRetentionDays: this.assistantActivityRetentionDays(),
       assistantProvider: this.assistantProvider() ?? 'default',
       flowProvider: this.flowProvider() ?? 'default',
+      defaultModel: this.defaultModel() ?? '',
+      defaultReasoningEffort: this.defaultReasoningEffort() ?? '',
+      assistantModel: this.assistantModel() ?? '',
+      assistantReasoningEffort: this.assistantReasoningEffort() ?? '',
+      flowModel: this.flowModel() ?? '',
+      flowReasoningEffort: this.flowReasoningEffort() ?? '',
       assistantLocalOnly: this.assistantLocalOnly(),
       flowLocalOnly: this.flowLocalOnly(),
     };
@@ -306,6 +342,208 @@ export class AiToolsTabComponent implements OnInit {
         );
       },
     });
+  }
+
+  private loadModelCatalog(): void {
+    if (this.modelCatalogPollTimer !== null) clearTimeout(this.modelCatalogPollTimer);
+    this.modelCatalogPollTimer = null;
+    this.loadingModelCatalog.set(true);
+    this.aiService.getSettingsModelCatalog().subscribe({
+      next: (catalog) => {
+        this.modelCatalog.set(catalog);
+        const catalogLoading = catalog.nodes.some((node) =>
+          node.providers.some((provider) => provider.state === 'loading'),
+        );
+        this.loadingModelCatalog.set(catalogLoading);
+        if (catalogLoading)
+          this.modelCatalogPollTimer = window.setTimeout(() => this.loadModelCatalog(), 750);
+      },
+      error: () => {
+        this.modelCatalog.set(null);
+        this.loadingModelCatalog.set(false);
+      },
+    });
+  }
+
+  providerChoices(
+    usage: 'default' | 'assistant' | 'flow' = 'default',
+  ): readonly { id: string; name: string }[] {
+    return this.providers
+      .filter((provider) => this.modelChoices(provider.id, usage).length > 0)
+      .map((provider) => ({ ...provider, name: aiTypeLabel(provider.id) }));
+  }
+
+  private modelAnnouncements(
+    providerId: string,
+    usage: 'default' | 'assistant' | 'flow',
+  ): readonly AiDiscoveredModel[] {
+    const catalog = this.modelCatalog();
+    if (!catalog) return [];
+    const disabled = new Set(
+      catalog.policy.disabledModels.map((model) => `${model.provider}\u0000${model.model}`),
+    );
+    const localOnly =
+      usage === 'assistant'
+        ? this.assistantLocalOnly()
+        : usage === 'flow'
+          ? this.flowLocalOnly()
+          : false;
+    const nodes = localOnly ? catalog.nodes.slice(0, 1) : catalog.nodes;
+    return nodes.flatMap((node) =>
+      node.providers
+        .filter((provider) => provider.provider === providerId && provider.state === 'available')
+        .flatMap((provider) => provider.models)
+        .filter((model) => !disabled.has(`${providerId}\u0000${model.id}`)),
+    );
+  }
+
+  modelChoices(
+    providerId: string,
+    usage: 'default' | 'assistant' | 'flow' = 'default',
+  ): readonly AiDiscoveredModel[] {
+    const models = this.modelAnnouncements(providerId, usage);
+    const choices = new Map<string, AiDiscoveredModel>();
+    for (const model of models) {
+      const existing = choices.get(model.id);
+      choices.set(
+        model.id,
+        existing
+          ? {
+              ...existing,
+              reasoningEfforts: [
+                ...new Set([...existing.reasoningEfforts, ...model.reasoningEfforts]),
+              ],
+              defaultReasoningEffort:
+                existing.defaultReasoningEffort ?? model.defaultReasoningEffort,
+              isDefault: existing.isDefault || model.isDefault,
+              reasoningKnown: existing.reasoningKnown || model.reasoningKnown,
+            }
+          : model,
+      );
+    }
+    return [...choices.values()];
+  }
+
+  reasoningChoices(
+    providerId: string,
+    modelId: string | null,
+    usage: 'default' | 'assistant' | 'flow' = 'default',
+  ): readonly string[] {
+    if (!modelId) return [];
+    return [
+      ...new Set(
+        this.modelAnnouncements(providerId, usage)
+          .filter((model) => model.id === modelId && model.reasoningKnown)
+          .flatMap((model) => model.reasoningEfforts),
+      ),
+    ];
+  }
+
+  effectiveProvider(usage: 'assistant' | 'flow'): string {
+    return (
+      (usage === 'assistant' ? this.assistantProvider() : this.flowProvider()) ??
+      this.defaultProvider()
+    );
+  }
+
+  modelValue(usage: 'default' | 'assistant' | 'flow'): string {
+    const selected =
+      usage === 'default'
+        ? this.defaultModel()
+        : usage === 'assistant'
+          ? this.assistantModel()
+          : this.flowModel();
+    if (selected) return selected;
+    const providerId = usage === 'default' ? this.defaultProvider() : this.effectiveProvider(usage);
+    if (
+      usage !== 'default' &&
+      (usage === 'assistant' ? this.assistantProvider() : this.flowProvider()) === null
+    ) {
+      const inherited = this.defaultModel();
+      if (inherited && providerId === this.defaultProvider()) return inherited;
+    }
+    return this.modelChoices(providerId, usage).find((model) => model.isDefault)?.id ?? '';
+  }
+
+  effortValue(usage: 'default' | 'assistant' | 'flow'): string {
+    const selected =
+      usage === 'default'
+        ? this.defaultReasoningEffort()
+        : usage === 'assistant'
+          ? this.assistantReasoningEffort()
+          : this.flowReasoningEffort();
+    if (selected) return selected;
+    const providerId = usage === 'default' ? this.defaultProvider() : this.effectiveProvider(usage);
+    const modelId = this.modelValue(usage);
+    if (
+      usage === 'assistant' &&
+      this.assistantProvider() === null &&
+      (this.assistantModel() === null || this.assistantModel() === this.defaultModel())
+    )
+      return this.defaultReasoningEffort() ?? '';
+    if (
+      usage === 'flow' &&
+      this.flowProvider() === null &&
+      (this.flowModel() === null || this.flowModel() === this.defaultModel())
+    )
+      return this.defaultReasoningEffort() ?? '';
+    return (
+      this.modelChoices(providerId, usage).find((model) => model.id === modelId)
+        ?.defaultReasoningEffort ?? ''
+    );
+  }
+
+  changeDefaultProvider(providerId: string): void {
+    this.defaultProvider.set(providerId);
+    this.defaultModel.set(null);
+    this.defaultReasoningEffort.set(null);
+    if (this.assistantProvider() === null) {
+      this.assistantModel.set(null);
+      this.assistantReasoningEffort.set(null);
+    }
+    if (this.flowProvider() === null) {
+      this.flowModel.set(null);
+      this.flowReasoningEffort.set(null);
+    }
+  }
+
+  changeUsageProvider(usage: 'assistant' | 'flow', provider: string | null): void {
+    (usage === 'assistant' ? this.assistantProvider : this.flowProvider).set(provider);
+    (usage === 'assistant' ? this.assistantModel : this.flowModel).set(null);
+    (usage === 'assistant' ? this.assistantReasoningEffort : this.flowReasoningEffort).set(null);
+  }
+
+  changeModel(usage: 'default' | 'assistant' | 'flow', modelId: string): void {
+    const modelSignal =
+      usage === 'default'
+        ? this.defaultModel
+        : usage === 'assistant'
+          ? this.assistantModel
+          : this.flowModel;
+    const effortSignal =
+      usage === 'default'
+        ? this.defaultReasoningEffort
+        : usage === 'assistant'
+          ? this.assistantReasoningEffort
+          : this.flowReasoningEffort;
+    modelSignal.set(modelId || null);
+    effortSignal.set(null);
+  }
+
+  changeEffort(usage: 'default' | 'assistant' | 'flow', effort: string): void {
+    const modelSignal =
+      usage === 'default'
+        ? this.defaultModel
+        : usage === 'assistant'
+          ? this.assistantModel
+          : this.flowModel;
+    if (effort && !modelSignal()) modelSignal.set(this.modelValue(usage) || null);
+    (usage === 'default'
+      ? this.defaultReasoningEffort
+      : usage === 'assistant'
+        ? this.assistantReasoningEffort
+        : this.flowReasoningEffort
+    ).set(effort || null);
   }
   startAuth(tool: AiToolInfo): void {
     if (!this.isAdmin() || !tool.isInstalled) return;
@@ -364,11 +602,18 @@ export class AiToolsTabComponent implements OnInit {
   providerNames(ids: readonly string[]): string {
     return ids.map((id) => this.providers.find((p) => p.id === id)?.name ?? id).join(', ');
   }
+  providerName(id: string): string {
+    return aiTypeLabel(id);
+  }
+  effortName(value: string): string {
+    return aiEffortLabel(value);
+  }
   authLabel(state: string): string {
     return (
       (
         {
           authorized: 'Identifiants reconnus',
+          checking: 'Vérification en cours…',
           pending: 'Autorisation en attente',
           expired: 'Connexion expirée',
           failed: 'Échec de connexion',
