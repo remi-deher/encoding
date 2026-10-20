@@ -205,6 +205,7 @@ public sealed class AiClusterTests
     public async Task ModelCatalogAndPolicyUsePeerTransportAndNoCredentialsAreExposed()
     {
         await using var mesh = await Mesh.CreateAsync();
+        await mesh.PrepareOpenAiCatalogsAsync();
         var catalog = await mesh.First.Service.ModelsAsync(false, Ct);
         var remote = Assert.Single(catalog.Nodes, n => n.NodeId == mesh.Second.Identity.PeerId);
         Assert.Equal(2, Assert.Single(remote.Providers).Models.Count);
@@ -224,6 +225,7 @@ public sealed class AiClusterTests
     public async Task ConversationTurnsCanChangeModelsButReplayAndPendingRequestsKeepTheirSelection()
     {
         await using var mesh = await Mesh.CreateAsync();
+        await mesh.PrepareOpenAiCatalogsAsync();
         var node = mesh.Second.Identity.PeerId;
         var firstPrompt = new AiPrompt("instructions", "first", Model: "gpt-4o-mini", NodeId: node);
         var first = await mesh.First.Service.GenerateAsync("openai", firstPrompt, Ct, allowModelChanges: true);
@@ -252,6 +254,7 @@ public sealed class AiClusterTests
     public async Task AssistantOptionsUseTheDiscoveredCatalogAndFilterDisabledModels()
     {
         await using var mesh = await Mesh.CreateAsync();
+        await mesh.PrepareOpenAiCatalogsAsync();
         var assistant = new AiAssistantService(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
             null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
         var options = await assistant.OptionsAsync(Ct);
@@ -269,6 +272,7 @@ public sealed class AiClusterTests
     public async Task AssistantPersistsPerTurnSelectionsAndObservedModelWithoutRewritingOldTurns()
     {
         await using var mesh = await Mesh.CreateAsync();
+        await mesh.PrepareOpenAiCatalogsAsync();
         mesh.First.Settings.UpdateSettings(new(OpenAiApiKey: "first-test-key"));
         mesh.Factory.ReportModel = true;
         var resourceId = Guid.NewGuid();
@@ -526,6 +530,9 @@ public sealed class AiClusterTests
             await mesh.Second.Admissions.ImportBootstrapAsync(bootstrap!, nodeId, Ct);
             return mesh;
         }
+        public Task PrepareOpenAiCatalogsAsync() => Task.WhenAll(
+            First.Catalog.ReadAsync("openai", "http", true, Ct),
+            Second.Catalog.ReadAsync("openai", "http", true, Ct));
         public async ValueTask DisposeAsync() { await First.DisposeAsync(); await Second.DisposeAsync(); }
     }
     private sealed class MeshFactory : IHttpClientFactory
