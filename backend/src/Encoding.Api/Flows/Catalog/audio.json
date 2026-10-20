@@ -315,7 +315,7 @@
     {
       "id": "audio-rules",
       "version": "1.0.0",
-      "name": "Audio par règles",
+      "name": "Préréglage audio AAC / AC-3",
       "description": "Uniformise toutes les pistes audio : stéréo en AAC (une stéréo AC-3 est conservée), 2.1 et plus en AC-3 limité à 6 canaux, mono AAC conservé. La disposition des canaux et le LFE sont préservés ; une disposition inconnue n’est déduite que de pistes déclarées concordantes.",
       "kind": "action",
       "mediaType": "audio",

@@ -123,7 +123,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 RuntimeHandoffSelector? handoff=null; RuntimeWait? wait=null;
                 try
                 {
-                    var id=node.Component.ComponentId; var c=node.Configuration;
+                    var id=node.Component.ComponentId; var c=FlowOperationConfiguration.Resolve(id,node.Configuration);
                     if(id.StartsWith("base-input-",StringComparison.Ordinal)) { if(id!="base-input-file") await EnsureScanAsync(); }
                     else if(id=="base-variable")
                     {
@@ -245,7 +245,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         foreach(var change in response.VariableChanges) variables[change.Key]=change.Value;
                         if(response.CandidateArtifactId is { } candidate) await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate),[]),node.Id);
                     }
-                    else if(id is "base-track-names" or "subtitles-track-names")
+                    else if(id is "base-track-names" or "subtitles-track-names" || FlowOperationConfiguration.IsNamingOperation(id))
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.TrackNamesAsync(c,context.CurrentMetadata!.Value,variables.TryGetValue("tracks.origin",out var saved)?saved:null,current,directory,node.Id,job.Token);
@@ -257,7 +257,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
-                    else if(id is "base-subtitle-manage" or "subtitles-manage")
+                    else if(id is "base-subtitle-manage" or "subtitles-manage" || FlowOperationConfiguration.IsSubtitleOperation(id))
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.SubtitleManageAsync(c,context.CurrentMetadata!.Value,current,directory,node.Id,job.Token);

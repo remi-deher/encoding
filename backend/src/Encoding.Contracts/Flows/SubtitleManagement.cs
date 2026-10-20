@@ -10,13 +10,13 @@ public sealed class SubtitleException(string message) : Exception(message);
 
 /// <summary>Options du bloc <c>base-subtitle-manage</c> (architecture 0057).</summary>
 public sealed record SubtitleOptions(bool ApplyProfile = true, bool ConvertSrt = true, bool UpgradeAss = true, bool RemoveDuplicates = true,
-    bool InferForced = true, bool SetTitles = true, bool FrenchDefault = true)
+    bool InferForced = true, bool SetTitles = true, bool FrenchDefault = true, string? Operation = null)
 {
     public static SubtitleOptions From(IReadOnlyDictionary<string, JsonElement> configuration)
     {
         bool Flag(string key) => !configuration.TryGetValue(key, out var value) || value.ValueKind != JsonValueKind.False;
         var profile = configuration.TryGetValue("styleProfile", out var mode) && mode.ValueKind == JsonValueKind.String ? mode.GetString() : "crunchyroll";
-        return new(profile != "none", Flag("convertSrt"), Flag("upgradeAss"), Flag("removeDuplicates"), Flag("inferForced"), Flag("setTitles"), Flag("frenchDefault"));
+        return new(profile != "none", Flag("convertSrt"), Flag("upgradeAss"), Flag("removeDuplicates"), Flag("inferForced"), Flag("setTitles"), Flag("frenchDefault"), configuration.TryGetValue("operation", out var operation) ? operation.GetString() : null);
     }
 }
 
@@ -248,7 +248,7 @@ public static class SubtitlePlanner
             state.Events = state.Rows.Select(row => row.Text).ToList();
             state.Custom = AssProfile.IsCustom(state.Track.AssText!);
             if (state.Events.Count > 0) { notes.Add($"Sous-titres piste {state.Track.Ordinal} ({state.Track.Language}) : {state.Events.Count} répliques."); continue; }
-            if (AssIsEmpty(state.Track)) { state.Dropped = true; notes.Add($"Piste {state.Track.Ordinal} vide confirmée : retirée."); }
+            if (AssIsEmpty(state.Track)) { state.Dropped = options.Operation is null or "subtitles-remove-duplicates"; notes.Add($"Piste {state.Track.Ordinal} vide confirmée : {(state.Dropped ? "retirée" : "conservée") }."); }
             else throw new SubtitleException($"Piste {state.Track.Ordinal} sans répliques, mais piste source non confirmée vide ({state.Track.Codec}). Source conservée ; vérifier l'extraction.");
         }
         var live = states.Where(item => !item.Dropped).ToList();
@@ -363,7 +363,8 @@ public static class SubtitlePlanner
                     : FullByTitle(track) || state.Full ? $"{label} / {format} / Complet"
                     : $"{label} / {format} / Piste {positions[track.Ordinal]}";
             }
-            var language = track.Language.Equals("frf", StringComparison.OrdinalIgnoreCase) ? "fr-FR" : track.Language;
+            var language = options.Operation is null && track.Language.Equals("frf", StringComparison.OrdinalIgnoreCase) ? "fr-FR" : track.Language;
+            if (options.Operation is not (null or "subtitles-detect-forced")) state.IsForced = track.Forced;
             var note = state.Dropped ? "retirée" : state.Kind;
             var different = state.Dropped || state.Replacement is not null || state.IsForced != track.Forced || state.IsDefault != track.Default || title != track.Title
                 || language != track.Language;

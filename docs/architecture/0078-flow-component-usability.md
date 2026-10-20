@@ -25,3 +25,10 @@ historiques conservent leurs options et valeurs implicites.
 
 Chaque lot est vérifié et committé séparément. Les garanties de scan, de bail,
 de plan média, de validation et de publication restent celles du moteur.
+
+## Opérations ciblées
+
+Subtitles 1.1.0 ajoute sept opérations ciblées. FlowOperationConfiguration impose les effets autorisés avant l'appel aux planificateurs communs ; un paramètre hors schéma ne peut pas activer un autre effet. Les anciens identifiants gardent leurs valeurs implicites. Le composant complet reste disponible pour une écriture groupée. Les nouveaux composants exigent un worker annonçant la nouvelle version du plugin.
+
+Les métadonnées editor restent compatibles avec les valeurs textuelles existantes. Les choix observés ne remplacent jamais une référence inconnue. Les chemins de travail et noms de jeux de polices restent saisissables : leur présence effective dépend du worker et est vérifiée lors du traitement.
+

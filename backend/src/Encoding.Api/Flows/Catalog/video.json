@@ -57,7 +57,7 @@
             "type": "encoding-profile",
             "description": "Les valeurs du profil sont intégrées au flow et restent stables après publication.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Profil et qualité"
           },
           {
             "id": "encoderMode",
@@ -75,7 +75,7 @@
               }
             ],
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Encodeur"
           },
           {
             "id": "encoderId",
@@ -84,7 +84,7 @@
             "visibleWhenFieldId": "encoderMode",
             "visibleWhenValue": "specific",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Encodeur"
           },
           {
             "id": "videoCodec",
@@ -107,7 +107,7 @@
               }
             ],
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Exécution"
           },
           {
             "id": "quality",
@@ -127,7 +127,7 @@
               28
             ],
             "importance": "advanced",
-            "section": "Paramètres"
+            "section": "Profil et qualité"
           },
           {
             "id": "preset",
@@ -151,7 +151,7 @@
               }
             ],
             "importance": "advanced",
-            "section": "Paramètres"
+            "section": "Profil et qualité"
           },
           {
             "id": "hardwareAcceleration",
@@ -179,14 +179,14 @@
               }
             ],
             "importance": "advanced",
-            "section": "Paramètres"
+            "section": "Encodeur"
           },
           {
             "id": "qualityTier",
             "label": "Palier de qualité adaptatif",
             "type": "select",
             "defaultValue": "custom",
-            "description": "Adapte automatiquement la qualité selon la résolution (4K, 1080p, 720p) et l'encodeur sélectionné.",
+            "description": "Un palier autre que « Personnalisé » remplace la qualité du profil. La valeur effective dépend de la résolution et de l’encodeur ; elle est conservée dans l’historique de traitement.",
             "options": [
               {
                 "value": "custom",
@@ -194,23 +194,23 @@
               },
               {
                 "value": "transparent",
-                "label": "Visuellement transparent (CRF 18 / 4K CRF 21)"
+                "label": "Visuellement transparent"
               },
               {
                 "value": "high",
-                "label": "Haute qualité - Recommandé (CRF 21 / 4K CRF 24)"
+                "label": "Haute qualité"
               },
               {
                 "value": "balanced",
-                "label": "Équilibré (CRF 23 / 4K CRF 26)"
+                "label": "Équilibré"
               },
               {
                 "value": "compact",
-                "label": "Compacité maximale (CRF 26 / 4K CRF 29)"
+                "label": "Compacité maximale"
               }
             ],
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Profil et qualité"
           },
           {
             "id": "colorDepth",
@@ -237,7 +237,7 @@
               }
             ],
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Couleur et HDR"
           },
           {
             "id": "preserveHdr",
@@ -246,7 +246,7 @@
             "defaultValue": true,
             "description": "Injecte automatiquement les espaces colorimétriques BT.2020 et courbes SMPTE ST 2084 pour éviter l'image délavée.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Couleur et HDR"
           },
           {
             "id": "retryWithCpu",

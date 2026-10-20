@@ -557,7 +557,7 @@
               }
             ],
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Vidéo et intégrité"
           },
           {
             "id": "durationToleranceSeconds",
@@ -568,7 +568,7 @@
             "max": 600,
             "step": 0.5,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Durée"
           },
           {
             "id": "preserveTrackCounts",
@@ -576,7 +576,7 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Vidéo et intégrité"
           },
           {
             "id": "preserveSubtitleCount",
@@ -584,7 +584,7 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Sous-titres"
           },
           {
             "id": "allowedAudioCodecs",
@@ -593,7 +593,7 @@
             "defaultValue": "",
             "description": "Liste séparée par des virgules. Laisser vide pour accepter tous les codecs.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Audio"
           },
           {
             "id": "forbiddenAudioCodecs",
@@ -602,7 +602,7 @@
             "defaultValue": "eac3",
             "description": "Liste séparée par des virgules. Laisser vide pour ne pas filtrer les codecs audio.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Audio"
           },
           {
             "id": "allowedSubtitleCodecs",
@@ -611,7 +611,7 @@
             "defaultValue": "ass,ssa,hdmv_pgs_subtitle,dvd_subtitle,dvb_subtitle",
             "description": "Liste séparée par des virgules. Laisser vide pour accepter tous les codecs.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Sous-titres"
           },
           {
             "id": "maxAudioChannels",
@@ -622,7 +622,7 @@
             "max": 64,
             "step": 1,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Audio"
           },
           {
             "id": "preserveAudioChannels",
@@ -630,7 +630,7 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Audio"
           },
           {
             "id": "preserveAudioLayout",
@@ -638,7 +638,7 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Audio"
           },
           {
             "id": "preserveSubtitleMetadata",
@@ -646,7 +646,7 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Sous-titres"
           },
           {
             "id": "preserveChapterCount",
@@ -654,7 +654,7 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Pièces jointes et chapitres"
           },
           {
             "id": "preserveOriginalAttachments",
@@ -662,7 +662,7 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Pièces jointes et chapitres"
           },
           {
             "id": "requiredAttachmentNames",
@@ -671,7 +671,7 @@
             "defaultValue": "",
             "description": "Noms de fichiers séparés par des virgules, par exemple Arial.ttf.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Pièces jointes et chapitres"
           },
           {
             "id": "maxOutputSizeGrowthPercent",
@@ -682,7 +682,7 @@
             "max": 1000,
             "step": 1,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Vidéo et intégrité"
           },
           {
             "id": "compareAssEvents",
@@ -691,7 +691,7 @@
             "defaultValue": false,
             "description": "Compare début, fin et texte des événements après conversion temporaire en ASS.",
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Sous-titres"
           },
           {
             "id": "verifyDecoding",
@@ -699,7 +699,7 @@
             "type": "boolean",
             "defaultValue": false,
             "importance": "basic",
-            "section": "Paramètres"
+            "section": "Vidéo et intégrité"
           }
         ]
       },

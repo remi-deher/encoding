@@ -111,8 +111,8 @@ internal static class SubtitleScenarios
         var fonts = subsManifest.Components.Single(item => item.Id == "subtitles-add-fonts");
         var baseManifest = registry.Plugins.Single(item => item.Id == "base");
         var input = baseManifest.Components.Single(item => item.Id == "base-input-file");
-        Check(subsManifest.Version == "1.0.0" && manage.Version == "1.0.0" && fonts.Version == "1.0.0"
-            && manage.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]) && fonts.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "Both blocks are declared in Subtitles 1.0.0 with three outputs.");
+        Check(subsManifest.Version == "1.1.0" && manage.Version == "1.0.0" && fonts.Version == "1.0.0"
+            && manage.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]) && fonts.Outputs.Select(item => item.Id).SequenceEqual(["success", "unchanged", "error"]), "Both blocks are declared in Subtitles 1.1.0 with three outputs.");
         FlowDefinition Flow(params object[] _) => new(1, Guid.NewGuid(), 1, "Subtitles", "video", [
             new("input", null, new("base", "1.4.0", input.Id, input.Version, 1), new Dictionary<string, JsonElement>()),
             new("subs", null, new("base", "1.4.0", "base-subtitle-manage", "1.4.0", 1), new Dictionary<string, JsonElement>()),
