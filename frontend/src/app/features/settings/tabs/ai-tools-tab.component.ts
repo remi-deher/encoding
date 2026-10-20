@@ -314,7 +314,12 @@ export class AiToolsTabComponent implements OnInit {
       next: (response) => {
         this.connecting.set(false);
         const ref = this.dialog.open(DeviceAuthDialogComponent, {
-          data: { toolId: tool.id, toolName: tool.name, prompt: response.prompt },
+          data: {
+            toolId: tool.id,
+            toolName: tool.name,
+            prompt: response.prompt,
+            attemptId: response.attemptId,
+          },
           width: '520px',
           maxWidth: 'calc(100vw - 32px)',
         });

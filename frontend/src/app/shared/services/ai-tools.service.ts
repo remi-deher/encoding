@@ -237,15 +237,15 @@ export class AiToolsService {
     return this.http.get<AiClusterView>('/api/v1/tools/ai/cluster');
   }
 
-  submitAuthInput(toolId: string, input: string): Observable<{ readonly accepted: boolean }> {
+  submitAuthInput(toolId: string, input: string, attemptId?: string | null): Observable<{ readonly accepted: boolean }> {
     return this.http.post<{ readonly accepted: boolean }>(
       `/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/input`,
-      { input },
+      { input, attemptId },
     );
   }
 
-  cancelAuth(toolId: string): Observable<unknown> {
-    return this.http.post(`/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/cancel`, {});
+  cancelAuth(toolId: string, attemptId?: string | null): Observable<unknown> {
+    return this.http.post(`/api/v1/tools/ai/${encodeURIComponent(toolId)}/auth/cancel`, { attemptId });
   }
 
   listTools(): Observable<readonly AiToolInfo[]> {

@@ -59,7 +59,7 @@ public sealed class AiAuthenticationTests
         Assert.Equal("ABCD-23456", prompt.Prompt.UserCode);
         Assert.Equal("https://auth.openai.com/codex/device", prompt.Prompt.VerificationUri);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        while ((await service.GetStatusAsync("codex-cli", deadline.Token)).State == "pending") await Task.Delay(20, deadline.Token);
+        while ((await service.GetStatusAsync("codex-cli", deadline.Token)).AttemptState == "pending") await Task.Delay(20, deadline.Token);
         Assert.Equal("authorized", (await service.GetStatusAsync("codex-cli")).State);
         Assert.Equal("authorized", (await new DeviceCodeAuthService(fixture.Runtime).GetStatusAsync("codex-cli")).State);
         await service.RevokeAuthAsync("codex-cli", CancellationToken.None);
@@ -91,11 +91,11 @@ public sealed class AiAuthenticationTests
         Assert.Null(response.Prompt.UserCode);
         Assert.Equal("https://claude.com/oauth/authorize?flow=example", response.Prompt.VerificationUri);
         Assert.True(response.Prompt.RequiresInput);
-        Assert.Equal("pending", (await service.GetStatusAsync("claude-cli")).State);
+        Assert.Equal("pending", (await service.GetStatusAsync("claude-cli")).AttemptState);
         await service.SubmitAuthInputAsync("claude-cli", "sample-return-code", CancellationToken.None);
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.SubmitAuthInputAsync("claude-cli", "another-code", CancellationToken.None));
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        while ((await service.GetStatusAsync("claude-cli", deadline.Token)).State == "pending") await Task.Delay(20, deadline.Token);
+        while ((await service.GetStatusAsync("claude-cli", deadline.Token)).AttemptState == "pending") await Task.Delay(20, deadline.Token);
         Assert.Equal("authorized", (await service.GetStatusAsync("claude-cli")).State);
         Assert.DoesNotContain("sample-return-code", string.Join("\n", logger.Messages));
     }
@@ -159,7 +159,7 @@ public sealed class AiAuthenticationDiagnosticsTests
         using var service = new DeviceCodeAuthService(fixture.Runtime, logger);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.StartDeviceAuthAsync("codex-cli", CancellationToken.None));
         Assert.Contains($"code {exitCode}", error.Message);
-        Assert.Equal("failed", (await service.GetStatusAsync("codex-cli")).State);
+        Assert.Equal("failed", (await service.GetStatusAsync("codex-cli")).AttemptState);
         Assert.Contains(logger.Messages, item => item.Contains($"exit={exitCode}"));
         Assert.DoesNotContain("private-token", string.Join("\n", logger.Messages));
         Assert.DoesNotContain("private-token", error.Message);
@@ -201,7 +201,7 @@ public sealed class AiAuthenticationDiagnosticsTests
         timer.Fire();
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => attempt);
         Assert.Contains(hasOutput ? "a produit une sortie" : "aucune sortie", error.Message);
-        Assert.Equal("failed", (await service.GetStatusAsync("codex-cli")).State);
+        Assert.Equal("failed", (await service.GetStatusAsync("codex-cli")).AttemptState);
         Assert.DoesNotContain("private-unrecognized-output", string.Join("\n", logger.Messages));
     }
 

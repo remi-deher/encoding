@@ -7,20 +7,44 @@ using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
-public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<DeviceCodeAuthService>? logger = null, TimeProvider? timeProvider = null) : IDisposable
+public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<DeviceCodeAuthService>? logger = null,
+    TimeProvider? timeProvider = null, AiQuotaService? quotas = null, AiModelCatalogService? models = null) : IDisposable
 {
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private readonly ILogger<DeviceCodeAuthService> log = logger ?? NullLogger<DeviceCodeAuthService>.Instance;
     private readonly ConcurrentDictionary<string, Session> sessions = new();
+    private readonly ConcurrentDictionary<string, long> connectionRevisions = new();
+    private readonly ConcurrentDictionary<string, StatusCacheEntry> statusCache = new();
     private readonly SemaphoreSlim gate = new(1);
+
+    public string ConnectionRevision(string id)
+    {
+        _ = AiCliRuntime.Executable(id);
+        return $"{id}:{connectionRevisions.GetOrAdd(id, 0)}";
+    }
+
+    private void ConnectionChanged(string id)
+    {
+        connectionRevisions.AddOrUpdate(id, 1, static (_, current) => current + 1);
+        if (statusCache.TryGetValue(id, out var cached))
+        {
+            lock (cached.Sync)
+            {
+                cached.Generation++;
+                cached.Status = null;
+            }
+        }
+        quotas?.Invalidate(id);
+        models?.Invalidate(id);
+    }
 
     public async Task<IReadOnlyList<AiToolInfo>> ListToolsAsync(CancellationToken ct = default)
     {
-        var result = new List<AiToolInfo>();
-        foreach (var id in new[] { "codex-cli", "claude-cli" })
-            result.Add(new(id, id == "codex-cli" ? "Codex CLI" : "Claude Code", "Compte CLI sur ce nœud", "CLI",
-                runtime.Find(id) is not null, await GetStatusAsync(id, ct), ["ai-text-generation", "subtitles-translation"]));
-        return result;
+        var ids = new[] { "codex-cli", "claude-cli" };
+        var statuses = await Task.WhenAll(ids.Select(id => GetStatusAsync(id, ct)));
+        return ids.Select((id, index) => new AiToolInfo(id, id == "codex-cli" ? "Codex CLI" : "Claude Code",
+            "Compte CLI sur ce nœud", "CLI", runtime.Find(id) is not null, statuses[index],
+            ["ai-text-generation", "subtitles-translation"])).ToArray();
     }
 
     public async Task<DeviceAuthStatus> GetStatusAsync(string id, CancellationToken ct = default)
@@ -30,15 +54,60 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         {
             if (session.State == "pending" && DateTimeOffset.UtcNow >= session.ExpiresAt)
             { session.State = "expired"; session.Cancellation.Cancel(); }
-            if (session.State != "authorized") return new(id, session.State, ErrorMessage: session.Error);
+            if (session.FinishedAt is { } finishedAt && finishedAt.AddMinutes(5) <= clock.GetUtcNow())
+                ((ICollection<KeyValuePair<string, Session>>)sessions).Remove(new(id, session));
+            else
+            {
+                var account = await ReadCachedCliStatusAsync(id, ct);
+                return account with { AttemptState = session.State, AttemptErrorMessage = session.Error };
+            }
         }
-        return await CheckCliStatusAsync(id, ct);
+        return await ReadCachedCliStatusAsync(id, ct);
+    }
+
+    private async Task<DeviceAuthStatus> ReadCachedCliStatusAsync(string id, CancellationToken ct)
+    {
+        var entry = statusCache.GetOrAdd(id, _ => new());
+        await entry.Gate.WaitAsync(ct);
+        try
+        {
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                int generation;
+                lock (entry.Sync)
+                {
+                    if (entry.Status is { } cached && entry.ExpiresAt > clock.GetUtcNow()) return cached;
+                    generation = entry.Generation;
+                }
+                var status = await CheckCliStatusAsync(id, ct);
+                lock (entry.Sync)
+                {
+                    if (generation == entry.Generation)
+                    {
+                        entry.Status = status;
+                        entry.ExpiresAt = clock.GetUtcNow().AddSeconds(15);
+                        return status;
+                    }
+                }
+            }
+            return new(id, "failed", ErrorMessage: "Connexion modifiée pendant le contrôle. Actualisez le statut.");
+        }
+        finally { entry.Gate.Release(); }
     }
 
     private async Task<DeviceAuthStatus> CheckCliStatusAsync(string id, CancellationToken ct)
     {
-        if (runtime.Find(id) is null) return new(id, "unconfigured", ErrorMessage: "Outil non installé.");
-        if (!runtime.CanRun) return new(id, "failed", ErrorMessage: "Landlock est requis pour exécuter les outils IA sur ce nœud Linux.");
+        var timer = Stopwatch.StartNew();
+        if (runtime.Find(id) is null)
+        {
+            await LogStatusDiagnosticAsync(id, "cli_missing", timer.ElapsedMilliseconds);
+            return new(id, "unconfigured", ErrorMessage: "Outil non installé.");
+        }
+        if (!runtime.CanRun)
+        {
+            await LogStatusDiagnosticAsync(id, "sandbox_unavailable", timer.ElapsedMilliseconds);
+            return new(id, "failed", ErrorMessage: "Landlock est requis pour exécuter les outils IA sur ce nœud Linux.");
+        }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         try
@@ -49,6 +118,7 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
                 log.Log(status.ExitCode == 1 ? LogLevel.Debug : LogLevel.Warning, "AI CLI status {Provider}: exit={ExitCode}, stdoutChars={OutputChars}, stderrChars={ErrorChars}",
                     id, status.ExitCode, status.Output.Length, status.Error.Length);
                 // Exit 1 is the documented unauthenticated status. Other exits indicate a runtime failure.
+                await LogStatusDiagnosticAsync(id, status.ExitCode == 1 ? "auth_missing" : "status_exit", timer.ElapsedMilliseconds);
                 return status.ExitCode == 1 ? new(id, "unconfigured") : new(id, "failed",
                     ErrorMessage: $"La CLI a quitté avec le code {status.ExitCode}. Consultez les journaux système de ce nœud.");
             }
@@ -58,16 +128,23 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
                 if (!doc.RootElement.TryGetProperty("loggedIn", out var loggedIn) || loggedIn.ValueKind != JsonValueKind.True)
                     return new(id, "unconfigured");
             }
+            log.LogDebug("AI CLI status provider={Provider}, category=authorized, version={Version}, durationMs={DurationMs}, attemptId=status",
+                id, await runtime.VersionForDiagnosticsAsync(id), timer.ElapsedMilliseconds);
             return new(id, "authorized");
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             log.LogWarning("AI CLI status {Provider}: failure={Failure}", id, ex.GetType().Name);
+            await LogStatusDiagnosticAsync(id, ex is OperationCanceledException ? "status_timeout" : "status_failure", timer.ElapsedMilliseconds);
             return new(id, "failed", ErrorMessage: ex is OperationCanceledException
                 ? "La CLI n’a pas répondu au contrôle de connexion sous 10 secondes."
                 : "Le contrôle de connexion CLI a échoué. Consultez les journaux système de ce nœud.");
         }
     }
+
+    private async Task LogStatusDiagnosticAsync(string id, string category, long durationMs) =>
+        log.LogWarning("AI CLI status provider={Provider}, category={Category}, version={Version}, durationMs={DurationMs}, attemptId=status",
+            id, category, await runtime.VersionForDiagnosticsAsync(id), durationMs);
 
     public async Task<DeviceAuthStartResponse> StartDeviceAuthAsync(string id, CancellationToken ct)
     {
@@ -80,17 +157,19 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         {
             if (!sessions.TryGetValue(id, out session!) || session.State != "pending" || session.ExpiresAt <= DateTimeOffset.UtcNow)
             {
-                if (session is not null) session.Cancellation.Cancel();
+                await StopSessionAsync(id);
                 session = new(id);
                 sessions[id] = session;
+                ConnectionChanged(id);
                 session.Run = RunLoginAsync(session);
             }
         }
         finally { gate.Release(); }
-        try { return new(id, await session.Prompt.Task.WaitAsync(TimeSpan.FromSeconds(30), clock, ct)); }
+        try { return new(id, await session.Prompt.Task.WaitAsync(TimeSpan.FromSeconds(30), clock, ct), session.Id); }
         catch (TimeoutException)
         {
             session.State = "failed";
+            session.FinishedAt = clock.GetUtcNow();
             session.Error = session.HasOutput
                 ? "La CLI a produit une sortie, mais aucune URL de connexion reconnue n’a été détectée sous 30 secondes. Consultez les journaux système de ce nœud."
                 : "La CLI n’a produit aucune sortie sous 30 secondes. Vérifiez son accès au service d’authentification depuis ce nœud.";
@@ -108,8 +187,27 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         AiCliProcess? process = null;
         try
         {
-            var buffer = "";
+            var outputLines = new AuthOutputLines();
+            string? recognizedUrl = null;
+            string? recognizedCode = null;
             var sync = new object();
+            void ProcessLine(string line)
+            {
+                var clean = AnsiSanitizer.Sanitize(line);
+                recognizedUrl ??= FindVerificationUrl(session.ToolId, clean);
+                var code = UserCode().Match(clean);
+                if (session.ToolId == "codex-cli" && code.Success) recognizedCode ??= code.Value;
+                session.HasUrl |= recognizedUrl is not null;
+                session.HasCode |= recognizedCode is not null;
+                if (recognizedUrl is not null && (session.ToolId == "claude-cli" || recognizedCode is not null)
+                    && session.Prompt.TrySetResult(new(
+                        recognizedCode,
+                        recognizedUrl,
+                        Math.Max(1, (int)(session.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds),
+                        5,
+                        session.ToolId == "claude-cli")))
+                    log.LogInformation("AI CLI auth {Attempt}: prompt recognized after {ElapsedMs} ms", session.Id, session.Timer.ElapsedMilliseconds);
+            }
             lock (sync)
             {
                 process = runtime.StartInteractive(session.ToolId, args, chunk =>
@@ -121,26 +219,15 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
                             session.HasOutput = true;
                             log.LogInformation("AI CLI auth {Attempt}: first output after {ElapsedMs} ms", session.Id, session.Timer.ElapsedMilliseconds);
                         }
-                        buffer += chunk;
-                        if (buffer.Length > 16384) buffer = buffer[^16384..];
-                        var clean = AnsiSanitizer.Sanitize(buffer);
-                        var url = FindVerificationUrl(session.ToolId, clean);
-                        var code = UserCode().Match(clean);
-                        session.HasUrl |= url is not null;
-                        session.HasCode |= session.ToolId == "codex-cli" && code.Success;
-                        if (url is not null && (session.ToolId == "claude-cli" || code.Success) && session.Prompt.TrySetResult(new(
-                            session.ToolId == "codex-cli" ? code.Value : null,
-                            url,
-                            Math.Max(1, (int)(session.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds),
-                            5,
-                            session.ToolId == "claude-cli")))
-                            log.LogInformation("AI CLI auth {Attempt}: prompt recognized after {ElapsedMs} ms", session.Id, session.Timer.ElapsedMilliseconds);
+                        foreach (var line in outputLines.Push(chunk)) ProcessLine(line);
                     }
                 });
                 session.Process = process;
             }
             if (session.ToolId == "codex-cli") process.CloseInput();
             var result = await process.WaitAsync(session.Cancellation.Token);
+            lock (sync)
+                if (outputLines.Flush() is { } lastLine) ProcessLine(lastLine);
             session.Process = null;
             var promptRecognized = session.Prompt.Task.IsCompletedSuccessfully;
             var verified = result.ExitCode == 0 && promptRecognized
@@ -172,17 +259,21 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         {
             session.Process = null;
             process?.Dispose();
+            session.FinishedAt ??= clock.GetUtcNow();
+            ConnectionChanged(session.ToolId);
             session.Prompt.TrySetException(new InvalidOperationException(session.Error ?? "Aucun lien de connexion disponible."));
         }
     }
 
-    public async Task SubmitAuthInputAsync(string id, string input, CancellationToken ct = default)
+    public async Task SubmitAuthInputAsync(string id, string input, CancellationToken ct = default, string? attemptId = null)
     {
         if (id != "claude-cli") throw new ArgumentException("Cette CLI n’attend pas de code de retour.");
         var value = input?.Trim();
         if (string.IsNullOrEmpty(value) || value.Length > 2048 || value.Any(char.IsControl))
             throw new ArgumentException("Le code de connexion Claude est invalide.");
         if (!sessions.TryGetValue(id, out var session)) throw new InvalidOperationException("Aucune connexion Claude n’est en attente.");
+        if (attemptId is not null && !StringComparer.Ordinal.Equals(attemptId, session.Id))
+            throw new InvalidOperationException("Cette fenêtre de connexion ne correspond plus à la tentative active.");
         await session.InputGate.WaitAsync(ct);
         try
         {
@@ -208,11 +299,12 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         {
             if (runtime.Find("claude-cli") is null) throw new InvalidOperationException("Claude Code n’est pas installé.");
             var path = Path.Combine(runtime.Profile("claude-cli"), "oauth-token.protected");
+            await StopSessionAsync("claude-cli");
+            ConnectionChanged("claude-cli");
             var previous = File.Exists(path) ? await File.ReadAllBytesAsync(path, ct) : null;
             try
             {
                 runtime.SaveClaudeToken(token);
-                sessions.TryRemove("claude-cli", out _);
                 var status = await GetStatusAsync("claude-cli", ct);
                 if (status.State != "authorized")
                 {
@@ -225,6 +317,7 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             {
                 if (previous is null) runtime.DeleteClaudeToken();
                 else await File.WriteAllBytesAsync(path, previous, CancellationToken.None);
+                ConnectionChanged("claude-cli");
                 throw;
             }
         }
@@ -237,8 +330,8 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         await gate.WaitAsync(ct);
         try
         {
-            if (sessions.TryRemove(id, out var session))
-            { session.Cancellation.Cancel(); if (session.Run is not null) await session.Run; }
+            await StopSessionAsync(id);
+            ConnectionChanged(id);
             if (id == "claude-cli") runtime.DeleteClaudeToken();
             if (runtime.Find(id) is not null)
             {
@@ -254,14 +347,28 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         finally { gate.Release(); }
     }
 
-    public void Cancel(string id)
+    public async Task CancelAsync(string id, string? attemptId = null)
     {
         _ = AiCliRuntime.Executable(id);
-        if (sessions.TryGetValue(id, out var session) && session.State == "pending")
+        await gate.WaitAsync();
+        try
         {
-            session.State = "expired";
-            session.Cancellation.Cancel();
+            if (sessions.TryGetValue(id, out var session)
+                && (attemptId is null || StringComparer.Ordinal.Equals(attemptId, session.Id)))
+            {
+                await StopSessionAsync(id);
+                ConnectionChanged(id);
+            }
         }
+        finally { gate.Release(); }
+    }
+
+    private async Task StopSessionAsync(string id)
+    {
+        if (!sessions.TryRemove(id, out var session)) return;
+        session.State = "expired";
+        session.Cancellation.Cancel();
+        if (session.Run is not null) await session.Run;
     }
 
     private static string? FindVerificationUrl(string id, string text)
@@ -281,6 +388,54 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
     private static partial Regex ClaudeVerificationUrl();
     [GeneratedRegex(@"\b[A-Z0-9]{4}-[A-Z0-9]{4,5}\b")]
     private static partial Regex UserCode();
+
+    private sealed class AuthOutputLines
+    {
+        private const int MaximumLineLength = 16384;
+        private readonly System.Text.StringBuilder line = new();
+        private bool discardLine;
+        private bool previousWasCarriageReturn;
+
+        public IReadOnlyList<string> Push(string chunk)
+        {
+            var completed = new List<string>();
+            foreach (var character in chunk)
+            {
+                if (character is '\r' or '\n')
+                {
+                    if (character == '\n' && previousWasCarriageReturn)
+                    {
+                        previousWasCarriageReturn = false;
+                        continue;
+                    }
+                    if (!discardLine) completed.Add(line.ToString());
+                    line.Clear();
+                    discardLine = false;
+                    previousWasCarriageReturn = character == '\r';
+                    continue;
+                }
+                previousWasCarriageReturn = false;
+                if (discardLine) continue;
+                if (line.Length == MaximumLineLength)
+                {
+                    line.Clear();
+                    discardLine = true;
+                    continue;
+                }
+                line.Append(character);
+            }
+            return completed;
+        }
+
+        public string? Flush()
+        {
+            if (discardLine || line.Length == 0) return null;
+            var result = line.ToString();
+            line.Clear();
+            return result;
+        }
+    }
+
     public void Dispose() { foreach (var session in sessions.Values) session.Cancellation.Cancel(); }
     private sealed class Session
     {
@@ -300,5 +455,15 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         public AiCliProcess? Process;
         public string? Error;
         public Task? Run;
+        public DateTimeOffset? FinishedAt;
+    }
+
+    private sealed class StatusCacheEntry
+    {
+        public readonly SemaphoreSlim Gate = new(1);
+        public readonly object Sync = new();
+        public DeviceAuthStatus? Status;
+        public DateTimeOffset ExpiresAt;
+        public int Generation;
     }
 }

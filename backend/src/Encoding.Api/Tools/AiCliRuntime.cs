@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Collections.Concurrent;
 using Encoding.Contracts.Tools;
 using Microsoft.AspNetCore.DataProtection;
 
@@ -13,6 +15,7 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
     protected virtual bool UseSandbox => OperatingSystem.IsLinux();
     public bool CanRun => !UseSandbox || Encoding.Core.Runtime.ProcessSandbox.IsAvailable;
     private readonly IDataProtector protector = protection.CreateProtector("Encoding.Ai.ClaudeToken.v1");
+    private readonly ConcurrentDictionary<string, (string Version, DateTimeOffset ExpiresAt)> diagnosticVersions = new();
     public static string ResolveRoot(IConfiguration configuration) => configuration["AiTools:CredentialsDirectory"]
         ?? Path.Combine(configuration["Node:DataDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "Data"), "credentials", "ai-tools");
     public string Root => ResolveRoot(configuration);
@@ -36,6 +39,25 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
         if (configured is not null) return File.Exists(configured) ? configured : null;
         return (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)
             .Select(dir => Path.Combine(dir, OperatingSystem.IsWindows() ? executable + ".exe" : executable)).FirstOrDefault(File.Exists);
+    }
+
+    public async Task<string> VersionForDiagnosticsAsync(string id)
+    {
+        if (diagnosticVersions.TryGetValue(id, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow) return cached.Version;
+        if (Find(id) is null) return "missing";
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var result = await RunAsync(id, ["--version"], timeout.Token);
+            var match = Regex.Match(result.Output + " " + result.Error, @"\b[0-9]+(?:\.[0-9]+){1,3}\b");
+            var version = result.ExitCode == 0 && match.Success ? match.Value : "unknown";
+            diagnosticVersions[id] = (version, DateTimeOffset.UtcNow.AddMinutes(5));
+            return version;
+        }
+        catch
+        {
+            return "unknown";
+        }
     }
     public void SaveClaudeToken(string token)
     {
@@ -147,18 +169,26 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
             start.Environment["CLAUDE_CODE_OAUTH_TOKEN"] = protector.Unprotect(File.ReadAllText(Path.Combine(profile, "oauth-token.protected")));
         return start;
     }
-    internal static async Task<string> ReadAsync(StreamReader reader, Action<string>? callback)
+    internal static async Task<string> ReadAsync(StreamReader reader, Action<string>? callback, Action? onFailure = null)
     {
         var result = new StringBuilder();
         var buffer = new char[2048];
-        while (await reader.ReadAsync(buffer.AsMemory()) is var count && count > 0)
+        try
         {
-            if (result.Length + count > 1024 * 1024) throw new InvalidOperationException("Sortie CLI trop volumineuse.");
-            var chunk = new string(buffer, 0, count);
-            result.Append(chunk);
-            callback?.Invoke(chunk);
+            while (await reader.ReadAsync(buffer.AsMemory()) is var count && count > 0)
+            {
+                if (result.Length + count > 1024 * 1024) throw new InvalidOperationException("Sortie CLI trop volumineuse.");
+                var chunk = new string(buffer, 0, count);
+                result.Append(chunk);
+                callback?.Invoke(chunk);
+            }
+            return result.ToString();
         }
-        return result.ToString();
+        catch
+        {
+            try { onFailure?.Invoke(); } catch { }
+            throw;
+        }
     }
 }
 
@@ -172,23 +202,39 @@ public sealed class AiCliProcess : IDisposable
     internal AiCliProcess(Process process, Action<string>? onOutput)
     {
         this.process = process;
-        stdout = AiCliRuntime.ReadAsync(process.StandardOutput, onOutput);
-        stderr = AiCliRuntime.ReadAsync(process.StandardError, onOutput);
+        stdout = AiCliRuntime.ReadAsync(process.StandardOutput, onOutput, Kill);
+        stderr = AiCliRuntime.ReadAsync(process.StandardError, onOutput, Kill);
     }
 
     public async Task WriteInputLineAsync(string value, CancellationToken ct)
     {
         if (Volatile.Read(ref inputClosed) != 0) throw new InvalidOperationException("Le processus n’accepte plus d’entrée.");
-        await WriteInputAsync(value, ct);
-        await process.StandardInput.WriteAsync(Environment.NewLine.AsMemory(), ct);
-        await process.StandardInput.FlushAsync(ct);
+        try
+        {
+            await WriteInputAsync(value, ct);
+            await process.StandardInput.WriteAsync(Environment.NewLine.AsMemory(), ct);
+            await process.StandardInput.FlushAsync(ct);
+        }
+        catch
+        {
+            await ThrowReaderFailureAsync();
+            throw;
+        }
     }
 
     public async Task WriteInputAsync(string value, CancellationToken ct)
     {
         if (Volatile.Read(ref inputClosed) != 0) throw new InvalidOperationException("Le processus n’accepte plus d’entrée.");
-        await process.StandardInput.WriteAsync(value.AsMemory(), ct);
-        await process.StandardInput.FlushAsync(ct);
+        try
+        {
+            await process.StandardInput.WriteAsync(value.AsMemory(), ct);
+            await process.StandardInput.FlushAsync(ct);
+        }
+        catch
+        {
+            await ThrowReaderFailureAsync();
+            throw;
+        }
     }
 
     public void CloseInput()
@@ -200,20 +246,36 @@ public sealed class AiCliProcess : IDisposable
     public async Task<AiProcessResult> WaitAsync(CancellationToken ct)
     {
         using var terminate = ct.Register(Kill);
-        try { await process.WaitForExitAsync(ct); }
+        try
+        {
+            await process.WaitForExitAsync(ct);
+            var output = await Task.WhenAll(stdout, stderr);
+            return new(process.ExitCode, output[0], output[1]);
+        }
         catch
         {
             Kill();
             try { await process.WaitForExitAsync(CancellationToken.None); } catch (InvalidOperationException) { }
-            try { await Task.WhenAll(stdout, stderr); } catch (IOException) { }
+            await IgnoreReaderFailuresAsync();
             throw;
         }
-        return new(process.ExitCode, await stdout, await stderr);
+    }
+
+    private async Task ThrowReaderFailureAsync()
+    {
+        if (stdout.IsFaulted) await stdout;
+        if (stderr.IsFaulted) await stderr;
+    }
+
+    private async Task IgnoreReaderFailuresAsync()
+    {
+        try { await Task.WhenAll(stdout, stderr); }
+        catch { }
     }
 
     private void Kill()
     {
-        try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
+        try { if (!process.HasExited) process.Kill(true); } catch { }
     }
 
     public void Dispose()

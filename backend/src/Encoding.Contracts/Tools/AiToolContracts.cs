@@ -9,7 +9,10 @@ public sealed record DeviceAuthPrompt(
     bool RequiresInput = false);
 
 /// <summary>Single-line login input requested by a provider CLI, such as Claude's browser return code.</summary>
-public sealed record AiCliAuthInputRequest(string Input);
+public sealed record AiCliAuthInputRequest(string Input, string? AttemptId = null);
+
+/// <summary>Identifies the device-auth attempt a dialog intends to cancel.</summary>
+public sealed record AiCliAuthCancelRequest(string? AttemptId = null);
 
 /// <summary>Status of an AI tool authentication session on a node.</summary>
 public sealed record DeviceAuthStatus(
@@ -17,12 +20,15 @@ public sealed record DeviceAuthStatus(
     string State,
     string? AccountName = null,
     DateTimeOffset? AuthenticatedAt = null,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    string? AttemptState = null,
+    string? AttemptErrorMessage = null);
 
 /// <summary>Response payload when starting device code authentication.</summary>
 public sealed record DeviceAuthStartResponse(
     string ToolId,
-    DeviceAuthPrompt Prompt);
+    DeviceAuthPrompt Prompt,
+    string? AttemptId = null);
 
 /// <summary>Summary of an AI tool's availability and configuration on the node.</summary>
 public sealed record AiToolInfo(
