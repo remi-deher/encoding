@@ -76,25 +76,21 @@ describe('FlowCommandBarComponent', () => {
     expect(emitSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('emits toggle dock events when dock buttons are clicked', () => {
+  it('emits toggle events for the palette and simulation tray', () => {
     const fixture = createComponent({
       title: 'Films — HEVC',
     });
     const paletteSpy = vi.fn();
-    const inspectorSpy = vi.fn();
     const traySpy = vi.fn();
 
     fixture.componentInstance.togglePalette.subscribe(paletteSpy);
-    fixture.componentInstance.toggleInspector.subscribe(inspectorSpy);
     fixture.componentInstance.toggleTray.subscribe(traySpy);
 
     const buttons = fixture.nativeElement.querySelectorAll('.dock-toggle-btn');
     buttons[0].click();
     buttons[1].click();
-    buttons[2].click();
 
     expect(paletteSpy).toHaveBeenCalledTimes(1);
-    expect(inspectorSpy).toHaveBeenCalledTimes(1);
     expect(traySpy).toHaveBeenCalledTimes(1);
   });
 });

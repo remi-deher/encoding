@@ -48,6 +48,7 @@ import {
   FlowGraphNode,
 } from '../../shared/models/flow-component';
 import { FlowGraphEditorComponent } from '../../shared/ui/flow-graph-editor.component';
+import { ComponentConfigurationFormComponent } from '../../shared/ui/component-configuration-form.component';
 import { FlowSimulation } from '../../shared/services/flow-simulation';
 import { createUuid } from '../../shared/utils/uuid';
 import { FlowTemplates } from '../../shared/services/flow-templates';
@@ -60,7 +61,6 @@ import { FlowComponentPackInstance } from '../../shared/models/flow-validation';
 import { PageTitle } from '../../shared/services/page-title';
 import { FlowCommandBarComponent } from './editor/flow-command-bar.component';
 import { FlowPaletteDockComponent } from './editor/flow-palette-dock.component';
-import { FlowInspectorDockComponent } from './editor/flow-inspector-dock.component';
 import {
   FlowSimulationTrayComponent,
   FlowValidationIssue,
@@ -153,7 +153,7 @@ type ComponentDestination =
   imports: [
     FlowCommandBarComponent,
     FlowPaletteDockComponent,
-    FlowInspectorDockComponent,
+    ComponentConfigurationFormComponent,
     FlowSimulationTrayComponent,
     FlowGraphEditorComponent,
     RecordFormComponent,
@@ -174,11 +174,14 @@ export class FlowEditorPageComponent {
 
   // Workbench shell state
   protected readonly paletteOpen = signal(true);
-  protected readonly inspectorOpen = signal(false);
   protected readonly trayOpen = signal(false);
   protected readonly trayTab = signal<'simulation' | 'diagnostics'>('simulation');
   protected readonly validationIssues = signal<readonly FlowValidationIssue[]>([]);
   protected readonly validationSuccess = signal<boolean | null>(null);
+  private readonly connectionVisibilityOverride = signal<boolean | null>(null);
+  protected readonly showFlowConnections = computed(
+    () => this.connectionVisibilityOverride() ?? this.connections().length < 12,
+  );
 
   protected readonly configuringNodeId = signal<string | undefined>(undefined);
   protected readonly nodes = signal<readonly FlowGraphNode[]>([]);
@@ -195,6 +198,12 @@ export class FlowEditorPageComponent {
     this.installedComponents().filter(
       (component) =>
         component.kind !== 'input' && isFlowComponentCompatible(component, this.flowMediaType()),
+    ),
+  );
+  protected readonly otherMediaComponents = computed(() =>
+    this.installedComponents().filter(
+      (component) =>
+        component.kind !== 'input' && !isFlowComponentCompatible(component, this.flowMediaType()),
     ),
   );
 
@@ -471,12 +480,20 @@ export class FlowEditorPageComponent {
     } else if (event.key === 'Escape') {
       if (this.packCreationOpen()) {
         this.packCreationOpen.set(false);
+      } else if (this.configuringNodeId()) {
+        this.closeComponentEditor();
       } else if (this.componentDestination()) {
         this.componentDestination.set(null);
-      } else if (this.inspectorOpen()) {
-        this.closeInspector();
       }
     }
+  }
+
+  protected toggleFlowConnections(): void {
+    this.connectionVisibilityOverride.set(!this.showFlowConnections());
+  }
+
+  protected setFlowConnections(visible: boolean): void {
+    this.connectionVisibilityOverride.set(visible);
   }
 
   protected onTitleChange(newTitle: string): void {
@@ -487,15 +504,13 @@ export class FlowEditorPageComponent {
     this.componentDestination.set(null);
   }
 
-  protected closeInspector(): void {
-    this.inspectorOpen.set(false);
+  protected closeComponentEditor(): void {
     this.configuringNodeId.set(undefined);
   }
 
-  protected onInspectorDeleteNode(nodeId: string): void {
+  protected deleteConfiguredNode(nodeId: string): void {
     this.removeNode(nodeId);
     this.configuringNodeId.set(undefined);
-    this.inspectorOpen.set(false);
   }
 
   protected async onPaletteComponentSelected(component: FlowComponentDefinition): Promise<void> {
@@ -885,7 +900,6 @@ export class FlowEditorPageComponent {
 
   protected onConfigurationRequested(nodeId: string): void {
     this.configuringNodeId.set(nodeId);
-    this.inspectorOpen.set(true);
   }
 
   protected renameNode(name: string): void {
@@ -999,6 +1013,9 @@ export class FlowEditorPageComponent {
   protected async openAiAssistant(): Promise<void> {
     const currentDoc = await this.currentFlowDocument();
     const dialogRef = this.dialog.open(FlowAiAssistantDialogComponent, {
+      width: 'min(760px, calc(100vw - 24px))',
+      maxWidth: 'calc(100vw - 24px)',
+      maxHeight: 'calc(100dvh - 24px)',
       data: {
         mediaType: this.flowMediaType(),
         currentFlow: currentDoc,
@@ -1220,7 +1237,7 @@ export class FlowEditorPageComponent {
             : node,
         ),
       );
-      this.inspectorOpen.set(false);
+      this.closeComponentEditor();
       return;
     }
     this.nodes.update((nodes) =>
@@ -1230,7 +1247,7 @@ export class FlowEditorPageComponent {
           : node,
       ),
     );
-    this.inspectorOpen.set(false);
+    this.closeComponentEditor();
   }
 
   protected onConnectionRequested(event: {

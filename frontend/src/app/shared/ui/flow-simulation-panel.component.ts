@@ -24,13 +24,13 @@ import {
     FileImportComponent,
   ],
   template: `
-    <p>
+    <p class="simulation-intro">
       Le test suit le flow en cours, y compris les modifications non enregistrées. Les conditions
       natives sont évaluées. Les traitements, scripts, intégrations et relais utilisent vos
       résultats fictifs.
     </p>
     @if (error()) {
-      <p role="alert">{{ error() }}</p>
+      <p class="simulation-error" role="alert">{{ error() }}</p>
     }
     <mat-accordion multi>
       <mat-expansion-panel [expanded]="!result()">
@@ -94,6 +94,24 @@ import {
       display: grid;
       gap: var(--space-4);
       min-width: 0;
+    }
+    .simulation-intro {
+      margin: 0;
+      padding: 12px 16px;
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-md);
+      background: var(--surface-container);
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+    .simulation-error {
+      margin: 0;
+      padding: 10px 14px;
+      border: 1px solid var(--danger);
+      border-radius: var(--radius-sm);
+      background: var(--danger-soft);
+      color: var(--danger);
     }
     p {
       margin: 0 0 var(--space-4);

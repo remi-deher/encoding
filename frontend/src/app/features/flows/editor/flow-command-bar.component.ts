@@ -187,18 +187,6 @@ import { MediaType } from '../../../shared/models/media-type';
           <button
             type="button"
             class="dock-toggle-btn"
-            [class.dock-toggle-btn_active]="inspectorOpen()"
-            (click)="toggleInspector.emit()"
-            matTooltip="Afficher/masquer l'inspecteur contextuel"
-            aria-label="Basculer l'inspecteur contextuel"
-          >
-            <span class="btn-glyph" aria-hidden="true">▤</span>
-            <span class="toggle-label">Inspecteur</span>
-          </button>
-
-          <button
-            type="button"
-            class="dock-toggle-btn"
             [class.dock-toggle-btn_active]="trayOpen()"
             (click)="toggleTray.emit()"
             matTooltip="Afficher/masquer le volet de simulation et diagnostics"
@@ -525,7 +513,6 @@ export class FlowCommandBarComponent {
   readonly canCreatePack = input(false);
 
   readonly paletteOpen = input(true);
-  readonly inspectorOpen = input(true);
   readonly trayOpen = input(false);
   readonly showConnections = input(true);
 
@@ -538,7 +525,6 @@ export class FlowCommandBarComponent {
   readonly restoreAiProposalRequested = output<void>();
   readonly canRestoreAiProposal = input(false);
   readonly togglePalette = output<void>();
-  readonly toggleInspector = output<void>();
   readonly toggleTray = output<void>();
   readonly toggleConnections = output<void>();
 
