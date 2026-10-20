@@ -1166,7 +1166,13 @@ export class AiAssistantPageComponent implements OnDestroy {
   private selectDefaultModel(): void {
     const options = this.assistantOptions();
     if (!options) return;
-    const selected =
+    const preferredModel = options.models.find(
+      (option) =>
+        option.provider === options.defaultProvider &&
+        option.model === options.defaultModel &&
+        (!options.defaultReasoningEffort || option.reasoningEfforts.includes(options.defaultReasoningEffort)),
+    );
+    const selected = preferredModel ??
       options.models.find(
         (option) =>
           option.provider === options.defaultProvider && option.model === options.defaultModel,
@@ -1174,7 +1180,11 @@ export class AiAssistantPageComponent implements OnDestroy {
       options.models.find((option) => option.provider === options.defaultProvider) ??
       options.models[0];
     this.selectedModelKey.set(selected ? this.modelOptionKey(selected) : '');
-    this.selectedReasoningEffort.set(selected?.defaultReasoningEffort ?? null);
+    this.selectedReasoningEffort.set(
+      selected?.reasoningEfforts.includes(options.defaultReasoningEffort ?? '')
+        ? options.defaultReasoningEffort ?? null
+        : selected?.defaultReasoningEffort ?? null,
+    );
   }
 
   private setConversationUrl(id: string): void {

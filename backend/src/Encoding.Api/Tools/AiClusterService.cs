@@ -364,10 +364,16 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         return shared is null ? local : local with
         {
             DefaultProvider = shared.DefaultProvider,
+            DefaultModel = shared.DefaultModel,
+            DefaultReasoningEffort = shared.DefaultReasoningEffort,
             TimeoutSeconds = shared.TimeoutSeconds,
             SubtitleBatchSize = shared.SubtitleBatchSize,
             AssistantProvider = shared.AssistantProvider,
+            AssistantModel = shared.AssistantModel,
+            AssistantReasoningEffort = shared.AssistantReasoningEffort,
             FlowProvider = shared.FlowProvider,
+            FlowModel = shared.FlowModel,
+            FlowReasoningEffort = shared.FlowReasoningEffort,
             AssistantLocalOnly = shared.AssistantLocalOnly,
             FlowLocalOnly = shared.FlowLocalOnly,
             AssistantConversationRetentionDays = shared.AssistantConversationRetentionDays,

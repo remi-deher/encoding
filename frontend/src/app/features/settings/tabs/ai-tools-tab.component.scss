@@ -25,6 +25,19 @@ p {
   width: 280px;
   max-width: 100%;
 }
+.default-provider .usage-model-fields {
+  flex: 1 1 680px;
+}
+.usage-model-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+}
+.usage-model-fields mat-form-field {
+  width: 100%;
+  min-width: 0;
+}
 .list-heading {
   margin-bottom: var(--space-3);
 }
@@ -67,6 +80,32 @@ p {
   margin-bottom: var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--surface-container-low);
+}
+.usage-settings > h3,
+.usage-settings > p {
+  margin: 0;
+}
+.usage-model-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container);
+}
+.usage-model-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.usage-model-heading h4 {
+  margin: 0;
+  font-size: var(--font-body);
+}
+.usage-model-heading span {
+  color: var(--text-secondary);
+  font-size: var(--font-label);
 }
 .local-policies {
   display: flex;
@@ -125,6 +164,16 @@ code {
   overflow-wrap: anywhere;
 }
 @media (max-width: 640px) {
+  .usage-model-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .default-provider {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .default-provider mat-form-field {
+    width: 100%;
+  }
   .provider-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: var(--space-2);

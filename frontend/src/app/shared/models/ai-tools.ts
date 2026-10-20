@@ -40,6 +40,8 @@ export interface FlowAiGenerateRequest {
   readonly provider?: string | null;
   readonly sessionId?: string | null;
   readonly requestId?: string | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
 }
 
 export interface FlowAiRefactorRequest {
@@ -48,6 +50,8 @@ export interface FlowAiRefactorRequest {
   readonly provider?: string | null;
   readonly sessionId?: string | null;
   readonly requestId?: string | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
 }
 
 export interface FlowAiExplainRequest {
@@ -55,6 +59,8 @@ export interface FlowAiExplainRequest {
   readonly provider?: string | null;
   readonly sessionId?: string | null;
   readonly requestId?: string | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
 }
 
 export interface FlowAiResponse {
@@ -86,6 +92,12 @@ export interface AiSettings {
   readonly openAiEnabled?: boolean;
   readonly codexEnabled?: boolean;
   readonly claudeEnabled?: boolean;
+  readonly defaultModel?: string | null;
+  readonly defaultReasoningEffort?: string | null;
+  readonly assistantModel?: string | null;
+  readonly assistantReasoningEffort?: string | null;
+  readonly flowModel?: string | null;
+  readonly flowReasoningEffort?: string | null;
 }
 
 export interface AiSettingsUpdateRequest {
@@ -107,6 +119,12 @@ export interface AiSettingsUpdateRequest {
   readonly openAiEnabled?: boolean;
   readonly codexEnabled?: boolean;
   readonly claudeEnabled?: boolean;
+  readonly defaultModel?: string | null;
+  readonly defaultReasoningEffort?: string | null;
+  readonly assistantModel?: string | null;
+  readonly assistantReasoningEffort?: string | null;
+  readonly flowModel?: string | null;
+  readonly flowReasoningEffort?: string | null;
 }
 
 export interface AiNodeAvailability {
@@ -158,6 +176,7 @@ export interface AiAssistantOptions {
   readonly defaultModel?: string | null;
   readonly models: readonly AiAssistantModelOption[];
   readonly catalogs?: readonly AiNodeModelCatalog[];
+  readonly defaultReasoningEffort?: string | null;
 }
 
 export interface AiTurnModelSelection {

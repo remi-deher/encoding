@@ -43,13 +43,6 @@ public sealed class AiAssistantService(
         if (refresh) await cluster.ModelsAsync(true, ct);
         var view = await cluster.ViewAsync(ct);
         var policy = await cluster.ModelPolicyAsync(ct);
-        var providerNames = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["codex-cli"] = "Codex CLI",
-            ["claude-cli"] = "Claude CLI",
-            ["openai"] = "OpenAI compatible",
-            ["ollama"] = "Ollama",
-        };
         var nodes = settings.AssistantLocalOnly ? view.Nodes.Take(1) : view.Nodes;
         var catalogs = nodes.Where(n => n.Reachable).Select(n => new AiNodeModelCatalog(n.NodeId, n.Name, n.Catalogs ?? [])).ToArray();
         var options = catalogs.SelectMany(node => node.Providers
@@ -63,9 +56,20 @@ public sealed class AiAssistantService(
                 .Select(m => new AiAssistantModelOption(c.Provider, m.Id, m.Label, m.ReasoningEfforts,
                     node.NodeId, node.Name, m.DefaultReasoningEffort, m.ReasoningKnown, m.IsDefault)))).ToArray();
         var defaultProvider = settings.AssistantProvider ?? settings.DefaultProvider;
-        var defaultModel = options.FirstOrDefault(option => option.Provider == defaultProvider && option.IsDefault)?.Model
+        var inheritedProvider = settings.AssistantProvider is null;
+        var configuredModel = inheritedProvider ? settings.AssistantModel ?? settings.DefaultModel : settings.AssistantModel;
+        var defaultModel = options.FirstOrDefault(option => option.Provider == defaultProvider && option.Model == configuredModel)?.Model
+            ?? options.FirstOrDefault(option => option.Provider == defaultProvider && option.IsDefault)?.Model
             ?? options.FirstOrDefault(option => option.Provider == defaultProvider)?.Model;
-        return new(defaultProvider, defaultModel, options, catalogs);
+        var selectedModels = options.Where(option => option.Provider == defaultProvider && option.Model == defaultModel).ToArray();
+        var configuredEffort = settings.AssistantReasoningEffort
+            ?? (inheritedProvider && (settings.AssistantModel is null || settings.AssistantModel == settings.DefaultModel)
+                ? settings.DefaultReasoningEffort : null);
+        var defaultEffort = configuredEffort is { } effort
+            && selectedModels.Any(option => option.ReasoningEfforts.Contains(effort, StringComparer.Ordinal))
+                ? effort
+                : selectedModels.Select(option => option.DefaultReasoningEffort).FirstOrDefault(value => value is not null);
+        return new(defaultProvider, defaultModel, options, catalogs, defaultEffort);
     }
 
     private static IReadOnlyList<string> ReasoningEfforts(string provider, string? model) => provider switch

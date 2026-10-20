@@ -17,10 +17,14 @@ Sources des formats : [Codex Model](https://github.com/openai/codex/blob/main/co
 ## API et désactivations
 
 - `GET /api/v1/tools/ai/models?refresh=true` : catalogue administrateur, séparé par nœud et fournisseur, avec politique de modèles désactivés.
+- `GET /api/v1/tools/ai/settings/model-options` : même catalogue, réservé à l’administrateur et destiné aux réglages des usages.
+- `PUT /api/v1/tools/ai/settings` : valide chaque nouveau fournisseur, modèle et effort demandé contre les modèles disponibles annoncés par les nœuds et la politique de désactivation avant d’enregistrer le réglage.
 - `PUT /api/v1/tools/ai/models/policy` : `{ provider, model, enabled }`, réservé à l’administrateur.
 - `GET /api/v1/tools/ai/assistant/options?refresh=true` : sélection utilisable par l’assistant, après filtrage des modèles désactivés, des catalogues anciens et de la politique local uniquement.
 
 La politique d’activation est un réglage partagé par couple fournisseur/identifiant de modèle. Un registre chiffré distinct par couple évite que deux changements sur des modèles différents s’écrasent entre pairs. La réconciliation reste éventuelle suivant 0049 ; une désactivation ne stoppe pas une inférence déjà engagée. Aucune règle ne modifie silencieusement le modèle d’une conversation existante. L’absence de modèle actif bloque un nouveau message jusqu’à un choix valide. Les réglages de découverte restent locaux et ne sont pas enregistrés comme des valeurs métier permanentes.
+
+Les sélections du moteur par défaut, de l’assistant et des flows sont des préférences partagées du cluster. Chacune peut fixer un modèle et un effort, ou reprendre la valeur annoncée par défaut du modèle. Les sélecteurs s’alimentent du catalogue backend par nœud; une capacité inconnue ou désactivée n’est pas proposée. L’assistant reçoit la sélection par défaut dans ses options, et les opérations de flow transmettent la sélection résolue aux appels d’inférence, y compris à la réparation d’une réponse JSON invalide.
 
 ## Conversations et reprise
 

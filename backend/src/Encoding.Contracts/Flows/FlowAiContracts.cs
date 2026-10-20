@@ -7,20 +7,26 @@ public sealed record FlowAiGenerateRequest(
     string UserPrompt,
     string? Provider = null,
     string? SessionId = null,
-    Guid? RequestId = null);
+    Guid? RequestId = null,
+    string? Model = null,
+    string? ReasoningEffort = null);
 
 public sealed record FlowAiRefactorRequest(
     FlowDefinition CurrentFlow,
     string UserPrompt,
     string? Provider = null,
     string? SessionId = null,
-    Guid? RequestId = null);
+    Guid? RequestId = null,
+    string? Model = null,
+    string? ReasoningEffort = null);
 
 public sealed record FlowAiExplainRequest(
     FlowDefinition Flow,
     string? Provider = null,
     string? SessionId = null,
-    Guid? RequestId = null);
+    Guid? RequestId = null,
+    string? Model = null,
+    string? ReasoningEffort = null);
 
 public sealed record FlowAiDraftRefactorRequest(
     int ExpectedDraftRevision,

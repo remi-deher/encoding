@@ -37,8 +37,16 @@ public static class AiToolEndpoints
             await GuardAsync(async () => { quotas.Invalidate(id); models.Invalidate(id); try { return Results.Ok(new { revoked = await service.RevokeAuthAsync(id, ct) }); } finally { quotas.Invalidate(id); models.Invalidate(id); } }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapGet("/settings", async (AiClusterService service, CancellationToken ct) => PublicSettings(await service.GetSettingsAsync(ct)));
-        group.MapPut("/settings", async (AiSettingsUpdateRequest request, AiClusterService service, CancellationToken ct) =>
-            await GuardAsync(async () => PublicSettings(await service.UpdateSettingsAsync(request, ct))))
+        group.MapGet("/settings/model-options", async (bool? refresh, AiClusterService service, CancellationToken ct) =>
+            Results.Ok(await service.ModelsAsync(refresh ?? false, ct)))
+            .RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapPut("/settings", async (AiSettingsUpdateRequest request, AiClusterService service, AiSettingsService settings, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                var current = await service.GetSettingsAsync(ct);
+                settings.ValidateModelSelections(current, request, await service.ModelsAsync(false, ct));
+                return PublicSettings(await service.UpdateSettingsAsync(request, ct));
+            }))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapGet("/sessions", async (int? offset, AiClusterService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.ListSessionsAsync(offset ?? 0, ct))))
@@ -77,6 +85,8 @@ public static class AiToolEndpoints
         settings.DefaultProvider, settings.OllamaBaseUrl, settings.OllamaModel, settings.OpenAiBaseUrl,
         settings.OpenAiModel, HasOpenAiApiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey), settings.TimeoutSeconds, settings.SubtitleBatchSize,
         settings.AssistantProvider, settings.FlowProvider, settings.AssistantLocalOnly, settings.FlowLocalOnly,
+        settings.DefaultModel, settings.DefaultReasoningEffort, settings.AssistantModel, settings.AssistantReasoningEffort,
+        settings.FlowModel, settings.FlowReasoningEffort,
         settings.OllamaEnabled, settings.OpenAiEnabled, settings.CodexEnabled, settings.ClaudeEnabled
     });
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)

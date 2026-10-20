@@ -24,53 +24,135 @@
         <div>
           <span class="eyebrow">À l’échelle du cluster</span>
           <h3>Moteur par défaut</h3>
-          <p>Utilisé lorsqu’aucun fournisseur n’est précisé.</p>
+          <p>Valeurs utilisées par défaut pour l’assistant et les flows.</p>
         </div>
-        <mat-form-field appearance="outline" subscriptSizing="dynamic"
-          ><mat-label>Moteur du cluster</mat-label
-          ><mat-select name="defaultProvider" [(ngModel)]="defaultProvider" [disabled]="!isAdmin()">
-            @for (provider of providers; track provider.id) {
-              <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
-            }
-          </mat-select></mat-form-field
-        >
+        <div class="usage-model-fields">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Type d’IA</mat-label>
+            <mat-select
+              name="defaultProvider"
+              [ngModel]="defaultProvider()"
+              (ngModelChange)="changeDefaultProvider($event)"
+              [disabled]="!isAdmin() || !modelCatalog()"
+            >
+              @for (provider of providerChoices(); track provider.id) {
+                <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Modèle</mat-label>
+            <mat-select
+              name="defaultModel"
+              [ngModel]="modelValue('default')"
+              (ngModelChange)="changeModel('default', $event)"
+              [disabled]="!isAdmin() || !modelCatalog()"
+            >
+              <mat-option value="">Modèle par défaut du fournisseur</mat-option>
+              @for (model of modelChoices(defaultProvider()); track model.id) {
+                <mat-option [value]="model.id">{{ model.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Effort de raisonnement</mat-label>
+            <mat-select
+              name="defaultReasoningEffort"
+              [ngModel]="effortValue('default')"
+              (ngModelChange)="changeEffort('default', $event)"
+              [disabled]="
+                !isAdmin() || !reasoningChoices(defaultProvider(), modelValue('default')).length
+              "
+            >
+              <mat-option value="">Valeur par défaut du modèle</mat-option>
+              @for (
+                effort of reasoningChoices(defaultProvider(), modelValue('default'));
+                track effort
+              ) {
+                <mat-option [value]="effort">{{ effortName(effort) }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
       </div>
       <section class="usage-settings" aria-labelledby="ai-usage-title">
         <h3 id="ai-usage-title">Usages et modèles</h3>
         <p>
-          « Par défaut » suit le moteur du cluster. Le modèle et le raisonnement de l’assistant se
-          choisissent dans la conversation.
+          Chaque usage peut reprendre les valeurs du cluster ou choisir sa propre configuration.
         </p>
-        <div class="fields">
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Assistant</mat-label>
-            <mat-select
-              name="assistantProvider"
-              [ngModel]="assistantProvider()"
-              (ngModelChange)="assistantProvider.set($event || null)"
-              [disabled]="!isAdmin()"
-            >
-              <mat-option [value]="null">Par défaut</mat-option>
-              @for (provider of providers; track provider.id) {
-                <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Génération et modification de flows</mat-label>
-            <mat-select
-              name="flowProvider"
-              [ngModel]="flowProvider()"
-              (ngModelChange)="flowProvider.set($event || null)"
-              [disabled]="!isAdmin()"
-            >
-              <mat-option [value]="null">Par défaut</mat-option>
-              @for (provider of providers; track provider.id) {
-                <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-        </div>
+        @if (loadingModelCatalog()) {
+          <p role="status">Chargement des modèles annoncés par les nœuds…</p>
+        } @else if (!modelCatalog()) {
+          <p role="alert">Impossible de charger les modèles annoncés. Actualisez les connexions.</p>
+        } @else if (!providerChoices().length) {
+          <p role="status">Aucun fournisseur n’annonce actuellement de modèle disponible.</p>
+        }
+        @for (usage of usageOptions; track usage) {
+          <div class="usage-model-card">
+            <div class="usage-model-heading">
+              <h4>
+                {{ usage === 'assistant' ? 'Assistant' : 'Génération et modification de flows' }}
+              </h4>
+              <span>{{
+                usage === 'assistant'
+                  ? 'Conversations avec l’assistant'
+                  : 'Création, explication et modification'
+              }}</span>
+            </div>
+            <div class="usage-model-fields">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Type d’IA</mat-label>
+                <mat-select
+                  [name]="usage + 'Provider'"
+                  [ngModel]="usage === 'assistant' ? assistantProvider() : flowProvider()"
+                  (ngModelChange)="changeUsageProvider(usage, $event || null)"
+                  [disabled]="!isAdmin() || !modelCatalog()"
+                >
+                  <mat-option [value]="null"
+                    >Par défaut · {{ providerName(defaultProvider()) }}</mat-option
+                  >
+                  @for (provider of providerChoices(usage); track provider.id) {
+                    <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Modèle</mat-label>
+                <mat-select
+                  [name]="usage + 'Model'"
+                  [ngModel]="modelValue(usage)"
+                  (ngModelChange)="changeModel(usage, $event)"
+                  [disabled]="!isAdmin() || !modelCatalog()"
+                >
+                  <mat-option value="">Modèle par défaut du fournisseur</mat-option>
+                  @for (model of modelChoices(effectiveProvider(usage), usage); track model.id) {
+                    <mat-option [value]="model.id">{{ model.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Effort de raisonnement</mat-label>
+                <mat-select
+                  [name]="usage + 'ReasoningEffort'"
+                  [ngModel]="effortValue(usage)"
+                  (ngModelChange)="changeEffort(usage, $event)"
+                  [disabled]="
+                    !isAdmin() ||
+                    !reasoningChoices(effectiveProvider(usage), modelValue(usage), usage).length
+                  "
+                >
+                  <mat-option value="">Valeur par défaut du modèle</mat-option>
+                  @for (
+                    effort of reasoningChoices(effectiveProvider(usage), modelValue(usage), usage);
+                    track effort
+                  ) {
+                    <mat-option [value]="effort">{{ effortName(effort) }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            </div>
+          </div>
+        }
         <div class="local-policies">
           <label
             ><input

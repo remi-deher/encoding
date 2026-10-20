@@ -292,6 +292,12 @@ export class AiToolsService {
     return this.http.get<AiSettings>('/api/v1/tools/ai/settings');
   }
 
+  getSettingsModelCatalog(refresh = false): Observable<AiClusterModelCatalog> {
+    return this.http.get<AiClusterModelCatalog>('/api/v1/tools/ai/settings/model-options', {
+      params: { refresh },
+    });
+  }
+
   updateSettings(request: AiSettingsUpdateRequest): Observable<AiSettings> {
     return this.http.put<AiSettings>('/api/v1/tools/ai/settings', request);
   }

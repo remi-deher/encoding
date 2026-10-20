@@ -14,6 +14,45 @@
   box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
 }
 
+.category-tabs.is-underline {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.category-tabs.is-underline::-webkit-scrollbar {
+  display: none;
+}
+
+.category-tabs.is-underline .category-tab-pill {
+  flex: 0 0 auto;
+  min-height: 44px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.category-tabs.is-underline .category-tab-pill.is-active {
+  position: relative;
+  color: var(--accent);
+  background: transparent;
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+.category-tabs.is-underline .category-tab-pill:hover:not(.is-active) {
+  background: var(--surface-container-low);
+}
+
 .category-tab-pill {
   display: inline-flex;
   align-items: center;
