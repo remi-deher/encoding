@@ -462,6 +462,182 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": []
+    },
+    {
+      "id": "probe-validate-output",
+      "version": "1.0.0",
+      "name": "Contrôler la sortie assemblée",
+      "description": "Compare le fichier assemblé à la source selon les contrôles choisis : durée, codecs, pistes, canaux audio/LFE, sous-titres, chapitres, pièces jointes, polices, taille et événements ASS.",
+      "kind": "action",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "valid",
+          "label": "Valide",
+          "description": "Tous les contrôles activés ont réussi."
+        },
+        {
+          "id": "invalid",
+          "label": "Invalide",
+          "description": "Au moins un contrôle a détecté une différence."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "Un outil ou une métadonnée nécessaire au contrôle est indisponible."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "requiredVideoCodec",
+            "label": "Codec vidéo requis",
+            "type": "select",
+            "defaultValue": "any",
+            "options": [
+              { "value": "any", "label": "Tout codec" },
+              { "value": "hevc", "label": "HEVC" },
+              { "value": "hevc-or-source", "label": "HEVC ou codec source conservé" },
+              { "value": "h264", "label": "H.264" },
+              { "value": "av1", "label": "AV1" }
+            ]
+          },
+          {
+            "id": "durationToleranceSeconds",
+            "label": "Écart de durée maximal (secondes)",
+            "type": "number",
+            "defaultValue": 2,
+            "min": 0,
+            "max": 600,
+            "step": 0.5
+          },
+          {
+            "id": "preserveTrackCounts",
+            "label": "Conserver le nombre de pistes vidéo et audio",
+            "type": "boolean",
+            "defaultValue": false
+          },
+          {
+            "id": "preserveSubtitleCount",
+            "label": "Conserver le nombre de pistes de sous-titres",
+            "type": "boolean",
+            "defaultValue": false
+          },
+          {
+            "id": "allowedAudioCodecs",
+            "label": "Codecs audio autorisés",
+            "type": "text",
+            "defaultValue": "",
+            "description": "Liste séparée par des virgules. Laisser vide pour accepter tous les codecs."
+          },
+          {
+            "id": "forbiddenAudioCodecs",
+            "label": "Codecs audio interdits",
+            "type": "text",
+            "defaultValue": "eac3",
+            "description": "Liste séparée par des virgules. Laisser vide pour ne pas filtrer les codecs audio."
+          },
+          {
+            "id": "allowedSubtitleCodecs",
+            "label": "Codecs de sous-titres autorisés",
+            "type": "text",
+            "defaultValue": "ass,ssa,hdmv_pgs_subtitle,dvd_subtitle,dvb_subtitle",
+            "description": "Liste séparée par des virgules. Laisser vide pour accepter tous les codecs."
+          },
+          {
+            "id": "maxAudioChannels",
+            "label": "Nombre maximal de canaux audio (0 = aucune limite)",
+            "type": "number",
+            "defaultValue": 0,
+            "min": 0,
+            "max": 64,
+            "step": 1
+          },
+          {
+            "id": "preserveAudioChannels",
+            "label": "Conserver le nombre de canaux par piste audio",
+            "type": "boolean",
+            "defaultValue": false
+          },
+          {
+            "id": "preserveAudioLayout",
+            "label": "Conserver la disposition audio et le LFE",
+            "type": "boolean",
+            "defaultValue": false
+          },
+          {
+            "id": "preserveSubtitleMetadata",
+            "label": "Conserver les langues, titres et indicateurs des sous-titres",
+            "type": "boolean",
+            "defaultValue": false
+          },
+          {
+            "id": "preserveChapterCount",
+            "label": "Conserver le nombre de chapitres",
+            "type": "boolean",
+            "defaultValue": false
+          },
+          {
+            "id": "preserveOriginalAttachments",
+            "label": "Conserver les pièces jointes d'origine",
+            "type": "boolean",
+            "defaultValue": false
+          },
+          {
+            "id": "requiredAttachmentNames",
+            "label": "Pièces jointes requises",
+            "type": "text",
+            "defaultValue": "",
+            "description": "Noms de fichiers séparés par des virgules, par exemple Arial.ttf."
+          },
+          {
+            "id": "maxOutputSizeGrowthPercent",
+            "label": "Croissance maximale de taille (0 = aucune limite)",
+            "type": "number",
+            "defaultValue": 0,
+            "min": 0,
+            "max": 1000,
+            "step": 1
+          },
+          {
+            "id": "compareAssEvents",
+            "label": "Comparer les événements des sous-titres texte",
+            "type": "boolean",
+            "defaultValue": false,
+            "description": "Compare début, fin et texte des événements après conversion temporaire en ASS."
+          },
+          {
+            "id": "verifyDecoding",
+            "label": "Décoder les pistes vidéo et audio après assemblage",
+            "type": "boolean",
+            "defaultValue": false
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "ffprobe",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        },
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        },
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": []
     }
   ]
 }

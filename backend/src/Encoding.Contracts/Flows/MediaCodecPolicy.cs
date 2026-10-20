@@ -36,6 +36,23 @@ public static class MediaCodecPolicy
         return null;
     }
 
+    public static (VideoEncoderDescriptor Encoder, EncodingProfileTarget Target)? ResolveCpuFallbackVideoEncoder(
+        string codec,
+        EncodingProfileSnapshot profile,
+        IReadOnlyList<string> availableEncoders,
+        IReadOnlyList<string> availableAccelerations,
+        IReadOnlyList<Encoding.Contracts.Nodes.NodeEncoderCapability>? encoderChecks = null)
+    {
+        var cpuTargets=profile.Targets
+            .Where(target=>VideoEncoderCatalog.Find(target.EncoderId) is { } descriptor&&descriptor.Codec==codec&&descriptor.Acceleration=="cpu")
+            .OrderBy(target=>target.Priority)
+            .ToList();
+        var nextPriority=cpuTargets.Select(target=>target.Priority).DefaultIfEmpty(-1).Max()+1;
+        foreach(var encoder in VideoEncoderCatalog.All.Where(encoder=>encoder.Codec==codec&&encoder.Acceleration=="cpu"&&!cpuTargets.Any(target=>target.EncoderId==encoder.Id)))
+            cpuTargets.Add(new(encoder.Id,encoder.DefaultQuality,encoder.Presets.FirstOrDefault(preset=>preset.Id=="medium")?.Id??string.Empty,nextPriority++));
+        return ResolveVideoEncoder(codec,"automatic",null,profile with { Targets=cpuTargets },availableEncoders,availableAccelerations,encoderChecks);
+    }
+
     public static decimal ResolveQuality(VideoEncoderDescriptor encoder, string tier, int width, int height, decimal fallbackQuality)
     {
         if (string.IsNullOrWhiteSpace(tier) || tier == "custom") return fallbackQuality;

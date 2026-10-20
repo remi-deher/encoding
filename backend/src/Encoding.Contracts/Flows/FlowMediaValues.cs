@@ -8,7 +8,7 @@ public static class FlowMediaValues
         or "base-transcode-audio" or "audio-transcode"
         or "base-normalize-audio" or "audio-normalize"
         or "base-resize-video" or "video-resize"
-        or "base-remux-media"
+        or "base-remux-media" or "video-remux-media"
         or "base-auto-crop" or "video-auto-crop"
         or "base-deinterlace-video" or "video-deinterlace";
 

@@ -4,7 +4,7 @@ using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeTransferRepository(DbDataSource dataSource)
+public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionStreamBroadcaster? broadcaster=null)
 {
     public async Task<IReadOnlyList<RuntimeTransfer>> ListAsync(Guid node,CancellationToken ct)
     {
@@ -44,7 +44,16 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource)
         if(replacement is not null) await SourceReplacementRepository.RecordInTransactionAsync(id,library,source,original,sourceSha,resultSha,graceHours!.Value,replacement,c,tx,ct);
         await using var update=Sql.Command("UPDATE execution_work SET published_path=@path WHERE execution_id=@id",c,tx);
         update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("path",request.PublishedPath); await update.ExecuteNonQueryAsync(ct);
-        await RuntimeRepository.ReleaseAsync(id,c,tx,ct); await tx.CommitAsync(ct); return true;
+        await using var advance=Sql.Command("UPDATE executions SET revision=revision+1,updated_at=clock_timestamp() WHERE id=@id RETURNING revision",c,tx);
+        advance.Parameters.AddWithValue("id",id);
+        var eventRevision=await advance.ScalarInt32Async(ct)??throw new InvalidOperationException("Révision d’exécution absente après publication.");
+        await using(var published=Sql.Command("INSERT INTO execution_events(id,execution_id,revision,state,detail) VALUES(@event,@id,@revision,'media.published',@detail)",c,tx))
+        {
+            published.Parameters.AddWithValue("event",Guid.NewGuid()); published.Parameters.AddWithValue("id",id); published.Parameters.AddWithValue("revision",eventRevision);
+            published.Parameters.AddWithValue("detail","Média publié : "+request.PublishedPath+" (SHA-256 : "+request.Sha256+").");
+            await published.ExecuteNonQueryAsync(ct);
+        }
+        await RuntimeRepository.ReleaseAsync(id,c,tx,ct); await tx.CommitAsync(ct); broadcaster?.Publish(id); return true;
     }
     public async Task<bool> FinishAsync(Guid id,Guid worker,FinishRuntimeExecution request,CancellationToken ct,bool sourceFailure=false)
     {

@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "base",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "name": "Base",
   "supportedHostContractVersions": [
     1
@@ -40,7 +40,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -73,7 +74,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -106,7 +108,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -139,7 +142,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -172,7 +176,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -264,7 +269,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -329,7 +335,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -380,7 +387,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -425,7 +433,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -481,142 +490,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
-      ]
-    },
-    {
-      "id": "base-remux-media",
-      "version": "1.0.0",
-      "name": "Changer de conteneur",
-      "description": "Copie les pistes compatibles dans un conteneur MKV ou MP4.",
-      "kind": "action",
-      "mediaType": "video",
-      "supportedFlowMediaTypes": [
-        "video"
-      ],
-      "outputs": [
-        {
-          "id": "success",
-          "label": "Suite",
-          "description": "L’action a terminé son traitement."
-        },
-        {
-          "id": "error",
-          "label": "Erreur",
-          "description": "L’action n’a pas pu terminer son traitement."
-        }
-      ],
-      "configurationSchema": {
-        "version": 1,
-        "fields": [
-          {
-            "id": "processingMode",
-            "label": "Mode de traitement",
-            "type": "select",
-            "defaultValue": "plan",
-            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
-            "options": [
-              {
-                "value": "plan",
-                "label": "Ajouter au plan"
-              },
-              {
-                "value": "direct",
-                "label": "Opération autonome"
-              }
-            ]
-          },
-          {
-            "id": "container",
-            "label": "Conteneur",
-            "type": "select",
-            "inline": true,
-            "defaultValue": "mkv",
-            "options": [
-              {
-                "value": "mkv",
-                "label": "Matroska (MKV)"
-              },
-              {
-                "value": "mp4",
-                "label": "MP4"
-              }
-            ]
-          }
-        ]
-      },
-      "requiredTools": [
-        {
-          "toolId": "ffmpeg",
-          "minimumVersion": null,
-          "requiredCapabilities": []
-        }
-      ],
-      "requiresMedia": true,
-      "requiresWriteAccess": true,
-      "compatiblePluginVersions": [
-        "1.0.0",
-        "1.1.0",
-        "1.2.0",
-        "1.3.0",
-        "1.4.0",
-        "1.5.0"
-      ]
-    },
-    {
-      "id": "base-condition",
-      "version": "1.0.0",
-      "name": "Tester une condition",
-      "description": "Évalue une règle et dirige le flow selon le résultat.",
-      "kind": "condition",
-      "mediaType": "general",
-      "supportedFlowMediaTypes": [
-        "video",
-        "image",
-        "music",
-        "subtitles"
-      ],
-      "outputs": [
-        {
-          "id": "yes",
-          "label": "Oui",
-          "description": "La condition est satisfaite."
-        },
-        {
-          "id": "no",
-          "label": "Non",
-          "description": "La condition n’est pas satisfaite."
-        },
-        {
-          "id": "error",
-          "label": "Erreur",
-          "description": "La condition n’a pas pu être évaluée."
-        }
-      ],
-      "configurationSchema": {
-        "version": 1,
-        "fields": [
-          {
-            "id": "expression",
-            "type": "text",
-            "label": "Expression",
-            "description": "Règle à évaluer pour choisir la sortie.",
-            "placeholder": "Ex. codec vidéo = HEVC",
-            "required": true,
-            "multiline": true
-          }
-        ]
-      },
-      "requiredTools": [],
-      "requiresMedia": false,
-      "requiresWriteAccess": false,
-      "compatiblePluginVersions": [
-        "1.0.0",
-        "1.1.0",
-        "1.2.0",
-        "1.3.0",
-        "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -670,7 +545,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -877,7 +753,8 @@
         "1.2.0",
         "1.3.0",
         "1.4.0",
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -927,7 +804,8 @@
       "requiresMedia": false,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     },
     {
@@ -972,7 +850,8 @@
       "requiresMedia": false,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.5.0"
+        "1.5.0",
+        "1.6.0"
       ]
     }
   ]

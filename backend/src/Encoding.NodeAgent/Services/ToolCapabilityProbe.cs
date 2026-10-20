@@ -32,8 +32,8 @@ public sealed class ToolCapabilityProbe(
             Directory.CreateDirectory(options.DataDirectory);
             var list = new List<NodeToolCapability>
             {
-                new("plugin/base", "1.6.0", ["general"], ["cpu"]),
-                new("plugin/video", "1.0.0", ["general"], []),
+                new("plugin/base", "1.7.0", ["general"], ["cpu"]),
+                new("plugin/video", "1.1.0", ["general"], []),
                 new("plugin/audio", "1.0.0", ["general"], []),
                 new("plugin/subtitles", "1.0.0", ["general"], []),
                 new("plugin/mkv", "1.0.0", ["general"], []),
