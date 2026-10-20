@@ -11,14 +11,17 @@ export interface DeviceAuthPrompt {
 export interface DeviceAuthStatus {
   readonly toolId: string;
   readonly state: 'unconfigured' | 'pending' | 'authorized' | 'expired' | 'failed';
+  readonly attemptState?: 'pending' | 'authorized' | 'expired' | 'failed' | null;
   readonly accountName?: string | null;
   readonly authenticatedAt?: string | null;
   readonly errorMessage?: string | null;
+  readonly attemptErrorMessage?: string | null;
 }
 
 export interface DeviceAuthStartResponse {
   readonly toolId: string;
   readonly prompt: DeviceAuthPrompt;
+  readonly attemptId?: string | null;
 }
 
 export interface AiToolInfo {

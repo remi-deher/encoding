@@ -55,3 +55,27 @@ jobs:
           push: false
           cache-from: type=gha,scope=encoding
           cache-to: type=gha,scope=encoding,mode=max
+  ai-cli-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Install the pinned official CLI packages
+        run: |
+          npm install --prefix "$RUNNER_TEMP/encoding-ai-cli" --no-audit --no-fund \
+            @openai/codex@0.163.0 @anthropic-ai/claude-code@2.1.302
+          echo "$RUNNER_TEMP/encoding-ai-cli/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Check official CLI versions, options and Landlock execution
+        run: >-
+          dotnet test backend/tests/Encoding.Runtime.Tests/Encoding.Runtime.Tests.csproj
+          --configuration Release
+          --filter "FullyQualifiedName~AiCliNativeCompatibilityTests|FullyQualifiedName~ProductionRuntimeFailsClosedWithoutLandlockOrDeniesFilesOutsideProfile|FullyQualifiedName~ProductionSandboxAllowsReadingSystemOpenSslConfiguration"
+        env:
+          ENCODING_TEST_AI_CLI_NATIVE: '1'
+          ENCODING_TEST_AI_CLI_RUNTIME: ${{ runner.temp }}/encoding-ai-cli/node_modules
