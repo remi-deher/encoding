@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, finalize, shareReplay } from 'rxjs';
 import {
   AiClusterView,
   AiClusterModelCatalog,
@@ -34,6 +34,26 @@ import {
 })
 export class AiToolsService {
   private readonly http = inject(HttpClient);
+  private readonly modelCatalogRequests = new Map<string, Observable<AiClusterModelCatalog>>();
+  private readonly assistantOptionsRequests = new Map<string, Observable<AiAssistantOptions>>();
+
+  private shareInFlight<T>(
+    requests: Map<string, Observable<T>>,
+    key: string,
+    requestFactory: () => Observable<T>,
+  ): Observable<T> {
+    const existing = requests.get(key);
+    if (existing) return existing;
+    let shared!: Observable<T>;
+    shared = requestFactory().pipe(
+      finalize(() => {
+        if (requests.get(key) === shared) requests.delete(key);
+      }),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+    requests.set(key, shared);
+    return shared;
+  }
 
   listAssistantConversations(): Observable<readonly AiAssistantConversation[]> {
     return this.http.get<readonly AiAssistantConversation[]>(
@@ -41,8 +61,10 @@ export class AiToolsService {
     );
   }
 
-  getModelCatalog(refresh = false): Observable<AiClusterModelCatalog> {
-    return this.http.get<AiClusterModelCatalog>('/api/v1/tools/ai/models', { params: { refresh } });
+  getModelCatalog(): Observable<AiClusterModelCatalog> {
+    return this.shareInFlight(this.modelCatalogRequests, 'cluster', () =>
+      this.http.get<AiClusterModelCatalog>('/api/v1/tools/ai/models'),
+    );
   }
 
   updateModelPolicy(provider: string, model: string, enabled: boolean): Observable<AiModelPolicy> {
@@ -53,10 +75,10 @@ export class AiToolsService {
     });
   }
 
-  getAssistantOptions(refresh = false): Observable<AiAssistantOptions> {
-    return this.http.get<AiAssistantOptions>('/api/v1/tools/ai/assistant/options', {
-      params: { refresh },
-    });
+  getAssistantOptions(): Observable<AiAssistantOptions> {
+    return this.shareInFlight(this.assistantOptionsRequests, 'current', () =>
+      this.http.get<AiAssistantOptions>('/api/v1/tools/ai/assistant/options'),
+    );
   }
 
   listAssistantActivity(): Observable<readonly AiAssistantActivity[]> {
@@ -292,10 +314,8 @@ export class AiToolsService {
     return this.http.get<AiSettings>('/api/v1/tools/ai/settings');
   }
 
-  getSettingsModelCatalog(refresh = false): Observable<AiClusterModelCatalog> {
-    return this.http.get<AiClusterModelCatalog>('/api/v1/tools/ai/settings/model-options', {
-      params: { refresh },
-    });
+  getSettingsModelCatalog(): Observable<AiClusterModelCatalog> {
+    return this.getModelCatalog();
   }
 
   updateSettings(request: AiSettingsUpdateRequest): Observable<AiSettings> {

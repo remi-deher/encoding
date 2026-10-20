@@ -33,7 +33,7 @@
               name="defaultProvider"
               [ngModel]="defaultProvider()"
               (ngModelChange)="changeDefaultProvider($event)"
-              [disabled]="!isAdmin() || !modelCatalog()"
+              [disabled]="!isAdmin() || !modelCatalog() || loadingModelCatalog()"
             >
               @for (provider of providerChoices(); track provider.id) {
                 <mat-option [value]="provider.id">{{ provider.name }}</mat-option>
@@ -46,7 +46,7 @@
               name="defaultModel"
               [ngModel]="modelValue('default')"
               (ngModelChange)="changeModel('default', $event)"
-              [disabled]="!isAdmin() || !modelCatalog()"
+              [disabled]="!isAdmin() || !modelCatalog() || loadingModelCatalog()"
             >
               <mat-option value="">Modèle par défaut du fournisseur</mat-option>
               @for (model of modelChoices(defaultProvider()); track model.id) {
@@ -61,7 +61,7 @@
               [ngModel]="effortValue('default')"
               (ngModelChange)="changeEffort('default', $event)"
               [disabled]="
-                !isAdmin() || !reasoningChoices(defaultProvider(), modelValue('default')).length
+                !isAdmin() || loadingModelCatalog() || !reasoningChoices(defaultProvider(), modelValue('default')).length
               "
             >
               <mat-option value="">Valeur par défaut du modèle</mat-option>
@@ -106,7 +106,7 @@
                   [name]="usage + 'Provider'"
                   [ngModel]="usage === 'assistant' ? assistantProvider() : flowProvider()"
                   (ngModelChange)="changeUsageProvider(usage, $event || null)"
-                  [disabled]="!isAdmin() || !modelCatalog()"
+                  [disabled]="!isAdmin() || !modelCatalog() || loadingModelCatalog()"
                 >
                   <mat-option [value]="null"
                     >Par défaut · {{ providerName(defaultProvider()) }}</mat-option
@@ -122,7 +122,7 @@
                   [name]="usage + 'Model'"
                   [ngModel]="modelValue(usage)"
                   (ngModelChange)="changeModel(usage, $event)"
-                  [disabled]="!isAdmin() || !modelCatalog()"
+                  [disabled]="!isAdmin() || !modelCatalog() || loadingModelCatalog()"
                 >
                   <mat-option value="">Modèle par défaut du fournisseur</mat-option>
                   @for (model of modelChoices(effectiveProvider(usage), usage); track model.id) {
@@ -138,6 +138,7 @@
                   (ngModelChange)="changeEffort(usage, $event)"
                   [disabled]="
                     !isAdmin() ||
+                    loadingModelCatalog() ||
                     !reasoningChoices(effectiveProvider(usage), modelValue(usage), usage).length
                   "
                 >

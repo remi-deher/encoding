@@ -10,7 +10,7 @@ export interface DeviceAuthPrompt {
 
 export interface DeviceAuthStatus {
   readonly toolId: string;
-  readonly state: 'unconfigured' | 'pending' | 'authorized' | 'expired' | 'failed';
+  readonly state: 'unconfigured' | 'pending' | 'checking' | 'authorized' | 'expired' | 'failed';
   readonly attemptState?: 'pending' | 'authorized' | 'expired' | 'failed' | null;
   readonly accountName?: string | null;
   readonly authenticatedAt?: string | null;
@@ -354,7 +354,7 @@ export interface AiQuotaWindow {
 }
 export interface AiQuotaSnapshot {
   readonly provider: string;
-  readonly state: 'available' | 'unavailable' | 'stale';
+  readonly state: 'loading' | 'available' | 'unavailable' | 'stale';
   readonly windows: readonly AiQuotaWindow[];
   readonly observedAt: string | null;
   readonly checkedAt: string;
@@ -380,7 +380,7 @@ export interface AiDiscoveredModel {
 }
 export interface AiModelCatalog {
   readonly provider: string;
-  readonly state: 'available' | 'unavailable' | 'stale';
+  readonly state: 'loading' | 'available' | 'unavailable' | 'stale';
   readonly models: readonly AiDiscoveredModel[];
   readonly observedAt: string | null;
   readonly checkedAt: string;

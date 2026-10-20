@@ -41,7 +41,7 @@ public sealed class AiAssistantService(
     {
         var settings = await cluster.GetSettingsAsync(ct);
         if (refresh) await cluster.ModelsAsync(true, ct);
-        var view = await cluster.ViewAsync(ct);
+        var view = await cluster.CachedViewAsync(ct);
         var policy = await cluster.ModelPolicyAsync(ct);
         var nodes = settings.AssistantLocalOnly ? view.Nodes.Take(1) : view.Nodes;
         var catalogs = nodes.Where(n => n.Reachable).Select(n => new AiNodeModelCatalog(n.NodeId, n.Name, n.Catalogs ?? [])).ToArray();

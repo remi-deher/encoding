@@ -13,24 +13,64 @@ public sealed class AiModelCatalogService(AiCliRuntime runtime, AiSettingsServic
     private sealed class Entry
     {
         public readonly SemaphoreSlim Gate = new(1);
+        public readonly object Sync = new();
         public AiModelCatalog? Snapshot;
         public string? Fingerprint;
+        public bool RefreshQueued;
     }
     private readonly ConcurrentDictionary<string, Entry> entries = new();
     public void Invalidate(string provider) => entries.TryRemove(provider, out _);
 
+    /// <summary>Returns the last observation immediately and schedules a bounded refresh when it is missing or old.</summary>
+    public AiModelCatalog ReadCachedOrRefresh(string provider, string connectionRevision)
+    {
+        var entry = entries.GetOrAdd(provider, _ => new());
+        var fingerprint = GetFingerprint(provider, connectionRevision);
+        AiModelCatalog? snapshot;
+        var scheduleRefresh = false;
+        lock (entry.Sync)
+        {
+            if (entry.Fingerprint != fingerprint)
+            {
+                entry.Snapshot = null;
+                entry.Fingerprint = fingerprint;
+                entry.RefreshQueued = false;
+            }
+            snapshot = entry.Snapshot;
+            if (!entry.RefreshQueued && (snapshot is null || snapshot.CheckedAt.AddMinutes(5) <= clock.GetUtcNow()))
+            {
+                entry.RefreshQueued = true;
+                scheduleRefresh = true;
+            }
+        }
+        if (scheduleRefresh) _ = RefreshInBackground(provider, connectionRevision, entry);
+        return snapshot ?? new(provider, "loading", [], null, clock.GetUtcNow(), "Chargement du catalogue observé par le fournisseur.");
+    }
+
     public async Task<AiModelCatalog> ReadAsync(string provider, string connectionRevision, bool refresh, CancellationToken ct)
     {
         var entry = entries.GetOrAdd(provider, _ => new());
+        var fingerprint = GetFingerprint(provider, connectionRevision);
+        lock (entry.Sync)
+        {
+            if (entry.Fingerprint != fingerprint)
+            {
+                entry.Snapshot = null;
+                entry.Fingerprint = fingerprint;
+                entry.RefreshQueued = false;
+            }
+        }
         await entry.Gate.WaitAsync(ct);
         try
         {
             var local = settings.GetSettings();
-            // Local comparison only; the key is never returned or logged.
-            var fingerprint = connectionRevision + (provider == "openai" ? local.OpenAiBaseUrl + local.OpenAiApiKey + local.OpenAiModel
-                : provider == "ollama" ? local.OllamaBaseUrl + local.OllamaModel : runtime.Find(provider));
-            if (entry.Fingerprint != fingerprint) { entry.Snapshot = null; entry.Fingerprint = fingerprint; }
-            var previous = entry.Snapshot;
+            AiModelCatalog? previous;
+            lock (entry.Sync)
+            {
+                if (entry.Fingerprint != fingerprint)
+                    return new(provider, "unavailable", [], null, clock.GetUtcNow(), "Connexion modifiée pendant l’observation du catalogue.");
+                previous = entry.Snapshot;
+            }
             if (!refresh && previous is not null && previous.CheckedAt.AddMinutes(1) > clock.GetUtcNow()) return previous;
             try
             {
@@ -62,7 +102,7 @@ public sealed class AiModelCatalogService(AiCliRuntime runtime, AiSettingsServic
                     models = AiModelProtocol.ParseHttp(doc.RootElement).Select(m => m with { IsDefault = m.Id == defaultModel }).ToArray();
                 }
                 var now = clock.GetUtcNow();
-                return Publish(provider, entry, new(provider, models.Count > 0 ? "available" : "unavailable", models, now, now,
+                return Publish(provider, entry, fingerprint, new(provider, models.Count > 0 ? "available" : "unavailable", models, now, now,
                     models.Count == 0 ? "Le fournisseur ne publie aucun modèle utilisable." : null));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -70,19 +110,38 @@ public sealed class AiModelCatalogService(AiCliRuntime runtime, AiSettingsServic
                 or ArgumentException or HttpRequestException or System.ComponentModel.Win32Exception or System.Security.Cryptography.CryptographicException)
             {
                 var now = clock.GetUtcNow();
-                return Publish(provider, entry, previous is { Models.Count: > 0 }
+                return Publish(provider, entry, fingerprint, previous is { Models.Count: > 0 }
                     ? previous with { State = "stale", CheckedAt = now, Message = "Actualisation impossible. Ce catalogue ancien ne permet pas de nouvelle sélection." }
                     : new(provider, "unavailable", [], null, now, "Catalogue indisponible. Vérifiez la connexion et la compatibilité du fournisseur."));
             }
         }
         finally { entry.Gate.Release(); }
     }
-    private AiModelCatalog Publish(string provider, Entry entry, AiModelCatalog snapshot)
+    private AiModelCatalog Publish(string provider, Entry entry, string fingerprint, AiModelCatalog snapshot)
     {
-        if (!entries.TryGetValue(provider, out var current) || !ReferenceEquals(current, entry))
-            return new(provider, "unavailable", [], null, clock.GetUtcNow(), "Connexion modifiée. Actualisez le catalogue.");
-        entry.Snapshot = snapshot;
-        return snapshot;
+        lock (entry.Sync)
+        {
+            if (!entries.TryGetValue(provider, out var current) || !ReferenceEquals(current, entry)
+                || entry.Fingerprint != fingerprint)
+                return new(provider, "unavailable", [], null, clock.GetUtcNow(), "Connexion modifiée. Actualisez le catalogue.");
+            entry.Snapshot = snapshot;
+            return snapshot;
+        }
+    }
+
+    private string GetFingerprint(string provider, string connectionRevision)
+    {
+        var local = settings.GetSettings();
+        // Local comparison only; the key is never returned or logged.
+        return connectionRevision + (provider == "openai" ? local.OpenAiBaseUrl + local.OpenAiApiKey + local.OpenAiModel
+            : provider == "ollama" ? local.OllamaBaseUrl + local.OllamaModel : runtime.Find(provider));
+    }
+
+    private async Task RefreshInBackground(string provider, string connectionRevision, Entry entry)
+    {
+        try { await ReadAsync(provider, connectionRevision, true, CancellationToken.None); }
+        catch (Exception) { }
+        finally { lock (entry.Sync) entry.RefreshQueued = false; }
     }
 
 }

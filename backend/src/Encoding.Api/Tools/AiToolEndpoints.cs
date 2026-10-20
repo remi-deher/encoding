@@ -14,7 +14,7 @@ public static class AiToolEndpoints
         group.MapPut("/models/policy", async (AiModelPolicyUpdate request, AiClusterService service, CancellationToken ct) =>
             await GuardAsync(async () => Results.Ok(await service.UpdateModelPolicyAsync(request, ct))))
             .RequireAuthorization(AuthExtensions.AdministratorPolicy);
-        group.MapGet("/cluster", async (AiClusterService service, CancellationToken ct) => Results.Ok(await service.ViewAsync(ct)));
+        group.MapGet("/cluster", async (AiClusterService service, CancellationToken ct) => Results.Ok(await service.CachedViewAsync(ct)));
         group.MapGet("/quotas", async (AiClusterService service, CancellationToken ct) =>
             Results.Ok(await service.QuotasAsync(ct))).RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapGet("/{id}/status", async (string id, DeviceCodeAuthService service, CancellationToken ct) => await GuardAsync(async () => Results.Ok(await service.GetStatusAsync(id, ct))));

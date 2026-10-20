@@ -5,6 +5,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  OnDestroy,
   OnInit,
   computed,
   inject,
@@ -60,7 +61,7 @@ import { aiEffortLabel, aiTypeLabel } from '../../ai/components/ai-model-selecti
   templateUrl: './ai-tools-tab.component.html',
   styleUrl: './ai-tools-tab.component.scss',
 })
-export class AiToolsTabComponent implements OnInit {
+export class AiToolsTabComponent implements OnInit, OnDestroy {
   protected readonly editor = inject(SettingsEditor);
   private readonly providerEditor = viewChild.required<TemplateRef<unknown>>('providerEditor');
   readonly settingsError = signal(false);
@@ -152,6 +153,7 @@ export class AiToolsTabComponent implements OnInit {
   readonly flowLocalOnly = signal(false);
 
   private savedFingerprint = '';
+  private modelCatalogPollTimer: ReturnType<typeof setTimeout> | null = null;
   private fingerprint(): string {
     return JSON.stringify([
       this.defaultProvider(),
@@ -190,6 +192,9 @@ export class AiToolsTabComponent implements OnInit {
     this.refreshTools();
     this.loadSettings();
   }
+  ngOnDestroy(): void {
+    if (this.modelCatalogPollTimer !== null) clearTimeout(this.modelCatalogPollTimer);
+  }
   loadSettings(): void {
     this.settingsError.set(false);
     this.aiService.getSettings().subscribe({
@@ -207,7 +212,7 @@ export class AiToolsTabComponent implements OnInit {
   refreshTools(): void {
     this.quotaRevision.update((value) => value + 1);
     this.loadingTools.set(true);
-    this.loadModelCatalog(true);
+    this.loadModelCatalog();
     this.aiService.listTools().subscribe({
       next: (tools) => {
         this.tools.set(tools);
@@ -339,12 +344,19 @@ export class AiToolsTabComponent implements OnInit {
     });
   }
 
-  private loadModelCatalog(refresh = false): void {
+  private loadModelCatalog(): void {
+    if (this.modelCatalogPollTimer !== null) clearTimeout(this.modelCatalogPollTimer);
+    this.modelCatalogPollTimer = null;
     this.loadingModelCatalog.set(true);
-    this.aiService.getSettingsModelCatalog(refresh).subscribe({
+    this.aiService.getSettingsModelCatalog().subscribe({
       next: (catalog) => {
         this.modelCatalog.set(catalog);
-        this.loadingModelCatalog.set(false);
+        const catalogLoading = catalog.nodes.some((node) =>
+          node.providers.some((provider) => provider.state === 'loading'),
+        );
+        this.loadingModelCatalog.set(catalogLoading);
+        if (catalogLoading)
+          this.modelCatalogPollTimer = window.setTimeout(() => this.loadModelCatalog(), 750);
       },
       error: () => {
         this.modelCatalog.set(null);
@@ -601,6 +613,7 @@ export class AiToolsTabComponent implements OnInit {
       (
         {
           authorized: 'Identifiants reconnus',
+          checking: 'Vérification en cours…',
           pending: 'Autorisation en attente',
           expired: 'Connexion expirée',
           failed: 'Échec de connexion',

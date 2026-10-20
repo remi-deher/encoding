@@ -40,16 +40,15 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
 
     public async Task<IReadOnlyList<AiToolInfo>> ListToolsAsync(CancellationToken ct = default)
     {
-        var ids = new[] { "codex-cli", "claude-cli" };
-        var statuses = await Task.WhenAll(ids.Select(id => GetStatusAsync(id, ct)));
-        return ids.Select((id, index) => new AiToolInfo(id, id == "codex-cli" ? "Codex CLI" : "Claude Code",
-            "Compte CLI sur ce nœud", "CLI", runtime.Find(id) is not null, statuses[index],
-            ["ai-text-generation", "subtitles-translation"])).ToArray();
+        return await Task.WhenAll(new[] { "codex-cli", "claude-cli" }.Select(async id =>
+            new AiToolInfo(id, id == "codex-cli" ? "Codex CLI" : "Claude Code", "Compte CLI sur ce nœud", "CLI",
+                runtime.Find(id) is not null, await GetCachedStatusAsync(id, ct), ["ai-text-generation", "subtitles-translation"])));
     }
 
     public async Task<DeviceAuthStatus> GetStatusAsync(string id, CancellationToken ct = default)
     {
         _ = AiCliRuntime.Executable(id);
+        ct.ThrowIfCancellationRequested();
         if (sessions.TryGetValue(id, out var session))
         {
             if (session.State == "pending" && DateTimeOffset.UtcNow >= session.ExpiresAt)
@@ -63,6 +62,49 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             }
         }
         return await ReadCachedCliStatusAsync(id, ct);
+    }
+
+    private Task<DeviceAuthStatus> GetCachedStatusAsync(string id, CancellationToken ct)
+    {
+        _ = AiCliRuntime.Executable(id);
+        ct.ThrowIfCancellationRequested();
+        if (sessions.TryGetValue(id, out var session))
+        {
+            if (session.State == "pending" && DateTimeOffset.UtcNow >= session.ExpiresAt)
+            { session.State = "expired"; session.Cancellation.Cancel(); }
+            if (session.FinishedAt is { } finishedAt && finishedAt.AddMinutes(5) <= clock.GetUtcNow())
+                ((ICollection<KeyValuePair<string, Session>>)sessions).Remove(new(id, session));
+            else if (session.State == "authorized")
+                return Task.FromResult(new DeviceAuthStatus(id, "authorized", AttemptState: "authorized"));
+            else
+                return Task.FromResult(new DeviceAuthStatus(id, session.State, ErrorMessage: session.Error));
+        }
+        if (runtime.Find(id) is null) return Task.FromResult(new DeviceAuthStatus(id, "unconfigured", ErrorMessage: "Outil non installé."));
+        var entry = statusCache.GetOrAdd(id, _ => new());
+        DeviceAuthStatus? snapshot;
+        var refresh = false;
+        lock (entry.Sync)
+        {
+            snapshot = entry.Status;
+            if (!entry.RefreshQueued && (snapshot is null || entry.ExpiresAt <= clock.GetUtcNow()))
+            {
+                entry.RefreshQueued = true;
+                refresh = true;
+            }
+        }
+        if (refresh) _ = RefreshStatusInBackground(id, entry);
+        return Task.FromResult(snapshot ?? new DeviceAuthStatus(id, "checking", ErrorMessage: "Vérification de la connexion en cours."));
+    }
+
+    public void InvalidateStatus(string id)
+    {
+        if (!statusCache.TryGetValue(id, out var entry)) return;
+        lock (entry.Sync)
+        {
+            entry.Generation++;
+            entry.Status = null;
+            entry.ExpiresAt = DateTimeOffset.MinValue;
+        }
     }
 
     private async Task<DeviceAuthStatus> ReadCachedCliStatusAsync(string id, CancellationToken ct)
@@ -93,6 +135,13 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             return new(id, "failed", ErrorMessage: "Connexion modifiée pendant le contrôle. Actualisez le statut.");
         }
         finally { entry.Gate.Release(); }
+    }
+
+    private async Task RefreshStatusInBackground(string id, StatusCacheEntry entry)
+    {
+        try { await ReadCachedCliStatusAsync(id, CancellationToken.None); }
+        catch (Exception) { }
+        finally { lock (entry.Sync) entry.RefreshQueued = false; }
     }
 
     private async Task<DeviceAuthStatus> CheckCliStatusAsync(string id, CancellationToken ct)
@@ -305,7 +354,9 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             try
             {
                 runtime.SaveClaudeToken(token);
-                var status = await GetStatusAsync("claude-cli", ct);
+                sessions.TryRemove("claude-cli", out _);
+                InvalidateStatus("claude-cli");
+                var status = await ReadCachedCliStatusAsync("claude-cli", ct);
                 if (status.State != "authorized")
                 {
                     log.LogWarning("AI CLI Claude: token validation failed, state={State}, runtimeFailure={RuntimeFailure}", status.State, status.ErrorMessage is not null);
@@ -342,6 +393,7 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             }
             // Legacy markers are never accepted as proof of authentication.
             File.Delete(Path.Combine(runtime.Profile(id), "credentials.json"));
+            InvalidateStatus(id);
             return true;
         }
         finally { gate.Release(); }
@@ -465,5 +517,6 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         public DeviceAuthStatus? Status;
         public DateTimeOffset ExpiresAt;
         public int Generation;
+        public bool RefreshQueued;
     }
 }
