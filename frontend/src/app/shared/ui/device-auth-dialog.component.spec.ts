@@ -29,6 +29,7 @@ describe('DeviceAuthDialogComponent', () => {
           useValue: data ?? {
             toolId: 'codex-cli',
             toolName: 'Codex',
+            attemptId: 'attempt-123',
             prompt: {
               userCode: 'ABCD-12345',
               verificationUri: 'https://auth.openai.com/codex/device',
@@ -57,7 +58,7 @@ describe('DeviceAuthDialogComponent', () => {
     fixture.componentInstance.close();
     expect(close).toHaveBeenCalledWith({ success: false });
     fixture.destroy();
-    expect(cancel).toHaveBeenCalledWith('codex-cli');
+    expect(cancel).toHaveBeenCalledWith('codex-cli', 'attempt-123');
   });
   it('ne confirme que le statut autorisé renvoyé par le serveur', async () => {
     const fixture = await setup('authorized');
@@ -76,6 +77,7 @@ describe('DeviceAuthDialogComponent', () => {
     const fixture = await setup('pending', {
       toolId: 'claude-cli',
       toolName: 'Claude Code',
+      attemptId: 'attempt-claude',
       prompt: {
         userCode: null,
         verificationUri: 'https://claude.com/oauth/authorize?flow=test',
@@ -89,7 +91,7 @@ describe('DeviceAuthDialogComponent', () => {
     );
     fixture.componentInstance.authInput.set('return-code');
     fixture.componentInstance.submitInput();
-    expect(submit).toHaveBeenCalledWith('claude-cli', 'return-code');
+    expect(submit).toHaveBeenCalledWith('claude-cli', 'return-code', 'attempt-claude');
     expect(fixture.componentInstance.inputSubmitted()).toBe(true);
     fixture.destroy();
   });
