@@ -409,6 +409,11 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   expect(before.width).toBeLessThanOrEqual(60);
   const scroller = page.locator('mat-sidenav-content.page-transition-region');
   await scroller.evaluate((element) => {
+    const spacer = document.createElement('div');
+    spacer.dataset.testid = 'assistant-scroll-spacer';
+    spacer.style.height = '1600px';
+    spacer.style.pointerEvents = 'none';
+    element.append(spacer);
     element.scrollTop = element.scrollHeight;
   });
   await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(600);
@@ -439,9 +444,11 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
   await widget.getByRole('button', { name: 'Ressources, fichiers et outils de l’assistant' }).click();
   await widget.getByRole('combobox', { name: 'Type de ressource' }).click();
-  await page.getByRole('option', { name: 'Nœud', exact: true }).click();
+  await page.getByRole('option', { name: 'Nœuds', exact: true }).click();
   await widget.getByRole('combobox', { name: 'Ressource', exact: true }).click();
   await page.getByRole('option', { name: 'Salon', exact: true }).click();
+  await widget.getByRole('button', { name: 'Joindre', exact: true }).click();
+  await widget.getByRole('button', { name: 'Fermer l’espace de travail' }).click();
   await widget.getByRole('textbox', { name: 'Votre question' }).fill('Analyser ce nœud');
   await widget.getByRole('textbox', { name: 'Votre question' }).press('Enter');
   await expect(widget.getByText('Réponse du widget', { exact: true })).toBeVisible();
