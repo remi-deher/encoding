@@ -81,6 +81,8 @@ public sealed class AiAssistantService(
     };
 
     private readonly ConcurrentDictionary<(string OwnerId, Guid RequestId), CancellationTokenSource> activeRequests = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> conversationGates = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> actionGates = new();
     private readonly IDataProtector actionProtector = protection.CreateProtector("Encoding.AiAssistantAction.v1");
     private const string ConversationPrefix = "assistant/conversations/";
     private const string SessionOwnerPrefix = "assistant/session-owner/";
@@ -330,6 +332,26 @@ public sealed class AiAssistantService(
     {
         EnsureAdmin(user);
         var action = ReadAction(request, user, "business-operation");
+        if (action.CoordinatorId is null || action.CoordinatorId == Guid.Empty)
+            throw new ArgumentException("Ce jeton de confirmation ne contient pas de coordinateur valide. Préparez à nouveau l’action.");
+        if (action.CoordinatorId != transport.LocalId)
+        {
+            var ownerId = Guid.Parse(OwnerId(user));
+            var response = await transport.CallNodeAsync<AiAssistantForwardConfirmResponse>(action.CoordinatorId.Value,
+                "assistant-business-operation", new AiAssistantForwardConfirm(ownerId, true, request), TimeSpan.FromMinutes(2), ct);
+            if (response.InvalidRequest) throw new ArgumentException(response.Error ?? "Jeton de confirmation invalide.");
+            if (!response.Applied) throw new InvalidOperationException(response.Error ?? "L’opération n’a pas pu être appliquée.");
+            return true;
+        }
+        var gate = actionGates.GetOrAdd(action.ActionId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try { return await ConfirmBusinessOperationCoreAsync(request, user, action, ct); }
+        finally { gate.Release(); }
+    }
+
+    private async Task<bool> ConfirmBusinessOperationCoreAsync(AiAssistantConfirmActionRequest request,
+        ClaimsPrincipal user, ProtectedAssistantAction action, CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(action.OperationName) || action.OperationArguments is null)
             throw new ArgumentException("L’opération proposée est incomplète.");
         var operation = BusinessOperationCatalog.FindTool(action.OperationName);
@@ -339,10 +361,14 @@ public sealed class AiAssistantService(
             || HashJson(new { Name = action.OperationName, Arguments = action.OperationArguments }) != action.ParameterHash)
             throw new InvalidOperationException("L’opération ou ses paramètres ne sont plus valides.");
         var receiptKey = "assistant/business-operation/" + action.ActionId.ToString("N");
-        if (await store.ReadAsync<bool>(receiptKey, ct) == true) return true;
+        var receipt = await store.ReadAsync<string>(receiptKey, ct);
+        if (receipt == "completed") return true;
+        if (receipt == "started")
+            throw new InvalidOperationException("Le résultat de cette opération est incertain après une interruption. Elle ne sera pas relancée automatiquement.");
+        await store.SaveAsync(receiptKey, "started", ct);
         var result = await mcp.ExecuteOperationAsync(action.OperationName, document.RootElement, isAdmin: true, ct);
         if (result.IsError) throw new InvalidOperationException(result.Content.FirstOrDefault()?.Text ?? "L’opération a échoué.");
-        await store.SaveAsync(receiptKey, true, ct);
+        await store.SaveAsync(receiptKey, "completed", ct);
         await RecordConfirmedActionAsync(action.ActionId, action.OperationName, user, ct);
         return true;
     }
@@ -374,15 +400,15 @@ public sealed class AiAssistantService(
     private sealed record ProtectedAssistantAction(string OwnerId, string Action, Guid ResourceId, int ExpectedVersion,
         Guid ActionId, string? ParameterHash, DateTimeOffset ExpiresAt,
         Guid? RelatedResourceId = null, int? RelatedVersion = null, string? Text = null,
-        string? OperationName = null, string? OperationArguments = null);
+        string? OperationName = null, string? OperationArguments = null, Guid? CoordinatorId = null);
 
     private AiAssistantPreparedAction PrepareAction(ClaimsPrincipal user, string action, Guid resourceId, int expectedVersion,
         string? parameterHash, string summary, Guid? relatedResourceId = null, int? relatedVersion = null, string? text = null,
-        string? operationName = null, string? operationArguments = null)
+        string? operationName = null, string? operationArguments = null, Guid? coordinatorId = null)
     {
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
         var payload = new ProtectedAssistantAction(OwnerId(user), action, resourceId, expectedVersion, Guid.NewGuid(), parameterHash, expiresAt,
-            relatedResourceId, relatedVersion, text, operationName, operationArguments);
+            relatedResourceId, relatedVersion, text, operationName, operationArguments, coordinatorId);
         return new(actionProtector.Protect(JsonSerializer.Serialize(payload)), summary, expiresAt);
     }
 
@@ -610,6 +636,15 @@ public sealed class AiAssistantService(
             throw new ArgumentException("Les fichiers joints dépassent la limite cumulée de 16 Mo.");
         if (attachmentCharacters > MaxAssistantAttachmentCharacters)
             throw new ArgumentException("Le contenu des fichiers joints dépasse la capacité de contexte de l’assistant (1 000 000 caractères).");
+
+        var conversationId = string.IsNullOrWhiteSpace(request.ConversationId)
+            ? $"{transport.LocalId:N}.{request.RequestId:N}"
+            : request.ConversationId;
+        if (!IsSessionId(conversationId)) return null;
+        var gate = conversationGates.GetOrAdd(ownerId + "/" + conversationId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
 
         var isNewConversation = string.IsNullOrWhiteSpace(request.ConversationId);
         AiAssistantConversation conversation;
@@ -993,6 +1028,8 @@ public sealed class AiAssistantService(
             observedModel,
             result.ExecutorNodeId,
             actionProposal);
+        }
+        finally { gate.Release(); }
     }
 
     private Task<AiAssistantPreparedAction?> PrepareAssistantActionAsync(
@@ -1027,7 +1064,7 @@ public sealed class AiAssistantService(
         var preview = PreviewOperationArguments(arguments);
         return Task.FromResult<AiAssistantPreparedAction?>(PrepareAction(user, "business-operation", Guid.Empty, 0,
             hash, $"{descriptor.Description}\n\nParamètres proposés : {preview}",
-            operationName: action.Name, operationArguments: serialized));
+            operationName: action.Name, operationArguments: serialized, coordinatorId: transport.LocalId));
     }
 
     private static string PreviewOperationArguments(JsonElement arguments)

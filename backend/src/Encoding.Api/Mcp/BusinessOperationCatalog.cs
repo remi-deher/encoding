@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Encoding.Api.Mcp;
 
 /// <summary>Metadata for a business operation exposed through the REST, MCP and assistant surfaces.</summary>
@@ -40,9 +42,9 @@ public static class BusinessOperationCatalog
         new("get_library_processing", "Consulte la surveillance automatique et les limites de traitement d’une bibliothèque.",
             new { type = "object", properties = new { libraryId = new { type = "string" } }, required = new[] { "libraryId" } }),
         new("save_library_processing", "Configure la surveillance automatique et les limites de traitement d’une bibliothèque. Nécessite les droits administrateur.",
-            new { type = "object", properties = new { libraryId = new { type = "string" }, watchEnabled = new { type = "boolean" }, scanIntervalSeconds = new { type = "integer" }, maxConcurrentTasks = new { type = "integer" }, nodeLimits = new { type = "array" }, expectedRevision = new { type = "integer" } }, required = new[] { "libraryId", "watchEnabled", "scanIntervalSeconds", "nodeLimits", "expectedRevision" } }),
+            new { type = "object", additionalProperties = false, properties = new { libraryId = new { type = "string", format = "uuid" }, watchEnabled = new { type = "boolean" }, scanIntervalSeconds = new { type = "integer", minimum = 15, maximum = 86400 }, maxConcurrentTasks = new { type = new[] { "integer", "null" }, minimum = 1, maximum = 1000 }, nodeLimits = new { type = "array", maxItems = 1000, items = new { type = "object", additionalProperties = false, properties = new { nodeId = new { type = "string", format = "uuid" }, maxConcurrentTasks = new { type = "integer", minimum = 1, maximum = 1000 } }, required = new[] { "nodeId", "maxConcurrentTasks" } } }, expectedRevision = new { type = "integer", minimum = 0 } }, required = new[] { "libraryId", "watchEnabled", "scanIntervalSeconds", "nodeLimits", "expectedRevision" } }),
         new("configure_library_node_access", "Configure les modes d’accès direct, indisponible ou par transfert, avec les droits de lecture et d’écriture par nœud. Nécessite les droits administrateur.",
-            new { type = "object", properties = new { libraryId = new { type = "string" }, nodes = new { type = "array", description = "Accès par nœud : nodeId, mode (direct|unsupported|transfer), localPath, canRead, canWrite, transferSourceNodeId, isEnabled." } }, required = new[] { "libraryId", "nodes" } }),
+            new { type = "object", additionalProperties = false, properties = new { libraryId = new { type = "string", format = "uuid" }, nodes = new { type = "array", maxItems = 2048, description = "Accès par nœud : nodeId, mode (direct|unsupported|transfer), localPath, canRead, canWrite, transferSourceNodeId, isEnabled.", items = new { type = "object", additionalProperties = false, properties = new { nodeId = new { type = "string", format = "uuid" }, mode = new { type = "string", @enum = new[] { "direct", "unsupported", "transfer" } }, localPath = new { type = new[] { "string", "null" }, maxLength = 4096 }, canRead = new { type = "boolean" }, canWrite = new { type = "boolean" }, transferSourceNodeId = new { type = new[] { "string", "null" }, format = "uuid" }, isEnabled = new { type = "boolean" } }, required = new[] { "nodeId", "mode", "canRead", "canWrite" } } } }, required = new[] { "libraryId", "nodes" } }),
         new("set_library_activation", "Active ou désactive une bibliothèque. Nécessite les droits administrateur.",
             new { type = "object", properties = new { libraryId = new { type = "string" }, isActive = new { type = "boolean" } }, required = new[] { "libraryId", "isActive" } }),
         new("assign_library_flow", "Affecte ou retire une version publiée d’un flow à une bibliothèque. Nécessite les droits administrateur.",
@@ -59,7 +61,7 @@ public static class BusinessOperationCatalog
         new("get_node_group", "Consulte les critères et membres d’un groupe de nœuds.",
             new { type = "object", properties = new { id = new { type = "string" } }, required = new[] { "id" } }),
         new("save_node_group", "Crée ou modifie un groupe manuel ou automatique. Nécessite les droits administrateur.",
-            new { type = "object", properties = new { id = new { type = "string" }, name = new { type = "string" }, description = new { type = "string" }, mode = new { type = "string", @enum = new[] { "manual", "automatic" } }, criteria = new { type = "object" }, labels = new { type = "object" }, nodeIds = new { type = "array", items = new { type = "string" } } }, required = new[] { "name", "description", "mode", "criteria", "labels", "nodeIds" } }),
+            new { type = "object", additionalProperties = false, properties = new { id = new { type = "string", format = "uuid" }, name = new { type = "string", minLength = 1, maxLength = 128 }, description = new { type = "string", maxLength = 2000 }, mode = new { type = "string", @enum = new[] { "manual", "automatic" } }, criteria = new { type = "object", additionalProperties = false, properties = new { roles = new { type = "array", maxItems = 2, items = new { type = "string", @enum = new[] { "server", "worker" } } }, operatingSystem = new { type = new[] { "string", "null" }, maxLength = 128 }, architecture = new { type = new[] { "string", "null" }, maxLength = 128 }, minimumMemoryMb = new { type = new[] { "integer", "null" }, minimum = 1 }, requiredToolIds = new { type = "array", maxItems = 128, items = new { type = "string", maxLength = 128 } }, minimumConcurrentTasks = new { type = new[] { "integer", "null" }, minimum = 1 }, minimumProcessorCount = new { type = new[] { "integer", "null" }, minimum = 1 }, requiredEncoders = new { type = "array", maxItems = 128, items = new { type = "string", maxLength = 128 } } } }, labels = new { type = "object", maxProperties = 128, additionalProperties = new { type = new[] { "string", "null" }, maxLength = 1024 } }, nodeIds = new { type = "array", maxItems = 2048, items = new { type = "string", format = "uuid" } } }, required = new[] { "name", "description", "mode", "criteria", "labels", "nodeIds" } }),
         new("delete_node_group", "Supprime un groupe non utilisé par un flow. Nécessite les droits administrateur.",
             new { type = "object", properties = new { id = new { type = "string" } }, required = new[] { "id" } }),
         new("get_node_activity", "Consulte la capacité, la charge et l’activité récente d’un nœud.",
@@ -71,7 +73,7 @@ public static class BusinessOperationCatalog
         new("get_node_processing", "Consulte la capacité de traitement et la plage horaire d’un nœud.",
             new { type = "object", properties = new { nodeId = new { type = "string" } }, required = new[] { "nodeId" } }),
         new("save_node_processing", "Configure la capacité concurrente et la plage horaire d’un nœud. Nécessite les droits administrateur.",
-            new { type = "object", properties = new { nodeId = new { type = "string" }, maxConcurrentTasks = new { type = "integer" }, schedule = new { type = "object" }, expectedRevision = new { type = "integer" } }, required = new[] { "nodeId", "expectedRevision" } }),
+            new { type = "object", additionalProperties = false, properties = new { nodeId = new { type = "string", format = "uuid" }, maxConcurrentTasks = new { type = new[] { "integer", "null" }, minimum = 1, maximum = 1000 }, schedule = new { type = new[] { "object", "null" }, additionalProperties = false, properties = new { enabled = new { type = "boolean" }, timeZone = new { type = "string", minLength = 1, maxLength = 64 }, slots = new { type = "string", minLength = 672, maxLength = 672, pattern = "^[01]{672}$" } }, required = new[] { "enabled", "timeZone", "slots" } }, expectedRevision = new { type = "integer", minimum = 0 } }, required = new[] { "nodeId", "expectedRevision" } }),
         new("save_node_identity", "Modifie le nom convivial et les étiquettes déclarées d’un nœud. Nécessite les droits administrateur.",
             new { type = "object", properties = new { nodeId = new { type = "string" }, displayName = new { type = "string" }, labels = new { type = "object" } }, required = new[] { "nodeId", "labels" } }),
         new(
@@ -149,14 +151,18 @@ public static class BusinessOperationCatalog
             new
             {
                 type = "object",
+                additionalProperties = false,
                 properties = new
                 {
-                    id = new { type = "string", description = "Identifiant UUID facultatif du flow." },
-                    name = new { type = "string", description = "Nom du flow." },
-                    type = new { type = "string", description = "Type de média du flow (video, image, music, subtitles, generic).", @default = "video" },
+                    id = new { type = "string", format = "uuid", description = "Identifiant UUID facultatif du flow." },
+                    name = new { type = "string", minLength = 1, maxLength = 128, description = "Nom du flow." },
+                    type = new { type = "string", @enum = new[] { "video", "image", "music", "subtitles" }, description = "Type de média du flow.", @default = "video" },
+                    mediaType = new { type = "string", @enum = new[] { "video", "image", "music", "subtitles" } },
+                    formatVersion = new { type = "integer", minimum = 1, maximum = 1 },
+                    version = new { type = "integer", minimum = 1 },
                     publish = new { type = "boolean", description = "Si true, valide et publie le flow immédiatement en version 1.", @default = true },
-                    nodes = new { type = "array", description = "Liste des nœuds du flow avec id, component (ou componentId), name et configuration." },
-                    connections = new { type = "array", description = "Liste des connexions orientées entre sorties et entrées de nœuds." }
+                    nodes = new { type = "array", minItems = 1, maxItems = 1000, description = "Liste des nœuds du flow avec id, component, name facultatif et configuration.", items = new { type = "object", additionalProperties = false, properties = new { id = new { type = "string", minLength = 1, maxLength = 256 }, name = new { type = new[] { "string", "null" }, maxLength = 128 }, component = new { type = new[] { "string", "object" }, maxLength = 256, additionalProperties = false, properties = new { id = new { type = "string", maxLength = 256 }, componentId = new { type = "string", maxLength = 256 }, pluginId = new { type = "string", maxLength = 128 }, pluginVersion = new { type = "string", maxLength = 64 }, componentVersion = new { type = "string", maxLength = 64 }, configurationSchemaVersion = new { type = "integer", minimum = 1 } } }, configuration = new { type = "object", maxProperties = 256, additionalProperties = true } }, required = new[] { "component" } } },
+                    connections = new { type = "array", maxItems = 4000, description = "Liste des connexions orientées entre sorties et entrées de nœuds.", items = new { type = "object", additionalProperties = false, properties = new { id = new { type = "string", minLength = 1, maxLength = 256 }, sourceNodeId = new { type = "string", minLength = 1, maxLength = 256 }, sourceOutputId = new { type = "string", minLength = 1, maxLength = 256 }, targetNodeId = new { type = "string", minLength = 1, maxLength = 256 } }, required = new[] { "sourceNodeId", "targetNodeId" } } }
                 },
                 required = new[] { "nodes", "connections" }
             }
@@ -276,16 +282,18 @@ public static class BusinessOperationCatalog
                     targets = new
                     {
                         type = "array",
+                        maxItems = 64,
                         description = "Liste des cibles d'encodage (encoderId, quality, preset, priority).",
                         items = new
                         {
                             type = "object",
+                            additionalProperties = false,
                             properties = new
                             {
-                                encoderId = new { type = "string" },
-                                quality = new { type = "number" },
-                                preset = new { type = "string" },
-                                priority = new { type = "integer" }
+                                encoderId = new { type = "string", minLength = 1, maxLength = 128 },
+                                quality = new { type = "number", minimum = 0, maximum = 100 },
+                                preset = new { type = "string", minLength = 1, maxLength = 128 },
+                                priority = new { type = "integer", minimum = 0, maximum = 1000 }
                             },
                             required = new[] { "encoderId", "quality", "preset", "priority" }
                         }
@@ -512,7 +520,7 @@ public static class BusinessOperationCatalog
                 !mutation,
                 mutation,
                 !mutation,
-                tool.InputSchema,
+                CompleteInputSchema(tool.InputSchema),
                 RequiresConfirmation: mutation);
         }).ToArray();
 
@@ -524,24 +532,120 @@ public static class BusinessOperationCatalog
         var operation = FindTool(name);
         if (operation is null || arguments.ValueKind != System.Text.Json.JsonValueKind.Object) return false;
         using var schema = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(operation.InputSchema));
-        var root = schema.RootElement;
-        var properties = root.GetProperty("properties");
-        var supplied = arguments.EnumerateObject().ToArray();
-        if (supplied.Select(item => item.Name).Distinct(StringComparer.Ordinal).Count() != supplied.Length) return false;
-        if (supplied.Any(item => !properties.TryGetProperty(item.Name, out _))) return false;
-        if (root.TryGetProperty("required", out var required)
-            && required.EnumerateArray().Any(item => !arguments.TryGetProperty(item.GetString()!, out _))) return false;
-        foreach (var item in supplied)
+        return MatchesSchema(arguments, schema.RootElement, rejectUnknownProperties: true);
+    }
+
+    private static JsonNode CompleteInputSchema(object inputSchema)
+    {
+        var node = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(inputSchema))!.AsObject();
+        CompleteSchemaNode(node, isRoot: true);
+        return node;
+    }
+
+    private static void CompleteSchemaNode(JsonObject schema, bool isRoot = false)
+    {
+        var type = schema["type"] is JsonValue typeValue ? typeValue.GetValue<string>() : null;
+        if (type == "array")
         {
-            var definition = properties.GetProperty(item.Name);
-            if (definition.TryGetProperty("type", out var type) && !MatchesType(item.Value, type.GetString())) return false;
-            if (definition.TryGetProperty("enum", out var values)
-                && !values.EnumerateArray().Any(value => value.ValueKind == item.Value.ValueKind && value.ToString() == item.Value.ToString())) return false;
-            if (item.Value.ValueKind == System.Text.Json.JsonValueKind.Number
-                && item.Value.TryGetDecimal(out var numericValue))
+            schema["maxItems"] ??= 1000;
+            schema["items"] ??= new JsonObject();
+        }
+        if (type == "string") schema["maxLength"] ??= 65536;
+        if (type == "object") schema["maxProperties"] ??= 256;
+        if (type == "object" && (isRoot || schema["properties"] is JsonObject) && schema["additionalProperties"] is null)
+            schema["additionalProperties"] = false;
+
+        if (schema["properties"] is JsonObject properties)
+            foreach (var (name, node) in properties)
             {
-                if (definition.TryGetProperty("minimum", out var minimum) && numericValue < minimum.GetDecimal()) return false;
-                if (definition.TryGetProperty("maximum", out var maximum) && numericValue > maximum.GetDecimal()) return false;
+                if (node is not JsonObject property) continue;
+                if (name is "libraryId" or "flowId" or "nodeId" or "executionId" or "sourceFlowId" or "transferSourceNodeId"
+                    or "profileId" or "packId" or "templateId" or "resourceId" || isRoot && name == "id")
+                    property["format"] ??= "uuid";
+                if (name == "nodeIds" && property["items"] is JsonObject nodeIdsItem)
+                    nodeIdsItem["format"] ??= "uuid";
+                CompleteSchemaNode(property);
+            }
+        if (schema["items"] is JsonObject items)
+            CompleteSchemaNode(items);
+        if (schema["additionalProperties"] is JsonObject additionalProperties)
+            CompleteSchemaNode(additionalProperties);
+    }
+
+    private static bool MatchesSchema(System.Text.Json.JsonElement value, System.Text.Json.JsonElement schema, bool rejectUnknownProperties = false)
+    {
+        if (schema.TryGetProperty("type", out var type))
+        {
+            var matches = type.ValueKind == System.Text.Json.JsonValueKind.Array
+                ? type.EnumerateArray().Any(item => MatchesType(value, item.GetString()))
+                : MatchesType(value, type.GetString());
+            if (!matches) return false;
+        }
+
+        if (schema.TryGetProperty("enum", out var allowed)
+            && !allowed.EnumerateArray().Any(item => JsonValuesEqual(value, item))) return false;
+
+        if (value.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            var text = value.GetString()!;
+            if (schema.TryGetProperty("minLength", out var minLength) && text.Length < minLength.GetInt32()) return false;
+            if (schema.TryGetProperty("maxLength", out var maxLength) && text.Length > maxLength.GetInt32()) return false;
+            if (schema.TryGetProperty("format", out var format) && format.GetString() == "uuid"
+                && (!Guid.TryParse(text, out var id) || id == Guid.Empty)) return false;
+            if (schema.TryGetProperty("pattern", out var pattern)
+                && !System.Text.RegularExpressions.Regex.IsMatch(text, pattern.GetString()!,
+                    System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))) return false;
+            if (schema.TryGetProperty("minLength", out _) && string.IsNullOrWhiteSpace(text)) return false;
+        }
+
+        if (value.ValueKind == System.Text.Json.JsonValueKind.Number)
+        {
+            if (schema.TryGetProperty("type", out var numericType) &&
+                (numericType.ValueKind == System.Text.Json.JsonValueKind.String && numericType.GetString() == "integer"
+                 || numericType.ValueKind == System.Text.Json.JsonValueKind.Array && numericType.EnumerateArray().Any(item => item.GetString() == "integer"))
+                && !value.TryGetInt64(out _)) return false;
+            if (!value.TryGetDecimal(out var numericValue)) return false;
+            if (schema.TryGetProperty("minimum", out var minimum) && numericValue < minimum.GetDecimal()) return false;
+            if (schema.TryGetProperty("maximum", out var maximum) && numericValue > maximum.GetDecimal()) return false;
+        }
+
+        if (value.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            var items = value.EnumerateArray().ToArray();
+            if (schema.TryGetProperty("minItems", out var minItems) && items.Length < minItems.GetInt32()) return false;
+            if (schema.TryGetProperty("maxItems", out var maxItems) && items.Length > maxItems.GetInt32()) return false;
+            if (schema.TryGetProperty("items", out var itemSchema)
+                && items.Any(item => !MatchesSchema(item, itemSchema))) return false;
+        }
+
+        if (value.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            var supplied = value.EnumerateObject().ToArray();
+            if (supplied.Select(item => item.Name).Distinct(StringComparer.Ordinal).Count() != supplied.Length) return false;
+            if (schema.TryGetProperty("maxProperties", out var maxProperties) && supplied.Length > maxProperties.GetInt32()) return false;
+            if (schema.TryGetProperty("required", out var required)
+                && required.EnumerateArray().Any(item => !value.TryGetProperty(item.GetString()!, out _))) return false;
+            if (schema.TryGetProperty("properties", out var properties))
+            {
+                foreach (var property in supplied)
+                {
+                    if (properties.TryGetProperty(property.Name, out var definition))
+                    {
+                        if (!MatchesSchema(property.Value, definition)) return false;
+                    }
+                    else if (schema.TryGetProperty("additionalProperties", out var additional))
+                    {
+                        if (additional.ValueKind == System.Text.Json.JsonValueKind.False
+                            || additional.ValueKind == System.Text.Json.JsonValueKind.Object && !MatchesSchema(property.Value, additional)) return false;
+                    }
+                    else if (rejectUnknownProperties || properties.EnumerateObject().Any()) return false;
+                }
+            }
+            else if (schema.TryGetProperty("additionalProperties", out var additionalProperties))
+            {
+                if (additionalProperties.ValueKind == System.Text.Json.JsonValueKind.False && supplied.Length > 0) return false;
+                if (additionalProperties.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && supplied.Any(property => !MatchesSchema(property.Value, additionalProperties))) return false;
             }
         }
         return true;
@@ -549,6 +653,7 @@ public static class BusinessOperationCatalog
 
     private static bool MatchesType(System.Text.Json.JsonElement value, string? type) => type switch
     {
+        "null" => value.ValueKind == System.Text.Json.JsonValueKind.Null,
         "string" => value.ValueKind == System.Text.Json.JsonValueKind.String,
         "integer" => value.ValueKind == System.Text.Json.JsonValueKind.Number && value.TryGetInt64(out _),
         "number" => value.ValueKind == System.Text.Json.JsonValueKind.Number,
@@ -557,6 +662,9 @@ public static class BusinessOperationCatalog
         "array" => value.ValueKind == System.Text.Json.JsonValueKind.Array,
         _ => false
     };
+
+    private static bool JsonValuesEqual(System.Text.Json.JsonElement left, System.Text.Json.JsonElement right) =>
+        left.ValueKind == right.ValueKind && left.ToString() == right.ToString();
 
     public static bool IsAssistantRead(string name) => FindTool(name) is { ReadOnly: true, AvailableToAssistant: true };
 
@@ -585,7 +693,7 @@ public static class BusinessOperationCatalog
             "cancel-execution" => "Demande l’annulation d’une exécution, après confirmation.",
             "publish-flow" => "Publie le brouillon d’un flow, après confirmation.",
             _ => "Supprime un flow, après confirmation."
-        }, false, true, true, schema, true);
+        }, false, true, true, CompleteInputSchema(schema), true);
     }
 
     private static string DomainFor(string name) => name switch

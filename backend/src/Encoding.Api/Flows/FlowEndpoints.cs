@@ -17,6 +17,48 @@ public static class FlowEndpoints
             return await repository.GetAsync(id, null, ct) is { } saved ? Results.Ok(saved) : ApiProblem.NotFound();
         }).WithName("GetFlowForEdit");
 
+        flows.MapGet("/{id:guid}/preflight", async (Guid id, FlowRepository repository, FlowDefinitionValidator validator,
+            Encoding.Api.Executions.RuntimeEligibility eligibility, Encoding.Api.Nodes.NodeRepository nodes,
+            Encoding.Api.Nodes.NodePresenceOptions presence, CancellationToken ct) =>
+        {
+            var draft = await repository.DraftAsync(id, ct);
+            var flow = draft?.Definition ?? (await repository.GetAsync(id, null, ct))?.Definition;
+            if (flow is null) return ApiProblem.NotFound("Flow introuvable.");
+            var validation = validator.Validate(flow);
+            var availableWorkers = (await nodes.ListAsync(presence.OfflineAfter, ct))
+                .Where(node => node.Status == Encoding.Contracts.Nodes.NodePresenceStatus.Online
+                    && node.Lifecycle == Encoding.Contracts.Nodes.NodeLifecycle.Online
+                    && node.Roles.Contains(Encoding.Contracts.Nodes.NodeRole.Worker))
+                .ToArray();
+            var compatible = validation.IsValid
+                ? availableWorkers.Where(node => eligibility.CanRun(flow, node.Capabilities, node.Id,
+                    identity: new Encoding.Contracts.Nodes.NodeIdentityResponse(node.Id, node.DisplayName,
+                        node.Labels ?? new Dictionary<string, string?>(), node.Labels ?? new Dictionary<string, string?>(), []))).ToArray()
+                : [];
+            return Results.Ok(new
+            {
+                flowId = flow.Id,
+                draftRevision = draft?.DraftRevision,
+                publishedVersion = draft?.PublishedVersion ?? flow.Version,
+                graph = new { valid = validation.IsValid, issues = validation.Issues },
+                simulation = new { available = true, status = "not-run", requiredInput = "Un fichier de la bibliothèque cible est nécessaire." },
+                execution = new
+                {
+                    workerCompatible = compatible.Length > 0,
+                    status = !validation.IsValid ? "invalid-graph" : compatible.Length > 0 ? "worker-compatible" : "no-compatible-worker",
+                    checks = new
+                    {
+                        workerToolsAndEncoders = "observed",
+                        libraryAccess = "requires-target-library",
+                        writePermissions = "not-evaluated",
+                        aiProvider = "not-evaluated",
+                    },
+                    compatibleWorkers = compatible.Select(node => new { node.Id, node.Name, node.Capabilities, node.Inventory }),
+                    observedAt = DateTimeOffset.UtcNow,
+                },
+            });
+        }).AllowViewer().WithName("PreflightFlowExecution");
+
         flows.MapPut("/{id:guid}/draft", async (Guid id, SaveFlowDraftRequest request, FlowRepository repository, FlowDefinitionValidator validator, CancellationToken ct) =>
         {
             var validation = validator.ValidateDraft(request.Definition);

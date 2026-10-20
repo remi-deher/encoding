@@ -5,6 +5,9 @@ using Encoding.Api.Nodes;
 
 namespace Encoding.Api.Tools;
 
+public sealed record AiAssistantForwardConfirm(Guid OwnerId, bool IsAdmin, AiAssistantConfirmActionRequest Request);
+public sealed record AiAssistantForwardConfirmResponse(bool Applied, string? Error = null, bool InvalidRequest = false);
+
 /// <summary>A stable session coordinator owns writes; inference may move between connected peers without moving secrets.</summary>
 public sealed class AiClusterService(AiClusterTransport transport, AiClusterStore store, DeviceCodeAuthService auth,
     AiSettingsService settings, AiClientFactory factory, IConfiguration configuration, LocalNodeRegistry localNode, AiQuotaService? quotaService = null, AiModelCatalogService? modelCatalog = null, IServiceProvider? services = null)
@@ -124,6 +127,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         "quotas" => await LocalQuotasAsync(ct),
         "assistant-cancel" => CancelForwardedAssistant(value.Deserialize<AiAssistantForwardCancel>()!),
         "assistant-message" => await ForwardAssistantAsync(value.Deserialize<AiAssistantForwardRequest>()!, ct),
+        "assistant-business-operation" => await ForwardBusinessOperationAsync(value.Deserialize<AiAssistantForwardConfirm>()!, ct),
         "models" => await LocalModelsAsync(value.TryGetProperty("Refresh", out var refresh) && refresh.GetBoolean(), ct),
         "generate" => await GenerateAsync(value.Deserialize<AiGenerateRequest>()!.Provider, value.Deserialize<AiGenerateRequest>()!.Prompt, ct, allowModelChanges: value.Deserialize<AiGenerateRequest>()!.AllowModelChanges),
         "execute" => await ExecuteAsync(value.Deserialize<AiExecuteRequest>()!, ct),
@@ -146,10 +150,43 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             new(System.Security.Claims.ClaimTypes.NameIdentifier, request.OwnerId.ToString())], "cluster-ai"));
         return services.GetRequiredService<AiAssistantService>().CancelRequest(request.RequestId, user);
     }
+    private async Task<AiAssistantForwardConfirmResponse> ForwardBusinessOperationAsync(AiAssistantForwardConfirm request, CancellationToken ct)
+    {
+        if (request.OwnerId == Guid.Empty || !request.IsAdmin || services is null)
+            throw new ArgumentException("Identité ou autorisation indisponible.");
+        var user = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([
+            new(System.Security.Claims.ClaimTypes.NameIdentifier, request.OwnerId.ToString()),
+            new(System.Security.Claims.ClaimTypes.Role, "admin")], "cluster-ai"));
+        try
+        {
+            var applied = await services.GetRequiredService<AiAssistantService>()
+                .ConfirmBusinessOperationAsync(request.Request, user, ct);
+            return new(applied);
+        }
+        catch (ArgumentException ex) { return new(false, ex.Message, true); }
+        catch (InvalidOperationException ex) { return new(false, ex.Message); }
+    }
     public async Task<AiSessionState?> GetSessionAsync(string id, CancellationToken ct)
     {
         _ = Owner(id);
         return await store.ReadAsync<AiSessionState>("session/" + id, ct);
+    }
+
+    public async Task CleanupRuntimeSubtitleSessionsAsync(Guid executionId, Guid? invocationId, CancellationToken ct)
+    {
+        var prefix = $"runtime-ai/subtitles/{executionId:N}/" + (invocationId is { } invocation ? $"{invocation:N}/" : "");
+        string? cursor = null;
+        while (true)
+        {
+            var page = await store.ReadPrefixPageAsync<string>(prefix, cursor, 500, ct);
+            foreach (var (key, sessionId) in page)
+            {
+                await store.DeleteAsync(key["ai/".Length..], ct);
+                if (!string.IsNullOrWhiteSpace(sessionId)) await store.DeleteAsync("session/" + sessionId, ct);
+            }
+            if (page.Count < 500) break;
+            cursor = page[^1].Key;
+        }
     }
     public async Task<AiSessionPage> ListSessionsAsync(int offset, CancellationToken ct)
     {

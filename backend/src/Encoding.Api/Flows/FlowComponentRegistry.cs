@@ -116,9 +116,6 @@ public sealed class FlowComponentRegistry
 
     private static readonly Dictionary<string, (string PluginId, string ComponentId)> LegacyAliases = new(StringComparer.OrdinalIgnoreCase)
     {
-        // AI plugin
-        ["base-ai-translate-subtitles"] = ("ai", "ai-translate-subtitles"),
-        ["base-ai-metadata-enricher"] = ("ai", "ai-metadata-enricher"),
         // MKV plugin
         ["base-remux-matroska"] = ("mkv", "mkv-remux-matroska"),
         ["base-remove-tracks"] = ("mkv", "mkv-remove-tracks"),

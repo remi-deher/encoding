@@ -1,10 +1,14 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using Encoding.Api.Flows;
 using Encoding.Api.Infrastructure;
 using Encoding.Api.Tools;
 using Encoding.Api.Nodes;
+using Encoding.Contracts.Flows;
 using Encoding.Contracts.Tools;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -86,6 +90,33 @@ public sealed class AiClusterTests
         Assert.Contains((await mesh.First.Service.ListSessionsAsync(0, Ct)).Items, item => item.Id == id && item.Status == "running");
         Assert.Empty((await mesh.First.Service.ListSessionsAsync(50, Ct)).Items);
         await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.ListSessionsAsync(-1, Ct));
+    }
+
+    [Fact]
+    public async Task SessionHistorySkipsTombstonesAfterExpiration()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var generated = await mesh.First.Service.GenerateAsync("openai", new("instructions", "question"), Ct);
+        Assert.True(generated.Success, generated.ErrorMessage);
+
+        await mesh.First.Store.DeleteAsync("session/" + generated.SessionId, Ct);
+
+        Assert.DoesNotContain((await mesh.First.Service.ListSessionsAsync(0, Ct)).Items,
+            item => item.Id == generated.SessionId);
+    }
+
+    [Fact]
+    public async Task RegisterPrefixPagesUseAnExclusiveStableCursor()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        foreach (var key in new[] { "a", "b", "c" })
+            await mesh.First.Store.SaveAsync("page-test/" + key, key, Ct);
+
+        var first = await mesh.First.Store.ReadPrefixPageAsync<string>("page-test/", null, 2, Ct);
+        var second = await mesh.First.Store.ReadPrefixPageAsync<string>("page-test/", first[^1].Key, 2, Ct);
+
+        Assert.Equal(new[] { "a", "b" }, first.Select(item => item.Value));
+        Assert.Equal("c", Assert.Single(second).Value);
     }
 
     [Fact]
@@ -238,6 +269,7 @@ public sealed class AiClusterTests
     public async Task AssistantPersistsPerTurnSelectionsAndObservedModelWithoutRewritingOldTurns()
     {
         await using var mesh = await Mesh.CreateAsync();
+        mesh.First.Settings.UpdateSettings(new(OpenAiApiKey: "first-test-key"));
         mesh.Factory.ReportModel = true;
         var resourceId = Guid.NewGuid();
         var nodes = new NodeRepository(mesh.First.Database.Db);
@@ -256,7 +288,24 @@ public sealed class AiClusterTests
         var first = await assistant.SendAsync(request, user, Ct);
         Assert.True(first!.Success, first.ErrorMessage);
         Assert.Equal("resolved-test-model", first.ActualModel);
+        Assert.Equal(mesh.Second.Identity.PeerId, first.Selection!.NodeId);
+        Assert.Equal(mesh.Second.Identity.PeerId, first.ExecutorNodeId);
+        var plannerRequestId = DerivePlannerRequestId(first.Conversation.Id, request.RequestId);
+        var plannerSessionId = $"{first.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}";
+        var plannerSession = await mesh.First.Service.GetSessionAsync(plannerSessionId, Ct);
+        Assert.Equal(mesh.Second.Identity.PeerId, Assert.Single(plannerSession!.Turns).Selection!.NodeId);
+        Assert.Equal(mesh.Second.Identity.PeerId, plannerSession.Turns[0].ExecutorNodeId);
+        Assert.True(await assistant.IsAssistantConversationAsync(first.Conversation.Id, Ct));
+        Assert.True(await assistant.IsAssistantConversationAsync(plannerSessionId, Ct));
+        Assert.DoesNotContain((await mesh.First.Service.ListSessionsAsync(0, Ct)).Items,
+            item => item.Id == first.Conversation.Id || item.Id == plannerSessionId);
+        var otherAdmin = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([
+            new(System.Security.Claims.ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new(System.Security.Claims.ClaimTypes.Role, "admin")], "test"));
+        Assert.Null(await assistant.GetAsync(first.Conversation.Id, otherAdmin, Ct));
         await Assert.ThrowsAsync<ArgumentException>(() => assistant.SendAsync(request with { Model = "other-model" }, user, Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => assistant.SendAsync(new(Guid.NewGuid(), "unknown node",
+            Provider: "openai", Model: "gpt-4o-mini", NodeId: Guid.NewGuid()), user, Ct));
         var second = await assistant.SendAsync(new(Guid.NewGuid(), "second question", ConversationId: first.Conversation.Id,
             Provider: "openai", Model: "other-model", NodeId: mesh.Second.Identity.PeerId), user, Ct);
         Assert.True(second!.Success, second.ErrorMessage);
@@ -278,11 +327,135 @@ public sealed class AiClusterTests
         var sending = assistant.SendAsync(new(cancelledRequest, "third question", ConversationId: first.Conversation.Id,
             Provider: "openai", Model: "other-model", NodeId: mesh.Second.Identity.PeerId), user, Ct);
         await mesh.Factory.InferenceStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.True(await assistant.CancelRequestAsync(cancelledRequest, user, Ct));
+        Assert.True(await mesh.Second.Transport.CallNodeAsync<bool>(mesh.First.Identity.PeerId, "assistant-cancel",
+            new AiAssistantForwardCancel(Guid.Parse(user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value), cancelledRequest),
+            TimeSpan.FromSeconds(15), Ct));
         Assert.False((await sending)!.Success);
         Assert.Equal(2, (await assistant.GetAsync(first.Conversation.Id, user, Ct))!.Turns.Count);
 
+        mesh.Factory.BlockInferences = false;
+        var forwarded = await mesh.Second.Transport.CallNodeAsync<AiAssistantForwardResponse>(mesh.First.Identity.PeerId,
+            "assistant-message", new AiAssistantForwardRequest(
+                new(Guid.NewGuid(), "continued from another API node", ConversationId: first.Conversation.Id),
+                Guid.Parse(user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value), true),
+            TimeSpan.FromMinutes(2), Ct);
+        Assert.Null(forwarded.Error);
+        Assert.True(forwarded.Result!.Success, forwarded.Result.ErrorMessage);
+        Assert.Equal(3, (await assistant.GetAsync(first.Conversation.Id, user, Ct))!.Turns.Count);
+
     }
+
+    [Fact]
+    public async Task FlowRepairPreservesSessionScopeAndUsesDeterministicRepairRequestId()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var (registry, validator, _) = Harness.Services();
+        mesh.Factory.EnqueueReplies("not JSON", ValidFlowJson(registry));
+        using var services = new ServiceCollection().AddSingleton(mesh.First.Service).BuildServiceProvider();
+        var factory = new AiClientFactory(mesh.First.Configuration, mesh.Factory, mesh.First.Settings,
+            mesh.First.Profile.Runtime, services);
+        var generator = new FlowAiGeneratorService(factory, new FlowCatalogPromptBuilder(registry), validator);
+        var requestId = Guid.NewGuid();
+        var sessionId = $"{mesh.First.Identity.PeerId:N}.{Guid.NewGuid():N}";
+
+        var result = await generator.GenerateFlowAsync(new FlowAiGenerateRequest("video", "test flow", "openai", sessionId, requestId));
+
+        Assert.True(result.Success, result.Explanation);
+        Assert.Equal(sessionId, result.SessionId);
+        Assert.Equal(requestId, result.RequestId);
+        var session = await mesh.First.Service.GetSessionAsync(sessionId, Ct);
+        Assert.Equal(new AiSessionScope("flow-create"), session!.Scope);
+        Assert.Equal(2, session.Turns.Count);
+        Assert.Equal(requestId, session.Turns[0].RequestId);
+        Assert.Equal(DeriveRepairRequestId(requestId), session.Turns[1].RequestId);
+        Assert.All(session.Turns, turn => Assert.Equal(mesh.Second.Identity.PeerId, turn.ExecutorNodeId));
+    }
+
+    [Fact]
+    public async Task FailedFlowRepairDoesNotReturnValidationIssuesFromTheFirstOutput()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var (registry, validator, _) = Harness.Services();
+        var unavailableComponentFlow = new FlowDefinition(1, Guid.NewGuid(), 1, "Invalid", "video",
+        [
+            new("entry", null, registry.FindReference("base-input-file")!, new Dictionary<string, JsonElement>()),
+            new("ai", null, new FlowComponentReference("ai", "1.0.0", "ai-translate-subtitles", "1.0.0", 1), new Dictionary<string, JsonElement>()),
+            new("complete", null, registry.FindReference("base-complete-flow")!, new Dictionary<string, JsonElement>
+            {
+                ["result"] = JsonSerializer.SerializeToElement("unchanged"),
+            }),
+        ], [new("edge1", "entry", "success", "ai"), new("edge2", "ai", "output", "complete")]);
+        mesh.Factory.EnqueueReplies(EmptyFlowJson(), JsonSerializer.Serialize(unavailableComponentFlow, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        using var services = new ServiceCollection().AddSingleton(mesh.First.Service).BuildServiceProvider();
+        var factory = new AiClientFactory(mesh.First.Configuration, mesh.Factory, mesh.First.Settings,
+            mesh.First.Profile.Runtime, services);
+        var generator = new FlowAiGeneratorService(factory, new FlowCatalogPromptBuilder(registry), validator);
+
+        var result = await generator.GenerateFlowAsync(new FlowAiGenerateRequest("video", "test flow", "openai", RequestId: Guid.NewGuid()));
+
+        Assert.False(result.Success);
+        Assert.Contains(result.ValidationIssues!, issue => issue.Code == "component.unavailable");
+        Assert.DoesNotContain(result.ValidationIssues!, issue => issue.Code == "graph.entry.count");
+        Assert.Contains("réparation", result.Explanation!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, mesh.Factory.Inferences);
+    }
+
+    [Fact]
+    public async Task InterruptedFlowRepairCanResumeWithItsSameDeterministicRequestId()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var (registry, validator, _) = Harness.Services();
+        mesh.Factory.EnqueueReplies("not JSON");
+        mesh.Factory.EnqueueFailures(1);
+        mesh.Factory.EnqueueReplies(ValidFlowJson(registry));
+        using var services = new ServiceCollection().AddSingleton(mesh.First.Service).BuildServiceProvider();
+        var factory = new AiClientFactory(mesh.First.Configuration, mesh.Factory, mesh.First.Settings,
+            mesh.First.Profile.Runtime, services);
+        var generator = new FlowAiGeneratorService(factory, new FlowCatalogPromptBuilder(registry), validator);
+        var requestId = Guid.NewGuid();
+        var sessionId = $"{mesh.First.Identity.PeerId:N}.{Guid.NewGuid():N}";
+        var request = new FlowAiGenerateRequest("video", "test flow", "openai", sessionId, requestId);
+
+        var interrupted = await generator.GenerateFlowAsync(request);
+        Assert.False(interrupted.Success);
+        var resumed = await generator.GenerateFlowAsync(request);
+
+        Assert.True(resumed.Success, resumed.Explanation);
+        var session = await mesh.First.Service.GetSessionAsync(sessionId, Ct);
+        Assert.Equal(2, session!.Turns.Count);
+        Assert.Equal(DeriveRepairRequestId(requestId), session.Turns[1].RequestId);
+        Assert.Equal(3, mesh.Factory.Inferences);
+    }
+
+    private static Guid DerivePlannerRequestId(string conversationId, Guid requestId)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(conversationId + "/" + requestId.ToString("N")
+            + "/assistant-read-tool-planner"));
+        var derived = new Guid(bytes.AsSpan(0, 16));
+        return derived == Guid.Empty ? new Guid(bytes.AsSpan(16, 16)) : derived;
+    }
+
+    private static Guid DeriveRepairRequestId(Guid requestId)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"flow-repair-v1:{requestId:N}"));
+        return new Guid(bytes.AsSpan(0, 16));
+    }
+
+    private static string ValidFlowJson(FlowComponentRegistry registry)
+    {
+        var flow = new FlowDefinition(1, Guid.NewGuid(), 1, "Test flow", "video",
+        [
+            new("entry", "Entrée", registry.FindReference("base-input-file")!, new Dictionary<string, JsonElement>()),
+            new("complete", "Terminer", registry.FindReference("base-complete-flow")!, new Dictionary<string, JsonElement>
+            {
+                ["result"] = JsonSerializer.SerializeToElement("unchanged"),
+            }),
+        ], [new("edge", "entry", "success", "complete")]);
+        return JsonSerializer.Serialize(flow, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    }
+
+    private static string EmptyFlowJson() => JsonSerializer.Serialize(new FlowDefinition(1, Guid.NewGuid(), 1,
+        "Vide", "video", [], []), new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
     private sealed class Node : IAsyncDisposable
     {
@@ -358,11 +531,20 @@ public sealed class AiClusterTests
     private sealed class MeshFactory : IHttpClientFactory
     {
         public readonly Dictionary<string, Node> Nodes = [];
+        private readonly ConcurrentQueue<(string? Content, HttpStatusCode Status)> replies = new();
         public int Inferences;
         public bool ReportModel;
         public bool BlockInferences;
         public TaskCompletionSource InferenceStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public string LastPrompt = "";
+        public void EnqueueReplies(params string[] values)
+        {
+            foreach (var value in values) replies.Enqueue((value, HttpStatusCode.OK));
+        }
+        public void EnqueueFailures(int count)
+        {
+            for (var index = 0; index < count; index++) replies.Enqueue((null, HttpStatusCode.ServiceUnavailable));
+        }
         public HttpClient CreateClient(string name) => new(new Handler(this, name)) { Timeout = Timeout.InfiniteTimeSpan };
         private sealed class Handler(MeshFactory factory, string name) : HttpMessageHandler
         {
@@ -381,7 +563,13 @@ public sealed class AiClusterTests
                     factory.LastPrompt = await request.Content!.ReadAsStringAsync(ct);
                     if (request.Headers.Authorization?.Parameter == "broken-test-key")
                         return new(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("Provider unavailable") };
-                    return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = factory.ReportModel ? "resolved-test-model" : null, choices = new[] { new { message = new { content = "answer from remote model" } } } }) };
+                    var queued = factory.replies.TryDequeue(out var next)
+                        ? next
+                        : ("answer from remote model", HttpStatusCode.OK);
+                    if (queued.Status != HttpStatusCode.OK)
+                        return new(queued.Status) { Content = new StringContent("Provider temporarily unavailable") };
+                    var reply = queued.Content!;
+                    return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { model = factory.ReportModel ? "resolved-test-model" : null, choices = new[] { new { message = new { content = reply } } } }) };
                 }
                 var node = factory.Nodes[request.RequestUri!.Host];
                 var http = new DefaultHttpContext();

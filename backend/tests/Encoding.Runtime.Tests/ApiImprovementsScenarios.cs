@@ -346,6 +346,44 @@ internal static class ApiImprovementsScenarios
                 Check(initResp.StatusCode == HttpStatusCode.OK, "MCP endpoint responds to initialize.");
                 var initJson = await initResp.Content.ReadAsStringAsync();
                 Check(initJson.Contains("encoding-mcp") && initJson.Contains("2024-11-05"), "MCP initialize returns server info.");
+                using var envelope = JsonDocument.Parse(initJson);
+                Check(envelope.RootElement.TryGetProperty("result", out _) && !envelope.RootElement.TryGetProperty("error", out _),
+                    "MCP success envelope contains result and omits error.");
+            }
+
+            using (var invalidRpcResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "1.0",
+                id = 1,
+                method = "ping"
+            }))
+            {
+                Check(invalidRpcResp.StatusCode == HttpStatusCode.OK, "Invalid JSON-RPC request receives a protocol error envelope.");
+                using var envelope = JsonDocument.Parse(await invalidRpcResp.Content.ReadAsStringAsync());
+                Check(envelope.RootElement.TryGetProperty("error", out _) && !envelope.RootElement.TryGetProperty("result", out _),
+                    "MCP error envelope contains error and omits result.");
+            }
+
+            using (var invalidParamsResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "2.0",
+                id = 7,
+                method = "tools/list",
+                @params = Array.Empty<string>()
+            }))
+            {
+                using var envelope = JsonDocument.Parse(await invalidParamsResp.Content.ReadAsStringAsync());
+                Check(envelope.RootElement.TryGetProperty("error", out _) && !envelope.RootElement.TryGetProperty("result", out _),
+                    "MCP rejects a non-object params envelope.");
+            }
+
+            using (var notificationResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "2.0",
+                method = "notifications/initialized"
+            }))
+            {
+                Check(notificationResp.StatusCode == HttpStatusCode.NoContent, "MCP notification receives no JSON-RPC response.");
             }
 
             // B. Liste des outils (tools/list)
@@ -470,6 +508,17 @@ internal static class ApiImprovementsScenarios
             var msgDataLine = await sseReader.ReadLineAsync(sseCts.Token);
             Check(msgEventLine == "event: message", "MCP SSE streams back message event.");
             Check(msgDataLine is not null && msgDataLine.Contains("\"id\":10"), "MCP SSE delivers ping JSON-RPC response on stream.");
+
+            using (var duplicateSseMessage = await aiClient.SendAsync(HttpMethod.Post, $"/api/v1/mcp/message?sessionId={sessionId}", new
+            {
+                jsonrpc = "2.0",
+                id = 10,
+                method = "ping"
+            }))
+            {
+                Check(duplicateSseMessage.StatusCode == HttpStatusCode.Conflict,
+                    "MCP SSE rejects a duplicate JSON-RPC request id before processing it.");
+            }
 
             // G. Nouveaux outils MCP : Scripts, Profils d'encodage, Modèles, Packs et Plugins
             // Test Script : création puis publication

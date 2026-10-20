@@ -53,9 +53,10 @@ public sealed class AiClusterStore(DbDataSource database, ClusterReconciliationR
         journal.SetRegisterAsync("ai/" + key, "null", ct);
     public async Task<IReadOnlyList<T>> ListSessionsAsync<T>(int offset, int limit, CancellationToken ct)
     {
+        if (offset < 0 || limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
         // Bounded pagination over the existing encrypted registers, ordered by their last observed update.
         var rows = new List<(string Key, string Value)>();
-        await using (var command = database.CreateCommand("SELECT register_key, value FROM cluster_sync_registers WHERE register_key LIKE 'ai/session/%' ORDER BY occurred_at DESC, register_key LIMIT @limit OFFSET @offset"))
+        await using (var command = database.CreateCommand("SELECT s.register_key, s.value FROM cluster_sync_registers s WHERE s.register_key LIKE 'ai/session/%' AND s.value <> 'null' AND NOT EXISTS (SELECT 1 FROM cluster_sync_registers owner WHERE owner.register_key = 'ai/assistant/session-owner/' || substr(s.register_key, 12) AND owner.value <> 'null') ORDER BY s.occurred_at DESC, s.register_key LIMIT @limit OFFSET @offset"))
         {
             command.Parameters.AddWithValue("limit", limit);
             command.Parameters.AddWithValue("offset", offset);
@@ -64,8 +65,63 @@ public sealed class AiClusterStore(DbDataSource database, ClusterReconciliationR
         }
         var sessions = new List<T>();
         foreach (var row in rows)
-            sessions.Add(await UnprotectAsync<T>(JsonSerializer.Deserialize<string>(row.Value)!, row.Key, ct));
+        {
+            var encoded = JsonSerializer.Deserialize<string>(row.Value);
+            if (!string.IsNullOrWhiteSpace(encoded))
+                sessions.Add(await UnprotectAsync<T>(encoded, row.Key, ct));
+        }
         return sessions;
+    }
+
+    /// <summary>Reads one stable key-ordered page so retention jobs can traverse more than the first 1,000 registers.</summary>
+    public async Task<IReadOnlyList<(string Key, T Value)>> ReadPrefixPageAsync<T>(string prefix, string? afterRegisterKey,
+        int limit, CancellationToken ct)
+    {
+        if (limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
+        var rows = new List<(string Key, string Value)>();
+        var sql = afterRegisterKey is null
+            ? "SELECT register_key,value FROM cluster_sync_registers WHERE register_key LIKE @prefix AND value <> 'null' ORDER BY register_key LIMIT @limit"
+            : "SELECT register_key,value FROM cluster_sync_registers WHERE register_key LIKE @prefix AND value <> 'null' AND register_key > @afterKey ORDER BY register_key LIMIT @limit";
+        await using (var command = database.CreateCommand(sql))
+        {
+            command.Parameters.AddWithValue("prefix", "ai/" + prefix + "%");
+            if (afterRegisterKey is not null) command.Parameters.AddWithValue("afterKey", afterRegisterKey);
+            command.Parameters.AddWithValue("limit", limit);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) rows.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        var page = new List<(string Key, T Value)>(rows.Count);
+        foreach (var (key, value) in rows)
+        {
+            var encoded = JsonSerializer.Deserialize<string>(value);
+            if (string.IsNullOrWhiteSpace(encoded)) continue;
+            var purpose = key["ai/".Length..];
+            page.Add((key, await UnprotectAsync<T>(encoded, purpose, ct)));
+        }
+        return page;
+    }
+
+    public async Task<IReadOnlyList<T>> ReadPrefixLatestAsync<T>(string prefix, int limit, CancellationToken ct)
+    {
+        if (limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
+        var rows = new List<(string Key, string Value)>();
+        await using (var command = database.CreateCommand("SELECT register_key,value FROM cluster_sync_registers WHERE register_key LIKE @prefix AND value <> 'null' ORDER BY occurred_at DESC, register_key DESC LIMIT @limit"))
+        {
+            command.Parameters.AddWithValue("prefix", "ai/" + prefix + "%");
+            command.Parameters.AddWithValue("limit", limit);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) rows.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        var result = new List<T>(rows.Count);
+        foreach (var (key, value) in rows)
+        {
+            var encoded = JsonSerializer.Deserialize<string>(value);
+            if (string.IsNullOrWhiteSpace(encoded)) continue;
+            result.Add(await UnprotectAsync<T>(encoded, key["ai/".Length..], ct));
+        }
+        return result;
     }
     public async Task<T?> ReadAsync<T>(string key, CancellationToken ct)
     {
