@@ -17,8 +17,8 @@
     [canCreatePack]="storedVersion() >= 1"
     [canRestoreAiProposal]="aiProposalRollback() !== null"
     [paletteOpen]="paletteOpen()"
-    [inspectorOpen]="inspectorOpen()"
     [trayOpen]="trayOpen()"
+    [showConnections]="showFlowConnections()"
     (titleChange)="onTitleChange($event)"
     (saveRequested)="saveFlow()"
     (validateRequested)="validateGraph()"
@@ -27,16 +27,18 @@
     (aiAssistantRequested)="openAiAssistant()"
     (restoreAiProposalRequested)="restoreAiProposal()"
     (togglePalette)="paletteOpen.set(!paletteOpen())"
-    (toggleInspector)="inspectorOpen.set(!inspectorOpen())"
     (toggleTray)="trayOpen.set(!trayOpen())"
+    (toggleConnections)="toggleFlowConnections()"
   />
 
-  <!-- Main Split Body (Zone 2, Zone 3, Zone 4) -->
+  <!-- Main Split Body (Zone 2 and Zone 3) -->
   <div class="workbench-body">
     <!-- Zone 2 : Left Palette Dock -->
     <app-flow-palette-dock
       [opened]="paletteOpen()"
       [components]="components()"
+      [otherMediaComponents]="otherMediaComponents()"
+      [flowMediaType]="flowMediaType()"
       [packCatalog]="packCatalog()"
       [insertionPending]="componentDestination() !== null"
       [destinationLabel]="destinationDescription()"
@@ -63,34 +65,19 @@
           [mediaType]="flowMediaType()"
           (configurationChanged)="onInlineConfigurationChanged($event)"
           [connections]="connections()"
+          [showConnections]="showFlowConnections()"
           (configurationRequested)="onConfigurationRequested($event)"
           (branchComponentRequested)="onBranchComponentRequested($event)"
           (terminationRequested)="onTerminationRequested($event)"
           (connectionRequested)="onConnectionRequested($event)"
           (continuationRequested)="onContinuationRequested($event)"
           (connectionsChanged)="onConnectionsChanged($event)"
+          (showConnectionsChange)="setFlowConnections($event)"
           (nodeRemoved)="removeNode($event)"
           (connectionRemoved)="removeConnection($event)"
         />
       }
     </main>
-
-    <!-- Zone 4 : Right Inspector Dock -->
-    <app-flow-inspector-dock
-      [opened]="inspectorOpen()"
-      [node]="configuringNode()"
-      [schema]="configuringSchema()"
-      [values]="configuringValues()"
-      [flowTitle]="flowTitle()"
-      [flowMediaType]="flowMediaType()"
-      [nodeCount]="nodes().length"
-      [connectionCount]="connections().length"
-      (openedChange)="inspectorOpen.set($event)"
-      (instanceNameChange)="renameNode($event)"
-      (configurationSaved)="saveNodeConfiguration($event)"
-      (deleteNodeRequested)="onInspectorDeleteNode($event)"
-      (closeRequested)="closeInspector()"
-    />
   </div>
 
   <!-- Zone 5 : Bottom Tray (Simulation & Diagnostics) -->
@@ -111,6 +98,59 @@
     (fileSelected)="simulator.import($event)"
     (revalidateRequested)="validateGraph()"
   />
+
+  @if (configuringNode(); as current) {
+    <div
+      class="component-editor-backdrop"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="'Réglages de ' + (current.name || current.component.name)"
+      (click)="closeComponentEditor()"
+      (keydown.escape)="closeComponentEditor()"
+    >
+      <section class="component-editor-dialog" (click)="$event.stopPropagation()">
+        <header class="component-editor-header">
+          <div>
+            <p class="component-editor-meta">
+              {{ current.component.kind }} · {{ current.component.pluginName }}
+            </p>
+            <h2>{{ current.name || current.component.name }}</h2>
+            <p>{{ current.component.description }}</p>
+          </div>
+          <button
+            type="button"
+            class="component-editor-close"
+            (click)="closeComponentEditor()"
+            aria-label="Fermer les réglages"
+          >
+            ✕
+          </button>
+        </header>
+        <div class="component-editor-body">
+          <app-component-configuration-form
+            [schema]="configuringSchema()"
+            [values]="configuringValues()"
+            [instanceName]="current.name ?? ''"
+            submitLabel="Appliquer les réglages"
+            (instanceNameChange)="renameNode($event)"
+            (saved)="saveNodeConfiguration($event)"
+            (cancelled)="closeComponentEditor()"
+          />
+        </div>
+        @if (current.component.kind !== 'input') {
+          <footer class="component-editor-footer">
+            <button
+              type="button"
+              class="component-editor-delete"
+              (click)="deleteConfiguredNode(current.id)"
+            >
+              Supprimer ce bloc
+            </button>
+          </footer>
+        }
+      </section>
+    </div>
+  }
 
   <!-- Modal Dialog : Création de Pack -->
   @if (packCreationOpen()) {

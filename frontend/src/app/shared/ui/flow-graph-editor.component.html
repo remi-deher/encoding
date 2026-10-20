@@ -1,7 +1,15 @@
-<section #surface class="structured-editor" aria-label="Composition du flow par étapes">
+<section
+  #surface
+  class="structured-editor"
+  [class.structured-editor_compact]="compactView()"
+  aria-label="Composition du flow par étapes"
+>
   <div class="connection-tools">
-    <button mat-button type="button" (click)="showConnections.set(!showConnections())">
+    <button mat-button type="button" (click)="toggleConnections()">
       {{ showConnections() ? 'Masquer les liaisons' : 'Afficher les liaisons' }}
+    </button>
+    <button mat-button type="button" (click)="toggleDensity()">
+      {{ compactView() ? 'Vue détaillée' : 'Vue compacte' }}
     </button>
     @if (pendingConnection(); as pending) {
       <span role="status"
@@ -133,6 +141,31 @@
             </div>
             <div class="step-heading">
               <strong class="step-name">{{ step.node.name || step.node.component.name }}</strong>
+              @if (step.node.component.kind !== 'pack') {
+                <button
+                  mat-icon-button
+                  class="step-configure"
+                  type="button"
+                  [attr.aria-label]="'Configurer ' + (step.node.name || step.node.component.name)"
+                  title="Configurer le bloc"
+                  (click)="configurationRequested.emit(step.node.id)"
+                >
+                  <svg
+                    width="19"
+                    height="19"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                  >
+                    <path d="M12 8.3a3.7 3.7 0 1 0 0 7.4 3.7 3.7 0 0 0 0-7.4Z" />
+                    <path
+                      d="m19.4 13.5 1.1.9-1.2 2.1-1.4-.5a7.8 7.8 0 0 1-1.4.8l-.3 1.5h-2.4l-.4-1.5a7.8 7.8 0 0 1-1.5-.8l-1.4.5-1.2-2.1 1.1-.9a7 7 0 0 1 0-1.6l-1.1-.9 1.2-2.1 1.4.5a7.8 7.8 0 0 1 1.4-.8l.4-1.5h2.4l.3 1.5a7.8 7.8 0 0 1 1.5.8l1.4-.5 1.2 2.1-1.1.9a7 7 0 0 1 0 1.6Z"
+                    />
+                  </svg>
+                </button>
+              }
               @if (step.node.component.kind !== 'input') {
                 <button
                   mat-icon-button
@@ -159,63 +192,65 @@
             @if (incomingCount(step.node) > 1) {
               <p class="continuation-label">{{ incomingCount(step.node) }} liaisons entrantes</p>
             }
-            <p class="step-summary">{{ step.node.component.description }}</p>
-            @if (packForVisualNode(step.node); as pack) {
-              <button mat-button type="button" (click)="togglePack(pack)">
-                {{ packExpanded(pack) ? 'Replier le pack' : 'Déplier les composants' }}
-              </button>
-              @if (packExpanded(pack)) {
-                <section class="pack-expanded" [attr.aria-label]="'Contenu du pack ' + pack.name">
-                  <p class="pack-boundary">Entrée du pack → {{ packRootLabel(pack) }}</p>
-                  <ng-container
-                    [ngTemplateOutlet]="sequenceTemplate"
-                    [ngTemplateOutletContext]="{ sequence: packContents(pack).main }"
-                  />
-                  @if (packContents(pack).detached.length) {
-                    <p role="alert">Des composants du pack ne sont plus reliés à son entrée.</p>
-                  }
-                  <div class="pack-boundary pack-outputs">
-                    @for (port of pack.outputs; track port.id) {
-                      <span>{{ port.label }} ← {{ nodeLabel(port.sourceNodeId) }}</span>
+            @if (!compactView()) {
+              <p class="step-summary">{{ step.node.component.description }}</p>
+              @if (packForVisualNode(step.node); as pack) {
+                <button mat-button type="button" (click)="togglePack(pack)">
+                  {{ packExpanded(pack) ? 'Replier le pack' : 'Déplier les composants' }}
+                </button>
+                @if (packExpanded(pack)) {
+                  <section class="pack-expanded" [attr.aria-label]="'Contenu du pack ' + pack.name">
+                    <p class="pack-boundary">Entrée du pack → {{ packRootLabel(pack) }}</p>
+                    <ng-container
+                      [ngTemplateOutlet]="sequenceTemplate"
+                      [ngTemplateOutletContext]="{ sequence: packContents(pack).main }"
+                    />
+                    @if (packContents(pack).detached.length) {
+                      <p role="alert">Des composants du pack ne sont plus reliés à son entrée.</p>
                     }
-                  </div>
-                </section>
+                    <div class="pack-boundary pack-outputs">
+                      @for (port of pack.outputs; track port.id) {
+                        <span>{{ port.label }} ← {{ nodeLabel(port.sourceNodeId) }}</span>
+                      }
+                    </div>
+                  </section>
+                }
+              } @else {
+                <app-flow-inline-parameters
+                  [schema]="inlineSchema(step.node)"
+                  [values]="step.node.configuration"
+                  (changed)="
+                    configurationChanged.emit({
+                      nodeId: step.node.id,
+                      fieldId: $event.fieldId,
+                      value: $event.value,
+                    })
+                  "
+                />
               }
-            } @else {
-              <app-flow-inline-parameters
-                [schema]="inlineSchema(step.node)"
-                [values]="step.node.configuration"
-                (changed)="
-                  configurationChanged.emit({
-                    nodeId: step.node.id,
-                    fieldId: $event.fieldId,
-                    value: $event.value,
-                  })
-                "
-              />
+              <div class="step-controls">
+                @if (canMove(sequence, index, index - 1)) {
+                  <button
+                    mat-button
+                    type="button"
+                    [attr.aria-label]="'Monter ' + (step.node.name || step.node.component.name)"
+                    (click)="move(sequence, index, index - 1)"
+                  >
+                    ↑ Monter
+                  </button>
+                }
+                @if (canMove(sequence, index, index + 1)) {
+                  <button
+                    mat-button
+                    type="button"
+                    [attr.aria-label]="'Descendre ' + (step.node.name || step.node.component.name)"
+                    (click)="move(sequence, index, index + 1)"
+                  >
+                    ↓ Descendre
+                  </button>
+                }
+              </div>
             }
-            <div class="step-controls">
-              @if (canMove(sequence, index, index - 1)) {
-                <button
-                  mat-button
-                  type="button"
-                  [attr.aria-label]="'Monter ' + (step.node.name || step.node.component.name)"
-                  (click)="move(sequence, index, index - 1)"
-                >
-                  ↑ Monter
-                </button>
-              }
-              @if (canMove(sequence, index, index + 1)) {
-                <button
-                  mat-button
-                  type="button"
-                  [attr.aria-label]="'Descendre ' + (step.node.name || step.node.component.name)"
-                  (click)="move(sequence, index, index + 1)"
-                >
-                  ↓ Descendre
-                </button>
-              }
-            </div>
 
             <div class="output-actions" aria-label="Sorties de l’étape">
               @for (output of step.node.component.outputs; track output.id) {

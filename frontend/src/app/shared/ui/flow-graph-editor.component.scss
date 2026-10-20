@@ -2,7 +2,7 @@
   display: block;
 }
 .structured-editor {
-  width: min(100%, 1320px);
+  width: min(100%, 1600px);
   margin-inline: auto;
   position: relative;
 }
@@ -25,7 +25,7 @@
   min-height: 12px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 20px;
 }
 .step-unit {
   min-width: 0;
@@ -34,7 +34,7 @@
 .step-card {
   position: relative;
   box-sizing: border-box;
-  width: min(100%, max(440px, calc((var(--output-count) - 1) * 104px + 160px)));
+  width: min(100%, max(560px, calc((var(--output-count) - 1) * 112px + 200px)));
   margin-inline: auto;
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
@@ -88,7 +88,7 @@
 .step-heading {
   position: relative;
   text-align: center;
-  padding: 18px 42px 6px;
+  padding: 16px 82px 6px;
 }
 .step-name {
   font-size: 22px;
@@ -102,6 +102,14 @@
   right: 2px;
   top: 12px;
   min-width: 36px;
+}
+.step-configure {
+  position: absolute;
+  right: 40px;
+  top: 12px;
+  width: 36px;
+  height: 36px;
+  color: var(--text-secondary);
 }
 .step-summary {
   text-align: center;
@@ -238,6 +246,25 @@
   position: relative;
   z-index: 3;
   font-size: 14px;
+}
+.structured-editor_compact .sequence {
+  gap: 12px;
+}
+.structured-editor_compact .step-band {
+  padding-block: 7px;
+}
+.structured-editor_compact .step-heading {
+  padding-top: 8px;
+  padding-bottom: 2px;
+}
+.structured-editor_compact .step-name {
+  font-size: 18px;
+}
+.structured-editor_compact .output-actions {
+  margin-top: 4px;
+}
+.structured-editor_compact .output-label {
+  font-size: 12px;
 }
 @container (max-width:640px) {
   .branches {

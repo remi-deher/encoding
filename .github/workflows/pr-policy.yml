@@ -30,7 +30,8 @@ jobs:
       - name: Enable auto-merge for pull requests targeting dev
         if: github.event.pull_request.base.ref == 'dev' && github.event.pull_request.draft == false
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Configure PAT_TOKEN in repository Actions secrets when github.token cannot enable auto-merge.
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
 
@@ -40,6 +41,6 @@ jobs:
           github.event.pull_request.head.ref == 'dev' &&
           github.event.pull_request.draft == false
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
