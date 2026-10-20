@@ -39,8 +39,8 @@ public static class RuntimeEndpoints
             return await next(context);
         });
         group.MapPost("/executions/{id:guid}/ai/subtitles/translate", async (Guid nodeId, Guid id,
-            RuntimeAiSubtitleTranslationRequest request, RuntimeRepository runtime, AiClusterService ai,
-            AiClusterTransport transport, AiClusterStore store, CancellationToken ct) =>
+            RuntimeAiSubtitleTranslationRequest request, [FromServices] RuntimeRepository runtime, [FromServices] AiClusterService ai,
+            [FromServices] AiClusterTransport transport, [FromServices] AiClusterStore store, CancellationToken ct) =>
         {
             if (request.BatchIndex is < 0 or >= 100 || request.Items is null || request.Items.Count is < 1 or > 200
                 || request.Items.Any(item => item is null)
@@ -100,7 +100,7 @@ public static class RuntimeEndpoints
             return Results.Ok(new RuntimeAiSubtitleTranslationResponse(true, translations));
         }).RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
         group.MapPost("/executions/{id:guid}/ai/metadata/enrich", async (Guid nodeId, Guid id,
-            RuntimeAiMetadataEnrichmentRequest request, RuntimeRepository runtime, AiMetadataEnrichmentService enricher,
+            RuntimeAiMetadataEnrichmentRequest request, [FromServices] RuntimeRepository runtime, [FromServices] AiMetadataEnrichmentService enricher,
             CancellationToken ct) =>
         {
             if (request.Metadata.ValueKind != JsonValueKind.Object || JsonSerializer.SerializeToUtf8Bytes(request.Metadata).Length > 256 * 1024

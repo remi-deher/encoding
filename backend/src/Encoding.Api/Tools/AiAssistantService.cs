@@ -889,7 +889,7 @@ public sealed class AiAssistantService(
                 var plannerSessionId = $"{conversation.Id.Split('.')[0]}.{plannerRequestId:N}";
                 var planner = await cluster.GenerateAsync(
                     conversation.Provider,
-                    new AiPrompt(BuildToolPlannerPrompt(user.IsInRole("admin")), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId, RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort),
+                    new AiPrompt(BuildToolPlannerPrompt(user.IsInRole("admin")), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId, RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
                     requestCancellation.Token,
                     localOnly: policy.AssistantLocalOnly);
                 if (!planner.Success)
@@ -968,7 +968,7 @@ public sealed class AiAssistantService(
             await SaveActivityAsync(ownerId, activity, ct);
             result = await cluster.GenerateAsync(
                 conversation.Provider,
-                new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId, ReasoningEffort: conversation.ReasoningEffort),
+                new AiPrompt(systemPrompt, contextualPrompt, Model: conversation.Model, SessionId: conversation.Id, RequestId: request.RequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
                 requestCancellation.Token,
                 localOnly: policy.AssistantLocalOnly,
                 allowModelChanges: true);

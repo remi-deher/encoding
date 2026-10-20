@@ -394,7 +394,7 @@ public sealed class AiClusterTests
         var result = await generator.GenerateFlowAsync(new FlowAiGenerateRequest("video", "test flow", "openai", RequestId: Guid.NewGuid()));
 
         Assert.False(result.Success);
-        Assert.Contains(result.ValidationIssues!, issue => issue.Code == "component.unavailable");
+        Assert.Contains(result.ValidationIssues!, issue => issue.Code == "field.invalid");
         Assert.DoesNotContain(result.ValidationIssues!, issue => issue.Code == "graph.entry.count");
         Assert.Contains("réparation", result.Explanation!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, mesh.Factory.Inferences);
