@@ -12,8 +12,8 @@ import {
   input,
   output,
   ElementRef,
-  TemplateRef,
   viewChild,
+  viewChildren,
   inject,
   DestroyRef,
   afterRenderEffect,
@@ -27,8 +27,9 @@ import {
   FlowConnectionRequest,
   FlowGraphPosition,
   FlowComponentOutput,
+  FLOW_COMPONENT_KIND_LABELS,
 } from '../../models/flow-component';
-import { layoutFlowCanvas } from '../../models/flow-canvas';
+import { layoutFlowCanvas, FlowCanvasNodeSize } from '../../models/flow-canvas';
 import { canConnectFlowGraph } from '../../models/flow-graph';
 import { flowComponentColors } from '../../models/flow-presentation';
 import { ContextActionsDirective, ContextActionPosition } from '../context-actions.directive';
@@ -37,6 +38,7 @@ import {
   ContextActionMenuData,
 } from '../context-action-menu.component';
 import { NotificationService } from '../../services/notification.service';
+import { routeFlowLink } from '../flow-link-routing';
 @Component({
   selector: 'app-flow-canvas',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,16 +66,16 @@ export class FlowCanvasComponent {
   protected dropComponent(event: FlowPaletteDrop): void {
     const view = this.viewport()?.nativeElement;
     if (!view) return;
-    const rect = view.getBoundingClientRect();
+    const rect = this.surface()?.nativeElement.getBoundingClientRect();
+    if (!rect) return;
     this.componentDropped.emit({
       ...event,
       position: {
-        x: Math.max(24, (event.point.x - rect.left + view.scrollLeft) / this.scale()),
-        y: Math.max(24, (event.point.y - rect.top + view.scrollTop) / this.scale()),
+        x: Math.max(24, (event.point.x - rect.left) / this.scale()),
+        y: Math.max(24, (event.point.y - rect.top) / this.scale()),
       },
     });
   }
-  readonly toolbar = viewChild<TemplateRef<unknown>>('toolbar');
   readonly nodes = input.required<readonly FlowGraphNode[]>();
   readonly connections = input.required<readonly FlowGraphConnection[]>();
   readonly selectedNodeId = input<string | null>(null);
@@ -86,23 +88,80 @@ export class FlowCanvasComponent {
   readonly askAi = output<string>();
   readonly insert = output<{ sourceNodeId: string; output: FlowComponentOutput }>();
   readonly positionChanged = output<{ nodeId: string; position: FlowGraphPosition }>();
+  readonly positionsChanged = output<ReadonlyMap<string, FlowGraphPosition>>();
   readonly guided = output<string>();
   readonly positions = input<ReadonlyMap<string, FlowGraphPosition>>(new Map());
   private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
+  private readonly cards = viewChildren<ElementRef<HTMLElement>>('canvasCard');
+  private readonly surface = viewChild<ElementRef<HTMLElement>>('canvasSurface');
+  private readonly measurements = signal<ReadonlyMap<string, FlowCanvasNodeSize>>(new Map());
+  private readonly anchors = signal<ReadonlyMap<string, FlowGraphPosition>>(new Map());
+  private readonly previousLayout = signal<ReadonlyMap<string, FlowGraphPosition> | null>(null);
+  protected readonly canUndoLayout = computed(() => this.previousLayout() !== null);
+  private observer?: ResizeObserver;
   private readonly notifications = inject(NotificationService);
-  protected readonly layout = computed(() => layoutFlowCanvas(this.nodes(), this.connections()));
+  protected readonly layout = computed(() =>
+    layoutFlowCanvas(this.nodes(), this.connections(), this.measurements()),
+  );
+  protected readonly bounds = computed(() => {
+    const nodes = this.nodes();
+    return {
+      left: Math.min(0, ...nodes.map((node) => this.position(node).x - 24)),
+      top: Math.min(0, ...nodes.map((node) => this.position(node).y - 24)),
+      right: Math.max(
+        340,
+        ...nodes.map(
+          (node) => this.position(node).x + (this.measurements().get(node.id)?.width ?? 340) + 24,
+        ),
+      ),
+      bottom: Math.max(
+        200,
+        ...nodes.map(
+          (node) => this.position(node).y + (this.measurements().get(node.id)?.height ?? 200) + 24,
+        ),
+      ),
+    };
+  });
+  protected readonly overview = signal({ x: 0, y: 0, width: 0, height: 0 });
+  protected readonly miniViewBox = computed(
+    () => `0 0 ${this.bounds().right} ${this.bounds().bottom}`,
+  );
+  private readonly obstacles = computed(() =>
+    this.nodes().map((node) => {
+      const p = this.wirePosition(node),
+        size = this.measurements().get(node.id);
+      return {
+        left: p.x,
+        right: p.x + (size?.width ?? 340),
+        top: p.y,
+        bottom: p.y + (size?.height ?? 200),
+      };
+    }),
+  );
+  protected readonly paths = computed(
+    () =>
+      new Map(
+        this.connections().map((edge) => {
+          const a = this.nodes().find((node) => node.id === edge.sourceNodeId),
+            b = this.nodes().find((node) => node.id === edge.targetNodeId);
+          return [
+            edge.id,
+            a && b
+              ? routeFlowLink(
+                  this.anchor(a, edge.sourceOutputId),
+                  this.anchor(b, null),
+                  this.obstacles(),
+                  this.size().width,
+                )
+              : '',
+          ];
+        }),
+      ),
+  );
   protected readonly extent = signal({ width: 0, height: 0 });
   protected readonly size = computed(() => ({
-    width: Math.max(
-      this.layout().width,
-      this.extent().width,
-      ...[...this.positions().values()].map((p) => p.x + 900),
-    ),
-    height: Math.max(
-      this.layout().height,
-      this.extent().height,
-      ...[...this.positions().values()].map((p) => p.y + 600),
-    ),
+    width: Math.max(this.bounds().right + 64, this.extent().width),
+    height: Math.max(this.bounds().bottom + 64, this.extent().height),
   }));
   protected readonly scale = signal(1);
   private readonly liveDrag = signal<{ id: string; x: number; y: number } | null>(null);
@@ -126,8 +185,25 @@ export class FlowCanvasComponent {
   private contextTarget: { node?: FlowGraphNode; edge?: FlowGraphConnection } = {};
   private stopDrag?: () => void;
   protected readonly colors = flowComponentColors;
+  protected readonly kindLabels = FLOW_COMPONENT_KIND_LABELS;
+  protected nodeSize(node: FlowGraphNode): FlowCanvasNodeSize {
+    return this.measurements().get(node.id) ?? { width: 340, height: 200 };
+  }
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.stopDrag?.());
+    inject(DestroyRef).onDestroy(() => {
+      this.stopDrag?.();
+      this.observer?.disconnect();
+    });
+    afterRenderEffect(() => {
+      this.cards();
+      this.nodes();
+      const surface = this.surface()?.nativeElement;
+      this.observer?.disconnect();
+      if (!surface) return;
+      this.observer = new ResizeObserver(() => this.measure());
+      for (const card of this.cards()) this.observer.observe(card.nativeElement);
+      this.measure();
+    });
     afterRenderEffect(() => {
       const id = this.selectedNodeId(),
         view = this.viewport()?.nativeElement;
@@ -150,6 +226,85 @@ export class FlowCanvasComponent {
           });
       });
     });
+  }
+  private measure(): void {
+    const sizes = new Map<string, FlowCanvasNodeSize>();
+    const anchors = new Map<string, FlowGraphPosition>();
+    for (const ref of this.cards()) {
+      const card = ref.nativeElement;
+      const id = card.dataset['nodeId']!;
+      sizes.set(id, { width: card.offsetWidth, height: card.offsetHeight });
+      for (const port of card.querySelectorAll<HTMLElement>('[data-port]')) {
+        const bounds = card.getBoundingClientRect(),
+          point = port.getBoundingClientRect();
+        anchors.set(id + ':' + port.dataset['port'], {
+          x: (point.left + point.width / 2 - bounds.left) / this.scale(),
+          y: (point.top + point.height / 2 - bounds.top) / this.scale(),
+        });
+      }
+    }
+    if (JSON.stringify([...sizes]) !== JSON.stringify([...this.measurements()]))
+      this.measurements.set(sizes);
+    if (JSON.stringify([...anchors]) !== JSON.stringify([...this.anchors()]))
+      this.anchors.set(anchors);
+    this.updateOverview();
+  }
+  protected autoLayout(): void {
+    this.previousLayout.set(new Map(this.nodes().map((node) => [node.id, this.position(node)])));
+    this.positionsChanged.emit(this.layout().positions);
+    this.extent.set({ width: 0, height: 0 });
+    requestAnimationFrame(() => this.fit());
+  }
+  protected undoLayout(): void {
+    const previous = this.previousLayout();
+    if (previous) this.positionsChanged.emit(previous);
+    this.previousLayout.set(null);
+  }
+  protected wheel(event: WheelEvent): void {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    const view = this.viewport()?.nativeElement;
+    if (!view) return;
+    const rect = view.getBoundingClientRect(),
+      before = this.scale();
+    const x = event.clientX - rect.left,
+      y = event.clientY - rect.top;
+    const next = Math.max(0.2, Math.min(1.75, before * Math.exp(-event.deltaY * 0.002)));
+    const surfaceLeft = this.surface()!.nativeElement.getBoundingClientRect().left;
+    const left =
+      ((event.clientX - surfaceLeft) / before) * next +
+      Math.max(0, (view.clientWidth - this.size().width * next) / 2) -
+      x;
+    const top = ((view.scrollTop + y) / before) * next - y;
+    this.scale.set(next);
+    requestAnimationFrame(() => {
+      view.scrollTo(left, top);
+      this.updateOverview();
+    });
+  }
+  private updateOverview(): void {
+    const view = this.viewport()?.nativeElement;
+    if (view)
+      this.overview.set({
+        x: view.scrollLeft / this.scale(),
+        y: view.scrollTop / this.scale(),
+        width: view.clientWidth / this.scale(),
+        height: view.clientHeight / this.scale(),
+      });
+  }
+  protected miniNavigate(event: MouseEvent): void {
+    const button = event.currentTarget as HTMLElement,
+      rect = button.querySelector('svg')!.getBoundingClientRect();
+    const view = this.viewport()?.nativeElement;
+    if (!view) return;
+    const x =
+      event.detail === 0 ? 0.5 : Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const y =
+      event.detail === 0 ? 0.5 : Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    view.scrollTo(
+      x * this.bounds().right * this.scale() - view.clientWidth / 2,
+      y * this.bounds().bottom * this.scale() - view.clientHeight / 2,
+    );
   }
   protected edit(node: FlowGraphNode): void {
     if (node.component.kind === 'pack') this.guided.emit(node.id);
@@ -179,29 +334,38 @@ export class FlowCanvasComponent {
   protected fit(): void {
     const view = this.viewport()?.nativeElement;
     if (!view) return;
+    this.extent.set({ width: 0, height: 0 });
     this.scale.set(
       Math.max(
         0.2,
         Math.min(
           1,
-          (view.clientWidth - 40) / this.size().width,
-          (view.clientHeight - 40) / this.size().height,
+          (view.clientWidth - 40) / this.bounds().right,
+          (view.clientHeight - 40) / this.bounds().bottom,
         ),
       ),
     );
     view.scrollTo(0, 0);
+    requestAnimationFrame(() => this.updateOverview());
   }
   protected navigate(): void {
+    this.updateOverview();
     const view = this.viewport()?.nativeElement;
     if (!view) return;
-    if (view.scrollLeft + view.clientWidth > this.size().width * this.scale() - 180)
+    if (
+      view.scrollLeft > 0 &&
+      view.scrollLeft + view.clientWidth > this.size().width * this.scale() - 180
+    )
       this.extent.update((s) => ({ ...s, width: this.size().width + 900 }));
-    if (view.scrollTop + view.clientHeight > this.size().height * this.scale() - 180)
+    if (
+      view.scrollTop > 0 &&
+      view.scrollTop + view.clientHeight > this.size().height * this.scale() - 180
+    )
       this.extent.update((s) => ({ ...s, height: this.size().height + 700 }));
   }
   protected pan(event: PointerEvent): void {
     if (
-      event.button !== 0 ||
+      (event.button !== 0 && event.button !== 1) ||
       !(event.target instanceof Element) ||
       event.target.closest('article,button,path')
     )
@@ -227,25 +391,20 @@ export class FlowCanvasComponent {
     view.addEventListener('pointercancel', end, { once: true });
   }
   protected path(edge: FlowGraphConnection): string {
-    const a = this.nodes().find((n) => n.id === edge.sourceNodeId),
-      b = this.nodes().find((n) => n.id === edge.targetNodeId);
-    if (!a || !b) return '';
-    const s = this.wirePosition(a),
-      t = this.wirePosition(b),
-      i = a.component.outputs.findIndex((o) => o.id === edge.sourceOutputId),
-      y = s.y + 100 + i * 40;
-    return `M ${s.x + 300} ${y} C ${s.x + 380} ${y} ${t.x - 80} ${t.y + 50} ${t.x} ${t.y + 50}`;
+    return this.paths().get(edge.id) ?? '';
+  }
+  private anchor(node: FlowGraphNode, port: string | null): FlowGraphPosition {
+    const p = this.wirePosition(node),
+      offset = this.anchors().get(node.id + ':' + (port === null ? 'input' : 'output:' + port));
+    return { x: p.x + (offset?.x ?? 170), y: p.y + (offset?.y ?? (port === null ? 0 : 160)) };
   }
   protected ghost(): string {
     const pending = this.pending(),
       p = this.pointer();
     if (!pending || !p) return '';
-    const a = this.wirePosition(pending.node),
-      y =
-        a.y +
-        100 +
-        pending.node.component.outputs.findIndex((o) => o.id === pending.output.id) * 40;
-    return `M ${a.x + 300} ${y} C ${a.x + 380} ${y} ${p.x - 80} ${p.y} ${p.x} ${p.y}`;
+    const a = this.anchor(pending.node, pending.output.id),
+      middle = (a.y + p.y) / 2;
+    return `M ${a.x} ${a.y} V ${middle} H ${p.x} V ${p.y}`;
   }
   protected begin(node: FlowGraphNode, output: FlowComponentOutput, event?: PointerEvent): void {
     event?.stopPropagation();
@@ -260,10 +419,11 @@ export class FlowCanvasComponent {
     const move = (e: PointerEvent) => {
       const root = this.viewport()?.nativeElement;
       if (!root) return;
-      const rect = root.getBoundingClientRect();
+      const rect = this.surface()?.nativeElement.getBoundingClientRect();
+      if (!rect) return;
       this.pointer.set({
-        x: (e.clientX - rect.left + root.scrollLeft) / this.scale(),
-        y: (e.clientY - rect.top + root.scrollTop) / this.scale(),
+        x: (e.clientX - rect.left) / this.scale(),
+        y: (e.clientY - rect.top) / this.scale(),
       });
     };
     const up = (e: PointerEvent) => {

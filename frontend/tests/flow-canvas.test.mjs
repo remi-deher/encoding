@@ -24,11 +24,32 @@ test('five decision levels and reconvergences are laid out without graph mutatio
   assert.equal(JSON.stringify({ nodes, edges }), before);
   assert.equal(layout.positions.size, nodes.length);
   for (const e of edges)
-    assert.ok(layout.positions.get(e.targetNodeId).x > layout.positions.get(e.sourceNodeId).x);
+    assert.ok(layout.positions.get(e.targetNodeId).y > layout.positions.get(e.sourceNodeId).y);
   const ps = [...layout.positions.values()];
   for (let i = 0; i < ps.length; i++)
     for (let j = i + 1; j < ps.length; j++)
-      assert.ok(ps[i].x !== ps[j].x || Math.abs(ps[i].y - ps[j].y) >= 250);
+      assert.ok(Math.abs(ps[i].x - ps[j].x) >= 340 || Math.abs(ps[i].y - ps[j].y) >= 240);
+});
+
+test('automatic placement reserves measured space for tall and multi-output blocks', () => {
+  const nodes = ['entry', 'left', 'right', 'join'].map(node);
+  const edges = [
+    edge('entry', 'left'),
+    edge('entry', 'right'),
+    edge('left', 'join'),
+    edge('right', 'join'),
+  ];
+  const sizes = new Map([
+    ['entry', { width: 700, height: 370 }],
+    ['left', { width: 340, height: 610 }],
+    ['right', { width: 500, height: 180 }],
+  ]);
+  const layout = layoutFlowCanvas(nodes, edges, sizes);
+  const p = layout.positions;
+  assert.ok(p.get('left').y >= p.get('entry').y + 370 + 80);
+  assert.ok(p.get('join').y >= p.get('left').y + 610 + 80);
+  assert.ok(p.get('right').x >= p.get('left').x + 340 + 60);
+  assert.deepEqual([...layout.positions], [...layoutFlowCanvas(nodes, edges, sizes).positions]);
 });
 test('detached nodes, invalid references and cyclic drafts remain visible for repair', () => {
   const nodes = ['a', 'b', 'alone'].map(node);

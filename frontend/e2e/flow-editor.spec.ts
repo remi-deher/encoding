@@ -177,7 +177,8 @@ test('guided branches keep their widths inside a horizontally scrollable workspa
   const cards = await page
     .locator('.step-card')
     .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().width));
-  expect(Math.min(...cards)).toBeGreaterThanOrEqual(430);
+  expect(Math.min(...cards)).toBeGreaterThanOrEqual(338);
+  expect(Math.max(...cards)).toBeLessThanOrEqual(440);
   const dimensions = await page.evaluate(() => ({
     body: document.documentElement.scrollWidth,
     viewport: innerWidth,
@@ -228,7 +229,7 @@ test('five nested decisions retain card widths, a single convergence and local s
   const widths = await page
     .locator('.step-card')
     .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().width));
-  expect(Math.min(...widths)).toBeGreaterThanOrEqual(430);
+  expect(Math.min(...widths)).toBeGreaterThanOrEqual(338);
   await expect(page.locator('.step-card[data-node-id="Fin"]')).toHaveCount(1);
   const sizes = await page.locator('.workbench-canvas').evaluate((el) => ({
     client: el.clientWidth,
@@ -380,7 +381,11 @@ test('editor keeps navigation above the vertical flow and opens tools on demand'
   ).toHaveCount(0);
   await expect(page.locator('.simulation-tray')).toHaveCount(0);
   await header.getByRole('button', { name: 'Canvas', exact: true }).click();
-  await expect(header.getByRole('button', { name: 'Tout afficher', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('toolbar', { name: 'Navigation du canvas' })
+      .getByRole('button', { name: 'Tout afficher', exact: true }),
+  ).toBeVisible();
   expect((await page.locator('.connection-list').boundingBox())?.height).toBeLessThanOrEqual(1);
   await header.getByRole('button', { name: 'Autres actions du flow', exact: true }).click();
   await page
@@ -431,7 +436,7 @@ test('palette drag places canvas blocks and cancels outside the workspace', asyn
   await setup(page);
   await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   await dragPaletteAction(page, async () => {
-    const rect = (await page.locator('.canvas-viewport').boundingBox())!;
+    const rect = (await page.locator('.canvas-surface').boundingBox())!;
     return { x: rect.x + 90, y: rect.y + 280 };
   });
   await expect(page.locator('.canvas-node')).toHaveCount(6);
@@ -619,7 +624,7 @@ test('canvas wires follow dragging before release and selection highlights conne
   await setup(page);
   await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   const entry = page.locator('.canvas-node').first();
-  await entry.click();
+  await entry.locator('.canvas-plugin').click();
   await expect(page.locator('.wire.highlighted')).not.toHaveCount(0);
   const wire = page.locator('.wire').first();
   const before = await wire.getAttribute('d');
@@ -676,4 +681,189 @@ test('inspector keeps deletion in the shared action footer', async ({ page }, in
     ),
   ).toBe(true);
   await page.screenshot({ path: info.outputPath('aligned-inspector.png') });
+});
+
+test('compact headings contain their actions and expose the common continuation', async ({
+  page,
+}, info) => {
+  await setup(page);
+  await expect(page.locator('.common-continuation')).toContainText('Suite commune : Fin');
+  const contained = await page.locator('.step-card').evaluateAll((cards) =>
+    cards.every((card) => {
+      const bounds = card.getBoundingClientRect();
+      return [...card.querySelectorAll('.step-heading button')].every((button) => {
+        const b = button.getBoundingClientRect();
+        return (
+          b.left >= bounds.left &&
+          b.right <= bounds.right &&
+          b.top >= bounds.top &&
+          b.bottom <= bounds.bottom
+        );
+      });
+    }),
+  );
+  expect(contained).toBe(true);
+  await page.getByRole('button', { name: 'Replier les branches', exact: true }).click();
+  await expect(page.locator('.step-card')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Déplier les branches', exact: true }).click();
+  await expect(page.locator('.step-card')).toHaveCount(5);
+  await page.screenshot({ path: info.outputPath('compact-guided.png') });
+});
+
+test('canvas layout is explicit, reversible and zoom stays inside the workspace', async ({
+  page,
+}, info) => {
+  await setup(page);
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+  const readPositions = () =>
+    page.locator('.canvas-node').evaluateAll((cards) =>
+      cards.map((card) => ({
+        id: card.getAttribute('data-node-id'),
+        left: (card as HTMLElement).style.left,
+        top: (card as HTMLElement).style.top,
+      })),
+    );
+  await expect(page.locator('.wire').first()).toHaveAttribute('d', /^M /);
+  const before = await readPositions();
+  await page.getByRole('button', { name: 'Disposition automatique', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Annuler la disposition', exact: true }),
+  ).toBeVisible();
+  const placed = await page.locator('.canvas-node').evaluateAll((cards) =>
+    cards.map((card) => {
+      const e = card as HTMLElement;
+      return {
+        id: e.dataset['nodeId'],
+        x: parseFloat(e.style.left),
+        y: parseFloat(e.style.top),
+        width: e.offsetWidth,
+        height: e.offsetHeight,
+      };
+    }),
+  );
+  for (let i = 0; i < placed.length; i++)
+    for (let j = i + 1; j < placed.length; j++) {
+      const a = placed[i],
+        b = placed[j];
+      expect(
+        a.x + a.width <= b.x ||
+          b.x + b.width <= a.x ||
+          a.y + a.height <= b.y ||
+          b.y + b.height <= a.y,
+      ).toBe(true);
+    }
+  await page.getByRole('button', { name: 'Annuler la disposition', exact: true }).click();
+  await expect.poll(readPositions).toEqual(before);
+  const canvas = page.locator('.canvas-viewport');
+  const oldScale = await page.locator('.canvas-surface').getAttribute('style');
+  await canvas.dispatchEvent('wheel', { deltaY: -100, ctrlKey: false });
+  await expect(page.locator('.canvas-surface')).toHaveAttribute('style', oldScale!);
+  const box = (await canvas.boundingBox())!;
+  await canvas.dispatchEvent('wheel', {
+    deltaY: -100,
+    ctrlKey: true,
+    clientX: box.x + 80,
+    clientY: box.y + 100,
+  });
+  await expect(page.locator('.canvas-surface')).not.toHaveAttribute('style', oldScale!);
+  await expect(page.getByRole('button', { name: 'Naviguer dans la minicarte' })).toBeVisible();
+  await page.getByRole('button', { name: 'Tout afficher', exact: true }).click();
+  await page.screenshot({ path: info.outputPath('compact-canvas.png') });
+  const violations = (
+    await new AxeBuilder({ page })
+      .include('app-flow-canvas')
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze()
+  ).violations;
+  expect(violations).toEqual([]);
+  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
+  await expect(page.locator('.step-card')).toHaveCount(5);
+});
+
+test('multiple exclusive cases, nested decisions and protected ends remain navigable in both views', async ({
+  page,
+}, info) => {
+  await setup(page);
+  const kinds = {
+    ...component('subtitle-kind', 'condition', []),
+    outputs: [
+      { id: 'text', label: 'Texte', description: 'Sous-titres textuels' },
+      { id: 'image', label: 'Image', description: 'Sous-titres image' },
+      { id: 'absent', label: 'Absent', description: 'Aucune piste' },
+    ],
+  };
+  const complexNodes = [
+    node('Entrée', 'base-input-file'),
+    node('Vidéo conforme ?', 'decision'),
+    node('GPU utilisable ?', 'decision'),
+    node('Encoder GPU', 'action'),
+    node('Encoder CPU', 'action'),
+    node('Audio conforme ?', 'decision'),
+    node('Normaliser audio', 'action'),
+    node('Sous-titres', 'subtitle-kind'),
+    node('Convertir ASS', 'action'),
+    node('Conserver PGS', 'action'),
+    node('Sortie valide ?', 'decision'),
+    node('Taille réduite ?', 'decision'),
+    node('Succès', 'finish'),
+    node('Conserver original', 'finish'),
+    node('Échec protégé', 'finish'),
+  ];
+  const connections = [
+    edge('c0', 'Entrée', 'success', 'Vidéo conforme ?'),
+    edge('c1', 'Vidéo conforme ?', 'yes', 'Audio conforme ?'),
+    edge('c2', 'Vidéo conforme ?', 'no', 'GPU utilisable ?'),
+    edge('c3', 'GPU utilisable ?', 'yes', 'Encoder GPU'),
+    edge('c4', 'GPU utilisable ?', 'no', 'Encoder CPU'),
+    edge('c5', 'Encoder GPU', 'success', 'Audio conforme ?'),
+    edge('c6', 'Encoder CPU', 'success', 'Audio conforme ?'),
+    edge('c7', 'Audio conforme ?', 'yes', 'Sous-titres'),
+    edge('c8', 'Audio conforme ?', 'no', 'Normaliser audio'),
+    edge('c9', 'Normaliser audio', 'success', 'Sous-titres'),
+    edge('c10', 'Sous-titres', 'text', 'Convertir ASS'),
+    edge('c11', 'Sous-titres', 'image', 'Conserver PGS'),
+    edge('c12', 'Sous-titres', 'absent', 'Sortie valide ?'),
+    edge('c13', 'Convertir ASS', 'success', 'Sortie valide ?'),
+    edge('c14', 'Conserver PGS', 'success', 'Sortie valide ?'),
+    edge('c15', 'Sortie valide ?', 'yes', 'Taille réduite ?'),
+    edge('c16', 'Sortie valide ?', 'no', 'Échec protégé'),
+    edge('c17', 'Taille réduite ?', 'yes', 'Succès'),
+    edge('c18', 'Taille réduite ?', 'no', 'Conserver original'),
+  ];
+  await page.route('**/api/v1/flows/components', (r) =>
+    r.fulfill({
+      json: [{ id: 'base', version: '1.0.0', name: 'Base', components: [...components, kinds] }],
+    }),
+  );
+  await page.route('**/api/v1/flows/11111111-1111-4111-8111-111111111111/edit', (r) =>
+    r.fulfill({
+      json: {
+        definition: { ...flow, nodes: complexNodes, connections },
+        publishedVersion: 1,
+        backupStatus: 'ready',
+      },
+    }),
+  );
+  await page.reload();
+  await expect(page.locator('.step-card')).toHaveCount(15);
+  for (const name of ['Texte', 'Image', 'Absent'])
+    await expect(
+      page.getByRole('button', { name: 'Replier le chemin ' + name, exact: true }),
+    ).toHaveCount(1);
+  for (const name of ['Audio conforme ?', 'Sous-titres', 'Sortie valide ?'])
+    await expect(page.locator(`.step-card[data-node-id="${name}"]`)).toHaveCount(1);
+  await page.locator('.step-card[data-node-id="Sous-titres"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('complex-guided.png') });
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+  await page.getByRole('button', { name: 'Disposition automatique', exact: true }).click();
+  await expect(page.locator('.canvas-node')).toHaveCount(15);
+  await expect(page.locator('.wire')).toHaveCount(19);
+  await expect
+    .poll(() =>
+      page.locator('.wire').evaluateAll((paths) => paths.every((p) => !!p.getAttribute('d'))),
+    )
+    .toBe(true);
+  await page.screenshot({ path: info.outputPath('complex-canvas.png') });
+  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
+  await expect(page.locator('.step-card')).toHaveCount(15);
 });

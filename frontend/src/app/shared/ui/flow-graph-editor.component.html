@@ -7,9 +7,6 @@
       Canvas
     </button>
   </div>
-  @if (viewMode() === 'canvas') {
-    <ng-container [ngTemplateOutlet]="canvas()?.toolbar() ?? null" />
-  }
 </ng-template>
 <ng-template #options>
   <button mat-menu-item (click)="toggleDensity()">
@@ -35,9 +32,15 @@
     (askAi)="aiRequested.emit($event)"
     (insert)="onCanvasInsert($event)"
     (positionChanged)="setCanvasPosition($event)"
+    (positionsChanged)="setCanvasPositions($event)"
     (guided)="switchView('guided', $event)"
   />
 } @else {
+  <div class="guided-tools" role="group" aria-label="Navigation de la vue guidée">
+    <span>Étapes et chemins alternatifs</span>
+    <button mat-button (click)="foldAllBranches(true)">Replier les branches</button>
+    <button mat-button (click)="foldAllBranches(false)">Déplier les branches</button>
+  </div>
   <section
     #surface
     appContextActions
@@ -197,7 +200,14 @@
               <span class="step-provider">{{ blockLabel(step.node.component) }}</span>
             </div>
             <div class="step-heading">
-              <strong class="step-name">{{ step.node.name || step.node.component.name }}</strong>
+              <button
+                class="step-name"
+                type="button"
+                (click)="requestConfiguration(step.node.id)"
+                [disabled]="step.node.component.kind === 'pack'"
+              >
+                {{ step.node.name || step.node.component.name }}
+              </button>
               @if (step.node.component.kind !== 'pack') {
                 <button
                   mat-icon-button
@@ -205,7 +215,7 @@
                   type="button"
                   [attr.aria-label]="'Configurer ' + (step.node.name || step.node.component.name)"
                   title="Configurer le bloc"
-                  (click)="configurationRequested.emit(step.node.id)"
+                  (click)="requestConfiguration(step.node.id)"
                 >
                   <svg
                     width="19"
@@ -404,6 +414,7 @@
                       [name]="branchFolded(step.node.id, branch.output.id) ? 'right' : 'down'"
                     />
                     {{ branch.output.label }}
+                    <span class="branch-count">{{ branchSize(branch.sequence) }} étape(s)</span>
                   </button>
                   @if (!branchFolded(step.node.id, branch.output.id)) {
                     @if (!branch.sequence.steps.length) {
@@ -419,10 +430,20 @@
                       [ngTemplateOutlet]="sequenceTemplate"
                       [ngTemplateOutletContext]="{ sequence: branch.sequence }"
                     />
+                  } @else {
+                    <p class="branch-empty">
+                      Chemin replié · {{ branchSize(branch.sequence) }} étape(s)
+                    </p>
                   }
                 </section>
               }
             </div>
+            @if (step.joinId) {
+              <p class="common-continuation">
+                <app-icon name="down" /> Suite commune : {{ nodeLabel(step.joinId) }}
+                <span>Un seul chemin est exécuté.</span>
+              </p>
+            }
             @if (
               !step.joinId && !structured().references && continuationSources(step.node).length
             ) {

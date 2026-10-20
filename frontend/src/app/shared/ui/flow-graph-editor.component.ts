@@ -61,6 +61,7 @@ import {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-graph-editor',
+  host: { '[class.canvas-view]': "viewMode() === 'canvas'" },
   imports: [
     NgTemplateOutlet,
     IconComponent,
@@ -83,7 +84,6 @@ import {
 export class FlowGraphEditorComponent {
   protected readonly paletteDrag = inject(FlowPaletteDrag);
   readonly componentDropped = output<FlowPaletteDrop>();
-  protected readonly canvas = viewChild(FlowCanvasComponent);
   readonly toolbar = viewChild<TemplateRef<unknown>>('toolbar');
   readonly simulationResult = input<SimulationResult | null>(null);
   readonly simulationDetailsRequested = output<void>();
@@ -102,7 +102,27 @@ export class FlowGraphEditorComponent {
     this.configurationRequested.emit(node.id);
   }
   protected branchColumns(count: number): string {
-    return `repeat(${count}, minmax(440px, 1fr))`;
+    return `repeat(${count}, max-content)`;
+  }
+  protected branchSize(sequence: FlowSequence): number {
+    return sequence.steps.reduce(
+      (count, step) =>
+        count +
+        (step.reference ? 0 : 1) +
+        step.branches.reduce((total, branch) => total + this.branchSize(branch.sequence), 0),
+      0,
+    );
+  }
+  protected foldAllBranches(fold: boolean): void {
+    this.foldedBranches.set(
+      fold
+        ? new Set(
+            this.visualNodes().flatMap((node) =>
+              node.component.outputs.map((output) => node.id + ':' + output.id),
+            ),
+          )
+        : new Set(),
+    );
   }
   readonly layoutKey = input('flow');
   readonly duplicateRequested = output<string>();
@@ -176,9 +196,10 @@ export class FlowGraphEditorComponent {
     if (changed) this.canvasPositions.set(positions);
   }
   setCanvasPosition(event: { nodeId: string; position: FlowGraphPosition }): void {
-    this.canvasPositions.update((positions) =>
-      new Map(positions).set(event.nodeId, event.position),
-    );
+    this.setCanvasPositions(new Map(this.canvasPositions()).set(event.nodeId, event.position));
+  }
+  setCanvasPositions(positions: ReadonlyMap<string, FlowGraphPosition>): void {
+    this.canvasPositions.set(positions);
     try {
       localStorage.setItem(
         'encoding.flow-layout.' + this.layoutKey(),
@@ -371,7 +392,6 @@ export class FlowGraphEditorComponent {
     this.drawingSize.set({ width: root.clientWidth, height: root.offsetHeight });
     const obstacles = this.cards()
       .map((card) => card.nativeElement)
-      .filter((card) => !card.closest('.branch-lane')?.querySelector('[aria-expanded="false"]'))
       .map((card) => {
         const bounds = card.getBoundingClientRect();
         return {
