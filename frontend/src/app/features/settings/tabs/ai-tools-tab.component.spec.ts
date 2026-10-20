@@ -54,9 +54,9 @@ describe('AiToolsTabComponent', () => {
 
   async function setup() {
     aiServiceMock = {
-      getSettingsModelCatalog: vi.fn().mockReturnValue(
-        of({ nodes: [], policy: { disabledModels: [] } }),
-      ),
+      getSettingsModelCatalog: vi
+        .fn()
+        .mockReturnValue(of({ nodes: [], policy: { disabledModels: [] } })),
       listSessions: vi.fn().mockReturnValue(of({ items: [], offset: 0, hasMore: false })),
       getQuotas: vi.fn().mockReturnValue(of({ nodes: [] })),
       getCluster: vi.fn().mockReturnValue(of({ nodes: [] })),
