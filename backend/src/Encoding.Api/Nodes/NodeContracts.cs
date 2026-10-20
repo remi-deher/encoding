@@ -10,7 +10,7 @@ public static class NodeHeartbeatValidator
 {
     private static readonly HashSet<string> SupportedMediaTypes = new(StringComparer.Ordinal)
     {
-        "video", "image", "audio", "subtitles", "general"
+        "video", "image", "audio", "subtitles", "music", "general"
     };
     private static readonly Regex PairingKeyPattern = new("^[0-9A-F]{16}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
