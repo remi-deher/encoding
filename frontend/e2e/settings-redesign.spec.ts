@@ -90,6 +90,15 @@ test('four domains use the application shell and remain accessible on both theme
     );
     for (const theme of ['light', 'dark']) {
       await page.evaluate((value) => (document.documentElement.dataset['theme'] = value), theme);
+      // Audit the settled theme, after the tab color transitions complete.
+      await settings.evaluate(async (element) => {
+        getComputedStyle(element).color;
+        await Promise.all(
+          element
+            .getAnimations({ subtree: true })
+            .map((animation) => animation.finished.catch(() => {})),
+        );
+      });
       const axe = await new AxeBuilder({ page })
         .include('app-settings-page')
         .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
