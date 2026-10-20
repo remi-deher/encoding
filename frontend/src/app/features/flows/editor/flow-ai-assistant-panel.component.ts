@@ -1,13 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FlowPreviewComponent } from '../../../shared/ui/flow-preview/flow-preview';
+import { FlowComponentDefinition } from '../../../shared/models/flow-component';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+  input,
+  output,
+  effect,
+  untracked,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import {
-  MAT_DIALOG_DATA,
-  MatDialogActions,
-  MatDialogContent,
-  MatDialogRef,
-  MatDialogTitle,
-} from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -18,22 +23,23 @@ import { FlowSimulation } from '../../../shared/services/flow-simulation';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { createUuid } from '../../../shared/utils/uuid';
 
-export interface FlowAiAssistantDialogData {
+export interface FlowAiAssistantPanelData {
   readonly mediaType: string;
   readonly currentFlow?: FlowDocument | null;
+  readonly label?: string;
+  readonly initialPrompt?: string;
+  readonly components?: readonly FlowComponentDefinition[];
 }
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  selector: 'app-flow-ai-assistant-dialog',
+  selector: 'app-flow-ai-assistant-panel',
   providers: [FlowSimulation],
   imports: [
     CommonModule,
+    FlowPreviewComponent,
     FormsModule,
     MatButtonModule,
-    MatDialogActions,
-    MatDialogContent,
-    MatDialogTitle,
     MatFormFieldModule,
     MatInputModule,
     MatProgressSpinnerModule,
@@ -49,7 +55,7 @@ export interface FlowAiAssistantDialogData {
         </span>
         <div class="app-dialog-heading">
           <p class="app-dialog-eyebrow">Assistant de flow</p>
-          <h2 mat-dialog-title>Assistant de flow</h2>
+          <h2>Assistant de flow</h2>
           <p class="dialog-description">
             @if (mode() === 'generate') {
               Décrivez le résultat attendu et l’assistant préparera un flow adapté à votre média.
@@ -70,8 +76,9 @@ export interface FlowAiAssistantDialogData {
         </button>
       </header>
 
-      <mat-dialog-content class="app-dialog-body flow-ai-body">
-        @if (data.currentFlow) {
+      <div class="app-dialog-body flow-ai-body">
+        <p role="status">{{ data().label || 'Flow complet' }}</p>
+        @if (data().currentFlow) {
           <div class="mode-selector" role="group" aria-label="Action de l’assistant">
             <button
               class="mode-card"
@@ -183,7 +190,7 @@ export interface FlowAiAssistantDialogData {
           <section class="proposal-box" aria-labelledby="proposal-title">
             <h3 id="proposal-title">Proposition à examiner</h3>
             <p>
-              @if (data.currentFlow) {
+              @if (data().currentFlow) {
                 {{ proposalChanges().addedNodes.length }} bloc(s) ajouté(s),
                 {{ proposalChanges().changedNodes.length }} modifié(s),
                 {{ proposalChanges().removedNodes.length }} supprimé(s),
@@ -267,10 +274,13 @@ export interface FlowAiAssistantDialogData {
                 </div>
               }
             </section>
-            <p class="proposal-applied" role="status">
-              Proposition appliquée à l’éditeur. Vous pouvez continuer la conversation pour
-              l’ajuster.
-            </p>
+            <app-flow-preview [flow]="proposed" [components]="data().components ?? []" />
+            <div class="proposal-decisions">
+              <button matButton="filled" [disabled]="applyBusy()" (click)="applyProposal()">
+                Appliquer au flow
+              </button>
+              <button matButton="text" (click)="discardProposal()">Rejeter la proposition</button>
+            </div>
           </section>
         }
 
@@ -297,10 +307,10 @@ export interface FlowAiAssistantDialogData {
             <span>L’assistant analyse le catalogue et prépare le flow…</span>
           </div>
         }
-      </mat-dialog-content>
+      </div>
 
-      <mat-dialog-actions class="app-dialog-footer flow-ai-footer" align="end">
-        <span class="footer-note">{{ data.mediaType }}</span>
+      <div class="app-dialog-footer flow-ai-footer">
+        <span class="footer-note">{{ data().mediaType }}</span>
         <button
           class="cancel-action"
           matButton="text"
@@ -335,11 +345,34 @@ export interface FlowAiAssistantDialogData {
                 : 'Générer le flow'
           }}
         </button>
-      </mat-dialog-actions>
+      </div>
     </section>
   `,
   styles: [
     `
+      :host {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        max-width: 100%;
+      }
+      .flow-ai-dialog {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        width: 100%;
+      }
+      .flow-ai-body {
+        min-height: 0;
+        overflow: auto;
+        flex: 1;
+      }
+      .proposal-decisions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
       .flow-ai-dialog {
         min-width: 0;
         max-width: none;
@@ -717,9 +750,21 @@ export interface FlowAiAssistantDialogData {
     `,
   ],
 })
-export class FlowAiAssistantDialogComponent {
-  readonly data = inject<FlowAiAssistantDialogData>(MAT_DIALOG_DATA);
-  private readonly dialogRef = inject(MatDialogRef<FlowAiAssistantDialogComponent>);
+export class FlowAiAssistantPanelComponent {
+  readonly context = input.required<FlowAiAssistantPanelData>();
+  readonly data = this.context;
+  readonly applyBusy = input(false);
+  readonly flowApplied = output<FlowDocument>();
+  readonly dismissed = output<void>();
+  constructor() {
+    effect(() => {
+      const data = this.data();
+      untracked(() => {
+        this.setMode(data.currentFlow ? 'refactor' : 'generate');
+        this.prompt.set(data.initialPrompt ?? '');
+      });
+    });
+  }
   private readonly aiService = inject(AiToolsService);
   private readonly notifications = inject(NotificationService);
   protected readonly simulation = inject(FlowSimulation);
@@ -731,7 +776,7 @@ export class FlowAiAssistantDialogComponent {
   readonly proposal = signal<FlowDocument | null>(null);
   readonly proposalRequestId = signal<string | null>(null);
   readonly proposalChanges = computed(() => {
-    const current = this.data.currentFlow;
+    const current = this.data().currentFlow;
     const proposed = this.proposal();
     if (!current || !proposed)
       return {
@@ -774,7 +819,11 @@ export class FlowAiAssistantDialogComponent {
       removedConnections: current.connections
         .filter((item) => !proposedConnections.has(key(item)))
         .map(connectionLabel),
-      metadataChanged: current.name !== proposed.name || current.mediaType !== proposed.mediaType,
+      metadataChanged:
+        current.name !== proposed.name ||
+        current.mediaType !== proposed.mediaType ||
+        JSON.stringify(current.componentPacks ?? []) !==
+          JSON.stringify(proposed.componentPacks ?? []),
     };
   });
   readonly errorMessage = signal<string | null>(null);
@@ -800,11 +849,14 @@ export class FlowAiAssistantDialogComponent {
     this.proposalRequestId.set(null);
   }
 
+  acknowledgeProposal(): void {
+    this.recordProposalDecision('applied-to-editor');
+  }
+
   applyProposal(): void {
     const flow = this.proposal();
     if (!flow) return;
-    this.recordProposalDecision('applied-to-editor');
-    this.proposal.set(flow);
+    this.flowApplied.emit(flow);
   }
 
   simulateProposal(flow: FlowDocument): void {
@@ -891,7 +943,7 @@ export class FlowAiAssistantDialogComponent {
         .generateFlow({
           sessionId: this.sessionId(),
           requestId: this.requestId,
-          mediaType: this.data.mediaType,
+          mediaType: this.data().mediaType,
           userPrompt: this.prompt(),
         })
         .subscribe({
@@ -903,7 +955,6 @@ export class FlowAiAssistantDialogComponent {
             if (res.success && res.flow) {
               this.proposalRequestId.set(res.requestId ?? null);
               this.proposal.set(res.flow);
-              this.dialogRef.close({ flow: res.flow });
             } else {
               this.errorMessage.set(res.explanation || 'Impossible de générer un flow valide.');
             }
@@ -913,12 +964,12 @@ export class FlowAiAssistantDialogComponent {
             this.errorMessage.set(err.message ?? 'Erreur lors de la génération.');
           },
         });
-    } else if (currentMode === 'refactor' && this.data.currentFlow) {
+    } else if (currentMode === 'refactor' && this.data().currentFlow) {
       this.aiService
         .refactorFlow({
           sessionId: this.sessionId(),
           requestId: this.requestId,
-          currentFlow: this.data.currentFlow,
+          currentFlow: this.data().currentFlow!,
           userPrompt: this.prompt(),
         })
         .subscribe({
@@ -930,7 +981,6 @@ export class FlowAiAssistantDialogComponent {
             if (res.success && res.flow) {
               this.proposalRequestId.set(res.requestId ?? null);
               this.proposal.set(res.flow);
-              this.dialogRef.close({ flow: res.flow });
             } else {
               this.errorMessage.set(
                 res.explanation || 'Impossible d’appliquer les modifications au flow.',
@@ -942,12 +992,12 @@ export class FlowAiAssistantDialogComponent {
             this.errorMessage.set(err.message ?? 'Erreur lors de la modification.');
           },
         });
-    } else if (currentMode === 'explain' && this.data.currentFlow) {
+    } else if (currentMode === 'explain' && this.data().currentFlow) {
       this.aiService
         .explainFlow({
           sessionId: this.sessionId(),
           requestId: this.requestId,
-          flow: this.data.currentFlow,
+          flow: this.data().currentFlow!,
         })
         .subscribe({
           next: (res) => {
@@ -967,6 +1017,6 @@ export class FlowAiAssistantDialogComponent {
   }
 
   close(): void {
-    this.dialogRef.close();
+    this.dismissed.emit();
   }
 }

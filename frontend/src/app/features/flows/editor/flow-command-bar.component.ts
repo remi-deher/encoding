@@ -93,6 +93,22 @@ import { MediaType } from '../../../shared/models/media-type';
       </div>
 
       <div class="command-group tool-actions">
+        <button
+          matButton="text"
+          [disabled]="!canUndo()"
+          (click)="undoRequested.emit()"
+          aria-label="Annuler la dernière modification"
+        >
+          ↶ Annuler
+        </button>
+        <button
+          matButton="text"
+          [disabled]="!canRedo()"
+          (click)="redoRequested.emit()"
+          aria-label="Rétablir la modification"
+        >
+          ↷ Rétablir
+        </button>
         @if (canRestoreAiProposal()) {
           <button
             matButton="tonal"
@@ -497,6 +513,11 @@ import { MediaType } from '../../../shared/models/media-type';
   `,
 })
 export class FlowCommandBarComponent {
+  readonly canUndo = input(false);
+  readonly canRedo = input(false);
+  readonly undoRequested = output<void>();
+  readonly redoRequested = output<void>();
+
   readonly title = input.required<string>();
   readonly mediaType = input.required<MediaType>();
   readonly storedVersion = input(0);

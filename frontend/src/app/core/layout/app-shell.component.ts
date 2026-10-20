@@ -1,3 +1,5 @@
+import { FlowEditorAssistant } from '../../shared/services/flow-editor-assistant.service';
+import { FlowAiAssistantPanelComponent } from '../../features/flows/editor/flow-ai-assistant-panel.component';
 import {
   ExecutionTracking,
   INITIAL_EXECUTION_TRACKING,
@@ -44,6 +46,7 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
     ThemeToggleComponent,
     UserMenuComponent,
     AiAssistantPageComponent,
+    FlowAiAssistantPanelComponent,
   ],
   templateUrl: './app-shell.component.html',
   host: {
@@ -52,6 +55,19 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
   },
 })
 export class AppShellComponent {
+  protected readonly flowAssistant = inject(FlowEditorAssistant);
+  protected readonly generalAssistant = viewChild(AiAssistantPageComponent);
+  protected readonly flowWidget = viewChild<FlowAiAssistantPanelComponent>('flowWidget');
+  protected async applyFlowProposal(
+    flow: import('../../shared/models/flow-validation').FlowDocument,
+  ): Promise<void> {
+    const widget = this.flowWidget();
+    if (await this.flowAssistant.apply(flow)) {
+      widget?.acknowledgeProposal();
+      this.closeAssistantPanel();
+    }
+  }
+
   private static readonly assistantLauncherStorageKey = 'encoding.assistant-launcher.position';
   private static readonly assistantLauncherGrid = 24;
   private readonly router = inject(Router);
@@ -100,6 +116,13 @@ export class AppShellComponent {
   constructor() {
     afterNextRender(() => this.onWindowResize());
     effect(() => {
+      if (this.flowAssistant.session()) {
+        this.assistantWidgetMounted.set(true);
+        this.assistantPanelOpen.set(true);
+        this.updateAssistantPanelGeometry();
+      }
+    });
+    effect(() => {
       const compact = this.isCompactNavigation();
       const context = this.navigationEnd();
       this.navigationOpened.set(!compact && !context.authMode && !context.workspaceMode);
@@ -126,6 +149,7 @@ export class AppShellComponent {
     () => Boolean(this.currentUser()) && !this.authMode() && !this.assistantRouteActive(),
   );
   protected readonly assistantWidgetMounted = signal(false);
+  protected readonly generalAssistantMounted = signal(false);
   protected readonly assistantPanelOpen = signal(false);
   private readonly assistantPanelOpening = signal(false);
   protected readonly assistantPanelGeometry = signal<{
@@ -200,6 +224,13 @@ export class AppShellComponent {
       event.preventDefault();
       event.stopPropagation();
       this.suppressAssistantClick = false;
+      return;
+    }
+    if (this.flowAssistant.hasEditor() && !this.assistantPanelOpen()) {
+      if (this.flowAssistant.session()) {
+        this.updateAssistantPanelGeometry();
+        this.assistantPanelOpen.set(true);
+      } else void this.flowAssistant.open();
       return;
     }
     this.toggleAssistantPanel();
@@ -280,6 +311,7 @@ export class AppShellComponent {
       this.closeAssistantPanel();
       return;
     }
+    if (!this.flowAssistant.session()) this.generalAssistantMounted.set(true);
     this.focusReturnElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (this.isCompactNavigation()) this.navigationOpened.set(false);
@@ -306,8 +338,14 @@ export class AppShellComponent {
     const launcher = button.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const panelWidth = Math.min(380, Math.max(1, viewportWidth - 32));
-    const panelHeight = Math.min(520, Math.max(1, viewportHeight - 112));
+    const panelWidth = Math.min(
+      this.flowAssistant.session() ? 640 : 380,
+      Math.max(1, viewportWidth - 32),
+    );
+    const panelHeight = Math.min(
+      this.flowAssistant.session() ? 840 : 520,
+      Math.max(1, viewportHeight - 112),
+    );
     const margin = 16;
     const gap = 16;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));

@@ -1,0 +1,163 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 400px;
+  min-width: 0;
+}
+.canvas-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px;
+  background: var(--surface-container);
+  font-size: var(--font-label);
+}
+.canvas-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  cursor: grab;
+  background: radial-gradient(var(--border-subtle) 1px, transparent 1px) 0 0/24px 24px;
+}
+.canvas-viewport:active {
+  cursor: grabbing;
+}
+.canvas-surface {
+  position: relative;
+  transform-origin: 0 0;
+}
+.wires {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.wire-hit {
+  stroke: transparent;
+  stroke-width: 18;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.wire-hit:hover {
+  stroke: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.ghost {
+  stroke-dasharray: 6 4;
+}
+.canvas-node {
+  position: absolute;
+  width: 300px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-container);
+  border: 2px solid transparent;
+  box-shadow: var(--elevation-1);
+  font-size: 14px;
+  cursor: pointer;
+}
+.selected {
+  border-color: var(--accent);
+}
+.canvas-node:focus-visible,
+.port:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+header {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  color: var(--node-color);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--surface-container-high);
+}
+header span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drag,
+.more {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.drag {
+  font-size: 24px;
+  cursor: move;
+  touch-action: none;
+}
+.more {
+  font-size: 24px;
+}
+strong {
+  display: block;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.output-row {
+  height: 40px;
+  position: relative;
+  text-align: right;
+  padding-right: 10px;
+}
+.output-row button[mat-button] {
+  font-size: var(--font-label);
+}
+.port {
+  position: absolute;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  border: 6px solid var(--surface-container);
+  border-radius: 50%;
+  background: var(--node-color, var(--accent));
+  padding: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+.output {
+  right: -15px;
+  top: 0;
+}
+.input {
+  left: -15px;
+  top: 34px;
+}
+.valid {
+  outline: 3px solid var(--accent);
+}
+.connection-list {
+  display: flex;
+  overflow: auto;
+  max-height: 52px;
+  background: var(--surface-container-low);
+  font-size: var(--font-label);
+}
+.connection-list button {
+  flex-shrink: 0;
+}
+.cdk-drag-placeholder {
+  opacity: 0;
+}
+.cdk-drag-preview {
+  box-shadow: var(--elevation-3);
+}
