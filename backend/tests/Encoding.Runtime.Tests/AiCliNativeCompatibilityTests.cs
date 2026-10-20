@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Diagnostics;
 using Xunit;
-using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
@@ -65,8 +64,7 @@ public sealed class AiCliNativeCompatibilityTests
     [InlineData(true)]
     public async Task ExcessiveCliOutputStopsTheEntireProcessTree(bool stderr)
     {
-        if (Environment.GetEnvironmentVariable("ENCODING_TEST_AI_CLI_NATIVE") != "1") return;
-        Assert.True(OperatingSystem.IsLinux());
+        if (Environment.GetEnvironmentVariable("ENCODING_TEST_AI_CLI_NATIVE") != "1" || !OperatingSystem.IsLinux()) return;
         Assert.True(Encoding.Core.Runtime.ProcessSandbox.IsAvailable);
 
         using var fixture = new AiCliTestProfile();
@@ -91,7 +89,7 @@ public sealed class AiCliNativeCompatibilityTests
             catch (ArgumentException) { return; }
             await Task.Delay(25, timeout.Token);
         }
-        Assert.True(false, $"CLI descendant {childPid} remained alive after oversized output.");
+        Assert.Fail($"CLI descendant {childPid} remained alive after oversized output.");
     }
 
     [Fact]
