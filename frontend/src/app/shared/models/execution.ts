@@ -73,10 +73,11 @@ export interface ResolvedVideoEncoding {
   readonly priority: number;
   readonly resolvedAt: string;
 }
+export type ExecutionEventState = ExecutionState | 'media.published';
 export interface ExecutionEventResponse {
   readonly id: string;
   readonly revision: number;
-  readonly state: ExecutionState;
+  readonly state: ExecutionEventState;
   readonly detail: string;
   readonly createdAt: string;
 }

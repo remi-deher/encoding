@@ -11,17 +11,17 @@ const COMMON_OUTPUTS = [
   output('success', 'Suite', 'Le composant a terminé son traitement.'),
   output('error', 'Erreur', 'Le composant n’a pas pu terminer son traitement.'),
 ];
-export const FLOW_COMPONENT_CATALOG: readonly FlowComponentDefinition[] = [
-  ...FLOW_CONTROL_COMPONENTS,
-  ...MEDIA_TOOL_ACTIONS,
+/** Only used to render and edit saved flows; this legacy block is not offered in the palette. */
+export const LEGACY_FLOW_COMPONENTS: readonly FlowComponentDefinition[] = [
   {
     id: 'base-condition',
-    name: 'Tester une condition',
-    description: 'Évalue une règle et dirige le flow selon le résultat.',
+    name: 'Condition héritée',
+    description: 'Bloc JavaScript conservé pour les flows existants.',
     kind: 'condition',
     mediaType: 'general',
+    supportedFlowMediaTypes: ['video', 'image', 'music', 'subtitles'],
     pluginId: 'base',
-    pluginName: 'Base',
+    pluginName: 'Base (compatibilité)',
     outputs: [
       output('yes', 'Oui', 'La condition est satisfaite.'),
       output('no', 'Non', 'La condition n’est pas satisfaite.'),
@@ -34,14 +34,17 @@ export const FLOW_COMPONENT_CATALOG: readonly FlowComponentDefinition[] = [
           id: 'expression',
           type: 'text',
           label: 'Expression',
-          description: 'Règle à évaluer pour choisir la sortie.',
-          placeholder: 'Ex. codec vidéo = HEVC',
+          description: 'Expression JavaScript historique évaluée pour choisir la sortie.',
           required: true,
           multiline: true,
         },
       ],
     },
   },
+];
+export const FLOW_COMPONENT_CATALOG: readonly FlowComponentDefinition[] = [
+  ...FLOW_CONTROL_COMPONENTS,
+  ...MEDIA_TOOL_ACTIONS,
   {
     id: 'base-variable',
     name: 'Définir une variable',

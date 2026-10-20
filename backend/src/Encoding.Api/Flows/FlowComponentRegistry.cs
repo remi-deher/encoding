@@ -10,6 +10,7 @@ public sealed class FlowComponentRegistry
 {
     private readonly Dictionary<FlowComponentReference, FlowComponentDescriptor> components = [];
     private readonly Dictionary<FlowComponentReference,string> runtimeVersions=[];
+    private readonly FlowComponentDescriptor legacyCondition;
     public IReadOnlyList<PluginManifest> Plugins { get; }
 
     public FlowComponentRegistry(IConfiguration configuration)
@@ -20,6 +21,9 @@ public sealed class FlowComponentRegistry
         if (manifest.ContractVersion != 1 || !manifest.SupportedHostContractVersions.Contains(1)
             || manifest.Id != "base" || string.IsNullOrWhiteSpace(manifest.Version))
             throw new InvalidOperationException("Le manifeste Base est incompatible.");
+        var legacyPath = Path.Combine(AppContext.BaseDirectory, "Flows", "Legacy", "base-condition.json");
+        legacyCondition = JsonSerializer.Deserialize<FlowComponentDescriptor>(File.ReadAllText(legacyPath), new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            ?? throw new InvalidOperationException("Le composant Base historique est vide.");
         var manifests = new List<PluginManifest> { manifest };
         var catalogDirectory = Path.Combine(AppContext.BaseDirectory, "Flows", "Catalog");
         foreach (var file in Directory.EnumerateFiles(catalogDirectory, "*.json")
@@ -111,6 +115,16 @@ public sealed class FlowComponentRegistry
                 }
             }
         }
+        var legacyReference = new FlowComponentReference(manifest.Id, manifest.Version, legacyCondition.Id,
+            legacyCondition.Version, legacyCondition.ConfigurationSchema.Version);
+        components.Add(legacyReference, legacyCondition);
+        runtimeVersions.Add(legacyReference, manifest.Version);
+        foreach (var version in legacyCondition.CompatiblePluginVersions ?? [])
+        {
+            var compatible = legacyReference with { PluginVersion = version };
+            components.Add(compatible, legacyCondition);
+            runtimeVersions.Add(compatible, manifest.Version);
+        }
         Plugins = manifests;
     }
 
@@ -141,6 +155,7 @@ public sealed class FlowComponentRegistry
         ["base-inspect-track"] = ("probe", "probe-inspect-track"),
         ["base-export-media-report"] = ("probe", "probe-export-report"),
         // Video plugin
+        ["base-remux-media"] = ("video", "video-remux-media"),
         ["base-transcode-video"] = ("video", "video-transcode"),
         ["base-resize-video"] = ("video", "video-resize"),
         ["base-auto-crop"] = ("video", "video-auto-crop"),
@@ -218,6 +233,14 @@ public sealed class FlowComponentRegistry
         if (LegacyAliases.TryGetValue(componentId, out var target))
         {
             return FindReference(target.ComponentId, target.PluginId);
+        }
+
+        if (string.Equals(componentId, "base-condition", StringComparison.OrdinalIgnoreCase)
+            && (pluginId is null || string.Equals(pluginId, "base", StringComparison.OrdinalIgnoreCase)))
+        {
+            var manifest = Plugins.Single(plugin => plugin.Id == "base");
+            return new FlowComponentReference(manifest.Id, manifest.Version, legacyCondition.Id,
+                legacyCondition.Version, legacyCondition.ConfigurationSchema.Version);
         }
 
         return null;

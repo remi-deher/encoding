@@ -6,7 +6,7 @@ public sealed class MediaScanner(ProcessToolRunner tools)
 {
     public async Task<JsonElement> ScanAsync(string path,CancellationToken ct)
     {
-        var json=await tools.CheckedAsync("ffprobe",["-v","error","-show_format","-show_streams","-of","json",path],Path.GetDirectoryName(path)!,ct);
+        var json=await tools.CheckedAsync("ffprobe",["-v","error","-show_format","-show_streams","-show_chapters","-of","json",path],Path.GetDirectoryName(path)!,ct);
         using var document=JsonDocument.Parse(json);
         if(!document.RootElement.TryGetProperty("streams",out var streams) || streams.GetArrayLength()==0) throw new IOException("Aucune piste média valide détectée.");
         var sanitized=System.Text.Json.Nodes.JsonNode.Parse(document.RootElement.GetRawText())!;

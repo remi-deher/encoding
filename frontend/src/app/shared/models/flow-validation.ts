@@ -106,14 +106,18 @@ export function resolveFlowComponent(
   plugins: readonly FlowPluginCatalog[],
   reference: FlowComponentReference,
 ) {
+  const movedRemux = reference.pluginId === 'base' && reference.componentId === 'base-remux-media';
+  const pluginId = movedRemux ? 'video' : reference.pluginId;
+  const componentId = movedRemux ? 'video-remux-media' : reference.componentId;
   for (const plugin of plugins) {
-    if (plugin.id !== reference.pluginId) continue;
+    if (plugin.id !== pluginId) continue;
     const component = plugin.components.find(
       (component) =>
-        component.id === reference.componentId &&
+        component.id === componentId &&
         component.version === reference.componentVersion &&
         component.configurationSchema?.version === reference.configurationSchemaVersion &&
-        (plugin.version === reference.pluginVersion ||
+        (movedRemux ||
+          plugin.version === reference.pluginVersion ||
           component.compatiblePluginVersions?.includes(reference.pluginVersion)),
     );
     if (component) return { plugin, component };

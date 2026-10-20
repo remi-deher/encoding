@@ -55,13 +55,15 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             var componentId = node.Component.ComponentId;
             var isAliased = FlowComponentRegistry.TryGetLegacyAlias(componentId, out var legacyTarget);
             var targetPluginId = isAliased ? legacyTarget.PluginId : pluginId;
+            var component=registry.Resolve(node.Component);
 
             var matches = capabilities.Any(c =>
                 (c.ToolId == "plugin/" + pluginId && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component)))
                 || (pluginId == "ai" && (componentId is "ai-translate-subtitles" or "ai-metadata-enricher") && c.ToolId == "ai-runtime" && c.Version == "1.0.0")
                 || (isAliased && c.ToolId == "plugin/" + targetPluginId)
                 || (isAliased && c.ToolId == "plugin/base" && IsBaseVersionSatisfied(c.Version, componentId))
-                || (node.Component.PluginId is "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" && c.ToolId == "plugin/base" && c.Version == "1.6.0"));
+                || (pluginId == "base" && !isAliased && c.ToolId == "plugin/base" && component?.CompatiblePluginVersions?.Contains(c.Version,StringComparer.Ordinal)==true)
+                || (node.Component.PluginId is "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" && c.ToolId == "plugin/base" && IsAtLeast(c.Version, "1.6.0")));
 
             if (!matches) return false;
             if(node.Component.PluginId=="nodes" && node.Component.ComponentId=="nodes-run-on-node")
@@ -99,7 +101,6 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                     if (!supported) return false;
                 }
             }
-            var component=registry.Resolve(node.Component)!;
             if(component is null) return false;
             if(node.Component.PluginId=="base" && node.Component.ComponentId=="base-prepare-processing"
                 && !capabilities.Any(c=>c.ToolId==(node.Configuration.TryGetValue("tool",out var chosen)?chosen.GetString():"ffmpeg"))) return false;
@@ -108,7 +109,8 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             foreach(var tool in component.RequiredTools)
                 if(!capabilities.Any(c=>c.ToolId==tool.ToolId && (tool.MinimumVersion is null || Version.TryParse(c.Version,out var actual) && Version.TryParse(tool.MinimumVersion,out var minimum) && actual>=minimum)
                     && tool.RequiredCapabilities.All(feature=>c.AccelerationTypes.Contains(feature)))) return false;
-            if(node.Configuration.TryGetValue("hardwareAcceleration",out var acceleration) && acceleration.GetString() is { } name && name!="cpu"
+            var retryWithCpu=node.Configuration.TryGetValue("retryWithCpu",out var retryValue)&&retryValue.ValueKind==System.Text.Json.JsonValueKind.True;
+            if(node.Configuration.TryGetValue("hardwareAcceleration",out var acceleration) && acceleration.GetString() is { } name && name!="cpu"&&!retryWithCpu
                 && !capabilities.Any(c=>c.ToolId=="ffmpeg" && c.AccelerationTypes.Contains(name))) return false;
             if(node.Component.ComponentId=="base-script" && node.Configuration.TryGetValue("language",out var language)
                 && !capabilities.Any(c=>c.ToolId==(language.GetString()=="python"?"python":"javascript"))) return false;
@@ -126,10 +128,21 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                     var mode=node.Configuration.TryGetValue("encoderMode",out var modeValue)?modeValue.GetString()!:"automatic";
                     var selected=node.Configuration.TryGetValue("encoderId",out var encoderValue)?encoderValue.GetString():null;
                     var ffmpeg=capabilities.FirstOrDefault(capability=>capability.ToolId=="ffmpeg");
-                    if(profile is null || ffmpeg is null
-                        || MediaCodecPolicy.ResolveVideoEncoder(codec,mode,selected,profile,ffmpeg.Encoders??[],ffmpeg.AccelerationTypes,ffmpeg.EncoderChecks) is null) return false;
+                    if(profile is null || ffmpeg is null) return false;
+                    var usable=retryWithCpu
+                        ?MediaCodecPolicy.ResolveCpuFallbackVideoEncoder(codec,profile,ffmpeg.Encoders??[],ffmpeg.AccelerationTypes,ffmpeg.EncoderChecks) is not null
+                        :MediaCodecPolicy.ResolveVideoEncoder(codec,mode,selected,profile,ffmpeg.Encoders??[],ffmpeg.AccelerationTypes,ffmpeg.EncoderChecks) is not null;
+                    if(!usable) return false;
                 }
-                else if(MediaCodecPolicy.VideoEncoder(codec,node.Configuration.TryGetValue("hardwareAcceleration",out var hw)?hw.GetString()!:"cpu",encoders) is null) return false;
+                else
+                {
+                    var hardware=node.Configuration.TryGetValue("hardwareAcceleration",out var hw)?hw.GetString()!:"cpu";
+                    if(retryWithCpu&&hardware!="cpu")
+                    {
+                        if(MediaCodecPolicy.VideoEncoder(codec,"cpu",encoders) is null) return false;
+                    }
+                    else if(MediaCodecPolicy.VideoEncoder(codec,hardware,encoders) is null) return false;
+                }
             }
             if((node.Component.ComponentId is "base-audio-rules" or "audio-rules") && (MediaCodecPolicy.AudioEncoder("aac",encoders) is null || MediaCodecPolicy.AudioEncoder("ac3",encoders) is null)) return false;
             if((node.Component.ComponentId is "base-transcode-audio" or "audio-transcode") && node.Configuration.TryGetValue("audioCodec",out var audio)
@@ -152,4 +165,9 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
         };
         return actual >= minVersion;
     }
+
+    private static bool IsAtLeast(string actualVersion, string minimumVersion) =>
+        Version.TryParse(actualVersion, out var actual)
+        && Version.TryParse(minimumVersion, out var minimum)
+        && actual >= minimum;
 }
