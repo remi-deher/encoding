@@ -242,7 +242,7 @@ public static class RuntimeEndpoints
 
     private static Guid DeriveBatchRequestId(Guid executionId, Guid invocationId, string nodeId, int batchIndex)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{executionId:N}/{invocationId:N}/{nodeId}/{batchIndex}"));
+        var bytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{executionId:N}/{invocationId:N}/{nodeId}/{batchIndex}"));
         var id = new Guid(bytes.AsSpan(0, 16));
         return id == Guid.Empty ? new Guid(bytes.AsSpan(16, 16)) : id;
     }

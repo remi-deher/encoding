@@ -485,6 +485,16 @@ public sealed class AiAssistantService(
         return ReadActivityAsync(OwnerId(user), requestId, ct);
     }
 
+    public async Task<Guid?> GetRequestCoordinatorIdAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct)
+    {
+        if (requestId == Guid.Empty) return null;
+        var activity = await ReadActivityAsync(OwnerId(user), requestId, ct);
+        var parts = activity?.ConversationId?.Split('.');
+        return parts is { Length: 2 } && Guid.TryParseExact(parts[0], "N", out var coordinatorId) && coordinatorId != Guid.Empty
+            ? coordinatorId
+            : null;
+    }
+
     private async Task<AiAssistantActivity?> ReadActivityAsync(string ownerId, Guid requestId, CancellationToken ct) =>
         (await store.ReadAsync<StoredActivity>(ActivityPrefix + ownerId + "/" + requestId.ToString("N"), ct))?.Activity;
 

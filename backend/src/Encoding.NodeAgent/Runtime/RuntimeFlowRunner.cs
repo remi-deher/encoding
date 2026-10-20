@@ -494,7 +494,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 {
                     var request=new CompleteRuntimeStep(lease.Epoch,eventId,Volatile.Read(ref revision),checkpoint,
                         commandCapture.ForStep(node.Id,started.InvocationId),
-                        id=="ai-translate-subtitles" && node.Component.PluginId=="ai");
+                        node.Component.ComponentId=="ai-translate-subtitles" && node.Component.PluginId=="ai");
                     for(var retry=0;;retry++)
                     {
                         try

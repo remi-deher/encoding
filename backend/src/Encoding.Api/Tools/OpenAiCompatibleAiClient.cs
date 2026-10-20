@@ -102,7 +102,7 @@ public sealed class OpenAiCompatibleAiClient(HttpClient httpClient, string model
                 throw new InvalidDataException("Provider response exceeded the configured limit.");
             await output.WriteAsync(buffer.AsMemory(0, read), ct);
         }
-        return Encoding.UTF8.GetString(output.GetBuffer(), 0, checked((int)output.Length));
+        return System.Text.Encoding.UTF8.GetString(output.GetBuffer(), 0, checked((int)output.Length));
     }
 
     private static bool HasStructuredRateLimit(string content)

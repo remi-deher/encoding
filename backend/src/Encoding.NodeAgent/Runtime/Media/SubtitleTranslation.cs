@@ -88,7 +88,7 @@ public static partial class SubtitleTranslation
             output.AppendLine(translations[cue.Id]);
             output.AppendLine();
         }
-        var suffix = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(flowNodeId)))[..16];
+        var suffix = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(flowNodeId)))[..16];
         var target = Path.Combine(directory, "translated-" + suffix + ".srt");
         await File.WriteAllTextAsync(target, output.ToString(), new UTF8Encoding(false), ct);
         return new(target);
@@ -114,7 +114,7 @@ public static partial class SubtitleTranslation
         if (codec is "hdmv_pgs_subtitle" or "dvd_subtitle" or "dvb_subtitle" or "xsub")
             throw new SubtitleException("La piste sélectionnée contient des sous-titres image; une étape OCR est nécessaire.");
         var streamIndex = stream.GetProperty("index").GetInt32();
-        var token = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(flowNodeId)))[..16];
+        var token = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(flowNodeId)))[..16];
         var extracted = Path.Combine(directory, "subtitle-" + token + ".srt");
         await tools.CheckedAsync("ffmpeg", ["-nostdin", "-v", "error", "-i", sourcePath, "-map", "0:" + streamIndex,
             "-c:s", "srt", "-f", "srt", "-y", extracted], directory, ct);
