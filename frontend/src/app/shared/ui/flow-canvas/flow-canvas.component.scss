@@ -180,3 +180,14 @@ strong {
   font-size: var(--font-label);
   overflow-wrap: anywhere;
 }
+
+.canvas-viewport {
+  user-select: none;
+}
+.wire.highlighted {
+  stroke-width: 4;
+  filter: drop-shadow(0 0 3px var(--accent));
+}
+.wire.muted {
+  opacity: 0.25;
+}

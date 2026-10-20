@@ -18,7 +18,7 @@ import {
   MatDialogTitle,
 } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
+import { IconComponent } from './icon.component';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -43,7 +43,7 @@ export interface DeviceAuthDialogData {
     MatDialogActions,
     MatDialogContent,
     MatDialogTitle,
-    MatIconModule,
+    IconComponent,
     MatProgressSpinnerModule,
     MatFormFieldModule,
     MatInputModule,
@@ -60,8 +60,8 @@ export interface DeviceAuthDialogData {
       <mat-dialog-content class="app-dialog-body device-auth-body">
         @if (data.prompt.userCode) {
           <p class="instruction">
-            Ouvrez le lien officiel ci-dessous dans votre navigateur et saisissez le code fourni
-            par {{ data.toolName }} :
+            Ouvrez le lien officiel ci-dessous dans votre navigateur et saisissez le code fourni par
+            {{ data.toolName }} :
           </p>
         } @else {
           <p class="instruction">
@@ -75,7 +75,7 @@ export interface DeviceAuthDialogData {
           <div class="code-box">
             <span class="code-value">{{ userCode }}</span>
             <button matButton="outlined" type="button" (click)="copyCode()">
-              <mat-icon>{{ copied() ? 'check' : 'content_copy' }}</mat-icon>
+              <app-icon [name]="copied() ? 'check' : 'copy'" />
               {{ copied() ? 'Copié !' : 'Copier le code' }}
             </button>
           </div>
@@ -88,7 +88,7 @@ export interface DeviceAuthDialogData {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <mat-icon>open_in_new</mat-icon>
+            <app-icon name="outward" />
             Ouvrir {{ data.prompt.verificationUri }}
           </a>
         </div>
@@ -123,7 +123,7 @@ export interface DeviceAuthDialogData {
             <span>Vérification de l'autorisation...</span>
           } @else if (isAuthorized()) {
             <span class="authorized-badge">
-              <mat-icon>check_circle</mat-icon> Compte associé avec succès !
+              <app-icon name="check" /> Compte associé avec succès !
             </span>
           } @else {
             <button
@@ -132,7 +132,7 @@ export interface DeviceAuthDialogData {
               [disabled]="isChecking()"
               (click)="checkStatus()"
             >
-              <mat-icon>refresh</mat-icon>
+              <app-icon name="refresh" />
               {{ data.prompt.userCode ? "J'ai validé le code" : 'Vérifier la connexion' }}
             </button>
           }
@@ -289,7 +289,9 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
         } else if (attemptState === 'failed' || attemptState === 'expired') {
           this.expired.set(true);
           this.statusMessage.set(
-            status.attemptErrorMessage || status.errorMessage || 'La connexion a échoué ou a expiré. Relancez l’association.',
+            status.attemptErrorMessage ||
+              status.errorMessage ||
+              'La connexion a échoué ou a expiré. Relancez l’association.',
           );
           clearInterval(this.polling);
         }

@@ -28,7 +28,7 @@
 </svg>
 @for (link of links(); track link.id) {
   <button
-    mat-icon-button
+    matButton="tonal"
     class="link-insertion"
     appContextActions
     (contextActions)="contextRequested.emit({ id: link.id, position: $event })"
@@ -36,9 +36,8 @@
     [style.left.px]="link.insertion.x"
     [style.top.px]="link.insertion.y"
     aria-label="Insérer une étape sur cette liaison"
-    title="Insérer une étape"
     (click)="insertionRequested.emit(link.id)"
   >
-    +
+    <app-icon name="add" /> Étape
   </button>
 }

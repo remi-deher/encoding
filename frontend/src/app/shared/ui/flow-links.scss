@@ -23,15 +23,28 @@ path {
   position: absolute;
   transform: translate(-50%, -50%);
   pointer-events: auto;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  line-height: 28px;
-  font-size: 21px;
   color: var(--accent);
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+  white-space: nowrap;
+}
+.link-insertion::before,
+.link-insertion::after {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  border-top: 1px solid var(--border-strong);
+  content: '';
+}
+.link-insertion::before {
+  right: calc(100% + 2px);
+}
+.link-insertion::after {
+  left: calc(100% + 2px);
+}
+.link-insertion app-icon {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
 }
 
 .link-hit {

@@ -161,6 +161,19 @@ test('guided branches keep their widths inside a horizontally scrollable workspa
   page,
 }) => {
   await setup(page);
+  await expect(
+    page.locator('mat-expansion-panel', { has: page.locator('.branch-heading') }),
+  ).toHaveCount(0);
+  const branch = page.getByRole('button', { name: 'Replier le chemin Oui', exact: true });
+  await expect(branch).toHaveAttribute('aria-expanded', 'true');
+  await branch.click();
+  await expect(
+    page.getByRole('button', { name: 'Déplier le chemin Oui', exact: true }),
+  ).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.branch-lane').first().locator('.step-card')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Déplier le chemin Oui', exact: true }).click();
+  await expect(page.locator('.branch-lane').first().locator('.step-card')).toHaveCount(1);
+  await expect(page.locator('.link-insertion').first()).toContainText('Étape');
   const cards = await page
     .locator('.step-card')
     .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().width));
@@ -233,7 +246,10 @@ test('five nested decisions retain card widths, a single convergence and local s
   await page.screenshot({ path: testInfo.outputPath('canvas-five-levels.png') });
   await page.getByRole('button', { name: 'Guidé', exact: true }).click();
   const before = await page.locator('.workbench-canvas').evaluate((el) => el.scrollWidth);
-  await page.locator('mat-expansion-panel-header').first().click();
+  await page
+    .getByRole('button', { name: /^Replier le chemin / })
+    .first()
+    .click();
   await expect
     .poll(() => page.locator('.workbench-canvas').evaluate((el) => el.scrollWidth))
     .toBeLessThan(before);
@@ -595,4 +611,69 @@ test('inspector preserves optional advanced settings while editing a common sett
   await expect(inspector.getByLabel('Option avancée', { exact: true })).toHaveValue('Conserver');
   await inspector.getByRole('button', { name: 'Appliquer les réglages', exact: true }).click();
   await expect(card).toContainText('Qualité : 22');
+});
+
+test('canvas wires follow dragging before release and selection highlights connections', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+  const entry = page.locator('.canvas-node').first();
+  await entry.click();
+  await expect(page.locator('.wire.highlighted')).not.toHaveCount(0);
+  const wire = page.locator('.wire').first();
+  const before = await wire.getAttribute('d');
+  const handle = entry.getByRole('button', { name: 'Déplacer l’étape' });
+  const rect = (await handle.boundingBox())!;
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width / 2 + 60, rect.y + rect.height / 2 + 70, { steps: 12 });
+  await expect(wire).not.toHaveAttribute('d', before!);
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
+  const during = await wire.getAttribute('d');
+  await page.mouse.up();
+  await expect(wire).toHaveAttribute('d', during!);
+});
+
+test('guided workspace fills the available width and separates blocks from its toolbar', async ({
+  page,
+}) => {
+  await setup(page);
+  const toolbar = (await page.locator('.command-bar').boundingBox())!;
+  const workspace = (await page.locator('.flow-workbench').boundingBox())!;
+  expect(Math.abs(toolbar.width - workspace.width)).toBeLessThan(2);
+  const firstBlock = (await page.locator('.step-card').first().boundingBox())!;
+  expect(firstBlock.y - toolbar.y - toolbar.height).toBeGreaterThanOrEqual(16);
+});
+
+test('inspector keeps deletion in the shared action footer', async ({ page }, info) => {
+  await setup(page);
+  await page.locator('.step-card[data-node-id="Action A"] .step-name').click();
+  const inspector = page.getByRole('complementary', { name: 'Action A', exact: true });
+  const footer = inspector.locator('.form-actions');
+  await expect(footer.getByRole('button', { name: 'Supprimer ce bloc' })).toBeVisible();
+  await expect(footer.getByRole('button', { name: 'Appliquer les réglages' })).toBeVisible();
+  if (info.project.name === 'desktop') {
+    const remove = (await footer.getByRole('button', { name: 'Supprimer ce bloc' }).boundingBox())!;
+    const apply = (await footer
+      .getByRole('button', { name: 'Appliquer les réglages' })
+      .boundingBox())!;
+    expect(Math.abs(remove.y + remove.height / 2 - apply.y - apply.height / 2)).toBeLessThan(2);
+  }
+  const applyButton = footer.getByRole('button', { name: 'Appliquer les réglages' });
+  expect(
+    await applyButton.evaluate((button) =>
+      (() => {
+        const text = button.querySelector('.mdc-button__label')!.getBoundingClientRect();
+        const bounds = button.getBoundingClientRect();
+        return (
+          text.top >= bounds.top &&
+          text.bottom <= bounds.bottom &&
+          text.left >= bounds.left &&
+          text.right <= bounds.right
+        );
+      })(),
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: info.outputPath('aligned-inspector.png') });
 });

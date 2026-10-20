@@ -303,6 +303,7 @@ type ConfigurationFormGroup = FormGroup<
       }
 
       <div class="form-actions">
+        <ng-content select="[form-secondary-actions]" />
         <button matButton="text" type="button" (click)="cancelled.emit()">Annuler</button>
         @if (showConnectionTest()) {
           <button
@@ -407,6 +408,8 @@ type ConfigurationFormGroup = FormGroup<
     .form-actions {
       display: flex;
       justify-content: flex-end;
+      align-items: center;
+      flex-wrap: wrap;
       gap: var(--space-2);
       padding-top: var(--space-4);
     }
@@ -427,7 +430,8 @@ type ConfigurationFormGroup = FormGroup<
         border-top: 1px solid var(--border-subtle);
       }
       .form-actions button {
-        flex: 1;
+        flex: 1 0 auto;
+        white-space: nowrap;
       }
     }
   `,
