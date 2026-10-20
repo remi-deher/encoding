@@ -35,6 +35,6 @@ public sealed class McpSessionManagerTests
             return accepted && !duplicate && !limitReached;
         })));
 
-        Assert.Single(results.Where(accepted => accepted));
+        Assert.Single(results, accepted => accepted);
     }
 }
