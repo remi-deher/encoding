@@ -530,9 +530,19 @@ public sealed class AiClusterTests
             await mesh.Second.Admissions.ImportBootstrapAsync(bootstrap!, nodeId, Ct);
             return mesh;
         }
-        public Task PrepareOpenAiCatalogsAsync() => Task.WhenAll(
-            First.Catalog.ReadAsync("openai", "http", true, Ct),
-            Second.Catalog.ReadAsync("openai", "http", true, Ct));
+        public async Task PrepareOpenAiCatalogsAsync()
+        {
+            await Second.Catalog.ReadAsync("openai", "http", true, Ct);
+            for (var attempt = 0; attempt < 100; attempt++)
+            {
+                var view = await First.Service.CachedViewAsync(Ct);
+                var remote = view.Nodes.FirstOrDefault(node => node.NodeId == Second.Identity.PeerId);
+                if (remote?.Catalogs?.Any(provider => provider.Provider == "openai" && provider.State == "available") == true)
+                    return;
+                await Task.Delay(25, Ct);
+            }
+            throw new InvalidOperationException("Le catalogue OpenAI du pair n’est pas apparu dans la vue cluster mise en cache.");
+        }
         public async ValueTask DisposeAsync() { await First.DisposeAsync(); await Second.DisposeAsync(); }
     }
     private sealed class MeshFactory : IHttpClientFactory
