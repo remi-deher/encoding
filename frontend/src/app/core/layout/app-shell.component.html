@@ -209,6 +209,7 @@
     <aside
       id="assistant-widget-panel"
       class="assistant-widget-panel"
+      [class.flow-assistant-panel]="flowAssistant.session() !== null"
       [class.is-open]="assistantPanelOpen() && showAssistantBubble()"
       [style.left.px]="assistantPanelGeometry()?.left ?? null"
       [style.top.px]="assistantPanelGeometry()?.top ?? null"
@@ -236,7 +237,11 @@
           mat-icon-button
           aria-label="Ouvrir la conversation dans Assistant"
           routerLink="/ai/assistant"
-          [queryParams]="widget.conversationId() ? { conversation: widget.conversationId() } : {}"
+          [queryParams]="
+            generalAssistant()?.conversationId()
+              ? { conversation: generalAssistant()?.conversationId() }
+              : {}
+          "
           ><svg
             viewBox="0 0 24 24"
             width="20"
@@ -268,7 +273,33 @@
           </svg>
         </button>
       </header>
-      <app-ai-assistant-page #widget [panelMode]="true" />
+      @if (flowAssistant.session(); as session) {
+        @defer (on immediate) {
+          <app-flow-ai-assistant-panel
+            #flowWidget
+            [applyBusy]="flowAssistant.applying()"
+            [context]="{
+              mediaType: session.flow.mediaType,
+              currentFlow: session.flow,
+              label: session.label,
+              initialPrompt: session.prompt,
+              components: session.components,
+            }"
+            (flowApplied)="applyFlowProposal($event)"
+            (dismissed)="flowAssistant.session.set(null); closeAssistantPanel()"
+          />
+        } @placeholder {
+          <p role="status">Chargement de l’assistant du flow…</p>
+        }
+      }
+      @if (generalAssistantMounted()) {
+        <app-ai-assistant-page
+          #widget
+          [panelMode]="true"
+          [style.display]="flowAssistant.session() ? 'none' : null"
+          [attr.inert]="flowAssistant.session() ? '' : null"
+        />
+      }
     </aside>
   }
 </div>

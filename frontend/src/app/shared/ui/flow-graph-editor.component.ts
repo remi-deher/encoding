@@ -1,3 +1,8 @@
+import { layoutFlowCanvas } from '../models/flow-canvas';
+import { FlowCanvasComponent } from './flow-canvas/flow-canvas.component';
+import { ContextActionsDirective, ContextActionPosition } from './context-actions.directive';
+import { ContextActionMenuComponent, ContextActionMenuData } from './context-action-menu.component';
+import { FlowGraphPosition } from '../models/flow-component';
 import { routeFlowLink } from './flow-link-routing';
 import { FlowLinks, FlowLinkDrawing } from './flow-links';
 import { FlowInlineParameters } from './flow-inline-parameters';
@@ -21,12 +26,13 @@ import {
   signal,
   afterRenderEffect,
   DestroyRef,
+  untracked,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { CdkDrag, CdkDragHandle, CdkDragDrop, CdkDropList } from '@angular/cdk/drag-drop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatExpansionModule } from '@angular/material/expansion';
+import { MatExpansionPanel, MatExpansionModule } from '@angular/material/expansion';
 import { NotificationService } from '../services/notification.service';
 import {
   FLOW_COMPONENT_KIND_LABELS,
@@ -52,6 +58,9 @@ import {
   selector: 'app-flow-graph-editor',
   imports: [
     NgTemplateOutlet,
+    FlowCanvasComponent,
+    ContextActionsDirective,
+    ContextActionMenuComponent,
     FlowInlineParameters,
     FlowLinks,
     CdkDrag,
@@ -65,6 +74,165 @@ import {
   styleUrl: './flow-graph-editor.component.scss',
 })
 export class FlowGraphEditorComponent {
+  readonly layoutKey = input('flow');
+  readonly duplicateRequested = output<string>();
+  readonly aiRequested = output<string>();
+  protected readonly viewMode = signal<'guided' | 'canvas'>('guided');
+  protected readonly selectedNodeId = signal<string | null>(null);
+  protected readonly canvasPositions = signal<ReadonlyMap<string, FlowGraphPosition>>(new Map());
+  protected readonly foldedBranches = signal<ReadonlySet<string>>(new Set());
+  protected branchFolded(nodeId: string, outputId: string): boolean {
+    return this.foldedBranches().has(nodeId + ':' + outputId);
+  }
+  protected foldBranch(nodeId: string, outputId: string, folded: boolean): void {
+    const key = nodeId + ':' + outputId;
+    if (this.foldedBranches().has(key) === folded) return;
+    this.foldedBranches.update((current) => {
+      const next = new Set(current);
+      if (folded) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }
+  protected readonly contextMenu = signal<ContextActionMenuData | null>(null);
+  private contextNode?: FlowGraphNode;
+  private contextEdgeId?: string;
+  private readonly branchPanels = viewChildren(MatExpansionPanel);
+  readonly paletteRequested = output<void>();
+  protected backgroundMenu(position: ContextActionPosition): void {
+    this.contextNode = undefined;
+    this.contextEdgeId = undefined;
+    this.contextMenu.set({
+      ...position,
+      items: [
+        { id: 'palette', label: 'Ajouter une étape' },
+        { id: 'expand', label: 'Déplier toutes les branches' },
+        { id: 'collapse', label: 'Replier toutes les branches' },
+      ],
+    });
+  }
+  protected edgeMenu(event: { id: string; position: ContextActionPosition }): void {
+    this.contextNode = undefined;
+    this.contextEdgeId = event.id;
+    this.contextMenu.set({
+      ...event.position,
+      items: [
+        { id: 'insert', label: 'Insérer une étape' },
+        { id: 'disconnect', label: 'Supprimer la liaison' },
+        { id: 'ai-edge', label: 'Expliquer cette liaison avec l’IA' },
+      ],
+    });
+  }
+  protected switchView(mode: 'guided' | 'canvas', nodeId?: string): void {
+    if (nodeId) this.selectedNodeId.set(nodeId);
+    if (mode === 'canvas') this.ensureCanvasPositions();
+    this.viewMode.set(mode);
+    if (mode === 'guided' && this.selectedNodeId())
+      setTimeout(() => this.focusNode(this.selectedNodeId()!));
+  }
+  private ensureCanvasPositions(): void {
+    const nodes = this.visualNodes(),
+      positions = new Map(this.canvasPositions()),
+      layout = layoutFlowCanvas(nodes, this.visualConnections());
+    let changed = false;
+    for (const node of nodes) {
+      if (positions.has(node.id)) continue;
+      let p = layout.positions.get(node.id)!;
+      while (
+        nodes.some((other) => {
+          const occupied = positions.get(other.id);
+          return occupied && Math.abs(occupied.x - p.x) < 330 && Math.abs(occupied.y - p.y) < 220;
+        })
+      )
+        p = { x: p.x, y: p.y + 240 };
+      positions.set(node.id, p);
+      changed = true;
+    }
+    if (changed) this.canvasPositions.set(positions);
+  }
+  protected setCanvasPosition(event: { nodeId: string; position: FlowGraphPosition }): void {
+    this.canvasPositions.update((positions) =>
+      new Map(positions).set(event.nodeId, event.position),
+    );
+    try {
+      localStorage.setItem(
+        'encoding.flow-layout.' + this.layoutKey(),
+        JSON.stringify([...this.canvasPositions()]),
+      );
+    } catch {
+      /* Layout remains available in memory. */
+    }
+  }
+  protected requestConfiguration(nodeId: string): void {
+    this.selectedNodeId.set(nodeId);
+    this.configurationRequested.emit(nodeId);
+  }
+  protected openNodeMenu(position: ContextActionPosition, node: FlowGraphNode): void {
+    this.contextEdgeId = undefined;
+    this.contextNode = node;
+    this.selectedNodeId.set(node.id);
+    this.contextMenu.set({
+      ...position,
+      items: [
+        { id: 'configure', label: 'Configurer', disabled: node.component.kind === 'pack' },
+        {
+          id: 'duplicate',
+          label: 'Dupliquer',
+          disabled: node.component.kind === 'input' || node.component.kind === 'pack',
+        },
+        { id: 'canvas', label: 'Afficher dans Canvas' },
+        { id: 'ai', label: 'Demander à l’IA' },
+        { id: 'remove', label: 'Supprimer', disabled: node.component.kind === 'input' },
+      ],
+    });
+  }
+  protected nodeMenuButton(event: MouseEvent, node: FlowGraphNode): void {
+    event.stopPropagation();
+    const origin = event.currentTarget as HTMLElement,
+      rect = origin.getBoundingClientRect();
+    this.openNodeMenu({ x: rect.left, y: rect.bottom, origin }, node);
+  }
+  protected contextAction(action: string): void {
+    const node = this.contextNode,
+      edgeId = this.contextEdgeId;
+    this.contextMenu.set(null);
+    if (action === 'palette') this.paletteRequested.emit();
+    if (action === 'expand') this.branchPanels().forEach((p) => p.open());
+    if (action === 'collapse') this.branchPanels().forEach((p) => p.close());
+    if (action === 'insert' && edgeId) this.insertOnConnection(edgeId);
+    if (action === 'disconnect' && edgeId) this.connectionRemoved.emit(edgeId);
+    if (action === 'ai-edge' && edgeId) {
+      const e = this.connections().find((e) => e.id === edgeId);
+      if (e) this.aiRequested.emit(e.sourceNodeId);
+    }
+    if (!node) return;
+    if (action === 'configure') this.requestConfiguration(node.id);
+    if (action === 'duplicate') this.duplicateRequested.emit(node.id);
+    if (action === 'canvas') this.switchView('canvas', node.id);
+    if (action === 'ai') this.aiRequested.emit(node.id);
+    if (action === 'remove') this.nodeRemoved.emit(node.id);
+  }
+
+  protected onCanvasConnect(request: FlowConnectionRequest): void {
+    const source = this.visualNodes().find((n) => n.id === request.sourceNodeId),
+      target = this.visualNodes().find((n) => n.id === request.targetNodeId);
+    const output = source?.component.outputs.find((o) => o.id === request.sourceOutputId);
+    if (source && target && output)
+      this.connectPackOutput(source, output, {
+        ...target,
+        id: this.packForVisualNode(target)?.inputNodeId ?? target.id,
+      });
+  }
+  protected onCanvasDisconnect(id: string): void {
+    const edge = this.visualConnections().find((e) => e.id === id),
+      source = this.visualNodes().find((n) => n.id === edge?.sourceNodeId),
+      output = source?.component.outputs.find((o) => o.id === edge?.sourceOutputId);
+    if (source && output) this.disconnect(source, output);
+  }
+  protected onCanvasInsert(event: { sourceNodeId: string; output: FlowComponentOutput }): void {
+    const node = this.visualNodes().find((n) => n.id === event.sourceNodeId);
+    if (node) this.add(node, event.output);
+  }
   readonly mediaType = input.required<MediaType>();
   readonly configurationChanged = output<{
     readonly nodeId: string;
@@ -132,12 +300,37 @@ export class FlowGraphEditorComponent {
   }
 
   constructor() {
+    afterRenderEffect(() => {
+      const key = this.layoutKey();
+      try {
+        const data = JSON.parse(localStorage.getItem('encoding.flow-layout.' + key) ?? '[]');
+        this.canvasPositions.set(
+          new Map(
+            data.filter(
+              (entry: unknown) =>
+                Array.isArray(entry) &&
+                typeof entry[0] === 'string' &&
+                Number.isFinite(entry[1]?.x) &&
+                Number.isFinite(entry[1]?.y),
+            ),
+          ),
+        );
+      } catch {
+        this.canvasPositions.set(new Map());
+      }
+    });
+    afterRenderEffect(() => {
+      this.visualNodes();
+      this.viewMode();
+      if (this.viewMode() === 'canvas') untracked(() => this.ensureCanvasPositions());
+    });
     inject(DestroyRef).onDestroy(() => this.observer?.disconnect());
     afterRenderEffect(() => {
       this.nodes();
       this.connections();
       this.componentPacks();
       this.expandedPacks();
+      this.foldedBranches();
       this.cards();
       this.ports();
       this.inputs();
@@ -154,7 +347,7 @@ export class FlowGraphEditorComponent {
     const root = this.surface()?.nativeElement;
     if (!root) return;
     const origin = root.getBoundingClientRect();
-    this.drawingSize.set({ width: root.clientWidth, height: root.scrollHeight });
+    this.drawingSize.set({ width: root.clientWidth, height: root.offsetHeight });
     const obstacles = this.cards()
       .map((card) => card.nativeElement)
       .filter((card) => !card.closest('mat-expansion-panel:not(.mat-expanded)'))
@@ -189,8 +382,25 @@ export class FlowGraphEditorComponent {
         sy = a.top + a.height / 2 - origin.top;
       const tx = b.left + b.width / 2 - origin.left,
         ty = b.top + b.height / 2 - origin.top;
-      const path = routeFlowLink({ x: sx, y: sy }, { x: tx, y: ty }, obstacles, root.clientWidth);
+      let path = routeFlowLink(
+        { x: sx, y: sy },
+        {
+          x: tx,
+          y:
+            ty -
+            (this.drawnGraphConnections().filter((e) => e.targetNodeId === edge.targetNodeId)
+              .length > 1
+              ? 32
+              : 0),
+        },
+        obstacles,
+        root.clientWidth,
+      );
       if (!path) return [];
+      if (
+        this.drawnGraphConnections().filter((e) => e.targetNodeId === edge.targetNodeId).length > 1
+      )
+        path += ' L ' + tx + ' ' + ty;
       const geometry = root.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
       geometry.setAttribute('d', path);
       const midpoint = geometry.getPointAtLength(geometry.getTotalLength() / 2);
@@ -272,7 +482,7 @@ export class FlowGraphEditorComponent {
     )
       return;
     event.preventDefault();
-    this.configurationRequested.emit(node.id);
+    this.requestConfiguration(node.id);
   }
   private readonly schemaCache = new Map<
     FlowComponentDefinition,
@@ -376,9 +586,29 @@ export class FlowGraphEditorComponent {
     this.move(sequence, event.previousIndex, event.currentIndex);
   }
   protected focusNode(id: string): void {
-    this.cards()
-      .find((card) => card.nativeElement.dataset['nodeId'] === id)
-      ?.nativeElement.focus();
+    const path = (sequence: FlowSequence): string[] | null => {
+      for (const step of sequence.steps) {
+        if (step.node.id === id && !step.reference) return [];
+        for (const branch of step.branches) {
+          const nested = path(branch.sequence);
+          if (nested) return [step.node.id + ':' + branch.output.id, ...nested];
+        }
+      }
+      return null;
+    };
+    const keys =
+      [this.structured().main, ...this.structured().detached]
+        .map(path)
+        .find((value) => value !== null) ?? [];
+    if (keys.some((key) => this.foldedBranches().has(key)))
+      this.foldedBranches.update(
+        (current) => new Set([...current].filter((key) => !keys.includes(key))),
+      );
+    setTimeout(() =>
+      this.cards()
+        .find((card) => card.nativeElement.dataset['nodeId'] === id)
+        ?.nativeElement.focus(),
+    );
   }
   protected continuationSources(node: FlowGraphNode): readonly FlowContinuationSource[] {
     const pack = this.packForVisualNode(node);

@@ -1,6 +1,10 @@
 <div class="flow-workbench">
   <!-- Zone 1 : Command Bar -->
   <app-flow-command-bar
+    [canUndo]="canUndoEdit()"
+    [canRedo]="canRedoEdit()"
+    (undoRequested)="undoEdit()"
+    (redoRequested)="undoEdit(true)"
     [title]="flowTitle()"
     [mediaType]="flowMediaType()"
     [storedVersion]="storedVersion()"
@@ -60,6 +64,10 @@
         </div>
       } @else {
         <app-flow-graph-editor
+          [layoutKey]="validationFlowId"
+          (paletteRequested)="paletteOpen.set(true)"
+          (duplicateRequested)="duplicateNode($event)"
+          (aiRequested)="openAiAssistant($event)"
           [nodes]="nodes()"
           [componentPacks]="componentPacks()"
           [mediaType]="flowMediaType()"
@@ -103,9 +111,8 @@
     <div
       class="component-editor-backdrop"
       role="dialog"
-      aria-modal="true"
+      aria-modal="false"
       [attr.aria-label]="'Réglages de ' + (current.name || current.component.name)"
-      (click)="closeComponentEditor()"
       (keydown.escape)="closeComponentEditor()"
     >
       <section class="component-editor-dialog" (click)="$event.stopPropagation()">
@@ -117,12 +124,7 @@
             <h2>{{ current.name || current.component.name }}</h2>
             <p>{{ current.component.description }}</p>
           </div>
-          <button
-            type="button"
-            class="component-editor-close"
-            (click)="closeComponentEditor()"
-            aria-label="Fermer les réglages"
-          >
+          <button type="button" class="component-editor-close" aria-label="Fermer les réglages">
             ✕
           </button>
         </header>

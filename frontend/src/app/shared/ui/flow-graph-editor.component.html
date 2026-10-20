@@ -1,56 +1,96 @@
-<section
-  #surface
-  class="structured-editor"
-  [class.structured-editor_compact]="compactView()"
-  aria-label="Composition du flow par étapes"
->
-  <div class="connection-tools">
-    <button mat-button type="button" (click)="toggleConnections()">
-      {{ showConnections() ? 'Masquer les liaisons' : 'Afficher les liaisons' }}
-    </button>
-    <button mat-button type="button" (click)="toggleDensity()">
-      {{ compactView() ? 'Vue détaillée' : 'Vue compacte' }}
-    </button>
-    @if (pendingConnection(); as pending) {
-      <span role="status"
-        >Sortie {{ pending.output.label }} : choisissez le point d’entrée d’une étape.</span
-      >
-      <button mat-button type="button" (click)="pendingConnection.set(null)">
-        Annuler la liaison
-      </button>
-    }
-  </div>
-  @if (showConnections()) {
-    <app-flow-links
-      [size]="drawingSize()"
-      [links]="drawnConnections()"
-      (insertionRequested)="insertOnConnection($event)"
-    />
-  }
-
-  @if (structured().references) {
-    <p class="graph-notice" role="status">
-      Certains raccordements sont partagés entre des branches. Ils restent représentés par des
-      renvois explicites ; leur logique n’a pas été convertie.
-    </p>
-  }
-  <ng-container
-    [ngTemplateOutlet]="sequenceTemplate"
-    [ngTemplateOutletContext]="{ sequence: structured().main }"
+<div class="view-switch" role="toolbar" aria-label="Vues du flow">
+  <button mat-button [attr.aria-pressed]="viewMode() === 'guided'" (click)="switchView('guided')">
+    Guidé
+  </button>
+  <button mat-button [attr.aria-pressed]="viewMode() === 'canvas'" (click)="switchView('canvas')">
+    Canvas
+  </button>
+  <span>{{
+    viewMode() === 'guided'
+      ? 'Placement vertical automatique · Défilement horizontal'
+      : 'Placement libre · Reliez une sortie à une entrée'
+  }}</span>
+</div>
+@if (viewMode() === 'canvas') {
+  <app-flow-canvas
+    [nodes]="visualNodes()"
+    [connections]="visualConnections()"
+    [positions]="canvasPositions()"
+    [selectedNodeId]="selectedNodeId()"
+    (selectNode)="selectedNodeId.set($event)"
+    (configure)="requestConfiguration($event)"
+    (connect)="onCanvasConnect($event)"
+    (disconnect)="onCanvasDisconnect($event)"
+    (remove)="nodeRemoved.emit($event)"
+    (duplicate)="duplicateRequested.emit($event)"
+    (askAi)="aiRequested.emit($event)"
+    (insert)="onCanvasInsert($event)"
+    (positionChanged)="setCanvasPosition($event)"
+    (guided)="switchView('guided', $event)"
   />
-  @if (structured().detached.length) {
-    <section class="detached" aria-label="Blocs non reliés à l’entrée">
-      <h2>Blocs non reliés à l’entrée</h2>
-      <p>Ces blocs sont conservés. Reliez-les depuis le menu de sortie d’une étape.</p>
-      @for (sequence of structured().detached; track sequence.id) {
-        <ng-container
-          [ngTemplateOutlet]="sequenceTemplate"
-          [ngTemplateOutletContext]="{ sequence: sequence }"
-        />
+} @else {
+  <section
+    #surface
+    appContextActions
+    (contextActions)="backgroundMenu($event)"
+    class="structured-editor"
+    [class.structured-editor_compact]="compactView()"
+    aria-label="Composition du flow par étapes"
+  >
+    <div class="connection-tools">
+      <button mat-button type="button" (click)="toggleConnections()">
+        {{ showConnections() ? 'Masquer les liaisons' : 'Afficher les liaisons' }}
+      </button>
+      <button mat-button type="button" (click)="toggleDensity()">
+        {{ compactView() ? 'Vue détaillée' : 'Vue compacte' }}
+      </button>
+      @if (pendingConnection(); as pending) {
+        <span role="status"
+          >Sortie {{ pending.output.label }} : choisissez le point d’entrée d’une étape.</span
+        >
+        <button mat-button type="button" (click)="pendingConnection.set(null)">
+          Annuler la liaison
+        </button>
       }
-    </section>
-  }
-</section>
+    </div>
+    @if (showConnections()) {
+      <app-flow-links
+        [size]="drawingSize()"
+        [links]="drawnConnections()"
+        (insertionRequested)="insertOnConnection($event)"
+        (contextRequested)="edgeMenu($event)"
+      />
+    }
+
+    @if (structured().references) {
+      <p class="graph-notice" role="status">
+        Certains raccordements sont partagés entre des branches. Ils restent représentés par des
+        renvois explicites ; leur logique n’a pas été convertie.
+      </p>
+    }
+    <ng-container
+      [ngTemplateOutlet]="sequenceTemplate"
+      [ngTemplateOutletContext]="{ sequence: structured().main }"
+    />
+    @if (structured().detached.length) {
+      <section class="detached" aria-label="Blocs non reliés à l’entrée">
+        <h2>Blocs non reliés à l’entrée</h2>
+        <p>Ces blocs sont conservés. Reliez-les depuis le menu de sortie d’une étape.</p>
+        @for (sequence of structured().detached; track sequence.id) {
+          <ng-container
+            [ngTemplateOutlet]="sequenceTemplate"
+            [ngTemplateOutletContext]="{ sequence: sequence }"
+          />
+        }
+      </section>
+    }
+  </section>
+}
+<app-context-action-menu
+  [context]="contextMenu()"
+  (action)="contextAction($event)"
+  (closed)="contextMenu.set(null)"
+/>
 
 <ng-template #sequenceTemplate let-sequence="sequence">
   <div
@@ -85,6 +125,10 @@
         } @else {
           <article
             class="step-card"
+            appContextActions
+            (contextActions)="openNodeMenu($event, step.node)"
+            [class.step-selected]="selectedNodeId() === step.node.id"
+            (click)="selectedNodeId.set(step.node.id)"
             #stepCard
             [style.--step-color]="colors(step.node.component).color"
             [style.--step-background]="colors(step.node.component).background"
@@ -166,28 +210,15 @@
                   </svg>
                 </button>
               }
-              @if (step.node.component.kind !== 'input') {
-                <button
-                  mat-icon-button
-                  class="step-menu"
-                  type="button"
-                  [attr.aria-label]="'Supprimer ' + (step.node.name || step.node.component.name)"
-                  title="Supprimer le bloc"
-                  (click)="nodeRemoved.emit(step.node.id)"
-                >
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                  >
-                    <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
-                  </svg>
-                </button>
-              }
+              <button
+                mat-icon-button
+                class="step-menu"
+                type="button"
+                [attr.aria-label]="'Actions de ' + (step.node.name || step.node.component.name)"
+                (click)="nodeMenuButton($event, step.node)"
+              >
+                ⋯
+              </button>
             </div>
             @if (incomingCount(step.node) > 1) {
               <p class="continuation-label">{{ incomingCount(step.node) }} liaisons entrantes</p>
@@ -252,7 +283,7 @@
               </div>
             }
 
-            <div class="output-actions" aria-label="Sorties de l’étape">
+            <div class="output-actions" role="group" aria-label="Sorties de l’étape">
               @for (output of step.node.component.outputs; track output.id) {
                 <div
                   class="output-action"
@@ -318,7 +349,11 @@
           @if (step.branches.length) {
             <div class="branches" [style.--branch-count]="step.branches.length">
               @for (branch of step.branches; track branch.output.id) {
-                <mat-expansion-panel [expanded]="true">
+                <mat-expansion-panel
+                  [expanded]="!branchFolded(step.node.id, branch.output.id)"
+                  (opened)="foldBranch(step.node.id, branch.output.id, false)"
+                  (closed)="foldBranch(step.node.id, branch.output.id, true)"
+                >
                   <mat-expansion-panel-header>
                     <mat-panel-title>{{ branch.output.label }}</mat-panel-title>
                     <mat-panel-description
