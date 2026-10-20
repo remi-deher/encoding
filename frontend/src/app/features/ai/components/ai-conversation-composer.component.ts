@@ -3,7 +3,6 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatMenuModule } from '@angular/material/menu';
 import { AiAssistantModelOption } from '../../../shared/models/ai-tools';
 import { AiModelSelectorComponent } from './ai-model-selector.component';
 
@@ -15,16 +14,16 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
     MatButtonModule,
     MatInputModule,
     MatFormFieldModule,
-    MatMenuModule,
     AiModelSelectorComponent,
   ],
   template: `
     <form class="composer" (ngSubmit)="send.emit()">
       <mat-form-field class="prompt-field" appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Votre question</mat-label>
         <textarea
           matInput
           name="prompt"
+          aria-label="Votre question"
+          placeholder="Votre question"
           rows="2"
           maxlength="4000"
           [ngModel]="text()"
@@ -48,22 +47,13 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
           </button>
         </div>
       }
-      <input
-        #fileInput
-        class="visually-hidden"
-        type="file"
-        accept=".txt,.md,.csv,.json,.log,.yaml,.yml,text/plain,text/markdown,text/csv,application/json"
-        aria-label="Choisir un fichier texte à joindre"
-        (change)="readAttachment($event)"
-      />
       <div class="composer-tools">
         <button
           mat-icon-button
           type="button"
-          aria-label="Ajouter un fichier texte"
-          title="Ajouter un fichier texte"
-          [disabled]="locked()"
-          (click)="fileInput.click()"
+          aria-label="Ressources, fichiers et outils de l’assistant"
+          title="Ressources, fichiers et outils"
+          (click)="attach.emit()"
         >
           <svg
             viewBox="0 0 24 24"
@@ -89,18 +79,6 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
           (effortChange)="effortChange.emit($event)"
           (settingsOpenChange)="settingsOpenChange.emit($event)"
         />
-        <button
-          mat-icon-button
-          type="button"
-          aria-label="Options de la conversation"
-          [matMenuTriggerFor]="menu"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-            <circle cx="5" cy="12" r="1.6" />
-            <circle cx="12" cy="12" r="1.6" />
-            <circle cx="19" cy="12" r="1.6" />
-          </svg>
-        </button>
         @if (busy()) {
           <button
             mat-mini-fab
@@ -136,25 +114,6 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
           </button>
         }
       </div>
-      <mat-menu #menu="matMenu">
-        <button mat-menu-item type="button" [disabled]="locked()" (click)="attach.emit()">
-          Joindre une ressource Encoding
-        </button>
-        <button
-          mat-menu-item
-          type="button"
-          [disabled]="locked() || loading()"
-          (click)="refresh.emit()"
-        >
-          Actualiser les modèles
-        </button>
-        <button mat-menu-item type="button" [disabled]="locked()" (click)="tools.emit()">
-          Outils de lecture
-        </button>
-        <button mat-menu-item type="button" [disabled]="busy()" (click)="newConversation.emit()">
-          Nouvelle conversation
-        </button>
-      </mat-menu>
     </form>
   `,
   styles: `
@@ -273,17 +232,7 @@ export class AiConversationComposerComponent {
   readonly send = output<void>();
   readonly cancel = output<void>();
   readonly attach = output<void>();
-  readonly fileSelected = output<File>();
   readonly fileRemoved = output<void>();
-  readonly refresh = output<void>();
-  readonly tools = output<void>();
-  readonly newConversation = output<void>();
-  protected readAttachment(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) this.fileSelected.emit(file);
-    input.value = '';
-  }
   protected clearAttachment(): void {
     this.fileRemoved.emit();
   }

@@ -24,6 +24,45 @@
   <p class="cluster-name">{{ clusterName() }}</p>
   <app-page-header title="Vue d’ensemble" [actions]="pageActionsTemplate()" />
 
+  <div class="overview-view-bar" role="group" aria-label="Vues d’ensemble">
+    <button
+      type="button"
+      class="overview-view-button"
+      [class.is-active]="overviewView() === 'general'"
+      [attr.aria-pressed]="overviewView() === 'general'"
+      (click)="overviewView.set('general')"
+    >
+      <span aria-hidden="true">▦</span> Général
+    </button>
+    <button
+      type="button"
+      class="overview-view-button"
+      [class.is-active]="overviewView() === 'ai'"
+      [attr.aria-pressed]="overviewView() === 'ai'"
+      (click)="overviewView.set('ai')"
+    >
+      <span aria-hidden="true">✦</span> IA
+    </button>
+    <button
+      type="button"
+      class="overview-view-button"
+      [class.is-active]="overviewView() === 'activity'"
+      [attr.aria-pressed]="overviewView() === 'activity'"
+      (click)="overviewView.set('activity')"
+    >
+      <span aria-hidden="true">◷</span> Activité
+    </button>
+    <button
+      type="button"
+      class="overview-view-button"
+      [class.is-active]="overviewView() === 'infrastructure'"
+      [attr.aria-pressed]="overviewView() === 'infrastructure'"
+      (click)="overviewView.set('infrastructure')"
+    >
+      <span aria-hidden="true">▤</span> Infrastructure
+    </button>
+  </div>
+
   @if (state().status === 'loading') {
     <p role="status">Chargement des données…</p>
   } @else if (state().status === 'error') {
@@ -35,6 +74,8 @@
     </p>
   }
 
+  @if (overviewView() !== 'ai') {
+  @if (overviewView() === 'general') {
   <section
     class="metrics-grid"
     [attr.aria-label]="standalone() ? 'Indicateurs de ce nœud' : 'Indicateurs du cluster'"
@@ -55,8 +96,10 @@
       </a>
     }
   </section>
+  }
 
-  <div class="overview-grid">
+  <div class="overview-grid" [class.is-single-view]="overviewView() !== 'general'">
+    @if (overviewView() !== 'infrastructure') {
     <section class="tasks-panel" aria-labelledby="active-tasks-heading">
       <div class="panel-heading">
         <div>
@@ -94,7 +137,9 @@
         >
       }
     </section>
+    }
 
+    @if (overviewView() !== 'activity') {
     <section class="nodes-panel" aria-labelledby="nodes-heading">
       <div class="panel-heading">
         <div>
@@ -175,9 +220,11 @@
         }
       }
     </section>
+    }
   </div>
 
   <div class="overview-bottom-grid">
+    @if (overviewView() !== 'infrastructure') {
     <section class="activity-panel" aria-labelledby="activity-heading">
       <div class="panel-heading">
         <div>
@@ -213,8 +260,9 @@
         }
       </div>
     </section>
+    }
 
-    @if (matrixColumns().length && matrixRows().length) {
+    @if (overviewView() !== 'activity' && matrixColumns().length && matrixRows().length) {
       <section class="surface-panel matrix-panel" aria-labelledby="matrix-heading">
         <div class="panel-heading">
           <div>
@@ -245,6 +293,94 @@
       </section>
     }
   </div>
+  } @else {
+    <section class="ai-overview" aria-labelledby="ai-overview-heading">
+      <header class="ai-overview-heading">
+        <div>
+          <p class="eyebrow">Vue d’ensemble</p>
+          <h2 id="ai-overview-heading">Intelligence artificielle</h2>
+          <p>État des fournisseurs, demandes récentes et conversations de l’assistant.</p>
+        </div>
+        <div class="ai-overview-actions">
+          <a class="subtle-link" routerLink="/ai">Fournisseurs IA <span aria-hidden="true">→</span></a>
+          <a class="ai-primary-link" routerLink="/ai/assistant">Ouvrir l’assistant <span aria-hidden="true">↗</span></a>
+        </div>
+      </header>
+
+      @if (aiOverviewLoading()) {
+        <p class="ai-feedback" role="status">Chargement des données IA…</p>
+      } @else if (aiOverviewPartial()) {
+        <p class="ai-feedback" role="status">Certaines données IA ne sont pas disponibles pour le moment.</p>
+      }
+
+      <div class="ai-metrics-grid" aria-label="Indicateurs IA">
+        <article class="metric ai-metric">
+          <span>Fournisseurs disponibles</span>
+          <strong>{{ count(aiProviderCount()) }}</strong>
+          <small>{{ aiOptions()?.models?.length ?? 0 }} modèles · {{ aiProviderNames() || 'Aucun disponible' }}</small>
+        </article>
+        <article class="metric ai-metric">
+          <span>Modèle par défaut</span>
+          <strong class="ai-default-model">{{ aiDefaultModel() }}</strong>
+          <small>{{ aiDefaultProvider() }}</small>
+        </article>
+        <article class="metric ai-metric">
+          <span>Demandes en cours</span>
+          <strong>{{ count(aiRunningCount()) }}</strong>
+          <small>Demandes encore actives</small>
+        </article>
+        <article class="metric ai-metric" [class.has-warning]="aiFailedCount() > 0">
+          <span>Demandes en échec</span>
+          <strong>{{ count(aiFailedCount()) }}</strong>
+          <small>Dans l’activité conservée</small>
+        </article>
+      </div>
+
+      <div class="ai-overview-grid">
+        <section class="ai-overview-panel surface-panel" aria-labelledby="ai-activity-heading">
+          <div class="panel-heading">
+            <h2 id="ai-activity-heading">Activité récente</h2>
+            <a class="subtle-link" routerLink="/ai/activity">Toute l’activité <span aria-hidden="true">→</span></a>
+          </div>
+          <ul class="ai-overview-list">
+            @for (activity of recentAiActivity(); track activity.requestId) {
+              <li>
+                <span class="ai-status-dot" [class.is-running]="activity.status === 'running'" [class.is-failed]="activity.status === 'failed'" aria-hidden="true"></span>
+                <div>
+                  <strong>{{ providerLabel(activity.provider) }} · {{ activityStatusLabel(activity.status) }}</strong>
+                  <small>{{ activity.progressDetail || activity.operation || 'Assistant' }}</small>
+                </div>
+                <time [attr.datetime]="activity.updatedAt">{{ activity.updatedAt | date: 'dd/MM HH:mm' }}</time>
+              </li>
+            } @empty {
+              <li class="ai-empty-row">Aucune activité IA récente.</li>
+            }
+          </ul>
+        </section>
+
+        <section class="ai-overview-panel surface-panel" aria-labelledby="ai-conversations-heading">
+          <div class="panel-heading">
+            <h2 id="ai-conversations-heading">Conversations récentes</h2>
+            <a class="subtle-link" routerLink="/ai/assistant">Ouvrir le chat <span aria-hidden="true">→</span></a>
+          </div>
+          <ul class="ai-overview-list">
+            @for (conversation of recentAiConversations(); track conversation.id) {
+              <li>
+                <span class="ai-conversation-icon" aria-hidden="true">✦</span>
+                <div>
+                  <strong>{{ conversation.title }}</strong>
+                  <small>{{ providerLabel(conversation.provider) }} · {{ conversation.source.label }}</small>
+                </div>
+                <time [attr.datetime]="conversation.updatedAt">{{ conversation.updatedAt | date: 'dd/MM HH:mm' }}</time>
+              </li>
+            } @empty {
+              <li class="ai-empty-row">Aucune conversation enregistrée.</li>
+            }
+          </ul>
+        </section>
+      </div>
+    </section>
+  }
 </ng-template>
 
 <ng-template #pageActions>

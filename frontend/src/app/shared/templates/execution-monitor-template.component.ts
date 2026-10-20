@@ -64,18 +64,26 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
         <p class="execution-feedback" role="status">{{ feedback() }}</p>
       }
 
-      <div class="monitor-toolbar">
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="monitor-search-field">
-          <mat-label>Rechercher un média, une bibliothèque, un flow ou un worker</mat-label>
-          <input matInput type="search" [value]="searchQuery()" (input)="onSearchInput($event)" />
-        </mat-form-field>
-      </div>
+      <div class="monitor-content-layout">
+        <aside class="monitor-toolbar" aria-label="Recherche dans les tâches">
+          <h2>Rechercher</h2>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="monitor-search-field">
+            <mat-label>Média, bibliothèque, flow…</mat-label>
+            <input
+              matInput
+              type="search"
+              [value]="searchQuery()"
+              (input)="onSearchInput($event)"
+            />
+          </mat-form-field>
+          <p class="monitor-search-hint">La recherche couvre aussi les workers, les états et les détails.</p>
+        </aside>
 
-      <mat-tab-group
-        class="execution-tabs"
-        [selectedIndex]="selectedIndex()"
-        (selectedIndexChange)="onSelectedIndexChange($event)"
-      >
+        <mat-tab-group
+          class="execution-tabs"
+          [selectedIndex]="selectedIndex()"
+          (selectedIndexChange)="onSelectedIndexChange($event)"
+        >
         <mat-tab>
           <ng-template mat-tab-label>
             À traiter <span class="tab-count">{{ queueCount() }}</span>
@@ -172,7 +180,8 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
             />
           </div>
         </mat-tab>
-      </mat-tab-group>
+        </mat-tab-group>
+      </div>
     </section>
 
     @if (note()) {
@@ -293,14 +302,37 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       background: var(--surface-container-low);
     }
 
+    .monitor-content-layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+      align-items: start;
+    }
+
     .monitor-toolbar {
-      padding: var(--space-4) var(--space-4) var(--space-2);
+      min-height: 100%;
+      padding: var(--space-4);
       display: flex;
-      justify-content: flex-end;
+      flex-direction: column;
+      gap: var(--space-2);
+      border-right: 1px solid var(--outline-variant);
+      background: var(--surface-container-lowest);
+    }
+
+    .monitor-toolbar h2 {
+      margin: 0;
+      color: var(--text-primary);
+      font-size: var(--font-title-sm);
     }
 
     .monitor-search-field {
-      width: min(380px, 100%);
+      width: 100%;
+    }
+
+    .monitor-search-hint {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: var(--font-label);
+      line-height: 1.45;
     }
 
     .tab-count {
@@ -399,6 +431,16 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     }
 
     @media (max-width: 700px) {
+      .monitor-content-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .monitor-toolbar {
+        min-height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--outline-variant);
+      }
+
       :host ::ng-deep .execution-tabs .mat-mdc-tab-labels {
         min-width: max-content;
       }
