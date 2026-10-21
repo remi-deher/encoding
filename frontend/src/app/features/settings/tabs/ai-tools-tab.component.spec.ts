@@ -15,6 +15,7 @@ describe('AiToolsTabComponent', () => {
     getSettingsModelCatalog: ReturnType<typeof vi.fn>;
     listSessions: ReturnType<typeof vi.fn>;
     getQuotas: ReturnType<typeof vi.fn>;
+    getUsage: ReturnType<typeof vi.fn>;
     getCluster: ReturnType<typeof vi.fn>;
     listTools: ReturnType<typeof vi.fn>;
     getSettings: ReturnType<typeof vi.fn>;
@@ -61,6 +62,21 @@ describe('AiToolsTabComponent', () => {
         .mockReturnValue(of({ nodes: [], policy: { disabledModels: [] } })),
       listSessions: vi.fn().mockReturnValue(of({ items: [], offset: 0, hasMore: false })),
       getQuotas: vi.fn().mockReturnValue(of({ nodes: [] })),
+      getUsage: vi.fn().mockReturnValue(
+        of({
+          days: 30,
+          since: '',
+          nodes: [],
+          truncated: false,
+          total: {
+            turns: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            cachedInputTokens: 0,
+            turnsWithoutUsage: 0,
+          },
+        }),
+      ),
       getCluster: vi.fn().mockReturnValue(of({ nodes: [] })),
       listTools: vi.fn().mockReturnValue(of(sampleTools)),
       getSettings: vi.fn().mockReturnValue(of(sampleSettings)),

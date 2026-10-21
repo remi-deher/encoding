@@ -6,6 +6,7 @@ import {
   AiClusterModelCatalog,
   AiModelPolicy,
   AiClusterQuotas,
+  AiClusterUsage,
   AiSessionPage,
   AiSessionState,
   AiAssistantConversation,
@@ -261,6 +262,9 @@ export class AiToolsService {
 
   getQuotas(): Observable<AiClusterQuotas> {
     return this.http.get<AiClusterQuotas>('/api/v1/tools/ai/quotas');
+  }
+  getUsage(days: number): Observable<AiClusterUsage> {
+    return this.http.get<AiClusterUsage>(`/api/v1/tools/ai/usage?days=${days}`);
   }
 
   getCluster(): Observable<AiClusterView> {

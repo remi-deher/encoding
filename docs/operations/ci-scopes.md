@@ -33,6 +33,9 @@ concernées des suites en échec.
 
 ## Promotion et publication
 
+Les PR de fonctionnalité vers dev sont fusionnées en squash ; la PR de promotion dev vers main
+reste en fusion « Merge » pour que main demeure contenue dans dev.
+
 `promotion-ci` contrôle le SHA exact de dev et les derniers résultats des domaines
 inchangés. Il est exécuté pour chaque PR vers main, sans filtre de chemins, et doit
 être requis dans une règle de protection de main. Cette règle ne doit pas offrir de

@@ -117,6 +117,34 @@ public sealed class AiCredentialSyncTests
     }
 
     [Fact]
+    public async Task ReplicationStatusReportsSyncedAbsentAndRevisionWithoutSecrets()
+    {
+        var clusterId = Guid.NewGuid();
+        var key = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        await using var first = await NewNodeAsync(clusterId, key);
+        await using var second = await NewNodeAsync(clusterId, key);
+
+        await first.Sync.SyncOnceAsync(CancellationToken.None);
+        Assert.All(first.Sync.Statuses(), status => Assert.Equal("absent", status.State));
+
+        File.WriteAllText(first.CodexPath, CodexAuth);
+        await first.Sync.SyncOnceAsync(CancellationToken.None);
+        var published = Assert.Single(first.Sync.Statuses(), status => status.Provider == "codex-cli");
+        Assert.Equal("synced", published.State);
+        Assert.Equal(1, published.Revision);
+        Assert.NotNull(published.SyncedAt);
+
+        // Avant réception, le second nœud n'a pas la connexion ; après, il est à jour sur la même révision.
+        await second.Sync.SyncOnceAsync(CancellationToken.None);
+        Assert.Equal("absent", Assert.Single(second.Sync.Statuses(), status => status.Provider == "codex-cli").State);
+        await ReplicateAsync(clusterId, first, second);
+        await second.Sync.SyncOnceAsync(CancellationToken.None);
+        var received = Assert.Single(second.Sync.Statuses(), status => status.Provider == "codex-cli");
+        Assert.Equal(("synced", 1L), (received.State, received.Revision));
+        Assert.DoesNotContain("codex-refresh-secret", System.Text.Json.JsonSerializer.Serialize(second.Sync.Statuses()), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MostRecentChangeWinsWhenBothNodesChangedTheirConnection()
     {
         var clusterId = Guid.NewGuid();

@@ -120,6 +120,51 @@ public sealed class AiClusterTests
     }
 
     [Fact]
+    public async Task UsageIsGroupedByExecutorNodeWithAGlobalTotalAndNeverInventsMissingTokens()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var nodeA = Guid.NewGuid();
+        var nodeB = Guid.NewGuid();
+        AiSessionTurn Turn(Guid? node, AiUsage? usage, DateTimeOffset at) => new(Guid.NewGuid(), "q", "a", usage, at, null, node);
+        var now = DateTimeOffset.UtcNow;
+        await mesh.First.Store.SaveAsync("session/usage-1", new AiSessionState("usage-1", "openai", "", [
+            Turn(nodeA, new AiUsage(100, 20, 10, 0.5m), now),
+            Turn(nodeA, new AiUsage(50, 5), now),
+            Turn(nodeB, null, now),
+            Turn(nodeB, new AiUsage(7, 3), now.AddDays(-90))], UpdatedAt: now), Ct);
+        await mesh.First.Store.SaveAsync("session/usage-2", new AiSessionState("usage-2", "claude-cli", "", [Turn(null, new AiUsage(1, 1), now)], UpdatedAt: now), Ct);
+
+        var usage = await mesh.First.Service.UsageAsync(30, Ct);
+
+        var a = Assert.Single(usage.Nodes, node => node.NodeId == nodeA);
+        Assert.Equal(new AiUsageTotals(2, 150, 25, 10, 0.5m, 0), a.Total);
+        var b = Assert.Single(usage.Nodes, node => node.NodeId == nodeB);
+        Assert.Equal(new AiUsageTotals(1, 0, 0, 0, null, 1), b.Total);
+        Assert.Contains(usage.Nodes, node => node.NodeId is null && node.Total.InputTokens == 1);
+        Assert.Equal(new AiUsageTotals(4, 151, 26, 10, 0.5m, 1), usage.Total);
+        Assert.False(usage.Truncated);
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.UsageAsync(0, Ct));
+    }
+
+    [Fact]
+    public async Task ApiTokenReplicationShowsWhichNodeKnowsEachTokenWithoutExposingValues()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var (created, plaintext) = await new Encoding.Api.Auth.ApiTokenRepository(mesh.First.Database.Db).CreateTokenAsync("test", "viewer", null, Ct);
+
+        var view = await mesh.First.Service.ApiTokenReplicationAsync(Ct);
+
+        Assert.Equal(2, view.Nodes.Count);
+        var first = Assert.Single(view.Nodes, node => node.NodeId == mesh.First.Identity.PeerId);
+        Assert.Equal(new Encoding.Contracts.Auth.ApiTokenReplicationEntry(created.Id, false), Assert.Single(first.Tokens!));
+        // Le second nœud n'a pas encore reçu le jeton : l'écart est visible au lieu d'être supposé résorbé.
+        var second = Assert.Single(view.Nodes, node => node.NodeId == mesh.Second.Identity.PeerId);
+        Assert.True(second.Reachable);
+        Assert.Empty(second.Tokens!);
+        Assert.DoesNotContain(plaintext, System.Text.Json.JsonSerializer.Serialize(view), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SessionsCannotMixMediaOrOperationsAndPreserveUsageOnReplay()
     {
         await using var mesh = await Mesh.CreateAsync();
@@ -185,6 +230,61 @@ public sealed class AiClusterTests
         var recovered = await mesh.First.NewService().GenerateAsync("openai", prompt, Ct);
         Assert.True(recovered.Success, recovered.ErrorMessage);
         Assert.Equal(1, mesh.Factory.Inferences);
+    }
+
+    [Fact]
+    public async Task LostCoordinatorSessionContinuesOnThisNodeWithItsValidatedHistory()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var lost = Guid.NewGuid();
+        var sessionId = $"{lost:N}.{Guid.NewGuid():N}";
+        var done = new AiSessionTurn(Guid.NewGuid(), "first question", "first answer", null, DateTimeOffset.UtcNow);
+        await mesh.First.Store.SaveAsync("session/" + sessionId, new AiSessionState(sessionId, "openai", "instructions", [done]), Ct);
+        var prompt = new AiPrompt("instructions", "suite", SessionId: sessionId, RequestId: Guid.NewGuid());
+
+        var result = await mesh.First.NewService().GenerateAsync("openai", prompt, Ct);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Contains("first answer", mesh.Factory.LastPrompt);
+        Assert.Equal(mesh.First.Identity.PeerId.ToString("N"), await mesh.First.Store.ReadAsync<string>(AiClusterService.CoordinatorKey(sessionId), Ct));
+        Assert.Equal(2, (await mesh.First.Service.GetSessionAsync(sessionId, Ct))!.Turns.Count);
+    }
+
+    [Fact]
+    public async Task TakeOverRequiresALocalCheckpointAndHelperSessionsFollowTheNewCoordinator()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var lost = Guid.NewGuid();
+        var conversation = $"{lost:N}.{Guid.NewGuid():N}";
+        var helper = $"{lost:N}.{Guid.NewGuid():N}";
+
+        Assert.Equal(lost, await mesh.First.Service.CoordinatorAsync(conversation, Ct));
+        Assert.False(await mesh.First.Service.TryTakeOverAsync(conversation, Ct));
+        Assert.Equal(lost, await mesh.First.Service.CoordinatorAsync(conversation, Ct));
+        Assert.Null(await mesh.First.Service.CoordinatorAsync("pas-une-session", Ct));
+
+        await mesh.First.Store.SaveAsync("session/" + conversation, new AiSessionState(conversation, "openai", "instructions", []), Ct);
+        Assert.True(await mesh.First.Service.TryTakeOverAsync(conversation, Ct));
+        Assert.Equal(mesh.First.Identity.PeerId, await mesh.First.Service.CoordinatorAsync(conversation, Ct));
+
+        // Une session auxiliaire (titre, planification) n'a pas besoin de checkpoint : elle suit le coordinateur courant.
+        await mesh.First.Service.AdoptSessionAsync(helper, Ct);
+        Assert.Equal(mesh.First.Identity.PeerId, await mesh.First.Service.CoordinatorAsync(helper, Ct));
+    }
+
+    [Fact]
+    public async Task SessionWithoutLocalCheckpointIsNeverTakenOverFromAnEmptyContext()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var sessionId = $"{Guid.NewGuid():N}.{Guid.NewGuid():N}";
+        var prompt = new AiPrompt("instructions", "suite", SessionId: sessionId, RequestId: Guid.NewGuid());
+
+        var result = await mesh.First.NewService().GenerateAsync("openai", prompt, Ct);
+
+        Assert.False(result.Success);
+        Assert.Contains("Coordinateur de session indisponible", result.ErrorMessage);
+        Assert.Null(await mesh.First.Store.ReadAsync<string>(AiClusterService.CoordinatorKey(sessionId), Ct));
+        Assert.Equal(0, mesh.Factory.Inferences);
     }
 
     [Fact]
@@ -608,7 +708,7 @@ public sealed class AiClusterTests
             return node;
         }
         public AiClusterService NewService() => new(Transport, Store, Auth, Settings, Clients, Configuration, LocalNode, new AiQuotaService(Profile.Runtime), Catalog,
-            new ServiceCollection().AddSingleton<AiAssistantService>(_ => Assistant ?? throw new InvalidOperationException("Assistant not configured")).BuildServiceProvider());
+            new ServiceCollection().AddSingleton(new Encoding.Api.Auth.ApiTokenRepository(Database.Db)).AddSingleton<AiAssistantService>(_ => Assistant ?? throw new InvalidOperationException("Assistant not configured")).BuildServiceProvider());
         public async ValueTask DisposeAsync() { Auth.Dispose(); Identity.Dispose(); Key.Dispose(); await Database.DisposeAsync(); Profile.Dispose(); }
     }
     private sealed class Mesh : IAsyncDisposable

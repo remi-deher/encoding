@@ -127,12 +127,24 @@ export interface AiSettingsUpdateRequest {
   readonly flowReasoningEffort?: string | null;
 }
 
+/** Réplication d'une connexion IA sur un nœud (jamais de secret). */
+export interface AiCredentialStatus {
+  readonly provider: string;
+  /** `synced` identique au cluster, `pending` écart ou échec de synchronisation, `absent` aucune connexion. */
+  readonly state: 'synced' | 'pending' | 'absent';
+  readonly revision?: number | null;
+  readonly syncedAt?: string | null;
+}
 export interface AiNodeAvailability {
   readonly nodeId: string;
   readonly name: string;
   readonly providers: readonly string[];
   readonly reachable: boolean;
   readonly models?: Readonly<Record<string, string | null>>;
+  /** Absent si le nœud n'est pas à jour de version : l'état est alors inconnu. */
+  readonly credentials?: readonly AiCredentialStatus[] | null;
+  /** Fournisseurs que le cluster détient mais que la CLI de ce nœud déclare non connectés. */
+  readonly reconnect?: readonly string[] | null;
 }
 export interface AiClusterView {
   readonly nodes: readonly AiNodeAvailability[];
@@ -159,6 +171,8 @@ export interface AiAssistantConversation {
   readonly nodeId?: string | null;
   /** `ai` (généré), `fallback` (début du message) ou `user` (renommé). */
   readonly titleSource?: 'ai' | 'fallback' | 'user' | null;
+  /** Nœud qui coordonne la discussion (reprise comprise). */
+  readonly coordinatorId?: string | null;
 }
 
 export interface AiAssistantModelOption {
@@ -400,4 +414,30 @@ export interface AiModelPolicy {
 export interface AiClusterModelCatalog {
   readonly nodes: readonly AiNodeModelCatalog[];
   readonly policy: AiModelPolicy;
+}
+
+export interface AiUsageTotals {
+  readonly turns: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cachedInputTokens: number;
+  readonly costUsd?: number | null;
+  readonly turnsWithoutUsage: number;
+}
+export interface AiProviderUsage {
+  readonly provider: string;
+  readonly totals: AiUsageTotals;
+}
+export interface AiNodeUsage {
+  readonly nodeId?: string | null;
+  readonly name: string;
+  readonly providers: readonly AiProviderUsage[];
+  readonly total: AiUsageTotals;
+}
+export interface AiClusterUsage {
+  readonly days: number;
+  readonly since: string;
+  readonly nodes: readonly AiNodeUsage[];
+  readonly total: AiUsageTotals;
+  readonly truncated: boolean;
 }

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text;
 using Encoding.Contracts.Tools;
 using Encoding.Api.Nodes;
+using Encoding.Contracts.Auth;
 
 namespace Encoding.Api.Tools;
 
@@ -12,7 +13,8 @@ public sealed record AiAssistantForwardConfirmResponse(bool Applied, string? Err
 
 /// <summary>A stable session coordinator owns writes; inference may move between connected peers without moving secrets.</summary>
 public sealed class AiClusterService(AiClusterTransport transport, AiClusterStore store, DeviceCodeAuthService auth,
-    AiSettingsService settings, AiClientFactory factory, IConfiguration configuration, LocalNodeRegistry localNode, AiQuotaService? quotaService = null, AiModelCatalogService? modelCatalog = null, IServiceProvider? services = null)
+    AiSettingsService settings, AiClientFactory factory, IConfiguration configuration, LocalNodeRegistry localNode, AiQuotaService? quotaService = null, AiModelCatalogService? modelCatalog = null, IServiceProvider? services = null,
+    AiCredentialSyncService? credentialSync = null)
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> gates = new();
     private readonly ConcurrentDictionary<Guid, Lazy<Task<AiCompletionResult>>> running = new();
@@ -26,12 +28,13 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         preparation.CancelAfter(TimeSpan.FromSeconds(20));
         var token = preparation.Token;
         var providers = new List<string>();
+        IReadOnlyList<AiToolInfo> tools = [];
         var models = new Dictionary<string, string?>(StringComparer.Ordinal);
         IReadOnlyList<AiModelCatalog>? catalogs = null;
         string? name = null;
         try
         {
-            var tools = await auth.ListToolsAsync(token);
+            tools = await auth.ListToolsAsync(token);
             providers.AddRange(tools.Where(t => t.IsInstalled && t.AuthStatus.State == "authorized").Select(t => t.Id));
             var local = await GetSettingsAsync(token);
             if (!local.CodexEnabled) providers.Remove("codex-cli");
@@ -65,8 +68,14 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             catalogs = modelCatalog is null ? null : providers.Select(provider => new AiModelCatalog(provider, "unavailable", [], null,
                 DateTimeOffset.UtcNow, "Préparation du catalogue dépassée." )).ToArray();
         }
+        var credentials = credentialSync?.Statuses();
+        // Le cluster détient la connexion mais la CLI de ce nœud la déclare non connectée : il faut la reconnecter ici.
+        var reconnect = credentials is null ? null : tools.Where(tool => tool.IsInstalled && tool.AuthStatus.State == "unconfigured"
+                && credentials.Any(status => status.Provider == tool.Id && status.State == "synced"))
+            .Select(tool => tool.Id).ToArray();
         return new(transport.LocalId, name ?? configuration["Node:Name"] ?? Environment.MachineName,
-            providers.Distinct(StringComparer.Ordinal).ToArray(), Models: models, Catalogs: catalogs);
+            providers.Distinct(StringComparer.Ordinal).ToArray(), Models: models, Catalogs: catalogs,
+            Credentials: credentials, Reconnect: reconnect);
     }
     public async Task<AiClusterView> ViewAsync(CancellationToken ct)
     {
@@ -188,10 +197,32 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var remote = await Task.WhenAll(peers);
         return new(new[] { await local }.Concat(remote.OfType<AiNodeQuotas>()).DistinctBy(n => n.NodeId).ToArray());
     }
+    private async Task<ApiTokenReplicationNode> LocalApiTokenStateAsync(CancellationToken ct) =>
+        new(transport.LocalId, await localNode.ResolveDisplayNameAsync(ct) ?? configuration["Node:Name"] ?? Environment.MachineName, true,
+            services is null ? [] : await services.GetRequiredService<Encoding.Api.Auth.ApiTokenRepository>().ReplicationStateAsync(ct));
+    /// <summary>Jetons connus de chaque nœud (identifiant et révocation) ; un pair injoignable est signalé, pas supposé à jour.</summary>
+    public async Task<ApiTokenReplicationView> ApiTokenReplicationAsync(CancellationToken ct)
+    {
+        var local = LocalApiTokenStateAsync(ct);
+        var peers = (await transport.PeersAsync(ct)).Select(async url =>
+        {
+            try { return await transport.CallAsync<ApiTokenReplicationNode>(url, "api-token-state", new { }, TimeSpan.FromSeconds(15), ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Un pair qui ne répond pas est signalé (état inconnu) au lieu d'être supposé à jour.
+                return new ApiTokenReplicationNode(Guid.Empty, Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url, false, null);
+            }
+        }).ToArray();
+        var remote = await Task.WhenAll(peers);
+        var answered = remote.Where(n => n.Reachable).DistinctBy(n => n.NodeId);
+        var nodes = new[] { await local }.Concat(answered).DistinctBy(n => n.NodeId).Concat(remote.Where(n => !n.Reachable)).ToArray();
+        return new(nodes);
+    }
     public async Task<object> DispatchAsync(string operation, JsonElement value, CancellationToken ct) => operation switch
     {
         "availability" => await LocalAsync(ct),
         "quotas" => await LocalQuotasAsync(ct),
+        "api-token-state" => await LocalApiTokenStateAsync(ct),
         "assistant-cancel" => CancelForwardedAssistant(value.Deserialize<AiAssistantForwardCancel>()!),
         "assistant-message" => await ForwardAssistantAsync(value.Deserialize<AiAssistantForwardRequest>()!, ct),
         "assistant-business-operation" => await ForwardBusinessOperationAsync(value.Deserialize<AiAssistantForwardConfirm>()!, ct),
@@ -265,6 +296,53 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             session.Turns.Count, session.Attempt, session.UpdatedAt, session.AttemptDeadline, session.LastError,
             SumUsage(session.Turns), session.Scope)).ToArray(), offset, sessions.Count > 50);
     }
+    /// <summary>Consommation observée par nœud exécutant, agrégée depuis les sessions répliquées (assistant et flows).</summary>
+    public async Task<AiClusterUsage> UsageAsync(int days, CancellationToken ct)
+    {
+        if (days is < 1 or > 365) throw new ArgumentException("Période invalide.");
+        const int pageSize = 200, maxSessions = 5000;
+        var since = DateTimeOffset.UtcNow.AddDays(-days);
+        var names = (await CachedViewAsync(ct)).Nodes.ToDictionary(node => node.NodeId, node => node.Name);
+        var cells = new Dictionary<(Guid, string), long[]>();
+        var costs = new Dictionary<(Guid, string), decimal?>();
+        var scanned = 0;
+        var truncated = false;
+        for (var offset = 0; ; offset += pageSize)
+        {
+            var page = await store.ListSessionsAsync<AiSessionState>(offset, pageSize, ct, includeAssistant: true);
+            foreach (var session in page)
+                foreach (var turn in session.Turns.Where(t => (t.CompletedAt ?? session.UpdatedAt ?? DateTimeOffset.MinValue) >= since))
+                {
+                    var key = (turn.ExecutorNodeId ?? Guid.Empty, turn.Selection?.Provider ?? session.Provider);
+                    var cell = cells.TryGetValue(key, out var existing) ? existing : cells[key] = new long[5];
+                    cell[0]++;
+                    if (turn.Usage is not { } usage || usage.InputTokens is null && usage.OutputTokens is null) { cell[4]++; continue; }
+                    cell[1] += usage.InputTokens ?? 0;
+                    cell[2] += usage.OutputTokens ?? 0;
+                    cell[3] += usage.CachedInputTokens ?? 0;
+                    if (usage.EstimatedCostUsd is { } cost) costs[key] = (costs.GetValueOrDefault(key) ?? 0) + cost;
+                }
+            scanned += page.Count;
+            if (page.Count < pageSize) break;
+            if (scanned >= maxSessions) { truncated = true; break; }
+        }
+        static AiUsageTotals Totals(long[] c, decimal? cost) => new(c[0], c[1], c[2], c[3], cost, c[4]);
+        var nodes = cells.GroupBy(entry => entry.Key.Item1).Select(group =>
+        {
+            var providers = group.OrderBy(entry => entry.Key.Item2, StringComparer.Ordinal)
+                .Select(entry => new AiProviderUsage(entry.Key.Item2, Totals(entry.Value, costs.GetValueOrDefault(entry.Key)))).ToArray();
+            var total = new long[5];
+            foreach (var entry in group) for (var i = 0; i < 5; i++) total[i] += entry.Value[i];
+            var nodeCosts = group.Select(entry => costs.GetValueOrDefault(entry.Key)).Where(c => c is not null).ToArray();
+            var id = group.Key == Guid.Empty ? (Guid?)null : group.Key;
+            return new AiNodeUsage(id, id is { } known && names.TryGetValue(known, out var name) ? name : id is null ? "Nœud non enregistré" : "Nœud retiré",
+                providers, Totals(total, nodeCosts.Length == 0 ? null : nodeCosts.Sum()));
+        }).OrderByDescending(node => node.Total.InputTokens + node.Total.OutputTokens).ThenBy(node => node.Name, StringComparer.Ordinal).ToArray();
+        var grand = new long[5];
+        foreach (var node in nodes) { grand[0] += node.Total.Turns; grand[1] += node.Total.InputTokens; grand[2] += node.Total.OutputTokens; grand[3] += node.Total.CachedInputTokens; grand[4] += node.Total.TurnsWithoutUsage; }
+        var allCosts = nodes.Select(node => node.Total.CostUsd).Where(c => c is not null).ToArray();
+        return new(days, since, nodes, Totals(grand, allCosts.Length == 0 ? null : allCosts.Sum()), truncated);
+    }
     private static AiUsage? SumUsage(IReadOnlyList<AiSessionTurn> turns)
     {
         if (turns.Count == 0 || turns.All(t => t.Usage is null)) return null;
@@ -288,20 +366,26 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         if (prompt.Scope is { } scope && (string.IsNullOrWhiteSpace(scope.Operation) || scope.Operation.Length > 80
             || new[] { scope.LibraryId, scope.FlowId, scope.MediaId, scope.ExecutionId }.Any(value => value == Guid.Empty)))
             throw new ArgumentException("Périmètre de session IA invalide.");
-        var owner = Owner(id);
+        var owner = await OwnerAsync(id, ct);
         if (owner != transport.LocalId)
         {
             if (localOnly) return new(false, "", "Ce nœud ne coordonne pas cette session.", SessionId: id, RequestId: requestId);
+            var ownerSeen = false;
             foreach (var url in await transport.PeersAsync(ct))
             {
                 try
                 {
                     var node = await transport.CallAsync<AiNodeAvailability>(url, "availability", new { }, TimeSpan.FromSeconds(15), ct);
-                    if (node.NodeId == owner) return await transport.CallAsync<AiCompletionResult>(url, "generate", new AiGenerateRequest(provider, prompt with { SessionId = id, RequestId = requestId }, allowModelChanges), TimeSpan.FromMinutes(35), ct);
+                    if (node.NodeId != owner) continue;
+                    ownerSeen = true;
+                    return await transport.CallAsync<AiCompletionResult>(url, "generate", new AiGenerateRequest(provider, prompt with { SessionId = id, RequestId = requestId }, allowModelChanges), TimeSpan.FromMinutes(35), ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested) { }
             }
-            return new(false, "", "Coordinateur de session indisponible. Le contexte validé est conservé ; réessayez après son retour.", SessionId: id, RequestId: requestId);
+            // Reprise : seulement si le coordinateur n'a répondu à aucune sonde (jamais après une demande acceptée, dont le résultat
+            // reste ambigu) et si le dernier checkpoint validé est déjà présent sur ce nœud, pour ne jamais repartir d'un contexte vide.
+            if (ownerSeen || !await TryTakeOverAsync(id, ct))
+                return new(false, "", "Coordinateur de session indisponible. Le contexte validé est conservé ; réessayez après son retour.", SessionId: id, RequestId: requestId);
         }
         var gate = gates.GetOrAdd(id, _ => new(1));
         if (!await gate.WaitAsync(0, ct)) return new(false, "", "Une demande est déjà en cours dans cette session.", SessionId: id, RequestId: requestId);
@@ -417,6 +501,35 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         await store.SaveAsync("session/" + fork.Id, fork, ct);
         return fork;
     }
+    /// <summary>Coordinateur courant de la session (reprise comprise) ; null si l'identifiant n'est pas celui d'une session.</summary>
+    public async Task<Guid?> CoordinatorAsync(string? id, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        try { return await OwnerAsync(id, ct); }
+        catch (ArgumentException) { return null; }
+    }
+    /// <summary>
+    /// Fait de ce nœud le coordinateur d'une session dont le coordinateur est injoignable. Refuse sans checkpoint validé présent
+    /// localement, pour ne jamais repartir d'un contexte vide ; l'appelant doit avoir constaté que le coordinateur ne répond pas.
+    /// </summary>
+    public async Task<bool> TryTakeOverAsync(string id, CancellationToken ct)
+    {
+        var previous = await OwnerAsync(id, ct);
+        if (previous == transport.LocalId) return true;
+        if (await GetSessionAsync(id, ct) is null) return false;
+        await store.SaveAsync(CoordinatorKey(id), transport.LocalId.ToString("N"), ct);
+        services?.GetService<ILogger<AiClusterService>>()?.LogWarning("Session IA {Session} reprise par ce nœud : son coordinateur {Coordinator} est injoignable.", id, previous);
+        return true;
+    }
+    /// <summary>Une session auxiliaire (titre, planification) créée par le coordinateur courant le suit, même après une reprise.</summary>
+    public async Task AdoptSessionAsync(string id, CancellationToken ct)
+    {
+        if (await OwnerAsync(id, ct) != transport.LocalId) await store.SaveAsync(CoordinatorKey(id), transport.LocalId.ToString("N"), ct);
+    }
+    public static string CoordinatorKey(string id) => "session-coordinator/" + id;
+    /// <summary>Coordinateur de la session : celui de son identifiant, sauf reprise explicite par un autre nœud (la plus récente gagne).</summary>
+    private async Task<Guid> OwnerAsync(string id, CancellationToken ct) =>
+        await store.ReadAsync<string>(CoordinatorKey(id), ct) is { } taken && Guid.TryParseExact(taken, "N", out var node) && node != Guid.Empty ? node : Owner(id);
     private static Guid Owner(string id)
     {
         var parts = id.Split('.');

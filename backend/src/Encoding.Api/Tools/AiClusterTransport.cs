@@ -52,6 +52,21 @@ public sealed class AiClusterTransport(ClusterPeerIdentityStore identity, Cluste
         return await store.UnprotectAsync<T>(reply.Payload, "reply/" + id, cancellation.Token);
     }
 
+    /// <summary>Adresse du pair qui répond sous cet identifiant, ou null s'il ne répond à aucune sonde.</summary>
+    public async Task<string?> FindNodeUrlAsync(Guid nodeId, CancellationToken ct)
+    {
+        foreach (var url in await PeersAsync(ct))
+        {
+            try
+            {
+                var node = await CallAsync<AiNodeAvailability>(url, "availability", new { }, TimeSpan.FromSeconds(15), ct);
+                if (node.NodeId == nodeId) return url;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException || !ct.IsCancellationRequested) { }
+        }
+        return null;
+    }
+
     public async Task<T> CallNodeAsync<T>(Guid nodeId, string operation, object value, TimeSpan timeout, CancellationToken ct)
     {
         if (nodeId == Guid.Empty || nodeId == LocalId)

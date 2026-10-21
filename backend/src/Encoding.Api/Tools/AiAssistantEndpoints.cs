@@ -54,10 +54,11 @@ public static class AiAssistantEndpoints
             }))
         .AllowAssistantConversation();
 
-        group.MapPost("/messages", async (AiAssistantMessageRequest request, HttpContext http, AiAssistantService service, AiClusterTransport transport, CancellationToken ct) =>
+        group.MapPost("/messages", async (AiAssistantMessageRequest request, HttpContext http, AiAssistantService service, AiClusterTransport transport, AiClusterService cluster, CancellationToken ct) =>
             await GuardAsync(async () =>
             {
-                if (TryCoordinatorId(request.ConversationId) is { } coordinatorId && coordinatorId != transport.LocalId)
+                if (await cluster.CoordinatorAsync(request.ConversationId, ct) is { } coordinatorId && coordinatorId != transport.LocalId
+                    && !await TakeOverLostCoordinatorAsync(request.ConversationId!, coordinatorId, transport, cluster, ct))
                 {
                     if (!Guid.TryParse(http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var ownerId)
                         || ownerId == Guid.Empty)
@@ -75,10 +76,10 @@ public static class AiAssistantEndpoints
         .AllowAssistantConversation()
         .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
 
-        group.MapPost("/requests/{requestId:guid}/cancel", async (Guid requestId, HttpContext http, AiAssistantService service, AiClusterTransport transport, CancellationToken ct) =>
+        group.MapPost("/requests/{requestId:guid}/cancel", async (Guid requestId, HttpContext http, AiAssistantService service, AiClusterTransport transport, AiClusterService cluster, CancellationToken ct) =>
             await GuardAsync(async () =>
             {
-                var coordinatorId = TryCoordinatorId(http.Request.Query["conversationId"].ToString())
+                var coordinatorId = await cluster.CoordinatorAsync(http.Request.Query["conversationId"].ToString(), ct)
                     ?? await service.GetRequestCoordinatorIdAsync(requestId, http.User, ct);
                 if (coordinatorId is null)
                     return Results.Conflict(new { title = "Aucune demande active ne correspond à cet identifiant." });
@@ -200,13 +201,13 @@ public static class AiAssistantEndpoints
         .AllowAssistantConversation();
     }
 
-    private static Guid? TryCoordinatorId(string? conversationId)
-    {
-        var parts = conversationId?.Split('.');
-        return parts is { Length: 2 } && Guid.TryParseExact(parts[0], "N", out var coordinatorId) && coordinatorId != Guid.Empty
-            ? coordinatorId
-            : null;
-    }
+    /// <summary>
+    /// Reprise d'une discussion dont le coordinateur ne répond à aucune sonde ; faux (donc transmission au coordinateur, qui échoue
+    /// proprement) s'il répond encore ou si l'historique validé n'est pas présent sur ce nœud.
+    /// </summary>
+    private static async Task<bool> TakeOverLostCoordinatorAsync(string conversationId, Guid coordinatorId, AiClusterTransport transport,
+        AiClusterService cluster, CancellationToken ct) =>
+        await transport.FindNodeUrlAsync(coordinatorId, ct) is null && await cluster.TryTakeOverAsync(conversationId, ct);
 
     private static async Task<IResult> GuardAsync(Func<Task<IResult>> action)
     {
