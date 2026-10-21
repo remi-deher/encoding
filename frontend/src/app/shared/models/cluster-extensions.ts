@@ -30,7 +30,8 @@ export interface StoreRepository {
   readonly isLocked: boolean;
   readonly enabled: boolean;
   readonly packagesCount: number;
-  readonly updatedAt: string;
+  readonly updatedAt?: string | null;
+  readonly lastError?: string | null;
 }
 
 export interface StorePackage {
@@ -47,4 +48,9 @@ export interface StorePackage {
   readonly requiredTools: readonly string[];
   readonly repositoryId: string;
   readonly icon: string;
+}
+
+export interface RejectedPlugin {
+  readonly file: string;
+  readonly reason: string;
 }

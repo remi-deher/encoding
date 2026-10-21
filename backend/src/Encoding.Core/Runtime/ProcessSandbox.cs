@@ -14,6 +14,31 @@ public static class ProcessSandbox
     [DllImport("libc")] private static extern int prctl(int option, ulong arg2, ulong arg3, ulong arg4, ulong arg5);
     [StructLayout(LayoutKind.Sequential)] private struct Ruleset { public ulong Access; }
     [StructLayout(LayoutKind.Sequential, Pack = 1)] private struct PathRule { public ulong Access; public int Parent; }
+    /// <summary>
+    /// Variable posée par l'hôte sur le processus relais pour demander un environnement minimal à l'enfant isolé
+    /// (plugins et scripts). Sans elle l'enfant hérite de l'environnement du relais (CLI IA, qui préparent le leur).
+    /// </summary>
+    public const string MinimalEnvironmentVariable = "ENCODING_SANDBOX_ENV";
+
+    private static readonly string[] InheritedVariables = ["PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ"];
+
+    /// <summary>
+    /// Environnement d'un processus isolé : liste blanche, jamais l'environnement du worker (chaînes de connexion, clés,
+    /// variables de configuration). HOME et TMPDIR pointent vers l'espace de travail, seul dossier inscriptible.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> MinimalEnvironment(IReadOnlyDictionary<string, string?> current, string workingDirectory)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var name in InheritedVariables)
+            if (current.TryGetValue(name, out var value) && !string.IsNullOrEmpty(value)) result[name] = value;
+        result.TryAdd("PATH", "/usr/local/bin:/usr/bin:/bin");
+        result.TryAdd("LC_ALL", "C.UTF-8");
+        result["HOME"] = workingDirectory;
+        result["TMPDIR"] = workingDirectory;
+        result["PYTHONDONTWRITEBYTECODE"] = "1";
+        return result;
+    }
+
     public static bool IsAvailable => OperatingSystem.IsLinux() && Syscall(444, 0, 0, 1, 0) >= 1;
 
     public static int Run(string[] args)
@@ -52,6 +77,12 @@ public static class ProcessSandbox
             if (prctl(38, 1, 0, 0, 0) != 0 || Syscall(446, rulesFd, 0, 0, 0) != 0) return 79;
             var info = new ProcessStartInfo(args[2]) { WorkingDirectory = args[1], UseShellExecute = false };
             foreach (var arg in args.Skip(4)) info.ArgumentList.Add(arg);
+            if (Environment.GetEnvironmentVariable(MinimalEnvironmentVariable) == "minimal")
+            {
+                var current = info.Environment.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+                info.Environment.Clear();
+                foreach (var (name, value) in MinimalEnvironment(current, Path.GetFullPath(args[1]))) info.Environment[name] = value;
+            }
             using var child = Process.Start(info) ?? throw new IOException("Child unavailable.");
             child.WaitForExit();
             return child.ExitCode;

@@ -16,6 +16,10 @@ internal static class PluginTests
         WebhookPayloads();
         CatalogAcceptsManifests();
         InvalidManifestsAreRejected();
+        WebhookThrottleBlocksRepeatedFailures();
+        ServerOnlySettingsStayOffWorkers();
+        SandboxedProcessesGetAMinimalEnvironment();
+        ManifestFingerprintDetectsContractDrift();
     }
 
     private static void PathMappings()
@@ -99,10 +103,23 @@ internal static class PluginTests
         duplicate["components"]!.AsArray().Add(duplicate["components"]![0]!.DeepClone());
         var unsupported=root.DeepClone().AsObject();
         unsupported["supportedHostContractVersions"] = new JsonArray(2);
-        var cases=new Dictionary<string,JsonNode>
+        var badId=root.DeepClone().AsObject();
+        badId["id"]="../evil";
+        var shadowsBuiltIn=root.DeepClone().AsObject();
+        shadowsBuiltIn["id"]="plex";
+        var badVersion=root.DeepClone().AsObject();
+        badVersion["version"]="latest";
+        var badSchema=root.DeepClone().AsObject();
+        badSchema["components"]![0]!["configurationSchema"]!["fields"]![0]!["type"]="telepathy";
+        var cases=new Dictionary<string,string>
         {
-            ["unsupported host contract"]=unsupported,
-            ["duplicate component identity"]=duplicate
+            ["unsupported host contract"]=unsupported.ToJsonString(),
+            ["duplicate component identity"]=duplicate.ToJsonString(),
+            ["unsafe plugin id"]=badId.ToJsonString(),
+            ["id of a built-in plugin"]=shadowsBuiltIn.ToJsonString(),
+            ["non semantic version"]=badVersion.ToJsonString(),
+            ["unknown field type"]=badSchema.ToJsonString(),
+            ["unreadable JSON"]="{ not json"
         };
 
         foreach(var (name,manifest) in cases)
@@ -111,15 +128,90 @@ internal static class PluginTests
             Directory.CreateDirectory(directory);
             try
             {
-                File.WriteAllText(Path.Combine(directory,"invalid.json"),manifest.ToJsonString());
+                File.WriteAllText(Path.Combine(directory,"invalid.json"),manifest);
+                var good=JsonNode.Parse(File.ReadAllText(source))!.AsObject();
+                good["id"]="second-example";
+                foreach(var component in good["components"]!.AsArray()) component!["id"]=component["id"]!.GetValue<string>().Replace("example-","second-");
+                File.WriteAllText(Path.Combine(directory,"b-valid.json"),good.ToJsonString());
                 var configuration=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["FlowPlugins:ManifestDirectory"]=directory }).Build();
-                var rejected=false;
-                try { _=new FlowComponentRegistry(configuration); }
-                catch(InvalidOperationException) { rejected=true; }
-                Check(rejected,"The catalog rejects an invalid manifest: "+name);
+                var registry=new FlowComponentRegistry(configuration);
+                Check(registry.Rejected.Count==1 && registry.Rejected[0].File=="invalid.json" && registry.Rejected[0].Reason.Length>0,"The catalog reports the invalid manifest without failing: "+name);
+                Check(registry.Plugins.All(plugin=>plugin.Id!="../evil") && registry.Plugins.Any(plugin=>plugin.Id=="second-example"),"A broken manifest does not hide a valid one: "+name);
+                Check(registry.Plugins.Count(plugin=>plugin.Id=="plex")==1,"A third-party manifest never replaces a built-in plugin: "+name);
             }
             finally { Directory.Delete(directory,true); }
         }
-        Console.WriteLine("PASS: plugin catalog rejects unsupported contracts and duplicate component identities.");
+        Console.WriteLine("PASS: an invalid third-party manifest is reported and skipped, never fatal.");
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = new(2026, 10, 21, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private static void WebhookThrottleBlocksRepeatedFailures()
+    {
+        var clock = new ManualClock();
+        var throttle = new WebhookAuthThrottle(clock);
+        for (var i = 0; i < WebhookAuthThrottle.MaxFailures - 1; i++) throttle.RecordFailure("sonarr|10.0.0.1");
+        Check(!throttle.IsBlocked("sonarr|10.0.0.1"), "Below the limit the caller is still served.");
+        throttle.RecordFailure("sonarr|10.0.0.1");
+        Check(throttle.IsBlocked("sonarr|10.0.0.1"), "At the limit the caller is blocked.");
+        Check(!throttle.IsBlocked("sonarr|10.0.0.2") && !throttle.IsBlocked("radarr|10.0.0.1"), "Other callers and plugins are unaffected.");
+        clock.Now += WebhookAuthThrottle.Window + TimeSpan.FromSeconds(1);
+        Check(!throttle.IsBlocked("sonarr|10.0.0.1"), "The block ends with the window.");
+        Console.WriteLine("PASS: webhook authentication failures are throttled per caller and plugin.");
+    }
+
+    private static void ServerOnlySettingsStayOffWorkers()
+    {
+        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var sonarr = registry.Plugins.Single(plugin => plugin.Id == "sonarr");
+        Check(sonarr.ConfigurationSchema!.Fields.Single(field => field.Id == "webhookSecret").Scope == "server", "The webhook secret is declared server-only.");
+        var values = new Dictionary<string, JsonElement>
+        {
+            ["baseUrl"] = JsonSerializer.SerializeToElement("http://sonarr"),
+            ["webhookSecret"] = JsonSerializer.SerializeToElement("s3cret")
+        };
+        var filtered = registry.ForWorker(new Dictionary<string, IReadOnlyDictionary<string, JsonElement>> { ["sonarr"] = values, ["unknown"] = values });
+        Check(filtered["sonarr"].ContainsKey("baseUrl") && !filtered["sonarr"].ContainsKey("webhookSecret"), "The worker receives the connection but not the webhook secret.");
+        Check(filtered["unknown"].ContainsKey("webhookSecret"), "A plugin without a declared scope is passed through unchanged.");
+        Console.WriteLine("PASS: server-only plugin settings are removed before reaching a worker.");
+    }
+
+    private static void SandboxedProcessesGetAMinimalEnvironment()
+    {
+        var current = new Dictionary<string, string?>
+        {
+            ["PATH"] = "/usr/bin", ["LANG"] = "fr_FR.UTF-8",
+            ["ConnectionStrings__Cluster"] = "Host=db;Password=hunter2", ["Node__Token"] = "t0ken", ["ANTHROPIC_API_KEY"] = "sk-x", ["HOME"] = "/root"
+        };
+        var minimal = Encoding.Core.Runtime.ProcessSandbox.MinimalEnvironment(current, "/work");
+        Check(minimal["PATH"] == "/usr/bin" && minimal["LANG"] == "fr_FR.UTF-8", "Locale and PATH are kept.");
+        Check(minimal["HOME"] == "/work" && minimal["TMPDIR"] == "/work", "HOME and TMPDIR point to the workspace.");
+        Check(!minimal.Keys.Any(name => name.Contains("Connection") || name.Contains("Token") || name.Contains("KEY")), "No secret or node setting reaches the sandboxed process.");
+        Check(Encoding.Core.Runtime.ProcessSandbox.MinimalEnvironment(new Dictionary<string, string?>(), "/work")["PATH"].Contains("/usr/bin"), "A default PATH is supplied.");
+        Console.WriteLine("PASS: sandboxed plugins and scripts receive an allow-listed environment.");
+    }
+
+    private static void ManifestFingerprintDetectsContractDrift()
+    {
+        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var plex = registry.Plugins.Single(plugin => plugin.Id == "plex");
+        var fingerprint = PluginManifestFingerprint.Compute(plex);
+        var relabelled = plex with { Name = "Autre libellé", Components = plex.Components.Select(c => c with { Name = c.Name + " (v2)", Description = "x" }).ToArray() };
+        Check(PluginManifestFingerprint.Compute(relabelled) == fingerprint, "Cosmetic changes do not alter the contract fingerprint.");
+        var firstOutput = plex.Components.First(c => c.Outputs.Count > 0);
+        var drifted = plex with
+        {
+            Components = plex.Components.Select(c => c.Id != firstOutput.Id ? c : c with { Outputs = c.Outputs.Skip(1).ToArray() }).ToArray()
+        };
+        Check(PluginManifestFingerprint.Compute(drifted) != fingerprint, "A removed output changes the fingerprint.");
+        Check(registry.FingerprintMatches("plex", fingerprint), "The server accepts the fingerprint of its own catalog.");
+        Check(!registry.FingerprintMatches("plex", PluginManifestFingerprint.Compute(drifted)), "The server refuses a worker whose same-version manifest differs.");
+        Check(registry.FingerprintMatches("plex", null), "A worker that announces no fingerprint stays accepted during a rolling upgrade.");
+        Check(registry.FingerprintMatches("not-installed", "anything"), "An unknown plugin is not judged by the fingerprint.");
+        Console.WriteLine("PASS: the manifest fingerprint detects same-version contract drift between server and worker.");
     }
 }

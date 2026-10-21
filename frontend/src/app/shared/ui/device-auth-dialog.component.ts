@@ -15,9 +15,9 @@ import {
   MatDialogActions,
   MatDialogContent,
   MatDialogRef,
-  MatDialogTitle,
 } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
+import { DialogFrameComponent } from './dialog-frame.component';
 import { IconComponent } from './icon.component';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -42,21 +42,18 @@ export interface DeviceAuthDialogData {
     MatButtonModule,
     MatDialogActions,
     MatDialogContent,
-    MatDialogTitle,
+    DialogFrameComponent,
     IconComponent,
     MatProgressSpinnerModule,
     MatFormFieldModule,
     MatInputModule,
   ],
   template: `
-    <section class="app-dialog device-auth-dialog">
-      <header class="app-dialog-header">
-        <div class="app-dialog-heading">
-          <p class="app-dialog-eyebrow">Authentification sécurisée</p>
-          <h2 mat-dialog-title>Associer {{ data.toolName }}</h2>
-        </div>
-      </header>
-
+    <app-dialog-frame
+      eyebrow="Authentification sécurisée"
+      icon="⚿"
+      [heading]="'Associer ' + data.toolName"
+    >
       <mat-dialog-content class="app-dialog-body device-auth-body">
         @if (data.prompt.userCode) {
           <p class="instruction">
@@ -142,10 +139,10 @@ export interface DeviceAuthDialogData {
         }
       </mat-dialog-content>
 
-      <mat-dialog-actions align="end">
+      <mat-dialog-actions class="app-dialog-footer" align="end">
         <button matButton="text" type="button" (click)="close()">Fermer</button>
       </mat-dialog-actions>
-    </section>
+    </app-dialog-frame>
   `,
   styles: [
     `

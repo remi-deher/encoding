@@ -7,6 +7,7 @@ import datetime
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -570,6 +571,72 @@ class JellyfinTests(unittest.TestCase):
             self.assertEqual((code, out), (1, ""), status)
             self.assertNotIn("jf-secret-key", err)
 
+
+
+class AuthoringToolsTests(unittest.TestCase):
+    """Outils d'auteur : validation du manifeste, simulation locale, SDK JavaScript."""
+
+    def load(self, *parts):
+        with open(os.path.join(PLUGINS, *parts), encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def test_shipped_manifests_validate(self):
+        catalog = os.path.join(PLUGINS, "..", "src", "Encoding.Api", "Flows", "Catalog")
+        for name in ("sonarr", "radarr", "plex", "jellyfin"):
+            self.assertEqual([], sdk.validate_manifest(self.load("..", "src", "Encoding.Api", "Flows", "Catalog", name + ".json")), name)
+        self.assertEqual([], sdk.validate_manifest(self.load("example", "manifest.json")))
+        self.assertEqual([], sdk.validate_manifest(self.load("example-js", "manifest.json")))
+        self.assertTrue(os.path.isdir(catalog))
+
+    def test_validation_names_each_problem(self):
+        manifest = self.load("example", "manifest.json")
+        manifest["id"] = "../evil"
+        manifest["version"] = "latest"
+        manifest["components"][0]["outputs"] = [{"id": "a", "label": "A"}, {"id": "a", "label": "B", "description": "d"}]
+        manifest["components"][0]["configurationSchema"]["fields"][0]["type"] = "telepathy"
+        manifest["components"][1]["timeoutSeconds"] = 0
+        problems = " | ".join(sdk.validate_manifest(manifest))
+        for expected in ("id :", "version :", "dupliqué", "n'a pas de description", "telepathy", "timeoutSeconds"):
+            self.assertIn(expected, problems)
+        self.assertEqual(["Le manifeste doit être un objet JSON."], sdk.validate_manifest([]))
+
+    def test_validate_command_exit_codes(self):
+        good = subprocess.run([sys.executable, "-B", os.path.join(PLUGINS, "sdk", "encoding_plugin_sdk.py"), "validate", os.path.join(PLUGINS, "example", "manifest.json")], capture_output=True, text=True)
+        self.assertEqual(0, good.returncode, good.stdout)
+        missing = subprocess.run([sys.executable, "-B", os.path.join(PLUGINS, "sdk", "encoding_plugin_sdk.py"), "validate", "/nonexistent.json"], capture_output=True, text=True)
+        self.assertEqual(1, missing.returncode)
+
+    def test_simulate_runs_a_component_without_a_cluster(self):
+        code, out, err = run_process(EXAMPLE, ["--simulate", "example-tag-file", '{"name":"n"}', "--media", "Show/e1.mkv"], "")
+        self.assertEqual(0, code, err)
+        response = json.loads(out)
+        self.assertEqual("success", response["outputId"])
+        self.assertEqual({"n": "e1.mkv"}, response["variableChanges"])
+        code, _, err = run_process(EXAMPLE, ["--simulate", "nope"], "")
+        self.assertEqual(1, code)
+        self.assertIn("absent du manifeste", err)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js absent")
+    def test_javascript_sdk_speaks_the_same_protocol(self):
+        script = os.path.join(PLUGINS, "example-js", "plugin.mjs")
+        manifest = self.load("example-js", "manifest.json")
+        node = shutil.which("node")
+        process = subprocess.run([node, script], input='{"type":"describe","contractVersion":1}\n', capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, process.returncode, process.stderr)
+        self.assertEqual("example-js", json.loads(process.stdout)["id"])
+        inv = invocation(manifest, "examplejs-tag-file", config={"name": "t"}, media_path="A/b.mkv")
+        process = subprocess.run([node, script], input=json.dumps({"type": "execute", "contractVersion": 1, "invocation": inv}) + "\n", capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, process.returncode, process.stderr)
+        response = json.loads(process.stdout)
+        self.assertEqual((inv["invocationId"], 3, "success", {"t": "b.mkv"}), (response["invocationId"], response["leaseEpoch"], response["outputId"], response["variableChanges"]))
+        bad = dict(inv, component=dict(inv["component"], pluginId="autre"))
+        process = subprocess.run([node, script], input=json.dumps({"type": "execute", "contractVersion": 1, "invocation": bad}) + "\n", capture_output=True, text=True, timeout=60)
+        self.assertEqual(1, process.returncode)
+        self.assertEqual("", process.stdout)
+        process = subprocess.run([node, os.path.join(PLUGINS, "sdk", "encoding-plugin-sdk.mjs"), "validate", os.path.join(PLUGINS, "example-js", "manifest.json")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, process.returncode, process.stdout)
+        process = subprocess.run([node, script, "--simulate", "examplejs-name-matches", '{"text":"b"}', "--media", "A/b.mkv"], capture_output=True, text=True, timeout=60)
+        self.assertEqual("yes", json.loads(process.stdout)["outputId"], process.stderr)
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,11 +9,12 @@ import {
   Validators,
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialogRef, MatDialogTitle } from '@angular/material/dialog';
+import { MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MINIMUM_PASSWORD_LENGTH } from '../../shared/models/auth';
 import { NotificationService } from '../../shared/services/notification.service';
+import { DialogFrameComponent } from '../../shared/ui/dialog-frame.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { AuthService } from './auth.service';
 
@@ -25,22 +26,15 @@ type PasswordField = 'currentPassword' | 'newPassword' | 'confirmation';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-password-change-dialog',
   imports: [
+    DialogFrameComponent,
     IconComponent,
     MatButtonModule,
-    MatDialogTitle,
     MatFormFieldModule,
     MatInputModule,
     ReactiveFormsModule,
   ],
   template: `
-    <section class="app-dialog">
-      <header class="app-dialog-header">
-        <span class="app-dialog-icon" aria-hidden="true">◆</span>
-        <div class="app-dialog-heading">
-          <p class="app-dialog-eyebrow">Sécurité du compte</p>
-          <h2 mat-dialog-title>Changer le mot de passe</h2>
-        </div>
-      </header>
+    <app-dialog-frame eyebrow="Sécurité du compte" heading="Changer le mot de passe">
       <form class="password-form" [formGroup]="form" novalidate (ngSubmit)="save()">
         <div class="app-dialog-body">
           @if (formError(); as message) {
@@ -130,7 +124,7 @@ type PasswordField = 'currentPassword' | 'newPassword' | 'confirmation';
           </button>
         </footer>
       </form>
-    </section>
+    </app-dialog-frame>
   `,
   styles: `
     .password-form {

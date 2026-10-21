@@ -27,28 +27,35 @@
     <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
   </ng-template>
 
-  <div catalogue-filters>
-    <app-category-tabs
-      label="Type de média"
-      [options]="categoryOptions()"
-      [selected]="selectedCategory()"
-      (selectedChange)="onCategoryChange($event)"
-    />
+  <div catalogue-table class="flow-groups">
+    @for (group of groups(); track group.value) {
+      <section class="flow-group" [attr.aria-label]="group.label">
+        <header class="flow-group-head">
+          <span class="flow-group-icon" [attr.data-media]="group.value">
+            <app-icon [name]="group.icon" />
+          </span>
+          <h2>{{ group.label }}</h2>
+          <span class="flow-group-count"
+            >{{ group.rows.length }} {{ group.rows.length === 1 ? 'flow' : 'flows' }}</span
+          >
+        </header>
+        <app-data-table
+          layout="resources"
+          [columns]="columns"
+          [rowActions]="rowActions"
+          (rowAction)="onRowAction($event)"
+          [rows]="group.rows"
+          [selectable]="false"
+          [rowOpenable]="true"
+          rowOpenLabel="Consulter"
+          (rowOpen)="onFlowOpen($event)"
+          [emptyMessage]="'Aucun flow.'"
+        />
+      </section>
+    } @empty {
+      <p class="catalog-state">Aucun flow ne correspond à la recherche.</p>
+    }
   </div>
-
-  <app-data-table
-    layout="resources"
-    catalogue-table
-    [columns]="columns"
-    [rowActions]="rowActions"
-    (rowAction)="onRowAction($event)"
-    [rows]="filteredFlows()"
-    [selectable]="false"
-    [rowOpenable]="true"
-    rowOpenLabel="Consulter"
-    (rowOpen)="onFlowOpen($event)"
-    emptyMessage="Aucun flow ne correspond à ce type de média."
-  />
 
   <ng-template #detailContent catalogue-detail>
     @if (selectedFlow(); as flow) {

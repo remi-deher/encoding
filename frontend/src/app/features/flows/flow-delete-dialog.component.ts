@@ -6,8 +6,8 @@ import {
   MatDialogActions,
   MatDialogContent,
   MatDialogRef,
-  MatDialogTitle,
 } from '@angular/material/dialog';
+import { DialogFrameComponent } from '../../shared/ui/dialog-frame.component';
 
 export interface FlowDeleteDialogData {
   readonly name: string;
@@ -22,17 +22,19 @@ export interface FlowDeleteDialogData {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-delete-dialog',
-  imports: [MatButtonModule, MatCheckboxModule, MatDialogActions, MatDialogContent, MatDialogTitle],
+  imports: [
+    DialogFrameComponent,
+    MatButtonModule,
+    MatCheckboxModule,
+    MatDialogActions,
+    MatDialogContent,
+  ],
   template: `
-    <section class="app-dialog confirmation-dialog">
-      <header class="app-dialog-header">
-        <span class="app-dialog-icon app-dialog-icon_danger" aria-hidden="true">!</span>
-        <div class="app-dialog-heading">
-          <p class="app-dialog-eyebrow">Confirmation</p>
-          <h2 mat-dialog-title>Supprimer le flow « {{ data.name }} » ?</h2>
-        </div>
-      </header>
-
+    <app-dialog-frame
+      variant="danger"
+      eyebrow="Confirmation"
+      [heading]="'Supprimer le flow « ' + data.name + ' » ?'"
+    >
       <mat-dialog-content class="app-dialog-body">
         <p class="message">
           Le flow et son brouillon seront retirés du catalogue. Les versions publiées et
@@ -85,14 +87,12 @@ export interface FlowDeleteDialogData {
           matButton="filled"
           type="button"
           [disabled]="!confirmed()"
-          [style.--mat-button-filled-container-color]="'var(--danger)'"
-          [style.--mat-button-filled-label-text-color]="'var(--on-danger)'"
           (click)="dialogRef.close(true)"
         >
           Supprimer
         </button>
       </mat-dialog-actions>
-    </section>
+    </app-dialog-frame>
   `,
   styles: `
     .message {
