@@ -384,10 +384,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             }
             // Reprise : seulement si le coordinateur n'a répondu à aucune sonde (jamais après une demande acceptée, dont le résultat
             // reste ambigu) et si le dernier checkpoint validé est déjà présent sur ce nœud, pour ne jamais repartir d'un contexte vide.
-            if (ownerSeen || await GetSessionAsync(id, ct) is null)
+            if (ownerSeen || !await TryTakeOverAsync(id, ct))
                 return new(false, "", "Coordinateur de session indisponible. Le contexte validé est conservé ; réessayez après son retour.", SessionId: id, RequestId: requestId);
-            await store.SaveAsync(CoordinatorKey(id), transport.LocalId.ToString("N"), ct);
-            services?.GetService<ILogger<AiClusterService>>()?.LogWarning("Session IA {Session} reprise par ce nœud : son coordinateur {Coordinator} est injoignable.", id, owner);
         }
         var gate = gates.GetOrAdd(id, _ => new(1));
         if (!await gate.WaitAsync(0, ct)) return new(false, "", "Une demande est déjà en cours dans cette session.", SessionId: id, RequestId: requestId);
@@ -502,6 +500,31 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var fork = saved with { Id = $"{transport.LocalId:N}.{Guid.NewGuid():N}", PendingRequest = null, PendingPrompt = null, AttemptDeadline = null, Attempt = 0, UpdatedAt = DateTimeOffset.UtcNow, LastError = null };
         await store.SaveAsync("session/" + fork.Id, fork, ct);
         return fork;
+    }
+    /// <summary>Coordinateur courant de la session (reprise comprise) ; null si l'identifiant n'est pas celui d'une session.</summary>
+    public async Task<Guid?> CoordinatorAsync(string? id, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        try { return await OwnerAsync(id, ct); }
+        catch (ArgumentException) { return null; }
+    }
+    /// <summary>
+    /// Fait de ce nœud le coordinateur d'une session dont le coordinateur est injoignable. Refuse sans checkpoint validé présent
+    /// localement, pour ne jamais repartir d'un contexte vide ; l'appelant doit avoir constaté que le coordinateur ne répond pas.
+    /// </summary>
+    public async Task<bool> TryTakeOverAsync(string id, CancellationToken ct)
+    {
+        var previous = await OwnerAsync(id, ct);
+        if (previous == transport.LocalId) return true;
+        if (await GetSessionAsync(id, ct) is null) return false;
+        await store.SaveAsync(CoordinatorKey(id), transport.LocalId.ToString("N"), ct);
+        services?.GetService<ILogger<AiClusterService>>()?.LogWarning("Session IA {Session} reprise par ce nœud : son coordinateur {Coordinator} est injoignable.", id, previous);
+        return true;
+    }
+    /// <summary>Une session auxiliaire (titre, planification) créée par le coordinateur courant le suit, même après une reprise.</summary>
+    public async Task AdoptSessionAsync(string id, CancellationToken ct)
+    {
+        if (await OwnerAsync(id, ct) != transport.LocalId) await store.SaveAsync(CoordinatorKey(id), transport.LocalId.ToString("N"), ct);
     }
     public static string CoordinatorKey(string id) => "session-coordinator/" + id;
     /// <summary>Coordinateur de la session : celui de son identifiant, sauf reprise explicite par un autre nœud (la plus récente gagne).</summary>

@@ -251,6 +251,28 @@ public sealed class AiClusterTests
     }
 
     [Fact]
+    public async Task TakeOverRequiresALocalCheckpointAndHelperSessionsFollowTheNewCoordinator()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var lost = Guid.NewGuid();
+        var conversation = $"{lost:N}.{Guid.NewGuid():N}";
+        var helper = $"{lost:N}.{Guid.NewGuid():N}";
+
+        Assert.Equal(lost, await mesh.First.Service.CoordinatorAsync(conversation, Ct));
+        Assert.False(await mesh.First.Service.TryTakeOverAsync(conversation, Ct));
+        Assert.Equal(lost, await mesh.First.Service.CoordinatorAsync(conversation, Ct));
+        Assert.Null(await mesh.First.Service.CoordinatorAsync("pas-une-session", Ct));
+
+        await mesh.First.Store.SaveAsync("session/" + conversation, new AiSessionState(conversation, "openai", "instructions", []), Ct);
+        Assert.True(await mesh.First.Service.TryTakeOverAsync(conversation, Ct));
+        Assert.Equal(mesh.First.Identity.PeerId, await mesh.First.Service.CoordinatorAsync(conversation, Ct));
+
+        // Une session auxiliaire (titre, planification) n'a pas besoin de checkpoint : elle suit le coordinateur courant.
+        await mesh.First.Service.AdoptSessionAsync(helper, Ct);
+        Assert.Equal(mesh.First.Identity.PeerId, await mesh.First.Service.CoordinatorAsync(helper, Ct));
+    }
+
+    [Fact]
     public async Task SessionWithoutLocalCheckpointIsNeverTakenOverFromAnEmptyContext()
     {
         await using var mesh = await Mesh.CreateAsync();

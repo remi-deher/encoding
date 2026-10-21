@@ -48,6 +48,9 @@
           >
             <strong>{{ conversation.title }}</strong
             ><span>{{ conversation.source.label }}</span>
+            @if (coordinatorLabel(conversation); as origin) {
+              <span class="node-origin">{{ origin }}</span>
+            }
           </button>
           <button
             class="conversation-delete"
@@ -307,6 +310,18 @@
         } @else {
           <h1>{{ detail()?.conversation?.title ?? 'Assistant' }}</h1>
           @if (detail(); as current) {
+            @if (coordinatorLabel(current.conversation); as origin) {
+              <span
+                class="node-badge"
+                [title]="
+                  coordinatorLost(current.conversation)
+                    ? 'Ce nœud ne répond plus : le nœud courant reprendra la discussion à votre prochain message.'
+                    : 'Nœud qui coordonne cette discussion.'
+                "
+                >{{ origin
+                }}{{ coordinatorLost(current.conversation) ? ' · injoignable' : '' }}</span
+              >
+            }
             <button
               mat-icon-button
               type="button"

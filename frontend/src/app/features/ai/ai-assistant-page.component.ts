@@ -31,6 +31,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
 import {
+  AiNodeAvailability,
   AiAssistantConversation,
   AiAssistantConversationDetail,
   AiAssistantActionProposal,
@@ -147,6 +148,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly nodes = signal<readonly NodeResponse[]>([]);
   protected readonly libraries = signal<readonly LibraryResponse[]>([]);
   protected readonly conversations = signal<readonly AiAssistantConversation[]>([]);
+  private readonly aiNodes = signal<readonly AiNodeAvailability[]>([]);
   protected readonly detail = signal<AiAssistantConversationDetail | null>(null);
   readonly conversationId = computed(() => this.detail()?.conversation.id ?? null);
   protected readonly assistantOptions = signal<AiAssistantOptions | null>(null);
@@ -253,6 +255,7 @@ export class AiAssistantPageComponent implements OnDestroy {
     this.loadNodes();
     this.loadLibraries();
     this.loadConversations();
+    this.loadAiNodes();
     this.loadAssistantOptions();
     afterNextRender(() => {
       if (this.panelMode()) return;
@@ -1179,6 +1182,29 @@ export class AiAssistantPageComponent implements OnDestroy {
       },
       error: () => this.loadingLibraries.set(false),
     });
+  }
+
+  private loadAiNodes(): void {
+    this.aiTools.getCluster().subscribe({
+      next: (view) => this.aiNodes.set(view.nodes),
+      error: () => this.aiNodes.set([]),
+    });
+  }
+
+  /** Nœud qui coordonne la discussion, pour l'indication « Discussion du nœud … ». */
+  protected coordinatorLabel(conversation: AiAssistantConversation): string | null {
+    if (!conversation.coordinatorId) return null;
+    const node = this.aiNodes().find(
+      (candidate) => candidate.nodeId === conversation.coordinatorId,
+    );
+    return node ? `Discussion du nœud ${node.name}` : 'Discussion d’un autre nœud';
+  }
+
+  /** Vrai quand le coordinateur ne répond plus : le nœud courant reprendra la discussion au prochain message. */
+  protected coordinatorLost(conversation: AiAssistantConversation): boolean {
+    return this.aiNodes().some(
+      (candidate) => candidate.nodeId === conversation.coordinatorId && !candidate.reachable,
+    );
   }
 
   private loadConversations(): void {

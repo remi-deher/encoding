@@ -440,3 +440,15 @@
   color: var(--text-primary);
   font: inherit;
 }
+
+.node-origin {
+  font-size: var(--font-label);
+}
+.node-badge {
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-container-highest);
+  color: var(--text-secondary);
+  font-size: var(--font-label);
+  white-space: nowrap;
+}
