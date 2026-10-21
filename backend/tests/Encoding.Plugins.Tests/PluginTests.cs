@@ -19,6 +19,7 @@ internal static class PluginTests
         WebhookThrottleBlocksRepeatedFailures();
         ServerOnlySettingsStayOffWorkers();
         SandboxedProcessesGetAMinimalEnvironment();
+        ManifestFingerprintDetectsContractDrift();
     }
 
     private static void PathMappings()
@@ -192,5 +193,25 @@ internal static class PluginTests
         Check(!minimal.Keys.Any(name => name.Contains("Connection") || name.Contains("Token") || name.Contains("KEY")), "No secret or node setting reaches the sandboxed process.");
         Check(Encoding.Core.Runtime.ProcessSandbox.MinimalEnvironment(new Dictionary<string, string?>(), "/work")["PATH"].Contains("/usr/bin"), "A default PATH is supplied.");
         Console.WriteLine("PASS: sandboxed plugins and scripts receive an allow-listed environment.");
+    }
+
+    private static void ManifestFingerprintDetectsContractDrift()
+    {
+        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var plex = registry.Plugins.Single(plugin => plugin.Id == "plex");
+        var fingerprint = PluginManifestFingerprint.Compute(plex);
+        var relabelled = plex with { Name = "Autre libellé", Components = plex.Components.Select(c => c with { Name = c.Name + " (v2)", Description = "x" }).ToArray() };
+        Check(PluginManifestFingerprint.Compute(relabelled) == fingerprint, "Cosmetic changes do not alter the contract fingerprint.");
+        var firstOutput = plex.Components.First(c => c.Outputs.Count > 0);
+        var drifted = plex with
+        {
+            Components = plex.Components.Select(c => c.Id != firstOutput.Id ? c : c with { Outputs = c.Outputs.Skip(1).ToArray() }).ToArray()
+        };
+        Check(PluginManifestFingerprint.Compute(drifted) != fingerprint, "A removed output changes the fingerprint.");
+        Check(registry.FingerprintMatches("plex", fingerprint), "The server accepts the fingerprint of its own catalog.");
+        Check(!registry.FingerprintMatches("plex", PluginManifestFingerprint.Compute(drifted)), "The server refuses a worker whose same-version manifest differs.");
+        Check(registry.FingerprintMatches("plex", null), "A worker that announces no fingerprint stays accepted during a rolling upgrade.");
+        Check(registry.FingerprintMatches("not-installed", "anything"), "An unknown plugin is not judged by the fingerprint.");
+        Console.WriteLine("PASS: the manifest fingerprint detects same-version contract drift between server and worker.");
     }
 }

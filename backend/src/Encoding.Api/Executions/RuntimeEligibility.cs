@@ -58,7 +58,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             var component=registry.Resolve(node.Component);
 
             var matches = capabilities.Any(c =>
-                (!isAliased && c.ToolId == "plugin/" + pluginId && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component) || (pluginId is "audio" or "video" or "subtitles") && component?.CompatiblePluginVersions?.Contains(c.Version, StringComparer.Ordinal) == true))
+                (!isAliased && c.ToolId == "plugin/" + pluginId && registry.FingerprintMatches(pluginId, c.ManifestFingerprint) && (c.Version == node.Component.PluginVersion || c.Version == registry.RuntimePluginVersion(node.Component) || (pluginId is "audio" or "video" or "subtitles") && component?.CompatiblePluginVersions?.Contains(c.Version, StringComparer.Ordinal) == true))
                 || (pluginId == "ai" && (componentId is "ai-translate-subtitles" or "ai-metadata-enricher") && c.ToolId == "ai-runtime" && c.Version == "1.0.0")
                 || (isAliased && c.ToolId == "plugin/" + targetPluginId)
                 || (isAliased && c.ToolId == "plugin/base" && IsBaseVersionSatisfied(c.Version, componentId))

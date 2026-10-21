@@ -44,7 +44,8 @@ public sealed record FlowComponentDescriptor(
     bool RequiresWriteAccess,
     IReadOnlyList<string>? CompatiblePluginVersions = null,
     string? MinimumRuntimePluginVersion = null,
-    bool ProducesFiles = false);
+    bool ProducesFiles = false,
+    int? TimeoutSeconds = null);
 
 public sealed record FlowOutputDescriptor(string Id, string Label, string Description);
 
@@ -96,3 +97,28 @@ public sealed record FlowSelectOption(
     string Value,
     string Label,
     IReadOnlyList<string>? SupportedFlowMediaTypes = null);
+
+/// <summary>
+/// Empreinte du contrat d'un manifeste (identité, composants, sorties, types de champs), indépendante des libellés.
+/// Le worker l'annonce avec la capacité <c>plugin/&lt;id&gt;</c> et le serveur la compare à son propre catalogue :
+/// deux builds portant le même numéro de version mais des contrats différents ne sont pas interchangeables.
+/// </summary>
+public static class PluginManifestFingerprint
+{
+    public static string Compute(PluginManifest manifest)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.Append(manifest.Id).Append('@').Append(manifest.Version).Append('\n');
+        foreach (var field in (manifest.ConfigurationSchema?.Fields ?? []).OrderBy(field => field.Id, StringComparer.Ordinal))
+            builder.Append("cfg:").Append(field.Id).Append(':').Append(field.Type).Append('\n');
+        foreach (var component in manifest.Components.OrderBy(component => component.Id, StringComparer.Ordinal))
+        {
+            builder.Append("component:").Append(component.Id).Append('@').Append(component.Version)
+                .Append(" schema=").Append(component.ConfigurationSchema.Version).Append(" kind=").Append(component.Kind).Append('\n');
+            foreach (var output in component.Outputs.OrderBy(output => output.Id, StringComparer.Ordinal)) builder.Append("  out:").Append(output.Id).Append('\n');
+            foreach (var field in component.ConfigurationSchema.Fields.OrderBy(field => field.Id, StringComparer.Ordinal))
+                builder.Append("  field:").Append(field.Id).Append(':').Append(field.Type).Append('\n');
+        }
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(builder.ToString()))).ToLowerInvariant()[..32];
+    }
+}

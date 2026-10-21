@@ -1,3 +1,4 @@
+using Encoding.Contracts.Plugins;
 using Encoding.Core.Runtime;
 using System.Text.RegularExpressions;
 using Encoding.Contracts.Flows;
@@ -103,7 +104,7 @@ public sealed class ToolCapabilityProbe(
                 try
                 {
                     var manifest = await plugins.DescribeAsync(plugin, ct);
-                    list.Add(new("plugin/" + manifest.Id, manifest.Version, ["general"], ["process"]));
+                    list.Add(new("plugin/" + manifest.Id, manifest.Version, ["general"], ["process"], ManifestFingerprint: PluginManifestFingerprint.Compute(manifest)));
                 }
                 catch (Exception) when (!ct.IsCancellationRequested) { }
             }

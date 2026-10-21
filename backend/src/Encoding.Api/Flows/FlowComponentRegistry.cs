@@ -119,6 +119,19 @@ public sealed class FlowComponentRegistry
         return result;
     }
 
+    /// <summary>
+    /// Vrai si la capacité annoncée par un worker décrit le même contrat que le catalogue du serveur. Un worker plus ancien
+    /// qui n'annonce pas d'empreinte reste accepté (compatibilité de déploiement progressif).
+    /// </summary>
+    public bool FingerprintMatches(string pluginId, string? announced)
+    {
+        if (announced is null) return true;
+        var plugin = Plugins.SingleOrDefault(item => item.Id == pluginId);
+        return plugin is null || fingerprints.GetOrAdd(pluginId, _ => PluginManifestFingerprint.Compute(plugin)) == announced;
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> fingerprints = new(StringComparer.Ordinal);
+
     /// <summary>Manifestes tiers écartés au chargement (fichier et motif), pour affichage dans la page Plugins.</summary>
     public IReadOnlyList<RejectedPluginManifest> Rejected { get; }
 
@@ -180,6 +193,7 @@ public sealed class FlowComponentRegistry
             if (string.IsNullOrWhiteSpace(component.Id) || string.IsNullOrWhiteSpace(component.Version)) reason = "identifiant ou version vide";
             else if (component.MinimumRuntimePluginVersion is not null && !Version.TryParse(component.MinimumRuntimePluginVersion, out _)) reason = "minimumRuntimePluginVersion illisible";
             else if (fields.Any(field => field.RequiresPluginVersion is not null && !Version.TryParse(field.RequiresPluginVersion, out _))) reason = "requiresPluginVersion illisible";
+            else if (component.TimeoutSeconds is < 1 or > 21600) reason = "timeoutSeconds hors de 1 à 21600";
             else if (component.ConfigurationSchema.Version != 1) reason = $"version de schéma {component.ConfigurationSchema.Version} (1 attendu)";
             else if (component.Outputs.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != component.Outputs.Count) reason = "identifiant de sortie dupliqué";
             else if (fields.Select(f => f.Id).Distinct(StringComparer.Ordinal).Count() != fields.Count) reason = "identifiant de champ dupliqué";

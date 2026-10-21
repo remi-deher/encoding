@@ -89,6 +89,7 @@ internal static class TriggerTests
         builder.Services.AddSingleton(registry);
         builder.Services.AddSingleton(configurations);
         builder.Services.AddSingleton(triggers);
+        builder.Services.AddSingleton<WebhookAuthThrottle>();
         await using var app = builder.Build();
         app.MapArrWebhookEndpoints();
         await app.StartAsync();
@@ -166,6 +167,18 @@ internal static class TriggerTests
         await db.CreateCommand("UPDATE integration_trigger_requests SET requested_at=clock_timestamp()-interval '2 hours',claimed_until=NULL WHERE state='processing'").ExecuteNonQueryAsync();
         await service.ProcessAsync(CancellationToken.None);
         Check(await ScalarAsync(db, "SELECT count(*) FROM integration_trigger_requests WHERE state='expired'") == 1, "A request whose file never appears expires.");
+        using (var oversized = new HttpRequestMessage(HttpMethod.Post, "/api/v1/integrations/sonarr/webhook") { Content = new StringContent("{\"eventType\":\"Test\",\"pad\":\"" + new string('x', 1024 * 1024 + 16) + "\"}", System.Text.Encoding.UTF8, "application/json") })
+        {
+            oversized.Headers.TryAddWithoutValidation("X-Encoding-Webhook-Secret", Secret);
+            // Le serveur peut fermer la connexion pendant l'envoi : refus par 413 ou connexion coupée, jamais un traitement.
+            var refused = false;
+            try { refused = (await http.SendAsync(oversized)).StatusCode == HttpStatusCode.RequestEntityTooLarge; }
+            catch (HttpRequestException) { refused = true; }
+            Check(refused, "A body above 1 MiB is refused before being parsed.");
+        }
+        for (var i = 0; i < WebhookAuthThrottle.MaxFailures; i++) await Post("sonarr", new { eventType = "Test" }, secret: "wrong-" + i);
+        var throttled = await Post("sonarr", new { eventType = "Test" });
+        Check(throttled.StatusCode == (HttpStatusCode)429 && throttled.Headers.Contains("Retry-After"), "Repeated authentication failures are throttled, even for the right secret.");
         Console.WriteLine("PASS: webhook authentication, idempotence, scan-gated execution creation, receipts, multi-server claims and expiry.");
     }
 
