@@ -34,6 +34,18 @@
 
   <div catalogue-table>
     @if (activeTab() === 'plugins') {
+      @if (rejectedPlugins().length > 0) {
+        <div class="rejected-plugins" role="alert">
+          <strong>{{ rejectedPlugins().length }} manifeste(s) de plugin ignoré(s) :</strong>
+          <ul>
+            @for (item of rejectedPlugins(); track item.file) {
+              <li>
+                <code>{{ item.file }}</code> — {{ item.reason }}
+              </li>
+            }
+          </ul>
+        </div>
+      }
       <app-data-table
         layout="resources"
         [columns]="columns"
@@ -50,20 +62,36 @@
             <div class="tool-card-header">
               <span class="tool-icon" aria-hidden="true">
                 @switch (tool.id) {
-                  @case ('ffmpeg') { 🎞️ }
-                  @case ('mkvtoolnix') { 📦 }
-                  @case ('ffprobe') { 🔍 }
-                  @case ('mediainfo') { 📊 }
-                  @case ('imagemagick') { 🖼️ }
-                  @case ('python') { 🐍 }
-                  @default { ⚙️ }
+                  @case ('ffmpeg') {
+                    🎞️
+                  }
+                  @case ('mkvtoolnix') {
+                    📦
+                  }
+                  @case ('ffprobe') {
+                    🔍
+                  }
+                  @case ('mediainfo') {
+                    📊
+                  }
+                  @case ('imagemagick') {
+                    🖼️
+                  }
+                  @case ('python') {
+                    🐍
+                  }
+                  @default {
+                    ⚙️
+                  }
                 }
               </span>
               <div class="tool-title-group">
                 <h3>{{ tool.name }}</h3>
-                <span class="tool-version">Version {{ tool.stockVersion }} ({{ tool.provider === 'stock' ? 'Référence intégrée' : 'Personnalisé' }})</span>
+                <span class="tool-version">{{
+                  tool.provider === 'stock' ? 'Outil livré avec l’image' : 'Personnalisé'
+                }}</span>
               </div>
-              <span class="badge success">{{ tool.clusterReadiness }}</span>
+              <span class="badge">{{ tool.clusterReadiness }}</span>
             </div>
 
             <p class="tool-description">{{ tool.role }}</p>
@@ -72,42 +100,115 @@
               <div><strong>Exécutables :</strong> {{ tool.executables.join(', ') }}</div>
               <div><strong>Médias supportés :</strong> {{ tool.mediaTypes.join(', ') }}</div>
               @if (tool.id === 'ffmpeg' && tool.encoders.length > 0) {
-                <div><strong>Encodeurs vérifiés :</strong> {{ tool.encoders.length }} (CPU, NVENC, QSV, VAAPI)</div>
+                <div>
+                  <strong>Encodeurs vérifiés :</strong> {{ tool.encoders.length }} (CPU, NVENC, QSV,
+                  VAAPI)
+                </div>
               }
-              <div><strong>Sonde système :</strong> {{ tool.probePreserved ? 'Préservée (/usr/bin)' : 'Personnalisée' }}</div>
-            </div>
-
-            <div class="tool-card-actions">
-              <button matButton="outlined" type="button" (click)="testTool(tool)">
-                Tester la conformité
-              </button>
+              <div>
+                <strong>Sonde système :</strong>
+                {{ tool.probePreserved ? 'Préservée (/usr/bin)' : 'Personnalisée' }}
+              </div>
             </div>
           </div>
         }
       </div>
     } @else if (activeTab() === 'store') {
       <div class="repositories-section">
-        <h3>Dépôts configurés pour le cluster</h3>
+        <h3>Dépôts configurés pour ce serveur</h3>
         <div class="repos-list">
           @for (repo of storeRepositories(); track repo.id) {
             <div class="repo-item">
               <div class="repo-info">
                 <span class="repo-name">{{ repo.name }}</span>
                 <span class="repo-url">{{ repo.url }}</span>
+                @if (repo.lastError) {
+                  <span class="repo-error">{{ repo.lastError }}</span>
+                }
               </div>
               <div class="repo-badges">
                 @if (repo.isLocked) {
-                  <span class="badge accent">Verrouillé (Officiel)</span>
-                } @else {
-                  <span class="badge success">Actif</span>
+                  <span class="badge accent">Officiel</span>
                 }
+                <span class="badge" [class.success]="repo.enabled">{{
+                  repo.enabled ? 'Actif' : 'Désactivé'
+                }}</span>
                 <span class="badge">{{ repo.packagesCount }} paquets</span>
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [disabled]="storeBusy()"
+                  (click)="syncRepository(repo)"
+                >
+                  Synchroniser
+                </button>
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [disabled]="storeBusy()"
+                  (click)="toggleRepository(repo)"
+                >
+                  {{ repo.enabled ? 'Désactiver' : 'Activer' }}
+                </button>
+                @if (!repo.isLocked) {
+                  <button
+                    matButton="outlined"
+                    type="button"
+                    [disabled]="storeBusy()"
+                    (click)="removeRepository(repo)"
+                  >
+                    Supprimer
+                  </button>
+                }
               </div>
             </div>
+          } @empty {
+            <p class="store-empty">
+              Aucun dépôt configuré. Ajoutez l’adresse d’un fichier <code>repository.json</code> ou
+              importez une archive.
+            </p>
           }
         </div>
+        <div class="store-actions">
+          <input
+            class="store-url"
+            type="url"
+            aria-label="Adresse du dépôt"
+            placeholder="https://exemple.org/plugins/repository.json"
+            [value]="repositoryUrl()"
+            (input)="onRepositoryUrlInput($event)"
+            (keydown.enter)="addCustomRepository()"
+          />
+          <button
+            matButton="filled"
+            type="button"
+            [disabled]="storeBusy() || !repositoryUrl().trim()"
+            (click)="addCustomRepository()"
+          >
+            Ajouter le dépôt
+          </button>
+          <label class="store-upload">
+            <input
+              type="file"
+              accept=".zip,application/zip"
+              hidden
+              [disabled]="storeBusy()"
+              (change)="onArchiveSelected($event)"
+            />
+            <span matButton="outlined">Importer une archive (.zip)</span>
+          </label>
+        </div>
+        <p class="store-note">
+          Les paquets s’installent sur ce serveur ; les workers les téléchargent et vérifient leur
+          empreinte. Dans un cluster à plusieurs serveurs, installez le paquet sur chacun.
+        </p>
       </div>
 
+      @if (storePackages().length === 0) {
+        <p class="store-empty">
+          Aucun paquet disponible : le Store n’est pas encore alimenté par un dépôt.
+        </p>
+      }
       <div class="store-grid">
         @for (pkg of filteredStorePackages(); track pkg.id) {
           <div class="store-card">
@@ -117,7 +218,11 @@
                 <h3>{{ pkg.name }}</h3>
                 <span class="store-author">Par {{ pkg.author }} • v{{ pkg.version }}</span>
               </div>
-              <span class="badge" [class.accent]="pkg.kind === 'plugin'" [class.warning]="pkg.kind === 'tool'">
+              <span
+                class="badge"
+                [class.accent]="pkg.kind === 'plugin'"
+                [class.warning]="pkg.kind === 'tool'"
+              >
                 {{ pkg.categoryLabel }}
               </span>
             </div>
@@ -126,22 +231,42 @@
 
             @if (pkg.requiredTools.length > 0) {
               <div class="tool-details">
-                <div><strong>Dépendances requises :</strong> {{ pkg.requiredTools.join(', ') }}</div>
+                <div>
+                  <strong>Dépendances requises :</strong> {{ pkg.requiredTools.join(', ') }}
+                </div>
               </div>
             }
 
             <div class="store-card-actions">
               @if (pkg.installedVersion) {
                 @if (pkg.hasUpdate) {
-                  <button matButton="filled" type="button" (click)="installPackage(pkg)">
+                  <button
+                    matButton="filled"
+                    type="button"
+                    [disabled]="storeBusy()"
+                    (click)="installPackage(pkg)"
+                  >
                     Mettre à jour (v{{ pkg.version }})
                   </button>
                 } @else {
-                  <span class="badge success">Déjà installé (v{{ pkg.installedVersion }})</span>
+                  <span class="badge success">Installé (v{{ pkg.installedVersion }})</span>
                 }
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [disabled]="storeBusy()"
+                  (click)="removePackage(pkg)"
+                >
+                  Retirer
+                </button>
               } @else {
-                <button matButton="filled" type="button" (click)="installPackage(pkg)">
-                  Installer sur le cluster
+                <button
+                  matButton="filled"
+                  type="button"
+                  [disabled]="storeBusy()"
+                  (click)="installPackage(pkg)"
+                >
+                  Installer
                 </button>
               }
             </div>

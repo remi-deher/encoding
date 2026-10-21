@@ -20,9 +20,15 @@ Un échec d'infrastructure (service injoignable, authentification refusée…) s
 InfrastructureError : le processus se termine en erreur et l'hôte considère l'effet incertain, sans jamais le
 transformer en sortie métier. Un résultat métier attendu (élément introuvable…) se rapporte par une sortie
 déclarée dans le descripteur du composant. N'écrivez ni secret ni donnée sensible dans stdout ou stderr.
+
+Outils d'auteur (aucun cluster nécessaire) :
+
+    python3 encoding_plugin_sdk.py validate manifest.json      # mêmes règles que le serveur
+    python3 plugin.py --simulate mon-composant '{"cle":"valeur"}' [--plugin-config '{...}'] [--media 'Dossier/e1.mkv']
 """
 import json
 import os
+import re
 import socket
 import sys
 import urllib.error
@@ -176,6 +182,44 @@ class Plugin:
             stderr.write("Erreur inattendue (%s).\n" % type(error).__name__)
             return 1
 
+    def simulate(self, component_id, config=None, plugin_config=None, media_path=None, library_id=None, variables=None):
+        """Exécute un composant sans processus ni cluster, avec une invocation fabriquée. Retourne la réponse du contrat."""
+        component = next((c for c in self.manifest["components"] if c["id"] == component_id), None)
+        if component is None:
+            raise ContractError("Composant absent du manifeste : %s." % component_id)
+        return self._execute({
+            "contractVersion": CONTRACT_VERSION, "invocationId": str(uuid.uuid4()), "leaseEpoch": 1,
+            "component": {"pluginId": self.manifest["id"], "pluginVersion": self.manifest["version"],
+                          "componentId": component["id"], "componentVersion": component["version"],
+                          "configurationSchemaVersion": component["configurationSchema"]["version"]},
+            "configuration": config or {}, "pluginConfiguration": plugin_config or {},
+            "context": {"mediaPath": media_path, "libraryId": library_id, "variables": variables or {}, "currentArtifactId": "current"},
+        })
+
+    def main(self, argv=None):
+        """Point d'entrée d'un plugin : protocole sur stdin/stdout, ou --simulate pour le développement local."""
+        argv = list(sys.argv[1:] if argv is None else argv)
+        if not argv or argv[0] != "--simulate":
+            return self.run()
+        try:
+            component_id = argv[1]
+            options = {"config": json.loads(argv[2]) if len(argv) > 2 and not argv[2].startswith("--") else {}}
+            rest = argv[3:] if len(argv) > 2 and not argv[2].startswith("--") else argv[2:]
+            for flag, value in zip(rest[::2], rest[1::2]):
+                if flag == "--plugin-config":
+                    options["plugin_config"] = json.loads(value)
+                elif flag == "--media":
+                    options["media_path"] = value
+                elif flag == "--library":
+                    options["library_id"] = value
+                else:
+                    raise ValueError("Option inconnue : %s" % flag)
+            print(json.dumps(self.simulate(component_id, **options), ensure_ascii=False, indent=2))
+            return 0
+        except (IndexError, ValueError, ContractError, InfrastructureError) as error:
+            sys.stderr.write("simulate : %s\n" % (error or "arguments invalides"))
+            return 1
+
     def _execute(self, invocation):
         if not isinstance(invocation, dict):
             raise ContractError("Invocation absente.")
@@ -308,3 +352,112 @@ class JsonApi:
             raise InfrastructureError("Impossible de joindre %s depuis ce worker." % self.name)
         except ValueError:
             raise InfrastructureError("%s a répondu avec un contenu illisible." % self.name)
+
+
+# --- validation d'un manifeste (mêmes règles que FlowComponentRegistry côté serveur) ------------------------------
+
+_PLUGIN_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)?$")
+_COMPONENT_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+_SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
+_PLUGIN_FIELD_TYPES = ("text", "secret", "number", "boolean", "select")
+_COMPONENT_FIELD_TYPES = ("text", "number", "boolean", "select", "condition-tree", "script-reference", "encoding-profile", "video-encoder", "record-list")
+
+
+def validate_manifest(manifest):
+    """Retourne la liste des problèmes d'un manifeste (vide si le serveur l'acceptera). Ne lève jamais."""
+    problems = []
+    if not isinstance(manifest, dict):
+        return ["Le manifeste doit être un objet JSON."]
+    plugin_id = manifest.get("id")
+    if not isinstance(plugin_id, str) or len(plugin_id) > 64 or not _PLUGIN_ID.match(plugin_id):
+        problems.append("id : minuscules, chiffres et tirets, avec un espace de noms optionnel « espace.nom ».")
+    if not isinstance(manifest.get("version"), str) or not _SEMVER.match(manifest["version"]):
+        problems.append("version : forme X.Y.Z attendue.")
+    if manifest.get("contractVersion") != CONTRACT_VERSION:
+        problems.append("contractVersion : %d attendu." % CONTRACT_VERSION)
+    if CONTRACT_VERSION not in (manifest.get("supportedHostContractVersions") or []):
+        problems.append("supportedHostContractVersions : doit contenir %d." % CONTRACT_VERSION)
+    if not isinstance(manifest.get("name"), str) or not manifest["name"].strip():
+        problems.append("name : requis.")
+
+    def check_fields(owner, fields, allowed):
+        seen = set()
+        if not isinstance(fields, list):
+            problems.append("%s : « fields » doit être une liste." % owner)
+            return
+        for field in fields:
+            field_id = field.get("id") if isinstance(field, dict) else None
+            if not field_id:
+                problems.append("%s : un champ n'a pas d'id." % owner)
+                continue
+            if field_id in seen:
+                problems.append("%s : champ « %s » dupliqué." % (owner, field_id))
+            seen.add(field_id)
+            if field.get("type") not in allowed:
+                problems.append("%s : champ « %s » de type « %s » non pris en charge (%s)." % (owner, field_id, field.get("type"), ", ".join(allowed)))
+            if not field.get("label"):
+                problems.append("%s : champ « %s » sans label." % (owner, field_id))
+            if field.get("scope") not in (None, "server", "worker"):
+                problems.append("%s : champ « %s » : scope « server » ou « worker »." % (owner, field_id))
+
+    schema = manifest.get("configurationSchema")
+    if schema is not None:
+        if schema.get("version") != 1:
+            problems.append("configurationSchema.version : 1 attendu.")
+        check_fields("configurationSchema", schema.get("fields", []), _PLUGIN_FIELD_TYPES)
+    components = manifest.get("components")
+    if not isinstance(components, list) or not components:
+        problems.append("components : au moins un composant est requis.")
+        components = []
+    seen_components = set()
+    for component in components:
+        cid = component.get("id") if isinstance(component, dict) else None
+        if not isinstance(cid, str) or not _COMPONENT_ID.match(cid):
+            problems.append("Composant « %s » : identifiant invalide (minuscules, chiffres, tirets)." % cid)
+            continue
+        if cid in seen_components:
+            problems.append("Composant « %s » déclaré deux fois." % cid)
+        seen_components.add(cid)
+        if not _SEMVER.match(str(component.get("version", ""))):
+            problems.append("Composant « %s » : version X.Y.Z attendue." % cid)
+        if component.get("kind") not in ("action", "condition"):
+            problems.append("Composant « %s » : kind « action » ou « condition »." % cid)
+        if not str(component.get("description", "")).strip():
+            problems.append("Composant « %s » : description vide (l'éditeur et les assistants IA s'y fient)." % cid)
+        outputs = component.get("outputs") or []
+        if not outputs:
+            problems.append("Composant « %s » : aucune sortie déclarée." % cid)
+        ids = [o.get("id") for o in outputs if isinstance(o, dict)]
+        if len(ids) != len(set(ids)):
+            problems.append("Composant « %s » : identifiant de sortie dupliqué." % cid)
+        for output in outputs:
+            if isinstance(output, dict) and not str(output.get("description", "")).strip():
+                problems.append("Composant « %s » : la sortie « %s » n'a pas de description." % (cid, output.get("id")))
+        component_schema = component.get("configurationSchema") or {}
+        if component_schema.get("version") != 1:
+            problems.append("Composant « %s » : configurationSchema.version 1 attendu." % cid)
+        check_fields("Composant « %s »" % cid, component_schema.get("fields", []), _COMPONENT_FIELD_TYPES)
+        timeout = component.get("timeoutSeconds")
+        if timeout is not None and not (isinstance(timeout, int) and 1 <= timeout <= 21600):
+            problems.append("Composant « %s » : timeoutSeconds entre 1 et 21600." % cid)
+    return problems
+
+
+def _cli(argv):
+    if len(argv) == 2 and argv[0] == "validate":
+        try:
+            with open(argv[1], encoding="utf-8") as handle:
+                problems = validate_manifest(json.load(handle))
+        except (OSError, ValueError) as error:
+            print("Manifeste illisible : %s" % error, file=sys.stderr)
+            return 1
+        for problem in problems:
+            print("✗ " + problem)
+        print("Manifeste valide." if not problems else "%d problème(s)." % len(problems))
+        return 1 if problems else 0
+    print("Usage : python3 encoding_plugin_sdk.py validate manifest.json", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(_cli(sys.argv[1:]))

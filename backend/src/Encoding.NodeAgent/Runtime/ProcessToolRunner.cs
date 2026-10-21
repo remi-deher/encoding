@@ -44,6 +44,7 @@ public sealed class ProcessToolRunner
             RedirectStandardInput = input is not null,
         };
         foreach (var arg in argumentList) info.ArgumentList.Add(arg);
+        if (sandbox) info.Environment[ProcessSandbox.MinimalEnvironmentVariable] = "minimal";
         // MKVToolNix lit les arguments et écrit son JSON selon la locale : en locale « C » (image sans LANG) les noms accentués sont tronqués.
         if (Path.GetFileName(executable).StartsWith("mkv", StringComparison.Ordinal)) info.Environment["LC_ALL"] = "C.UTF-8";
         var startedAt = DateTimeOffset.UtcNow;

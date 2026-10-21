@@ -1,6 +1,6 @@
 # 0063 — Store de plugins, dépôts décentralisés et gestion des paquets ZIP
 
-Statut : décision d'architecture. Complète [0011](0011-flow-block-template.md), [0013](0013-flow-catalog-and-validation.md), [0019](0019-plugin-configuration.md), [0032](0032-integration-plugins-and-sdk.md), [0049](0049-multi-server-shared-cluster.md) et [0062](0062-plugin-and-component-authoring-for-ai-and-mcp.md).
+Statut : décision d'architecture, implémentée en grande partie (voir « État d'implémentation » en fin de document). Complète [0011](0011-flow-block-template.md), [0013](0013-flow-catalog-and-validation.md), [0019](0019-plugin-configuration.md), [0032](0032-integration-plugins-and-sdk.md), [0049](0049-multi-server-shared-cluster.md) et [0062](0062-plugin-and-component-authoring-for-ai-and-mcp.md).
 
 ---
 
@@ -198,3 +198,22 @@ L'interface web Angular s'enrichit d'une section dédiée :
   - Carte de plugin : badge du namespace, description, icône, compatibilité avec la version actuelle du serveur.
   - Fiche détaillée : description longue, changelog, liste des blocs de flow ajoutés.
   - Bouton `Installer`, `Désactiver`, `Mettre à jour` (avec modal listant le changelog).
+
+---
+
+## 8. État d'implémentation (audit des plugins, 2026-10-21)
+
+Les routes du Store renvoyaient auparavant des données factices ; elles sont maintenant réelles. Ce qui existe :
+
+- **Paquet** (`Encoding.Core/Plugins/PluginPackage`) : `plugin.json` à la racine est un `PluginManifest` (le même contrat que les manifestes intégrés, voir 0062) complété d'un bloc `runtime` (`{ "type": "python3" | "node", "entrypoint": "main.py" }`). Le schéma `globalConfigurationSchema` en JSON Schema de l'exemple de la section 3 n'est **pas** retenu : un seul format de configuration existe (`configurationSchema`, 0019). Limites : 32 Mo compressé, 128 Mo décompressé, 500 fichiers ; tout chemin absolu, avec `..` ou `:` est refusé (zip slip). Identifiant qualifié `espace.nom` obligatoire.
+- **Installation sur un serveur** (`PluginStoreService`) : empreinte SHA-256, enregistrement à chaud dans `FlowComponentRegistry.TryInstall` (sans redémarrage), stockage dans `PluginStore:Directory` (par défaut `<données du nœud>/plugin-store`), rechargement au démarrage (un paquet altéré sur disque est signalé dans la page Plugins et non chargé). Une version publiée est immuable ; une mise à jour exige une version supérieure et garde les composants de l'ancienne version résolubles par les flows existants (leurs références pointent vers le descripteur de la nouvelle version, qui doit rester compatible avec son schéma). `official.*` est refusé à l'import manuel et aux dépôts tiers.
+- **Dépôts** (`PluginRepositoryService`) : `repository.json` 1.x, validé entrée par entrée (identifiant qualifié, empreinte de 64 hexadécimaux, URL HTTP(S) sans identifiants, version la plus récente présente). Le **dépôt officiel n'existe que si `PluginStore:OfficialRepositoryUrl` est configuré** : l'adresse `plugins.encoding.io` de la section 1 est fictive et n'est plus utilisée. L'archive téléchargée est rejetée si son SHA-256 diffère de celui de l'index.
+- **Workers** (`PluginSyncService`, `CustomPluginCatalog`) : chaque minute, un worker liste les paquets du serveur (`GET /api/v1/store/installed`, jeton de nœud), télécharge ceux qui manquent, contrôle l'empreinte, extrait dans `Runtime:CustomPluginDirectory` (`/opt/encoding/custom-plugins` dans l'image) puis écrit un marqueur `.verified` en dernier. Le plugin est lancé sous Landlock avec l'interpréteur de son `runtime` et son seul dossier en lecture. Une panne réseau ne retire rien ; une version que le serveur ne propose plus est effacée. La capacité `plugin/<id>` n'est annoncée qu'après une poignée de main réussie, avec l'empreinte du contrat (comparée au catalogue du serveur).
+
+Non implémenté, à décider ou à faire :
+
+- **Pas de réplication entre serveurs d'un cluster** : l'état du Store est un dossier local ; un paquet doit être installé sur chaque serveur (0049 ne prévoit pas de blobs). Les flows qui utilisent un plugin absent d'un serveur y sont invalides.
+- Mises à jour : l'interface propose « Mettre à jour » après synchronisation d'un dépôt ; il n'y a pas de synchronisation périodique automatique toutes les 24 h.
+- Pas de désactivation d'un plugin sans le retirer, pas de refus de retrait quand un flow l'utilise, pas de signature des paquets (seule l'empreinte annoncée par le dépôt protège l'intégrité, et le dépôt est de confiance).
+- `compatibility.minEngineVersion` et `requiredTools` ne sont pas contrôlés à l'installation.
+- Rien n'a été exécuté sous Landlock réel (ni plugin de paquet, ni synchronisation worker de bout en bout) : les tests couvrent le paquet, l'installation, les dépôts contre un serveur HTTP local et la découverte côté worker.

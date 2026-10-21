@@ -91,6 +91,8 @@ COPY backend/plugins/sdk/encoding_plugin_sdk.py backend/plugins/plex/plugin.py /
 COPY backend/src/Encoding.Api/Flows/Catalog/plex.json /opt/encoding/plugins/plex/manifests/
 COPY backend/plugins/sdk/encoding_plugin_sdk.py backend/plugins/jellyfin/plugin.py /opt/encoding/plugins/jellyfin/
 COPY backend/src/Encoding.Api/Flows/Catalog/jellyfin.json /opt/encoding/plugins/jellyfin/manifests/
+# Plugins du Store téléchargés par le worker (0063) : recréés depuis le serveur, hors du dossier de données privées du nœud.
+RUN mkdir -p /opt/encoding/custom-plugins
 WORKDIR /app
 COPY --from=build /app/api ./api
 COPY --from=build /app/agent ./agent
@@ -108,6 +110,8 @@ ENV Node__Roles=server,worker \
     PluginSettings__KeyDirectory=/var/lib/encoding-node/plugin-keys \
     FlowBackups__Directory=/var/lib/encoding-node/flow-backups \
     Runtime__ArtifactDirectory=/var/lib/encoding-node/runtime-artifacts \
+    Runtime__CustomPluginDirectory=/opt/encoding/custom-plugins \
+    PluginStore__Directory=/var/lib/encoding-node/plugin-store \
     Logging__Console__FormatterName=json \
     Logging__Console__FormatterOptions__UseUtcTimestamp=true \
     Logging__Console__FormatterOptions__IncludeScopes=true

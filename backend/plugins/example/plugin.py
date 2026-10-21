@@ -36,4 +36,4 @@ def name_matches(ctx):
 
 
 if __name__ == "__main__":
-    sys.exit(plugin.run())
+    sys.exit(plugin.main())
