@@ -37,7 +37,7 @@
   width: 210px;
   max-width: 100%;
 }
-.log-filters mat-form-field:first-child {
+.log-filters .log-search {
   flex: 1;
   min-width: min(100%, 230px);
 }
@@ -195,7 +195,8 @@ p {
   color: var(--text-primary);
 }
 @media (max-width: 640px) {
-  .log-filters mat-form-field {
+  .log-filters mat-form-field,
+  .log-filters .log-search {
     width: 100%;
   }
   .log-actions {

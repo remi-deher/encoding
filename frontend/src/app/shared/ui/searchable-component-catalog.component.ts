@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { SearchFieldComponent } from './search-field.component';
 import {
   FLOW_COMPONENT_KIND_LABELS,
   FlowComponentDefinition,
@@ -12,19 +11,16 @@ import {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-searchable-component-catalog',
-  imports: [FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [MatFormFieldModule, MatSelectModule, SearchFieldComponent],
   template: `
     <section class="component-catalog" aria-label="Catalogue des composants">
-      <mat-form-field appearance="outline" class="search-field">
-        <mat-label>Rechercher un composant</mat-label>
-        <input
-          matInput
-          type="search"
-          [ngModel]="query()"
-          (ngModelChange)="query.set($event)"
-          autocomplete="off"
-        />
-      </mat-form-field>
+      <app-search-field
+        class="search-field"
+        variant="bar"
+        label="Rechercher un composant"
+        [value]="query()"
+        (valueChange)="query.set($event)"
+      />
 
       <div class="catalog-filters">
         <mat-form-field appearance="outline">

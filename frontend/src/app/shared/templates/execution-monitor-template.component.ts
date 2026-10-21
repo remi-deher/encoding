@@ -10,8 +10,6 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { MatTabsModule } from '@angular/material/tabs';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
 import {
@@ -27,6 +25,7 @@ import { DetailField, DetailFieldListComponent } from '../ui/detail-field-list.c
 import { PageHeaderComponent } from '../ui/page-header.component';
 import { ExecutionPipelineLogsComponent } from '../ui/execution-pipeline-logs.component';
 import { ExecutionPipelineStep } from '../models/execution';
+import { SearchFieldComponent } from '../ui/search-field.component';
 
 export type ExecutionMonitorView = 'queue' | 'active' | 'errors' | 'cancelled' | 'history';
 
@@ -46,9 +45,8 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
     DataTableComponent,
     DetailDrawerComponent,
     DetailFieldListComponent,
-    MatFormFieldModule,
-    MatInputModule,
     MatTabsModule,
+    SearchFieldComponent,
     PageHeaderComponent,
     ExecutionPipelineLogsComponent,
   ],
@@ -69,14 +67,13 @@ const EXECUTION_MONITOR_VIEWS: readonly ExecutionMonitorView[] = [
       <div class="monitor-content-layout">
         <aside class="monitor-toolbar" aria-label="Recherche dans les tâches">
           <h2>Rechercher</h2>
-          <mat-form-field
-            appearance="outline"
-            subscriptSizing="dynamic"
+          <app-search-field
             class="monitor-search-field"
-          >
-            <mat-label>Média, bibliothèque, flow…</mat-label>
-            <input matInput type="search" [value]="searchQuery()" (input)="onSearchInput($event)" />
-          </mat-form-field>
+            variant="filled"
+            label="Média, bibliothèque, flow…"
+            [value]="searchQuery()"
+            (valueChange)="searchQuery.set($event)"
+          />
           <p class="monitor-search-hint">
             La recherche couvre aussi les workers, les états et les détails.
           </p>
@@ -513,10 +510,6 @@ export class ExecutionMonitorTemplateComponent {
   protected readonly filteredHistoryRows = computed(() =>
     this.filterRows(this.historyRows(), this.searchQuery()),
   );
-
-  protected onSearchInput(event: Event): void {
-    this.searchQuery.set((event.target as HTMLInputElement).value);
-  }
 
   private filterRows(rows: readonly DataTableRow[], rawQuery: string): readonly DataTableRow[] {
     const query = rawQuery.trim().toLocaleLowerCase('fr');

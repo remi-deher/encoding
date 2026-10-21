@@ -15,7 +15,6 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 import { retry, Subscription, tap } from 'rxjs';
@@ -34,6 +33,7 @@ import { ClipboardService } from '../../services/clipboard.service';
 import { FileDownload } from '../../services/file-download';
 import { NotificationService } from '../../services/notification.service';
 import { SystemLogsService } from '../../services/system-logs.service';
+import { SearchFieldComponent } from '../search-field.component';
 
 @Component({
   selector: 'app-system-log-viewer',
@@ -43,9 +43,9 @@ import { SystemLogsService } from '../../services/system-logs.service';
     MatButtonToggleModule,
     MatCheckboxModule,
     MatFormFieldModule,
-    MatInputModule,
     MatMenuModule,
     MatSelectModule,
+    SearchFieldComponent,
   ],
   templateUrl: './system-log-viewer.component.html',
   styleUrl: './system-log-viewer.component.scss',
@@ -178,8 +178,8 @@ export class SystemLogViewerComponent implements OnDestroy {
   onCategoryChange(event: Event): void {
     this.setCategory((event.target as HTMLSelectElement).value);
   }
-  onSearchInput(event: Event): void {
-    this.searchText.set((event.target as HTMLInputElement).value);
+  onSearchText(value: string): void {
+    this.searchText.set(value);
     this.clearFocus();
   }
   clearSearch(): void {
