@@ -30,7 +30,8 @@ export interface StoreRepository {
   readonly isLocked: boolean;
   readonly enabled: boolean;
   readonly packagesCount: number;
-  readonly updatedAt: string;
+  readonly updatedAt?: string | null;
+  readonly lastError?: string | null;
 }
 
 export interface StorePackage {

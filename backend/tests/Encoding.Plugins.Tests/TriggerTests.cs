@@ -100,7 +100,14 @@ internal static class TriggerTests
             using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/integrations/{plugin}/webhook") { Content = JsonContent.Create(body) };
             if (secret is not null && basic) request.Headers.TryAddWithoutValidation("Authorization", "Basic " + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("sonarr:" + secret)));
             else if (secret is not null) request.Headers.TryAddWithoutValidation("X-Encoding-Webhook-Secret", secret);
-            return await http.SendAsync(request);
+            try { return await http.SendAsync(request); }
+            catch (HttpRequestException)
+            {
+                // Connexion réutilisée fermée par le serveur après un refus anticipé : une seule nouvelle tentative.
+                using var retry = new HttpRequestMessage(HttpMethod.Post, request.RequestUri) { Content = JsonContent.Create(body) };
+                foreach (var header in request.Headers) retry.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                return await http.SendAsync(retry);
+            }
         }
         object Import(string path) => new { eventType = "Download", series = new { path = "/tv/Show" }, episodeFile = new { path } };
 

@@ -1,0 +1,120 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text.Json;
+using Encoding.Contracts.Plugins;
+
+namespace Encoding.Core.Plugins;
+
+/// <summary>Paquet refusé : le message est destiné à l'administrateur qui l'importe.</summary>
+public sealed class PluginPackageException(string message) : Exception(message);
+
+/// <summary>Runtime déclaré par <c>plugin.json</c> : <c>python3</c> ou <c>node</c>, avec un point d'entrée relatif au paquet.</summary>
+public sealed record PluginRuntimeSpec(string Type, string Entrypoint);
+
+public sealed record PluginPackageInfo(PluginManifest Manifest, PluginRuntimeSpec Runtime, string Sha256, int Entries, long UncompressedBytes);
+
+/// <summary>
+/// Paquet de plugin <c>.zip</c> (0063) : <c>plugin.json</c> à la racine (un <see cref="PluginManifest"/> étendu de
+/// <c>runtime</c>), code et assets. L'inspection ne lit que les métadonnées ; l'extraction refuse tout chemin qui sortirait
+/// du dossier cible et borne le nombre et la taille des fichiers (archive piégée).
+/// </summary>
+public static class PluginPackage
+{
+    public const string ManifestFile = "plugin.json";
+    public const long MaxArchiveBytes = 32L * 1024 * 1024;
+    public const long MaxUncompressedBytes = 128L * 1024 * 1024;
+    public const int MaxEntries = 500;
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly string[] Runtimes = ["python3", "node"];
+
+    public static string Hash(byte[] archive) => Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant();
+
+    public static PluginPackageInfo Inspect(byte[] archive)
+    {
+        if (archive.Length == 0 || archive.Length > MaxArchiveBytes) throw new PluginPackageException($"L'archive doit peser entre 1 octet et {MaxArchiveBytes / 1024 / 1024} Mo.");
+        using var zip = Open(archive);
+        var entries = zip.Entries.Where(entry => !entry.FullName.EndsWith('/')).ToList();
+        if (entries.Count > MaxEntries) throw new PluginPackageException($"L'archive contient plus de {MaxEntries} fichiers.");
+        var total = 0L;
+        foreach (var entry in zip.Entries)
+        {
+            SafeRelativePath(entry.FullName);
+            total += entry.Length;
+            if (total > MaxUncompressedBytes) throw new PluginPackageException($"L'archive décompressée dépasse {MaxUncompressedBytes / 1024 / 1024} Mo.");
+        }
+        var manifestEntry = zip.GetEntry(ManifestFile) ?? throw new PluginPackageException("plugin.json est absent à la racine de l'archive.");
+        if (manifestEntry.Length > 1024 * 1024) throw new PluginPackageException("plugin.json dépasse 1 Mo.");
+        byte[] raw;
+        using (var stream = manifestEntry.Open())
+        using (var memory = new MemoryStream())
+        {
+            stream.CopyTo(memory);
+            raw = memory.ToArray();
+        }
+        PluginManifest manifest;
+        PluginRuntimeSpec runtime;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<PluginManifest>(raw, Json) ?? throw new PluginPackageException("plugin.json est vide.");
+            using var document = JsonDocument.Parse(raw);
+            if (!document.RootElement.TryGetProperty("runtime", out var runtimeElement) || runtimeElement.ValueKind != JsonValueKind.Object)
+                throw new PluginPackageException("plugin.json doit déclarer « runtime » ({ \"type\": \"python3\" | \"node\", \"entrypoint\": \"main.py\" }).");
+            runtime = new PluginRuntimeSpec(
+                runtimeElement.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String ? type.GetString()! : "",
+                runtimeElement.TryGetProperty("entrypoint", out var entry) && entry.ValueKind == JsonValueKind.String ? entry.GetString()! : "");
+        }
+        catch (JsonException exception) { throw new PluginPackageException($"plugin.json est illisible : {exception.Message}"); }
+        if (!Runtimes.Contains(runtime.Type)) throw new PluginPackageException($"runtime.type « {runtime.Type} » non pris en charge ({string.Join(", ", Runtimes)}).");
+        var entrypoint = SafeRelativePath(runtime.Entrypoint);
+        if (entrypoint.Length == 0 || zip.GetEntry(entrypoint) is null) throw new PluginPackageException($"Le point d'entrée « {runtime.Entrypoint} » est absent de l'archive.");
+        if (manifest.Id is null || !PluginIdentity.IsQualifiedPluginId(manifest.Id))
+            throw new PluginPackageException($"Identifiant « {manifest.Id} » invalide : « espace.nom » en minuscules, chiffres et tirets.");
+        return new PluginPackageInfo(manifest, runtime with { Entrypoint = entrypoint }, Hash(archive), entries.Count, total);
+    }
+
+    /// <summary>Extrait l'archive dans <paramref name="directory"/> (créé s'il n'existe pas). Aucun fichier ne sort du dossier.</summary>
+    public static void Extract(byte[] archive, string directory)
+    {
+        var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        Directory.CreateDirectory(directory);
+        using var zip = Open(archive);
+        var written = 0L;
+        foreach (var entry in zip.Entries)
+        {
+            var relative = SafeRelativePath(entry.FullName);
+            if (relative.Length == 0) continue;
+            var target = Path.GetFullPath(Path.Combine(root, relative));
+            if (!target.StartsWith(root, StringComparison.Ordinal)) throw new PluginPackageException($"Chemin refusé dans l'archive : {entry.FullName}");
+            if (entry.FullName.EndsWith('/')) { Directory.CreateDirectory(target); continue; }
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            using var input = entry.Open();
+            using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None);
+            var buffer = new byte[81920];
+            int read;
+            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                written += read;
+                if (written > MaxUncompressedBytes) throw new PluginPackageException("L'archive décompressée dépasse la limite autorisée.");
+                output.Write(buffer, 0, read);
+            }
+            if (entry.Name.EndsWith(".py", StringComparison.Ordinal) || entry.Name.EndsWith(".mjs", StringComparison.Ordinal) || entry.Name.EndsWith(".js", StringComparison.Ordinal))
+                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(target, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        }
+    }
+
+    private static ZipArchive Open(byte[] archive)
+    {
+        try { return new ZipArchive(new MemoryStream(archive, writable: false), ZipArchiveMode.Read); }
+        catch (InvalidDataException) { throw new PluginPackageException("Le fichier n'est pas une archive .zip valide."); }
+    }
+
+    /// <summary>Chemin relatif normalisé (séparateur « / »), ou lève si absolu, avec « .. » ou caractère interdit.</summary>
+    public static string SafeRelativePath(string name)
+    {
+        var normalized = name.Replace('\\', '/');
+        if (normalized.StartsWith('/') || normalized.Contains(':') || normalized.Contains('\0') || normalized.Split('/').Any(part => part == ".."))
+            throw new PluginPackageException($"Chemin refusé dans l'archive : {name}");
+        while (normalized.StartsWith("./", StringComparison.Ordinal)) normalized = normalized[2..];
+        return normalized;
+    }
+}

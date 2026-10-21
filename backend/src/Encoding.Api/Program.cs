@@ -90,6 +90,14 @@ builder.Services.AddSingleton<FlowComponentPackRepository>();
 builder.Services.AddSingleton<EncodingProfileRepository>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
 builder.Services.AddSingleton<WebhookAuthThrottle>();
+builder.Services.AddSingleton<PluginStoreService>();
+builder.Services.AddSingleton<PluginRepositoryService>();
+builder.Services.AddHostedService<PluginStoreStartup>();
+builder.Services.AddHttpClient(PluginRepositoryService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Encoding-PluginStore/1.0");
+}).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = true, MaxAutomaticRedirections = 3 });
 builder.Services.AddSingleton<PluginConnectionTester>();
 builder.Services.AddSingleton<McpService>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();
@@ -237,6 +245,7 @@ app.MapFlowComponentPackEndpoints();
 app.MapEncodingProfileEndpoints();
 app.MapFlowSimulationEndpoints();
 app.MapPluginConfigurationEndpoints();
+app.MapPluginStoreEndpoints();
 app.MapArrWebhookEndpoints();
 app.MapRuntimeEndpoints();
 app.MapSourceReplacementEndpoints();

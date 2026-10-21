@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Plugins;
@@ -8,10 +9,14 @@ namespace Encoding.Api.Flows;
 /// <summary>Installed descriptors only. Catalog availability does not imply a runnable handler.</summary>
 public sealed class FlowComponentRegistry
 {
-    private readonly Dictionary<FlowComponentReference, FlowComponentDescriptor> components = [];
-    private readonly Dictionary<FlowComponentReference,string> runtimeVersions=[];
+    private readonly ConcurrentDictionary<FlowComponentReference, FlowComponentDescriptor> components = [];
+    private readonly ConcurrentDictionary<FlowComponentReference,string> runtimeVersions=[];
     private readonly FlowComponentDescriptor legacyCondition;
-    public IReadOnlyList<PluginManifest> Plugins { get; }
+    private readonly object installGate = new();
+    private readonly HashSet<string> storeInstalled = new(StringComparer.Ordinal);
+    private volatile IReadOnlyList<PluginManifest> plugins = [];
+    /// <summary>Catalogue courant ; remplacé en bloc (jamais modifié en place) quand un paquet du Store est installé ou retiré.</summary>
+    public IReadOnlyList<PluginManifest> Plugins => plugins;
 
     public FlowComponentRegistry(IConfiguration configuration)
     {
@@ -44,13 +49,13 @@ public sealed class FlowComponentRegistry
         }
         var legacyReference = new FlowComponentReference(manifest.Id, manifest.Version, legacyCondition.Id,
             legacyCondition.Version, legacyCondition.ConfigurationSchema.Version);
-        components.Add(legacyReference, legacyCondition);
-        runtimeVersions.Add(legacyReference, manifest.Version);
+        components[legacyReference] = legacyCondition;
+        runtimeVersions[legacyReference] = manifest.Version;
         foreach (var version in legacyCondition.CompatiblePluginVersions ?? [])
         {
             var compatible = legacyReference with { PluginVersion = version };
-            components.Add(compatible, legacyCondition);
-            runtimeVersions.Add(compatible, manifest.Version);
+            components[compatible] = legacyCondition;
+            runtimeVersions[compatible] = manifest.Version;
         }
 
         // Plugins tiers : un manifeste défaillant est écarté et signalé, il ne doit jamais empêcher le serveur de démarrer.
@@ -65,30 +70,9 @@ public sealed class FlowComponentRegistry
                 {
                     var extra = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(file), new JsonSerializerOptions(JsonSerializerDefaults.Web))
                         ?? throw new InvalidOperationException("Le manifeste est vide.");
-                    if (extra.Id is null || !PluginIdentity.IsValidPluginId(extra.Id))
-                        throw new InvalidOperationException($"Identifiant de plugin invalide : « {extra.Id} » (minuscules, chiffres et tirets, avec un espace de noms optionnel « espace.nom »).");
-                    if (manifests.Any(existing => existing.Id == extra.Id))
-                        throw new InvalidOperationException($"L’identifiant « {extra.Id} » est déjà utilisé par un autre plugin.");
-                    if (extra.ContractVersion != 1 || extra.SupportedHostContractVersions is null || !extra.SupportedHostContractVersions.Contains(1))
-                        throw new InvalidOperationException("Le manifeste doit déclarer contractVersion 1 et supportedHostContractVersions [1].");
-                    if (string.IsNullOrWhiteSpace(extra.Version) || !System.Text.RegularExpressions.Regex.IsMatch(extra.Version, @"^\d+\.\d+\.\d+$"))
-                        throw new InvalidOperationException("La version du plugin doit être de la forme X.Y.Z.");
-                    if (extra.Components is null) throw new InvalidOperationException("Le manifeste ne déclare aucun composant.");
-                    foreach (var component in extra.Components)
-                        if (!PluginIdentity.IsValidComponentId(component.Id))
-                            throw new InvalidOperationException($"Identifiant de composant invalide : « {component.Id} ».");
-                    extra = Normalize(extra);
-                    Validate(extra);
-                    var references = extra.Components.Select(component => Reference(extra, component)).ToList();
-                    var keys = references.Concat(extra.Components.SelectMany((component, index) =>
-                        (component.CompatiblePluginVersions ?? []).Select(version => references[index] with { PluginVersion = version }))).ToList();
-                    if (keys.Distinct().Count() != keys.Count) throw new InvalidOperationException("Une identité de composant est déclarée deux fois dans ce plugin.");
-                    foreach (var reference in references)
-                        if (manifests.Any(existing => existing.Components.Any(component => component.Id == reference.ComponentId)))
-                            throw new InvalidOperationException($"Le composant « {reference.ComponentId} » existe déjà dans un autre plugin.");
-                    if (keys.Any(components.ContainsKey)) throw new InvalidOperationException("Une identité de composant existe déjà dans un autre plugin.");
-                    Register(extra, references);
-                    manifests.Add(extra);
+                    var (normalized, references) = CheckThirdParty(extra, manifests, null);
+                    Register(normalized, references);
+                    manifests.Add(normalized);
                 }
                 catch (Exception exception) when (exception is InvalidOperationException or JsonException or IOException or ArgumentException or NotSupportedException)
                 {
@@ -96,8 +80,103 @@ public sealed class FlowComponentRegistry
                 }
             }
         }
-        Rejected = rejected;
-        Plugins = manifests;
+        rejectedList = rejected;
+        plugins = manifests;
+    }
+
+    /// <summary>
+    /// Contrôle un manifeste tiers (fichier du dossier de manifestes ou paquet du Store) et retourne sa forme normalisée avec
+    /// ses références. <paramref name="replacing"/> : identifiant du plugin que ce manifeste remplace (mise à jour d'un paquet).
+    /// </summary>
+    private (PluginManifest Manifest, List<FlowComponentReference> References) CheckThirdParty(PluginManifest extra, IReadOnlyList<PluginManifest> existing, string? replacing)
+    {
+        if (extra.Id is null || !PluginIdentity.IsValidPluginId(extra.Id))
+            throw new InvalidOperationException($"Identifiant de plugin invalide : « {extra.Id} » (minuscules, chiffres et tirets, avec un espace de noms optionnel « espace.nom »).");
+        var others = existing.Where(item => item.Id != replacing).ToList();
+        if (others.Any(item => item.Id == extra.Id) || replacing is null && existing.Any(item => item.Id == extra.Id))
+            throw new InvalidOperationException($"L’identifiant « {extra.Id} » est déjà utilisé par un autre plugin.");
+        if (extra.ContractVersion != 1 || extra.SupportedHostContractVersions is null || !extra.SupportedHostContractVersions.Contains(1))
+            throw new InvalidOperationException("Le manifeste doit déclarer contractVersion 1 et supportedHostContractVersions [1].");
+        if (string.IsNullOrWhiteSpace(extra.Version) || !System.Text.RegularExpressions.Regex.IsMatch(extra.Version, @"^\d+\.\d+\.\d+$"))
+            throw new InvalidOperationException("La version du plugin doit être de la forme X.Y.Z.");
+        if (extra.Components is null) throw new InvalidOperationException("Le manifeste ne déclare aucun composant.");
+        foreach (var component in extra.Components)
+            if (!PluginIdentity.IsValidComponentId(component.Id))
+                throw new InvalidOperationException($"Identifiant de composant invalide : « {component.Id} ».");
+        extra = Normalize(extra);
+        Validate(extra);
+        var references = extra.Components.Select(component => Reference(extra, component)).ToList();
+        var keys = references.Concat(extra.Components.SelectMany((component, index) =>
+            (component.CompatiblePluginVersions ?? []).Select(version => references[index] with { PluginVersion = version }))).ToList();
+        if (keys.Distinct().Count() != keys.Count) throw new InvalidOperationException("Une identité de composant est déclarée deux fois dans ce plugin.");
+        foreach (var reference in references)
+            if (others.Any(item => item.Components.Any(component => component.Id == reference.ComponentId)))
+                throw new InvalidOperationException($"Le composant « {reference.ComponentId} » existe déjà dans un autre plugin.");
+        if (keys.Any(key => components.ContainsKey(key) && key.PluginId != replacing)) throw new InvalidOperationException("Une identité de composant existe déjà dans un autre plugin.");
+        return (extra, references);
+    }
+
+    /// <summary>
+    /// Installe (ou met à jour) un plugin tiers à chaud, sans redémarrage. En mise à jour, les composants de l'ancienne version
+    /// restent résolubles par les flows existants : leurs références pointent vers le descripteur de la nouvelle version, qui doit
+    /// donc rester compatible avec son schéma (un changement incompatible exige un nouvel identifiant de composant).
+    /// </summary>
+    public bool TryInstall(PluginManifest manifest, out string reason)
+    {
+        lock (installGate)
+        {
+            try
+            {
+                var previous = plugins.SingleOrDefault(item => item.Id == manifest.Id);
+                if (previous is not null && !storeInstalled.Contains(previous.Id))
+                    throw new InvalidOperationException($"L’identifiant « {manifest.Id} » est déjà utilisé par un plugin fourni avec l’application.");
+                if (previous is not null && Version.Parse(manifest.Version) <= Version.Parse(previous.Version))
+                    throw new InvalidOperationException($"La version {manifest.Version} n’est pas plus récente que la version installée ({previous.Version}).");
+                var inherited = previous is null ? [] : previous.Components.SelectMany(component => new[] { previous.Version }.Concat(component.CompatiblePluginVersions ?? [])).Distinct().ToArray();
+                var withHistory = previous is null ? manifest : manifest with
+                {
+                    Components = manifest.Components.Select(component => component with
+                    {
+                        CompatiblePluginVersions = (component.CompatiblePluginVersions ?? []).Concat(inherited).Distinct().ToArray()
+                    }).ToArray()
+                };
+                var (normalized, references) = CheckThirdParty(withHistory, plugins, previous?.Id);
+                if (previous is not null) RemoveRegistrations(previous.Id);
+                Register(normalized, references);
+                plugins = plugins.Where(item => item.Id != normalized.Id).Append(normalized).ToList();
+                storeInstalled.Add(normalized.Id);
+                fingerprints.Clear();
+                reason = "";
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                reason = exception.Message;
+                return false;
+            }
+        }
+    }
+
+    /// <summary>Retire un plugin installé depuis le Store. Les plugins fournis avec l'application ne sont jamais retirés.</summary>
+    public bool Uninstall(string pluginId)
+    {
+        lock (installGate)
+        {
+            if (!storeInstalled.Remove(pluginId)) return false;
+            RemoveRegistrations(pluginId);
+            plugins = plugins.Where(item => item.Id != pluginId).ToList();
+            fingerprints.Clear();
+            return true;
+        }
+    }
+
+    private void RemoveRegistrations(string pluginId)
+    {
+        foreach (var key in components.Keys.Where(key => key.PluginId == pluginId).ToList())
+        {
+            components.TryRemove(key, out _);
+            runtimeVersions.TryRemove(key, out _);
+        }
     }
 
     /// <summary>
@@ -133,7 +212,14 @@ public sealed class FlowComponentRegistry
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> fingerprints = new(StringComparer.Ordinal);
 
     /// <summary>Manifestes tiers écartés au chargement (fichier et motif), pour affichage dans la page Plugins.</summary>
-    public IReadOnlyList<RejectedPluginManifest> Rejected { get; }
+    public IReadOnlyList<RejectedPluginManifest> Rejected => rejectedList;
+    private volatile IReadOnlyList<RejectedPluginManifest> rejectedList = [];
+
+    /// <summary>Signale un paquet installé qui n'a pas pu être rechargé au démarrage.</summary>
+    public void AddRejected(string file, string reason)
+    {
+        lock (installGate) rejectedList = rejectedList.Append(new RejectedPluginManifest(file, reason)).ToList();
+    }
 
     private static FlowComponentReference Reference(PluginManifest installed, FlowComponentDescriptor component) =>
         new(installed.Id, installed.Version, component.Id, component.Version, component.ConfigurationSchema.Version);
@@ -216,13 +302,13 @@ public sealed class FlowComponentRegistry
             var component = installed.Components[index];
             var reference = references[index];
             if (!components.TryAdd(reference, component)) throw new InvalidOperationException($"Composant dupliqué : {component.Id}.");
-            runtimeVersions.Add(reference, installed.Version);
+            runtimeVersions[reference] = installed.Version;
             foreach (var version in component.CompatiblePluginVersions ?? [])
             {
                 var compatible = reference with { PluginVersion = version };
                 if (string.IsNullOrWhiteSpace(version) || !components.TryAdd(compatible, component))
                     throw new InvalidOperationException($"Référence compatible dupliquée ou invalide : {component.Id}.");
-                runtimeVersions.Add(compatible, installed.Version);
+                runtimeVersions[compatible] = installed.Version;
             }
         }
     }
@@ -369,15 +455,3 @@ public sealed class FlowComponentRegistry
 
 /// <summary>Manifeste de plugin tiers écarté au chargement.</summary>
 public sealed record RejectedPluginManifest(string File, string Reason);
-
-/// <summary>Règles d'identité des plugins et composants tiers (identifiant stable, utilisé dans des chemins et des capacités).</summary>
-public static class PluginIdentity
-{
-    private static readonly System.Text.RegularExpressions.Regex PluginId =
-        new(@"^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)?$", System.Text.RegularExpressions.RegexOptions.Compiled);
-    private static readonly System.Text.RegularExpressions.Regex ComponentId =
-        new(@"^[a-z0-9]+(-[a-z0-9]+)*$", System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    public static bool IsValidPluginId(string id) => id.Length <= 64 && PluginId.IsMatch(id);
-    public static bool IsValidComponentId(string? id) => id is { Length: <= 96 } && ComponentId.IsMatch(id);
-}

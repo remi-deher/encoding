@@ -528,21 +528,91 @@ export class PluginCatalogPageComponent {
     this.selectedStoreCategory.set(cat);
   }
 
+  protected readonly repositoryUrl = signal('');
+  protected readonly storeBusy = signal(false);
+
+  private storeError(error: unknown, fallback: string): string {
+    return (error as { error?: { title?: string } }).error?.title ?? fallback;
+  }
+
+  private async refreshStore(): Promise<void> {
+    const [repositories, packages] = await Promise.all([
+      this.extensionsService.listRepositories(),
+      this.extensionsService.listPackages(),
+    ]);
+    this.storeRepositories.set(repositories);
+    this.storePackages.set(packages);
+  }
+
+  private async runStoreAction(action: () => Promise<unknown>, success: string): Promise<void> {
+    this.storeBusy.set(true);
+    try {
+      await action();
+      await this.refreshStore();
+      this.notifications.show(success);
+    } catch (error) {
+      this.notifications.show(this.storeError(error, 'L’opération sur le Store a échoué.'));
+    } finally {
+      this.storeBusy.set(false);
+    }
+  }
+
+  protected onRepositoryUrlInput(event: Event): void {
+    this.repositoryUrl.set((event.target as HTMLInputElement).value);
+  }
+
   protected installPackage(pkg: StorePackage): void {
-    this.notifications.show(
-      `Le paquet '${pkg.name}' (${pkg.version}) est programmé pour déploiement sur le cluster.`,
+    void this.runStoreAction(
+      () => this.extensionsService.installPackage(pkg.repositoryId, pkg.id, pkg.version),
+      `« ${pkg.name} » ${pkg.version} est installé sur ce serveur ; les workers le téléchargent dans la minute.`,
+    );
+  }
+
+  protected removePackage(pkg: StorePackage): void {
+    void this.runStoreAction(
+      () => this.extensionsService.removePackage(pkg.id),
+      `« ${pkg.name} » est retiré.`,
     );
   }
 
   protected addCustomRepository(): void {
-    this.notifications.show(
-      'Pour ajouter un dépôt : saisissez une URL HTTP/HTTPS exposant un fichier repository.json conforme.',
+    const url = this.repositoryUrl().trim();
+    if (!url) return;
+    void this.runStoreAction(async () => {
+      await this.extensionsService.addRepository(url);
+      this.repositoryUrl.set('');
+    }, 'Dépôt ajouté.');
+  }
+
+  protected syncRepository(repo: StoreRepository): void {
+    void this.runStoreAction(
+      () => this.extensionsService.syncRepository(repo.id),
+      'Dépôt synchronisé.',
     );
   }
 
-  protected triggerZipUpload(): void {
-    this.notifications.show(
-      'Sideloading : Sélectionnez une archive .zip contenant plugin.json ou tool.json validé.',
+  protected toggleRepository(repo: StoreRepository): void {
+    void this.runStoreAction(
+      () => this.extensionsService.setRepositoryEnabled(repo.id, !repo.enabled),
+      repo.enabled ? 'Dépôt désactivé.' : 'Dépôt activé.',
+    );
+  }
+
+  protected removeRepository(repo: StoreRepository): void {
+    void this.runStoreAction(
+      () => this.extensionsService.removeRepository(repo.id),
+      'Dépôt supprimé.',
+    );
+  }
+
+  protected onArchiveSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    void this.runStoreAction(
+      () => this.extensionsService.importArchive(file),
+      `Archive « ${file.name} » installée.`,
     );
   }
 

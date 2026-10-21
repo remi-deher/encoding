@@ -20,7 +20,16 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private const int MaxVariableChanges=64, MaxVariableNameLength=128, MaxVariableBytes=256*1024, MaxDetailLength=4096, MaxErrorLength=400, MaxFingerprintedFiles=5000;
     private readonly ConcurrentDictionary<string,(string Fingerprint,PluginManifest Manifest)> described=new(StringComparer.Ordinal);
-    public IReadOnlyList<PluginLaunch> Installed=>configuration.GetSection("Runtime:Plugins").Get<PluginLaunch[]>()??[];
+    /// <summary>Plugins déclarés dans la configuration du worker, puis plugins du Store téléchargés et vérifiés (la configuration prime).</summary>
+    public IReadOnlyList<PluginLaunch> Installed
+    {
+        get
+        {
+            var declared=configuration.GetSection("Runtime:Plugins").Get<PluginLaunch[]>()??[];
+            var downloaded=CustomPluginCatalog.Scan(CustomPluginCatalog.DirectoryFor(configuration)).Where(plugin=>declared.All(item=>item.Id!=plugin.Id || item.Version!=plugin.Version));
+            return declared.Concat(downloaded).ToList();
+        }
+    }
 
     /// <summary>
     /// Manifeste du plugin installé. Le résultat est conservé tant que les fichiers du plugin ne changent pas (chemin, taille,

@@ -78,6 +78,10 @@ Exactement un de `outputId` ou `terminalResult` (`unchanged`, `success`, `failed
 
 ## Installer un plugin tiers
 
+**Par le Store (recommandé)** : empaquetez le plugin en `.zip` avec un `plugin.json` à la racine (le manifeste habituel plus `"runtime": { "type": "python3", "entrypoint": "main.py" }`, identifiant `espace.nom`), copiez-y le SDK à côté du point d'entrée, puis *Plugins & Outils → Store & Dépôts → Importer une archive*. Le serveur contrôle le paquet, l'enregistre à chaud, et chaque worker le télécharge et le vérifie dans la minute. Voir 0063 (état d'implémentation, limites en cluster multi-serveurs).
+
+**À la main** (plugin fourni avec l'image, ou besoin d'un lancement particulier) :
+
 - **Serveur** : copier le manifeste dans le dossier `FlowPlugins:ManifestDirectory` (variable `FlowPlugins__ManifestDirectory`) et redémarrer. Le catalogue valide le manifeste ; les composants apparaissent dans l’éditeur.
 - **Chaque worker** qui doit exécuter le plugin : installer les fichiers hors du dossier de données du nœud (par exemple `/opt/encoding/plugins/mon-plugin`) et déclarer :
 
