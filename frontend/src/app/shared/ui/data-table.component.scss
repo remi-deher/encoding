@@ -369,6 +369,7 @@
 }
 
 .card-sort {
+  --mat-form-field-outlined-container-shape: var(--radius-pill);
   display: flex;
   align-items: center;
   gap: var(--space-2);
