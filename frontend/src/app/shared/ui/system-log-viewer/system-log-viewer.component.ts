@@ -64,6 +64,9 @@ export class SystemLogViewerComponent implements OnDestroy {
   protected readonly selectedLevel = signal<SystemLogLevel | 'All'>('All');
   protected readonly selectedCategory = signal('');
   protected readonly searchText = signal('');
+  protected readonly activeFilterCount = computed(
+    () => (this.selectedLevel() !== 'All' ? 1 : 0) + (this.selectedCategory() ? 1 : 0),
+  );
   protected readonly availableCategories = signal<readonly string[]>([]);
   protected readonly displayedEntries = signal<readonly SystemLogEntry[]>([]);
   protected readonly isPaused = signal(false);

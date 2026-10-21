@@ -33,13 +33,20 @@
   gap: var(--space-3);
   flex-wrap: wrap;
 }
-.log-filters mat-form-field {
+.log-filter-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.log-filter-fields mat-form-field {
   width: 210px;
   max-width: 100%;
 }
 .log-filters .log-search {
   flex: 1;
   min-width: min(100%, 230px);
+  max-width: 640px;
+  margin-inline: auto;
 }
 .log-actions,
 .console-footer > div {
@@ -195,7 +202,7 @@ p {
   color: var(--text-primary);
 }
 @media (max-width: 640px) {
-  .log-filters mat-form-field,
+  .log-filter-fields mat-form-field,
   .log-filters .log-search {
     width: 100%;
   }

@@ -29,7 +29,26 @@
 
 .activity-search {
   width: 100%;
-  max-width: 460px;
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+.active-filters {
+  justify-content: center;
+}
+
+.filter-sections {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.filter-title {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-label);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .chip-row {
