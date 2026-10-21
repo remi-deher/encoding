@@ -17,8 +17,12 @@ public static class BusinessOperationEndpoints
             var operation = BusinessOperationCatalog.FindTool(request.Name);
             if (operation is null)
                 return Results.NotFound(new { title = $"Opération inconnue : {request.Name}" });
-            var result = await service.ExecuteOperationAsync(request.Name, request.Arguments,
-                http.User.IsInRole("admin"), ct);
+            if (McpAccess.MissingScope(http.User, operation) is { } missing)
+            {
+                await service.ExecuteForPrincipalAsync(request.Name, request.Arguments, http.User, ct);
+                return Results.Json(new { title = McpAccess.MissingScopeMessage(missing) }, statusCode: StatusCodes.Status403Forbidden);
+            }
+            var result = await service.ExecuteForPrincipalAsync(request.Name, request.Arguments, http.User, ct);
             return result.IsError
                 ? operation.RequiresAdministrator && !http.User.IsInRole("admin")
                     ? Results.Forbid()

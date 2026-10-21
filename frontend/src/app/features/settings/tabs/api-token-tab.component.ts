@@ -131,6 +131,16 @@ export class ApiTokenTabComponent {
         ],
       },
       {
+        id: 'mcpAccess',
+        label: 'Écriture via le MCP',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'read', label: 'Lecture seule (recommandé)' },
+          { value: 'write', label: 'Écriture complète (administrateur uniquement)' },
+        ],
+      },
+      {
         id: 'duration',
         label: 'Validité',
         type: 'select',
@@ -143,7 +153,7 @@ export class ApiTokenTabComponent {
         ],
       },
     ],
-    initialValues: { role: 'viewer', duration: 'never' },
+    initialValues: { role: 'viewer', mcpAccess: 'read', duration: 'never' },
   };
   protected readonly actions: readonly AccessListAction<TokenRow>[] = [
     {
@@ -198,6 +208,9 @@ export class ApiTokenTabComponent {
             tone: 'accent' as const,
             plain: true,
           },
+          ...(token.scopes?.length
+            ? [{ label: 'Écriture MCP', tone: 'warning' as const, plain: true }]
+            : []),
           usage,
         ],
       };
@@ -239,6 +252,8 @@ export class ApiTokenTabComponent {
           name: value['name'].trim(),
           role: value['role'] as 'admin' | 'viewer',
           expiresAt,
+          scopes:
+            value['role'] === 'admin' && value['mcpAccess'] === 'write' ? ['mcp:write'] : [],
         }),
       );
       this.secret.set(result.token);

@@ -17,10 +17,22 @@ public static class ApiTokenEndpoints
             if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 128)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Le nom du jeton est obligatoire et limité à 128 caractères."] });
 
-            var role = string.Equals(request.Role, "viewer", StringComparison.OrdinalIgnoreCase) ? "viewer" : "admin";
-            var (summary, rawToken) = await repository.CreateTokenAsync(request.Name.Trim(), role, request.ExpiresAt, ct);
+            var requestedRole = request.Role?.Trim();
+            if (!string.IsNullOrEmpty(requestedRole)
+                && !string.Equals(requestedRole, "admin", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(requestedRole, "viewer", StringComparison.OrdinalIgnoreCase))
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["role"] = ["Le rôle d’un jeton est « admin » ou « viewer »."] });
+            var role = string.Equals(requestedRole, "viewer", StringComparison.OrdinalIgnoreCase) ? "viewer" : "admin";
+
+            var (scopes, unknown) = ApiTokenScopes.Normalize(request.Scopes);
+            if (unknown.Count > 0)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["scopes"] = [$"Portées inconnues : {string.Join(", ", unknown)}. Valeurs possibles : {string.Join(", ", ApiTokenScopes.Allowed)}."] });
+            if (role == "viewer" && scopes.Count > 0)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["scopes"] = ["Un jeton en lecture seule ne peut pas porter de portée d’écriture."] });
+
+            var (summary, rawToken) = await repository.CreateTokenAsync(request.Name.Trim(), role, request.ExpiresAt, ct, scopes);
             return Results.Created($"/api/v1/tokens/{summary.Id}", new CreatedApiTokenResponse(
-                summary.Id, summary.Name, summary.TokenPrefix, summary.Role, summary.CreatedAt, summary.ExpiresAt, rawToken));
+                summary.Id, summary.Name, summary.TokenPrefix, summary.Role, summary.CreatedAt, summary.ExpiresAt, rawToken, summary.Scopes));
         }).WithName("CreateApiToken");
 
         group.MapDelete("/{id:guid}", async (Guid id, bool? permanent, ApiTokenRepository repository, CancellationToken ct) =>

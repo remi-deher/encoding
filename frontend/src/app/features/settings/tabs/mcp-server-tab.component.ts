@@ -48,7 +48,7 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
         <button matButton="text" (click)="copyAddress()">Copier l’adresse</button>
       </div>
       <p class="note">
-        Authentification par jeton d’API. Les droits du jeton déterminent les actions autorisées.
+        Authentification par jeton d’API. Le MCP est en lecture seule : un jeton administrateur n’écrit que s’il a reçu l’écriture MCP à sa création.
       </p>
       <mat-expansion-panel class="catalog"
         ><mat-expansion-panel-header

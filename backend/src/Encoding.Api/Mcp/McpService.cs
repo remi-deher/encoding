@@ -142,9 +142,33 @@ public sealed class McpService(
             ? argsProp
             : JsonSerializer.SerializeToElement(new { }, JsonOptions);
 
-        var callResult = await ExecuteOperationAsync(toolName, arguments, user.IsInRole("admin"), ct);
+        var callResult = await ExecuteForPrincipalAsync(toolName, arguments, user, ct);
 
         return McpJsonRpcResponse.Success(request.Id, callResult);
+    }
+
+    /// <summary>
+    /// Exécute une opération au nom d’un appelant : applique les portées d’un jeton API et journalise toute tentative d’écriture
+    /// (outil, acteur, issue et noms des arguments, jamais leurs valeurs).
+    /// </summary>
+    public async Task<McpCallToolResult> ExecuteForPrincipalAsync(string toolName, JsonElement arguments, ClaimsPrincipal user, CancellationToken ct)
+    {
+        var operation = BusinessOperationCatalog.FindTool(toolName);
+        if (operation is null || operation.ReadOnly)
+            return await ExecuteOperationAsync(toolName, arguments, user.IsInRole("admin"), ct);
+
+        var actor = $"{(McpAccess.IsApiToken(user) ? "jeton" : "session")} « {user.Identity?.Name ?? "inconnu"} »";
+        var names = arguments.ValueKind == JsonValueKind.Object ? string.Join(',', arguments.EnumerateObject().Select(property => property.Name)) : "";
+        if (McpAccess.MissingScope(user, operation) is { } missing)
+        {
+            logger.LogWarning("Audit MCP : écriture refusée pour {Actor}, outil {Tool}, portée manquante {Scope}.", actor, toolName, missing);
+            return McpCallToolResult.Text(McpAccess.MissingScopeMessage(missing), isError: true);
+        }
+
+        var result = await ExecuteOperationAsync(toolName, arguments, user.IsInRole("admin"), ct);
+        logger.LogWarning("Audit MCP : écriture {Outcome} par {Actor}, outil {Tool}, arguments [{Arguments}].",
+            result.IsError ? "en échec ou refusée" : "réussie", actor, toolName, names);
+        return result;
     }
 
     /// <summary>Execute a catalogued operation; all public surfaces share this dispatcher.</summary>

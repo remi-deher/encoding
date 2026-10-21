@@ -43,6 +43,7 @@ public sealed class SessionAuthenticationHandler(
                                 new Claim(ClaimTypes.Name, tokenRecord.Name),
                                 new Claim(ClaimTypes.Role, tokenRecord.Role),
                                 new Claim("auth_type", "api_token"),
+                                new Claim(ApiTokenScopes.ClaimType, string.Join(',', tokenRecord.Scopes)),
                             ],
                             SessionAuthentication.Scheme);
                         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(tokenIdentity), SessionAuthentication.Scheme));

@@ -9,7 +9,7 @@ public sealed record AuthOptions(
     int MaxFailedAttempts,
     int MaxPendingPairingRequests,
     int AnonymousRequestsPerMinute,
-    bool Enabled = false,
+    bool Enabled = true,
     int HeavyOperationsPerMinute = 30)
 {
     public static AuthOptions From(IConfiguration configuration)
@@ -27,7 +27,7 @@ public sealed record AuthOptions(
         if (maxFailures <= 0) throw new InvalidOperationException("Auth:MaxFailedAttempts doit être supérieur à zéro.");
         if (maxPending <= 0) throw new InvalidOperationException("Auth:MaxPendingPairingRequests doit être supérieur à zéro.");
         var secure = configuration["Auth:CookieSecure"];
-        var enabled = configuration.GetValue("Auth:Enabled", false);
+        var enabled = configuration.GetValue("Auth:Enabled", true);
         return new AuthOptions(
             TimeSpan.FromMinutes(idle),
             TimeSpan.FromHours(absolute),
