@@ -142,7 +142,7 @@ public sealed class AiAssistantService(
             {
                 var plannerRequestId = DeriveRequestId(
                     stored.Conversation.Id + "/" + requestId.ToString("N"), "assistant-read-tool-planner");
-                await store.DeleteAsync("session/" + $"{stored.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}", ct);
+                await DeleteHelperSessionAsync($"{stored.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}", ct);
             }
             removed++;
         }
@@ -440,11 +440,14 @@ public sealed class AiAssistantService(
     {
         var ownerId = OwnerId(user);
         var conversations = await store.ReadPrefixAsync<StoredConversation>(ConversationPrefix + ownerId + "/", ct);
-        return conversations
+        var page = conversations
             .Select(record => record.Conversation)
             .OrderByDescending(conversation => conversation.UpdatedAt)
             .Take(100)
             .ToArray();
+        for (var index = 0; index < page.Length; index++)
+            page[index] = page[index] with { CoordinatorId = await cluster.CoordinatorAsync(page[index].Id, ct) };
+        return page;
     }
 
     public async Task<bool> DeleteConversationAsync(string id, ClaimsPrincipal user, CancellationToken ct)
@@ -471,13 +474,13 @@ public sealed class AiAssistantService(
         {
             var titleSessionId = $"{stored.Conversation.Id.Split('.')[0]}.{TitleRequestId(stored.Conversation.Id, attempt):N}";
             await store.DeleteAsync(SessionOwnerKey(titleSessionId), ct);
-            await store.DeleteAsync("session/" + titleSessionId, ct);
+            await DeleteHelperSessionAsync(titleSessionId, ct);
         }
         foreach (var requestId in stored.TurnPromptSnapshots?.Keys ?? Array.Empty<Guid>())
         {
             var plannerRequestId = DeriveRequestId(
                 stored.Conversation.Id + "/" + requestId.ToString("N"), "assistant-read-tool-planner");
-            await store.DeleteAsync("session/" + $"{stored.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}", ct);
+            await DeleteHelperSessionAsync($"{stored.Conversation.Id.Split('.')[0]}.{plannerRequestId:N}", ct);
         }
     }
 
@@ -510,10 +513,7 @@ public sealed class AiAssistantService(
     {
         if (requestId == Guid.Empty) return null;
         var activity = await ReadActivityAsync(OwnerId(user), requestId, ct);
-        var parts = activity?.ConversationId?.Split('.');
-        return parts is { Length: 2 } && Guid.TryParseExact(parts[0], "N", out var coordinatorId) && coordinatorId != Guid.Empty
-            ? coordinatorId
-            : null;
+        return await cluster.CoordinatorAsync(activity?.ConversationId, ct);
     }
 
     private async Task<AiAssistantActivity?> ReadActivityAsync(string ownerId, Guid requestId, CancellationToken ct) =>
@@ -576,7 +576,7 @@ public sealed class AiAssistantService(
         if (!IsSessionId(id)) return null;
         var stored = await ReadConversationAsync(ownerId: OwnerId(user), id, ct);
         if (stored is null) return null;
-        var conversation = stored.Conversation;
+        var conversation = stored.Conversation with { CoordinatorId = await cluster.CoordinatorAsync(id, ct) };
 
         var session = await cluster.GetSessionAsync(id, ct);
         var turns = session?.Turns.Select(turn => new AiAssistantTurn(
@@ -911,6 +911,7 @@ public sealed class AiAssistantService(
                     conversation.Id + "/" + request.RequestId.ToString("N"), "assistant-read-tool-planner");
                 var plannerSessionId = $"{conversation.Id.Split('.')[0]}.{plannerRequestId:N}";
                 await store.SaveAsync(SessionOwnerKey(plannerSessionId), ownerId, requestCancellation.Token);
+                await cluster.AdoptSessionAsync(plannerSessionId, requestCancellation.Token);
                 var planner = await cluster.GenerateAsync(
                     conversation.Provider,
                     new AiPrompt(BuildToolPlannerPrompt(user.IsInRole("admin")), contextualPrompt, Model: conversation.Model, SessionId: plannerSessionId, RequestId: plannerRequestId, ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
@@ -1225,6 +1226,12 @@ public sealed class AiAssistantService(
         return await store.ReadAsync<string>(SessionOwnerKey(id), ct) is not null;
     }
 
+    private async Task DeleteHelperSessionAsync(string id, CancellationToken ct)
+    {
+        await store.DeleteAsync("session/" + id, ct);
+        await store.DeleteAsync(AiClusterService.CoordinatorKey(id), ct);
+    }
+
     private Task<StoredConversation?> ReadConversationAsync(string ownerId, string id, CancellationToken ct) =>
         store.ReadAsync<StoredConversation>(ConversationKey(ownerId, id), ct);
 
@@ -1341,6 +1348,7 @@ public sealed class AiAssistantService(
             var requestId = TitleRequestId(conversation.Id, attempt);
             var sessionId = $"{conversation.Id.Split('.')[0]}.{requestId:N}";
             await store.SaveAsync(SessionOwnerKey(sessionId), ownerId, ct);
+            await cluster.AdoptSessionAsync(sessionId, ct);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TitleTimeout);
             var exchange = $"Message de l’utilisateur :\n{Truncate(userPrompt, 600)}\n\nRéponse de l’assistant :\n{Truncate(answer, 600)}"
