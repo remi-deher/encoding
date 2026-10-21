@@ -27,20 +27,6 @@ path {
   background: var(--surface);
   white-space: nowrap;
 }
-.link-insertion::before,
-.link-insertion::after {
-  position: absolute;
-  top: 50%;
-  width: 28px;
-  border-top: 1px solid var(--border-strong);
-  content: '';
-}
-.link-insertion::before {
-  right: calc(100% + 2px);
-}
-.link-insertion::after {
-  left: calc(100% + 2px);
-}
 .link-insertion app-icon {
   width: 18px;
   height: 18px;

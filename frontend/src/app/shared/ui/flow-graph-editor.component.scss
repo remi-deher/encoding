@@ -195,10 +195,6 @@
 .branch-lane {
   min-width: 340px;
   padding: 0 12px 12px;
-  border-left: 1px solid var(--border-subtle);
-}
-.branch-lane:first-child {
-  border-left: 0;
 }
 .branch-heading {
   display: flex;
