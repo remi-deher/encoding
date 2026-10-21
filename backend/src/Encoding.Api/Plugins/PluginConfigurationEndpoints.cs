@@ -19,6 +19,7 @@ public static class PluginConfigurationEndpoints
                 p.ConfigurationSchema,
                 componentsCount = p.Components.Count
             }))).AllowViewer().WithName("ListPlugins");
+        plugins.MapGet("/rejected", (FlowComponentRegistry catalog) => Results.Ok(catalog.Rejected)).AllowViewer().WithName("ListRejectedPlugins");
         plugins.MapGet("/{pluginId}/configuration", async (string pluginId, FlowComponentRegistry catalog,
             PluginConfigurationRepository configurations, CancellationToken ct) =>
         {

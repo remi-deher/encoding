@@ -34,6 +34,16 @@
 
   <div catalogue-table>
     @if (activeTab() === 'plugins') {
+      @if (rejectedPlugins().length > 0) {
+        <div class="rejected-plugins" role="alert">
+          <strong>{{ rejectedPlugins().length }} manifeste(s) de plugin ignoré(s) :</strong>
+          <ul>
+            @for (item of rejectedPlugins(); track item.file) {
+              <li><code>{{ item.file }}</code> — {{ item.reason }}</li>
+            }
+          </ul>
+        </div>
+      }
       <app-data-table
         layout="resources"
         [columns]="columns"

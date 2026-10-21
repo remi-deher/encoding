@@ -99,10 +99,23 @@ internal static class PluginTests
         duplicate["components"]!.AsArray().Add(duplicate["components"]![0]!.DeepClone());
         var unsupported=root.DeepClone().AsObject();
         unsupported["supportedHostContractVersions"] = new JsonArray(2);
-        var cases=new Dictionary<string,JsonNode>
+        var badId=root.DeepClone().AsObject();
+        badId["id"]="../evil";
+        var shadowsBuiltIn=root.DeepClone().AsObject();
+        shadowsBuiltIn["id"]="plex";
+        var badVersion=root.DeepClone().AsObject();
+        badVersion["version"]="latest";
+        var badSchema=root.DeepClone().AsObject();
+        badSchema["components"]![0]!["configurationSchema"]!["fields"]![0]!["type"]="telepathy";
+        var cases=new Dictionary<string,string>
         {
-            ["unsupported host contract"]=unsupported,
-            ["duplicate component identity"]=duplicate
+            ["unsupported host contract"]=unsupported.ToJsonString(),
+            ["duplicate component identity"]=duplicate.ToJsonString(),
+            ["unsafe plugin id"]=badId.ToJsonString(),
+            ["id of a built-in plugin"]=shadowsBuiltIn.ToJsonString(),
+            ["non semantic version"]=badVersion.ToJsonString(),
+            ["unknown field type"]=badSchema.ToJsonString(),
+            ["unreadable JSON"]="{ not json"
         };
 
         foreach(var (name,manifest) in cases)
@@ -111,15 +124,19 @@ internal static class PluginTests
             Directory.CreateDirectory(directory);
             try
             {
-                File.WriteAllText(Path.Combine(directory,"invalid.json"),manifest.ToJsonString());
+                File.WriteAllText(Path.Combine(directory,"invalid.json"),manifest);
+                var good=JsonNode.Parse(File.ReadAllText(source))!.AsObject();
+                good["id"]="second-example";
+                foreach(var component in good["components"]!.AsArray()) component!["id"]=component["id"]!.GetValue<string>().Replace("example-","second-");
+                File.WriteAllText(Path.Combine(directory,"b-valid.json"),good.ToJsonString());
                 var configuration=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["FlowPlugins:ManifestDirectory"]=directory }).Build();
-                var rejected=false;
-                try { _=new FlowComponentRegistry(configuration); }
-                catch(InvalidOperationException) { rejected=true; }
-                Check(rejected,"The catalog rejects an invalid manifest: "+name);
+                var registry=new FlowComponentRegistry(configuration);
+                Check(registry.Rejected.Count==1 && registry.Rejected[0].File=="invalid.json" && registry.Rejected[0].Reason.Length>0,"The catalog reports the invalid manifest without failing: "+name);
+                Check(registry.Plugins.All(plugin=>plugin.Id!="../evil") && registry.Plugins.Any(plugin=>plugin.Id=="second-example"),"A broken manifest does not hide a valid one: "+name);
+                Check(registry.Plugins.Count(plugin=>plugin.Id=="plex")==1,"A third-party manifest never replaces a built-in plugin: "+name);
             }
             finally { Directory.Delete(directory,true); }
         }
-        Console.WriteLine("PASS: plugin catalog rejects unsupported contracts and duplicate component identities.");
+        Console.WriteLine("PASS: an invalid third-party manifest is reported and skipped, never fatal.");
     }
 }

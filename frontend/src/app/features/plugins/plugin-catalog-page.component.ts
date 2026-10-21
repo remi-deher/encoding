@@ -31,11 +31,12 @@ import { ClusterExtensionsService } from '../../shared/services/cluster-extensio
 import {
   ClusterTool,
   ExtensionTab,
+  RejectedPlugin,
   StorePackage,
   StoreRepository,
 } from '../../shared/models/cluster-extensions';
 
-type PluginFamily = 'base' | 'cluster' | 'media' | 'automation';
+type PluginFamily = 'base' | 'cluster' | 'media' | 'automation' | 'custom';
 
 interface PluginRecord extends DataTableRow {
   readonly id: string;
@@ -249,6 +250,7 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
   { value: 'cluster', label: 'Cluster' },
   { value: 'media', label: 'Média' },
   { value: 'automation', label: 'Automatisation' },
+  { value: 'custom', label: 'Tiers' },
 ];
 
 @Component({
@@ -287,7 +289,7 @@ export class PluginCatalogPageComponent {
   protected readonly selectedStoreCategory = signal('all');
 
   protected readonly extensionTabs = computed<readonly CategoryTabOption[]>(() => [
-    { value: 'plugins', label: 'Plugins', count: PLUGIN_RECORDS.length },
+    { value: 'plugins', label: 'Plugins', count: this.pluginRecords().length },
     { value: 'tools', label: 'Outils média', count: this.clusterTools().length },
     { value: 'store', label: 'Store & Dépôts', count: this.storePackages().length },
   ]);
@@ -317,9 +319,36 @@ export class PluginCatalogPageComponent {
     return cat === 'all' ? pkgs : pkgs.filter((p) => p.category === cat);
   });
 
+  protected readonly rejectedPlugins = signal<readonly RejectedPlugin[]>([]);
   protected readonly selectedFamily = signal('all');
   protected readonly selectedPlugin = signal<PluginRecord | null>(null);
   private readonly pluginCatalog = signal<readonly FlowPluginCatalog[]>([]);
+  /** Fiches connues du front, versions réelles du serveur, et plugins tiers déclarés par le catalogue. */
+  protected readonly pluginRecords = computed<readonly PluginRecord[]>(() => {
+    const catalog = this.pluginCatalog();
+    const known = PLUGIN_RECORDS.map((record) => {
+      const live = catalog.find((plugin) => plugin.id === record.id);
+      return live ? { ...record, version: live.version } : record;
+    });
+    const custom = catalog
+      .filter((plugin) => !PLUGIN_RECORDS.some((record) => record.id === plugin.id))
+      .map<PluginRecord>((plugin) => ({
+        id: plugin.id,
+        name: plugin.name,
+        family: 'custom',
+        familyLabel: 'Tiers',
+        category: 'Plugin tiers',
+        version: plugin.version,
+        components: plugin.components.map((component) => component.name).join(', '),
+        runtime: 'Processus isolé installé sur chaque worker',
+        configuration: plugin.configurationSchema
+          ? `${plugin.configurationSchema.fields.length} champ(s) déclaré(s)`
+          : 'Aucune configuration globale',
+        state: 'Déclaré',
+        iconUrl: '/plugins/base.svg',
+      }));
+    return [...known, ...custom];
+  });
   protected readonly configurationValues = signal<FlowComponentConfiguration>({});
   protected readonly configuredSecrets = signal<readonly string[]>([]);
   protected readonly configurationRevision = signal(0);
@@ -442,16 +471,16 @@ export class PluginCatalogPageComponent {
   ];
 
   protected readonly familyOptions = computed<readonly CategoryTabOption[]>(() => [
-    { value: 'all', label: 'Tous', count: PLUGIN_RECORDS.length },
+    { value: 'all', label: 'Tous', count: this.pluginRecords().length },
     ...PLUGIN_FAMILY_OPTIONS.map((family) => ({
       ...family,
-      count: PLUGIN_RECORDS.filter((plugin) => plugin.family === family.value).length,
+      count: this.pluginRecords().filter((plugin) => plugin.family === family.value).length,
     })),
   ]);
 
   protected readonly filteredPlugins = computed(() => {
     const family = this.selectedFamily();
-    return PLUGIN_RECORDS.filter((plugin) => family === 'all' || plugin.family === family);
+    return this.pluginRecords().filter((plugin) => family === 'all' || plugin.family === family);
   });
 
   private pluginComponents(pluginId: string) {
@@ -469,6 +498,11 @@ export class PluginCatalogPageComponent {
       .catch(() =>
         this.notifications.show('Le catalogue de configuration des plugins est indisponible.'),
       );
+
+    void this.extensionsService
+      .listRejectedPlugins()
+      .then((rejected) => this.rejectedPlugins.set(rejected))
+      .catch(() => {});
 
     void this.extensionsService
       .listTools()
@@ -517,7 +551,7 @@ export class PluginCatalogPageComponent {
   }
 
   protected onPluginOpen(row: DataTableRow): void {
-    const plugin = PLUGIN_RECORDS.find((candidate) => candidate.id === row['id']) ?? null;
+    const plugin = this.pluginRecords().find((candidate) => candidate.id === row['id']) ?? null;
     this.selectedPlugin.set(plugin);
     this.configurationValues.set({});
     this.configuredSecrets.set([]);

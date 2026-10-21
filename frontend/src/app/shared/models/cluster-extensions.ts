@@ -48,3 +48,8 @@ export interface StorePackage {
   readonly repositoryId: string;
   readonly icon: string;
 }
+
+export interface RejectedPlugin {
+  readonly file: string;
+  readonly reason: string;
+}
