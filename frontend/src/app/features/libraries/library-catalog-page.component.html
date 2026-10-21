@@ -4,6 +4,7 @@
   [actionOpen]="actionOpen()"
   [actionTitle]="actionTitle()"
   [actionDescription]="actionDescription()"
+  [actionStep]="actionStep()"
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
@@ -158,15 +159,23 @@
     }
   </ng-template>
 
+  <ng-template #actionFooterActions>
+    @if (actionRecordForm(); as form) {
+      <app-record-form-actions [form]="form" />
+    }
+  </ng-template>
+
   <ng-template #actionContent>
     @if (actionType() === 'create') {
       <app-record-form
+        [embedded]="true"
         [data]="createFormData"
         (submitted)="createLibrary($event)"
         (cancelled)="closeCreateLibrary()"
       />
     } @else if (actionType() === 'edit') {
       <app-record-form
+        [embedded]="true"
         [data]="editFormData()"
         (submitted)="updateLibrary($event)"
         (cancelled)="closeCreateLibrary()"
@@ -174,6 +183,7 @@
     } @else if (actionType() === 'processing') {
       @if (processingForm(); as form) {
         <app-record-form
+          [embedded]="true"
           [data]="form"
           [busy]="workflowBusy()"
           (submitted)="saveProcessing($event)"
@@ -183,6 +193,7 @@
     } @else if (actionType() === 'flow') {
       @if (assignmentForm(); as form) {
         <app-record-form
+          [embedded]="true"
           [data]="form"
           [busy]="workflowBusy()"
           (submitted)="saveFlowAssignment($event)"

@@ -1,5 +1,6 @@
 <app-management-catalog-template
   [title]="title()"
+  [actionStep]="actionStep()"
   [detailOpen]="
     pageTab() === 'groups' ? selectedGroupForDetail() !== null : selectedNode() !== null
   "
@@ -504,6 +505,12 @@
       </mat-tab-group>
     }
   </ng-template>
+  <ng-template #actionFooterActions>
+    @if (actionRecordForm(); as form) {
+      <app-record-form-actions [form]="form" />
+    }
+  </ng-template>
+
   <ng-template #actionContent>
     @if (pageTab() === 'groups') {
       <app-node-group-editor
@@ -518,6 +525,7 @@
         <p role="alert">{{ local.error() }}</p>
       }
       <app-record-form
+        [embedded]="true"
         [data]="createClusterForm"
         [busy]="local.busy()"
         (submitted)="local.create($event)"
@@ -539,6 +547,7 @@
     } @else if (actionType() === 'identity') {
       @if (identityForm(); as form) {
         <app-record-form
+          [embedded]="true"
           [data]="form"
           (submitted)="saveNodeIdentity($event)"
           (cancelled)="closeCreateNode()"
@@ -559,6 +568,7 @@
       }
     } @else if (actionType() === 'create-library') {
       <app-record-form
+        [embedded]="true"
         [data]="createLibraryFormData"
         (submitted)="createLibraryFromNode($event)"
         (cancelled)="closeCreateNode()"
@@ -657,6 +667,7 @@
         </button>
       </div>
       <app-record-form
+        [embedded]="true"
         [data]="createFormData"
         (submitted)="acceptNode($event)"
         (cancelled)="closeCreateNode()"

@@ -445,11 +445,6 @@
 
 <ng-template #flowFooter>
   @if (flowRecordForm(); as form) {
-    @if (form.secondaryLabel(); as label) {
-      <button matButton="text" type="button" (click)="form.secondary()">{{ label }}</button>
-    }
-    <button matButton="filled" type="button" (click)="form.primary()">
-      {{ form.primaryLabel() }}
-    </button>
+    <app-record-form-actions [form]="form" />
   }
 </ng-template>

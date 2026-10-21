@@ -7,7 +7,14 @@ import { LibraryResponse, NodeGroupResponse } from '../../shared/models/cluster'
 
 import { HttpClient } from '@angular/common/http';
 
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+  viewChildren,
+} from '@angular/core';
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -49,6 +56,7 @@ import {
   ResourceSheetSection,
 } from '../../shared/ui/resource-sheet.component';
 
+import { RecordFormActionsComponent } from '../../shared/ui/record-form-actions.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 
 import {
@@ -139,6 +147,7 @@ interface LibraryAccessRecord extends DataTableRow {
     MatTabsModule,
 
     RecordFormComponent,
+    RecordFormActionsComponent,
 
     LibraryNodeAccessFormComponent,
 
@@ -153,6 +162,15 @@ interface LibraryAccessRecord extends DataTableRow {
   styleUrl: './library-catalog-page.component.scss',
 })
 export class LibraryCatalogPageComponent {
+  private readonly recordForms = viewChildren(RecordFormComponent);
+  protected readonly actionRecordForm = computed(() =>
+    this.recordForms().find((form) => form.embedded()),
+  );
+  protected readonly actionStep = computed(() => {
+    const form = this.actionRecordForm();
+    return form ? { current: form.stepIndex() + 1, total: form.stepCount() } : null;
+  });
+
   private readonly flowApi = inject(FlowValidation);
 
   private readonly route = inject(ActivatedRoute);
