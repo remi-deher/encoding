@@ -103,6 +103,13 @@ export class AiToolsService {
     );
   }
 
+  renameAssistantConversation(id: string, title: string): Observable<AiAssistantConversation> {
+    return this.http.put<AiAssistantConversation>(
+      `/api/v1/tools/ai/assistant/conversations/${encodeURIComponent(id)}/title`,
+      { title },
+    );
+  }
+
   updateAssistantSources(
     id: string,
     request: AiAssistantSourcesRequest,

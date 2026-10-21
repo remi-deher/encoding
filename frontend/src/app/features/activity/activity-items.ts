@@ -152,8 +152,9 @@ export function aiItem(activity: AiAssistantActivity): ActivityItem {
     key: 'ai:' + activity.requestId,
     kind: 'ai',
     group,
-    title: aiOperationName(activity.operation),
+    title: activity.conversationTitle?.trim() || aiOperationName(activity.operation),
     subtitle: [
+      activity.conversationTitle?.trim() ? aiOperationName(activity.operation) : null,
       aiProviderName(activity.provider),
       activity.durationMilliseconds !== null ? aiDuration(activity.durationMilliseconds) : null,
       activity.errorCategory ? aiErrorName(activity.errorCategory) : null,

@@ -1,10 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   OnChanges,
   SimpleChanges,
   input,
   output,
+  signal,
+  viewChild,
 } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -65,11 +68,17 @@ type RecordFormControls = Record<string, FormControl<string>>;
   template: `
     <section class="record-form" [attr.aria-label]="data().title">
       @if (useStepper()) {
-        <mat-stepper #stepper linear aria-label="Étapes du formulaire">
+        <mat-stepper
+          #stepper
+          linear
+          aria-label="Étapes du formulaire"
+          [class.stepper-compact]="embedded()"
+          (selectedIndexChange)="stepIndex.set($event)"
+        >
           @for (step of steps(); track step.id; let index = $index; let last = $last) {
             <mat-step [label]="step.label" [stepControl]="formFor(step.id)">
               <form [formGroup]="formFor(step.id)" (ngSubmit)="advance(stepper, step, last)">
-                @if (step.description) {
+                @if (step.description && !embedded()) {
                   <p class="step-description">{{ step.description }}</p>
                 }
                 <div class="field-grid">
@@ -92,31 +101,33 @@ type RecordFormControls = Record<string, FormControl<string>>;
                     />
                   }
                 </div>
-                <footer class="form-actions">
-                  @if (index > 0) {
-                    <button matButton="text" type="button" matStepperPrevious [disabled]="busy()">
-                      Retour
+                @if (!embedded()) {
+                  <footer class="form-actions">
+                    @if (index > 0) {
+                      <button matButton="text" type="button" matStepperPrevious [disabled]="busy()">
+                        Retour
+                      </button>
+                    } @else if (data().cancellable !== false) {
+                      <button
+                        matButton="text"
+                        type="button"
+                        [disabled]="busy()"
+                        (click)="cancelled.emit()"
+                      >
+                        Annuler
+                      </button>
+                    }
+                    <button matButton="filled" type="submit" [disabled]="busy()">
+                      {{
+                        last
+                          ? data().review === false
+                            ? data().submitLabel
+                            : 'Vérifier'
+                          : 'Continuer'
+                      }}
                     </button>
-                  } @else if (data().cancellable !== false) {
-                    <button
-                      matButton="text"
-                      type="button"
-                      [disabled]="busy()"
-                      (click)="cancelled.emit()"
-                    >
-                      Annuler
-                    </button>
-                  }
-                  <button matButton="filled" type="submit" [disabled]="busy()">
-                    {{
-                      last
-                        ? data().review === false
-                          ? data().submitLabel
-                          : 'Vérifier'
-                        : 'Continuer'
-                    }}
-                  </button>
-                </footer>
+                  </footer>
+                }
               </form>
             </mat-step>
           }
@@ -124,10 +135,12 @@ type RecordFormControls = Record<string, FormControl<string>>;
             <mat-step label="Vérification">
               <div class="review-step">
                 <h3>{{ data().reviewTitle ?? 'Vérifier la définition' }}</h3>
-                <p class="step-description">
-                  Relisez les paramètres avant de les enregistrer. Vous pouvez revenir à chaque
-                  étape pour les modifier.
-                </p>
+                @if (!embedded()) {
+                  <p class="step-description">
+                    Relisez les paramètres avant de les enregistrer. Vous pouvez revenir à chaque
+                    étape pour les modifier.
+                  </p>
+                }
                 <dl class="summary">
                   @for (field of data().fields; track field.id) {
                     @if (isFieldVisible(field)) {
@@ -138,14 +151,16 @@ type RecordFormControls = Record<string, FormControl<string>>;
                     }
                   }
                 </dl>
-                <footer class="form-actions">
-                  <button matButton="text" type="button" matStepperPrevious [disabled]="busy()">
-                    Modifier
-                  </button>
-                  <button matButton="filled" type="button" [disabled]="busy()" (click)="save()">
-                    {{ data().submitLabel }}
-                  </button>
-                </footer>
+                @if (!embedded()) {
+                  <footer class="form-actions">
+                    <button matButton="text" type="button" matStepperPrevious [disabled]="busy()">
+                      Modifier
+                    </button>
+                    <button matButton="filled" type="button" [disabled]="busy()" (click)="save()">
+                      {{ data().submitLabel }}
+                    </button>
+                  </footer>
+                }
               </div>
             </mat-step>
           }
@@ -175,16 +190,23 @@ type RecordFormControls = Record<string, FormControl<string>>;
               />
             }
           </div>
-          <footer class="form-actions">
-            @if (data().cancellable !== false) {
-              <button matButton="text" type="button" [disabled]="busy()" (click)="cancelled.emit()">
-                Annuler
+          @if (!embedded()) {
+            <footer class="form-actions">
+              @if (data().cancellable !== false) {
+                <button
+                  matButton="text"
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="cancelled.emit()"
+                >
+                  Annuler
+                </button>
+              }
+              <button matButton="filled" type="submit" [disabled]="busy()">
+                {{ data().review === false ? data().submitLabel : 'Vérifier' }}
               </button>
-            }
-            <button matButton="filled" type="submit" [disabled]="busy()">
-              {{ data().review === false ? data().submitLabel : 'Vérifier' }}
-            </button>
-          </footer>
+            </footer>
+          }
         </form>
       } @else {
         <div class="review-step">
@@ -199,19 +221,29 @@ type RecordFormControls = Record<string, FormControl<string>>;
               }
             }
           </dl>
-          <footer class="form-actions">
-            <button matButton="text" type="button" [disabled]="busy()" (click)="reviewing = false">
-              Modifier
-            </button>
-            <button matButton="filled" type="button" [disabled]="busy()" (click)="save()">
-              {{ data().submitLabel }}
-            </button>
-          </footer>
+          @if (!embedded()) {
+            <footer class="form-actions">
+              <button
+                matButton="text"
+                type="button"
+                [disabled]="busy()"
+                (click)="reviewing = false"
+              >
+                Modifier
+              </button>
+              <button matButton="filled" type="button" [disabled]="busy()" (click)="save()">
+                {{ data().submitLabel }}
+              </button>
+            </footer>
+          }
         </div>
       }
     </section>
   `,
   styles: `
+    :host ::ng-deep .stepper-compact .mat-horizontal-stepper-header-container {
+      display: none;
+    }
     .record-form {
       width: 100%;
       min-width: 0;
@@ -297,14 +329,48 @@ export class RecordFormComponent implements OnChanges {
   readonly data = input.required<RecordFormData>();
   readonly busy = input(false);
   readonly useStepper = input(true);
+  /**
+   * Dans un tiroir : le formulaire n'affiche ni son stepper ni ses boutons. Le tiroir porte le
+   * pied (`primaryLabel`, `secondaryLabel`, `primary()`, `secondary()`) et l'avancement (`stepIndex`).
+   */
+  readonly embedded = input(false);
+  readonly stepIndex = signal(0);
+  private readonly stepper = viewChild(MatStepper);
+  readonly stepCount = computed(() => this.steps().length + (this.data().review === false ? 0 : 1));
+  readonly primaryLabel = computed(() => {
+    const index = this.stepIndex();
+    const count = this.steps().length;
+    if (index >= count) return this.data().submitLabel;
+    if (index < count - 1) return 'Continuer';
+    return this.data().review === false ? this.data().submitLabel : 'Vérifier';
+  });
+  readonly secondaryLabel = computed(() => {
+    const index = this.stepIndex();
+    if (index === 0) return this.data().cancellable === false ? null : 'Annuler';
+    return index >= this.steps().length ? 'Modifier' : 'Retour';
+  });
   readonly submitted = output<Record<string, string>>();
   readonly cancelled = output<void>();
+  primary(): void {
+    const index = this.stepIndex();
+    const steps = this.steps();
+    const stepper = this.stepper();
+    if (index >= steps.length) this.save();
+    else if (stepper) this.advance(stepper, steps[index], index === steps.length - 1);
+  }
+
+  secondary(): void {
+    if (this.stepIndex() === 0) this.cancelled.emit();
+    else this.stepper()?.previous();
+  }
+
   protected stepForms: Record<string, FormGroup<RecordFormControls>> = {};
   protected reviewing = false;
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['data']) {
       this.reviewing = false;
+      this.stepIndex.set(0);
       this.stepForms = {};
       for (const step of this.steps()) {
         const controls: RecordFormControls = {};

@@ -268,6 +268,108 @@ public sealed class AiClusterTests
         Assert.Single((await assistant.OptionsAsync(Ct)).Models);
     }
 
+    private static async Task<(Mesh Mesh, AiAssistantService Assistant, System.Security.Claims.ClaimsPrincipal User)> TitleHarnessAsync()
+    {
+        var mesh = await Mesh.CreateAsync();
+        await mesh.PrepareOpenAiCatalogsAsync();
+        var assistant = new AiAssistantService(mesh.First.Store, mesh.First.Service, mesh.First.Transport,
+            null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
+        mesh.First.Assistant = assistant;
+        mesh.Second.Assistant = new AiAssistantService(mesh.Second.Store, mesh.Second.Service, mesh.Second.Transport,
+            null!, null!, null!, null!, null!, null!, null!, new EphemeralDataProtectionProvider());
+        var user = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([
+            new(System.Security.Claims.ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new(System.Security.Claims.ClaimTypes.Role, "admin")], "test"));
+        return (mesh, assistant, user);
+    }
+
+    private static AiAssistantMessageRequest TitleRequest(Guid mesh, string prompt, string? conversationId = null) =>
+        new(Guid.NewGuid(), prompt, conversationId, Provider: "openai", Model: "gpt-4o-mini", NodeId: mesh);
+
+    [Fact]
+    public async Task AssistantNamesANewConversationFromItsFirstExchange()
+    {
+        var (mesh, assistant, user) = await TitleHarnessAsync();
+        await using var _ = mesh;
+        // planner, answer, then the title (quotes, markdown and a final period are cleaned).
+        mesh.Factory.EnqueueReplies("{\"kind\":\"answer\",\"content\":\"ok\"}", "Voici la réponse", "**\"Diagnostic du flow HEVC\".**\nexplication ignorée");
+        var first = await assistant.SendAsync(TitleRequest(mesh.Second.Identity.PeerId, "Pourquoi mon flow HEVC échoue ?"), user, Ct);
+        Assert.True(first!.Success, first.ErrorMessage);
+        Assert.Equal("Diagnostic du flow HEVC", first.Conversation.Title);
+        Assert.Equal("ai", first.Conversation.TitleSource);
+        Assert.Equal("Diagnostic du flow HEVC", (await assistant.ListAsync(user, Ct)).Single().Title);
+        Assert.Contains("Pourquoi mon flow HEVC", mesh.Factory.LastPrompt);
+        // The generated title is final: later turns keep it without another title request.
+        var before = mesh.Factory.Inferences;
+        var second = await assistant.SendAsync(TitleRequest(mesh.Second.Identity.PeerId, "Et pour l’audio ?", first.Conversation.Id), user, Ct);
+        Assert.Equal("Diagnostic du flow HEVC", second!.Conversation.Title);
+        Assert.Equal(2, mesh.Factory.Inferences - before);
+    }
+
+    [Fact]
+    public async Task AssistantKeepsThePromptTitleWhenTheProviderCannotNameTheConversation()
+    {
+        var (mesh, assistant, user) = await TitleHarnessAsync();
+        await using var _ = mesh;
+        mesh.Factory.EnqueueReplies("{\"kind\":\"answer\",\"content\":\"ok\"}", "Voici la réponse");
+        mesh.Factory.EnqueueFailures(8);
+        var first = await assistant.SendAsync(TitleRequest(mesh.Second.Identity.PeerId, "Pourquoi mon flow HEVC échoue ?"), user, Ct);
+        Assert.True(first!.Success, first.ErrorMessage);
+        Assert.Equal("Voici la réponse", first.Content);
+        Assert.Equal("Pourquoi mon flow HEVC échoue ?", first.Conversation.Title);
+        Assert.Equal("fallback", first.Conversation.TitleSource);
+    }
+
+    [Fact]
+    public async Task AssistantIgnoresAnEmptyGeneratedTitleAndRetriesOnTheNextTurn()
+    {
+        var (mesh, assistant, user) = await TitleHarnessAsync();
+        await using var _ = mesh;
+        mesh.Factory.EnqueueReplies("{\"kind\":\"answer\",\"content\":\"ok\"}", "Réponse 1", " \n ");
+        var first = await assistant.SendAsync(TitleRequest(mesh.Second.Identity.PeerId, "Bonjour"), user, Ct);
+        Assert.Equal("Bonjour", first!.Conversation.Title);
+        Assert.Equal("fallback", first.Conversation.TitleSource);
+        mesh.Factory.EnqueueReplies("{\"kind\":\"answer\",\"content\":\"ok\"}", "Réponse 2", "Salutations");
+        var second = await assistant.SendAsync(TitleRequest(mesh.Second.Identity.PeerId, "Salut encore", first.Conversation.Id), user, Ct);
+        Assert.Equal("Salutations", second!.Conversation.Title);
+    }
+
+    [Fact]
+    public async Task AssistantRenameIsValidatedOwnedAndNeverOverwrittenByAutomaticTitles()
+    {
+        var (mesh, assistant, user) = await TitleHarnessAsync();
+        await using var _ = mesh;
+        mesh.Factory.EnqueueReplies("{\"kind\":\"answer\",\"content\":\"ok\"}", "Réponse", " ");
+        var first = await assistant.SendAsync(TitleRequest(mesh.Second.Identity.PeerId, "Bonjour"), user, Ct);
+        var renamed = await assistant.RenameAsync(first!.Conversation.Id, "  Mon titre  ", user, Ct);
+        Assert.Equal("Mon titre", renamed!.Title);
+        Assert.Equal("user", renamed.TitleSource);
+        await Assert.ThrowsAsync<ArgumentException>(() => assistant.RenameAsync(first.Conversation.Id, "   ", user, Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => assistant.RenameAsync(first.Conversation.Id, new string('x', 200), user, Ct));
+        var stranger = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([
+            new(System.Security.Claims.ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "test"));
+        Assert.Null(await assistant.RenameAsync(first.Conversation.Id, "Pirate", stranger, Ct));
+        Assert.Null(await assistant.RenameAsync("not-a-session", "Titre", user, Ct));
+        mesh.Factory.EnqueueReplies("{\"kind\":\"answer\",\"content\":\"ok\"}", "Réponse 2", "Titre automatique");
+        var next = await assistant.SendAsync(TitleRequest(mesh.Second.Identity.PeerId, "Suite", first.Conversation.Id), user, Ct);
+        Assert.Equal("Mon titre", next!.Conversation.Title);
+        Assert.Equal("Mon titre", (await assistant.GetAsync(first.Conversation.Id, user, Ct))!.Conversation.Title);
+    }
+
+    [Fact]
+    public async Task AssistantActivityCarriesTheConversationTitle()
+    {
+        var (mesh, assistant, user) = await TitleHarnessAsync();
+        await using var _ = mesh;
+        mesh.Factory.EnqueueReplies("{\"kind\":\"answer\",\"content\":\"ok\"}", "Réponse", "Migration de bibliothèque");
+        var request = TitleRequest(mesh.Second.Identity.PeerId, "Aide-moi");
+        var first = await assistant.SendAsync(request, user, Ct);
+        var activity = (await assistant.ActivityAsync(user, Ct)).Single(item => item.RequestId == request.RequestId);
+        Assert.Equal("Migration de bibliothèque", activity.ConversationTitle);
+        await assistant.RenameAsync(first!.Conversation.Id, "Renommée", user, Ct);
+        Assert.Equal("Renommée", (await assistant.GetActivityAsync(request.RequestId, user, Ct))!.ConversationTitle);
+    }
+
     [Fact]
     public async Task AssistantPersistsPerTurnSelectionsAndObservedModelWithoutRewritingOldTurns()
     {

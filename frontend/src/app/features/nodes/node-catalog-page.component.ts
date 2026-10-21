@@ -49,6 +49,7 @@ import {
   computed,
   effect,
   inject,
+  viewChildren,
   signal,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -102,6 +103,7 @@ import {
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { nodeCapabilityCards, nodeCapabilityFields } from '../../shared/models/node-capabilities';
+import { RecordFormActionsComponent } from '../../shared/ui/record-form-actions.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { NodeModeController } from '../../shared/services/node-mode-controller';
 import { NotificationService } from '../../shared/services/notification.service';
@@ -201,6 +203,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     MatFormFieldModule,
     MatSelectModule,
     RecordFormComponent,
+    RecordFormActionsComponent,
     LibraryNodeAccessFormComponent,
     DrawerActionButtonComponent,
     GuidedSetupComponent,
@@ -218,6 +221,15 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
   styleUrl: './node-catalog-page.component.scss',
 })
 export class NodeCatalogPageComponent {
+  private readonly recordForms = viewChildren(RecordFormComponent);
+  protected readonly actionRecordForm = computed(() =>
+    this.recordForms().find((form) => form.embedded()),
+  );
+  protected readonly actionStep = computed(() => {
+    const form = this.actionRecordForm();
+    return form ? { current: form.stepIndex() + 1, total: form.stepCount() } : null;
+  });
+
   private readonly route = inject(ActivatedRoute);
   private readonly http = inject(HttpClient);
   private readonly clusterApi = inject(ClusterApi);

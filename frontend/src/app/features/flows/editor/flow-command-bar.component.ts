@@ -259,7 +259,7 @@ import { MediaType } from '../../../shared/models/media-type';
       color: var(--text-primary);
       padding: 8px;
       border: 1px solid var(--accent);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-md);
     }
     .status-pills {
       display: flex;

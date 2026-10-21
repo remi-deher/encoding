@@ -10,6 +10,10 @@ import { LocalNodeController } from '../../shared/services/local-node-controller
 import { NotificationService } from '../../shared/services/notification.service';
 import { formatMemory } from '../../shared/models/node-hardware';
 
+const MINIMUM_PASSWORD_LENGTH = 12;
+const MAXIMUM_PASSWORD_LENGTH = 256;
+const USERNAME_PATTERN = /^[A-Za-z0-9._@-]{1,64}$/;
+
 export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
 
 @Component({
@@ -127,10 +131,95 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
 
         <!-- Colonne droite : Atelier de configuration directe -->
         <div class="setup-workbench">
-          <!-- Section 1 : Identité -->
-          <section class="workbench-card" aria-labelledby="step-identity-heading">
+          <!-- Section 1 : Compte administrateur -->
+          <section class="workbench-card" aria-labelledby="step-admin-heading">
             <div class="section-heading">
               <span class="step-pill" aria-hidden="true">1</span>
+              <div>
+                <h2 id="step-admin-heading">Créer l’administrateur</h2>
+                <p>
+                  Ce compte protège l’accès au cluster. Vous pourrez en ajouter d’autres ensuite.
+                </p>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="admin-username-input" class="field-label">Nom d’utilisateur</label>
+              <input
+                id="admin-username-input"
+                type="text"
+                class="text-input"
+                [class.invalid]="adminErrors().username"
+                [ngModel]="adminUsername()"
+                (ngModelChange)="adminUsername.set($event)"
+                maxlength="64"
+                autocomplete="username"
+                [attr.aria-invalid]="adminErrors().username ? 'true' : null"
+                aria-describedby="admin-username-error"
+              />
+              @if (adminErrors().username) {
+                <span id="admin-username-error" class="field-error">{{
+                  adminErrors().username
+                }}</span>
+              }
+            </div>
+
+            <div class="form-group">
+              <label for="admin-password-input" class="field-label">Mot de passe</label>
+              <div class="input-with-button">
+                <input
+                  id="admin-password-input"
+                  class="text-input"
+                  [class.invalid]="adminErrors().password"
+                  [type]="passwordVisible() ? 'text' : 'password'"
+                  [ngModel]="adminPassword()"
+                  (ngModelChange)="adminPassword.set($event)"
+                  autocomplete="new-password"
+                  [attr.aria-invalid]="adminErrors().password ? 'true' : null"
+                  aria-describedby="admin-password-hint"
+                />
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [attr.aria-pressed]="passwordVisible()"
+                  (click)="passwordVisible.set(!passwordVisible())"
+                >
+                  {{ passwordVisible() ? 'Masquer' : 'Afficher' }}
+                </button>
+              </div>
+              <span
+                id="admin-password-hint"
+                [class]="adminErrors().password ? 'field-error' : 'field-hint'"
+              >
+                {{ adminErrors().password || minimumPasswordLength + ' caractères minimum.' }}
+              </span>
+            </div>
+
+            <div class="form-group">
+              <label for="admin-confirm-input" class="field-label">Confirmer le mot de passe</label>
+              <input
+                id="admin-confirm-input"
+                class="text-input"
+                [class.invalid]="adminErrors().confirm"
+                [type]="passwordVisible() ? 'text' : 'password'"
+                [ngModel]="adminConfirm()"
+                (ngModelChange)="adminConfirm.set($event)"
+                autocomplete="new-password"
+                [attr.aria-invalid]="adminErrors().confirm ? 'true' : null"
+                aria-describedby="admin-confirm-error"
+              />
+              @if (adminErrors().confirm) {
+                <span id="admin-confirm-error" class="field-error">{{
+                  adminErrors().confirm
+                }}</span>
+              }
+            </div>
+          </section>
+
+          <!-- Section 2 : Identité -->
+          <section class="workbench-card" aria-labelledby="step-identity-heading">
+            <div class="section-heading">
+              <span class="step-pill" aria-hidden="true">2</span>
               <div>
                 <h2 id="step-identity-heading">Identifier cette machine</h2>
                 <p>Donnez un nom convivial pour repérer facilement ce nœud sur votre réseau.</p>
@@ -165,10 +254,10 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
             </div>
           </section>
 
-          <!-- Section 2 : Choix de l'architecture -->
+          <!-- Section 3 : Choix de l'architecture -->
           <section class="workbench-card" aria-labelledby="step-mode-heading">
             <div class="section-heading">
-              <span class="step-pill" aria-hidden="true">2</span>
+              <span class="step-pill" aria-hidden="true">3</span>
               <div>
                 <h2 id="step-mode-heading">Comment souhaitez-vous utiliser cette machine ?</h2>
                 <p>Sélectionnez l’organisation initiale de votre installation.</p>
@@ -276,7 +365,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
             </div>
           </section>
 
-          <!-- Section 3 : Finalisation contextuelle selon le mode choisi -->
+          <!-- Section 4 : Finalisation contextuelle selon le mode choisi -->
           <section class="workbench-card workbench-card--Contextual" aria-live="polite">
             @if (selectedMode() === 'standalone') {
               <div class="contextual-summary">
@@ -286,8 +375,8 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     <h3>Prêt à démarrer en mode autonome</h3>
                     <p>
                       <strong>{{ effectiveNodeName() }}</strong> assurera l’interface serveur et
-                      l’encodage local. L’accès initial est ouvert sans mot de passe (activable dans
-                      Paramètres).
+                      l’encodage local. Vous vous connecterez avec le compte administrateur créé
+                      ci-dessus.
                     </p>
                   </div>
                 </div>
@@ -306,7 +395,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
 
             @if (selectedMode() === 'createCluster') {
               <div class="section-heading">
-                <span class="step-pill" aria-hidden="true">3</span>
+                <span class="step-pill" aria-hidden="true">4</span>
                 <div>
                   <h3>Nommer votre nouveau cluster</h3>
                   <p>Ce nom sera affiché lors de l’ajout d’autres serveurs ou workers.</p>
@@ -344,7 +433,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
 
             @if (selectedMode() === 'joinCluster') {
               <div class="section-heading">
-                <span class="step-pill" aria-hidden="true">3</span>
+                <span class="step-pill" aria-hidden="true">4</span>
                 <div>
                   <h3>Connexion au cluster d’accueil</h3>
                   <p>
@@ -455,6 +544,12 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       display: grid;
       gap: var(--space-4);
     }
+    :host {
+      display: block;
+      min-height: 100%;
+      padding: var(--space-4);
+      background: radial-gradient(ellipse at 50% 0, var(--accent-soft), transparent 65%);
+    }
     .setup-progress {
       border-radius: var(--radius-pill);
       overflow: hidden;
@@ -467,7 +562,6 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       border-radius: var(--radius-md);
       background: var(--danger-soft);
       color: var(--danger);
-      border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
       font-size: var(--font-body);
     }
     .setup-grid {
@@ -481,10 +575,11 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       display: grid;
       gap: var(--space-4);
       padding: var(--space-5);
-      border-radius: var(--radius-2xl, 24px);
-      background: var(--surface-container-low);
-      border: 1px solid var(--border-subtle);
-      box-shadow: var(--shadow-soft);
+      border-radius: 28px;
+      background: var(--surface-container);
+      box-shadow:
+        0 1px 2px rgb(0 0 0 / 8%),
+        0 8px 28px rgb(0 0 0 / 10%);
     }
     .setup-telemetry {
       position: sticky;
@@ -540,8 +635,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
     .hardware-bento {
       padding: var(--space-4);
       border-radius: var(--radius-lg);
-      background: var(--surface-container);
-      border: 1px solid var(--border-subtle);
+      background: var(--surface-container-low);
     }
     .hardware-bento-header,
     .section-heading,
@@ -598,7 +692,6 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       padding: 10px 12px;
       border-radius: var(--radius-md);
       background: var(--surface-container-high);
-      border: 1px solid var(--border-subtle);
     }
     .hardware-tile--wide {
       grid-column: 1 / -1;
@@ -626,7 +719,6 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
     }
     .workbench-card--Contextual {
       background: color-mix(in srgb, var(--surface-container) 85%, var(--accent-soft));
-      border-color: color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
     }
     .step-pill,
     .status-check {
@@ -667,16 +759,25 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
     .text-input {
       min-height: 44px;
       padding: 10px 14px;
-      border-radius: var(--radius-md);
+      border-radius: 12px;
       border: 1px solid var(--border-strong);
-      background: var(--surface-container-high);
+      background: transparent;
       color: var(--text-primary);
-      font-size: var(--font-body);
+      font-size: 16px;
       outline: none;
     }
     .text-input:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-soft);
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+    .text-input.invalid {
+      border-color: var(--danger);
+      box-shadow: inset 0 0 0 1px var(--danger);
+    }
+    .field-error {
+      margin: 0;
+      font-size: 12px;
+      color: var(--danger);
     }
     .Quick-suggestions {
       display: flex;
@@ -712,13 +813,17 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       text-align: left;
       padding: var(--space-4);
       border-radius: var(--radius-lg);
-      background: var(--surface-container);
-      border: 2px solid var(--border-subtle);
+      background: var(--surface-container-low);
+      border: 2px solid transparent;
       color: inherit;
       cursor: pointer;
     }
+    .mode-card:focus-visible {
+      outline: 3px solid var(--tertiary);
+      outline-offset: 2px;
+    }
     .mode-card.selected {
-      background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface-container));
+      background: var(--accent-soft);
       border-color: var(--accent);
     }
     .mode-card-top,
@@ -769,14 +874,13 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
     .cluster-card,
     .target-confirmed-box {
       padding: var(--space-3) var(--space-4);
-      background: var(--surface-container);
+      background: var(--surface-container-low);
       border-radius: var(--radius-md);
-      border: 1px solid var(--border-subtle);
     }
     .target-confirmed-box {
       display: grid;
       gap: 8px;
-      border-color: var(--accent);
+      outline: 1px solid var(--accent);
     }
     .target-badge,
     .code-label {
@@ -823,6 +927,36 @@ export class SetupWizardPageComponent {
   protected readonly selectedMode = signal<SetupOperationMode>('standalone');
   protected readonly clusterName = signal('');
   protected readonly clusterAddress = signal('');
+  protected readonly adminUsername = signal('admin');
+  protected readonly adminPassword = signal('');
+  protected readonly adminConfirm = signal('');
+  protected readonly passwordVisible = signal(false);
+  protected readonly adminSubmitted = signal(false);
+  protected readonly minimumPasswordLength = MINIMUM_PASSWORD_LENGTH;
+  /** Mêmes règles que le serveur ; les erreurs apparaissent après saisie ou première validation. */
+  protected readonly adminErrors = computed(() => {
+    const username = this.adminUsername().trim();
+    const password = this.adminPassword();
+    const confirm = this.adminConfirm();
+    const shown = this.adminSubmitted();
+    return {
+      username: USERNAME_PATTERN.test(username)
+        ? ''
+        : 'Le nom d’utilisateur compte de 1 à 64 caractères : lettres, chiffres, point, tiret, tiret bas ou @.',
+      password:
+        password.length > MAXIMUM_PASSWORD_LENGTH
+          ? `Le mot de passe ne peut pas dépasser ${MAXIMUM_PASSWORD_LENGTH} caractères.`
+          : password.length < MINIMUM_PASSWORD_LENGTH && (shown || password.length > 0)
+            ? `Le mot de passe doit contenir au moins ${MINIMUM_PASSWORD_LENGTH} caractères.`
+            : '',
+      confirm:
+        confirm.length > 0 || shown
+          ? confirm === password
+            ? ''
+            : 'Les deux mots de passe sont différents.'
+          : '',
+    };
+  });
 
   protected readonly nodeNameSuggestions = ['Serveur Salon', 'Worker GPU', 'NAS Médias'] as const;
 
@@ -1000,9 +1134,19 @@ export class SetupWizardPageComponent {
     clusterName?: string;
   }): Promise<void> {
     this.errorMessage.set('');
+    this.adminSubmitted.set(true);
+    const errors = this.adminErrors();
+    if (errors.username || errors.password || errors.confirm) {
+      document.getElementById('step-admin-heading')?.scrollIntoView?.({ block: 'center' });
+      return;
+    }
     this.busy.set(true);
     try {
-      await this.auth.setup(payload);
+      await this.auth.setup({
+        ...payload,
+        username: this.adminUsername().trim(),
+        password: this.adminPassword(),
+      });
       this.notifications.show('Initialisation terminée avec succès !');
       await this.router.navigate(['/']);
     } catch (error) {

@@ -18,7 +18,10 @@ public sealed record AiAssistantConversation(
     DateTimeOffset UpdatedAt,
     IReadOnlyList<AiAssistantSource>? AdditionalSources = null,
     string? Model = null,
-    string? ReasoningEffort = null, Guid? NodeId = null);
+    string? ReasoningEffort = null, Guid? NodeId = null,
+    string? TitleSource = null);
+
+public sealed record AiAssistantRenameRequest(string Title);
 
 public sealed record AiAssistantModelOption(string Provider, string? Model, string Label,
     IReadOnlyList<string> ReasoningEfforts, Guid? NodeId = null, string? NodeName = null,
@@ -105,7 +108,8 @@ public sealed record AiAssistantActivity(
     string Operation = "assistant",
     IReadOnlyList<string>? Tools = null,
     string? Progress = null,
-    string? ProgressDetail = null);
+    string? ProgressDetail = null,
+    string? ConversationTitle = null);
 
 // Only exchanged over the authenticated, encrypted peer transport; never accepted from a public HTTP body.
 public sealed record AiAssistantForwardRequest(AiAssistantMessageRequest Request, Guid OwnerId, bool IsAdmin);

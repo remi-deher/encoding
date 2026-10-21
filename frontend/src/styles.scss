@@ -236,6 +236,13 @@ html[data-theme='dark'] {
   --mat-outlined-button-outline-color: var(--border-strong);
   --mat-outlined-button-label-text-color: var(--text-primary);
 
+  /* Champs de saisie, listes déroulantes et menus : coins arrondis Material 3 */
+  --mat-form-field-outlined-container-shape: var(--radius-lg);
+  --mat-form-field-filled-container-shape: var(--radius-lg);
+  --mat-select-container-shape: var(--radius-lg);
+  --mat-autocomplete-container-shape: var(--radius-lg);
+  --mat-menu-container-shape: var(--radius-lg);
+
   /* Cible tactile minimale recommandée */
   --touch-target: 48px;
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;

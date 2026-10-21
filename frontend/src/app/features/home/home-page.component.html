@@ -6,7 +6,11 @@
       [modal]="true"
       title="Créer un flow"
       description="Choisissez un nom, un média et un point de départ avant d’ouvrir l’éditeur."
+      icon="+"
+      eyebrow="Nouveau"
+      [step]="flowStep()"
       [content]="flowFormTemplate()"
+      [footerActions]="flowFooterTemplate()"
       (closed)="closeFlowCreation()"
     >
       <div drawer-main>
@@ -429,11 +433,18 @@
     @if (flowCreationForm(); as form) {
       <app-record-form
         [data]="form"
+        [embedded]="true"
         (submitted)="startFlow($event)"
         (cancelled)="closeFlowCreation()"
       />
     }
   } @placeholder {
     <p role="status">Préparation du formulaire…</p>
+  }
+</ng-template>
+
+<ng-template #flowFooter>
+  @if (flowRecordForm(); as form) {
+    <app-record-form-actions [form]="form" />
   }
 </ng-template>
