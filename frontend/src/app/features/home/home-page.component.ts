@@ -84,6 +84,12 @@ export class HomePageComponent {
   >(null);
   protected readonly pageActionsTemplate = viewChild<TemplateRef<unknown>>('pageActions');
   protected readonly flowFormTemplate = viewChild<TemplateRef<unknown>>('flowForm');
+  protected readonly flowFooterTemplate = viewChild<TemplateRef<unknown>>('flowFooter');
+  protected readonly flowRecordForm = viewChild(RecordFormComponent);
+  protected readonly flowStep = computed(() => {
+    const form = this.flowRecordForm();
+    return form ? { current: form.stepIndex() + 1, total: form.stepCount() } : null;
+  });
   protected readonly homeContentTemplate = viewChild<TemplateRef<unknown>>('homeContent');
 
   protected async openFlowCreation(): Promise<void> {

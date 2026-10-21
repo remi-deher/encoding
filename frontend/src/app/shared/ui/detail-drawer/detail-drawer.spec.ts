@@ -59,3 +59,33 @@ describe('DetailDrawerComponent', () => {
     expect(sidebar.hasAttribute('inert')).toBe(false);
   });
 });
+
+describe('DetailDrawerComponent header template', () => {
+  function render(inputs: Record<string, unknown>) {
+    const fixture = TestBed.createComponent(DetailDrawerComponent);
+    for (const [key, value] of Object.entries(inputs)) {
+      fixture.componentRef.setInput(key, value);
+    }
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('shows no icon for the neutral variant and the variant glyph otherwise', () => {
+    expect(render({ opened: true }).querySelector('.drawer-icon')).toBeNull();
+    const danger = render({ opened: true, variant: 'danger' });
+    expect(danger.querySelector('.drawer-icon')?.textContent?.trim()).toBe('!');
+    expect(danger.querySelector('.drawer-header_danger')).not.toBeNull();
+  });
+
+  it('prefers an explicit icon over the variant glyph', () => {
+    const element = render({ opened: true, variant: 'info', icon: '+' });
+    expect(element.querySelector('.drawer-icon')?.textContent?.trim()).toBe('+');
+  });
+
+  it('exposes the step progress to assistive technology', () => {
+    const element = render({ opened: true, step: { current: 1, total: 2 } });
+    const bar = element.querySelector('.drawer-progress');
+    expect(bar?.getAttribute('aria-label')).toBe('Étape 1 sur 2');
+    expect(bar?.getAttribute('aria-valuenow')).toBe('1');
+  });
+});
