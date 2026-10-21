@@ -233,6 +233,39 @@ public sealed class AiClusterTests
     }
 
     [Fact]
+    public async Task LostCoordinatorSessionContinuesOnThisNodeWithItsValidatedHistory()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var lost = Guid.NewGuid();
+        var sessionId = $"{lost:N}.{Guid.NewGuid():N}";
+        var done = new AiSessionTurn(Guid.NewGuid(), "first question", "first answer", null, DateTimeOffset.UtcNow);
+        await mesh.First.Store.SaveAsync("session/" + sessionId, new AiSessionState(sessionId, "openai", "instructions", [done]), Ct);
+        var prompt = new AiPrompt("instructions", "suite", SessionId: sessionId, RequestId: Guid.NewGuid());
+
+        var result = await mesh.First.NewService().GenerateAsync("openai", prompt, Ct);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Contains("first answer", mesh.Factory.LastPrompt);
+        Assert.Equal(mesh.First.Identity.PeerId.ToString("N"), await mesh.First.Store.ReadAsync<string>(AiClusterService.CoordinatorKey(sessionId), Ct));
+        Assert.Equal(2, (await mesh.First.Service.GetSessionAsync(sessionId, Ct))!.Turns.Count);
+    }
+
+    [Fact]
+    public async Task SessionWithoutLocalCheckpointIsNeverTakenOverFromAnEmptyContext()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var sessionId = $"{Guid.NewGuid():N}.{Guid.NewGuid():N}";
+        var prompt = new AiPrompt("instructions", "suite", SessionId: sessionId, RequestId: Guid.NewGuid());
+
+        var result = await mesh.First.NewService().GenerateAsync("openai", prompt, Ct);
+
+        Assert.False(result.Success);
+        Assert.Contains("Coordinateur de session indisponible", result.ErrorMessage);
+        Assert.Null(await mesh.First.Store.ReadAsync<string>(AiClusterService.CoordinatorKey(sessionId), Ct));
+        Assert.Equal(0, mesh.Factory.Inferences);
+    }
+
+    [Fact]
     public async Task UnsignedMeshRequestsAndExpiredAttemptsCannotInvokeModel()
     {
         await using var mesh = await Mesh.CreateAsync();
