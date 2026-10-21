@@ -126,4 +126,10 @@ Le panneau **Réplication des connexions** (Paramètres → IA) indique, pour Co
 
 `GET /api/v1/tools/ai/usage?days=30` (administrateur, 1 à 365 jours) agrège les tokens rapportés par les fournisseurs sur les sessions répliquées (assistant et flows), par nœud ayant exécuté la demande puis par fournisseur, avec un total global. Les échanges sans consommation rapportée sont comptés à part et jamais estimés ; les anciens échanges sans nœud exécutant apparaissent sous « Nœud non enregistré ». Au plus 5 000 sessions récentes sont lues (`truncated` l'indique). La conservation suit celle des conversations (90 jours par défaut) : une période plus longue ne remonte pas plus loin.
 
+Le tiroir d'un fournisseur (**Configurer**) affiche la réplication par nœud de ce seul fournisseur. **Déconnecter le cluster** demande confirmation : la suppression est publiée au cluster, y compris pour les nœuds injoignables, qui la reçoivent à leur retour.
+
+### Jetons API et MCP : propagation par nœud
+
+`GET /api/v1/tokens/replication` (administrateur) demande à chaque nœud la liste des jetons qu'il connaît (identifiant et état de révocation seulement, jamais la valeur ni son condensat) par le transport IA signé et chiffré. L'onglet **Jetons d'API** affiche « Présent sur N nœuds sur M » ou, pour un jeton révoqué, « Révocation reçue par N nœuds sur M ». Un nœud qui ne répond pas est compté « injoignable » : il n'est jamais présumé à jour, et une révocation n'est pas garantie effective sur ce nœud tant qu'il n'a pas répondu. Sur un nœud seul, rien n'est affiché. La liste étant celle des nœuds joignables par ce transport, un nœud retiré du cluster n'y figure pas.
+
 Références : [Codex App Server](https://developers.openai.com/codex/app-server), [changelog officiel du SDK Claude](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md), déclarations `SDKControlGetUsageRequest` / `SDKControlGetUsageResponse` du paquet npm officiel 0.3.302.

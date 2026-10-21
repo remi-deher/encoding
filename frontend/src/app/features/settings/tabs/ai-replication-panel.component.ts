@@ -129,29 +129,34 @@ const REPLICATED = ['codex-cli', 'claude-cli', 'openai'] as const;
 })
 export class AiReplicationPanelComponent {
   readonly view = input.required<AiClusterView>();
+  /** Limite l'affichage à un fournisseur (tiroir de détail). */
+  readonly only = input<string | null>(null);
   protected readonly datePipe = new DatePipe('fr');
 
   readonly rows = computed<readonly ProviderRow[]>(() => {
     const nodes = this.view().nodes;
     if (!nodes.length) return [];
-    return [...REPLICATED, 'ollama'].map((id) => {
-      const replicated = id !== 'ollama';
-      const latest = Math.max(
-        0,
-        ...nodes.flatMap(
-          (node) =>
-            node.credentials?.find((c) => c.provider === id && c.state !== 'absent')?.revision ?? 0,
-        ),
-      );
-      const states = nodes.map((node) => this.nodeState(node, id, replicated, latest));
-      return {
-        id,
-        name: aiTypeLabel(id),
-        replicated,
-        reconnect: nodes.filter((node) => node.reconnect?.includes(id)).length,
-        nodes: states,
-      };
-    });
+    return [...REPLICATED, 'ollama']
+      .filter((id) => !this.only() || id === this.only())
+      .map((id) => {
+        const replicated = id !== 'ollama';
+        const latest = Math.max(
+          0,
+          ...nodes.flatMap(
+            (node) =>
+              node.credentials?.find((c) => c.provider === id && c.state !== 'absent')?.revision ??
+              0,
+          ),
+        );
+        const states = nodes.map((node) => this.nodeState(node, id, replicated, latest));
+        return {
+          id,
+          name: aiTypeLabel(id),
+          replicated,
+          reconnect: nodes.filter((node) => node.reconnect?.includes(id)).length,
+          nodes: states,
+        };
+      });
   });
 
   private nodeState(

@@ -37,6 +37,7 @@ import {
   AiClusterModelCatalog,
   AiDiscoveredModel,
 } from '../../../shared/models/ai-tools';
+import { ConfirmationDialogComponent } from '../../../shared/ui/confirmation-dialog.component';
 import { DeviceAuthDialogComponent } from '../../../shared/ui/device-auth-dialog.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { aiEffortLabel, aiTypeLabel } from '../../ai/components/ai-model-selection';
@@ -582,11 +583,34 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
   }
   revoke(id: string): void {
     if (!this.isAdmin()) return;
+    const count = this.cluster()?.nodes.length ?? 1;
+    const message =
+      id === 'codex-cli' || id === 'claude-cli'
+        ? count > 1
+          ? `La connexion sera supprimée sur les ${count} nœuds du cluster, y compris ceux qui sont injoignables : ils la perdront à leur retour. Les flows qui utilisent ce fournisseur échoueront tant qu’une nouvelle connexion n’est pas enregistrée.`
+          : 'La connexion sera supprimée. Les flows qui utilisent ce fournisseur échoueront tant qu’une nouvelle connexion n’est pas enregistrée.'
+        : 'La connexion sera supprimée.';
+    this.dialog
+      .open(ConfirmationDialogComponent, {
+        data: {
+          title: `Déconnecter ${this.providerName(id)} ?`,
+          eyebrow: count > 1 ? 'Action sur le cluster' : undefined,
+          message,
+          confirmLabel: 'Déconnecter',
+          variant: 'danger',
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (confirmed === true) this.disconnect(id);
+      });
+  }
+  private disconnect(id: string): void {
     this.connecting.set(true);
     this.aiService.revokeAuth(id).subscribe({
       next: () => {
         this.connecting.set(false);
-        this.notifications.show('Connexion locale supprimée.');
+        this.notifications.show('Connexion supprimée ; la suppression se propage au cluster.');
         this.refreshTools();
       },
       error: () => {

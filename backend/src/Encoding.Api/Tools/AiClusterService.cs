@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text;
 using Encoding.Contracts.Tools;
 using Encoding.Api.Nodes;
+using Encoding.Contracts.Auth;
 
 namespace Encoding.Api.Tools;
 
@@ -196,10 +197,32 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         var remote = await Task.WhenAll(peers);
         return new(new[] { await local }.Concat(remote.OfType<AiNodeQuotas>()).DistinctBy(n => n.NodeId).ToArray());
     }
+    private async Task<ApiTokenReplicationNode> LocalApiTokenStateAsync(CancellationToken ct) =>
+        new(transport.LocalId, await localNode.ResolveDisplayNameAsync(ct) ?? configuration["Node:Name"] ?? Environment.MachineName, true,
+            services is null ? [] : await services.GetRequiredService<Encoding.Api.Auth.ApiTokenRepository>().ReplicationStateAsync(ct));
+    /// <summary>Jetons connus de chaque nœud (identifiant et révocation) ; un pair injoignable est signalé, pas supposé à jour.</summary>
+    public async Task<ApiTokenReplicationView> ApiTokenReplicationAsync(CancellationToken ct)
+    {
+        var local = LocalApiTokenStateAsync(ct);
+        var peers = (await transport.PeersAsync(ct)).Select(async url =>
+        {
+            try { return await transport.CallAsync<ApiTokenReplicationNode>(url, "api-token-state", new { }, TimeSpan.FromSeconds(15), ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Un pair qui ne répond pas est signalé (état inconnu) au lieu d'être supposé à jour.
+                return new ApiTokenReplicationNode(Guid.Empty, Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url, false, null);
+            }
+        }).ToArray();
+        var remote = await Task.WhenAll(peers);
+        var answered = remote.Where(n => n.Reachable).DistinctBy(n => n.NodeId);
+        var nodes = new[] { await local }.Concat(answered).DistinctBy(n => n.NodeId).Concat(remote.Where(n => !n.Reachable)).ToArray();
+        return new(nodes);
+    }
     public async Task<object> DispatchAsync(string operation, JsonElement value, CancellationToken ct) => operation switch
     {
         "availability" => await LocalAsync(ct),
         "quotas" => await LocalQuotasAsync(ct),
+        "api-token-state" => await LocalApiTokenStateAsync(ct),
         "assistant-cancel" => CancelForwardedAssistant(value.Deserialize<AiAssistantForwardCancel>()!),
         "assistant-message" => await ForwardAssistantAsync(value.Deserialize<AiAssistantForwardRequest>()!, ct),
         "assistant-business-operation" => await ForwardBusinessOperationAsync(value.Deserialize<AiAssistantForwardConfirm>()!, ct),

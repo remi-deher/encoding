@@ -61,3 +61,9 @@ public sealed record CreatedApiTokenResponse(
     string Token,
     IReadOnlyList<string>? Scopes = null);
 
+
+/// <summary>Jeton connu d'un nœud : identifiant et état de révocation seulement, jamais de valeur ni de condensat.</summary>
+public sealed record ApiTokenReplicationEntry(Guid Id, bool Revoked);
+/// <summary>État des jetons déclaré par un nœud ; <c>Tokens</c> vaut null pour un nœud injoignable (état inconnu).</summary>
+public sealed record ApiTokenReplicationNode(Guid NodeId, string Name, bool Reachable, IReadOnlyList<ApiTokenReplicationEntry>? Tokens);
+public sealed record ApiTokenReplicationView(IReadOnlyList<ApiTokenReplicationNode> Nodes);
