@@ -7,6 +7,13 @@ import { LocalNodeController } from '../../shared/services/local-node-controller
 import { NotificationService } from '../../shared/services/notification.service';
 import { LocalNodeStatus } from '../../shared/models/local-node';
 
+const VALID_PASSWORD = 'un-mot-de-passe-long';
+
+function fillAdmin(component: SetupWizardPageComponent): void {
+  component['adminPassword'].set(VALID_PASSWORD);
+  component['adminConfirm'].set(VALID_PASSWORD);
+}
+
 describe('SetupWizardPageComponent', () => {
   let setupFn: ReturnType<typeof vi.fn>;
   let navigateFn: ReturnType<typeof vi.fn>;
@@ -138,12 +145,15 @@ describe('SetupWizardPageComponent', () => {
     const fixture = TestBed.createComponent(SetupWizardPageComponent);
     fixture.detectChanges();
     const component = fixture.componentInstance;
+    fillAdmin(component);
 
     await component['submitStandalone']();
 
     expect(setupFn).toHaveBeenCalledWith({
       nodeDisplayName: 'Serveur Salon',
       mode: 'standalone',
+      username: 'admin',
+      password: VALID_PASSWORD,
     });
     expect(navigateFn).toHaveBeenCalledWith(['/']);
   });
@@ -153,6 +163,7 @@ describe('SetupWizardPageComponent', () => {
     fixture.detectChanges();
     const component = fixture.componentInstance;
 
+    fillAdmin(component);
     component['selectedMode'].set('createCluster');
     component['clusterName'].set('Mon Cluster Maison');
     await component['submitCreateCluster']();
@@ -161,6 +172,8 @@ describe('SetupWizardPageComponent', () => {
       nodeDisplayName: 'Serveur Salon',
       mode: 'createCluster',
       clusterName: 'Mon Cluster Maison',
+      username: 'admin',
+      password: VALID_PASSWORD,
     });
     expect(navigateFn).toHaveBeenCalledWith(['/']);
   });
@@ -177,10 +190,42 @@ describe('SetupWizardPageComponent', () => {
 
     expect(localController.sendRequest).toHaveBeenCalledWith('Worker Garage');
 
+    fillAdmin(component);
     await component['submitJoinFinish']();
     expect(setupFn).toHaveBeenCalledWith({
       nodeDisplayName: 'Worker Garage',
       mode: 'joinCluster',
+      username: 'admin',
+      password: VALID_PASSWORD,
     });
+  });
+
+  it('refuses to finish without a valid administrator account', async () => {
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const el = fixture.nativeElement as HTMLElement;
+
+    await component['submitStandalone']();
+    fixture.detectChanges();
+    expect(setupFn).not.toHaveBeenCalled();
+    expect(el.textContent).toContain('au moins 12 caractères');
+
+    component['adminPassword'].set('court');
+    component['adminConfirm'].set('court');
+    await component['submitStandalone']();
+    expect(setupFn).not.toHaveBeenCalled();
+
+    component['adminPassword'].set(VALID_PASSWORD);
+    component['adminConfirm'].set('autre-mot-de-passe');
+    await component['submitStandalone']();
+    fixture.detectChanges();
+    expect(setupFn).not.toHaveBeenCalled();
+    expect(el.textContent).toContain('Les deux mots de passe sont différents.');
+
+    component['adminConfirm'].set(VALID_PASSWORD);
+    component['adminUsername'].set('nom invalide!');
+    await component['submitStandalone']();
+    expect(setupFn).not.toHaveBeenCalled();
   });
 });
