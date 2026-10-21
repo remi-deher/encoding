@@ -39,6 +39,11 @@
   (actionClosed)="pageTab() === 'groups' ? closeGroupForm() : closeCreateNode()"
   [showToolbar]="pageTab() === 'cluster' && !local.standalone() && clusterIdentity() !== null"
   filterLabel="Membres du cluster actuel"
+  [searchLayout]="pageTab() === 'cluster' ? 'centered-sheet' : 'end'"
+  searchLabel="Rechercher un nœud par nom ou identifiant"
+  [searchQuery]="nodeSearchQuery()"
+  (searchQueryChange)="nodeSearchQuery.set($event)"
+  [filterCount]="activeFilters().length"
   [showPageHeader]="pageTab() !== 'node'"
 >
   <ng-template #pageActions>
@@ -176,6 +181,23 @@
       </mat-select>
     </mat-form-field>
   </div>
+  @if (activeFilters().length > 0) {
+    <div catalogue-active-filters class="active-filters" role="group" aria-label="Filtres actifs">
+      @for (filter of activeFilters(); track filter.id) {
+        <button
+          type="button"
+          class="filter-chip"
+          [attr.aria-label]="'Retirer le filtre ' + filter.label"
+          (click)="filter.clear()"
+        >
+          {{ filter.label }} <span aria-hidden="true">✕</span>
+        </button>
+      }
+      <button type="button" class="filter-chip is-plain" (click)="clearNodeFilters()">
+        Tout effacer
+      </button>
+    </div>
+  }
   <div catalogue-table>
     @if (pageTab() === 'groups') {
       <div class="groups-grid">

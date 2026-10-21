@@ -10,6 +10,7 @@
   (actionClosed)="closeFlowCreation()"
   filterLabel=""
   searchLabel="Rechercher un flow"
+  searchLayout="centered"
   [showToolbar]="totalCount() > 0"
   [emptyState]="catalogState() === 'ready' && totalCount() === 0 ? emptyState : null"
   (emptyStateAction)="openFlowCreation()"

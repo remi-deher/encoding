@@ -261,3 +261,27 @@ p[role='note'] {
   padding-top: var(--space-3);
 }
 
+.active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.filter-chip {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: var(--font-label);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.filter-chip.is-plain {
+  background: var(--surface-container);
+  color: var(--text-secondary);
+  font-weight: 400;
+}
