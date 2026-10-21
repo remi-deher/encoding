@@ -138,11 +138,15 @@ test('the first-run setup studio completes standalone onboarding and passes WCAG
   );
   expect(blocking.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
 
+  await page.getByLabel('Mot de passe', { exact: true }).fill('un-mot-de-passe-long');
+  await page.getByLabel('Confirmer le mot de passe', { exact: true }).fill('un-mot-de-passe-long');
   await page.getByRole('button', { name: /Accéder au tableau de bord/ }).click();
   await expect(page).toHaveURL(/\/$/);
   expect(setupPayload).toMatchObject({
     nodeDisplayName: 'Serveur Salon',
     mode: 'standalone',
+    username: 'admin',
+    password: 'un-mot-de-passe-long',
   });
 });
 
