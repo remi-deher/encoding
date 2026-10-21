@@ -11,8 +11,7 @@ import {
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
+import { SearchFieldComponent } from '../../shared/ui/search-field.component';
 import { MatTabsModule } from '@angular/material/tabs';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable, catchError, of, switchMap, timer } from 'rxjs';
@@ -82,8 +81,7 @@ const AI_REFRESH_MS = 15000;
     ExecutionPipelineLogsComponent,
     IconComponent,
     MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
+    SearchFieldComponent,
     MatTabsModule,
     PageHeaderComponent,
     RouterLink,
@@ -384,9 +382,6 @@ export class ActivityPageComponent {
   protected setGroup(group: GroupFilter): void {
     this.groupFilter.set(group);
     this.doneLimit.set(DONE_PAGE_SIZE);
-  }
-  protected onSearch(event: Event): void {
-    this.search.set((event.target as HTMLInputElement).value);
   }
   protected showMoreDone(): void {
     this.doneLimit.update((limit) => limit + DONE_PAGE_SIZE);

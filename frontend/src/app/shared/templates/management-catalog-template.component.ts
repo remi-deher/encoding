@@ -7,10 +7,9 @@ import {
   output,
 } from '@angular/core';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
+import { SearchFieldComponent } from '../ui/search-field.component';
 import { PageHeaderComponent } from '../ui/page-header.component';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 
 export interface CatalogEmptyState {
   readonly icon: string;
@@ -25,13 +24,7 @@ export interface CatalogEmptyState {
 @Component({
   selector: 'app-management-catalog-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    DetailDrawerComponent,
-    MatButtonModule,
-    PageHeaderComponent,
-    MatFormFieldModule,
-    MatInputModule,
-  ],
+  imports: [DetailDrawerComponent, MatButtonModule, PageHeaderComponent, SearchFieldComponent],
   template: `
     <app-detail-drawer
       [opened]="actionOpen() || detailOpen()"
@@ -63,19 +56,13 @@ export interface CatalogEmptyState {
                 <div class="catalog-toolbar-row">
                   <ng-content select="[catalogue-filters]" />
                   @if (searchLabel()) {
-                    <mat-form-field
-                      appearance="outline"
-                      subscriptSizing="dynamic"
+                    <app-search-field
                       class="catalog-search"
-                    >
-                      <mat-label>{{ searchLabel() }}</mat-label>
-                      <input
-                        matInput
-                        type="search"
-                        [value]="searchQuery()"
-                        (input)="onSearchInput($event)"
-                      />
-                    </mat-form-field>
+                      variant="bar"
+                      [label]="searchLabel()"
+                      [value]="searchQuery()"
+                      (valueChange)="searchQueryChange.emit($event)"
+                    />
                   }
                 </div>
               </div>
@@ -162,10 +149,6 @@ export class ManagementCatalogTemplateComponent {
     read: TemplateRef,
   });
   protected readonly actionContent = contentChild('actionContent', { read: TemplateRef });
-
-  protected onSearchInput(event: Event): void {
-    this.searchQueryChange.emit((event.target as HTMLInputElement).value);
-  }
 
   protected onDrawerClosed(): void {
     if (this.actionOpen()) this.actionClosed.emit();
