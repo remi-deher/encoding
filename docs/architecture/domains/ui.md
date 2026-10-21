@@ -30,6 +30,9 @@ Règles obligatoires : [UI_RULES.md](../../../UI_RULES.md). Ce fichier consigne 
 ## Page Nœuds
 Voir [cluster.md](cluster.md) : onglets **Ce nœud** / **Cluster**, cartes de membres (accélérateur, matériel déclaré, traitements), actions groupées, assistant de rattachement guidé, tiroir de fiche. Pas de charge CPU/GPU affichée tant qu'aucune source réelle n'existe. Un accélérateur seulement détecté (non vérifié par mire) n'est jamais présenté comme utilisable.
 
+## Page Activité
+Route `/activity` (anciennes `/tasks` et `/ai/activity` redirigées, filtres `?view=` et `?type=ai` conservés) : une seule liste pour les exécutions de flows et les demandes de l'assistant IA, groupée par état (en cours, à traiter, erreurs, annulés, terminés), filtres par type et par état, recherche, détail dans un tiroir (synthèse, pipeline, événements, résultats pour une exécution ; fiche et lien de conversation pour une demande IA). Annuler/relancer se fait un par un (le tiroir ou le bouton Relancer d'une ligne en erreur) ; la sélection multiple de l'ancien tableau n'existe plus. Non vérifié en navigateur réel.
+
 ## Autres pages
 Console de logs système (filtres de sévérité, recherche, pause, auto-scroll intelligent, export) ; scripts (liste en cartes, éditeur en tiroir, restauration dans le brouillon) ; IA & fournisseurs ; Plugins (configuration globale, Store).
 

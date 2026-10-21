@@ -89,7 +89,7 @@
                 ? state().status === 'error'
                 : executionState().status === 'error'
             "
-            [routerLink]="metric.view === null ? '/libraries' : '/tasks'"
+            [routerLink]="metric.view === null ? '/libraries' : '/activity'"
             [queryParams]="metric.view ? { view: metric.view } : {}"
           >
             <span>{{ metric.label }}</span
@@ -110,7 +110,7 @@
                 <span class="count">{{ count(executionState().data?.activeCount) }}</span>
               </h2>
             </div>
-            <a class="subtle-link" routerLink="/tasks"
+            <a class="subtle-link" routerLink="/activity"
               >Toutes les tâches <span aria-hidden="true"><app-icon name="forward" /></span
             ></a>
           </div>
@@ -134,7 +134,7 @@
             }
           </div>
           @if (remainingActive() > 0) {
-            <a class="remaining-link" routerLink="/tasks" [queryParams]="{ view: 'active' }"
+            <a class="remaining-link" routerLink="/activity" [queryParams]="{ view: 'active' }"
               >{{ remainingActive() }}
               {{ remainingActive() === 1 ? 'autre traitement' : 'autres traitements' }} en cours
               <app-icon name="outward"
@@ -207,7 +207,7 @@
                 examiner</strong
               >
               <p>Consultez les erreurs avant de relancer les traitements.</p>
-              <a routerLink="/tasks" [queryParams]="{ view: 'errors' }"
+              <a routerLink="/activity" [queryParams]="{ view: 'errors' }"
                 >Examiner les échecs <app-icon name="outward"
               /></a>
             </aside>
@@ -239,7 +239,7 @@
             <div>
               <h2 id="activity-heading">Derniers traitements terminés</h2>
             </div>
-            <a class="subtle-link" routerLink="/tasks" [queryParams]="{ view: 'history' }"
+            <a class="subtle-link" routerLink="/activity" [queryParams]="{ view: 'history' }"
               >Historique <span aria-hidden="true"><app-icon name="forward" /></span
             ></a>
           </div>
@@ -357,7 +357,7 @@
         <section class="ai-overview-panel surface-panel" aria-labelledby="ai-activity-heading">
           <div class="panel-heading">
             <h2 id="ai-activity-heading">Activité récente</h2>
-            <a class="subtle-link" routerLink="/ai/activity"
+            <a class="subtle-link" routerLink="/activity" [queryParams]="{ type: 'ai' }"
               >Toute l’activité <span aria-hidden="true"><app-icon name="forward" /></span
             ></a>
           </div>
