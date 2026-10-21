@@ -6,6 +6,7 @@ Documents opérationnels (procédures, supervision, suivis). Pour l'état du sys
 | --- | --- | --- | --- |
 | [release.md](release.md) | Publication des images Docker, versions, installation de l'image unique | cluster | à jour |
 | [backup-restore.md](backup-restore.md) | Sauvegarde et restauration SQLite, volumes, perte d'un nœud | replication-storage | à jour |
+| [reverse-proxy.md](reverse-proxy.md) | Reverse proxy, en-têtes de sécurité, proxies de confiance, ports | auth-ops | à jour ; non testé derrière un vrai proxy |
 | [monitoring.md](monitoring.md) | Santé, métriques Prometheus, alertes, journaux, rétention | auth-ops | à jour |
 | [ai-providers.md](ai-providers.md) | Installation et connexion des fournisseurs IA | ai | à jour |
 | [ai-metadata-enrichment.md](ai-metadata-enrichment.md) | Bloc d'enrichissement IA des métadonnées | ai, plugins | à jour |

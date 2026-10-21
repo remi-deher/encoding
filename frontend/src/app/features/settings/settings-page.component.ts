@@ -23,14 +23,16 @@ import { McpServerTabComponent } from './tabs/mcp-server-tab.component';
 import { WebhooksTabComponent } from './tabs/webhooks-tab.component';
 import { MetricsTabComponent } from './tabs/metrics-tab.component';
 import { SystemTabComponent } from './tabs/system-tab.component';
+import { NetworkTabComponent } from './tabs/network-tab.component';
 import { AppearanceTabComponent } from './tabs/appearance-tab.component';
 import { SettingsEditor } from './settings-editor';
 
-export type SettingsMainTab = 'interface' | 'access' | 'connections' | 'operations';
+export type SettingsMainTab = 'interface' | 'access' | 'connections' | 'network' | 'operations';
 export function settingsDomain(value: string | null): SettingsMainTab {
   if (['access', 'security', 'tokens', 'users'].includes(value ?? '')) return 'access';
   if (['connections', 'integrations', 'mcp', 'webhooks', 'ai'].includes(value ?? ''))
     return 'connections';
+  if (['network', 'proxy', 'reverse-proxy'].includes(value ?? '')) return 'network';
   if (['operations', 'system', 'overview', 'logs', 'system-logs'].includes(value ?? ''))
     return 'operations';
   return 'interface';
@@ -53,6 +55,7 @@ export function settingsDomain(value: string | null): SettingsMainTab {
     MetricsTabComponent,
     SystemTabComponent,
     AppearanceTabComponent,
+    NetworkTabComponent,
     SystemLogViewerComponent,
   ],
   template: `
@@ -92,6 +95,9 @@ export function settingsDomain(value: string | null): SettingsMainTab {
             @case ('connections') {
               <app-ai-tools-tab /><app-mcp-server-tab /><app-webhooks-tab />
             }
+            @case ('network') {
+              <app-network-tab />
+            }
             @case ('operations') {
               <app-system-tab />
               <app-configuration-section
@@ -130,12 +136,14 @@ export class SettingsPageComponent {
     interface: 'Vos préférences pour cette interface.',
     access: 'Les comptes et les accès des applications à votre cluster.',
     connections: 'Les services que votre cluster utilise et les applications qui s’y connectent.',
+    network: 'L’accès à ce nœud derrière un reverse proxy.',
     operations: 'La santé des services et les événements de ce nœud.',
   };
   protected readonly mainTabs: readonly CategoryTabOption[] = [
     { value: 'interface', label: 'Interface' },
     { value: 'access', label: 'Accès' },
     { value: 'connections', label: 'Connexions' },
+    { value: 'network', label: 'Réseau' },
     { value: 'operations', label: 'Exploitation' },
   ];
   constructor() {
