@@ -37,6 +37,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
+import { RecordFormActionsComponent } from '../../shared/ui/record-form-actions.component';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { OverviewExecutionComponent } from './components/overview-execution.component';
@@ -66,6 +67,7 @@ type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
     NgTemplateOutlet,
     PageHeaderComponent,
     RecordFormComponent,
+    RecordFormActionsComponent,
     RouterLink,
     StatusBadgeComponent,
   ],

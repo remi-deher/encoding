@@ -34,7 +34,8 @@ export interface CatalogEmptyState {
       [description]="actionOpen() ? actionDescription() : detailDescription()"
       [content]="actionOpen() ? actionContent() : detailContent()"
       [headerActions]="actionOpen() ? undefined : detailHeaderActions()"
-      [footerActions]="actionOpen() ? undefined : detailFooterActions()"
+      [footerActions]="actionOpen() ? actionFooterActions() : detailFooterActions()"
+      [step]="actionOpen() ? actionStep() : null"
       (closed)="onDrawerClosed()"
     >
       <div drawer-main>
@@ -134,6 +135,8 @@ export class ManagementCatalogTemplateComponent {
   readonly actionOpen = input(false);
   readonly actionTitle = input('Ajouter');
   readonly actionDescription = input('');
+  /** Avancement d'un formulaire en plusieurs étapes dans le tiroir d'action. */
+  readonly actionStep = input<{ readonly current: number; readonly total: number } | null>(null);
   /** Largeur du tiroir : `standard` (560 px) pour une fiche, `wide` pour un éditeur. */
   readonly drawerSize = input<'standard' | 'wide'>('wide');
   /** Voile derrière le tiroir ; un clic dessus le ferme. */
@@ -146,6 +149,9 @@ export class ManagementCatalogTemplateComponent {
     read: TemplateRef,
   });
   protected readonly detailHeaderActions = contentChild('detailHeaderActions', {
+    read: TemplateRef,
+  });
+  protected readonly actionFooterActions = contentChild('actionFooterActions', {
     read: TemplateRef,
   });
   protected readonly actionContent = contentChild('actionContent', { read: TemplateRef });
