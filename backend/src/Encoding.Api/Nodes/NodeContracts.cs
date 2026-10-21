@@ -28,6 +28,8 @@ public static class NodeHeartbeatValidator
             || inventory.Architecture.Length > 64 || inventory.ProcessorCount is < 0 or > 4096
             || inventory.MemoryMb is < 0 or > 4_194_304
             || inventory.ProcessorModel?.Length > 256
+            || inventory.FontSets is { Count: > 64 }
+            || inventory.FontSets?.Any(name => string.IsNullOrWhiteSpace(name) || name.Length > 128 || name.IndexOfAny(['/', '\\', '\r', '\n']) >= 0) == true
             || inventory.Gpus is { Count: > 16 }
             || inventory.Gpus?.Any(g => string.IsNullOrWhiteSpace(g.Name) || g.Name.Length > 256
                 || g.Vendor?.Length > 64 || g.Driver?.Length > 64 || g.Device?.Length > 128) == true))

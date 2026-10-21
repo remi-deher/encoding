@@ -140,6 +140,7 @@
     @if (configuringNode(); as current) {
       <app-component-configuration-form
         [schema]="configuringSchema()"
+        [referenceOptions]="configurationReferences()"
         [values]="configuringValues()"
         [instanceName]="current.name ?? ''"
         [progressiveDisclosure]="true"

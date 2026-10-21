@@ -194,6 +194,36 @@ export class FlowEditorPageComponent {
   );
 
   protected readonly configuringNodeId = signal<string | undefined>(undefined);
+  protected configurationReferences() {
+    const current = this.configuringNode()?.id;
+    const upstream = new Set<string>();
+    const pending = current ? [current] : [];
+    while (pending.length) {
+      const target = pending.pop()!;
+      for (const edge of this.connections().filter((edge) => edge.targetNodeId === target)) {
+        if (!upstream.has(edge.sourceNodeId)) {
+          upstream.add(edge.sourceNodeId);
+          pending.push(edge.sourceNodeId);
+        }
+      }
+    }
+    return {
+      artifact: this.nodes()
+        .filter((node) => upstream.has(node.id) && node.component.producesFiles)
+        .map((node) => ({
+          value: 'artifact:' + encodeURIComponent(node.id) + '/0',
+          label: 'Premier fichier produit · ' + (node.name || node.component.name),
+        })),
+      'flow-node': this.nodes()
+        .filter(
+          (node) =>
+            node.id !== current &&
+            node.component.kind === 'condition' &&
+            !['base', 'conditions', 'nodes'].includes(node.component.pluginId),
+        )
+        .map((node) => ({ value: node.id, label: node.name || node.component.name })),
+    };
+  }
   protected readonly nodes = signal<readonly FlowGraphNode[]>([]);
   protected readonly connections = signal<readonly FlowGraphConnection[]>([]);
   protected readonly componentPacks = signal<readonly FlowComponentPackInstance[]>([]);

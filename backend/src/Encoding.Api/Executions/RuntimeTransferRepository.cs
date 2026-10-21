@@ -20,6 +20,7 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
         cmd.Parameters.AddWithValue("node",node); await using var r=await cmd.ExecuteReaderAsync(ct); var result=new List<RuntimeTransfer>();
         while(await r.ReadAsync(ct)) result.Add(new(r.GetGuid(0),r.GetInt64(1),r.GetString(2),r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5),r.IsDBNull(6)?null:r.GetString(6),r.GetBoolean(7),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.Nodes
             .Where(n=>n.Configuration.TryGetValue("sourceFile",out var f)&&f.ValueKind==System.Text.Json.JsonValueKind.String&&!string.IsNullOrWhiteSpace(f.GetString()))
+            .Where(n=>!n.Configuration["sourceFile"].GetString()!.StartsWith(Encoding.Contracts.Flows.FlowArtifactReference.Prefix, StringComparison.Ordinal))
             .Select(n=>RuntimeRepository.NormalizePath(n.Configuration["sourceFile"].GetString())).Distinct().ToArray(),System.Text.Json.JsonSerializer.Deserialize<Encoding.Contracts.Flows.FlowDefinition>(r.GetString(8),new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!.MediaType,r.GetBoolean(9),r.IsDBNull(10)?null:r.GetInt32(10),r.GetGuid(11)));
         return result;
     }

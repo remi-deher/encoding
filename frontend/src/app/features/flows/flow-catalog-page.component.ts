@@ -8,11 +8,13 @@ import { FileDownload } from '../../shared/services/file-download';
 import { NotificationService } from '../../shared/services/notification.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FlowValidation } from '../../shared/services/flow-validation';
-import { map, catchError, of, timer, switchMap } from 'rxjs';
+import { map, catchError, of, timer, switchMap, merge, Subject } from 'rxjs';
+import { AuthService } from '../../core/auth/auth.service';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import {
   DataTableColumn,
   DataTableListActionEvent,
@@ -62,6 +64,7 @@ interface FlowRecord extends DataTableRow {
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     MatButtonModule,
+    MatMenuModule,
     RecordFormComponent,
     DrawerActionButtonComponent,
     FlowPreviewComponent,
@@ -70,6 +73,9 @@ interface FlowRecord extends DataTableRow {
   templateUrl: './flow-catalog-page.component.html',
 })
 export class FlowCatalogPageComponent {
+  protected readonly auth = inject(AuthService);
+  protected readonly deletingFlow = signal<string | null>(null);
+  private readonly refreshCatalog = new Subject<void>();
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly routeData = toSignal(this.route.data, {
@@ -223,6 +229,12 @@ export class FlowCatalogPageComponent {
       label: 'Créer un pack de composants',
       visibleWhen: (row: DataTableRow) => Number(row['publishedVersion']) > 0,
     },
+    {
+      id: 'delete',
+      label: 'Supprimer',
+      tone: 'danger' as const,
+      visibleWhen: () => this.auth.isAdmin() && this.deletingFlow() === null,
+    },
   ];
   protected readonly selectionActions = [{ id: 'export', label: 'Exporter la sélection (ZIP)' }];
   protected async onListAction(event: DataTableListActionEvent): Promise<void> {
@@ -241,6 +253,10 @@ export class FlowCatalogPageComponent {
     }
   }
   protected async onRowAction(event: DataTableActionEvent): Promise<void> {
+    if (event.actionId === 'delete') {
+      await this.confirmDeleteFlow(event.row);
+      return;
+    }
     if (event.actionId === 'edit') {
       void this.router.navigate(['/flows', String(event.row['id']), 'edit'], {
         info: { flowEditorDirection: 'forward' },
@@ -365,10 +381,40 @@ export class FlowCatalogPageComponent {
     }
   }
   private readonly api = inject(FlowValidation);
+  protected async confirmDeleteFlow(row: DataTableRow): Promise<void> {
+    if (!this.auth.isAdmin() || this.deletingFlow() !== null) return;
+    const id = String(row['id']),
+      name = String(row['name']);
+    this.deletingFlow.set(id);
+    try {
+      const confirmed = await firstValueFrom(
+        this.dialog
+          .open(ConfirmationDialogComponent, {
+            data: {
+              title: `Supprimer le flow « ${name} » ?`,
+              message:
+                'Le flow et son brouillon seront retirés du catalogue. Les versions publiées et l’historique des exécutions sont conservés. La suppression est refusée si le flow est affecté à une bibliothèque ou possède une exécution en cours.',
+              confirmLabel: 'Supprimer',
+              confirmColor: 'var(--danger)',
+            },
+          })
+          .afterClosed(),
+      );
+      if (!confirmed) return;
+      await this.api.remove(id);
+      if (this.selectedFlow()?.id === id) this.onDetailClosed();
+      this.refreshCatalog.next();
+      this.notifications.show(`Le flow « ${name} » a été supprimé.`);
+    } catch (error) {
+      this.notifications.show(AuthService.errorMessage(error, 'Impossible de supprimer ce flow.'));
+    } finally {
+      this.deletingFlow.set(null);
+    }
+  }
   private readonly templates = inject(FlowTemplates);
   private readonly componentPacks = inject(FlowComponentPacks);
   private readonly catalog = toSignal(
-    timer(0, 5000).pipe(
+    merge(timer(0, 5000), this.refreshCatalog).pipe(
       switchMap(() =>
         this.api.list().pipe(
           map((flows) => ({ state: 'ready' as const, flows })),
