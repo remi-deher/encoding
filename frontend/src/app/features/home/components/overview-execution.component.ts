@@ -46,7 +46,7 @@ import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component'
           >{{ execution().node ?? 'Worker non attribué' }} ·
           {{ execution().updatedAt | date: 'dd/MM HH:mm' }}</span
         ><a
-          routerLink="/tasks"
+          routerLink="/activity"
           [queryParams]="{
             view:
               execution().state === 'succeeded'

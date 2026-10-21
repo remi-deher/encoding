@@ -25,42 +25,26 @@ const applicationRoutes: Routes = [
     redirectTo: 'nodes',
   },
   {
-    path: 'tasks',
+    path: 'activity',
     loadComponent: () =>
-      import('./features/tasks/task-monitoring-page.component').then(
-        (module) => module.TaskMonitoringPageComponent,
+      import('./features/activity/activity-page.component').then(
+        (module) => module.ActivityPageComponent,
       ),
     data: {
-      title: 'Tâches',
+      title: 'Activité',
       navigation: {
         group: 'Traitements',
-        label: 'Tâches',
+        label: 'Activité',
         glyph: '≡',
         order: 2,
-        keywords: ['exécutions', 'file'],
+        keywords: ['tâches', 'exécutions', 'file', 'historique', 'demandes', 'assistant'],
       },
-      description: 'Suivez les exécutions en attente, en cours, annulées, en erreur ou réussies.',
+      description:
+        'Suivez les exécutions de flows et les demandes de l’assistant IA : en cours, à traiter, en erreur ou terminées.',
     },
   },
-  {
-    path: 'ai/activity',
-    loadComponent: () =>
-      import('./features/ai/ai-activity-page.component').then(
-        (module) => module.AiActivityPageComponent,
-      ),
-    data: {
-      title: 'Activité IA',
-      navigation: {
-        group: 'Intelligence artificielle',
-        label: 'Activité',
-        glyph: '◷',
-        order: 3,
-        exact: true,
-        keywords: ['demandes', 'historique', 'erreurs'],
-      },
-      description: 'Historique des demandes de votre assistant.',
-    },
-  },
+  { path: 'tasks', pathMatch: 'full', redirectTo: 'activity' },
+  { path: 'ai/activity', pathMatch: 'full', redirectTo: 'activity?type=ai' },
   {
     path: 'ai/assistant',
     loadComponent: () =>
