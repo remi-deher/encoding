@@ -39,6 +39,13 @@ public static class AiAssistantEndpoints
                 ? Results.NoContent()
                 : Results.NotFound()));
 
+        group.MapPut("/conversations/{id}/title", async (string id, AiAssistantRenameRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
+            await GuardAsync(async () =>
+            {
+                var conversation = await service.RenameAsync(id, request.Title, http.User, ct);
+                return conversation is null ? Results.NotFound() : Results.Ok(conversation);
+            }));
+
         group.MapPut("/conversations/{id}/sources", async (string id, AiAssistantSourcesRequest request, HttpContext http, AiAssistantService service, CancellationToken ct) =>
             await GuardAsync(async () =>
             {
