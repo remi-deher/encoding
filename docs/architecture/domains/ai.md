@@ -15,7 +15,7 @@ tags: [ia, codex, claude, ollama, session, checkpoint, assistant, générateur d
 
 ## Fournisseurs et connexion
 - CLI officielles lancées par le serveur : **Codex** (`codex exec --json --ephemeral`, connexion `codex login --device-auth`) et **Claude** (`claude -p --output-format stream-json …`, jeton `claude setup-token` protégé par Data Protection et passé par `CLAUDE_CODE_OAUTH_TOKEN`), plus API compatibles OpenAI/Ollama (non configurées sur une nouvelle installation). Le lien/code de connexion émis par la CLI reste en mémoire (15 min max), jamais journalisé ni persisté ; le succès n'est confirmé qu'après `codex login status` / `claude auth status`.
-- Profils par fournisseur (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`) sous `AiTools:CredentialsDirectory` (défaut `Node:DataDirectory/credentials/ai-tools`) : **locaux**, hors maillage. CLI installées sous `AiTools:RuntimeDirectory` (`/opt/encoding/ai-cli`).
+- Profils par fournisseur (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`) sous `AiTools:CredentialsDirectory` (défaut `Node:DataDirectory/credentials/ai-tools`) : copiés localement, mais **répliqués chiffrés entre nœuds** (Codex `auth.json`, jeton Claude, clé OpenAI) par `AiCredentialSyncService` et la table `ai_credentials` ([ADR 0001](../adr/0001-replication-connexions-ia.md)) ; la modification la plus récente l’emporte et une déconnexion se propage. CLI installées sous `AiTools:RuntimeDirectory` (`/opt/encoding/ai-cli`).
 - CLI **confinées par Landlock** (code partagé dans `Encoding.Core.Runtime`) ; sans Landlock elles refusent de démarrer. Claude sans outils/MCP/skills/réglages hérités ; Codex en lecture seule sans approbation interactive. Aucune réponse simulée si la CLI est absente ; plus de flow synthétique en cas d'échec.
 - La page « IA & fournisseurs » distingue moteur par défaut et fiche sélectionnée ; les secrets restent masqués ; `hasOpenAiApiKey` seulement.
 
@@ -40,7 +40,7 @@ tags: [ia, codex, claude, ollama, session, checkpoint, assistant, générateur d
 - Pour que l'IA se branche correctement, les plugins décrivent sorties et champs ([plugins.md](plugins.md)) ; MCP : [auth-ops.md](auth-ops.md).
 
 ## Invariants
-1. Aucune inférence simulée ; aucun secret répliqué ni journalisé.
+1. Aucune inférence simulée ; les secrets IA ne transitent que chiffrés (journal du maillage) et ne sont jamais journalisés.
 2. Pas de repli non confiné pour lancer une CLI.
 3. Pas de reprise silencieuse d'un coordinateur de session.
 4. Toute sortie IA passe par la validation backend avant d'atteindre l'éditeur.

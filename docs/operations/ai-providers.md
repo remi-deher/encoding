@@ -4,7 +4,7 @@
 
 L'image embarque Codex CLI `0.163.0` et Claude Code `2.1.302`. Les arguments de construction `CODEX_CLI_VERSION` et `CLAUDE_CODE_VERSION` permettent une mise à jour explicite. L'installation utilise les paquets officiels npm ; aucun binaire tiers n'est versionné dans le dépôt.
 
-Conserver le volume `Node:DataDirectory`, notamment les clés Data Protection et `credentials/ai-tools`. Ne pas monter le même profil de credentials en écriture sur plusieurs serveurs. Tous les serveurs doivent être approuvés dans le même cluster et joignables par les adresses du maillage. Les horloges doivent être synchronisées. Le [maillage de réconciliation](../architecture/domains/replication-storage.md) est le chemin vérifié ; le mode optionnel `PeerCluster` Raft n'est pas couvert par les scénarios IA distribués de cette branche.
+Conserver le volume `Node:DataDirectory`, notamment les clés Data Protection et `credentials/ai-tools`. Ne pas monter le même profil de credentials en écriture sur plusieurs serveurs : la réplication entre nœuds s’en charge. Tous les serveurs doivent être approuvés dans le même cluster et joignables par les adresses du maillage. Les horloges doivent être synchronisées. Le [maillage de réconciliation](../architecture/domains/replication-storage.md) est le chemin vérifié ; le mode optionnel `PeerCluster` Raft n'est pas couvert par les scénarios IA distribués de cette branche.
 
 Ouvrir **Paramètres → Intégrations → IA & fournisseurs** sur le serveur qui doit héberger une connexion :
 
@@ -51,7 +51,7 @@ La réponse contient `sessionId` et `requestId`, y compris quand aucun exécuteu
 
 Une tentative est bornée par le délai configuré, entre 10 et 600 secondes. Un remplacement ambigu attend le délai précédent, avec une marge de cinq secondes ; au maximum trois exécuteurs sont essayés par appel. Si le coordinateur redémarre, attendre l'expiration du bail affiché avant de réessayer. Un échec peut avoir consommé du quota chez le fournisseur.
 
-Les marqueurs locaux d'essai ne sont pas supprimés automatiquement. Les checkpoints transitent chiffrés dans le journal du maillage ; les secrets de connexion n'y transitent pas.
+Les marqueurs locaux d'essai ne sont pas supprimés automatiquement. Les checkpoints transitent chiffrés dans le journal du maillage ; les connexions IA (Codex, Claude, clé OpenAI) y transitent aussi chiffrées : une connexion faite sur un nœud est reprise par les autres en quelques dizaines de secondes, y compris ses renouvellements et sa déconnexion ([ADR 0001](../architecture/adr/0001-replication-connexions-ia.md)). Si deux nœuds renouvellent Codex en même temps, reconnecter un nœud suffit.
 
 Les conversations terminées et l’activité IA expirent automatiquement. Les valeurs par défaut sont 90 jours pour les conversations (instantanés de contexte compris) et 30 jours pour l’activité. Les administrateurs peuvent régler ces durées dans **Paramètres → IA → Paramètres avancés du cluster** ou via `AiTools:AssistantConversationRetentionDays` et `AiTools:AssistantActivityRetentionDays` (1 à 3 650 jours) au démarrage. Le réglage enregistré est répliqué au cluster. Chaque nœud publie un tombstone dans le registre répliqué ; la passe s’exécute toutes les heures et ignore une conversation qui possède encore une demande en attente.
 

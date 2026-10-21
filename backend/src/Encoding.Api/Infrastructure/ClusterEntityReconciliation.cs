@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Tools;
 using Encoding.Contracts.Cluster;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
@@ -24,6 +25,8 @@ public sealed class ClusterEntityReconciliation(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IDataProtector pluginProtector = protection.CreateProtector("Encoding.PluginConfiguration.v1");
+    private readonly IDataProtector aiCredentialProtector = protection.CreateProtector(AiCredentialStore.Purpose);
+    private IDataProtector LocalProtector(string table) => table == "ai_credentials" ? aiCredentialProtector : pluginProtector;
     private static readonly HashSet<string> BooleanColumns = new(StringComparer.Ordinal)
     {
         "singleton", "idempotent", "is_active", "draining", "quarantined", "can_read", "can_write", "is_enabled",
@@ -41,6 +44,7 @@ public sealed class ClusterEntityReconciliation(
         new("encoding_profiles", ["id", "draft_revision", "draft_name", "draft_description", "draft_targets", "published_version", "created_at", "updated_at"], ["id"], ["draft_targets"]),
         new("users", ["id", "username", "password_hash", "role", "is_active", "failed_attempts", "locked_until", "created_at", "updated_at"], ["id"]),
         new("api_tokens", ["id", "name", "token_hash", "token_prefix", "role", "is_active", "created_at", "expires_at", "last_used_at", "revoked_at", "scopes"], ["id"], binaryColumns: ["token_hash"]),
+        new("ai_credentials", ["provider", "revision", "encrypted_values", "updated_at"], ["provider"], binaryColumns: ["encrypted_values"]),
         new("plugin_configurations", ["plugin_id", "revision", "encrypted_values", "updated_at"], ["plugin_id"], binaryColumns: ["encrypted_values"]),
         new("flow_plugin_configurations", ["flow_id", "plugin_id", "revision", "encrypted_values", "updated_at"], ["flow_id", "plugin_id"], binaryColumns: ["encrypted_values"]),
         new("enrollment_window", ["id", "open_until"], ["id"]),
@@ -452,8 +456,8 @@ public sealed class ClusterEntityReconciliation(
                 row[name] = JsonSerializer.SerializeToNode(items, JsonOptions);
             }
             else if (table.BinaryColumns.Contains(name, StringComparer.Ordinal) && value is byte[] pluginCipher
-                     && name == "encrypted_values" && (table.Name is "plugin_configurations" or "flow_plugin_configurations"))
-                row[name] = JsonNode.Parse(pluginProtector.Unprotect(pluginCipher));
+                     && name == "encrypted_values" && (table.Name is "plugin_configurations" or "flow_plugin_configurations" or "ai_credentials"))
+                row[name] = JsonNode.Parse(LocalProtector(table.Name).Unprotect(pluginCipher));
             else if (table.BinaryColumns.Contains(name, StringComparer.Ordinal) && value is byte[] bytes)
                 row[name] = Convert.ToHexString(bytes).ToLowerInvariant();
             else if (BooleanColumns.Contains(name) || (name == "id" && (table.Name is "enrollment_window" or "first_link_acceptance")))
@@ -649,10 +653,10 @@ public sealed class ClusterEntityReconciliation(
     private JsonObject PrepareRowForLocalStorage(EntityTable table, JsonObject row)
     {
         var local = (JsonObject)row.DeepClone();
-        if ((table.Name is "plugin_configurations" or "flow_plugin_configurations") && local["encrypted_values"] is { } values)
+        if ((table.Name is "plugin_configurations" or "flow_plugin_configurations" or "ai_credentials") && local["encrypted_values"] is { } values)
         {
             var plaintext = System.Text.Encoding.UTF8.GetBytes(values.ToJsonString(JsonOptions));
-            local["encrypted_values"] = Convert.ToHexString(pluginProtector.Protect(plaintext)).ToLowerInvariant();
+            local["encrypted_values"] = Convert.ToHexString(LocalProtector(table.Name).Protect(plaintext)).ToLowerInvariant();
         }
         return local;
     }
@@ -753,7 +757,7 @@ public sealed class ClusterEntityReconciliation(
         "cluster_nodes" => ["node_token_hash"],
         "node_enrollment_requests" => ["pairing_key_hash", "node_token_hash"],
         "users" => ["password_hash"],
-        "plugin_configurations" or "flow_plugin_configurations" => ["encrypted_values"],
+        "plugin_configurations" or "flow_plugin_configurations" or "ai_credentials" => ["encrypted_values"],
         _ => []
     };
 
