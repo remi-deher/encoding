@@ -1,0 +1,46 @@
+.flow-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.flow-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 4px 8px;
+
+  h2 {
+    margin: 0;
+    font-size: var(--font-title);
+    font-weight: 600;
+  }
+}
+
+.flow-group-count {
+  color: var(--text-muted);
+  font-size: var(--font-body);
+}
+
+.flow-group-icon {
+  --media-tone: var(--accent);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  color: var(--media-tone);
+  background: color-mix(in srgb, var(--media-tone) 16%, var(--surface-container-low));
+
+  &[data-media='video'] {
+    --media-tone: var(--tone-blue);
+  }
+
+  &[data-media='image'] {
+    --media-tone: var(--tone-purple);
+  }
+
+  &[data-media='music'] {
+    --media-tone: var(--warning);
+  }
+}
