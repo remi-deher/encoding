@@ -50,6 +50,9 @@ export class FlowValidation {
   list() {
     return this.http.get<readonly FlowSummary[]>('/api/v1/flows');
   }
+  remove(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>('/api/v1/flows/' + id));
+  }
   get(id: string) {
     return firstValueFrom(this.http.get<FlowVersionResponse>('/api/v1/flows/' + id + '/edit'));
   }

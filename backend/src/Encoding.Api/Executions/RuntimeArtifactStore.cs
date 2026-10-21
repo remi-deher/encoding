@@ -79,6 +79,7 @@ public sealed class RuntimeArtifactStore(DbDataSource dataSource,IConfiguration 
             await register.ExecuteNonQueryAsync(ct);
             if(inputPath is not null)
             {
+                if (inputPath.StartsWith(Encoding.Contracts.Flows.FlowArtifactReference.Prefix, StringComparison.Ordinal)) return false;
                 inputPath=RuntimeRepository.NormalizePath(inputPath);
                 await using var declared=Sql.Command("SELECT EXISTS(SELECT 1 FROM executions e JOIN execution_work w ON w.execution_id=e.id, json_each(e.flow_definition->'nodes') n WHERE e.id=@id AND w.source_node_id=@actor AND replace(n.value->'configuration'->>'sourceFile',char(92),'/')=@path)",c,tx);
                 declared.Parameters.AddWithValue("id",id); declared.Parameters.AddWithValue("actor",actor); declared.Parameters.AddWithValue("path",inputPath);

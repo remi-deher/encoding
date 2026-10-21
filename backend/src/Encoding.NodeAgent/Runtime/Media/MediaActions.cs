@@ -553,6 +553,17 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
 
     public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true,IReadOnlySet<int>? forceCpuFallbackSteps=null)
     {
+        if (plan.Any(step => step.Configuration.ContainsKey("trackSelection")))
+            plan = MediaTrackSelection.Expand(plan, await scanner.ScanAsync(current, ct));
+        if (plan.Any(step => step.ComponentId is "base-resize-video" or "video-resize"))
+        {
+            var metadata = await scanner.ScanAsync(current, ct);
+            var video = metadata.GetProperty("streams").EnumerateArray().FirstOrDefault(stream => MediaTrackSelection.Text(stream, "codec_type") == "video");
+            var width = video.ValueKind == JsonValueKind.Object ? MediaTrackSelection.Number(video, "width") : 0;
+            var height = video.ValueKind == JsonValueKind.Object ? MediaTrackSelection.Number(video, "height") : 0;
+            plan = plan.Where(step => step.ComponentId is not ("base-resize-video" or "video-resize") || VideoResizePolicy.ShouldResize(step.Configuration, width, height)).ToArray();
+        }
+        if (plan.Count == 0) return new(null, []);
         var output=Output(directory,node,Path.GetExtension(current) is ".mp4" or ".mkv" or ".mka" or ".flac"?Path.GetExtension(current):".mkv");
         var input=new List<string> { "-nostdin","-y","-v","error" }; var args=new List<string> { "-c","copy" }; var videoFilters=new List<string>(); var hardwareMode="cpu";
         var resolutions=new List<ResolvedVideoEncoding>();
@@ -669,8 +680,16 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                     if(Text(c,"inputLayout")!="") input.AddRange(["-channel_layout:a:"+index,Text(c,"inputLayout")]);
                     if(Text(c,"outputLayout")!="") args.AddRange(["-channel_layout:a:"+index,Text(c,"outputLayout")]);
                     if(Number(c,"sampleRate")!="0") args.AddRange(["-ar:a:"+index,Number(c,"sampleRate")]); break;
-                case "base-normalize-audio" or "audio-normalize": if(Path.GetExtension(current)==".flac") output=Output(directory,node,".mka"); args.AddRange(["-filter:a:"+Number(c,"trackId"),"loudnorm=I="+Number(c,"targetLoudness",-16)+":TP="+Number(c,"truePeak",-1),"-c:a:"+Number(c,"trackId"),"aac"]); break;
-                case "base-resize-video" or "video-resize": videoFilters.Add("scale="+Number(c,"width",1920)+":"+Number(c,"height",1080)+":force_original_aspect_ratio=decrease"); if(!plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode")) args.AddRange(["-c:v","libx264"]); break;
+                case "base-normalize-audio" or "audio-normalize":
+                    if(Path.GetExtension(current)==".flac") output=Output(directory,node,".mka");
+                    var normalization = AudioNormalizationPolicy.Filter(c);
+                    if (Text(c,"normalizationMethod","single") == "twoPass")
+                    {
+                        var measurement = await tools.CheckedWithResultAsync("ffmpeg", ["-nostdin", "-hide_banner", "-i", current, "-map", "0:a:" + Number(c,"trackId"), "-af", normalization + ":print_format=json", "-f", "null", "-"], directory, ct);
+                        normalization = AudioNormalizationPolicy.MeasuredFilter(normalization, measurement.Error);
+                    }
+                    args.AddRange(["-filter:a:"+Number(c,"trackId"),normalization,"-c:a:"+Number(c,"trackId"),"aac"]); break;
+                case "base-resize-video" or "video-resize": videoFilters.Add(VideoResizePolicy.Filter(c)); if(!plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode")) args.AddRange(["-c:v","libx264"]); break;
                 case "base-auto-crop" or "video-auto-crop":
                     var cropF=Text(c,"cropFilter");
                     if(!string.IsNullOrEmpty(cropF)) videoFilters.Add(cropF);

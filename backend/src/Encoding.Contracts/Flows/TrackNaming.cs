@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Encoding.Contracts.Flows;
 
 /// <summary>Options du bloc <c>base-track-names</c> (architecture 0056).</summary>
-public sealed record TrackNameOptions(string AudioTemplate, string SubtitleTemplate, bool SingleDefaultAudio, string DefaultAudioLanguage)
+public sealed record TrackNameOptions(string AudioTemplate, string SubtitleTemplate, bool SingleDefaultAudio, string DefaultAudioLanguage, bool RenameTracks = true)
 {
     public const string DefaultAudioTemplate = "{language} {variant} / {codec} / {layout} / {flags}";
     public const string DefaultSubtitleTemplate = "{language} {variant} / {codec} / {flags}";
@@ -13,7 +13,7 @@ public sealed record TrackNameOptions(string AudioTemplate, string SubtitleTempl
     {
         string Text(string key, string fallback) => configuration.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()) ? value.GetString()!.Trim() : fallback;
         var single = !configuration.TryGetValue("singleDefaultAudio", out var flag) || flag.ValueKind != JsonValueKind.False;
-        return new(Text("audioTemplate", DefaultAudioTemplate), Text("subtitleTemplate", DefaultSubtitleTemplate), single, Text("defaultAudioLanguage", ""));
+        return new(Text("audioTemplate", DefaultAudioTemplate), Text("subtitleTemplate", DefaultSubtitleTemplate), single, Text("defaultAudioLanguage", ""), !configuration.TryGetValue("renameTracks", out var rename) || rename.ValueKind != JsonValueKind.False);
     }
 }
 
@@ -93,7 +93,7 @@ public static class TrackNaming
                 ["language"] = language, ["variant"] = variant, ["codec"] = stream is { } s ? CodecLabel(s, track.Type) : "",
                 ["layout"] = track.Type == "audio" && stream is { } a ? LayoutLabel(a, track.AudioChannels) : "", ["flags"] = string.Join(" / ", flags)
             };
-            var name = Render(track.Type == "audio" ? options.AudioTemplate : options.SubtitleTemplate, tokens);
+            var name = options.RenameTracks ? Render(track.Type == "audio" ? options.AudioTemplate : options.SubtitleTemplate, tokens) : track.Name;
             var defaultChange = track.Type == "audio" ? defaults[Array.IndexOf(audio, track)] : null;
             if (name != track.Name || defaultChange is not null)
                 edits.Add(new(track.Uid, track.Type, track.Ordinal, name, defaultChange, $"{track.Type} {track.Ordinal} : « {track.Name} » vers « {name} »" + (defaultChange is { } d ? (d ? ", piste par défaut" : ", plus par défaut") : "")));

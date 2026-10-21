@@ -147,7 +147,7 @@ public sealed class AiToolTests
 
             Assert.Equal(new[] { 0, 1 }, batchIndexes);
             Assert.NotNull(outcome.File);
-            var translated = await File.ReadAllTextAsync(outcome.File!);
+            var translated = (await File.ReadAllTextAsync(outcome.File!)).Replace("\r\n", "\n");
             Assert.Contains("1\n00:00:01,000 --> 00:00:01,900\nFR Cue 1", translated);
             Assert.Contains("21\n00:00:21,000 --> 00:00:21,900\nFR Cue 21", translated);
         }

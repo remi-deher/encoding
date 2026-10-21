@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 const output = (id: string) => ({
@@ -593,6 +594,7 @@ test('inspector preserves optional advanced settings while editing a common sett
                       {
                         id: 'option',
                         label: 'Option avancée',
+                        importance: 'advanced',
                         type: 'text',
                         defaultValue: 'Conserver',
                       },
@@ -866,4 +868,61 @@ test('multiple exclusive cases, nested decisions and protected ends remain navig
   await page.screenshot({ path: info.outputPath('complex-canvas.png') });
   await page.getByRole('button', { name: 'Guidé', exact: true }).click();
   await expect(page.locator('.step-card')).toHaveCount(15);
+});
+
+test('structured audio rules remain editable and preserved on desktop and mobile', async ({
+  page,
+}, info) => {
+  await setup(page);
+  const audio = JSON.parse(
+    readFileSync(
+      '../backend/src/Encoding.Api/Flows/Catalog/audio.json',
+      'utf8',
+    ),
+  );
+  const ruleComponent = audio.components.find(
+    (item: { id: string }) => item.id === 'audio-convert-by-rules',
+  );
+  await page.route('**/api/v1/flows/components', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'base',
+          version: '1.0.0',
+          name: 'Base',
+          components: components.map((c) =>
+            c.id === 'action'
+              ? { ...c, configurationSchema: ruleComponent.configurationSchema }
+              : c,
+          ),
+        },
+      ],
+    }),
+  );
+  await page.reload();
+  const card = page.locator('.step-card[data-node-id="Action A"]');
+  await card.locator('.step-name').click();
+  const form = page.locator('app-component-configuration-form');
+  const rows = form.locator('.record');
+  await expect(rows).toHaveCount(2);
+  await rows.first().getByLabel('Langues', { exact: true }).fill('fra,jpn');
+  await form.getByRole('button', { name: 'Ajouter une règle', exact: true }).click();
+  await expect(rows).toHaveCount(3);
+  await rows.nth(2).getByLabel('Action', { exact: true }).click();
+  await page.getByRole('option', { name: 'Conserver sans réencoder', exact: true }).click();
+  await expect(rows.nth(2).getByLabel('Codec cible', { exact: true })).toHaveCount(0);
+  await form.getByRole('button', { name: 'Appliquer les réglages', exact: true }).click();
+  await card.locator('.step-name').click();
+  await expect(form.locator('.record')).toHaveCount(3);
+  await expect(form.locator('.record').first().getByLabel('Langues', { exact: true })).toHaveValue(
+    'fra,jpn',
+  );
+  await expect(form.locator('.record').nth(2).getByLabel('Action', { exact: true })).toContainText(
+    'Conserver sans réencoder',
+  );
+  await expect(page.locator('body')).toHaveJSProperty(
+    'scrollWidth',
+    await page.locator('body').evaluate((element) => element.clientWidth),
+  );
+  await page.screenshot({ path: info.outputPath('structured-audio-rules.png') });
 });

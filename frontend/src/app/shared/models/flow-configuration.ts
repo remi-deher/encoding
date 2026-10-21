@@ -16,6 +16,13 @@ export function flowConfigurationValue(
   )
     return null;
   return (
-    field.defaultValue ?? (field.type === 'boolean' ? false : field.type === 'number' ? null : '')
+    field.defaultValue ??
+    (field.type === 'record-list'
+      ? []
+      : field.type === 'boolean'
+        ? false
+        : field.type === 'number'
+          ? null
+          : '')
   );
 }
