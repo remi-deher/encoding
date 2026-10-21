@@ -89,6 +89,7 @@ builder.Services.AddSingleton<FlowTemplateRepository>();
 builder.Services.AddSingleton<FlowComponentPackRepository>();
 builder.Services.AddSingleton<EncodingProfileRepository>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
+builder.Services.AddSingleton<WebhookAuthThrottle>();
 builder.Services.AddSingleton<PluginConnectionTester>();
 builder.Services.AddSingleton<McpService>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();

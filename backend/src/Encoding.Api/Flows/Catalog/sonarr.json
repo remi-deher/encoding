@@ -33,6 +33,7 @@
       {
         "id": "webhookSecret",
         "type": "secret",
+        "scope": "server",
         "label": "Secret du webhook",
         "description": "Mot de passe (authentification de base, utilisateur quelconque) ou en-tête X-Encoding-Webhook-Secret à configurer dans la connexion Webhook de Sonarr."
       }

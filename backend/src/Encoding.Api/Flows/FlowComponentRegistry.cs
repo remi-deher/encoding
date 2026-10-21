@@ -100,6 +100,25 @@ public sealed class FlowComponentRegistry
         Plugins = manifests;
     }
 
+    /// <summary>
+    /// Retire d'une configuration effective les champs de portée « server » avant de l'envoyer à un worker : le secret d'un
+    /// webhook n'a de sens que sur le serveur et un plugin exécuté sur un worker n'a aucune raison de le recevoir.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>> ForWorker(
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>> settings)
+    {
+        var result = new Dictionary<string, IReadOnlyDictionary<string, JsonElement>>(StringComparer.Ordinal);
+        foreach (var (pluginId, values) in settings)
+        {
+            var serverOnly = Plugins.SingleOrDefault(plugin => plugin.Id == pluginId)?.ConfigurationSchema?.Fields
+                .Where(field => field.Scope == "server").Select(field => field.Id).ToHashSet(StringComparer.Ordinal);
+            result[pluginId] = serverOnly is { Count: > 0 }
+                ? values.Where(pair => !serverOnly.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal)
+                : values;
+        }
+        return result;
+    }
+
     /// <summary>Manifestes tiers écartés au chargement (fichier et motif), pour affichage dans la page Plugins.</summary>
     public IReadOnlyList<RejectedPluginManifest> Rejected { get; }
 
@@ -132,6 +151,8 @@ public sealed class FlowComponentRegistry
             if (pluginSchema.Version != 1) throw new InvalidOperationException($"Schéma de configuration invalide : {installed.Id} (version de schéma {pluginSchema.Version}, 1 attendu).");
             if (pluginSchema.Fields.Select(field => field.Id).Distinct(StringComparer.Ordinal).Count() != pluginSchema.Fields.Count)
                 throw new InvalidOperationException($"Schéma de configuration invalide : {installed.Id} (identifiant de champ dupliqué).");
+            if (pluginSchema.Fields.FirstOrDefault(field => field.Scope is not (null or "server" or "worker")) is { } badScope)
+                throw new InvalidOperationException($"Schéma de configuration invalide : {installed.Id} (champ « {badScope.Id} » : portée « {badScope.Scope} » inconnue, « server » ou « worker » attendu).");
             if (pluginSchema.Fields.FirstOrDefault(field => field.Type is not ("text" or "secret" or "number" or "boolean" or "select")) is { } badField)
                 throw new InvalidOperationException($"Schéma de configuration invalide : {installed.Id} (champ « {badField.Id} » de type « {badField.Type} » non pris en charge).");
         }

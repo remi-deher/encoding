@@ -22,6 +22,7 @@ Python 3 de la bibliothèque standard fonctionne dans le bac à sable (lecture d
 - Authentification par le secret du webhook de la configuration du plugin, en-tête `X-Encoding-Webhook-Secret` ou mot de passe d’authentification de base (le nom d’utilisateur est ignoré), comparé en temps constant. Sans secret configuré, le webhook est fermé (409). Cette route s’authentifie elle-même : elle doit rester hors d’un éventuel contrôle de session utilisateur.
 - `Test` répond 200 ; `Download` (import, mise à niveau comprise) est traité ; tout autre événement est ignoré (202). Les chemins viennent de `episodeFile`/`episodeFiles` ou `movieFile`/`movieFiles`, complétés par le dossier de la série/du film si le chemin complet est absent.
 - La correspondance des chemins du plugin (`identifiant-bibliothèque=/chemin/vu/par/le/service`, une ligne par bibliothèque) donne la bibliothèque et le chemin relatif. `LibraryPathMapping` (`Encoding.Contracts`) est la définition unique côté C# ; le plugin Python applique le même format, et les deux implémentations sont vérifiées par les mêmes vecteurs (`backend/plugins/tests/path-mapping-vectors.json`). Un fichier hors de toute racine configurée n’est pas traité (202, compté dans `unmapped`) ; un chemin avec `..` est refusé.
+- Le corps est borné à 1 Mo avant lecture (413 au-delà) et les échecs d'authentification sont limités par appelant et par plugin (10 par fenêtre de 5 minutes, puis 429 avec `Retry-After`) ; l'état de la limitation est local au serveur.
 - La requête n’exécute rien : elle enregistre une demande durable (`integration_trigger_requests`, une seule demande ouverte par bibliothèque et fichier, donc une livraison répétée est sans effet).
 - `IntegrationTriggerService` (sur chaque serveur) réclame les demandes avec `FOR UPDATE SKIP LOCKED` et une réclamation de 60 secondes récupérable. Il demande une découverte de la bibliothèque (accès direct, comme 0016), attend une découverte terminée démarrée après la demande, retrouve le fichier dans `library_media` puis appelle le chemin commun de mise en file des bibliothèques : validation du flow attribué, réservation unique du média, reçus d’empreinte taille/date. Un chemin reçu du réseau n’est donc jamais exécuté sans avoir été découvert par un nœud ; un fichier inchangé déjà traité n’est pas retraité ; une demande dont le fichier n’apparaît pas dans l’heure expire avec un motif.
 
@@ -44,7 +45,7 @@ Plex et Jellyfin utilisent le même SDK (correspondance de chemins et client HTT
 
 ## Configuration
 
-`pathMappings` et `webhookSecret` s’ajoutent au schéma de configuration de Sonarr et de Radarr, et `pathMappings` à celui de Plex et de Jellyfin (0019) ; le secret est chiffré comme les autres. Limite connue : la configuration effective du plugin est transmise au worker avec les autres valeurs, donc le secret du webhook y est inclus bien que seul le serveur en ait besoin.
+`pathMappings` et `webhookSecret` s’ajoutent au schéma de configuration de Sonarr et de Radarr, et `pathMappings` à celui de Plex et de Jellyfin (0019) ; le secret est chiffré comme les autres. Un champ de la configuration du plugin peut déclarer `"scope": "server"` : sa valeur reste sur le serveur et n'est jamais envoyée à un worker (`FlowComponentRegistry.ForWorker`). C'est le cas du `webhookSecret` de Sonarr et Radarr.
 
 ## Déploiement
 

@@ -53,7 +53,10 @@ public sealed record FlowToolRequirement(
     string? MinimumVersion,
     IReadOnlyList<string> RequiredCapabilities);
 
-/// <summary>Uses the editor's text, number, boolean and select field vocabulary.</summary>
+/// <summary>
+/// Uses the editor's text, number, boolean and select field vocabulary. <c>Scope</c> (plugin configuration only):
+/// <c>server</c> keeps the value on the server (never sent to a worker), <c>worker</c> or absent sends it with the invocation.
+/// </summary>
 public sealed record FlowConfigurationSchema(
     int Version,
     IReadOnlyList<FlowConfigurationField> Fields);
@@ -86,7 +89,8 @@ public sealed record FlowConfigurationField(
     int? MaxItems = null,
     string? RequiresPluginVersion = null,
     string? RequiresPluginVersionValue = null,
-    bool LegacyOnly = false);
+    bool LegacyOnly = false,
+    string? Scope = null);
 
 public sealed record FlowSelectOption(
     string Value,

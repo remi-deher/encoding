@@ -16,6 +16,8 @@ internal static class PluginTests
         WebhookPayloads();
         CatalogAcceptsManifests();
         InvalidManifestsAreRejected();
+        WebhookThrottleBlocksRepeatedFailures();
+        ServerOnlySettingsStayOffWorkers();
     }
 
     private static void PathMappings()
@@ -138,5 +140,41 @@ internal static class PluginTests
             finally { Directory.Delete(directory,true); }
         }
         Console.WriteLine("PASS: an invalid third-party manifest is reported and skipped, never fatal.");
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = new(2026, 10, 21, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private static void WebhookThrottleBlocksRepeatedFailures()
+    {
+        var clock = new ManualClock();
+        var throttle = new WebhookAuthThrottle(clock);
+        for (var i = 0; i < WebhookAuthThrottle.MaxFailures - 1; i++) throttle.RecordFailure("sonarr|10.0.0.1");
+        Check(!throttle.IsBlocked("sonarr|10.0.0.1"), "Below the limit the caller is still served.");
+        throttle.RecordFailure("sonarr|10.0.0.1");
+        Check(throttle.IsBlocked("sonarr|10.0.0.1"), "At the limit the caller is blocked.");
+        Check(!throttle.IsBlocked("sonarr|10.0.0.2") && !throttle.IsBlocked("radarr|10.0.0.1"), "Other callers and plugins are unaffected.");
+        clock.Now += WebhookAuthThrottle.Window + TimeSpan.FromSeconds(1);
+        Check(!throttle.IsBlocked("sonarr|10.0.0.1"), "The block ends with the window.");
+        Console.WriteLine("PASS: webhook authentication failures are throttled per caller and plugin.");
+    }
+
+    private static void ServerOnlySettingsStayOffWorkers()
+    {
+        var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
+        var sonarr = registry.Plugins.Single(plugin => plugin.Id == "sonarr");
+        Check(sonarr.ConfigurationSchema!.Fields.Single(field => field.Id == "webhookSecret").Scope == "server", "The webhook secret is declared server-only.");
+        var values = new Dictionary<string, JsonElement>
+        {
+            ["baseUrl"] = JsonSerializer.SerializeToElement("http://sonarr"),
+            ["webhookSecret"] = JsonSerializer.SerializeToElement("s3cret")
+        };
+        var filtered = registry.ForWorker(new Dictionary<string, IReadOnlyDictionary<string, JsonElement>> { ["sonarr"] = values, ["unknown"] = values });
+        Check(filtered["sonarr"].ContainsKey("baseUrl") && !filtered["sonarr"].ContainsKey("webhookSecret"), "The worker receives the connection but not the webhook secret.");
+        Check(filtered["unknown"].ContainsKey("webhookSecret"), "A plugin without a declared scope is passed through unchanged.");
+        Console.WriteLine("PASS: server-only plugin settings are removed before reaching a worker.");
     }
 }

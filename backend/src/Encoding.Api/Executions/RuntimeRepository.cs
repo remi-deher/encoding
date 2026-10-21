@@ -260,6 +260,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             }
             var pluginSettings=item.Settings is {} savedSettings?pluginConfigurations.ReadSnapshot(savedSettings)
                 :await pluginConfigurations.ResolveEffectiveAsync(item.Flow.Id,item.Flow.Nodes.Select(node=>node.Component.PluginId).Where(id=>id!="base"),c,tx,ct);
+            pluginSettings=components.ForWorker(pluginSettings);
             var segmentEntry=item.Checkpoint?.NextNodeId??(item.Checkpoint is null?item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id:null);
             if(segmentEntry is not null && item.Probe is null)
             {
