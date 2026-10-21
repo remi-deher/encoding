@@ -288,8 +288,8 @@ export class PluginCatalogPageComponent {
 
   protected readonly extensionTabs = computed<readonly CategoryTabOption[]>(() => [
     { value: 'plugins', label: 'Plugins', count: PLUGIN_RECORDS.length },
-    { value: 'tools', label: 'Outils média', count: this.clusterTools().length || 6 },
-    { value: 'store', label: 'Store & Dépôts', count: this.storePackages().length || 4 },
+    { value: 'tools', label: 'Outils média', count: this.clusterTools().length },
+    { value: 'store', label: 'Store & Dépôts', count: this.storePackages().length },
   ]);
 
   protected readonly storeCategoryOptions = computed<readonly CategoryTabOption[]>(() => [
@@ -492,15 +492,6 @@ export class PluginCatalogPageComponent {
 
   protected onStoreCategoryChange(cat: string): void {
     this.selectedStoreCategory.set(cat);
-  }
-
-  protected async testTool(tool: ClusterTool): Promise<void> {
-    try {
-      const res = await this.extensionsService.testToolConformance(tool.id);
-      this.notifications.show(res.message);
-    } catch {
-      this.notifications.show(`Échec du test de conformité pour ${tool.name}.`);
-    }
   }
 
   protected installPackage(pkg: StorePackage): void {

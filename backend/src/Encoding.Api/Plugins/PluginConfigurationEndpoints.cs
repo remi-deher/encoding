@@ -82,7 +82,9 @@ public static class PluginConfigurationEndpoints
             }
         });
 
-        // --- GESTION DES OUTILS MÉDIA DU CLUSTER (0064) ---
+        // --- OUTILS MÉDIA DU CLUSTER (0064) ---
+        // Le serveur ne sonde pas les outils : la version et la conformité réelles sont annoncées par chaque nœud
+        // (capacités, ToolCapabilityProbe). Cette liste décrit seulement les outils livrés ; aucun état n'est inventé.
         var tools = app.MapGroup("/api/v1/tools").WithTags("Tools");
         tools.MapGet("", () =>
         {
@@ -95,221 +97,37 @@ public static class PluginConfigurationEndpoints
                 e.QualityMode
             }).ToList();
 
+            static object Tool(string id, string name, string role, string[] executables, string[] mediaTypes, object encoders) => new
+            {
+                id,
+                name,
+                role,
+                provider = "stock",
+                stockVersion = "",
+                customPath = (string?)null,
+                conformanceStatus = "unknown",
+                probePreserved = true,
+                executables,
+                mediaTypes,
+                encoders,
+                clusterReadiness = "Version et état annoncés par chaque nœud"
+            };
+            var none = Array.Empty<object>();
             var list = new object[]
             {
-                new
-                {
-                    id = "ffmpeg",
-                    name = "FFmpeg",
-                    role = "Moteur universel de transcodage et filtrage vidéo/audio",
-                    provider = "stock",
-                    stockVersion = "7.1",
-                    customPath = (string?)null,
-                    conformanceStatus = "ready",
-                    probePreserved = true,
-                    executables = new[] { "ffmpeg" },
-                    mediaTypes = new[] { "video", "audio", "subtitles" },
-                    encoders,
-                    clusterReadiness = "Conforme sur tous les nœuds actifs"
-                },
-                new
-                {
-                    id = "mkvtoolnix",
-                    name = "MKVToolNix",
-                    role = "Multiplexage, extraction et édition rapide de conteneurs MKV",
-                    provider = "stock",
-                    stockVersion = "88.0",
-                    customPath = (string?)null,
-                    conformanceStatus = "ready",
-                    probePreserved = true,
-                    executables = new[] { "mkvmerge", "mkvextract", "mkvpropedit" },
-                    mediaTypes = new[] { "video", "audio", "subtitles" },
-                    encoders = Array.Empty<object>(),
-                    clusterReadiness = "Conforme sur tous les nœuds actifs"
-                },
-                new
-                {
-                    id = "ffprobe",
-                    name = "FFprobe",
-                    role = "Inspection et sondage des métadonnées de flux",
-                    provider = "stock",
-                    stockVersion = "7.1",
-                    customPath = (string?)null,
-                    conformanceStatus = "ready",
-                    probePreserved = true,
-                    executables = new[] { "ffprobe" },
-                    mediaTypes = new[] { "video", "audio", "subtitles" },
-                    encoders = Array.Empty<object>(),
-                    clusterReadiness = "Conforme sur tous les nœuds actifs"
-                },
-                new
-                {
-                    id = "mediainfo",
-                    name = "MediaInfo",
-                    role = "Analyse approfondie des métadonnées HDR et Dolby Vision",
-                    provider = "stock",
-                    stockVersion = "24.06",
-                    customPath = (string?)null,
-                    conformanceStatus = "ready",
-                    probePreserved = true,
-                    executables = new[] { "mediainfo" },
-                    mediaTypes = new[] { "video", "audio" },
-                    encoders = Array.Empty<object>(),
-                    clusterReadiness = "Conforme sur tous les nœuds actifs"
-                },
-                new
-                {
-                    id = "imagemagick",
-                    name = "ImageMagick",
-                    role = "Traitement et retouche d'affiches, miniatures et jaquettes",
-                    provider = "stock",
-                    stockVersion = "7.1",
-                    customPath = (string?)null,
-                    conformanceStatus = "ready",
-                    probePreserved = true,
-                    executables = new[] { "magick", "convert" },
-                    mediaTypes = new[] { "image" },
-                    encoders = Array.Empty<object>(),
-                    clusterReadiness = "Conforme sur tous les nœuds actifs"
-                },
-                new
-                {
-                    id = "python",
-                    name = "Python 3 Runtime",
-                    role = "Moteur d'exécution pour plugins tiers et scripts isolés Landlock",
-                    provider = "stock",
-                    stockVersion = "3.12",
-                    customPath = (string?)null,
-                    conformanceStatus = "ready",
-                    probePreserved = true,
-                    executables = new[] { "python3" },
-                    mediaTypes = new[] { "general" },
-                    encoders = Array.Empty<object>(),
-                    clusterReadiness = "Conforme sur tous les nœuds actifs"
-                }
+                Tool("ffmpeg", "FFmpeg", "Moteur universel de transcodage et filtrage vidéo/audio", ["ffmpeg"], ["video", "audio", "subtitles"], encoders),
+                Tool("mkvtoolnix", "MKVToolNix", "Multiplexage, extraction et édition rapide de conteneurs MKV", ["mkvmerge", "mkvextract", "mkvpropedit"], ["video", "audio", "subtitles"], none),
+                Tool("ffprobe", "FFprobe", "Inspection et sondage des métadonnées de flux", ["ffprobe"], ["video", "audio", "subtitles"], none),
+                Tool("mediainfo", "MediaInfo", "Analyse approfondie des métadonnées HDR et Dolby Vision", ["mediainfo"], ["video", "audio"], none),
+                Tool("imagemagick", "ImageMagick", "Traitement et retouche d'affiches, miniatures et jaquettes", ["magick", "convert"], ["image"], none),
+                Tool("python", "Python 3", "Moteur d'exécution des plugins tiers et des scripts isolés Landlock", ["python3"], ["general"], none)
             };
             return Results.Ok(list);
         }).AllowViewer().WithName("ListClusterTools");
 
+        // Aucun test de conformité n'existe encore : répondre « réussi » sans rien exécuter serait une fausse assurance.
         tools.MapPost("/{toolId}/conformance-test", (string toolId) =>
-        {
-            var id = toolId.Trim().ToLowerInvariant();
-            if (id is not ("ffmpeg" or "mkvtoolnix" or "ffprobe" or "mediainfo" or "imagemagick" or "python"))
-                return Results.NotFound(new { title = $"Outil '{toolId}' non reconnu." });
-
-            return Results.Ok(new
-            {
-                toolId = id,
-                passed = true,
-                message = $"Test de conformité validé avec succès pour '{id}'. Format de sortie et sondes opérationnels.",
-                timestamp = DateTimeOffset.UtcNow
-            });
-        }).WithName("TestToolConformance");
-
-        // --- GESTION DU STORE ET DÉPÔTS DU CLUSTER (0063) ---
-        var store = app.MapGroup("/api/v1/store").WithTags("Store");
-        store.MapGet("/repositories", () =>
-        {
-            var repos = new object[]
-            {
-                new
-                {
-                    id = "official",
-                    name = "Dépôt Officiel Encoding",
-                    url = "https://plugins.encoding.io/v1/repository.json",
-                    description = "Dépôt officiel maintenu par l'équipe Encoding. Intégrations testées et certifiées.",
-                    isOfficial = true,
-                    isLocked = true,
-                    enabled = true,
-                    packagesCount = 8,
-                    updatedAt = DateTimeOffset.UtcNow
-                },
-                new
-                {
-                    id = "community-transcode",
-                    name = "Communauté Transcodage & Filtres",
-                    url = "https://community.encoding.io/v1/repository.json",
-                    description = "Plugins et outils communautaires pour le traitement avancé audio/vidéo.",
-                    isOfficial = false,
-                    isLocked = false,
-                    enabled = true,
-                    packagesCount = 12,
-                    updatedAt = DateTimeOffset.UtcNow.AddHours(-12)
-                }
-            };
-            return Results.Ok(repos);
-        }).AllowViewer().WithName("ListStoreRepositories");
-
-        store.MapGet("/packages", () =>
-        {
-            var packages = new object[]
-            {
-                new
-                {
-                    id = "community.whisper-subtitles",
-                    name = "Whisper Subtitles Generator",
-                    kind = "plugin",
-                    category = "subtitles",
-                    categoryLabel = "Sous-titres",
-                    version = "1.2.0",
-                    installedVersion = "1.0.4",
-                    hasUpdate = true,
-                    author = "OpenAI / Community",
-                    description = "Génère des sous-titres automatiques multilingues de haute précision via Whisper.",
-                    requiredTools = new[] { "whisper-cli", "mkvmerge" },
-                    repositoryId = "community-transcode",
-                    icon = "💬"
-                },
-                new
-                {
-                    id = "tool.whisper-cli",
-                    name = "Whisper.cpp CLI",
-                    kind = "tool",
-                    category = "tools",
-                    categoryLabel = "Outil Média",
-                    version = "1.7.1",
-                    installedVersion = (string?)null,
-                    hasUpdate = false,
-                    author = "ggerganov",
-                    description = "Moteur d'inférence haute performance en C++ pour Whisper, optimisé CPU et CUDA.",
-                    requiredTools = Array.Empty<string>(),
-                    repositoryId = "community-transcode",
-                    icon = "🧠"
-                },
-                new
-                {
-                    id = "official.flac-master",
-                    name = "FLAC Audio Master",
-                    kind = "plugin",
-                    category = "audio",
-                    categoryLabel = "Audio",
-                    version = "1.1.0",
-                    installedVersion = (string?)null,
-                    hasUpdate = false,
-                    author = "Encoding Team",
-                    description = "Normalisation et compression intelligente pour audiophiles avec conversion multicanale.",
-                    requiredTools = new[] { "ffmpeg" },
-                    repositoryId = "official",
-                    icon = "🎵"
-                },
-                new
-                {
-                    id = "tool.handbrake-cli",
-                    name = "HandBrake CLI",
-                    kind = "tool",
-                    category = "tools",
-                    categoryLabel = "Outil Média",
-                    version = "1.8.2",
-                    installedVersion = (string?)null,
-                    hasUpdate = false,
-                    author = "HandBrake Team",
-                    description = "Encodeur vidéo par lots prêt à l'emploi avec préréglages constructeurs (Apple, Roku, Android).",
-                    requiredTools = Array.Empty<string>(),
-                    repositoryId = "community-transcode",
-                    icon = "🎬"
-                }
-            };
-            return Results.Ok(packages);
-        }).AllowViewer().WithName("ListStorePackages");
+            Results.Json(new { title = "Le test de conformité des outils n’est pas encore disponible." },
+                statusCode: StatusCodes.Status501NotImplemented)).WithName("TestToolConformance");
     }
 }
