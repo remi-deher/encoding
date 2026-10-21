@@ -31,10 +31,11 @@ jobs:
       - name: Enable auto-merge for pull requests targeting dev
         if: github.event.pull_request.base.ref == 'dev' && github.event.pull_request.draft == false
         env:
+          # Squash : un seul commit par PR de fonctionnalité dans dev.
           # Configure PAT_TOKEN in repository Actions secrets when github.token cannot enable auto-merge.
           GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash
 
       - name: Enable auto-merge for a dev-to-main promotion
         if: >-
