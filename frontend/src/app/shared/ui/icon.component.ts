@@ -28,6 +28,8 @@ const ICONS = {
   pin: 'M9 3h6l-1 6 4 4H6l4-4Zm3 10v8',
   edit: 'm4 16 12-12 4 4L8 20H4Zm10-10 4 4',
   sort: 'M8 4v16m-4-4 4 4 4-4M16 20V4m-4 4 4-4 4 4',
+  eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+  'eye-off': 'M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6C3.7 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 4.4-1M9.9 9.9a3 3 0 0 0 4.2 4.2',
 } as const;
 export type IconName = keyof typeof ICONS;
 @Component({
