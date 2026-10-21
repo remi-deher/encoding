@@ -1,10 +1,10 @@
 # TODO : Règle d'or de l'accélération matérielle et isolation des outils de conteneur
 
 > **Destinataire** : Agent IA / Développeur  
-> **Statut** : À prendre en charge  
+> **Statut** : À prendre en charge (`HardwareCapabilities.RequiresHardwareAcceleration` existe dans `AiToolContracts.cs` ; le drapeau `IsHardwareAccelerated`, le rejet par le validateur de plugins et la restriction du résolveur ne sont pas codés)  
 > **Priorité** : Haute  
 > **Domaines** : Runtime Worker, Plugins, Store/Validation, Sécurité Landlock, Outils Média  
-> **Documents de référence** : [0051](../architecture/domains/cluster.md), [0063](../architecture/domains/plugins.md), [0064](../architecture/domains/plugins.md), [0065](../architecture/domains/auth-ops.md).
+> **Documents de référence** : [cluster](../architecture/domains/cluster.md), [plugins](../architecture/domains/plugins.md) (Store ; outils média custom/managed non implémentés), [auth-ops](../architecture/domains/auth-ops.md).
 
 ---
 
@@ -45,14 +45,14 @@ public static class HardwareCapabilities
 ```
 
 ### B. Contrôle à l'installation du plugin (`PluginPackageValidator`)
-Lors de l'import ou du téléchargement d'un paquet `.zip` ([0063](../architecture/domains/plugins.md)) :
+Lors de l'import ou du téléchargement d'un paquet `.zip` ([plugins](../architecture/domains/plugins.md)) :
 1. Inspecter `plugin.json`.
 2. Si un composant ou un outil déclaré dans le plugin prétend fournir ou requérir une capacité matérielle tout en pointant vers un binaire embarqué (`bin/` ou chemin relatif dans le zip) :
    - **Rejeter le paquet avec une erreur explicite** :
      `"PLUGIN_EMBEDDED_HARDWARE_TOOL_FORBIDDEN: L'accélération matérielle ({capability}) ne peut pas être fournie par un binaire embarqué. Le plugin doit déclarer la dépendance vers l'outil du conteneur (ex. requiredTools: ['ffmpeg'])."`
 
 ### C. Résolution d'exécution au runtime (`ToolResolver` / `RuntimeEligibility`)
-Lorsqu'un nœud de flow s'exécute ou qu'un worker vérifie son éligibilité ([0064](../architecture/domains/plugins.md)) :
+Lorsqu'un nœud de flow s'exécute ou qu'un worker vérifie son éligibilité ([plugins](../architecture/domains/plugins.md)) :
 1. Analyser les `RequiredCapabilities` du composant et de la configuration courante (ex: profile encodeur ciblant `nvenc`, `qsv` ou `vaapi`).
 2. **Si l'opération requiert une accélération matérielle** :
    - Forcer le fournisseur vers **`Stock` (Conteneur)** ou **`Custom` Nœud validé par la mire synthétique matérielle**.
@@ -61,7 +61,7 @@ Lorsqu'un nœud de flow s'exécute ou qu'un worker vérifie son éligibilité ([
 3. **Si l'opération est purement logicielle (CPU)** :
    - Autoriser la cascade standard : Bloc > Outil embarqué du plugin > Outil conteneur.
 
-### D. Confinement Landlock ([0015](../architecture/domains/runtime.md))
+### D. Confinement Landlock ([runtime](../architecture/domains/runtime.md))
 - Les binaires embarqués dans les plugins (`/opt/encoding/custom-plugins/<plugin>/bin/`) n'ont aucun accès aux nœuds de périphériques `/dev/dri`, `/dev/nvidia*`.
 - Seul le processus de référence exécutant les binaires système du conteneur dispose des descripteurs de périphériques matériels montés.
 
@@ -73,13 +73,13 @@ Lorsqu'un nœud de flow s'exécute ou qu'un worker vérifie son éligibilité ([
   - Ajouter l'énumération / helper `HardwareCapabilities.RequiresHardwareAcceleration(capabilities)`.
   - Compléter `FlowToolRequirement` et `ToolDescriptor` avec le drapeau booléen calculé `IsHardwareAccelerated`.
 - [ ] **2. Validateur de Paquet Plugin (`Encoding.Api / Plugins`)** :
-  - Dans la validation de `plugin.json` (architecture 0063), vérifier qu'aucun binaire embarqué ne revendique de capacités matérielles.
+  - Dans la validation de `plugin.json` (fiche plugins, Store), vérifier qu'aucun binaire embarqué ne revendique de capacités matérielles.
   - Ajouter les tests unitaires correspondants (`PluginPackageValidatorTests`).
 - [ ] **3. Résolveur d'outils Runtime (`Encoding.Worker / Runtime`)** :
   - Dans la résolution de l'exécutable pour une étape (`ToolResolver` / `FlowStepExecutor`), interdire la substitution par un binaire plugin dès lors qu'un encodeur matériel est actif.
-  - Vérifier que `ToolCapabilityProbe` reste le garant unique de l'accélération matérielle (architecture 0051 & 0064).
+  - Vérifier que `ToolCapabilityProbe` reste le garant unique de l'accélération matérielle (fiches cluster et plugins).
 - [ ] **4. Documentation Architecture** :
-  - Mettre à jour `0063-plugin-store-and-repositories.md` et `0064-custom-and-managed-media-tools.md` avec cette règle explicite.
+  - Inscrire cette règle dans la fiche [plugins](../architecture/domains/plugins.md) ; si les outils custom/managed sont repris, écrire un ADR dans `docs/architecture/adr/`.
 - [ ] **5. Tests de validation automatisés** :
   - Test unitaire : Rejet d'un plugin tentant d'embarquer un binaire avec accélération `nvenc`/`vaapi`.
   - Test d'intégration : Un composant demandant `nvenc` utilise systématiquement le `ffmpeg` du conteneur même si un autre outil est présent dans le répertoire de travail.

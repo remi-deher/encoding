@@ -8,7 +8,7 @@
 
 Le workflow `.github/workflows/release.yml` s'exécute à chaque push sur `main`. Il confirme qu'une PR `dev` vers `main` a été fusionnée et attend que les contrôles CI du commit (Backend, Frontend) soient tous terminés et verts, puis publie sur Docker Hub :
 
-- `<utilisateur>/encoding` (`backend/Dockerfile`, contexte racine) : image unique contenant le serveur, l'interface web, le worker et le lanceur qui les démarre selon le mode du nœud (voir l'architecture 0036).
+- `<utilisateur>/encoding` (`backend/Dockerfile`, contexte racine) : image unique contenant le serveur, l'interface web, le worker et le lanceur qui les démarre selon le mode du nœud (voir [cluster](../architecture/domains/cluster.md)).
 
 L'image reçoit les tags `X.Y.Z` et `latest`, et le commit reçoit le tag git `vX.Y.Z`.
 
@@ -29,7 +29,7 @@ Calculé par `.github/scripts/next-version.sh` à partir du dernier tag `vX.Y.Z`
 
 ## Utiliser l'image
 
-Sans configuration de base de données, l'image utilise SQLite dans le dossier de données (`/var/lib/encoding-node/cluster.db`). Chaque serveur garde son propre fichier ; les données se réconcilient par le maillage opportuniste 0049 :
+Sans configuration de base de données, l'image utilise SQLite dans le dossier de données (`/var/lib/encoding-node/cluster.db`). Chaque serveur garde son propre fichier ; les données se réconcilient par le [maillage de réconciliation](../architecture/domains/replication-storage.md) :
 
 ```
 docker run -d --name encoding -p 8080:8080 \
