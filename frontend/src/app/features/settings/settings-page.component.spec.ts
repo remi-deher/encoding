@@ -17,11 +17,11 @@ describe('SettingsPageComponent', () => {
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement };
   }
-  it('shows four domains, a single editing drawer, and appearance by default', async () => {
+  it('shows five domains, a single editing drawer, and appearance by default', async () => {
     const { element } = await setup();
     expect(
       [...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent?.trim()),
-    ).toEqual(['Interface', 'Accès', 'Connexions', 'Exploitation']);
+    ).toEqual(['Interface', 'Accès', 'Connexions', 'Réseau', 'Exploitation']);
     expect(element.querySelector('app-appearance-tab')).not.toBeNull();
     expect(element.querySelectorAll('app-detail-drawer')).toHaveLength(1);
   });
@@ -38,7 +38,7 @@ describe('SettingsPageComponent', () => {
     expect(element.querySelector('app-ai-tools-tab')).not.toBeNull();
     expect(element.querySelector('app-mcp-server-tab')).not.toBeNull();
     expect(element.querySelector('app-webhooks-tab')).not.toBeNull();
-    expect(element.querySelectorAll('[role="tab"]')).toHaveLength(4);
+    expect(element.querySelectorAll('[role="tab"]')).toHaveLength(5);
   });
   it.each(['system', 'logs', 'system-logs', 'overview', 'operations'])(
     'keeps operation deep links working: %s',

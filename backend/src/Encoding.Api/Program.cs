@@ -72,6 +72,7 @@ builder.Services.AddSingleton<ISystemLogNodeContext>(localNodeLogContext);
 builder.Services.AddSystemLogging();
 builder.Services.AddApiProblemDetails();
 builder.Services.AddClusterAuthentication(builder.Configuration);
+builder.Services.AddSingleton<NetworkSettingsService>();
 builder.Services.AddSingleton<ApiTokenRepository>();
 builder.Services.AddSingleton<McpSessionManager>();
 builder.Services.AddSingleton<ExecutionStreamBroadcaster>();
@@ -229,6 +230,8 @@ if (peerClusterOptions.Enabled)
 }
 
 app.UseRequestObservability();
+app.UseTrustedProxies();
+app.UseSecurityHeaders();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -238,6 +241,7 @@ app.UseClusterAuthentication();
 app.UsePeerRequestRouting();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
+app.MapNetworkSettingsEndpoints();
 app.MapEnrollmentWindowEndpoints();
 app.MapFlowEndpoints();
 app.MapFlowAiEndpoints();

@@ -45,6 +45,34 @@ internal static class AuthScenarios
         Check(AuthService.ValidateNewUser("a b", "court").Count == 2, "Spaces in names and short passwords are both reported.");
         Check(AuthService.ValidatePassword("p", new string('x', 257)).Count == 1, "Oversized passwords are refused before hashing.");
         Console.WriteLine("PASS: password hashing, rehash detection and credential policy.");
+        var matcher = ProxyMatcher.Create(["192.168.1.10", "172.18.0.0/16", "::1"]);
+        Check(matcher.Contains(System.Net.IPAddress.Parse("192.168.1.10")) && !matcher.Contains(System.Net.IPAddress.Parse("192.168.1.11")), "A single proxy address matches only itself.");
+        Check(matcher.Contains(System.Net.IPAddress.Parse("172.18.5.9")) && matcher.Contains(System.Net.IPAddress.Parse("::ffff:192.168.1.10")), "Networks and IPv4-mapped addresses match.");
+        Check(!ProxyMatcher.IsValidEntry("pas une adresse") && !ProxyMatcher.IsValidEntry("10.0.0.0/40"), "Malformed proxy entries are refused.");
+        var settingsFile = Path.Combine(Path.GetTempPath(), "network_" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            var service = new NetworkSettingsService(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Network:SettingsFile"] = settingsFile }).Build());
+            Check(!service.IsTrustedProxy(System.Net.IPAddress.Parse("192.168.1.10")), "No proxy is trusted by default.");
+            Check(service.Save(true, []).Count == 1, "Trust cannot be enabled without a proxy address.");
+            Check(service.Save(true, ["bad"]).Count == 1, "An invalid proxy address is refused.");
+            Check(service.Save(true, ["192.168.1.10"]).Count == 0 && service.IsTrustedProxy(System.Net.IPAddress.Parse("192.168.1.10")), "A declared proxy is trusted after saving.");
+            var reloaded = new NetworkSettingsService(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Network:SettingsFile"] = settingsFile }).Build());
+            Check(reloaded.IsTrustedProxy(System.Net.IPAddress.Parse("192.168.1.10")), "The proxy setting survives a restart.");
+        }
+        finally { File.Delete(settingsFile); }
+        Console.WriteLine("PASS: trusted proxy matching and settings persistence.");
+    }
+
+    private static async Task SecurityHeadersAsync(WebApplicationFactory<ApiAssembly> factory)
+    {
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/api/v1/auth/status");
+        Check(response.Headers.TryGetValues("X-Content-Type-Options", out var sniff) && sniff.Single() == "nosniff", "API responses forbid content sniffing.");
+        Check(response.Headers.Contains("X-Frame-Options") && response.Headers.Contains("Referrer-Policy"), "API responses carry framing and referrer protections.");
+        Check(response.Headers.CacheControl?.NoStore == true, "API responses are never cached.");
+        Check(!response.Headers.Contains("Strict-Transport-Security"), "HSTS is only sent over HTTPS.");
+        Console.WriteLine("PASS: security headers on API responses.");
     }
 
     public static async Task RunAsync(string connection)
@@ -62,6 +90,7 @@ internal static class AuthScenarios
             {
                 await ScenarioAsync(factory);
                 await EndpointCatalogueAsync(factory);
+                await SecurityHeadersAsync(factory);
             }
             await using (var limited = CreateFactory(cluster, directory, new() { ["Auth:AnonymousRequestsPerMinute"] = "3" }))
             {

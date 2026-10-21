@@ -1,7 +1,6 @@
 using System.Threading.RateLimiting;
 using Encoding.Api.Nodes;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Encoding.Api.Auth;
@@ -50,21 +49,11 @@ public static class AuthExtensions
                 http.User.Identity?.Name ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = options.HeavyOperationsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
-        if (configuration.GetValue("Auth:TrustForwardedHeaders", false))
-        {
-            services.Configure<ForwardedHeadersOptions>(forwarded =>
-            {
-                forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-                forwarded.KnownIPNetworks.Clear();
-                forwarded.KnownProxies.Clear();
-            });
-        }
         return services;
     }
 
     public static WebApplication UseClusterAuthentication(this WebApplication app)
     {
-        if (app.Configuration.GetValue("Auth:TrustForwardedHeaders", false)) app.UseForwardedHeaders();
         app.UseAuthentication();
         app.UseRateLimiter();
         app.UseAuthorization();

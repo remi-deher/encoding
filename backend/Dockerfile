@@ -92,7 +92,8 @@ COPY backend/src/Encoding.Api/Flows/Catalog/plex.json /opt/encoding/plugins/plex
 COPY backend/plugins/sdk/encoding_plugin_sdk.py backend/plugins/jellyfin/plugin.py /opt/encoding/plugins/jellyfin/
 COPY backend/src/Encoding.Api/Flows/Catalog/jellyfin.json /opt/encoding/plugins/jellyfin/manifests/
 # Plugins du Store téléchargés par le worker (0063) : recréés depuis le serveur, hors du dossier de données privées du nœud.
-RUN mkdir -p /opt/encoding/custom-plugins
+RUN mkdir -p /opt/encoding/custom-plugins /var/lib/encoding-node /var/lib/encoding/flow-backups /var/lib/encoding/runtime-artifacts /var/lib/encoding/plugin-keys \
+ && chown -R $APP_UID:$APP_UID /opt/encoding/custom-plugins /var/lib/encoding-node /var/lib/encoding
 WORKDIR /app
 COPY --from=build /app/api ./api
 COPY --from=build /app/agent ./agent
@@ -118,4 +119,8 @@ ENV Node__Roles=server,worker \
 # 8080 : API et interface web ; 8443 : transport TLS mutuel entre serveurs quand PeerCluster est activé.
 # L'agent (8081) et le lanceur (8082) restent locaux au conteneur.
 EXPOSE 8080 8443
+# Exécution sans root ($APP_UID, 1654 dans l'image de base). GPU : ajouter le GID du groupe de renderD128 au conteneur
+# (group_add, voir docker-compose.gpu.yml). Les volumes déjà créés par une ancienne image (root) doivent être rendus
+# à cet utilisateur : voir docs/operations/reverse-proxy.md.
+USER $APP_UID
 ENTRYPOINT ["dotnet", "/app/launcher/Encoding.Launcher.dll"]

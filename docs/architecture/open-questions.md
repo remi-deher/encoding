@@ -40,7 +40,7 @@ Seule la version de protocole (`Current = 1`) est contrôlée. Pas de plage de s
 ## Hygiène du dépôt
 
 - `backend/migrations/0036_library_cluster_tombstones.sql` (racine) n'est pas chargé par le migrateur (seul `migrations/sqlite/` l'est) : reliquat à supprimer.
-- Les instructions du projet (mission) et la mémoire d'équipe citent encore PostgreSQL ; le code et `AGENTS.md` disent SQLite seul. À aligner.
+- Les instructions du projet (mission) et la mémoire d'équipe citent encore PostgreSQL ; le code, `AGENTS.md` et la production (vérifiée le 2026-10-21) sont en SQLite seul. À aligner côté instructions du projet, hors dépôt.
 - Documents d'exploitation : ré-audités le 2026-10-21 (index dans `docs/operations/README.md`). Restent à ré-auditer : `docs/design/*`.
 - `backend/README.md` : sections datées par numéros de migration (« la migration 0008 ajoute… ») à réécrire en renvoyant vers les fiches.
 
