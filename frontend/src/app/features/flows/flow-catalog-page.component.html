@@ -10,6 +10,9 @@
   (actionClosed)="closeFlowCreation()"
   filterLabel=""
   searchLabel="Rechercher un flow"
+  [showToolbar]="totalCount() > 0"
+  [emptyState]="catalogState() === 'ready' && totalCount() === 0 ? emptyState : null"
+  (emptyStateAction)="openFlowCreation()"
   [searchQuery]="searchQuery()"
   (searchQueryChange)="searchQuery.set($event)"
   [catalogState]="catalogState()"
@@ -27,6 +30,25 @@
     <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
   </ng-template>
 
+  <div catalogue-summary class="flow-types" role="group" aria-label="Filtrer par type de média">
+    @if (totalCount() > 0) {
+      @for (type of typeTiles(); track type.value) {
+        <button
+          type="button"
+          class="flow-type"
+          [attr.data-media]="type.value"
+          [attr.aria-pressed]="typeFilter() === type.value"
+          [disabled]="type.count === 0"
+          (click)="toggleType(type.value)"
+        >
+          <span class="flow-type-icon"><app-icon [name]="type.icon" /></span>
+          <span class="flow-type-label">{{ type.label }}</span>
+          <span class="flow-type-count">{{ type.count }}</span>
+        </button>
+      }
+    }
+  </div>
+
   <div catalogue-table class="flow-groups">
     @for (group of groups(); track group.value) {
       <section class="flow-group" [attr.aria-label]="group.label">
@@ -41,6 +63,7 @@
         </header>
         <app-data-table
           layout="resources"
+          [compactResources]="true"
           [columns]="columns"
           [rowActions]="rowActions"
           (rowAction)="onRowAction($event)"
@@ -53,7 +76,9 @@
         />
       </section>
     } @empty {
-      <p class="catalog-state">Aucun flow ne correspond à la recherche.</p>
+      <p class="catalog-state">
+        Aucun flow ne correspond à votre recherche ou au type sélectionné.
+      </p>
     }
   </div>
 

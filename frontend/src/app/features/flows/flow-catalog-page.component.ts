@@ -24,7 +24,10 @@ import {
   DataTableRow,
 } from '../../shared/ui/data-table.component';
 import { IconComponent } from '../../shared/ui/icon.component';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import {
+  CatalogEmptyState,
+  ManagementCatalogTemplateComponent,
+} from '../../shared/templates/management-catalog-template.component';
 import { MEDIA_TYPE_ICONS, MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 import { FLOW_CREATION_FORM } from '../../shared/models/flow-creation';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
@@ -426,17 +429,40 @@ export class FlowCatalogPageComponent {
   ];
 
   protected readonly filteredFlows = computed(() => {
+    const type = this.typeFilter();
     const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
     return this.records().filter(
       (flow) =>
-        !query ||
-        flow.name.toLocaleLowerCase('fr-FR').includes(query) ||
-        flow.mediaType.toLocaleLowerCase('fr-FR').includes(query) ||
-        flow.summary.toLocaleLowerCase('fr-FR').includes(query) ||
-        flow.status.toLocaleLowerCase('fr-FR').includes(query) ||
-        flow.state.toLocaleLowerCase('fr-FR').includes(query),
+        (!type || flow.category === type) &&
+        (!query ||
+          flow.name.toLocaleLowerCase('fr-FR').includes(query) ||
+          flow.mediaType.toLocaleLowerCase('fr-FR').includes(query) ||
+          flow.summary.toLocaleLowerCase('fr-FR').includes(query) ||
+          flow.status.toLocaleLowerCase('fr-FR').includes(query) ||
+          flow.state.toLocaleLowerCase('fr-FR').includes(query)),
     );
   });
+  protected readonly typeFilter = signal<MediaType | null>(null);
+  protected readonly totalCount = computed(() => this.records().length);
+  protected readonly typeTiles = computed(() =>
+    MEDIA_TYPE_OPTIONS.map((type) => ({
+      ...type,
+      icon: MEDIA_TYPE_ICONS[type.value],
+      count: this.records().filter((flow) => flow.category === type.value).length,
+    })),
+  );
+  protected toggleType(type: MediaType): void {
+    this.typeFilter.update((current) => (current === type ? null : type));
+  }
+  protected readonly emptyState: CatalogEmptyState = {
+    icon: '▶',
+    eyebrow: 'FLOWS',
+    title: 'Créez votre premier flow',
+    description:
+      'Un flow décrit les étapes appliquées à vos médias : analyse, conversion, sous-titres, publication. Partez d’un modèle ou importez un flow existant.',
+    chips: MEDIA_TYPE_OPTIONS.map((type) => type.label),
+    actionLabel: 'Créer le premier flow',
+  };
   protected readonly rows = this.filteredFlows;
   protected readonly groups = computed(() =>
     MEDIA_TYPE_OPTIONS.map((type) => ({
