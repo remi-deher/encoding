@@ -21,7 +21,7 @@ describe('SettingsPageComponent', () => {
     const { element } = await setup();
     expect(
       [...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent?.trim()),
-    ).toEqual(['Interface', 'Accès', 'Connexions', 'Exploitation']);
+    ).toEqual(['Interface', 'Accès', 'Connexions', 'Réseau', 'Exploitation']);
     expect(element.querySelector('app-appearance-tab')).not.toBeNull();
     expect(element.querySelectorAll('app-detail-drawer')).toHaveLength(1);
   });

@@ -1,7 +1,6 @@
 using System.Threading.RateLimiting;
 using Encoding.Api.Nodes;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Encoding.Api.Auth;
@@ -50,34 +49,7 @@ public static class AuthExtensions
                 http.User.Identity?.Name ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = options.HeavyOperationsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
         });
-        if (configuration.GetValue("Auth:TrustForwardedHeaders", false))
-        {
-            services.Configure<ForwardedHeadersOptions>(forwarded =>
-            {
-                forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-                forwarded.KnownIPNetworks.Clear();
-                forwarded.KnownProxies.Clear();
-                // Sans liste, tout appelant direct est cru sur parole (comportement historique, à éviter hors réseau fermé).
-                foreach (var entry in SplitList(configuration["Auth:KnownProxies"]))
-                    forwarded.KnownProxies.Add(System.Net.IPAddress.Parse(entry));
-                foreach (var entry in SplitList(configuration["Auth:KnownNetworks"]))
-                    forwarded.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(entry));
-            });
-        }
         return services;
-    }
-
-    private static IEnumerable<string> SplitList(string? value) =>
-        (value ?? string.Empty).Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-    /// <summary>Applique X-Forwarded-For/Proto avant les fichiers statiques et les en-têtes de sécurité (HSTS dépend du schéma réel).</summary>
-    public static WebApplication UseTrustedForwardedHeaders(this WebApplication app)
-    {
-        if (!app.Configuration.GetValue("Auth:TrustForwardedHeaders", false)) return app;
-        if (string.IsNullOrWhiteSpace(app.Configuration["Auth:KnownProxies"]) && string.IsNullOrWhiteSpace(app.Configuration["Auth:KnownNetworks"]))
-            app.Logger.LogWarning("Auth:TrustForwardedHeaders=true sans Auth:KnownProxies ni Auth:KnownNetworks : n'importe quel appelant direct peut forger X-Forwarded-For et X-Forwarded-Proto. Renseignez l'adresse du reverse proxy.");
-        app.UseForwardedHeaders();
-        return app;
     }
 
     public static WebApplication UseClusterAuthentication(this WebApplication app)
