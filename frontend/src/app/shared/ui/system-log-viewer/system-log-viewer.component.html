@@ -28,29 +28,33 @@
     <div class="log-filters">
       <app-search-field
         class="log-search"
-        variant="compact"
+        variant="bar"
         label="Rechercher dans les journaux"
         placeholder="Message, exception, identifiant…"
         [value]="searchText()"
         (valueChange)="onSearchText($event)"
-      />
-      <mat-form-field appearance="outline" subscriptSizing="dynamic"
-        ><mat-label>Niveau minimum</mat-label
-        ><mat-select [value]="selectedLevel()" (selectionChange)="setLevel($event.value)">
-          @for (level of levelOptions; track level.value) {
-            <mat-option [value]="level.value">{{ level.label }}</mat-option>
-          }
-        </mat-select></mat-form-field
+        [filterCount]="activeFilterCount()"
       >
-      <mat-form-field appearance="outline" subscriptSizing="dynamic"
-        ><mat-label>Service</mat-label
-        ><mat-select [value]="selectedCategory()" (selectionChange)="setCategory($event.value)"
-          ><mat-option value="">Tous les services</mat-option>
-          @for (category of categories(); track category) {
-            <mat-option [value]="category">{{ category }}</mat-option>
-          }
-        </mat-select></mat-form-field
-      >
+        <div search-filters class="log-filter-fields">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic"
+            ><mat-label>Niveau minimum</mat-label
+            ><mat-select [value]="selectedLevel()" (selectionChange)="setLevel($event.value)">
+              @for (level of levelOptions; track level.value) {
+                <mat-option [value]="level.value">{{ level.label }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+          <mat-form-field appearance="outline" subscriptSizing="dynamic"
+            ><mat-label>Service</mat-label
+            ><mat-select [value]="selectedCategory()" (selectionChange)="setCategory($event.value)"
+              ><mat-option value="">Tous les services</mat-option>
+              @for (category of categories(); track category) {
+                <mat-option [value]="category">{{ category }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+        </div>
+      </app-search-field>
     </div>
     <div class="action-toolbar">
       <span class="export-scope"
