@@ -12,6 +12,10 @@ public static class ApiTokenEndpoints
             Results.Ok(await repository.ListAsync(ct)))
             .WithName("ListApiTokens");
 
+        group.MapGet("/replication", async (Encoding.Api.Tools.AiClusterService cluster, CancellationToken ct) =>
+            Results.Ok(await cluster.ApiTokenReplicationAsync(ct)))
+            .WithName("ApiTokenReplication").RequireAuthorization(AuthExtensions.AdministratorPolicy);
+
         group.MapPost("", async (CreateApiTokenRequest request, ApiTokenRepository repository, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 128)

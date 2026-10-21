@@ -1,7 +1,12 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { ApiTokenResponse, CreateApiTokenRequest, CreatedApiTokenResponse } from '../models/api-token';
+import {
+  ApiTokenReplicationView,
+  ApiTokenResponse,
+  CreateApiTokenRequest,
+  CreatedApiTokenResponse,
+} from '../models/api-token';
 
 @Injectable({ providedIn: 'root' })
 export class ApiTokenService {
@@ -9,6 +14,10 @@ export class ApiTokenService {
 
   list(): Observable<readonly ApiTokenResponse[]> {
     return this.http.get<readonly ApiTokenResponse[]>('/api/v1/tokens');
+  }
+
+  replication(): Observable<ApiTokenReplicationView> {
+    return this.http.get<ApiTokenReplicationView>('/api/v1/tokens/replication');
   }
 
   create(request: CreateApiTokenRequest): Observable<CreatedApiTokenResponse> {

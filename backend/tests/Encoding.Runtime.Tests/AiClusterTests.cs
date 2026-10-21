@@ -147,6 +147,24 @@ public sealed class AiClusterTests
     }
 
     [Fact]
+    public async Task ApiTokenReplicationShowsWhichNodeKnowsEachTokenWithoutExposingValues()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var (created, plaintext) = await new Encoding.Api.Auth.ApiTokenRepository(mesh.First.Database.Db).CreateTokenAsync("test", "viewer", null, Ct);
+
+        var view = await mesh.First.Service.ApiTokenReplicationAsync(Ct);
+
+        Assert.Equal(2, view.Nodes.Count);
+        var first = Assert.Single(view.Nodes, node => node.NodeId == mesh.First.Identity.PeerId);
+        Assert.Equal(new Encoding.Contracts.Auth.ApiTokenReplicationEntry(created.Id, false), Assert.Single(first.Tokens!));
+        // Le second nœud n'a pas encore reçu le jeton : l'écart est visible au lieu d'être supposé résorbé.
+        var second = Assert.Single(view.Nodes, node => node.NodeId == mesh.Second.Identity.PeerId);
+        Assert.True(second.Reachable);
+        Assert.Empty(second.Tokens!);
+        Assert.DoesNotContain(plaintext, System.Text.Json.JsonSerializer.Serialize(view), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SessionsCannotMixMediaOrOperationsAndPreserveUsageOnReplay()
     {
         await using var mesh = await Mesh.CreateAsync();
@@ -635,7 +653,7 @@ public sealed class AiClusterTests
             return node;
         }
         public AiClusterService NewService() => new(Transport, Store, Auth, Settings, Clients, Configuration, LocalNode, new AiQuotaService(Profile.Runtime), Catalog,
-            new ServiceCollection().AddSingleton<AiAssistantService>(_ => Assistant ?? throw new InvalidOperationException("Assistant not configured")).BuildServiceProvider());
+            new ServiceCollection().AddSingleton(new Encoding.Api.Auth.ApiTokenRepository(Database.Db)).AddSingleton<AiAssistantService>(_ => Assistant ?? throw new InvalidOperationException("Assistant not configured")).BuildServiceProvider());
         public async ValueTask DisposeAsync() { Auth.Dispose(); Identity.Dispose(); Key.Dispose(); await Database.DisposeAsync(); Profile.Dispose(); }
     }
     private sealed class Mesh : IAsyncDisposable
