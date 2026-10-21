@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 export const scopes = [
   {
     workflow: 'backend',
-    checks: ['backend-compile', 'backend-runtime-tests', 'backend-launcher-tests', 'backend-plugin-tests', 'backend-prototype-tests', 'ai-cli-native'],
+    checks: ['backend-compile', 'backend-runtime-tests', 'backend-launcher-tests', 'backend-plugin-tests', 'backend-prototype-tests', 'backend-static-checks', 'ai-cli-native'],
     paths: ['backend/**', '!backend/tests/monitoring/**', '.github/workflows/backend.yml'],
   },
   {
