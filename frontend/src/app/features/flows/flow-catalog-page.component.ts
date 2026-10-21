@@ -20,9 +20,9 @@ import {
   DataTableListActionEvent,
   DataTableActionEvent,
   DataTableSelectionActionEvent,
-  DataTableComponent,
   DataTableRow,
 } from '../../shared/ui/data-table.component';
+import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import {
   CatalogEmptyState,
@@ -60,7 +60,7 @@ interface FlowRecord extends DataTableRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-catalog-page',
   imports: [
-    DataTableComponent,
+    StatusBadgeComponent,
     FlowDetailsComponent,
     ManagementCatalogTemplateComponent,
     IconComponent,

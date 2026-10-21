@@ -61,19 +61,39 @@
             >{{ group.rows.length }} {{ group.rows.length === 1 ? 'flow' : 'flows' }}</span
           >
         </header>
-        <app-data-table
-          layout="resources"
-          [compactResources]="true"
-          [columns]="columns"
-          [rowActions]="rowActions"
-          (rowAction)="onRowAction($event)"
-          [rows]="group.rows"
-          [selectable]="false"
-          [rowOpenable]="true"
-          rowOpenLabel="Consulter"
-          (rowOpen)="onFlowOpen($event)"
-          [emptyMessage]="'Aucun flow.'"
-        />
+        <ul class="flow-list">
+          @for (row of group.rows; track row.id) {
+            <li class="flow-row">
+              <button type="button" class="flow-main" (click)="onFlowOpen(row)">
+                <span class="flow-name">{{ row.name }}</span>
+                <span class="flow-meta">{{ row.steps }}</span>
+              </button>
+              <div class="flow-badges">
+                <app-status-badge
+                  [label]="row.state === 'Brouillon' ? 'Brouillon' : 'Publié · ' + row.version"
+                  [tone]="row.state === 'Brouillon' ? 'warning' : 'success'"
+                />
+                <app-status-badge
+                  [label]="'JSON : ' + row.backup.toLowerCase()"
+                  [tone]="row.backup === 'En échec' ? 'danger' : 'neutral'"
+                />
+              </div>
+              <time class="flow-date">{{ row.modifiedAt }}</time>
+              <div class="flow-actions">
+                <button matButton="text" type="button" (click)="onFlowOpen(row)">Consulter</button>
+                <button
+                  matIconButton
+                  type="button"
+                  [matMenuTriggerFor]="rowMenu"
+                  [matMenuTriggerData]="{ row: row }"
+                  [attr.aria-label]="'Autres actions pour ' + row.name"
+                >
+                  <span aria-hidden="true">⋮</span>
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
       </section>
     } @empty {
       <p class="catalog-state">
@@ -81,6 +101,23 @@
       </p>
     }
   </div>
+
+  <mat-menu #rowMenu="matMenu">
+    <ng-template matMenuContent let-row="row">
+      @for (action of rowActions; track action.id) {
+        @if (!action.visibleWhen || action.visibleWhen(row)) {
+          <button
+            mat-menu-item
+            type="button"
+            [class.flow-menu-danger]="action.tone === 'danger'"
+            (click)="onRowAction({ actionId: action.id, row: row })"
+          >
+            {{ action.label }}
+          </button>
+        }
+      }
+    </ng-template>
+  </mat-menu>
 
   <ng-template #detailContent catalogue-detail>
     @if (selectedFlow(); as flow) {
