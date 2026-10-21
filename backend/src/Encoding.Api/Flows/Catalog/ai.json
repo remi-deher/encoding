@@ -45,7 +45,9 @@
             "required": true,
             "inline": true,
             "defaultValue": "fr",
-            "description": "Code de langue ISO-639 ou nom complet de la langue cible."
+            "description": "Code de langue ISO-639 ou nom complet de la langue cible.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "sourceLanguage",
@@ -54,7 +56,9 @@
             "required": false,
             "inline": true,
             "defaultValue": "auto",
-            "description": "Langue source d'origine ou 'auto' pour détection automatique."
+            "description": "Langue source d'origine ou 'auto' pour détection automatique.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "provider",
@@ -79,7 +83,9 @@
                 "value": "openai",
                 "label": "API OpenAI / Cloud"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "batchSize",
@@ -89,7 +95,9 @@
             "min": 20,
             "max": 200,
             "step": 10,
-            "description": "Nombre de répliques envoyées par requête à l'IA."
+            "description": "Nombre de répliques envoyées par requête à l'IA.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "subtitleTrackIndex",
@@ -99,12 +107,18 @@
             "min": 0,
             "max": 64,
             "step": 1,
-            "description": "Pour une vidéo, indice parmi ses pistes texte de sous-titres (0 = première piste). Les pistes image PGS/VobSub nécessitent un OCR distinct."
+            "description": "Pour une vidéo, indice parmi ses pistes texte de sous-titres (0 = première piste). Les pistes image PGS/VobSub nécessitent un OCR distinct.",
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
       "requiredTools": [
-        {"toolId": "ffmpeg", "minimumVersion": null, "requiredCapabilities": []}
+        {
+          "toolId": "ffmpeg",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
@@ -117,26 +131,95 @@
       "description": "Produit un résumé et des mots-clés dans un fichier annexe, avec recherche externe facultative et provenance explicite.",
       "kind": "action",
       "mediaType": "video",
-      "supportedFlowMediaTypes": ["video", "music"],
+      "supportedFlowMediaTypes": [
+        "video",
+        "music"
+      ],
       "outputs": [
-        {"id": "output", "label": "Succès", "description": "Le fichier de métadonnées annexes a été créé."},
-        {"id": "rateLimit", "label": "Quota dépassé", "description": "Le fournisseur IA a limité la requête."},
-        {"id": "error", "label": "Erreur", "description": "L’enrichissement a échoué; le média original est conservé."}
+        {
+          "id": "output",
+          "label": "Succès",
+          "description": "Le fichier de métadonnées annexes a été créé."
+        },
+        {
+          "id": "rateLimit",
+          "label": "Quota dépassé",
+          "description": "Le fournisseur IA a limité la requête."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "L’enrichissement a échoué; le média original est conservé."
+        }
       ],
       "configurationSchema": {
         "version": 1,
         "fields": [
-          {"id": "provider", "label": "Fournisseur IA", "type": "select", "required": true, "defaultValue": "ollama", "options": [
-            {"value": "ollama", "label": "Ollama local"}, {"value": "openai", "label": "OpenAI / Compatible API"},
-            {"value": "codex-cli", "label": "OpenAI Codex CLI"}, {"value": "claude-cli", "label": "Anthropic Claude CLI"}
-          ]},
-          {"id": "useExternalSources", "label": "Rechercher dans des catalogues externes", "type": "boolean", "defaultValue": false,
-            "description": "Envoie le titre du fichier à la source sélectionnée. Désactivé en mode local uniquement."},
-          {"id": "externalSource", "label": "Source externe", "type": "select", "required": true, "defaultValue": "tmdb", "options": [
-            {"value": "tmdb", "label": "TMDb (films et séries)", "supportedFlowMediaTypes": ["video"]},
-            {"value": "musicbrainz", "label": "MusicBrainz (musique)", "supportedFlowMediaTypes": ["music"]},
-            {"value": "none", "label": "Aucune source externe"}
-          ]}
+          {
+            "id": "provider",
+            "label": "Fournisseur IA",
+            "type": "select",
+            "required": true,
+            "defaultValue": "ollama",
+            "options": [
+              {
+                "value": "ollama",
+                "label": "Ollama local"
+              },
+              {
+                "value": "openai",
+                "label": "OpenAI / Compatible API"
+              },
+              {
+                "value": "codex-cli",
+                "label": "OpenAI Codex CLI"
+              },
+              {
+                "value": "claude-cli",
+                "label": "Anthropic Claude CLI"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "useExternalSources",
+            "label": "Rechercher dans des catalogues externes",
+            "type": "boolean",
+            "defaultValue": false,
+            "description": "Envoie le titre du fichier à la source sélectionnée. Désactivé en mode local uniquement.",
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "externalSource",
+            "label": "Source externe",
+            "type": "select",
+            "required": true,
+            "defaultValue": "tmdb",
+            "options": [
+              {
+                "value": "tmdb",
+                "label": "TMDb (films et séries)",
+                "supportedFlowMediaTypes": [
+                  "video"
+                ]
+              },
+              {
+                "value": "musicbrainz",
+                "label": "MusicBrainz (musique)",
+                "supportedFlowMediaTypes": [
+                  "music"
+                ]
+              },
+              {
+                "value": "none",
+                "label": "Aucune source externe"
+              }
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
+          }
         ]
       },
       "requiredTools": [],

@@ -102,6 +102,18 @@ export function flowConfigurationFieldError(
     value === undefined || value === null || (typeof value === 'string' && !value.trim());
   if (empty) return field.required ? 'Ce paramètre est obligatoire.' : undefined;
   switch (field.type) {
+    case 'record-list':
+      if (!Array.isArray(value)) return 'Une liste de règles est attendue.';
+      if (value.length < (field.minItems ?? 0) || value.length > (field.maxItems ?? 64))
+        return 'Nombre de lignes hors limites.';
+      for (const row of value) {
+        if (typeof row !== 'object' || row === null || Array.isArray(row)) return 'Ligne invalide.';
+        for (const child of field.itemFields) {
+          const error = flowConfigurationFieldError(child, row[child.id] ?? child.defaultValue);
+          if (error) return child.label + ' : ' + error;
+        }
+      }
+      return undefined;
     case 'condition-tree':
       return conditionTreeError(value, field.conditionFields);
     case 'text':

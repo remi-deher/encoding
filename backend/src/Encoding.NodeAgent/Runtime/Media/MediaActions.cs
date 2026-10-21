@@ -10,7 +10,7 @@ namespace Encoding.NodeAgent.Runtime.Media;
 public sealed record MediaActionOutcome(string? Primary,IReadOnlyList<string> Additional,JsonElement? Value=null,
     IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings=null);
 
-public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IToolCapabilityProbe capabilities,ILogger<MediaActions>? logger=null)
+public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IToolCapabilityProbe capabilities,ILogger<MediaActions>? logger=null)
 {
     public static string Text(IReadOnlyDictionary<string,JsonElement> c,string key,string fallback="")=>c.TryGetValue(key,out var v)&&v.ValueKind==JsonValueKind.String?v.GetString()!:fallback;
     public static string Number(IReadOnlyDictionary<string,JsonElement> c,string key,decimal fallback=0)=>c.TryGetValue(key,out var v)&&v.ValueKind==JsonValueKind.Number&&v.TryGetDecimal(out var n)?n.ToString(CultureInfo.InvariantCulture):fallback.ToString(CultureInfo.InvariantCulture);
@@ -553,6 +553,17 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
 
     public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true,IReadOnlySet<int>? forceCpuFallbackSteps=null)
     {
+        if (plan.Any(step => step.Configuration.ContainsKey("trackSelection")))
+            plan = MediaTrackSelection.Expand(plan, await scanner.ScanAsync(current, ct));
+        if (plan.Any(step => step.ComponentId is "base-resize-video" or "video-resize"))
+        {
+            var metadata = await scanner.ScanAsync(current, ct);
+            var video = metadata.GetProperty("streams").EnumerateArray().FirstOrDefault(stream => MediaTrackSelection.Text(stream, "codec_type") == "video");
+            var width = video.ValueKind == JsonValueKind.Object ? MediaTrackSelection.Number(video, "width") : 0;
+            var height = video.ValueKind == JsonValueKind.Object ? MediaTrackSelection.Number(video, "height") : 0;
+            plan = plan.Where(step => step.ComponentId is not ("base-resize-video" or "video-resize") || VideoResizePolicy.ShouldResize(step.Configuration, width, height)).ToArray();
+        }
+        if (plan.Count == 0) return new(null, []);
         var output=Output(directory,node,Path.GetExtension(current) is ".mp4" or ".mkv" or ".mka" or ".flac"?Path.GetExtension(current):".mkv");
         var input=new List<string> { "-nostdin","-y","-v","error" }; var args=new List<string> { "-c","copy" }; var videoFilters=new List<string>(); var hardwareMode="cpu";
         var resolutions=new List<ResolvedVideoEncoding>();
@@ -660,17 +671,8 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                     }
                     break;
                 }
-                case "base-transcode-audio" or "audio-transcode":
-                    var index=Number(c,"trackId"); var audio=Text(c,"audioCodec","aac"); args.AddRange(["-c:a:"+index,audio=="opus"?"libopus":audio]);
-                    if(audio!="flac") args.AddRange(["-b:a:"+index,Number(c,"bitrateKbps",192)+"k"]);
-                    if(Path.GetExtension(current)==".flac" && audio!="flac" || Path.GetExtension(current)==".mp4" && audio=="flac") output=Output(directory,node,".mkv");
-                    if(Text(c,"channels","source")!="source") args.AddRange(["-ac:a:"+index,Text(c,"channels")]);
-                    // Disposition déclarée à l’entrée quand la source n’en a pas (déduite, 0055) et disposition imposée à la sortie pour garder le LFE.
-                    if(Text(c,"inputLayout")!="") input.AddRange(["-channel_layout:a:"+index,Text(c,"inputLayout")]);
-                    if(Text(c,"outputLayout")!="") args.AddRange(["-channel_layout:a:"+index,Text(c,"outputLayout")]);
-                    if(Number(c,"sampleRate")!="0") args.AddRange(["-ar:a:"+index,Number(c,"sampleRate")]); break;
-                case "base-normalize-audio" or "audio-normalize": if(Path.GetExtension(current)==".flac") output=Output(directory,node,".mka"); args.AddRange(["-filter:a:"+Number(c,"trackId"),"loudnorm=I="+Number(c,"targetLoudness",-16)+":TP="+Number(c,"truePeak",-1),"-c:a:"+Number(c,"trackId"),"aac"]); break;
-                case "base-resize-video" or "video-resize": videoFilters.Add("scale="+Number(c,"width",1920)+":"+Number(c,"height",1080)+":force_original_aspect_ratio=decrease"); if(!plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode")) args.AddRange(["-c:v","libx264"]); break;
+                case "base-transcode-audio" or "audio-transcode" or "base-normalize-audio" or "audio-normalize": break;
+                case "base-resize-video" or "video-resize": videoFilters.Add(VideoResizePolicy.Filter(c)); if(!plan.Any(p=>p.ComponentId is "base-transcode-video" or "video-transcode")) args.AddRange(["-c:v","libx264"]); break;
                 case "base-auto-crop" or "video-auto-crop":
                     var cropF=Text(c,"cropFilter");
                     if(!string.IsNullOrEmpty(cropF)) videoFilters.Add(cropF);
@@ -685,6 +687,9 @@ public sealed class MediaActions(ProcessToolRunner tools,MediaScanner scanner,IT
                 default: throw new IOException("Ce réglage ne fait pas partie d’un plan FFmpeg.");
             }
         }
+        if (await AppendAudioPlanAsync(plan, current, directory, input, args, preserve, ct) is { } audioExtension
+            && Path.GetExtension(output) == Path.GetExtension(current))
+            output = Output(directory, node, audioExtension);
         if(hardwareMode=="vaapi") videoFilters.AddRange(["format=nv12","hwupload"]);
         if(videoFilters.Count>0) args.AddRange(["-vf",string.Join(',',videoFilters)]);
         input.AddRange(["-i",current]); input.AddRange(args); input.Add(output);

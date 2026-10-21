@@ -55,7 +55,9 @@
                 "value": "png",
                 "label": "PNG"
               }
-            ]
+            ],
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "quality",
@@ -65,7 +67,9 @@
             "defaultValue": 85,
             "min": 1,
             "max": 100,
-            "step": 1
+            "step": 1,
+            "importance": "advanced",
+            "section": "Paramètres"
           }
         ]
       },
@@ -112,7 +116,9 @@
             "inline": true,
             "defaultValue": 1920,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "height",
@@ -121,14 +127,18 @@
             "inline": true,
             "defaultValue": 1080,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "preserveAspectRatio",
             "label": "Conserver les proportions",
             "type": "boolean",
             "inline": true,
-            "defaultValue": true
+            "defaultValue": true,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },
@@ -173,7 +183,9 @@
             "label": "Proportions cibles",
             "type": "text",
             "required": false,
-            "description": "Facultatif, par exemple 16:9. Si renseigné, applique un recadrage centré plutôt que la zone en pixels."
+            "description": "Facultatif, par exemple 16:9. Si renseigné, applique un recadrage centré plutôt que la zone en pixels.",
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "x",
@@ -182,7 +194,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "y",
@@ -191,7 +205,9 @@
             "inline": true,
             "defaultValue": 0,
             "min": 0,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "width",
@@ -200,7 +216,9 @@
             "inline": true,
             "defaultValue": 1920,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           },
           {
             "id": "height",
@@ -209,7 +227,9 @@
             "inline": true,
             "defaultValue": 1080,
             "min": 1,
-            "step": 1
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
           }
         ]
       },

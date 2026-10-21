@@ -9,14 +9,29 @@ namespace Encoding.Contracts.Flows;
 public sealed class AudioRuleException(string message) : Exception(message);
 
 /// <summary>Options du bloc <c>base-audio-rules</c> (architecture 0055).</summary>
-public sealed record AudioRuleOptions(bool KeepStereoAc3 = true, bool InferUnknownLayout = true, int SampleRate = 48000)
+public sealed record AudioRuleOptions(bool KeepStereoAc3 = true, bool InferUnknownLayout = true, int SampleRate = 48000, IReadOnlyList<JsonElement>? Rules = null, bool EnforceSampleRate = false)
 {
     public static AudioRuleOptions From(IReadOnlyDictionary<string, JsonElement> configuration)
     {
         bool Flag(string key, bool fallback) => configuration.TryGetValue(key, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : fallback;
         var rate = configuration.TryGetValue("sampleRate", out var sample) && sample.ValueKind == JsonValueKind.Number && sample.TryGetInt32(out var parsed) ? parsed : 48000;
         var unknown = configuration.TryGetValue("unknownLayout", out var mode) && mode.ValueKind == JsonValueKind.String ? mode.GetString() : "infer";
-        return new(Flag("keepStereoAc3", true), unknown != "fail", rate);
+        var rules = configuration.TryGetValue("rules", out var list) && list.ValueKind == JsonValueKind.Array ? list.EnumerateArray().Select(item => item.Clone()).ToArray() : null;
+        if (rules is not null)
+            foreach (var rule in rules)
+            {
+                if (rule.ValueKind != JsonValueKind.Object) throw new AudioRuleException("Règle audio invalide.");
+                var action = MediaTrackSelection.Text(rule, "action");
+                if (action is not ("copy" or "convert")) throw new AudioRuleException("Choisissez une action audio explicite.");
+                var minimum = MediaTrackSelection.Number(rule, "minChannels"); var maximum = MediaTrackSelection.Number(rule, "maxChannels");
+                if (maximum > 0 && minimum > maximum) throw new AudioRuleException("Le minimum de canaux dépasse le maximum.");
+                if (action == "copy") continue;
+                var codec = MediaTrackSelection.Text(rule, "codec"); var bitrate = MediaTrackSelection.Number(rule, "bitrateKbps", 256);
+                if (codec is not ("aac" or "ac3" or "opus" or "flac")) throw new AudioRuleException("Codec audio cible inconnu.");
+                if (MediaTrackSelection.Number(rule, "targetChannels") is not (0 or 2 or 6)) throw new AudioRuleException("Limite de canaux : 0, 2 ou 6.");
+                if (bitrate is < 32 or > 1536 || codec == "ac3" && bitrate > 640) throw new AudioRuleException("Débit audio invalide (AC-3 : 640 kbit/s maximum).");
+            }
+        return new(Flag("keepStereoAc3", true), unknown != "fail", rate, rules, configuration.TryGetValue("sampleRate", out var suppliedRate) && suppliedRate.ValueKind == JsonValueKind.Number);
     }
 }
 
@@ -58,7 +73,7 @@ public static class AudioRulePlanner
 
     private sealed class Track
     {
-        public int Index; public string Codec = ""; public int Channels; public string Layout = ""; public string Title = ""; public bool Inferred;
+        public JsonElement Metadata; public int Index; public string Codec = ""; public int Channels; public string Layout = ""; public string Title = ""; public bool Inferred;
     }
 
     public static AudioRulePlan Plan(JsonElement metadata, AudioRuleOptions options)
@@ -68,10 +83,9 @@ public static class AudioRulePlanner
             foreach (var stream in streams.EnumerateArray().Where(item => item.TryGetProperty("codec_type", out var type) && type.GetString() == "audio"))
             {
                 var channels = stream.TryGetProperty("channels", out var count) && count.ValueKind == JsonValueKind.Number ? count.GetInt32() : 0;
-                if (channels < 1) throw new AudioRuleException($"Nombre de canaux audio inconnu : piste {tracks.Count}. Original non remplacé.");
                 tracks.Add(new Track
                 {
-                    Index = tracks.Count, Channels = channels,
+                    Metadata = stream.Clone(), Index = tracks.Count, Channels = channels,
                     Codec = (stream.TryGetProperty("codec_name", out var codec) ? codec.GetString() ?? "" : "").ToLowerInvariant(),
                     Layout = RealLayout(stream.TryGetProperty("channel_layout", out var layout) ? layout.GetString() : null),
                     Title = stream.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Object && tags.TryGetProperty("title", out var title) ? title.GetString() ?? "" : ""
@@ -80,21 +94,35 @@ public static class AudioRulePlanner
         var decisions = new List<AudioTrackDecision>();
         foreach (var track in tracks)
         {
-            var target = track.Channels switch
+            JsonElement? rule = options.Rules?.Cast<JsonElement?>().FirstOrDefault(item => item is {} selected && MediaTrackSelection.Matches(track.Metadata, selected));
+            if (options.Rules is not null && (rule is null || MediaTrackSelection.Text(rule.Value, "action") == "copy"))
+            {
+                decisions.Add(new(track.Index, track.Codec, track.Channels, false, Note: rule is null ? "aucune règle : piste conservée" : "copie demandée"));
+                continue;
+            }
+            if (track.Channels < 1) throw new AudioRuleException($"Nombre de canaux audio inconnu : piste {track.Index}. Original non remplacé.");
+            var target = rule is {} chosen ? MediaTrackSelection.Text(chosen, "codec") : track.Channels switch
             {
                 2 => options.KeepStereoAc3 && track.Codec == "ac3" ? "ac3" : "aac",
                 >= 3 => "ac3",
                 _ => track.Codec == "aac" ? "aac" : "ac3"
             };
-            var outputChannels = target == "ac3" ? Math.Min(track.Channels, 6) : track.Channels;
-            if (track.Codec == target && track.Channels == outputChannels)
+            var limit = rule is {} selectedRule ? MediaTrackSelection.Number(selectedRule, "targetChannels") : 0;
+            var outputChannels = Math.Min(track.Channels, limit > 0 ? limit : track.Channels);
+            if (target == "ac3") outputChannels = Math.Min(outputChannels, 6);
+            var sampleRateMatches = options.SampleRate == 0 || rule is null && !options.EnforceSampleRate
+                || track.Metadata.TryGetProperty("sample_rate", out var sampling) && int.TryParse(sampling.ToString(), out var sourceSampling) && sourceSampling == options.SampleRate;
+            if (sampleRateMatches && track.Codec == target && track.Channels == outputChannels && (rule is null || target == "flac"
+                || track.Metadata.TryGetProperty("bit_rate", out var sourceBitrate) && int.TryParse(sourceBitrate.ToString(), out var sourceRate) && sourceRate == MediaTrackSelection.Number(rule.Value, "bitrateKbps") * 1000))
             {
                 decisions.Add(new(track.Index, track.Codec, track.Channels, false, Note: "conforme"));
                 continue;
             }
             if (!Infer(track, tracks, options)) throw new AudioRuleException($"Audio piste {track.Index} ({track.Codec}, {track.Channels} canaux) : disposition inconnue. Original non remplacé.");
-            var (layout, channels) = TargetLayout(track, target);
+            var (layout, channels) = outputChannels == 2 && track.Channels > 2 ? ("stereo", 2)
+                : outputChannels == 6 && track.Channels > 6 ? (HasLfe(track.Layout) ? ("5.1", 6) : ("5.0", 5)) : TargetLayout(track, target);
             var bitrate = target == "aac" ? (track.Channels == 1 ? 128 : 256) : channels switch { 1 => 128, 2 => 256, 3 => 384, 4 => 448, _ => 640 };
+            if (rule is {} bitrateRule) bitrate = MediaTrackSelection.Number(bitrateRule, "bitrateKbps", bitrate);
             decisions.Add(new(track.Index, track.Codec, track.Channels, true, target, channels, bitrate, layout, track.Inferred ? track.Layout : null,
                 $"{track.Codec} {track.Channels} canaux vers {target.ToUpperInvariant()} {channels} canaux, {bitrate} kb/s" + (track.Inferred ? " (disposition déduite)" : "")));
         }

@@ -80,6 +80,18 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             async Task<string> ExtraAsync(string path)
             {
+                if (FlowArtifactReference.TryParse(path, out var reference))
+                {
+                    await EnsureFilesAsync();
+                    var artifact = reference.Resolve(variables);
+                    var sha = artifact.GetProperty("sha256").GetString()!;
+                    var folder = Path.Combine(directory, "artifacts", sha); Directory.CreateDirectory(folder);
+                    var target = SafeMediaPaths.Resolve(folder, Path.GetFileName(artifact.GetProperty("name").GetString()!));
+                    if (!File.Exists(target)) await client.DownloadAsync(lease.ExecutionId, lease.Epoch, sha, target, job.Token);
+                    return target;
+                }
+                if (path.StartsWith(FlowArtifactReference.Prefix, StringComparison.Ordinal))
+                    throw new FlowArtifactReferenceException("Référence de fichier produit invalide.");
                 path=path.Replace('\\','/');
                 RuntimeSourceState state;
                 while(true)
@@ -95,11 +107,14 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             {
                 if(outcome.VideoEncodings is { Count: > 0 })
                     context=context with { VideoEncodings=[..(context.VideoEncodings??[]),..outcome.VideoEncodings] };
+                var artifactIndex = 0;
                 foreach(var additional in outcome.Additional)
                 {
                     var sha=await SafeMediaPaths.DigestAsync(additional,job.Token);
                     await client.PutAsync(lease.ExecutionId,lease.Epoch,additional,sha,false,job.Token);
-                    variables["artifact."+node+"."+Path.GetFileName(additional)]=JsonSerializer.SerializeToElement(new { sha256=sha,name=Path.GetFileName(additional) });
+                    var description = JsonSerializer.SerializeToElement(new { sha256=sha,name=Path.GetFileName(additional) });
+                    variables["artifact."+node+"."+Path.GetFileName(additional)]=description;
+                    variables[new FlowArtifactReference(node, artifactIndex++).VariableKey]=description;
                 }
                 if(outcome.Primary is { } candidate)
                 {
@@ -123,7 +138,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 RuntimeHandoffSelector? handoff=null; RuntimeWait? wait=null;
                 try
                 {
-                    var id=node.Component.ComponentId; var c=node.Configuration;
+                    var id=node.Component.ComponentId; var c=FlowOperationConfiguration.Resolve(id,node.Configuration);
                     if(id.StartsWith("base-input-",StringComparison.Ordinal)) { if(id!="base-input-file") await EnsureScanAsync(); }
                     else if(id=="base-variable")
                     {
@@ -245,7 +260,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         foreach(var change in response.VariableChanges) variables[change.Key]=change.Value;
                         if(response.CandidateArtifactId is { } candidate) await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate),[]),node.Id);
                     }
-                    else if(id is "base-track-names" or "subtitles-track-names")
+                    else if(id is "base-track-names" or "subtitles-track-names" || FlowOperationConfiguration.IsNamingOperation(id))
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.TrackNamesAsync(c,context.CurrentMetadata!.Value,variables.TryGetValue("tracks.origin",out var saved)?saved:null,current,directory,node.Id,job.Token);
@@ -257,7 +272,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
-                    else if(id is "base-subtitle-manage" or "subtitles-manage")
+                    else if(id is "base-subtitle-manage" or "subtitles-manage" || FlowOperationConfiguration.IsSubtitleOperation(id))
                     {
                         await EnsureScanAsync();
                         var outcome=await actions.SubtitleManageAsync(c,context.CurrentMetadata!.Value,current,directory,node.Id,job.Token);
@@ -279,7 +294,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
-                    else if(id is "base-audio-rules" or "audio-rules")
+                    else if(id is "base-audio-rules" or "audio-rules" or "audio-convert-by-rules")
                     {
                         await EnsureScanAsync();
                         var rules=AudioRuleOptions.From(c); var audioPlan=AudioRulePlanner.Plan(context.CurrentMetadata!.Value,rules);
@@ -447,11 +462,19 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     else
                     {
                         await EnsureScanAsync();
-                        if(MediaActions.Text(c,"processingMode","direct")=="plan")
+                        IReadOnlyList<RuntimePlanStep> requested = [new(id,c,node.Id)];
+                        if (c.ContainsKey("trackSelection")) requested = MediaTrackSelection.Expand(requested, context.CurrentMetadata!.Value);
+                        if (id is "base-resize-video" or "video-resize")
+                        {
+                            var video = context.CurrentMetadata!.Value.GetProperty("streams").EnumerateArray().FirstOrDefault(stream => MediaTrackSelection.Text(stream,"codec_type") == "video");
+                            if (video.ValueKind == JsonValueKind.Object && !VideoResizePolicy.ShouldResize(c, MediaTrackSelection.Number(video,"width"), MediaTrackSelection.Number(video,"height"))) requested = [];
+                        }
+                        if (requested.Count == 0) output = "unchanged";
+                        else if(MediaActions.Text(c,"processingMode","direct")=="plan")
                         {
                             if(variables.TryGetValue("plan.tool",out var selected) && (IsFfmpegPlan(id)!=(selected.GetString()=="ffmpeg")))
                                 throw new MediaToolException("outil du plan incompatible avec cette action",1);
-                            context=context with { Plan=[..context.Plan,new RuntimePlanStep(id,c,node.Id)] };
+                            context=context with { Plan=[..context.Plan,..requested] };
                         }
                         else
                         {
@@ -585,7 +608,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         catch(Exception exception)
         {
             logger.LogWarning("Exécution {ExecutionId} interrompue : {Type}",lease.ExecutionId,exception.GetType().Name);
-            if(!lost) await FailureAsync("failed",exception is MediaToolException?exception.Message:"L’exécution a échoué ; aucun remplacement de source n’a été effectué.");
+            if(!lost) await FailureAsync("failed",exception is MediaToolException or FlowArtifactReferenceException?exception.Message:"L’exécution a échoué ; aucun remplacement de source n’a été effectué.");
         }
         finally { job.Cancel(); await renewal; }
 

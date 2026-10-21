@@ -68,6 +68,26 @@
         [routerLink]="['/flows', flow.id, 'edit']"
         [navigationInfo]="{ flowEditorDirection: 'forward' }"
       />
+      @if (auth.isAdmin()) {
+        <button
+          mat-icon-button
+          type="button"
+          [matMenuTriggerFor]="flowActions"
+          aria-label="Actions du flow"
+        >
+          ⋮
+        </button>
+        <mat-menu #flowActions="matMenu">
+          <button
+            mat-menu-item
+            type="button"
+            [disabled]="deletingFlow() !== null"
+            (click)="confirmDeleteFlow(flow)"
+          >
+            Supprimer le flow
+          </button>
+        </mat-menu>
+      }
     }
   </ng-template>
 

@@ -128,14 +128,14 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         (Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,Guid Library,Guid? Source,string? Checkpoint) item,
         FlowDefinition flow,RuntimeHandoffSelector selector,RuntimeCheckpoint? checkpoint,CancellationToken ct)
     {
-        var candidates=new List<(Guid Id,NodeToolCapability[] Capabilities,int Capacity,bool ScheduleEnabled,string? Timezone,string? Slots)>();
+        var candidates=new List<(Guid Id,NodeToolCapability[] Capabilities,int Capacity,bool ScheduleEnabled,string? Timezone,string? Slots,NodeInventory? Inventory)>();
         await using(var c=await dataSource.OpenConnectionAsync(ct))
         await using(var cmd=Sql.Command("""
           SELECT n.id,n.capabilities::text,
             COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=n.id),n.max_concurrent_tasks),
             COALESCE((SELECT p.schedule_enabled FROM node_processing_settings p WHERE p.node_id=n.id),false),
             (SELECT p.schedule_timezone FROM node_processing_settings p WHERE p.node_id=n.id AND p.schedule_enabled),
-            (SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=n.id AND p.schedule_enabled)
+            (SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=n.id AND p.schedule_enabled),n.inventory::text
           FROM cluster_nodes n WHERE n.deleted_at IS NULL AND n.accepts_work AND 'worker'=ANY(n.roles)
             AND NOT n.draining AND NOT n.quarantined AND n.incompatible_reason IS NULL
             AND n.last_seen_at>clock_timestamp()-@offline
@@ -144,7 +144,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             cmd.Parameters.AddWithValue("offline",offlineAfter);
             await using var r=await cmd.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct)) candidates.Add((r.GetGuid(0),JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(1),Json)??[],r.GetInt32(2),r.GetBoolean(3),
-                r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5)));
+                r.IsDBNull(4)?null:r.GetString(4),r.IsDBNull(5)?null:r.GetString(5),r.IsDBNull(6)?null:JsonSerializer.Deserialize<NodeInventory>(r.GetString(6),Json)));
         }
         var entry=checkpoint?.NextNodeId??flow.Nodes.Single(node=>node.Component.PluginId=="base" && node.Component.ComponentId.StartsWith("base-input-",StringComparison.Ordinal)).Id;
         var needsWrite=eligibility!.RequiresWriteAccess(flow,entry,checkpoint is not null);
@@ -155,7 +155,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             if(!selector.Accepts(candidate.Id,item.Previous??Guid.Empty,identity)) continue;
             if(candidate.ScheduleEnabled && candidate.Timezone is not null && candidate.Slots is not null
                 && !new NodeSchedule(true,candidate.Timezone,candidate.Slots).IsOpen(DateTimeOffset.UtcNow)) continue;
-            if(!eligibility.CanRun(flow,candidate.Capabilities,candidate.Id,entry,checkpoint is not null,checkpoint?.Context,identity)) continue;
+            if(!eligibility.CanRun(flow,candidate.Capabilities,candidate.Id,entry,checkpoint is not null,checkpoint?.Context,identity,candidate.Inventory)) continue;
             await using var c=await dataSource.OpenConnectionAsync(ct);
             await using(var active=Sql.Command("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@worker AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')",c))
             {

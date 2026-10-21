@@ -1,6 +1,13 @@
+import { ConfigurationReferenceFieldComponent } from './configuration-reference-field/configuration-reference-field.component';
+import { ConfigurationChoice } from '../models/configuration-choice';
+import { ConfigurationRecordListComponent } from './configuration-record-list/configuration-record-list.component';
+import { FlowConfigurationRecord } from '../models/flow-component';
 import { NgTemplateOutlet } from '@angular/common';
 import { flowFieldValidator } from './flow-configuration-controls';
-import { flowConfigurationValue } from '../models/flow-configuration';
+import {
+  flowConfigurationValue,
+  isFlowConfigurationFieldVisible,
+} from '../models/flow-configuration';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -46,6 +53,8 @@ type ConfigurationFormGroup = FormGroup<
   selector: 'app-component-configuration-form',
   imports: [
     NgTemplateOutlet,
+    ConfigurationRecordListComponent,
+    ConfigurationReferenceFieldComponent,
     MatButtonModule,
     MatCheckboxModule,
     MatFormFieldModule,
@@ -71,7 +80,7 @@ type ConfigurationFormGroup = FormGroup<
           [ngTemplateOutletContext]="{ visibleFields: primaryFields() }"
         />
         @if (advancedFields().length) {
-          <details class="advanced-settings">
+          <details class="advanced-settings" [open]="advancedInvalid()">
             <summary>Réglages avancés · {{ advancedFields().length }}</summary>
             <ng-container
               [ngTemplateOutlet]="fieldTemplate"
@@ -83,7 +92,21 @@ type ConfigurationFormGroup = FormGroup<
           <div class="configuration-fields">
             @for (field of visibleFields; track field.id) {
               @if (isFieldVisible(field)) {
+                @if (field.section && visibleFields[$index - 1]?.section !== field.section) {
+                  <h3>{{ field.section }}</h3>
+                }
                 @switch (field.type) {
+                  @case ('record-list') {
+                    <app-configuration-record-list
+                      [field]="field"
+                      [value]="recordListValue(field.id)"
+                      [disabled]="busy()"
+                      (valueChange)="setRecordListValue(field.id, $event)"
+                    />
+                    @if (configurationFieldError(field.id)) {
+                      <p role="alert">{{ configurationFieldError(field.id) }}</p>
+                    }
+                  }
                   @case ('condition-tree') {
                     <section
                       class="condition-field"
@@ -238,7 +261,16 @@ type ConfigurationFormGroup = FormGroup<
                     />
                   }
                   @case ('text') {
-                    @if (field.id === 'code') {
+                    @if (field.editor) {
+                      <app-configuration-reference-field
+                        [field]="field"
+                        [value]="textValue(field.id)"
+                        [disabled]="busy()"
+                        [contextOptions]="referenceOptions()[field.editor] ?? []"
+                        [error]="configurationFieldError(field.id)"
+                        (valueChange)="setTextValue(field.id, $event)"
+                      />
+                    } @else if (field.id === 'code') {
                       <section class="code-field" [attr.aria-label]="field.label">
                         <h3>{{ field.label }}</h3>
                         @if (field.description) {
@@ -302,6 +334,20 @@ type ConfigurationFormGroup = FormGroup<
         <p class="empty-configuration">Ce composant ne demande aucun réglage.</p>
       }
 
+      @if (progressiveDisclosure()) {
+        <section aria-label="Résumé des paramètres">
+          <h3>Configuration effective</h3>
+          <p>
+            Les valeurs du formulaire incluent les valeurs par défaut du composant. Les champs
+            masqués sont conservés.
+          </p>
+          <ul>
+            @for (line of configurationSummary(); track line) {
+              <li>{{ line }}</li>
+            }
+          </ul>
+        </section>
+      }
       <div class="form-actions">
         <ng-content select="[form-secondary-actions]" />
         <button matButton="text" type="button" (click)="cancelled.emit()">Annuler</button>
@@ -439,6 +485,7 @@ type ConfigurationFormGroup = FormGroup<
 export class ComponentConfigurationFormComponent implements OnChanges {
   private readonly scriptLibrary = inject(FlowScripts);
   private readonly profileLibrary = inject(EncodingProfiles);
+  readonly referenceOptions = input<Readonly<Record<string, readonly ConfigurationChoice[]>>>({});
   readonly schema = input.required<FlowComponentConfigurationSchema | undefined>();
   readonly values = input<FlowComponentConfiguration>({});
   readonly configuredSecrets = input<readonly string[]>([]);
@@ -453,13 +500,41 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   readonly progressiveDisclosure = input(false);
   protected primaryFields(): readonly FlowComponentConfigurationField[] {
     return this.progressiveDisclosure()
-      ? this.fields.filter((field) => field.inline || field.required)
+      ? this.fields.filter((field) => this.isPrimary(field) && this.isFieldVisible(field))
       : this.fields;
   }
   protected advancedFields(): readonly FlowComponentConfigurationField[] {
     return this.progressiveDisclosure()
-      ? this.fields.filter((field) => !field.inline && !field.required)
+      ? this.fields.filter((field) => !this.isPrimary(field) && this.isFieldVisible(field))
       : [];
+  }
+  private isPrimary(field: FlowComponentConfigurationField): boolean {
+    return field.importance !== 'advanced';
+  }
+  protected configurationSummary(): readonly string[] {
+    return this.fields
+      .filter(
+        (field) => this.isFieldVisible(field) && field.type !== 'secret' && field.id !== 'code',
+      )
+      .flatMap((field) => {
+        const value = this.form.controls[field.id]?.value;
+        if (value === null || value === undefined || value === '' || typeof value === 'object')
+          return [];
+        const label =
+          field.type === 'select'
+            ? (field.options.find((option) => option.value === value)?.label ?? String(value))
+            : typeof value === 'boolean'
+              ? value
+                ? 'Oui'
+                : 'Non'
+              : String(value);
+        return [field.label + ' : ' + label];
+      });
+  }
+  protected advancedInvalid(): boolean {
+    return this.advancedFields().some(
+      (field) => this.isFieldVisible(field) && this.form.controls[field.id]?.invalid,
+    );
   }
   readonly saved = output<FlowComponentConfiguration>();
   readonly cancelled = output<void>();
@@ -493,7 +568,10 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     ) {
       this.secretsToClear = new Set();
       this.nameControl.setValue(this.instanceName() ?? '');
-      this.fields = this.schema()?.fields ?? [];
+      this.fields = (this.schema()?.fields ?? []).filter(
+        (field) =>
+          !field.legacyOnly || Object.prototype.hasOwnProperty.call(this.values(), field.id),
+      );
       const controls: Record<string, FormControl<FlowComponentConfigurationValue>> = {};
       for (const field of this.fields) {
         controls[field.id] = new FormControl(flowConfigurationValue(field, this.values()), {
@@ -518,7 +596,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     if (this.busy() || this.form.invalid || this.nameControl.invalid) return;
     if (this.instanceName() !== undefined)
       this.instanceNameChange.emit(this.nameControl.value.trim());
-    const values = this.form.getRawValue();
+    const values = { ...this.values(), ...this.form.getRawValue() };
     this.saved.emit(values);
     this.savedWithSecrets.emit({ values, clearSecrets: [...this.secretsToClear] });
   }
@@ -528,6 +606,14 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     this.connectionTestRequested.emit(this.form.getRawValue());
   }
 
+  protected recordListValue(id: string): readonly FlowConfigurationRecord[] {
+    const value = this.form.controls[id]?.value;
+    return Array.isArray(value) ? value : [];
+  }
+  protected setRecordListValue(id: string, value: readonly FlowConfigurationRecord[]): void {
+    this.form.controls[id].setValue(value);
+    this.form.controls[id].markAsDirty();
+  }
   protected conditionValue(fieldId: string): ConditionGroup | undefined {
     const value = this.form.controls[fieldId]?.value;
     return value && typeof value === 'object' && 'kind' in value ? value : undefined;
@@ -553,10 +639,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   }
 
   protected isFieldVisible(field: FlowComponentConfigurationField): boolean {
-    if (!field.visibleWhenFieldId) return true;
-    const value = this.form.controls[field.visibleWhenFieldId]?.value;
-    if (field.visibleWhenEmpty) return value === undefined || value === null || value === '';
-    return field.visibleWhenValue === undefined || value === field.visibleWhenValue;
+    return isFlowConfigurationFieldVisible(field, this.form.getRawValue());
   }
 
   protected profileReference(fieldId: string): string {

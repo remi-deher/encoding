@@ -1,0 +1,29 @@
+// Both projections use the same compact block hierarchy and in-flow actions.
+@mixin heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  min-height: 48px;
+}
+
+@mixin title {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+@mixin summary {
+  margin: 0 16px 12px;
+  color: var(--text-secondary);
+  font-size: var(--font-label);
+  overflow-wrap: anywhere;
+}

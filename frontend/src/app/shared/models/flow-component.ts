@@ -13,6 +13,7 @@ export interface FlowComponentDefinition {
   readonly compatiblePluginVersions?: readonly string[];
   readonly reference?: FlowComponentReference;
   readonly id: string;
+  readonly producesFiles?: boolean;
   readonly name: string;
   readonly description: string;
   readonly kind: FlowComponentKind;
@@ -87,12 +88,35 @@ interface FlowComponentConfigurationFieldBase {
   readonly required?: boolean;
   /** Show this field in the common block, in schema order. */
   readonly inline?: boolean;
+  readonly importance?: 'basic' | 'advanced';
+  readonly section?: string;
+  readonly legacyOnly?: boolean;
+  readonly requiresPluginVersion?: string;
+  readonly requiresPluginVersionValue?: string;
+  readonly editor?:
+    | 'languages'
+    | 'language'
+    | 'node'
+    | 'node-group'
+    | 'flow-node'
+    | 'indices'
+    | 'labels'
+    | 'artifact'
+    | 'font-set';
   readonly visibleWhenFieldId?: string;
   readonly visibleWhenValue?: string;
   readonly visibleWhenEmpty?: boolean;
 }
 
+export type FlowConfigurationRecord = Readonly<Record<string, string | number | boolean | null>>;
 export type FlowComponentConfigurationField =
+  | (FlowComponentConfigurationFieldBase & {
+      readonly type: 'record-list';
+      readonly itemFields: readonly FlowComponentConfigurationField[];
+      readonly defaultValue?: readonly FlowConfigurationRecord[];
+      readonly minItems?: number;
+      readonly maxItems?: number;
+    })
   | (FlowComponentConfigurationFieldBase & {
       readonly type: 'condition-tree';
       readonly defaultValue?: ConditionGroup;
@@ -180,18 +204,26 @@ export function getFlowConfigurationSchema(
 }
 
 export type FlowComponentConfigurationValue =
-  string | number | boolean | null | ConditionGroup | EncodingProfileSnapshot;
+  | string
+  | number
+  | boolean
+  | null
+  | ConditionGroup
+  | EncodingProfileSnapshot
+  | readonly FlowConfigurationRecord[];
 export type FlowComponentConfiguration = Readonly<Record<string, FlowComponentConfigurationValue>>;
 
 export function createDefaultFlowComponentConfiguration(
   schema: FlowComponentConfigurationSchema | undefined,
 ): FlowComponentConfiguration {
   return Object.fromEntries(
-    (schema?.fields ?? []).flatMap((field) => {
-      if (field.defaultValue !== undefined) return [[field.id, field.defaultValue]];
-      if (field.type === 'boolean') return [[field.id, false]];
-      return [];
-    }),
+    (schema?.fields ?? [])
+      .filter((field) => !field.legacyOnly)
+      .flatMap((field) => {
+        if (field.defaultValue !== undefined) return [[field.id, field.defaultValue]];
+        if (field.type === 'boolean') return [[field.id, false]];
+        return [];
+      }),
   );
 }
 

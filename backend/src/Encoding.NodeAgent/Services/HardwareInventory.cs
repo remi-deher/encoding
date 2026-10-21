@@ -23,7 +23,7 @@ public static class HardwareInventory
     /// <summary>Lu une seule fois : le matériel ne change pas pendant la vie du processus et la base PCI est volumineuse.</summary>
     private static readonly Lazy<NodeInventory> CurrentInventory = new(() => Read("/proc/cpuinfo", "/sys/class/drm"));
 
-    public static NodeInventory Current() => CurrentInventory.Value;
+    public static NodeInventory Current() => CurrentInventory.Value with { FontSets = FontInventory.Read(Environment.GetEnvironmentVariable("ENCODING_FONT_DIR") ?? "/app/common/Fonts") };
 
     public static NodeInventory Read(string cpuInfoPath, string drmRoot) => new(
         RuntimeInformation.OSDescription,

@@ -2,8 +2,19 @@ name: Backend
 on:
   push:
     branches: [dev, main]
+    paths:
+      - "backend/**"
+      - "docs/operations/**"
+      - ".github/workflows/backend.yml"
   pull_request:
     branches: [dev, main]
+    paths:
+      - "backend/**"
+      - "docs/operations/**"
+      - ".github/workflows/backend.yml"
+concurrency:
+  group: backend-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   peer-alerts:
     runs-on: ubuntu-latest
@@ -16,31 +27,80 @@ jobs:
       - run: >-
           docker run --rm --entrypoint promtool -v "$PWD:/repo:ro"
           prom/prometheus:v3.5.0 test rules /repo/backend/tests/monitoring/peer-cluster-alerts.test.yml
-  build:
+  backend-compile:
     runs-on: ubuntu-latest
-    container: mcr.microsoft.com/dotnet/sdk:10.0
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
-      - run: dotnet run --project backend/tools/ClusterMeshPrototype --configuration Release -- test
-      - run: dotnet run --project backend/tools/ClusterConsensusPrototype --configuration Release -- test
-      - run: apt-get update && apt-get install -y --no-install-recommends ffmpeg mediainfo python3
-      - run: python3 -m unittest discover -s backend/plugins/tests -v
+
+  backend-runtime-tests:
+    runs-on: ubuntu-latest
+    needs: backend-compile
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore backend/Encoding.sln
+      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg mediainfo mkvtoolnix python3
+      - run: mkvmerge --version
       - run: >-
           dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
           --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --results-directory test-results
         env:
           ENCODING_TEST_REQUIRE_MEDIA_TOOLS: '1'
-      - run: dotnet run --project backend/tests/Encoding.Launcher.Tests --configuration Release
-      - run: dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: backend-test-results
+          name: backend-runtime-test-results
           path: test-results
           retention-days: 14
+  backend-launcher-tests:
+    runs-on: ubuntu-latest
+    needs: backend-compile
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore backend/Encoding.sln
+      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
+      - run: dotnet run --project backend/tests/Encoding.Launcher.Tests --configuration Release
+  backend-plugin-tests:
+    runs-on: ubuntu-latest
+    needs: backend-compile
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore backend/Encoding.sln
+      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg mediainfo python3
+      - run: python3 -m unittest discover -s backend/plugins/tests -v
+      - run: dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
+  backend-prototype-tests:
+    runs-on: ubuntu-latest
+    needs: backend-compile
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore backend/Encoding.sln
+      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
+      - run: dotnet run --project backend/tools/ClusterMeshPrototype --configuration Release -- test
+      - run: dotnet run --project backend/tools/ClusterConsensusPrototype --configuration Release -- test
   image:
     # Vérifie que l'image unique se construit avant la fusion ; la publication se fait dans release.yml.
     runs-on: ubuntu-latest
