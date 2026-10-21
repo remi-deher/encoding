@@ -396,7 +396,7 @@ export class ScriptLibraryPageComponent {
           title: 'Abandonner les modifications ?',
           message: 'Le brouillon de ce script contient des modifications non enregistrées.',
           confirmLabel: 'Abandonner',
-          confirmColor: 'var(--danger-strong)',
+          variant: 'danger',
         },
       })
       .afterClosed()

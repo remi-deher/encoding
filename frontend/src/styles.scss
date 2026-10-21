@@ -323,49 +323,58 @@ html[data-theme='dark'] {
 
 .app-dialog-panel,
 .confirmation-dialog-panel {
+  --mat-dialog-container-shape: var(--radius-2xl);
+  --mat-dialog-container-color: var(--surface-container-high);
   width: min(480px, calc(100vw - 24px)) !important;
   min-width: min(280px, calc(100vw - 24px)) !important;
   max-width: calc(100vw - 24px) !important;
   max-height: calc(100dvh - 24px) !important;
 }
 
+/* Gabarit de modale : bandeau sémantique (neutre, danger, information), corps, actions en pilules. */
 .app-dialog {
+  --dialog-tone: var(--accent-soft);
+  --dialog-tone-ink: var(--accent-strong);
   box-sizing: border-box;
   width: 100%;
   max-height: calc(100dvh - 24px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--surface);
+  background: var(--surface-container-high);
   color: var(--text-primary);
 }
 
+.app-dialog_danger {
+  --dialog-tone: var(--danger-soft);
+  --dialog-tone-ink: var(--danger);
+}
+
+.app-dialog_info {
+  --dialog-tone: var(--tertiary-soft);
+  --dialog-tone-ink: var(--tertiary);
+}
+
 .app-dialog-header {
-  padding: 22px 22px 16px;
+  padding: 20px 24px;
   display: flex;
   align-items: center;
   gap: 14px;
   flex: 0 0 auto;
+  background: var(--dialog-tone);
 }
 
 .app-dialog-icon {
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--surface-muted);
-  color: var(--accent-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--dialog-tone-ink);
   font-size: var(--font-title-md);
   font-weight: 700;
-}
-
-.app-dialog-icon_danger {
-  border-color: color-mix(in srgb, var(--danger-strong) 35%, var(--border-subtle));
-  background: color-mix(in srgb, var(--danger-strong) 12%, var(--surface));
-  color: var(--danger-strong);
 }
 
 .app-dialog-heading {
@@ -375,7 +384,7 @@ html[data-theme='dark'] {
 
 .app-dialog-eyebrow {
   margin: 0 0 4px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: var(--font-label);
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -398,7 +407,7 @@ html[data-theme='dark'] {
   min-height: 0;
   max-height: min(56dvh, 560px);
   margin: 0;
-  padding: 0 22px 20px;
+  padding: 20px 24px;
   flex: 0 1 auto;
   overflow: auto;
   overscroll-behavior: contain;
@@ -407,16 +416,28 @@ html[data-theme='dark'] {
 }
 
 .app-dialog .app-dialog-footer {
-  min-height: 62px;
+  min-height: 0;
   margin: 0;
-  padding: 12px 18px;
+  padding: 0 20px 20px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
   flex: 0 0 auto;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--surface);
+}
+
+.app-dialog .app-dialog-footer .mdc-button {
+  border-radius: var(--radius-pill);
+}
+
+.app-dialog .app-dialog-footer .mat-mdc-button:not(.mat-mdc-button-disabled) {
+  background: var(--surface-container-highest);
+}
+
+/* Bouton principal d'une modale de danger : couleur portée par la variante, pas par l'appelant. */
+.app-dialog_danger .app-dialog-footer .mat-mdc-unelevated-button:not(.mat-mdc-button-disabled) {
+  --mat-button-filled-container-color: var(--danger-strong);
+  --mat-button-filled-label-text-color: var(--on-danger);
 }
 
 @media (max-width: 600px) {
@@ -426,16 +447,16 @@ html[data-theme='dark'] {
   }
 
   .app-dialog-header {
-    padding: 18px 18px 14px;
+    padding: 16px 18px;
   }
 
   .app-dialog .app-dialog-body {
     max-height: min(58dvh, 520px);
-    padding: 0 18px 18px;
+    padding: 16px 18px;
   }
 
   .app-dialog .app-dialog-footer {
-    padding: 10px 12px;
+    padding: 0 14px 16px;
   }
 }
 

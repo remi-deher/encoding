@@ -4,17 +4,17 @@ import {
   MatDialogActions,
   MatDialogContent,
   MatDialogRef,
-  MatDialogTitle,
 } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
+import { DialogFrameComponent, DialogVariant } from './dialog-frame.component';
 
 export interface ConfirmationDialogData {
   readonly title: string;
   readonly eyebrow?: string;
   readonly message?: string;
   readonly confirmLabel?: string;
-  readonly headerColor?: string;
-  readonly confirmColor?: string;
+  /** `danger` pour une action destructive ou irréversible ; `info` est déduit du mode d'information. */
+  readonly variant?: DialogVariant;
   readonly mode?: 'confirmation' | 'information';
   readonly closeLabel?: string;
   readonly items?: readonly { readonly label: string; readonly detail?: string }[];
@@ -24,21 +24,14 @@ export interface ConfirmationDialogData {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-confirmation-dialog',
-  imports: [MatButtonModule, MatDialogActions, MatDialogContent, MatDialogTitle],
+  imports: [DialogFrameComponent, MatButtonModule, MatDialogActions, MatDialogContent],
   template: `
-    <section class="app-dialog confirmation-dialog">
-      <header class="app-dialog-header">
-        <span class="app-dialog-icon" [class.app-dialog-icon_danger]="isDanger" aria-hidden="true">
-          {{ data.mode === 'information' ? 'i' : isDanger ? '!' : '?' }}
-        </span>
-        <div class="app-dialog-heading">
-          <p class="app-dialog-eyebrow">
-            {{ data.eyebrow ?? (data.mode === 'information' ? 'Information' : 'Confirmation') }}
-          </p>
-          <h2 mat-dialog-title>{{ data.title }}</h2>
-        </div>
-      </header>
-
+    <app-dialog-frame
+      [variant]="variant"
+      [eyebrow]="data.eyebrow ?? (data.mode === 'information' ? 'Information' : 'Confirmation')"
+      [heading]="data.title"
+      [icon]="data.mode === 'information' ? 'i' : variant === 'danger' ? '!' : '?'"
+    >
       <mat-dialog-content class="app-dialog-body confirmation-dialog-content">
         @if (data.message) {
           <p class="dialog-message">{{ data.message }}</p>
@@ -61,33 +54,17 @@ export interface ConfirmationDialogData {
 
       <mat-dialog-actions class="app-dialog-footer" align="end">
         @if (data.mode === 'information') {
-          <button
-            matButton="filled"
-            type="button"
-            [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
-            [style.--mat-button-filled-label-text-color]="
-              data.confirmColor ? 'var(--on-danger)' : null
-            "
-            (click)="dialogRef.close(true)"
-          >
+          <button matButton="filled" type="button" (click)="dialogRef.close(true)">
             {{ data.closeLabel ?? 'Fermer' }}
           </button>
         } @else {
           <button matButton="text" type="button" (click)="dialogRef.close(false)">Annuler</button>
-          <button
-            matButton="filled"
-            type="button"
-            [style.--mat-button-filled-container-color]="data.confirmColor ?? null"
-            [style.--mat-button-filled-label-text-color]="
-              data.confirmColor ? 'var(--on-danger)' : null
-            "
-            (click)="dialogRef.close(true)"
-          >
+          <button matButton="filled" type="button" (click)="dialogRef.close(true)">
             {{ data.confirmLabel ?? 'Confirmer' }}
           </button>
         }
       </mat-dialog-actions>
-    </section>
+    </app-dialog-frame>
   `,
   styles: `
     .confirmation-dialog-content {
@@ -137,7 +114,8 @@ export interface ConfirmationDialogData {
 export class ConfirmationDialogComponent {
   protected readonly data = inject<ConfirmationDialogData>(MAT_DIALOG_DATA);
   protected readonly dialogRef = inject(MatDialogRef<ConfirmationDialogComponent, boolean>);
-  protected readonly isDanger = Boolean(this.data.confirmColor || this.data.headerColor);
+  protected readonly variant: DialogVariant =
+    this.data.variant ?? (this.data.mode === 'information' ? 'info' : 'neutral');
 
   constructor() {
     this.dialogRef.addPanelClass(['app-dialog-panel', 'confirmation-dialog-panel']);

@@ -136,8 +136,7 @@ export class NodeGroupsPageComponent {
           message:
             'Ce groupe et ses étiquettes partagées seront supprimés. Les nœuds membres et leur inventaire ne sont pas affectés. Attention : un groupe ciblé par un flow ne peut pas être supprimé.',
           confirmLabel: 'Supprimer',
-          headerColor: 'var(--danger)',
-          confirmColor: 'warn',
+          variant: 'danger',
         },
       })
       .afterClosed()

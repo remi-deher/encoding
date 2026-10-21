@@ -717,8 +717,7 @@ export class AiAssistantPageComponent implements OnDestroy {
           title: `Supprimer « ${conversation.title} » ?`,
           message: 'Cette conversation et son historique seront supprimés définitivement.',
           confirmLabel: 'Supprimer',
-          headerColor: 'var(--danger)',
-          confirmColor: 'warn',
+          variant: 'danger',
         },
       })
       .afterClosed()

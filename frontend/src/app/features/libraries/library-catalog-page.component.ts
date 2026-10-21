@@ -336,7 +336,9 @@ export class LibraryCatalogPageComponent {
     }
   }
 
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Bibliothèques');
+  protected readonly title = computed(
+    () => (this.routeData()['title'] as string) ?? 'Bibliothèques',
+  );
 
   protected readonly librarySections: readonly CategoryTabOption[] = [
     { value: 'media', label: 'Bibliothèques' },
@@ -486,10 +488,7 @@ export class LibraryCatalogPageComponent {
         message: `La définition « ${row['name']} » et ses accès par nœud seront supprimés. Les fichiers média ne seront pas touchés. Cette action est irréversible.`,
 
         confirmLabel: 'Supprimer',
-
-        headerColor: 'var(--danger-strong)',
-
-        confirmColor: 'var(--danger-strong)',
+        variant: 'danger',
       }),
     },
   ];
@@ -510,10 +509,7 @@ export class LibraryCatalogPageComponent {
         message: `L’accès de « ${row['nodeName']} » sera retiré de cette bibliothèque.`,
 
         confirmLabel: 'Supprimer l’accès',
-
-        headerColor: 'var(--danger-strong)',
-
-        confirmColor: 'var(--danger-strong)',
+        variant: 'danger',
       }),
     },
   ];
