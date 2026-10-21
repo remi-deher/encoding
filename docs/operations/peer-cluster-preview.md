@@ -1,5 +1,7 @@
 # Exploiter un cluster pair à pair
 
+> **Statut : aperçu expérimental, désactivé par défaut.** Ce mode Raft donne des garanties (majorité, refus sans quorum) opposées au maillage de réconciliation LWW qui est le mode par défaut et le seul chemin vérifié avec les autres fonctions (IA distribuée, Store, etc.). Son gel ou son retrait est une décision en attente : voir [open-questions](../architecture/open-questions.md). Ne pas l'activer en production sans cette décision.
+
 Le mode `PeerCluster` est optionnel. Trois serveurs conservent chacun une base SQLite locale et un journal Raft indépendants ; la majorité confirme les changements métier. Tous les pairs utilisent la même version applicative. Aucun serveur central permanent n’est requis. Voir [0061](../architecture/domains/replication-storage.md).
 
 ## Ce qui est partagé

@@ -1,5 +1,7 @@
 # Cluster pair à pair — suivi de préparation
 
+> **Statut : aperçu expérimental.** « Terminé » ci-dessous signifie « codé et testé en CI », pas « validé en production » : le mode est désactivé par défaut et son avenir est une décision en attente ([open-questions](../architecture/open-questions.md)).
+
 Les six points sont traités dans le code et les procédures. Voir [0061](../architecture/domains/replication-storage.md) et le [guide d’exploitation](peer-cluster-preview.md).
 
 | Point | État | Réalisation et validation |

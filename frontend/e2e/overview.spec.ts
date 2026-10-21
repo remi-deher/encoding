@@ -125,7 +125,7 @@ test('overview uses backend counts and filtered records with accessible responsi
     await page.screenshot({ path: info.outputPath(`overview-${theme}.png`), fullPage: true });
   }
   await home.getByRole('link', { name: 'Examiner les échecs' }).click();
-  await expect(page).toHaveURL(/tasks\?view=errors/);
+  await expect(page).toHaveURL(/activity\?view=errors/);
 });
 
 test('failed refresh preserves known records and reports stale values', async ({ page }) => {

@@ -4,10 +4,8 @@ Dressé le 2026-10-21 en relisant les anciens ADR contre le code de `dev`. Chaqu
 
 ## À traiter en priorité (production)
 
-### 1. L'authentification est désactivée par défaut
-- Constaté : `Auth:Enabled` vaut `false` (`AuthOptions.cs`) et `backend/docker-compose.yml` ne le positionne pas ; dans ce cas `SessionAuthenticationHandler` donne le rôle `admin` à tout appelant. `AGENTS.md` affirme que toute route de gestion exige une session ou un jeton.
-- Impact : une instance exposée sans `Auth__Enabled=true` est entièrement ouverte, y compris l'API d'enrôlement, les plugins et les suppressions.
-- Proposition : activer par défaut dans l'image (assistant `/setup` obligatoire au premier démarrage), `Auth__Enabled=false` explicite pour le développement. À confirmer : quelle valeur utilisent les déploiements TrueNAS actuels.
+### 1. Authentification par défaut : décidé (2026-10-21)
+- Décision de Rémi : le setup d'un admin est imposé. `Auth:Enabled` vaut désormais `true` par défaut ; les écritures MCP exigent un jeton à portée explicite. Voir [auth-ops](domains/auth-ops.md). Reste à faire : vérifier sur les deux hôtes TrueNAS (comptes existants ? sinon l'assistant d'admin apparaîtra à la mise à jour) et ajouter un jeton MCP scopé pour les clients existants.
 
 ### 2. Deux mécanismes de réplication aux garanties opposées
 - Constaté : le **maillage LWW sans quorum** (par défaut, [replication-storage](domains/replication-storage.md)) et le **mode Raft optionnel** `PeerCluster__Enabled` (quorum, transactions répliquées, baux avec terme) coexistent dans le code (`Infrastructure/PeerCluster/`, ~15 fichiers, tests dédiés, 3 documents d'exploitation). Les principes affichés du produit (« sans quorum ») ne couvrent que le premier.
@@ -43,7 +41,7 @@ Seule la version de protocole (`Current = 1`) est contrôlée. Pas de plage de s
 
 - `backend/migrations/0036_library_cluster_tombstones.sql` (racine) n'est pas chargé par le migrateur (seul `migrations/sqlite/` l'est) : reliquat à supprimer.
 - Les instructions du projet (mission) et la mémoire d'équipe citent encore PostgreSQL ; le code et `AGENTS.md` disent SQLite seul. À aligner.
-- Documents d'exploitation à ré-auditer dans une étape suivante (ils citent d'anciens ADR et certains décrivent le mode Raft ou les outils gérés) : `docs/operations/peer-cluster-*.md`, `todo-hardware-accelerated-tools-policy.md`, `docs/design/*`.
+- Documents d'exploitation : ré-audités le 2026-10-21 (index dans `docs/operations/README.md`). Restent à ré-auditer : `docs/design/*`.
 - `backend/README.md` : sections datées par numéros de migration (« la migration 0008 ajoute… ») à réécrire en renvoyant vers les fiches.
 
 ## Non vérifié en conditions réelles (à ne pas présenter comme garanti)

@@ -10,6 +10,8 @@ import {
 } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
+import { PasswordChangeDialogComponent } from '../../../core/auth/password-change-dialog.component';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 import { SettingsEditor } from '../settings-editor';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -80,6 +82,7 @@ export class UserManagementTabComponent {
   private readonly userEditor = viewChild.required<TemplateRef<unknown>>('userEditor');
   private readonly recordForm = viewChild(RecordFormComponent);
   private readonly accounts = inject(UserAccounts);
+  private readonly dialog = inject(MatDialog);
   private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationService);
 
@@ -88,7 +91,6 @@ export class UserManagementTabComponent {
   protected readonly state = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly query = signal('');
   protected readonly busy = signal(false);
-  protected readonly resetTarget = signal<UserRow | null>(null);
 
   protected readonly actions: readonly AccessListAction<UserRow>[] = [
     {
@@ -117,7 +119,8 @@ export class UserManagementTabComponent {
       }),
     },
     { id: 'activate', label: 'Réactiver', visibleWhen: (row) => !row.isActive },
-    { id: 'password', label: 'Réinitialiser le mot de passe' },
+    { id: 'own-password', label: 'Changer mon mot de passe', visibleWhen: (row) => row.isSelf },
+    { id: 'password', label: 'Réinitialiser le mot de passe', visibleWhen: (row) => !row.isSelf },
     {
       id: 'delete',
       label: 'Supprimer',
@@ -155,63 +158,42 @@ export class UserManagementTabComponent {
     return this.rows().filter((row) => !q || row.username.toLowerCase().includes(q));
   });
 
-  protected readonly form = computed<RecordFormData>(() => {
-    const target = this.resetTarget();
-    return target
-      ? {
-          title: 'Réinitialiser le mot de passe',
-          description: `Nouveau mot de passe de « ${target.username} ». Ses sessions seront fermées.`,
-          review: false,
-          submitLabel: 'Réinitialiser',
-          fields: [
-            {
-              id: 'password',
-              label: 'Nouveau mot de passe',
-              type: 'password',
-              required: true,
-              autocomplete: 'new-password',
-              minLength: MINIMUM_PASSWORD_LENGTH,
-              hint: `Au moins ${MINIMUM_PASSWORD_LENGTH} caractères.`,
-            },
-          ],
-        }
-      : {
-          title: 'Nouvel utilisateur',
-          description: 'Créez un compte pour un membre de l’équipe.',
-          review: false,
-          submitLabel: 'Créer l’utilisateur',
-          fields: [
-            {
-              id: 'username',
-              label: 'Nom d’utilisateur',
-              type: 'text',
-              required: true,
-              maxLength: 64,
-              autocomplete: 'off',
-            },
-            {
-              id: 'password',
-              label: 'Mot de passe initial',
-              type: 'password',
-              required: true,
-              autocomplete: 'new-password',
-              minLength: MINIMUM_PASSWORD_LENGTH,
-              hint: `Au moins ${MINIMUM_PASSWORD_LENGTH} caractères.`,
-            },
-            {
-              id: 'role',
-              label: 'Rôle',
-              type: 'select',
-              required: true,
-              options: [
-                { value: 'viewer', label: USER_ROLE_LABELS.viewer },
-                { value: 'admin', label: USER_ROLE_LABELS.admin },
-              ],
-            },
-          ],
-          initialValues: { role: 'viewer' },
-        };
-  });
+  protected readonly form = computed<RecordFormData>(() => ({
+    title: 'Nouvel utilisateur',
+    description: 'Créez un compte pour un membre de l’équipe.',
+    review: false,
+    submitLabel: 'Créer l’utilisateur',
+    fields: [
+      {
+        id: 'username',
+        label: 'Nom d’utilisateur',
+        type: 'text',
+        required: true,
+        maxLength: 64,
+        autocomplete: 'off',
+      },
+      {
+        id: 'password',
+        label: 'Mot de passe initial',
+        type: 'password',
+        required: true,
+        autocomplete: 'new-password',
+        minLength: MINIMUM_PASSWORD_LENGTH,
+        hint: `Au moins ${MINIMUM_PASSWORD_LENGTH} caractères.`,
+      },
+      {
+        id: 'role',
+        label: 'Rôle',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'viewer', label: USER_ROLE_LABELS.viewer },
+          { value: 'admin', label: USER_ROLE_LABELS.admin },
+        ],
+      },
+    ],
+    initialValues: { role: 'viewer' },
+  }));
 
   constructor() {
     void this.refresh();
@@ -229,9 +211,8 @@ export class UserManagementTabComponent {
   }
 
   protected newUser(): void {
-    this.resetTarget.set(null);
     void this.editor.open({
-      title: this.resetTarget() ? 'Réinitialiser le mot de passe' : 'Créer un compte',
+      title: 'Créer un compte',
       content: this.userEditor(),
       dirty: () => this.recordForm()?.hasUnsavedChanges() ?? false,
       busy: () => this.busy(),
@@ -240,19 +221,18 @@ export class UserManagementTabComponent {
 
   protected closeForm(): void {
     this.editor.reset();
-    this.resetTarget.set(null);
   }
 
   protected async onAction(event: AccessListActionEvent<UserRow>): Promise<void> {
     const row = event.row;
     switch (event.actionId) {
+      // Même fenêtre, mêmes règles et mêmes messages que « Changer le mot de passe » du menu du compte.
+      case 'own-password':
+        this.dialog.open(PasswordChangeDialogComponent);
+        return;
       case 'password':
-        this.resetTarget.set(row);
-        void this.editor.open({
-          title: this.resetTarget() ? 'Réinitialiser le mot de passe' : 'Créer un compte',
-          content: this.userEditor(),
-          dirty: () => this.recordForm()?.hasUnsavedChanges() ?? false,
-          busy: () => this.busy(),
+        this.dialog.open(PasswordChangeDialogComponent, {
+          data: { target: { id: row.id, username: row.username } },
         });
         return;
       case 'make-admin':
@@ -281,22 +261,16 @@ export class UserManagementTabComponent {
   }
 
   protected async submit(value: Record<string, string>): Promise<void> {
-    const target = this.resetTarget();
     this.busy.set(true);
     try {
-      if (target) {
-        await firstValueFrom(this.accounts.resetPassword(target.id, value['password']));
-        this.notifications.show(`Le mot de passe de « ${target.username} » a été réinitialisé.`);
-      } else {
-        await firstValueFrom(
-          this.accounts.create(
-            value['username'].trim(),
-            value['password'],
-            value['role'] as 'admin' | 'viewer',
-          ),
-        );
-        this.notifications.show(`« ${value['username'].trim()} » a été créé.`);
-      }
+      await firstValueFrom(
+        this.accounts.create(
+          value['username'].trim(),
+          value['password'],
+          value['role'] as 'admin' | 'viewer',
+        ),
+      );
+      this.notifications.show(`« ${value['username'].trim()} » a été créé.`);
       this.closeForm();
       await this.refresh();
     } catch (error) {

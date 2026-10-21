@@ -8,12 +8,14 @@ export interface ApiTokenResponse {
   readonly expiresAt?: string | null;
   readonly lastUsedAt?: string | null;
   readonly revokedAt?: string | null;
+  readonly scopes?: readonly string[] | null;
 }
 
 export interface CreateApiTokenRequest {
   readonly name: string;
   readonly role: 'admin' | 'viewer';
   readonly expiresAt?: string | null;
+  readonly scopes?: readonly string[];
 }
 
 export interface CreatedApiTokenResponse {

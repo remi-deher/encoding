@@ -4,11 +4,11 @@ Ce flow reconstruit le flow FileFlows « V3 – HEVC + AAC/AC3 + ASS Crunchyroll
 
 ## Mettre le flow en service
 
-1. Page **Flows** : importer `hevc-aac-ass.flow.json` (import JSON, ADR 0014). Le flow est créé en version 1, identifiant fixe ; un second import identique est sans effet.
+1. Page **Flows** : importer `hevc-aac-ass.flow.json` (import JSON, voir [flows](../architecture/domains/flows.md)). Le flow est créé en version 1, identifiant fixe ; un second import identique est sans effet.
 2. Ouvrir le flow dans l'éditeur : régler le nom du disque du bloc **Verrou de disque** (`disque-1` par défaut ; le même nom pour toutes les bibliothèques d'un même disque physique), le jeu de polices et les contrôles de sortie. Cet exemple choisit QSV et active le repli CPU; le même réglage fonctionne aussi avec NVENC et VAAPI. Si une branche conserve des sources HDR/10-bit dans leur codec d'origine, choisir **HEVC ou codec source conservé** dans le validateur. Publier.
-3. Attribuer la version publiée à une bibliothèque. Si besoin, créer un modèle depuis cette version (ADR 0025) pour en dériver d'autres flows.
-4. Prérequis sur les nœuds : FFmpeg, MKVToolNix, plugin `base` 1.6.0 ou plus, plugin `plex` 1.1.0 (déclarés dans `Runtime:Plugins`, voir `docker-compose.yml`), et le dossier de polices du nœud (`ENCODING_FONT_DIR/Crunchyroll/…`, ADR 0057). Un nœud qui ne satisfait pas ces conditions ne reçoit pas le flow.
-5. Plex : renseigner l'adresse, le jeton et la correspondance de chemins du plugin (ADR 0032). Pour protéger le remplacement de la source, activer la politique de remplacement de la bibliothèque (ADR 0030, désactivée par défaut) ; la garde de Plex s'applique alors (ADR 0059).
+3. Attribuer la version publiée à une bibliothèque. Si besoin, créer un modèle depuis cette version ([flows](../architecture/domains/flows.md)) pour en dériver d'autres flows.
+4. Prérequis sur les nœuds : FFmpeg, MKVToolNix, plugin `base` 1.6.0 ou plus, plugin `plex` 1.1.0 (déclarés dans `Runtime:Plugins`, voir `docker-compose.yml`), et le dossier de polices du nœud (`ENCODING_FONT_DIR/Crunchyroll/…`). Un nœud qui ne satisfait pas ces conditions ne reçoit pas le flow.
+5. Plex : renseigner l'adresse, le jeton et la correspondance de chemins du plugin ([plugins](../architecture/domains/plugins.md)). Pour protéger le remplacement de la source, activer la politique de remplacement de la bibliothèque ([runtime](../architecture/domains/runtime.md), désactivée par défaut) ; la garde de Plex s'applique alors ([runtime](../architecture/domains/runtime.md)).
 
 ## Déroulement
 
@@ -28,9 +28,9 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 
 ## Correspondance FileFlows → encoding
 
-| Bloc FileFlows | Bloc encoding | PR / ADR | Écart |
+| Bloc FileFlows | Bloc encoding | Ancien ADR (voir [table](../architecture/legacy-adr-map.md)) | Écart |
 | --- | --- | --- | --- |
-| Entrée VideoFile | `base-input-video` | — | Scan imposé avant toute transformation (0006) |
+| Entrée VideoFile | `base-input-video` | — | Scan imposé avant toute transformation (ancien 0006) |
 | 0. Pause lecture Plex | `plex-check-playback` (fichier + épisode précédent) → « Reporter » | 0059 | Report de 10 minutes sans occuper de worker ; pas de Watchdeck (disques en pause) |
 | 3. Verrou par disque, report si occupé | `base-disk-lock` → « Reporter » (2 min) | 0058 | Nom de disque saisi dans le bloc |
 | 0b. Relevé des pistes d'origine | `base-track-names` (instantané) | 0056 | Conserve les noms d'origine (VFF, VFQ…) |
@@ -43,7 +43,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 | 4b. Noms de pistes | `base-track-names` (appliquer) | 0056 | Modèle de nom modifiable |
 | 29, 13. Garde Plex puis remplacement atomique | politique de remplacement de la bibliothèque + garde Plex | 0030, 0059 | Remplacement désactivé par défaut ; garde pour tous les remplacements du cluster |
 | Contrôles post-assemblage | `probe-validate-output` | 0075 | Vérifie au choix HEVC, pistes vidéo/audio, codecs audio et sous-titres, canaux/disposition/LFE, chapitres, pièces jointes, durée et événements ASS |
-| 14–15, 26–27. Actualisation Plex / Radarr / Sonarr | événement durable `media.published` ajouté au journal après publication | 0075 | Comprend chemin et SHA-256 ; les plugins n'ont pas encore de consommateur automatique pour lancer leurs actions |
+| 14–15, 26–27. Actualisation Plex / Radarr / Sonarr | événement durable `media.published` ajouté au journal après publication | 0075 | Comprend chemin et SHA-256 ; aucun consommateur n'existe encore : ni les plugins ni le serveur n'actualisent Plex/Radarr/Sonarr à partir de cet événement (voir [open-questions](../architecture/open-questions.md)) |
 | Scripts avec `Flow.Execute` | `base-script` avec l'aide `tools` | 0054 | Bac à sable Landlock conservé |
 
 ## Comportement dans les cas d'échec
@@ -56,7 +56,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 | Disposition audio ambiguë | Sortie « Erreur » → Échec, source intacte |
 | Outil ou plugin absent sur le nœud | Le nœud ne reçoit pas le flow |
 | Perte du worker en cours de traitement | Le bail expire et la tentative échoue ; une reprise explicite, ou une règle de reprise bornée du flow, crée une nouvelle exécution depuis l’entrée. Un relais explicite conserve son checkpoint (0015, 0021) |
-| Perte du nœud d'accès pendant la publication | La publication est reprise sans double bascule (0030) |
+| Perte du nœud d'accès pendant la publication | La publication est reprise sans double bascule ([runtime](../architecture/domains/runtime.md)) |
 
 ## Limites connues
 

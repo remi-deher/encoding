@@ -350,7 +350,7 @@ export class AiAssistantPageComponent implements OnDestroy {
       label: option.label,
       href: {
         flow: '/flows',
-        execution: '/tasks',
+        execution: '/activity',
         node: '/nodes',
         library: '/libraries',
       }[option.type],

@@ -232,6 +232,8 @@ app.UseRequestObservability();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+if (!app.Services.GetRequiredService<Encoding.Api.Auth.AuthOptions>().Enabled)
+    app.Logger.LogWarning("Auth:Enabled=false : toute requête est traitée comme administrateur, MCP et API de gestion compris. À réserver au développement.");
 app.UseClusterAuthentication();
 app.UsePeerRequestRouting();
 app.MapAuthEndpoints();
