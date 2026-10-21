@@ -465,6 +465,12 @@ public sealed class AiAssistantService(
         await store.DeleteAsync(ConversationKey(stored.OwnerId, stored.Conversation.Id), ct);
         await store.DeleteAsync(SessionOwnerKey(stored.Conversation.Id), ct);
         await store.DeleteAsync("session/" + stored.Conversation.Id, ct);
+        for (var attempt = 1; attempt <= MaxTitleAttemptTurns; attempt++)
+        {
+            var titleSessionId = $"{stored.Conversation.Id.Split('.')[0]}.{TitleRequestId(stored.Conversation.Id, attempt):N}";
+            await store.DeleteAsync(SessionOwnerKey(titleSessionId), ct);
+            await store.DeleteAsync("session/" + titleSessionId, ct);
+        }
         foreach (var requestId in stored.TurnPromptSnapshots?.Keys ?? Array.Empty<Guid>())
         {
             var plannerRequestId = DeriveRequestId(
@@ -477,16 +483,25 @@ public sealed class AiAssistantService(
     {
         var ownerId = OwnerId(user);
         var records = await store.ReadPrefixAsync<StoredActivity>(ActivityPrefix + ownerId + "/", ct);
-        return records.Select(record => record.Activity)
+        var titles = (await store.ReadPrefixAsync<StoredConversation>(ConversationPrefix + ownerId + "/", ct))
+            .ToDictionary(record => record.Conversation.Id, record => record.Conversation.Title, StringComparer.Ordinal);
+        return records.Select(record => WithTitle(record.Activity, titles))
             .OrderByDescending(activity => activity.UpdatedAt)
             .Take(100)
             .ToArray();
     }
 
-    public Task<AiAssistantActivity?> GetActivityAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct)
+    private static AiAssistantActivity WithTitle(AiAssistantActivity activity, IReadOnlyDictionary<string, string> titles) =>
+        activity.ConversationId is { } id && titles.TryGetValue(id, out var title) ? activity with { ConversationTitle = title } : activity;
+
+    public async Task<AiAssistantActivity?> GetActivityAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct)
     {
         if (requestId == Guid.Empty) throw new ArgumentException("Identifiant de demande invalide.");
-        return ReadActivityAsync(OwnerId(user), requestId, ct);
+        var ownerId = OwnerId(user);
+        var activity = await ReadActivityAsync(ownerId, requestId, ct);
+        if (activity?.ConversationId is { } id && IsSessionId(id) && await ReadConversationAsync(ownerId, id, ct) is { } stored)
+            activity = activity with { ConversationTitle = stored.Conversation.Title };
+        return activity;
     }
 
     public async Task<Guid?> GetRequestCoordinatorIdAsync(Guid requestId, ClaimsPrincipal user, CancellationToken ct)
@@ -708,7 +723,8 @@ public sealed class AiAssistantService(
                     now,
                     Model: model,
                     ReasoningEffort: request.ReasoningEffort,
-                    NodeId: request.NodeId);
+                    NodeId: request.NodeId,
+                    TitleSource: TitleSourceFallback);
                 await SaveConversationAsync(ownerId, conversation, ct);
             }
         }
@@ -1031,6 +1047,15 @@ public sealed class AiAssistantService(
             ?? new Dictionary<Guid, string?>();
         updatedActualModels[request.RequestId] = observedModel;
         var latestConversation = conversation with { Provider = conversation.Provider, Model = conversation.Model, ReasoningEffort = conversation.ReasoningEffort, NodeId = conversation.NodeId };
+        if (result.Success && latestConversation.TitleSource == TitleSourceFallback && userPrompts.Count <= MaxTitleAttemptTurns)
+        {
+            var generated = await TryGenerateTitleAsync(latestConversation, request.UserPrompt, result.Content, ownerId, userPrompts.Count, ct);
+            if (generated is not null)
+                latestConversation = latestConversation with { Title = generated, TitleSource = TitleSourceAi };
+        }
+        // A rename made while the answer was being generated always wins over the automatic title.
+        if (await ReadConversationAsync(ownerId, conversation.Id, ct) is { Conversation.TitleSource: TitleSourceUser } renamed)
+            latestConversation = latestConversation with { Title = renamed.Conversation.Title, TitleSource = TitleSourceUser };
         await SaveConversationAsync(ownerId, latestConversation, ct,
             turnSelections: updatedSelections, turnActualModels: updatedActualModels);
         return new(
@@ -1282,6 +1307,79 @@ public sealed class AiAssistantService(
         return parts.Length == 2
             && Guid.TryParseExact(parts[0], "N", out var peerId) && peerId != Guid.Empty
             && Guid.TryParseExact(parts[1], "N", out var sessionId) && sessionId != Guid.Empty;
+    }
+
+    private const string TitleSourceFallback = "fallback";
+    private const string TitleSourceAi = "ai";
+    private const string TitleSourceUser = "user";
+    private const int MaxTitleAttemptTurns = 2;
+    private const int MaxTitleLength = 80;
+    private static readonly TimeSpan TitleTimeout = TimeSpan.FromSeconds(20);
+
+    public async Task<AiAssistantConversation?> RenameAsync(string id, string? title, ClaimsPrincipal user, CancellationToken ct)
+    {
+        if (!IsSessionId(id)) return null;
+        var cleaned = title?.Trim().Length > MaxTitleLength ? null : CleanTitle(title, MaxTitleLength);
+        if (cleaned is null) throw new ArgumentException("Le titre doit contenir entre 1 et 80 caractères.");
+        var ownerId = OwnerId(user);
+        var stored = await ReadConversationAsync(ownerId, id, ct);
+        if (stored is null) return null;
+        var conversation = stored.Conversation with { Title = cleaned, TitleSource = TitleSourceUser };
+        await SaveConversationAsync(ownerId, conversation, ct);
+        return conversation;
+    }
+
+    // The title is a convenience: any failure (no provider, timeout, empty or unusable output) keeps the prompt-based fallback.
+    private async Task<string?> TryGenerateTitleAsync(AiAssistantConversation conversation, string userPrompt, string? answer,
+        string ownerId, int attempt, CancellationToken ct)
+    {
+        try
+        {
+            var localOnly = (await cluster.GetSettingsAsync(ct)).AssistantLocalOnly;
+            var requestId = TitleRequestId(conversation.Id, attempt);
+            var sessionId = $"{conversation.Id.Split('.')[0]}.{requestId:N}";
+            await store.SaveAsync(SessionOwnerKey(sessionId), ownerId, ct);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TitleTimeout);
+            var exchange = $"Message de l’utilisateur :\n{Truncate(userPrompt, 600)}\n\nRéponse de l’assistant :\n{Truncate(answer, 600)}"
+                + (conversation.Source.Kind == "application" ? string.Empty : $"\n\nRessource concernée : {Truncate(conversation.Source.Label, 120)}");
+            var generated = await cluster.GenerateAsync(
+                conversation.Provider,
+                new AiPrompt(TitleSystemPrompt, exchange, Model: conversation.Model, SessionId: sessionId, RequestId: requestId,
+                    ReasoningEffort: conversation.ReasoningEffort, NodeId: conversation.NodeId),
+                timeout.Token, localOnly: localOnly);
+            return generated.Success ? CleanTitle(generated.Content, 60) : null;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return null; }
+    }
+
+    private const string TitleSystemPrompt =
+        "Tu nommes des conversations. Donne un titre court (3 à 7 mots, 60 caractères maximum) dans la langue de l’utilisateur, "
+        + "qui résume le sujet de l’échange. Réponds uniquement par le titre, sans guillemets, sans ponctuation finale, sans explication.";
+
+    // One stable request per attempt: a replay of the same turn is idempotent, a later turn retries with a fresh request.
+    private static Guid TitleRequestId(string conversationId, int attempt) =>
+        DeriveRequestId(conversationId + "/title/" + attempt, "assistant-title");
+
+    private static string Truncate(string? value, int length) =>
+        string.IsNullOrEmpty(value) ? string.Empty : value.Length <= length ? value : value[..length];
+
+    /// <summary>Keeps the first non-empty line, strips markdown and quotes, and refuses empty or over-long results.</summary>
+    internal static string? CleanTitle(string? raw, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var line = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? string.Empty;
+        line = string.Join(' ', line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        if (line.StartsWith("Titre :", StringComparison.OrdinalIgnoreCase)) line = line[7..];
+        string previous;
+        do
+        {
+            previous = line;
+            line = line.Trim('#', '*', '_', '`', '"', '\'', '«', '»', '“', '”', ' ').TrimEnd('.', ':', ';', ',');
+        } while (line != previous);
+        if (line.Length == 0) return null;
+        return line.Length <= maxLength ? line : line[..(maxLength - 1)].TrimEnd() + "…";
     }
 
     private static string CreateTitle(string prompt)

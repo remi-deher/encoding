@@ -157,6 +157,8 @@ export interface AiAssistantConversation {
   readonly model?: string | null;
   readonly reasoningEffort?: string | null;
   readonly nodeId?: string | null;
+  /** `ai` (généré), `fallback` (début du message) ou `user` (renommé). */
+  readonly titleSource?: 'ai' | 'fallback' | 'user' | null;
 }
 
 export interface AiAssistantModelOption {
@@ -299,6 +301,7 @@ export interface AiAssistantActivity {
   readonly tools?: readonly string[] | null;
   readonly progress?: string | null;
   readonly progressDetail?: string | null;
+  readonly conversationTitle?: string | null;
 }
 
 export interface AiUsage {

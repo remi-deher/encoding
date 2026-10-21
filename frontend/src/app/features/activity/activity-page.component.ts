@@ -335,6 +335,9 @@ export class ActivityPageComponent {
     if (!a) return [];
     return [
       { section: 'Demande', label: 'Identifiant', value: a.requestId, copiable: true },
+      ...(a.conversationTitle
+        ? [{ section: 'Demande', label: 'Conversation', value: a.conversationTitle }]
+        : []),
       { section: 'Demande', label: 'Opération', value: aiOperationName(a.operation) },
       { section: 'Demande', label: 'Fournisseur', value: aiProviderName(a.provider) },
       { section: 'Demande', label: 'État', value: aiStatusName(a.status) },

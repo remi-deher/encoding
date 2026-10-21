@@ -1,6 +1,6 @@
 import { AiAssistantActivity } from '../../shared/models/ai-tools';
 import { ExecutionResponse } from '../../shared/models/execution';
-import { aiItem, executionGroup, executionItem } from './activity-items';
+import { aiItem, aiOperationName, executionGroup, executionItem } from './activity-items';
 
 const execution = (state: ExecutionResponse['state']): ExecutionResponse => ({
   id: 'e1',
@@ -50,5 +50,15 @@ describe('activity items', () => {
     expect(aiItem(ai('failed')).group).toBe('errors');
     expect(aiItem(ai('proposal-ready')).group).toBe('done');
     expect(aiItem(ai('succeeded')).key).toBe('ai:r1');
+  });
+
+  it('titles an AI request with its conversation name, with a fallback to the operation', () => {
+    const named = aiItem({ ...ai('succeeded'), conversationTitle: ' Diagnostic du flow HEVC ' });
+    expect(named.title).toBe('Diagnostic du flow HEVC');
+    expect(named.subtitle).toContain('Assistant');
+    expect(aiItem(ai('succeeded')).title).toBe(aiOperationName(undefined));
+    expect(aiItem({ ...ai('succeeded'), conversationTitle: '  ' }).title).toBe(
+      aiOperationName(undefined),
+    );
   });
 });

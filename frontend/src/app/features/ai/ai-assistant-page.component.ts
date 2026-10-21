@@ -726,6 +726,40 @@ export class AiAssistantPageComponent implements OnDestroy {
       });
   }
 
+  protected readonly renaming = signal<string | null>(null);
+  protected readonly renameDraft = signal('');
+
+  protected startRename(conversation: AiAssistantConversation): void {
+    this.renameDraft.set(conversation.title);
+    this.renaming.set(conversation.id);
+  }
+
+  protected cancelRename(): void {
+    this.renaming.set(null);
+  }
+
+  protected saveRename(): void {
+    const id = this.renaming();
+    if (!id) return;
+    this.renaming.set(null);
+    const title = this.renameDraft().trim();
+    const current = this.detail()?.conversation;
+    if (!title || !current || current.id !== id || title === current.title) return;
+    this.errorMessage.set(null);
+    this.aiTools.renameAssistantConversation(id, title).subscribe({
+      next: (conversation) => {
+        this.detail.update((detail) =>
+          detail && detail.conversation.id === id ? { ...detail, conversation } : detail,
+        );
+        this.conversations.update((items) =>
+          items.map((item) => (item.id === id ? { ...item, ...conversation } : item)),
+        );
+      },
+      error: (error: HttpErrorResponse) =>
+        this.errorMessage.set(this.errorText(error, 'Impossible de renommer cette conversation.')),
+    });
+  }
+
   private deleteConversation(conversation: AiAssistantConversation): void {
     if (this.deletingConversationId()) return;
     this.deletingConversationId.set(conversation.id);
