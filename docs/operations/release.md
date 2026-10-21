@@ -2,7 +2,7 @@
 
 ## Parcours de développement et promotion
 
-- Les PR de fonctionnalités sont ouvertes vers `dev`. La policy du dépôt active leur auto-merge.
+- Les PR de fonctionnalités sont ouvertes vers `dev`. La policy du dépôt active leur auto-merge en squash : un seul commit par PR dans `dev`, sans commit « Merge pull request ». Seule la PR de promotion `dev` vers `main` utilise une fusion « Merge » (un squash casserait le contrôle `promotion-ci`, qui vérifie que `main` est contenue dans `dev`). L'historique déjà présent n'est pas réécrit.
 - Quand un ensemble de changements est prêt à sortir, ouvrir une PR de `dev` vers `main`. La policy active automatiquement l’auto-merge de cette PR, sans label supplémentaire ; GitHub la fusionne lorsque les exigences et contrôles requis sont satisfaits.
 - La fusion de cette PR sur `main` déclenche le workflow de release. Il attend que les contrôles CI Backend et Frontend soient terminés et verts avant de publier. La PR de promotion échoue explicitement si `main` contient un commit hors fusion absent de `dev`, par exemple un commit direct (fusionner `main` dans `dev` ; ne jamais rebaser). Les fusions de promotion précédentes sont attendues sur `main` et ne bloquent pas. Un commit poussé directement sur `main` ne publie rien : le workflow de release échoue avec un message qui l'indique. Pour protéger `main`, exiger la PR et le contrôle `promotion-ci` dans les règles de branche, sans dérogation. Une PR de promotion peut être fermée ou son auto-merge désactivé si la release doit être reportée.
 
