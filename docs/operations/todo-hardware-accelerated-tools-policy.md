@@ -4,7 +4,7 @@
 > **Statut** : À prendre en charge  
 > **Priorité** : Haute  
 > **Domaines** : Runtime Worker, Plugins, Store/Validation, Sécurité Landlock, Outils Média  
-> **Documents de référence** : [0051](../architecture/0051-hardware-encoding-in-image.md), [0063](../architecture/0063-plugin-store-and-repositories.md), [0064](../architecture/0064-custom-and-managed-media-tools.md), [0065](../architecture/0065-ai-media-tools-and-mcp-integration.md).
+> **Documents de référence** : [0051](../architecture/domains/cluster.md), [0063](../architecture/domains/plugins.md), [0064](../architecture/domains/plugins.md), [0065](../architecture/domains/auth-ops.md).
 
 ---
 
@@ -45,14 +45,14 @@ public static class HardwareCapabilities
 ```
 
 ### B. Contrôle à l'installation du plugin (`PluginPackageValidator`)
-Lors de l'import ou du téléchargement d'un paquet `.zip` ([0063](../architecture/0063-plugin-store-and-repositories.md)) :
+Lors de l'import ou du téléchargement d'un paquet `.zip` ([0063](../architecture/domains/plugins.md)) :
 1. Inspecter `plugin.json`.
 2. Si un composant ou un outil déclaré dans le plugin prétend fournir ou requérir une capacité matérielle tout en pointant vers un binaire embarqué (`bin/` ou chemin relatif dans le zip) :
    - **Rejeter le paquet avec une erreur explicite** :
      `"PLUGIN_EMBEDDED_HARDWARE_TOOL_FORBIDDEN: L'accélération matérielle ({capability}) ne peut pas être fournie par un binaire embarqué. Le plugin doit déclarer la dépendance vers l'outil du conteneur (ex. requiredTools: ['ffmpeg'])."`
 
 ### C. Résolution d'exécution au runtime (`ToolResolver` / `RuntimeEligibility`)
-Lorsqu'un nœud de flow s'exécute ou qu'un worker vérifie son éligibilité ([0064](../architecture/0064-custom-and-managed-media-tools.md)) :
+Lorsqu'un nœud de flow s'exécute ou qu'un worker vérifie son éligibilité ([0064](../architecture/domains/plugins.md)) :
 1. Analyser les `RequiredCapabilities` du composant et de la configuration courante (ex: profile encodeur ciblant `nvenc`, `qsv` ou `vaapi`).
 2. **Si l'opération requiert une accélération matérielle** :
    - Forcer le fournisseur vers **`Stock` (Conteneur)** ou **`Custom` Nœud validé par la mire synthétique matérielle**.
@@ -61,7 +61,7 @@ Lorsqu'un nœud de flow s'exécute ou qu'un worker vérifie son éligibilité ([
 3. **Si l'opération est purement logicielle (CPU)** :
    - Autoriser la cascade standard : Bloc > Outil embarqué du plugin > Outil conteneur.
 
-### D. Confinement Landlock ([0015](../architecture/0015-flow-runtime-and-portable-archives.md))
+### D. Confinement Landlock ([0015](../architecture/domains/runtime.md))
 - Les binaires embarqués dans les plugins (`/opt/encoding/custom-plugins/<plugin>/bin/`) n'ont aucun accès aux nœuds de périphériques `/dev/dri`, `/dev/nvidia*`.
 - Seul le processus de référence exécutant les binaires système du conteneur dispose des descripteurs de périphériques matériels montés.
 

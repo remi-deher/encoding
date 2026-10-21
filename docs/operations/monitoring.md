@@ -1,6 +1,6 @@
 # Supervision
 
-Voir [0029](../architecture/0029-operations-observability-and-retention.md) pour les décisions.
+Voir [0029](../architecture/domains/auth-ops.md) pour les décisions.
 
 ## Endpoints
 
