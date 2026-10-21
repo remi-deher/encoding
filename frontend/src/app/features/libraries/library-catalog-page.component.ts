@@ -11,7 +11,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
+  untracked,
   signal,
   viewChildren,
 } from '@angular/core';
@@ -193,6 +195,11 @@ export class LibraryCatalogPageComponent {
   private readonly notifications = inject(NotificationService);
 
   private readonly libraries = signal<readonly LibraryRecord[]>([]);
+  protected readonly searchQuery = signal('');
+  private readonly libraryParam = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('library'))),
+    { initialValue: this.route.snapshot.queryParamMap.get('library') },
+  );
 
   private readonly processingByLibrary = signal<
     Readonly<Record<string, LibraryProcessingSettings>>
@@ -1071,7 +1078,16 @@ export class LibraryCatalogPageComponent {
     const workflow = this.workflowState();
     const selectedProcessing = this.processingState();
     const processingMap = this.processingByLibrary();
-    return this.libraries().map((library) => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr');
+    const visible = query
+      ? this.libraries().filter(
+          (library) =>
+            library.id === selectedId ||
+            library.name.toLocaleLowerCase('fr').includes(query) ||
+            library.nodePaths.toLocaleLowerCase('fr').includes(query),
+        )
+      : this.libraries();
+    return visible.map((library) => {
       const processing =
         library.id === selectedId && selectedProcessing
           ? selectedProcessing
@@ -1099,18 +1115,36 @@ export class LibraryCatalogPageComponent {
 
   constructor() {
     this.refresh();
+    // La fiche est portée par l'URL (?library=<id>) : le menu latéral et le bouton précédent
+    // du navigateur ramènent à la liste sans bouton retour dédié.
+    effect(() => {
+      const id = this.libraryParam();
+      const libraries = this.libraries();
+      untracked(() => {
+        if (!id) {
+          if (this.selectedLibrary()) this.selectedLibrary.set(null);
+          return;
+        }
+        if (this.selectedLibrary()?.id === id) return;
+        const library = libraries.find((item) => item.id === id);
+        if (library) this.openLibrary(library);
+      });
+    });
   }
 
   protected onLibraryOpen(row: DataTableRow): void {
-    const library = this.libraries().find((item) => item.id === row['id']) ?? null;
+    const id = String(row['id']);
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { library: id } });
+  }
 
+  private openLibrary(library: LibraryRecord): void {
     this.selectedLibrary.set(library);
     this.selectedLibraryTabIndex.set(0);
 
     this.selectedAccesses.set([]);
     this.selectedProcessingExecutionId.set(null);
 
-    if (library) this.loadSelectedAccesses(library.id);
+    this.loadSelectedAccesses(library.id);
   }
 
   protected onProcessingExecutionAction(executionId: string): void {
