@@ -238,7 +238,7 @@ public sealed partial class FlowRepository(DbDataSource dataSource, PeerConsensu
         }
     }
 
-    public async Task<(FlowDeleteResult Result, string? Reason)> DeleteFlowAsync(Guid id, CancellationToken ct, int? expectedVersion = null)
+    public async Task<(FlowDeleteResult Result, string? Reason)> DeleteFlowAsync(Guid id, CancellationToken ct, int? expectedVersion = null, bool detachLibraries = false)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
@@ -255,7 +255,7 @@ public sealed partial class FlowRepository(DbDataSource dataSource, PeerConsensu
         await using var checkAssign = Sql.Command("SELECT count(*) FROM library_flow_assignments WHERE flow_id = @id", connection, tx);
         checkAssign.Parameters.AddWithValue("id", id);
         var assignCount = Convert.ToInt64(await checkAssign.ExecuteScalarAsync(ct));
-        if (assignCount > 0)
+        if (assignCount > 0 && !detachLibraries)
             return (FlowDeleteResult.Conflict, "Ce flow est actuellement assigné à une ou plusieurs bibliothèques.");
 
         await using var checkExec = Sql.Command("""
@@ -267,6 +267,17 @@ public sealed partial class FlowRepository(DbDataSource dataSource, PeerConsensu
         var activeExecCount = Convert.ToInt64(await checkExec.ExecuteScalarAsync(ct));
         if (activeExecCount > 0)
             return (FlowDeleteResult.Conflict, "Des exécutions sont actuellement en cours pour ce flow.");
+
+        if (assignCount > 0)
+        {
+            // Les exécutions embarquent leur définition : détacher les bibliothèques ne touche pas aux tâches déjà créées.
+            await using var advance = Sql.Command("UPDATE libraries SET flow_assignment_revision = flow_assignment_revision + 1 WHERE id IN (SELECT library_id FROM library_flow_assignments WHERE flow_id = @id)", connection, tx);
+            advance.Parameters.AddWithValue("id", id);
+            await advance.ExecuteNonQueryAsync(ct);
+            await using var detach = Sql.Command("DELETE FROM library_flow_assignments WHERE flow_id = @id", connection, tx);
+            detach.Parameters.AddWithValue("id", id);
+            await detach.ExecuteNonQueryAsync(ct);
+        }
 
         await using var clearDraft = Sql.Command("DELETE FROM flow_drafts WHERE flow_id = @id", connection, tx);
         clearDraft.Parameters.AddWithValue("id", id);

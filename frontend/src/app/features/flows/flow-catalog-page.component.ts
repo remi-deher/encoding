@@ -3,7 +3,7 @@ import { FlowDocument } from '../../shared/models/flow-validation';
 import { FlowComponentDefinition } from '../../shared/models/flow-component';
 import { RecordFormData } from '../../shared/ui/record-form.component';
 import { MatDialog } from '@angular/material/dialog';
-import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
+import { FlowDeleteDialogComponent } from './flow-delete-dialog.component';
 import { FileDownload } from '../../shared/services/file-download';
 import { NotificationService } from '../../shared/services/notification.service';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -317,21 +317,12 @@ export class FlowCatalogPageComponent {
       name = String(row['name']);
     this.deletingFlow.set(id);
     try {
+      const libraries = await this.api.usage(id);
       const confirmed = await firstValueFrom(
-        this.dialog
-          .open(ConfirmationDialogComponent, {
-            data: {
-              title: `Supprimer le flow « ${name} » ?`,
-              message:
-                'Le flow et son brouillon seront retirés du catalogue. Les versions publiées et l’historique des exécutions sont conservés. La suppression est refusée si le flow est affecté à une bibliothèque ou possède une exécution en cours.',
-              confirmLabel: 'Supprimer',
-              confirmColor: 'var(--danger)',
-            },
-          })
-          .afterClosed(),
+        this.dialog.open(FlowDeleteDialogComponent, { data: { name, libraries } }).afterClosed(),
       );
       if (!confirmed) return;
-      await this.api.remove(id);
+      await this.api.remove(id, libraries.length > 0);
       if (this.selectedFlow()?.id === id) this.onDetailClosed();
       this.refreshCatalog.next();
       this.notifications.show(`Le flow « ${name} » a été supprimé.`);
