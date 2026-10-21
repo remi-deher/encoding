@@ -38,8 +38,8 @@ inchangés. Il est exécuté pour chaque PR vers main, sans filtre de chemins, e
 être requis dans une règle de protection de main. Cette règle ne doit pas offrir de
 dérogation aux intégrations qui activent l'auto-merge. La politique de PR désactive
 l'auto-merge existant et ne l'active de nouveau qu'après réussite de promotion-ci,
-avec vérification du SHA de tête. Il vérifie aussi que main est contenue dans dev ;
-sinon il échoue en demandant de fusionner ou rebaser main dans dev. Un nouveau push invalide le contrôle précédent.
+avec vérification du SHA de tête. Il vérifie aussi que main ne porte aucun commit hors fusion absent de dev (les fusions de
+promotion précédentes sont normales) ; sinon il échoue en demandant de fusionner main dans dev. Un nouveau push invalide le contrôle précédent.
 Un échec impose une correction puis un nouveau contrôle, ou une relance si le test
 était transitoirement en panne.
 
