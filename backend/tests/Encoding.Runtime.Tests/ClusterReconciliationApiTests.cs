@@ -90,6 +90,52 @@ public sealed class ClusterReconciliationApiTests
     }
 
     [Fact]
+    public async Task SignedExchangeFromAnIncompatibleProtocolOrAnotherClusterIsRefusedWithoutApplyingChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "encoding-mesh-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var sourceConnectionString = $"Data Source={Path.Combine(root, "source.db")};Pooling=False";
+        var targetConnectionString = $"Data Source={Path.Combine(root, "target.db")};Pooling=False";
+        try
+        {
+            await using var source = new SqliteDataSource(sourceConnectionString);
+            await using var target = new SqliteDataSource(targetConnectionString);
+            var migrations = Harness.RepositoryRoot();
+            await DatabaseMigrator.ApplyAsync(source, migrations, CancellationToken.None);
+            await DatabaseMigrator.ApplyAsync(target, migrations, CancellationToken.None);
+            var clusterId = Guid.NewGuid();
+            await new ClusterIdentityRepository(source).AdoptAsync(clusterId, "Media", CancellationToken.None);
+            await new ClusterIdentityRepository(target).AdoptAsync(clusterId, "Media", CancellationToken.None);
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["PluginSettings:KeyDirectory"] = Path.Combine(root, "source-keys")
+            }).Build();
+            using var sourceIdentity = new ClusterPeerIdentityStore(configuration, new EphemeralDataProtectionProvider());
+            await TrustPeerAsync(target, clusterId, sourceIdentity);
+            var journal = new ClusterReconciliationRepository(source);
+            await journal.SetRegisterAsync("cluster.name", JsonSerializer.Serialize("Maison"), CancellationToken.None);
+            var changes = await journal.GetEventsAfterAsync(clusterId, new Dictionary<Guid, long>(), ClusterReconciliationRepository.MaximumBatchSize, CancellationToken.None);
+            var eventsBefore = await CountEventsAsync(target);
+
+            await using var factory = CreateFactory(targetConnectionString, root);
+            using var client = factory.CreateClient();
+            foreach (var version in new[] { ClusterReconciliationEndpoints.ProtocolVersion + 1, ClusterReconciliationEndpoints.ProtocolVersion - 1 })
+            {
+                var request = new ClusterReconciliationExchangeRequest(version, clusterId, new Dictionary<Guid, long>(), changes);
+                using var response = await SendSignedAsync(client, JsonSerializer.SerializeToUtf8Bytes(request, JsonOptions), sourceIdentity);
+                Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            }
+            var otherCluster = new ClusterReconciliationExchangeRequest(ClusterReconciliationEndpoints.ProtocolVersion, Guid.NewGuid(), new Dictionary<Guid, long>(), changes);
+            using (var response = await SendSignedAsync(client, JsonSerializer.SerializeToUtf8Bytes(otherCluster, JsonOptions), sourceIdentity))
+                Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+            Assert.Equal(eventsBefore, await CountEventsAsync(target));
+            Assert.Equal("Media", await ClusterNameAsync(target));
+        }
+        finally { try { Directory.Delete(root, true); } catch (IOException) { } }
+    }
+
+    [Fact]
     public async Task ExchangeRegistersAdvertisedPeerAndExchangesKnownPeers()
     {
         var root = Path.Combine(Path.GetTempPath(), "encoding-mesh-discovery-" + Guid.NewGuid().ToString("N"));
