@@ -52,7 +52,7 @@ de suppression confirmée des flows.
 
 ## Plan pour l'agent repreneur
 
-1. Lire `AGENTS.md`, `UI_RULES.md`, `BACKEND_RULES.md`, `TEST_RULES.md`, puis ADR 0078.
+1. Lire `AGENTS.md`, `UI_RULES.md`, `BACKEND_RULES.md`, `TEST_RULES.md`, puis ADR 0079 (flow-component-usability) et 0078 (blocs compacts).
    Examiner le dernier commit et son diff avant toute modification. Ne pas refaire
    les quatre lots déjà livrés et ne pas modifier silencieusement les flows publiés.
 
@@ -89,7 +89,7 @@ de suppression confirmée des flows.
    utiliser uniquement des médias synthétiques pour ces vérifications.
 
 6. Exécuter les vérifications finales, corriger les échecs sans les masquer, puis
-   documenter les limites restantes. Mettre à jour ADR 0078 et le guide utilisateur
+   documenter les limites restantes. Mettre à jour ADR 0079 et le guide utilisateur
    avec les sélecteurs et les versions minimales réellement livrés. Faire un commit
    distinct de stabilisation, pousser et actualiser la description de la PR vers
    `dev`. Ne pas fusionner ni déployer sans demande explicite.

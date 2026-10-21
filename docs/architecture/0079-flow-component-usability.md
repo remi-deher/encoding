@@ -1,4 +1,4 @@
-# 0078 — Configuration compréhensible des composants de flow
+# 0079 — Configuration compréhensible des composants de flow
 
 ## Décision
 
@@ -39,3 +39,13 @@ Le champ record-list est une liste bornée d’objets à champs primitifs décla
 
 Le redimensionnement conserve son comportement historique par défaut ; les résolutions prédéfinies et la réduction sans agrandissement sont explicites. La normalisation conserve le mode personnalisé et une passe par défaut ; deux passes analysent la source avant application des mesures finies. Les styles ASS personnalisés sont des instantanés de paramètres inclus dans la version du flow ; les compositions complexes restent préservées.
 
+
+## Compatibilité et ressources (étape 5)
+
+Versions minimales : un composant ou une option peut exiger une version minimale de plugin ; l'éligibilité refuse un worker plus ancien, y compris via les anciens alias Base, tandis qu'un flow historique reste exécutable par un worker ancien compatible.
+
+Polices : l'inventaire des jeux de polices d'un nœud est facultatif et borné. Les suggestions viennent des workers observés ; un jeu vu sur un worker ne prouve pas sa présence sur tous les workers éligibles, donc aucune attribution compatible n'est promise.
+
+Fichiers produits : `artifact:<identifiant-encodé>/<indice>` désigne un fichier additionnel d'un producteur précédent (capacité worker `artifact-references`). Le préfixe contient un caractère interdit dans les anciens chemins de bibliothèque : un chemin valide auparavant n'est jamais réinterprété.
+
+Limites restantes : pas de parcours runtime complet extraction → consommation avec reprise/relais, ni de test des combinaisons audio + normalisation dans un même plan, validés uniquement par les tests unitaires ciblés.
