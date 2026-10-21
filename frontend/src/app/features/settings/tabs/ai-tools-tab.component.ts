@@ -1,5 +1,7 @@
 import { AiModelCatalogComponent } from './ai-model-catalog.component';
 import { AiQuotaPanelComponent } from './ai-quota-panel.component';
+import { AiReplicationPanelComponent } from './ai-replication-panel.component';
+import { AiUsagePanelComponent } from './ai-usage-panel.component';
 import { AiSessionHistoryComponent } from './ai-session-history.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
@@ -46,6 +48,8 @@ import { aiEffortLabel, aiTypeLabel } from '../../ai/components/ai-model-selecti
   imports: [
     ConfigurationSectionComponent,
     AiQuotaPanelComponent,
+    AiReplicationPanelComponent,
+    AiUsagePanelComponent,
     AiModelCatalogComponent,
     AiSessionHistoryComponent,
     FormsModule,

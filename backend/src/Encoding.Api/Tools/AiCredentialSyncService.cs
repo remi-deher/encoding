@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
+using System.Collections.Concurrent;
 using System.Text.Json;
+using Encoding.Contracts.Tools;
 
 namespace Encoding.Api.Tools;
 
@@ -20,6 +22,12 @@ public sealed class AiCredentialSyncService(AiCredentialStore store, AiCliRuntim
             () => Modified(Path.Combine(runtime.Profile("claude-cli"), "oauth-token.protected"))),
         new("openai", () => settings.GetSettings().OpenAiApiKey, settings.SetOpenAiApiKey, () => Modified(Path.Combine(runtime.Root, "settings.json")))
     ];
+    private readonly ConcurrentDictionary<string, AiCredentialStatus> statuses = new();
+
+    /// <summary>État de réplication de chaque connexion sur ce nœud, sans secret ni condensat.</summary>
+    public IReadOnlyList<AiCredentialStatus> Statuses() => sources
+        .Select(source => statuses.TryGetValue(source.Provider, out var status) ? status : new(source.Provider, "pending", null, null)).ToArray();
+
     private string StatePath => Path.Combine(runtime.Root, "ai-credentials-sync.json");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -45,6 +53,8 @@ public sealed class AiCredentialSyncService(AiCredentialStore store, AiCliRuntim
             try { await SyncAsync(source, state, ct); }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
+                var previous = statuses.GetValueOrDefault(source.Provider);
+                statuses[source.Provider] = new(source.Provider, "pending", previous?.Revision, previous?.SyncedAt);
                 logger.LogWarning("Connexion IA {Provider} non synchronisée ({Type}).", source.Provider, exception.GetType().Name);
             }
         }
@@ -59,7 +69,7 @@ public sealed class AiCredentialSyncService(AiCredentialStore store, AiCliRuntim
         var localHash = Hash(local);
         var remoteHash = Hash(row?.Secret);
         state.TryGetValue(source.Provider, out var synced);
-        if (localHash == remoteHash) { state[source.Provider] = localHash; return; }
+        if (localHash == remoteHash) { state[source.Provider] = localHash; Record(source.Provider, local, row); return; }
         var localChanged = localHash != synced;
         var remoteChanged = remoteHash != synced;
         if (localChanged && remoteChanged)
@@ -73,14 +83,23 @@ public sealed class AiCredentialSyncService(AiCredentialStore store, AiCliRuntim
         {
             await store.PutAsync(source.Provider, local, ct);
             state[source.Provider] = localHash;
+            Record(source.Provider, local, await store.GetAsync(source.Provider, ct), DateTimeOffset.UtcNow);
             logger.LogInformation("Connexion IA {Provider} publiée vers le cluster.", source.Provider);
         }
         else if (remoteChanged)
         {
             source.Write(row?.Secret);
             state[source.Provider] = remoteHash;
+            Record(source.Provider, row?.Secret, row, DateTimeOffset.UtcNow);
             logger.LogInformation("Connexion IA {Provider} reçue du cluster.", source.Provider);
         }
+    }
+
+    private void Record(string provider, string? secret, AiCredentialRow? row, DateTimeOffset? changedAt = null)
+    {
+        var previous = statuses.GetValueOrDefault(provider);
+        statuses[provider] = new(provider, secret is null ? "absent" : "synced", row?.Revision,
+            changedAt ?? (previous is { State: "synced" } && previous.Revision == row?.Revision ? previous.SyncedAt : row?.UpdatedAt));
     }
 
     private static string? Hash(string? value) => value is null ? null : Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)));

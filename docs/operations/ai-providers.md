@@ -120,4 +120,10 @@ Le cache local et l’actualisation de l’interface sont d’une minute. Une le
 
 Les alertes visuelles apparaissent à 20 % restants et deviennent critiques à 5 %. Elles ne déclenchent aucune notification externe, aucun achat ni aucune pause automatique de flow. Les quotas sont informatifs et n’autorisent pas l’application à dépasser une limite fournisseur.
 
+### Réplication par nœud et consommation de tokens
+
+Le panneau **Réplication des connexions** (Paramètres → IA) indique, pour Codex, Claude Code et la clé OpenAI, l'état de chaque nœud : **à jour**, **en attente** (version plus récente en cours de réception ou synchronisation en échec), **à reconnecter**, **aucune connexion**, **injoignable** ou **état inconnu** (nœud d'une version antérieure qui ne déclare pas cet état). L'état vient de chaque nœud (`credentials` et `reconnect` dans `GET /api/v1/tools/ai/cluster`) : révision de la connexion appliquée et date de dernière application, jamais de secret ni de condensat. « À reconnecter » signifie que le cluster détient la connexion mais que la CLI de ce nœud se déclare non connectée. Ollama reste local à chaque nœud et n'a pas d'état de réplication. Un nœud injoignable n'est jamais présenté comme en erreur : son état est inconnu.
+
+`GET /api/v1/tools/ai/usage?days=30` (administrateur, 1 à 365 jours) agrège les tokens rapportés par les fournisseurs sur les sessions répliquées (assistant et flows), par nœud ayant exécuté la demande puis par fournisseur, avec un total global. Les échanges sans consommation rapportée sont comptés à part et jamais estimés ; les anciens échanges sans nœud exécutant apparaissent sous « Nœud non enregistré ». Au plus 5 000 sessions récentes sont lues (`truncated` l'indique). La conservation suit celle des conversations (90 jours par défaut) : une période plus longue ne remonte pas plus loin.
+
 Références : [Codex App Server](https://developers.openai.com/codex/app-server), [changelog officiel du SDK Claude](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md), déclarations `SDKControlGetUsageRequest` / `SDKControlGetUsageResponse` du paquet npm officiel 0.3.302.

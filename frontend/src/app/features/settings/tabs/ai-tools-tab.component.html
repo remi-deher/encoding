@@ -1,6 +1,6 @@
 <app-configuration-section
   title="Fournisseurs IA"
-  description="Un moteur pour le cluster, des connexions propres à chaque nœud."
+  description="Les connexions Codex, Claude Code et la clé OpenAI sont partagées par tout le cluster."
 >
   <button
     section-actions
@@ -331,46 +331,37 @@
         </p>
       </mat-expansion-panel>
     </form>
-    <mat-expansion-panel class="advanced"
-      ><mat-expansion-panel-header
-        ><mat-panel-title
-          >Disponibilité dans le cluster</mat-panel-title
-        ></mat-expansion-panel-header
-      >
-      @if (cluster(); as view) {
-        <p>
-          Les nœuds répondants déclarent leurs connexions ; le quota et la disponibilité du modèle
-          restent à vérifier.
-        </p>
-        <div class="node-list">
-          @for (node of view.nodes; track node.nodeId) {
-            <div class="node-row">
-              <app-icon aria-hidden="true" name="server" /><strong>{{ node.name }}</strong
-              ><span>{{
-                node.providers.length
-                  ? providerNames(node.providers)
-                  : 'Aucun fournisseur configuré'
-              }}</span>
-            </div>
-          } @empty {
-            <p>Aucune connexion déclarée par les nœuds répondants.</p>
-          }
+    <section class="replication" aria-labelledby="replication-title">
+      <div class="section-intro">
+        <span class="step-number" aria-hidden="true">03</span>
+        <div>
+          <span class="eyebrow">À l’échelle du cluster</span>
+          <h3 id="replication-title" class="list-heading">Réplication des connexions</h3>
+          <p>
+            Une connexion faite sur un nœud est copiée chiffrée sur les autres en quelques dizaines
+            de secondes. Chaque nœud indique lui-même s’il est à jour.
+          </p>
         </div>
+      </div>
+      @if (cluster(); as view) {
+        <app-ai-replication-panel [view]="view" />
       } @else {
         <p>Disponibilité du cluster indisponible.</p>
       }
-    </mat-expansion-panel>
+    </section>
   }
 </app-configuration-section>
 @if (isAdmin()) {
   <app-ai-quota-panel [refreshKey]="quotaRevision()" />
+  <app-ai-usage-panel [refreshKey]="quotaRevision()" />
   <app-ai-session-history />
 }
 <ng-template #providerEditor>
   <form #providerForm="ngForm" class="provider-editor" (ngSubmit)="saveSettings()">
     <p>
-      Les adresses, modèles et secrets restent propres à ce nœud. Les demandes du cluster peuvent
-      utiliser cette connexion.
+      Les connexions Codex, Claude Code et la clé OpenAI sont partagées avec tout le cluster : les
+      modifier ici les modifie sur chaque nœud. Les adresses et modèles Ollama et OpenAI restent
+      propres à ce nœud.
     </p>
     @switch (selectedProvider()) {
       @case ('ollama') {

@@ -17,6 +17,8 @@ public static class AiToolEndpoints
         group.MapGet("/cluster", async (AiClusterService service, CancellationToken ct) => Results.Ok(await service.CachedViewAsync(ct)));
         group.MapGet("/quotas", async (AiClusterService service, CancellationToken ct) =>
             Results.Ok(await service.QuotasAsync(ct))).RequireAuthorization(AuthExtensions.AdministratorPolicy);
+        group.MapGet("/usage", async (int? days, AiClusterService service, CancellationToken ct) =>
+            await GuardAsync(async () => Results.Ok(await service.UsageAsync(days ?? 30, ct)))).RequireAuthorization(AuthExtensions.AdministratorPolicy);
         group.MapGet("/{id}/status", async (string id, DeviceCodeAuthService service, CancellationToken ct) => await GuardAsync(async () => Results.Ok(await service.GetStatusAsync(id, ct))));
         group.MapPost("/{id}/auth/device-code/start", async (string id, DeviceCodeAuthService service, AiQuotaService quotas, AiModelCatalogService models, CancellationToken ct) =>
             await GuardAsync(async () => { quotas.Invalidate(id); models.Invalidate(id); return Results.Ok(await service.StartDeviceAuthAsync(id, ct)); }))
