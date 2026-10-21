@@ -269,6 +269,10 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
       overscroll-behavior: contain;
     }
 
+    .drawer-footer:empty {
+      display: none;
+    }
+
     .drawer-footer {
       padding: var(--space-3) var(--space-5);
       display: flex;
@@ -291,8 +295,17 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
         border-end-start-radius: 0;
       }
 
+      :host(:not(.drawer-fill)) .detail-drawer-panel.mat-drawer-end {
+        top: 48px;
+        bottom: 0;
+      }
+
+      :host(:not(.drawer-fill)) .detail-drawer-panel.mat-drawer-end:not(.mat-drawer-opened) {
+        transform: translate3d(0, 100%, 0);
+      }
+
       .drawer-panel {
-        height: 100dvh;
+        height: 100%;
       }
 
       .drawer-grab {
