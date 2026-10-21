@@ -53,7 +53,7 @@ export function tokenPropagation(
   token: Pick<ApiTokenResponse, 'id' | 'isActive'>,
   view: ApiTokenReplicationView | null,
 ): TokenPropagation | null {
-  if (!view || view.nodes.length < 2) return null;
+  if (!view?.nodes || view.nodes.length < 2) return null;
   const answering = view.nodes.filter((node) => node.reachable && node.tokens);
   const unreachable = view.nodes.length - answering.length;
   const upToDate = answering.filter((node) => {

@@ -14,6 +14,11 @@ describe('tokenPropagation', () => {
     expect(tokenPropagation({ id: 't', isActive: true }, null)).toBeNull();
   });
 
+  it('ignore une réponse sans liste de nœuds', () => {
+    const view = [] as unknown as ApiTokenReplicationView;
+    expect(tokenPropagation({ id: 't', isActive: true }, view)).toBeNull();
+  });
+
   it('compte les nœuds qui ont le jeton et signale un écart', () => {
     const view: ApiTokenReplicationView = {
       nodes: [node('a', [{ id: 't', revoked: false }]), node('b', [])],

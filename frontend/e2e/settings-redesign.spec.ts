@@ -198,6 +198,9 @@ test('creates accounts and API tokens through one shared drawer and clears one-t
       await route.fulfill({ json: users[0] });
     } else await route.fulfill({ json: users });
   });
+  await page.route('**/api/v1/tokens/replication', (route) =>
+    route.fulfill({ json: { nodes: [] } }),
+  );
   await page.route('**/api/v1/tokens', async (route) => {
     if (route.request().method() === 'POST') {
       const value = route.request().postDataJSON();
