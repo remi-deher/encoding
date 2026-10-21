@@ -18,6 +18,17 @@ public sealed class MediaToolsFactAttribute : FactAttribute
     }
 }
 
+/// <summary>Extraction and consumption use the real Matroska tools.</summary>
+public sealed class MkvToolsFactAttribute : FactAttribute
+{
+    public MkvToolsFactAttribute()
+    {
+        if (Environment.GetEnvironmentVariable("ENCODING_TEST_REQUIRE_MEDIA_TOOLS") == "1") return;
+        if (Encoding.NodeAgent.Runtime.ProcessToolRunner.Find("ffmpeg") is null || Encoding.NodeAgent.Runtime.ProcessToolRunner.Find("ffprobe") is null || Encoding.NodeAgent.Runtime.ProcessToolRunner.Find("mkvmerge") is null)
+            Skip = "ffmpeg, ffprobe and mkvmerge are required (included in backend/tests/Dockerfile).";
+    }
+}
+
 /// <summary>One SQLite file shared by database scenarios, run sequentially in this collection.</summary>
 public sealed class RuntimeFixture : IAsyncLifetime
 {

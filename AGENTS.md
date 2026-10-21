@@ -112,7 +112,7 @@ Toute route de gestion exige une session ou un jeton API Bearer (ex. `enc_pat_..
 
 ## Règles absolues de programmation de l’interface
 
-L’éditeur utilise des blocs compacts communs à Guidé et Canvas, des branches de largeur intrinsèque et une navigation Canvas avec disposition verticale explicite, annulable et locale au navigateur. Voir [0079](docs/architecture/0078-compact-flow-blocks-and-workspace-navigation.md). Les paramètres spécialisés restent accessibles dans l’inspecteur déclaratif ; la disposition visuelle ne modifie jamais les connexions.
+L’éditeur utilise des blocs compacts communs à Guidé et Canvas, des branches de largeur intrinsèque et une navigation Canvas avec disposition verticale explicite, annulable et locale au navigateur. Voir [0078](docs/architecture/0078-compact-flow-blocks-and-workspace-navigation.md). Les paramètres spécialisés restent accessibles dans l’inspecteur déclaratif ; la disposition visuelle ne modifie jamais les connexions.
 
 La page Nœuds distingue **Ce nœud** et **Cluster** ; la création et le rattachement guidé réutilisent les composants communs Angular Material/CDK et les API authentifiées existantes. Voir [0048](docs/architecture/0048-local-node-and-guided-cluster-management.md).
 

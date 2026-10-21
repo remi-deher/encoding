@@ -39,7 +39,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             && (c.Version==node.Component.PluginVersion || c.Version==registry.RuntimePluginVersion(node.Component)));
     }
 
-    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null)
+    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null,NodeInventory? inventory=null)
     {
         if(!validator.Validate(flow).IsValid) return false;
         var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
@@ -66,6 +66,11 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 || (node.Component.PluginId is "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" && c.ToolId == "plugin/base" && IsAtLeast(c.Version, "1.6.0")));
 
             if (!matches) return false;
+            if (componentId is "base-add-fonts" or "subtitles-add-fonts")
+            {
+                var fontSet = node.Configuration.TryGetValue("fontSet", out var configuredSet) && configuredSet.ValueKind == JsonValueKind.String ? configuredSet.GetString() : "Crunchyroll";
+                if (inventory?.FontSets?.Contains(fontSet ?? "", StringComparer.Ordinal) != true) return false;
+            }
             if (node.Configuration.TryGetValue("sourceFile", out var fileReference) && fileReference.ValueKind == JsonValueKind.String
                 && fileReference.GetString()!.StartsWith(FlowArtifactReference.Prefix, StringComparison.Ordinal)
                 && !capabilities.Any(capability => capability.ToolId == FlowArtifactReference.Capability && IsAtLeast(capability.Version, "1.0.0"))) return false;

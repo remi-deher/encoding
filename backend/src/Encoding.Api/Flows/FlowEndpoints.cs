@@ -33,7 +33,7 @@ public static class FlowEndpoints
             var compatible = validation.IsValid
                 ? availableWorkers.Where(node => eligibility.CanRun(flow, node.Capabilities, node.Id,
                     identity: new Encoding.Contracts.Nodes.NodeIdentityResponse(node.Id, node.DisplayName,
-                        node.Labels ?? new Dictionary<string, string?>(), node.Labels ?? new Dictionary<string, string?>(), []))).ToArray()
+                        node.Labels ?? new Dictionary<string, string?>(), node.Labels ?? new Dictionary<string, string?>(), []), inventory: node.Inventory)).ToArray()
                 : [];
             return Results.Ok(new
             {

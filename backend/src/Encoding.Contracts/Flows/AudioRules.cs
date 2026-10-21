@@ -9,7 +9,7 @@ namespace Encoding.Contracts.Flows;
 public sealed class AudioRuleException(string message) : Exception(message);
 
 /// <summary>Options du bloc <c>base-audio-rules</c> (architecture 0055).</summary>
-public sealed record AudioRuleOptions(bool KeepStereoAc3 = true, bool InferUnknownLayout = true, int SampleRate = 48000, IReadOnlyList<JsonElement>? Rules = null)
+public sealed record AudioRuleOptions(bool KeepStereoAc3 = true, bool InferUnknownLayout = true, int SampleRate = 48000, IReadOnlyList<JsonElement>? Rules = null, bool EnforceSampleRate = false)
 {
     public static AudioRuleOptions From(IReadOnlyDictionary<string, JsonElement> configuration)
     {
@@ -31,7 +31,7 @@ public sealed record AudioRuleOptions(bool KeepStereoAc3 = true, bool InferUnkno
                 if (MediaTrackSelection.Number(rule, "targetChannels") is not (0 or 2 or 6)) throw new AudioRuleException("Limite de canaux : 0, 2 ou 6.");
                 if (bitrate is < 32 or > 1536 || codec == "ac3" && bitrate > 640) throw new AudioRuleException("Débit audio invalide (AC-3 : 640 kbit/s maximum).");
             }
-        return new(Flag("keepStereoAc3", true), unknown != "fail", rate, rules);
+        return new(Flag("keepStereoAc3", true), unknown != "fail", rate, rules, configuration.TryGetValue("sampleRate", out var suppliedRate) && suppliedRate.ValueKind == JsonValueKind.Number);
     }
 }
 
@@ -83,7 +83,6 @@ public static class AudioRulePlanner
             foreach (var stream in streams.EnumerateArray().Where(item => item.TryGetProperty("codec_type", out var type) && type.GetString() == "audio"))
             {
                 var channels = stream.TryGetProperty("channels", out var count) && count.ValueKind == JsonValueKind.Number ? count.GetInt32() : 0;
-                if (channels < 1) throw new AudioRuleException($"Nombre de canaux audio inconnu : piste {tracks.Count}. Original non remplacé.");
                 tracks.Add(new Track
                 {
                     Metadata = stream.Clone(), Index = tracks.Count, Channels = channels,
@@ -101,6 +100,7 @@ public static class AudioRulePlanner
                 decisions.Add(new(track.Index, track.Codec, track.Channels, false, Note: rule is null ? "aucune règle : piste conservée" : "copie demandée"));
                 continue;
             }
+            if (track.Channels < 1) throw new AudioRuleException($"Nombre de canaux audio inconnu : piste {track.Index}. Original non remplacé.");
             var target = rule is {} chosen ? MediaTrackSelection.Text(chosen, "codec") : track.Channels switch
             {
                 2 => options.KeepStereoAc3 && track.Codec == "ac3" ? "ac3" : "aac",
@@ -110,7 +110,9 @@ public static class AudioRulePlanner
             var limit = rule is {} selectedRule ? MediaTrackSelection.Number(selectedRule, "targetChannels") : 0;
             var outputChannels = Math.Min(track.Channels, limit > 0 ? limit : track.Channels);
             if (target == "ac3") outputChannels = Math.Min(outputChannels, 6);
-            if (track.Codec == target && track.Channels == outputChannels && (rule is null
+            var sampleRateMatches = options.SampleRate == 0 || rule is null && !options.EnforceSampleRate
+                || track.Metadata.TryGetProperty("sample_rate", out var sampling) && int.TryParse(sampling.ToString(), out var sourceSampling) && sourceSampling == options.SampleRate;
+            if (sampleRateMatches && track.Codec == target && track.Channels == outputChannels && (rule is null || target == "flac"
                 || track.Metadata.TryGetProperty("bit_rate", out var sourceBitrate) && int.TryParse(sourceBitrate.ToString(), out var sourceRate) && sourceRate == MediaTrackSelection.Number(rule.Value, "bitrateKbps") * 1000))
             {
                 decisions.Add(new(track.Index, track.Codec, track.Channels, false, Note: "conforme"));

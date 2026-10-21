@@ -49,6 +49,12 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     [DatabaseFact]
     public Task ConditionalRelayErrorBranch() => Scenarios.ConditionalRelayAsync("error");
 
+    [MkvToolsFact]
+    public Task MissingProducerOnSelectedBranchFailsWithoutPublishing() => Scenarios.ArtifactRelayAsync(true);
+
+    [MkvToolsFact]
+    public Task ProducedAudioFileIsConsumedAfterDurableRelay() => Scenarios.ArtifactRelayAsync();
+
     [MediaToolsFact]
     public Task H265ConversionHandedOffAfterExecution() => Scenarios.MediaRelayAsync(false);
 

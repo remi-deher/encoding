@@ -3,6 +3,8 @@ using System.Text.Json;
 
 namespace Encoding.Contracts.Flows;
 
+public sealed class FlowArtifactReferenceException(string message) : IOException(message);
+
 /// <summary>Reference to a durable additional file produced earlier in the same execution.</summary>
 public sealed record FlowArtifactReference(string NodeId, int Index)
 {
@@ -24,12 +26,12 @@ public sealed record FlowArtifactReference(string NodeId, int Index)
     public JsonElement Resolve(IReadOnlyDictionary<string, JsonElement> variables)
     {
         if (!variables.TryGetValue(VariableKey, out var value))
-            throw new IOException("Le bloc « " + NodeId + " » n’a pas produit le fichier " + (Index + 1) + " sur le chemin suivi.");
+            throw new FlowArtifactReferenceException("Le bloc « " + NodeId + " » n’a pas produit le fichier " + (Index + 1) + " sur le chemin suivi.");
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("sha256", out var digest)
             || digest.ValueKind != JsonValueKind.String || !System.Text.RegularExpressions.Regex.IsMatch(digest.GetString()!, "^[0-9a-f]{64}$")
             || !value.TryGetProperty("name", out var file) || file.ValueKind != JsonValueKind.String
-            || file.GetString() is not { Length: > 0 and <= 255 } name || name.IndexOfAny(['/', '\\', '\0']) >= 0)
-            throw new IOException("Référence de fichier produit corrompue.");
+            || file.GetString() is not { Length: > 0 and <= 255 } name || name is "." or ".." || name.Any(char.IsControl) || name.IndexOfAny(['/', '\\', ':']) >= 0)
+            throw new FlowArtifactReferenceException("Référence de fichier produit corrompue.");
         return value;
     }
 }

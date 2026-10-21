@@ -322,7 +322,7 @@ public static class SubtitlePlanner
         }
 
         // Conversion SRT vers ASS et mise à niveau des ASS simples. Les pistes bitmap et les ASS personnalisés restent intacts.
-        if (options.ApplyProfile)
+        if (options.ApplyProfile || options.Operation == "subtitles-convert-ass")
             foreach (var state in live.Where(item => item.Track.AssText is not null))
             {
                 var text = state.Track.AssText!.TrimStart('\uFEFF');

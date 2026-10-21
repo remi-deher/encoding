@@ -146,12 +146,12 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     private async Task<RuntimeLease?> ClaimAvailableAsync(Guid worker, CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
-        IReadOnlyList<NodeToolCapability> capabilities; int capacity;
-        await using(var node=Sql.Command("SELECT capabilities::text,COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id),max_concurrent_tasks),(SELECT p.schedule_timezone FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),(SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled) FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL AND accepts_work AND 'worker'=ANY(roles) AND last_seen_at>clock_timestamp()-@offline FOR UPDATE",c,tx))
+        IReadOnlyList<NodeToolCapability> capabilities; int capacity; NodeInventory? inventory;
+        await using(var node=Sql.Command("SELECT capabilities::text,COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id),max_concurrent_tasks),(SELECT p.schedule_timezone FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),(SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),inventory::text FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL AND accepts_work AND 'worker'=ANY(roles) AND last_seen_at>clock_timestamp()-@offline FOR UPDATE",c,tx))
         {
             node.Parameters.AddWithValue("offline",presence.OfflineAfter); node.Parameters.AddWithValue("node",worker); await using var r=await node.ExecuteReaderAsync(ct);
             if(!await r.ReadAsync(ct)) return null;
-            capabilities=JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(0),Json)??[]; capacity=r.GetInt32(1);
+            capabilities=JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(0),Json)??[]; capacity=r.GetInt32(1); inventory=r.IsDBNull(4)?null:JsonSerializer.Deserialize<NodeInventory>(r.GetString(4),Json);
             // Le calendrier ne bloque que les nouveaux démarrages : les baux actifs ne sont ni révoqués ni interrompus.
             if(!r.IsDBNull(2) && !r.IsDBNull(3) && !new NodeSchedule(true,r.GetString(2),r.GetString(3)).IsOpen(DateTimeOffset.UtcNow)) return null;
         }
@@ -193,7 +193,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 if(!eligibility.CanProbe(item.Flow,capabilities,wanted.BlockNodeId)) continue;
             }
             else if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value,nodeIdentity))) continue;
-            if(item.Probe is null && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity)) continue;
+            if(item.Probe is null && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity,inventory)) continue;
             // Library row serializes claims from all workers before counting active leases.
             await using(var limits=Sql.Command("""
               SELECT p.max_concurrent_tasks,(SELECT max_concurrent_tasks FROM library_node_processing_limits WHERE library_id=l.id AND node_id=@worker)

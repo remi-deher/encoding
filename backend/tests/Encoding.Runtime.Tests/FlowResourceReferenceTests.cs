@@ -33,14 +33,39 @@ public sealed class FlowResourceReferenceTests
         Assert.True(FlowArtifactReference.TryParse(reference.ToString(), out var parsed));
         Assert.Equal(reference, parsed);
         var variables = new Dictionary<string, JsonElement>();
-        Assert.Throws<IOException>(() => reference.Resolve(variables));
+        Assert.Throws<FlowArtifactReferenceException>(() => reference.Resolve(variables));
         variables[reference.VariableKey] = JsonSerializer.SerializeToElement(new { sha256 = new string('a', 64), name = "chapters.xml" });
         var restored = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Serialize(variables))!;
         Assert.Equal("chapters.xml", reference.Resolve(restored).GetProperty("name").GetString());
         restored[reference.VariableKey] = JsonSerializer.SerializeToElement(new { sha256 = "../../outside", name = "chapters.xml" });
-        Assert.Throws<IOException>(() => reference.Resolve(restored));
+        Assert.Throws<FlowArtifactReferenceException>(() => reference.Resolve(restored));
+        foreach (var name in new[] { "..", "../outside", "folder\\file", "drive:file" })
+        {
+            restored[reference.VariableKey] = JsonSerializer.SerializeToElement(new { sha256 = new string('a', 64), name });
+            Assert.Throws<FlowArtifactReferenceException>(() => reference.Resolve(restored));
+        }
         Assert.False(FlowArtifactReference.TryParse("artifact:producer/../outside", out _));
         Assert.False(FlowArtifactReference.TryParse("artifact:producer/64", out _));
+    }
+
+    [Fact]
+    public void FontsMustExistOnTheSelectedWorkerIncludingAfterRelay()
+    {
+        var (registry, _, eligibility) = Harness.Services();
+        var flow = new FlowDefinition(1, Guid.NewGuid(), 1, "Fonts", "video", [
+            new("input", null, registry.FindReference("base-input-file")!, new Dictionary<string, JsonElement>()),
+            new("fonts", null, registry.FindReference("subtitles-add-fonts")!, new Dictionary<string, JsonElement> { ["fontSet"] = JsonSerializer.SerializeToElement("Anime") })
+        ], [new("next", "input", "success", "fonts")]);
+        Encoding.Contracts.Nodes.NodeToolCapability[] caps = [
+            new("plugin/base", "1.7.0", ["general"], []), new("plugin/subtitles", "1.1.0", ["video"], []),
+            new("mkvtoolnix", "90.0", ["video"], []), new("ffprobe", "7.0", ["video"], [])];
+        var worker = Guid.NewGuid();
+        Assert.False(eligibility.CanRun(flow, caps, worker));
+        Assert.False(eligibility.CanRun(flow, caps, worker, inventory: new("test", "x64", 1, 1, FontSets: [])));
+        Assert.False(eligibility.CanRun(flow, caps, worker, inventory: new("test", "x64", 1, 1, FontSets: ["Other"])));
+        Assert.True(eligibility.CanRun(flow, caps, worker, inventory: new("test", "x64", 1, 1, FontSets: ["Anime"])));
+        Assert.False(eligibility.CanRun(flow, caps, worker, "fonts", true));
+        Assert.True(eligibility.CanRun(flow, caps, worker, "fonts", true, inventory: new("test", "x64", 1, 1, FontSets: ["Anime"])));
     }
 
     [Fact]
@@ -50,12 +75,18 @@ public sealed class FlowResourceReferenceTests
         Directory.CreateDirectory(directory);
         try
         {
-            for (var index = 0; index < 70; index++) Directory.CreateDirectory(Path.Combine(directory, "Set " + index.ToString("D2")));
+            for (var index = 0; index < 70; index++)
+            {
+                var set = Directory.CreateDirectory(Path.Combine(directory, "Set " + index.ToString("D2")));
+                File.WriteAllText(Path.Combine(set.FullName, "font.ttf"), "synthetic inventory entry");
+            }
+            Directory.CreateDirectory(Path.Combine(directory, "Empty"));
             Directory.CreateDirectory(Path.Combine(directory, "invalid..set"));
             var sets = FontInventory.Read(directory)!;
             Assert.Equal(64, sets.Count);
             Assert.Equal("Set 00", sets[0]);
             Assert.DoesNotContain("invalid..set", sets);
+            Assert.DoesNotContain("Empty", sets);
             Assert.All(sets, name => Assert.DoesNotContain(Path.DirectorySeparatorChar, name));
         }
         finally { Assert.StartsWith(Path.GetFullPath(Path.GetTempPath()), Path.GetFullPath(directory)); Directory.Delete(directory, true); }

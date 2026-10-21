@@ -19,7 +19,10 @@ import {
   FlowComponentConfigurationSchema,
   FlowComponentConfigurationValue,
 } from '../models/flow-component';
-import { flowConfigurationValue } from '../models/flow-configuration';
+import {
+  flowConfigurationValue,
+  isFlowConfigurationFieldVisible,
+} from '../models/flow-configuration';
 import { flowFieldValidator } from './flow-configuration-controls';
 import { conditionTreeSummary } from '../models/condition-tree';
 
@@ -73,6 +76,15 @@ export class FlowInlineParameters implements OnChanges, OnDestroy {
       );
     }
     this.form = new FormGroup(controls);
+  }
+  protected visible(field: FlowComponentConfigurationField): boolean {
+    const values = Object.fromEntries(
+      (this.schema()?.fields ?? []).map((item) => [
+        item.id,
+        flowConfigurationValue(item, this.values()),
+      ]),
+    );
+    return isFlowConfigurationFieldVisible(field, values);
   }
   protected numberOptions(
     field: Extract<FlowComponentConfigurationField, { type: 'number' }>,

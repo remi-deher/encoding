@@ -16,6 +16,24 @@ public sealed class MediaProcessingOptionTests
     } });
 
     [Fact]
+    public void ExplicitSampleRateIsPartOfConformity()
+    {
+        var source = Json(new { streams = new[] { new { codec_type = "audio", codec_name = "aac", channels = 2, channel_layout = "stereo", sample_rate = "44100" } } });
+        Assert.Single(AudioRulePlanner.Plan(source, AudioRuleOptions.From(Config(new { sampleRate = 48000 }))).Conversions);
+        Assert.Empty(AudioRulePlanner.Plan(source, AudioRuleOptions.From(Config(new { sampleRate = 0 }))).Conversions);
+    }
+
+    [Fact]
+    public void UnselectedUnknownChannelsAreRetainedAndFlacConformityIgnoresLossyBitrate()
+    {
+        var unknown = Json(new { streams = new[] { new { codec_type = "audio", codec_name = "unknown" } } });
+        Assert.Empty(AudioRulePlanner.Plan(unknown, AudioRuleOptions.From(Config(new { rules = new[] { new { action = "copy" } } }))).Conversions);
+        Assert.Empty(AudioRulePlanner.Plan(unknown, AudioRuleOptions.From(Config(new { rules = new[] { new { action = "convert", codec = "aac", languages = "fra" } } }))).Conversions);
+        var flac = Json(new { streams = new[] { new { codec_type = "audio", codec_name = "flac", channels = 2, channel_layout = "stereo", sample_rate = "48000" } } });
+        Assert.Empty(AudioRulePlanner.Plan(flac, AudioRuleOptions.From(Config(new { rules = new[] { new { action = "convert", codec = "flac", bitrateKbps = 256 } } }))).Conversions);
+    }
+
+    [Fact]
     public void RulesUseFirstMatchAndRetainUnmatchedTracksWithLfe()
     {
         var options = AudioRuleOptions.From(Config(new { rules = new object[] {

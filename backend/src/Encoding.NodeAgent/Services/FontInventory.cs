@@ -10,6 +10,9 @@ public static class FontInventory
             if (!Directory.Exists(root)) return [];
             return Directory.EnumerateDirectories(root)
                 .Where(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0)
+                .Where(path => Directory.EnumerateFiles(path).Any(file =>
+                    (File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0
+                    && new[] { ".ttf", ".otf", ".ttc" }.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)))
                 .Select(Path.GetFileName).OfType<string>()
                 .Where(name => name.Length <= 128 && !name.Contains("..", StringComparison.Ordinal)
                     && System.Text.RegularExpressions.Regex.IsMatch(name, @"^[A-Za-z0-9][A-Za-z0-9 ._-]*$"))

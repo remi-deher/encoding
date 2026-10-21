@@ -4,7 +4,10 @@ import { ConfigurationRecordListComponent } from './configuration-record-list/co
 import { FlowConfigurationRecord } from '../models/flow-component';
 import { NgTemplateOutlet } from '@angular/common';
 import { flowFieldValidator } from './flow-configuration-controls';
-import { flowConfigurationValue } from '../models/flow-configuration';
+import {
+  flowConfigurationValue,
+  isFlowConfigurationFieldVisible,
+} from '../models/flow-configuration';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -636,16 +639,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   }
 
   protected isFieldVisible(field: FlowComponentConfigurationField): boolean {
-    if (!field.visibleWhenFieldId) return true;
-    const value = this.form.controls[field.visibleWhenFieldId]?.value;
-    if (field.visibleWhenEmpty)
-      return (
-        value === undefined ||
-        value === null ||
-        value === '' ||
-        (Array.isArray(value) && value.length === 0)
-      );
-    return field.visibleWhenValue === undefined || value === field.visibleWhenValue;
+    return isFlowConfigurationFieldVisible(field, this.form.getRawValue());
   }
 
   protected profileReference(fieldId: string): string {
