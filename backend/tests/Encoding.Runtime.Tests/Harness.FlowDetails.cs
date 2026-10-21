@@ -38,6 +38,16 @@ internal static partial class Harness
             Check((await repository.UsageAsync(flow.Id, CancellationToken.None)).Single().Version == 1, "Restoration preserves the library assignment.");
             Check((await repository.VersionsAsync(flow.Id, CancellationToken.None)).Count == 1, "Restoration preserves published versions.");
             Check((await repository.DraftBackupAsync(flow.Id, first.DraftRevision, CancellationToken.None))!.Name == "Draft one", "Restoration preserves the original snapshot.");
+            var (refused, _) = await repository.DeleteFlowAsync(flow.Id, CancellationToken.None);
+            Check(refused == FlowDeleteResult.Conflict, "Deleting an assigned flow is refused without explicit detachment.");
+            using var detached = await client.DeleteAsync($"api/v1/flows/{flow.Id}?detachLibraries=true");
+            Check(detached.StatusCode == System.Net.HttpStatusCode.NoContent, "Deleting an assigned flow succeeds with detachment.");
+            Check((await repository.UsageAsync(flow.Id, CancellationToken.None)).Count == 0, "Deleting a flow unassigns its libraries.");
+            await using (var revision = db.CreateCommand("SELECT flow_assignment_revision FROM libraries WHERE id=@library"))
+            {
+                revision.Parameters.AddWithValue("library", library);
+                Check(Convert.ToInt32(await revision.ExecuteScalarAsync()) == 1, "Detaching a library advances its assignment revision.");
+            }
         }
     }
 }

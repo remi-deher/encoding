@@ -137,9 +137,9 @@ public static class FlowEndpoints
             return Results.Ok(saved);
         }).AddEndpointFilter<ValidateSaveFlowFilter>().WithName("PublishFlowVersion");
 
-        flows.MapDelete("/{id:guid}", async (Guid id, FlowRepository repository, CancellationToken ct) =>
+        flows.MapDelete("/{id:guid}", async (Guid id, bool? detachLibraries, FlowRepository repository, CancellationToken ct) =>
         {
-            var (result, reason) = await repository.DeleteFlowAsync(id, ct);
+            var (result, reason) = await repository.DeleteFlowAsync(id, ct, detachLibraries: detachLibraries == true);
             return result switch
             {
                 FlowDeleteResult.Deleted => Results.NoContent(),
