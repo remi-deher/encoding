@@ -71,6 +71,13 @@ public class AiCliRuntime(IConfiguration configuration, IDataProtectionProvider 
         using (var writer = new StreamWriter(stream)) writer.Write(protector.Protect(token));
         File.Move(temporary, path, true);
     }
+    public string? ReadClaudeToken()
+    {
+        var path = Path.Combine(Profile("claude-cli"), "oauth-token.protected");
+        try { return File.Exists(path) ? protector.Unprotect(File.ReadAllText(path)) : null; }
+        catch (System.Security.Cryptography.CryptographicException) { return null; }
+    }
+    public string CodexAuthPath => Path.Combine(Profile("codex-cli"), "auth.json");
     public bool HasClaudeToken => File.Exists(Path.Combine(Profile("claude-cli"), "oauth-token.protected"));
     public void DeleteClaudeToken() => File.Delete(Path.Combine(Profile("claude-cli"), "oauth-token.protected"));
 
