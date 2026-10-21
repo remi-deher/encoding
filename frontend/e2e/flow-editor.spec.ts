@@ -875,10 +875,7 @@ test('structured audio rules remain editable and preserved on desktop and mobile
 }, info) => {
   await setup(page);
   const audio = JSON.parse(
-    readFileSync(
-      '../backend/src/Encoding.Api/Flows/Catalog/audio.json',
-      'utf8',
-    ),
+    readFileSync('../backend/src/Encoding.Api/Flows/Catalog/audio.json', 'utf8'),
   );
   const ruleComponent = audio.components.find(
     (item: { id: string }) => item.id === 'audio-convert-by-rules',
