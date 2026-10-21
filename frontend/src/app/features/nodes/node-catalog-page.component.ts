@@ -433,6 +433,7 @@ export class NodeCatalogPageComponent {
   protected readonly firstLink = signal<FirstLinkAcceptance>({ isActive: false, expiresAt: null });
   protected readonly loadState = signal<'loading' | 'ready' | 'error'>('loading');
   protected readonly selectedRole = signal('all');
+  protected readonly nodeSearchQuery = signal('');
   protected readonly actionOpen = signal(false);
   protected readonly actionType = signal<
     'enrollment' | 'library-access' | 'create-library' | 'identity'
@@ -1168,8 +1169,16 @@ export class NodeCatalogPageComponent {
 
   private readonly filteredRawNodes = computed(() => {
     const role = this.selectedRole();
+    const query = this.nodeSearchQuery().trim().toLocaleLowerCase('fr');
     return this.nodes()
       .filter((node) => role === 'all' || node.roles.includes(role as NodeRole))
+      .filter(
+        (node) =>
+          !query ||
+          [node.name, node.displayName ?? '', node.id].some((value) =>
+            value.toLocaleLowerCase('fr').includes(query),
+          ),
+      )
       .filter(
         (node) => this.selectedState() === 'all' || this.stateGroup(node) === this.selectedState(),
       )
@@ -1506,6 +1515,26 @@ export class NodeCatalogPageComponent {
         this.pendingEnrollments.set(pending);
         this.loadState.set('ready');
       });
+  }
+
+  protected readonly activeFilters = computed(() => {
+    const filters: { id: string; label: string; clear: () => void }[] = [];
+    const role = this.selectedRole();
+    if (role !== 'all') {
+      const label = this.roleOptions().find((option) => option.value === role)?.label ?? role;
+      filters.push({ id: 'role', label, clear: () => this.selectedRole.set('all') });
+    }
+    const state = this.selectedState();
+    if (state !== 'all') {
+      const label = this.stateOptions().find((option) => option.value === state)?.label ?? state;
+      filters.push({ id: 'state', label, clear: () => this.selectedState.set('all') });
+    }
+    return filters;
+  });
+
+  protected clearNodeFilters(): void {
+    this.selectedRole.set('all');
+    this.selectedState.set('all');
   }
 
   protected onRoleChange(role: string): void {
