@@ -4,10 +4,12 @@ Un plugin ajoute des composants de flow (actions, conditions) fournis par un pro
 
 ```
 sdk/encoding_plugin_sdk.py   SDK Python (un seul fichier, bibliothèque standard)
+sdk/encoding-plugin-sdk.mjs  SDK JavaScript (un seul fichier, Node.js, sans dépendance), même API
 arr/plugin.py                Sonarr et Radarr (python3 plugin.py sonarr|radarr)
 plex/plugin.py               Plex
 jellyfin/plugin.py           Jellyfin
-example/                     plugin tiers minimal : plugin.py + manifest.json
+example/                     plugin tiers minimal en Python : plugin.py + manifest.json
+example-js/                  le même en JavaScript : plugin.mjs + manifest.json
 tests/                       tests Python (python3 -m unittest discover -s backend/plugins/tests)
 ```
 
@@ -15,12 +17,26 @@ tests/                       tests Python (python3 -m unittest discover -s backe
 
 - Un plugin est un programme lancé **à chaque appel** par le worker, qui lui transmet une requête JSON d’une ligne sur stdin et lit une réponse JSON d’une ligne sur stdout.
 - Il s’exécute sous Linux Landlock : écriture seulement dans son espace temporaire, lecture des exécutables et dépendances déclarés, pas d’accès au jeton du nœud ni aux montages média. Le réseau reste disponible (HTTP/HTTPS, DNS).
-- Ne lisez pas `/proc` ni `/sys` : un exécutable .NET/CoreCLR ne démarre pas dans ce bac à sable (voir 0032). Python 3 de la bibliothèque standard fonctionne ; Node.js dépend de sa configuration OpenSSL.
+- **Langages** : Python 3 (bibliothèque standard) et Node.js sont installés dans l'image et ont un SDK. Un exécutable .NET n'a pas été essayé depuis que `/proc` est lisible dans le bac à sable (voir 0032) : à valider sur un hôte Landlock avant de le promettre. Le protocole est du JSON d'une ligne, n'importe quel langage qui sait lire stdin peut l'implémenter.
+- **Environnement** : le processus ne reçoit pas l'environnement du worker, seulement `PATH`, `LANG`, `LC_ALL`, `LC_CTYPE`, `TZ`, plus `HOME` et `TMPDIR` pointant vers son espace de travail. Toute configuration passe par la configuration du plugin (champs `secret` compris), jamais par des variables d'environnement.
+- **Limites** : requête de 1 Mo au plus ; réponse de 1 Mo au plus ; 64 variables au plus (nom de 128 caractères, 256 Ko au total) ; `detail` tronqué à 4 096 caractères ; échéance de l'invocation 6 h au plus, que le composant peut raccourcir avec `timeoutSeconds` (1 à 21 600) dans son descripteur. Au-delà, le processus est arrêté avec son arbre et l'effet est considéré incertain.
+- **Diagnostic** : en cas d'échec, le code de sortie et la fin de stderr (400 caractères) apparaissent dans le motif de l'étape ; le journal de commandes de l'étape garde stdout/stderr bornés. Écrivez des messages d'erreur utiles et jamais de secret.
 - Un plugin ne choisit jamais de chemin de publication et ne déclare pas une tâche terminée : l’hôte analyse et valide les sorties.
 
 ## Écrire un plugin
 
-1. **Manifeste** (`manifest.json`) : identité, version, contrat hôte `[1]`, composants (id, version, type `action`/`condition`, médias compatibles, sorties, schéma de configuration déclaratif). Voir `example/manifest.json`. Le plugin ne fournit aucun code d’interface : le formulaire est rendu à partir du schéma (`text`, `number`, `boolean`, `select`, et `secret` pour la configuration du plugin).
+Outils d'auteur, sans cluster ni Landlock :
+
+```
+python3 sdk/encoding_plugin_sdk.py validate manifest.json          # mêmes règles que le serveur
+python3 plugin.py --simulate mon-composant '{"cle":"valeur"}' --media 'Dossier/e1.mkv'
+node sdk/encoding-plugin-sdk.mjs validate manifest.json             # équivalent JavaScript
+node plugin.mjs --simulate mon-composant '{"cle":"valeur"}'
+```
+
+`validate` liste chaque problème (identifiant, version, sorties sans description, type de champ inconnu, `timeoutSeconds`…) ; un manifeste que le serveur refuse est écarté et signalé dans la page Plugins (bandeau « manifeste(s) ignoré(s) ») sans empêcher le démarrage. `--simulate` construit une invocation et affiche la réponse du contrat. Les identifiants de plugin sont en minuscules (`mon-plugin` ou `espace.mon-plugin`), la version est `X.Y.Z`.
+
+1. **Manifeste** (`manifest.json`) : identité, version, contrat hôte `[1]`, composants (id, version, type `action`/`condition`, médias compatibles, sorties, schéma de configuration déclaratif). Voir `example/manifest.json`. Un champ de la configuration du plugin peut porter `"scope": "server"` : sa valeur reste sur le serveur et n'est jamais envoyée au worker (utile pour un secret de webhook). Le plugin ne fournit aucun code d’interface : le formulaire est rendu à partir du schéma (`text`, `number`, `boolean`, `select`, et `secret` pour la configuration du plugin).
 2. **Code** (`plugin.py`) :
 
 ```python

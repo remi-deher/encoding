@@ -31,3 +31,7 @@ media-test/*
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Python bytecode
+__pycache__/
+*.pyc
