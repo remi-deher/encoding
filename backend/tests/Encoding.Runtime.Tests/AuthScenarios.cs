@@ -47,6 +47,17 @@ internal static class AuthScenarios
         Console.WriteLine("PASS: password hashing, rehash detection and credential policy.");
     }
 
+    private static async Task SecurityHeadersAsync(WebApplicationFactory<ApiAssembly> factory)
+    {
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/api/v1/auth/status");
+        Check(response.Headers.TryGetValues("X-Content-Type-Options", out var sniff) && sniff.Single() == "nosniff", "API responses forbid content sniffing.");
+        Check(response.Headers.Contains("X-Frame-Options") && response.Headers.Contains("Referrer-Policy"), "API responses carry framing and referrer protections.");
+        Check(response.Headers.CacheControl?.NoStore == true, "API responses are never cached.");
+        Check(!response.Headers.Contains("Strict-Transport-Security"), "HSTS is only sent over HTTPS.");
+        Console.WriteLine("PASS: security headers on API responses.");
+    }
+
     public static async Task RunAsync(string connection)
     {
         await using var database = await TestDatabase.CreateAsync(connection, "auth");
@@ -62,6 +73,7 @@ internal static class AuthScenarios
             {
                 await ScenarioAsync(factory);
                 await EndpointCatalogueAsync(factory);
+                await SecurityHeadersAsync(factory);
             }
             await using (var limited = CreateFactory(cluster, directory, new() { ["Auth:AnonymousRequestsPerMinute"] = "3" }))
             {

@@ -6,7 +6,7 @@ services:
       context: ..
       dockerfile: backend/Dockerfile
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ConnectionStrings__Cluster: Data Source=/var/lib/encoding-node/cluster.db
       NodePresence__OfflineAfterSeconds: 30
       FlowBackups__Directory: /var/lib/encoding/flow-backups

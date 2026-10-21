@@ -229,6 +229,8 @@ if (peerClusterOptions.Enabled)
 }
 
 app.UseRequestObservability();
+app.UseTrustedForwardedHeaders();
+app.UseSecurityHeaders();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
