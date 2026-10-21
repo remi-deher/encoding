@@ -51,12 +51,12 @@ public sealed class AiClusterStore(DbDataSource database, ClusterReconciliationR
     /// <summary>Réplique un tombstone. Les anciennes versions restent dans le journal append-only jusqu'à leur purge coordonnée.</summary>
     public Task DeleteAsync(string key, CancellationToken ct) =>
         journal.SetRegisterAsync("ai/" + key, "null", ct);
-    public async Task<IReadOnlyList<T>> ListSessionsAsync<T>(int offset, int limit, CancellationToken ct)
+    public async Task<IReadOnlyList<T>> ListSessionsAsync<T>(int offset, int limit, CancellationToken ct, bool includeAssistant = false)
     {
         if (offset < 0 || limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(limit));
         // Bounded pagination over the existing encrypted registers, ordered by their last observed update.
         var rows = new List<(string Key, string Value)>();
-        await using (var command = database.CreateCommand("SELECT s.register_key, s.value FROM cluster_sync_registers s WHERE s.register_key LIKE 'ai/session/%' AND s.value <> 'null' AND NOT EXISTS (SELECT 1 FROM cluster_sync_registers owner WHERE owner.register_key = 'ai/assistant/session-owner/' || substr(s.register_key, 12) AND owner.value <> 'null') ORDER BY s.occurred_at DESC, s.register_key LIMIT @limit OFFSET @offset"))
+        await using (var command = database.CreateCommand("SELECT s.register_key, s.value FROM cluster_sync_registers s WHERE s.register_key LIKE 'ai/session/%' AND s.value <> 'null' " + (includeAssistant ? "" : "AND NOT EXISTS (SELECT 1 FROM cluster_sync_registers owner WHERE owner.register_key = 'ai/assistant/session-owner/' || substr(s.register_key, 12) AND owner.value <> 'null') ") + "ORDER BY s.occurred_at DESC, s.register_key LIMIT @limit OFFSET @offset"))
         {
             command.Parameters.AddWithValue("limit", limit);
             command.Parameters.AddWithValue("offset", offset);

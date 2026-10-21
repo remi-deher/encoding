@@ -120,6 +120,33 @@ public sealed class AiClusterTests
     }
 
     [Fact]
+    public async Task UsageIsGroupedByExecutorNodeWithAGlobalTotalAndNeverInventsMissingTokens()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var nodeA = Guid.NewGuid();
+        var nodeB = Guid.NewGuid();
+        AiSessionTurn Turn(Guid? node, AiUsage? usage, DateTimeOffset at) => new(Guid.NewGuid(), "q", "a", usage, at, null, node);
+        var now = DateTimeOffset.UtcNow;
+        await mesh.First.Store.SaveAsync("session/usage-1", new AiSessionState("usage-1", "openai", "", [
+            Turn(nodeA, new AiUsage(100, 20, 10, 0.5m), now),
+            Turn(nodeA, new AiUsage(50, 5), now),
+            Turn(nodeB, null, now),
+            Turn(nodeB, new AiUsage(7, 3), now.AddDays(-90))], UpdatedAt: now), Ct);
+        await mesh.First.Store.SaveAsync("session/usage-2", new AiSessionState("usage-2", "claude-cli", "", [Turn(null, new AiUsage(1, 1), now)], UpdatedAt: now), Ct);
+
+        var usage = await mesh.First.Service.UsageAsync(30, Ct);
+
+        var a = Assert.Single(usage.Nodes, node => node.NodeId == nodeA);
+        Assert.Equal(new AiUsageTotals(2, 150, 25, 10, 0.5m, 0), a.Total);
+        var b = Assert.Single(usage.Nodes, node => node.NodeId == nodeB);
+        Assert.Equal(new AiUsageTotals(1, 0, 0, 0, null, 1), b.Total);
+        Assert.Contains(usage.Nodes, node => node.NodeId is null && node.Total.InputTokens == 1);
+        Assert.Equal(new AiUsageTotals(4, 151, 26, 10, 0.5m, 1), usage.Total);
+        Assert.False(usage.Truncated);
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.UsageAsync(0, Ct));
+    }
+
+    [Fact]
     public async Task SessionsCannotMixMediaOrOperationsAndPreserveUsageOnReplay()
     {
         await using var mesh = await Mesh.CreateAsync();
