@@ -14,6 +14,8 @@ internal static partial class Harness
     {
         public async Task ArtifactRelayAsync(bool missingProducer = false)
         {
+            Check(ProcessToolRunner.Find("mkvmerge") is not null,
+                "mkvmerge is required for extraction/consumption scenarios. Install MKVToolNix in the runtime test job or add its directory to PATH.");
             var capabilities = Capabilities(true).Concat(new NodeToolCapability[] {
                 new("mkvtoolnix", "90.0", ["video"], []),
                 new(FlowArtifactReference.Capability, "1.0.0", ["general"], []) }).ToArray();
@@ -58,7 +60,12 @@ internal static partial class Harness
                 var produced = reference.Resolve(received.Checkpoint!.Context.Variables);
                 Check(received.Checkpoint.NextNodeId == "consume", "Resume at the consumer without repeating extraction.");
                 using (var client = Client(b)) await Runner("consume-b", out _).RunAsync(received, client, deadline.Token);
-                var returned = await runtime.ClaimAsync(a, deadline.Token) ?? throw new InvalidOperationException("The consumer must complete and checkpoint.");
+                var returned = await runtime.ClaimAsync(a, deadline.Token);
+                if (returned is null)
+                {
+                    var execution = await executions.GetAsync(id, deadline.Token);
+                    throw new InvalidOperationException($"The consumer must complete and checkpoint. State: {execution?.State}; detail: {execution?.Detail}");
+                }
                 Check(returned.Checkpoint!.Context.CurrentSha256 != sourceSha, "Adding the extracted track changes the temporary result.");
                 Check(reference.Resolve(returned.Checkpoint.Context.Variables).GetProperty("sha256").GetString() == produced.GetProperty("sha256").GetString(),
                     "The durable file reference survives both worker changes.");
