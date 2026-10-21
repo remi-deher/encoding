@@ -1,6 +1,6 @@
 # Backend
 
-Socle API ASP.NET Core sur .NET 10, avec SQLite local par serveur. Les serveurs d'un cluster réconcilient progressivement leurs données via le maillage décrit dans [`0049`](../docs/architecture/0049-multi-server-shared-cluster.md). L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`.
+Socle API ASP.NET Core sur .NET 10, avec SQLite local par serveur. Les serveurs d'un cluster réconcilient progressivement leurs données via le maillage décrit dans [`0049`](../docs/architecture/domains/replication-storage.md). L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`.
 
 Le mode optionnel **pair à pair** conserve une base SQLite indépendante par serveur et réplique l’état métier avec Raft. Configuration, jointure, sauvegarde/restauration, rotation et contraintes de version : [guide d’exploitation](../docs/operations/peer-cluster-preview.md).
 
@@ -17,7 +17,7 @@ L’interface Angular et l’API sont servies par le même conteneur : ouvrir `h
 
 ## Encodage matériel (Intel, AMD, NVIDIA)
 
-L’image embarque les pilotes VA-API Intel (`iHD`, QSV) et AMD (Mesa) ; le pilote NVIDIA vient de l’hôte (NVIDIA Container Toolkit). Sans GPU utilisable, le nœud encode sur CPU et le journal de l’agent en donne la raison. Voir [0051](../docs/architecture/0051-hardware-encoding-in-image.md).
+L’image embarque les pilotes VA-API Intel (`iHD`, QSV) et AMD (Mesa) ; le pilote NVIDIA vient de l’hôte (NVIDIA Container Toolkit). Sans GPU utilisable, le nœud encode sur CPU et le journal de l’agent en donne la raison. Voir [0051](../docs/architecture/domains/cluster.md).
 
 - Intel/AMD : monter `/dev/dri` (`devices: ["/dev/dri:/dev/dri"]`). Le conteneur est root ; pour un usage non-root, `group_add` avec le GID de `renderD128` (`stat -c %g /dev/dri/renderD128`, 107 sur TrueNAS SCALE).
 - NVIDIA : réservation de device `nvidia` (capabilities `gpu, video, compute, utility`) ou `--gpus all`.
@@ -59,7 +59,7 @@ La page **Tâches** est prête, mais la file et le répartiteur ne sont pas enco
 
 ## Authentification
 
-Au premier démarrage, l’interface propose un assistant d’initialisation (`/setup`) pour nommer le nœud et choisir son mode (machine autonome, création de cluster ou rattachement à un cluster existant). Par défaut, l’authentification est en accès libre (`Auth:Enabled: false`) sans mot de passe obligatoire. L’authentification peut être activée (`Auth__Enabled=true`) pour exiger une connexion par identifiants (gérés dans **Paramètres** ; le rôle lecture seule consulte sans modifier). Réglages optionnels, identiques pour tous les serveurs du cluster : `Auth__SessionIdleMinutes` (480), `Auth__SessionAbsoluteHours` (168), `Auth__MaxFailedAttempts` (5), `Auth__MaxPendingPairingRequests` (20), `Auth__AnonymousRequestsPerMinute` (20), `Auth__CookieSecure` (`auto`, `true` ou `false` ; `true` derrière un proxy TLS) et `Auth__TrustForwardedHeaders` (`true` derrière un proxy de confiance, pour limiter par adresse réelle). Voir [0031](../docs/architecture/0031-authentication-roles-and-pairing.md).
+Au premier démarrage, l’interface propose un assistant d’initialisation (`/setup`) pour nommer le nœud et choisir son mode (machine autonome, création de cluster ou rattachement à un cluster existant). Par défaut, l’authentification est en accès libre (`Auth:Enabled: false`) sans mot de passe obligatoire. L’authentification peut être activée (`Auth__Enabled=true`) pour exiger une connexion par identifiants (gérés dans **Paramètres** ; le rôle lecture seule consulte sans modifier). Réglages optionnels, identiques pour tous les serveurs du cluster : `Auth__SessionIdleMinutes` (480), `Auth__SessionAbsoluteHours` (168), `Auth__MaxFailedAttempts` (5), `Auth__MaxPendingPairingRequests` (20), `Auth__AnonymousRequestsPerMinute` (20), `Auth__CookieSecure` (`auto`, `true` ou `false` ; `true` derrière un proxy TLS) et `Auth__TrustForwardedHeaders` (`true` derrière un proxy de confiance, pour limiter par adresse réelle). Voir [0031](../docs/architecture/domains/auth-ops.md).
 
 ## API `v1`
 
@@ -77,11 +77,11 @@ Une définition de bibliothèque ne configure aucun accès média. Les chemins l
 
 ## Suivi des exécutions
 
-La migration 0008 ajoute le registre et son journal. L’API /api/v1/executions expose les compteurs et tentatives persistants, les demandes d’annulation et les relances. Le runtime utilise ce registre, contrôle les baux et valide les sorties avant une réussite. Voir docs/architecture/0009-execution-tracking.md pour les contrats et les limites.
+La migration 0008 ajoute le registre et son journal. L’API /api/v1/executions expose les compteurs et tentatives persistants, les demandes d’annulation et les relances. Le runtime utilise ce registre, contrôle les baux et valide les sorties avant une réussite. Voir docs/architecture/domains/runtime.md pour les contrats et les limites.
 
 ## Préparation du moteur de flow
 
-Les contrats de préparation se trouvent dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins : définition versionnée, manifeste déclaratif, invocation et résultat d’étape. Ils sont exposés par l’API et exécutés par l’agent via le runtime décrit dans l’architecture 0015. L’ordre d’implémentation et les garanties attendues sont décrits dans [l’architecture 0012](../docs/architecture/0012-flow-engine-foundation.md).
+Les contrats de préparation se trouvent dans Encoding.Contracts/Flows et Encoding.Contracts/Plugins : définition versionnée, manifeste déclaratif, invocation et résultat d’étape. Ils sont exposés par l’API et exécutés par l’agent via le runtime décrit dans l’architecture 0015. L’ordre d’implémentation et les garanties attendues sont décrits dans [l’architecture 0012](../docs/architecture/domains/flows.md).
 
 ## Catalogue et validation des flows
 
@@ -91,25 +91,25 @@ Le manifeste déclaratif Base est dans src/Encoding.Api/Flows/Catalog/base.json.
 
 ## Bibliothèque de scripts
 
-La migration 0018 ajoute les brouillons et versions publiées de scripts partagés. L’API `GET/POST /api/v1/scripts`, `GET /api/v1/scripts/{id}`, `PUT /api/v1/scripts/{id}/draft`, `POST /api/v1/scripts/{id}/publish` et `GET /api/v1/scripts/{id}/versions/{version}` gère ces ressources avec contrôle de concurrence. Un flow garde une copie du code choisi et une référence de provenance vers la version publiée ; voir [0024](../docs/architecture/0024-script-library.md).
+La migration 0018 ajoute les brouillons et versions publiées de scripts partagés. L’API `GET/POST /api/v1/scripts`, `GET /api/v1/scripts/{id}`, `PUT /api/v1/scripts/{id}/draft`, `POST /api/v1/scripts/{id}/publish` et `GET /api/v1/scripts/{id}/versions/{version}` gère ces ressources avec contrôle de concurrence. Un flow garde une copie du code choisi et une référence de provenance vers la version publiée ; voir [0024](../docs/architecture/domains/flows.md).
 
 ## Modèles de flow
 
-La migration 0019 ajoute les modèles partagés. `POST /api/v1/templates/from-flow` copie une version publiée précise, et `GET /api/v1/templates` ainsi que `GET /api/v1/templates/{id}` les exposent à l’interface. L’éditeur charge le modèle sous un nouvel identifiant de flow ; voir [0025](../docs/architecture/0025-flow-templates.md).
+La migration 0019 ajoute les modèles partagés. `POST /api/v1/templates/from-flow` copie une version publiée précise, et `GET /api/v1/templates` ainsi que `GET /api/v1/templates/{id}` les exposent à l’interface. L’éditeur charge le modèle sous un nouvel identifiant de flow ; voir [0025](../docs/architecture/domains/flows.md).
 
 ## Versions et sauvegardes de flows
 
 La migration 0009 ajoute les versions immuables et la file de sauvegardes. GET /api/v1/flows liste les flows ; GET /api/v1/flows/{id} et /versions/{version} lisent leurs documents ; PUT /api/v1/flows/{id} publie une version validée avec expectedVersion. Un conflit concurrent reçoit HTTP 409. La création d’exécution exige une version enregistrée.
 
-FlowBackups__Directory configure le dossier JSON. Compose monte encoding-flow-backups dans /var/lib/encoding/flow-backups, séparément de la base. Les erreurs sont visibles dans backupStatus et retentées. En maillage SQLite, chaque serveur recrée ses propres fichiers depuis les définitions réconciliées ; le volume de sauvegarde reste local et doit être sauvegardé indépendamment. Voir [0014](../docs/architecture/0014-flow-version-storage-and-backups.md) pour la récupération et les limites.
+FlowBackups__Directory configure le dossier JSON. Compose monte encoding-flow-backups dans /var/lib/encoding/flow-backups, séparément de la base. Les erreurs sont visibles dans backupStatus et retentées. En maillage SQLite, chaque serveur recrée ses propres fichiers depuis les définitions réconciliées ; le volume de sauvegarde reste local et doit être sauvegardé indépendamment. Voir [0014](../docs/architecture/domains/flows.md) pour la récupération et les limites.
 
 
 ## Runtime, brouillons et restauration
 
-Voir [0015 — Runtime et archives portables](../docs/architecture/0015-flow-runtime-and-portable-archives.md) pour les baux, checkpoints, outils, contrats plugin et restrictions Linux Landlock.
+Voir [0015 — Runtime et archives portables](../docs/architecture/domains/runtime.md) pour les baux, checkpoints, outils, contrats plugin et restrictions Linux Landlock.
 
 - Le tableau propose brouillons, publication validée, comparaison des versions, import JSON/ZIP, export JSON individuel et export ZIP d’une sélection.
-- La bibliothèque reçoit une version publiée du flow. Découvrez les fichiers puis traitez une sélection depuis la bibliothèque ; aucun chemin n’est saisi. Configurez les montages et les accès des nœuds au préalable. Voir [0016](../docs/architecture/0016-library-workflow-and-discovery.md).
+- La bibliothèque reçoit une version publiée du flow. Découvrez les fichiers puis traitez une sélection depuis la bibliothèque ; aucun chemin n’est saisi. Configurez les montages et les accès des nœuds au préalable. Voir [0016](../docs/architecture/domains/runtime.md).
 - Scripts et plugins nécessitent Landlock sur le noyau Linux hôte ; ils ne sont pas annoncés si cette restriction est absente.
 - Le nœud source transfère le média par WebDAV ; les outils travaillent sur une copie locale. Le résultat validé est publié sous .encoding-results/<executionId>/ sans remplacer la source.
 - Les métadonnées avant/après, événements et fichiers produits sont consultables dans le suivi.
@@ -119,7 +119,7 @@ Voir [0015 — Runtime et archives portables](../docs/architecture/0015-flow-run
 
 Depuis l’éditeur, **Tester le flow** explore le document en cours avec un profil fictif ou un fichier importé via MediaInfo. Le nom, les métadonnées, les pistes et les variables restent modifiables. Les conditions natives affichent leurs comparaisons et sorties ; les actions externes s’arrêtent pour demander le résultat à supposer avant de poursuivre.
 
-Aucune exécution, conversion, invocation de plugin ou transfert réel n’est créé. Les résultats du test restent dans la session de l’éditeur. L’import MediaInfo est limité à 512 Mio, deux minutes et deux lectures simultanées par serveur ; la copie temporaire est supprimée après lecture. Voir [0023](../docs/architecture/0023-flow-simulation.md) pour les contrats et limites.
+Aucune exécution, conversion, invocation de plugin ou transfert réel n’est créé. Les résultats du test restent dans la session de l’éditeur. L’import MediaInfo est limité à 512 Mio, deux minutes et deux lectures simultanées par serveur ; la copie temporaire est supprimée après lecture. Voir [0023](../docs/architecture/domains/flows.md) pour les contrats et limites.
 
 L’action Enregistrer de l’éditeur valide automatiquement le document : publication s’il est valide, brouillon sinon. Une publication inchangée retourne la version existante et ne crée ni version ni tâche de sauvegarde supplémentaire. Ce contrôle transactionnel conserve les conflits de concurrence et les versions des archives importées.
 

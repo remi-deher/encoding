@@ -1,6 +1,6 @@
 # Cluster pair à pair — suivi de préparation
 
-Les six points sont traités dans le code et les procédures. Voir [0061](../architecture/0061-peer-sql-transactions-and-operations.md) et le [guide d’exploitation](peer-cluster-preview.md).
+Les six points sont traités dans le code et les procédures. Voir [0061](../architecture/domains/replication-storage.md) et le [guide d’exploitation](peer-cluster-preview.md).
 
 | Point | État | Réalisation et validation |
 | --- | --- | --- |

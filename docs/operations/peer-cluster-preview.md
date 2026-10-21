@@ -1,6 +1,6 @@
 # Exploiter un cluster pair à pair
 
-Le mode `PeerCluster` est optionnel. Trois serveurs conservent chacun une base SQLite locale et un journal Raft indépendants ; la majorité confirme les changements métier. Tous les pairs utilisent la même version applicative. Aucun serveur central permanent n’est requis. Voir [0061](../architecture/0061-peer-sql-transactions-and-operations.md).
+Le mode `PeerCluster` est optionnel. Trois serveurs conservent chacun une base SQLite locale et un journal Raft indépendants ; la majorité confirme les changements métier. Tous les pairs utilisent la même version applicative. Aucun serveur central permanent n’est requis. Voir [0061](../architecture/domains/replication-storage.md).
 
 ## Ce qui est partagé
 
