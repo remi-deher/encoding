@@ -7,10 +7,20 @@ import {
   TemplateRef,
   effect,
   inject,
+  computed,
   input,
   output,
 } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
+
+export type DrawerVariant = 'neutral' | 'info' | 'danger' | 'success';
+
+const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
+  neutral: null,
+  info: 'i',
+  danger: '!',
+  success: '✓',
+};
 
 @Component({
   selector: 'app-detail-drawer',
@@ -36,7 +46,16 @@ import { MatSidenavModule } from '@angular/material/sidenav';
         (closed)="closed.emit()"
       >
         <section class="drawer-panel">
-          <header class="drawer-header">
+          <div class="drawer-grab" aria-hidden="true"></div>
+          <header
+            class="drawer-header"
+            [class.drawer-header_info]="variant() === 'info'"
+            [class.drawer-header_danger]="variant() === 'danger'"
+            [class.drawer-header_success]="variant() === 'success'"
+          >
+            @if (glyph(); as glyphText) {
+              <span class="drawer-icon" aria-hidden="true">{{ glyphText }}</span>
+            }
             <div class="drawer-heading">
               @if (eyebrow()) {
                 <p class="drawer-eyebrow">{{ eyebrow() }}</p>
@@ -60,6 +79,18 @@ import { MatSidenavModule } from '@angular/material/sidenav';
               </button>
             </div>
           </header>
+          @if (step(); as progress) {
+            <div
+              class="drawer-progress"
+              role="progressbar"
+              [attr.aria-label]="'Étape ' + progress.current + ' sur ' + progress.total"
+              aria-valuemin="1"
+              [attr.aria-valuemax]="progress.total"
+              [attr.aria-valuenow]="progress.current"
+            >
+              <i [style.width.%]="(progress.current / progress.total) * 100"></i>
+            </div>
+          }
           <div class="drawer-body">
             <ng-container [ngTemplateOutlet]="content() ?? null" />
           </div>
@@ -116,6 +147,8 @@ import { MatSidenavModule } from '@angular/material/sidenav';
     }
 
     .drawer-panel {
+      --drawer-tone: var(--accent-soft);
+      --drawer-tone-ink: var(--accent-strong);
       height: 100%;
       min-height: 100%;
       max-height: 100%;
@@ -133,7 +166,53 @@ import { MatSidenavModule } from '@angular/material/sidenav';
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      background: var(--surface-container-low);
+      background: var(--drawer-tone);
+    }
+
+    .drawer-header_info {
+      --drawer-tone: var(--tertiary-soft);
+      --drawer-tone-ink: var(--tertiary);
+    }
+
+    .drawer-header_danger {
+      --drawer-tone: var(--danger-soft);
+      --drawer-tone-ink: var(--danger);
+    }
+
+    .drawer-header_success {
+      --drawer-tone: var(--success-soft);
+      --drawer-tone-ink: var(--success);
+    }
+
+    .drawer-icon {
+      width: 40px;
+      height: 40px;
+      flex: 0 0 40px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--radius-pill);
+      background: var(--surface);
+      color: var(--drawer-tone-ink);
+      font-size: var(--font-title-md);
+      font-weight: 700;
+    }
+
+    .drawer-progress {
+      height: 4px;
+      flex: 0 0 auto;
+      background: var(--surface-container-highest);
+    }
+
+    .drawer-progress i {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+      border-radius: 0 2px 2px 0;
+      transition: width 0.2s ease;
+    }
+
+    .drawer-grab {
+      display: none;
     }
 
     .drawer-heading {
@@ -206,8 +285,29 @@ import { MatSidenavModule } from '@angular/material/sidenav';
         max-width: 100vw;
       }
 
+      .detail-drawer-panel {
+        border-start-start-radius: var(--radius-2xl);
+        border-start-end-radius: var(--radius-2xl);
+        border-end-start-radius: 0;
+      }
+
       .drawer-panel {
         height: 100dvh;
+      }
+
+      .drawer-grab {
+        display: block;
+        width: 36px;
+        height: 4px;
+        margin: 8px auto 0;
+        flex: 0 0 auto;
+        border-radius: 2px;
+        background: var(--text-muted);
+        opacity: 0.6;
+      }
+
+      .drawer-footer > * {
+        flex: 1 1 0;
       }
 
       .drawer-header {
@@ -245,6 +345,13 @@ export class DetailDrawerComponent {
   readonly dismissible = input(true);
   readonly mainScroll = input<'auto' | 'parent'>('auto');
   readonly opened = input(false);
+  /** Teinte du bandeau : même vocabulaire que les modales (`DialogFrameComponent`). */
+  readonly variant = input<DrawerVariant>('neutral');
+  /** Glyphe de la pastille ; par défaut celui de la variante, aucune pastille en neutre. */
+  readonly icon = input<string>();
+  /** Avancement d'un parcours en plusieurs étapes (« Étape 1 sur 2 »). */
+  readonly step = input<{ readonly current: number; readonly total: number } | null>(null);
+  protected readonly glyph = computed(() => this.icon() ?? VARIANT_GLYPHS[this.variant()]);
   readonly eyebrow = input('');
   readonly title = input('Détails');
   readonly description = input('');

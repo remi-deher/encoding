@@ -16,6 +16,7 @@ Avant de concevoir une vue ou un composant, identifier la question principale à
 ### Choisir le bon conteneur d’interaction
 - **Vue principale / Sections structurées** : Les informations essentielles (état, capacité, matériel, flow actif, activité) sont lisibles immédiatement sans obliger l’utilisateur à ouvrir une série de petites boîtes ou de sous-fenêtres.
 - **Tiroir latéral (`DetailDrawer`)** : Réservé à l’inspection détaillée d’un élément, à la configuration d’un bloc de flow ou à une édition contextuelle ciblée. Ne jamais empiler plusieurs tiroirs dans le DOM et éviter d’enfermer toute une application dans un tiroir.
+  - **Gabarit** : bandeau teinté (`variant` : neutre, `info`, `danger`, `success`) avec pastille (`icon`), sur-titre (`eyebrow`), titre et sous-titre (`description`) ; avancement d’un parcours par `step` (« Étape 1 sur 2 ») plutôt que par un stepper dans le corps ; pied d’actions toujours collé en bas (`footerActions`) ; feuille basse avec poignée sous 700 px. Un formulaire `RecordForm` placé dans un tiroir s’utilise avec `embedded` : il ne dessine ni boutons ni description et expose `primaryLabel`, `secondaryLabel`, `primary()`, `secondary()`, `stepIndex` et `stepCount` pour le pied du tiroir (voir l’accueil, « Créer un flow »). Ne pas répéter dans le corps la description déjà portée par l’en-tête.
 - **Modale (`MatDialog`)** : Réservée aux confirmations critiques, aux codes de vérification d’appairage et aux décisions courtes qui requièrent l’attention immédiate.
 
 ---
