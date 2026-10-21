@@ -13,6 +13,9 @@ permissions:
   contents: write
   checks: read
   pull-requests: read
+env:
+  REQUIRED_CHECKS_JSON: >-
+    ["peer-alerts","backend-compile","backend-runtime-tests","backend-launcher-tests","backend-plugin-tests","backend-prototype-tests","image","ai-cli-native","frontend-fast","frontend-e2e"]
 jobs:
   wait-ci:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
@@ -50,22 +53,23 @@ jobs:
           fi
 
           sleep 60 # laisse les workflows Backend et Frontend s'enregistrer
-          # La policy est un check de PR, pas un check CI de code. Seuls les jobs
-          # peer-alerts, build, image et frontend déterminent si la release peut partir.
-          ci_shas="$SHA"
+          # Les workflows sont filtrés par chemin : un check absent du commit de merge est
+          # cherché sur le dernier commit ayant touché backend/ ou frontend/.
+          required="$(jq -r '.[]' <<<"$REQUIRED_CHECKS_JSON")"
+          other_shas="$(for d in backend frontend; do gh api "repos/${GITHUB_REPOSITORY}/commits?sha=${SHA}&path=${d}&per_page=1" --jq '.[0].sha // empty'; done | sort -u | grep -v "^${SHA}$" || true)"
           for _ in $(seq 1 120); do
-            runs="$(for s in $ci_shas; do gh api "repos/${GITHUB_REPOSITORY}/commits/${s}/check-runs?per_page=100" \
-              --jq '[.check_runs[] | select(.name == "peer-alerts" or .name == "build" or .name == "image" or .name == "frontend")]'; done | jq -s 'add')"
-            if [ "$(jq length <<<"$runs")" -eq 0 ] && [ "$ci_shas" = "$SHA" ]; then
-              ci_shas="$(for d in backend frontend; do gh api "repos/${GITHUB_REPOSITORY}/commits?sha=${SHA}&path=${d}&per_page=1" --jq '.[0].sha // empty'; done | sort -u | tr '\n' ' ')"
-              [ -n "$ci_shas" ] || ci_shas="$SHA"
-              continue
-            fi
-            total="$(jq length <<<"$runs")"
-            pending="$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")"
-            failed="$(jq '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not))] | length' <<<"$runs")"
+            runs="$(for s in $SHA $other_shas; do gh api "repos/${GITHUB_REPOSITORY}/commits/${s}/check-runs?per_page=100" \
+              | jq --arg s "$s" '[.check_runs[] | {name, status, conclusion, sha: $s}]'; done | jq -s 'add')"
+            failed=0; pending=0; missing=0
+            for check in $required; do
+              # Le résultat sur le commit de merge prime sur celui d'un commit antérieur.
+              matched="$(jq --arg n "$check" --arg s "$SHA" '[.[] | select(.name == $n)] | . as $all | ([.[] | select(.sha == $s)]) as $own | if ($own | length) > 0 then $own else $all end' <<<"$runs")"
+              [ "$(jq length <<<"$matched")" -eq 0 ] && { missing=$((missing + 1)); continue; }
+              [ "$(jq '[.[] | select(.status != "completed")] | length' <<<"$matched")" -gt 0 ] && { pending=$((pending + 1)); continue; }
+              [ "$(jq '[.[] | select(.conclusion | IN("success","skipped","neutral") | not)] | length' <<<"$matched")" -gt 0 ] && failed=$((failed + 1))
+            done
             if [ "$failed" -gt 0 ]; then echo "CI en échec : pas de publication."; echo green=false >> "$GITHUB_OUTPUT"; exit 0; fi
-            if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ]; then echo green=true >> "$GITHUB_OUTPUT"; exit 0; fi
+            if [ "$missing" -eq 0 ] && [ "$pending" -eq 0 ]; then echo "Tous les checks requis sont verts."; echo green=true >> "$GITHUB_OUTPUT"; exit 0; fi
             sleep 20
           done
           echo "Délai dépassé en attendant la CI."; echo green=false >> "$GITHUB_OUTPUT"
