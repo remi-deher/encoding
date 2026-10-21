@@ -1,8 +1,16 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import {
   DataTableColumn,
@@ -50,7 +58,8 @@ interface PackRow extends DataTableRow {
       [detailOpen]="selectedPack() !== null"
       [detailTitle]="selectedPack()?.name ?? 'Pack de composants'"
       [detailDescription]="selectedPack()?.description ?? ''"
-      (detailClosed)="closeDetail()"
+      detailLayout="page"
+      searchLayout="centered"
     >
       <app-category-tabs
         catalogue-navigation
@@ -89,7 +98,9 @@ export class ComponentPackLibraryPageComponent {
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Packs de composants');
+  protected readonly title = computed(
+    () => (this.routeData()['title'] as string) ?? 'Packs de composants',
+  );
   protected readonly librarySections: readonly CategoryTabOption[] = [
     { value: 'media', label: 'Bibliothèques' },
     { value: 'scripts', label: 'Scripts' },
@@ -220,8 +231,28 @@ export class ComponentPackLibraryPageComponent {
     ];
   });
 
+  private readonly itemParam = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('pack'))),
+    { initialValue: this.route.snapshot.queryParamMap.get('pack') },
+  );
+
   constructor() {
     void this.loadPacks();
+    // La fiche est portée par l'URL (?pack=<id>) : le menu latéral et le bouton précédent
+    // du navigateur ramènent à la liste.
+    effect(() => {
+      const id = this.itemParam();
+      const items = this.packs();
+      untracked(() => {
+        if (!id) {
+          if (this.selectedPack()) this.closeDetail();
+          return;
+        }
+        if (this.selectedPack()?.id === id) return;
+        const item = items.find((candidate) => candidate.id === id);
+        if (item) void this.showPack(item);
+      });
+    });
   }
 
   protected onSectionChanged(section: string): void {
@@ -231,12 +262,17 @@ export class ComponentPackLibraryPageComponent {
     if (section === 'encoding') void this.router.navigateByUrl('/libraries/encoding-profiles');
   }
 
-  protected async openPack(row: DataTableRow): Promise<void> {
-    const pack = this.packs().find((candidate) => candidate.id === row['id']) ?? null;
+  protected openPack(row: DataTableRow): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { pack: String(row['id']) },
+    });
+  }
+
+  private async showPack(pack: FlowComponentPackSummary): Promise<void> {
     this.selectedPack.set(pack);
     this.selectedDetails.set(null);
-    this.selectedDetailsLoadState.set(pack ? 'loading' : 'idle');
-    if (!pack) return;
+    this.selectedDetailsLoadState.set('loading');
     try {
       const details = await this.api.get(pack.id);
       if (this.selectedPack()?.id === pack.id) {
