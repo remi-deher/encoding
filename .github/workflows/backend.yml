@@ -49,7 +49,8 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg mediainfo python3
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg mediainfo mkvtoolnix python3
+      - run: mkvmerge --version
       - run: >-
           dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
           --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --results-directory test-results
