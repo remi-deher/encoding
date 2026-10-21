@@ -252,8 +252,7 @@ export class ApiTokenTabComponent {
           name: value['name'].trim(),
           role: value['role'] as 'admin' | 'viewer',
           expiresAt,
-          scopes:
-            value['role'] === 'admin' && value['mcpAccess'] === 'write' ? ['mcp:write'] : [],
+          scopes: value['role'] === 'admin' && value['mcpAccess'] === 'write' ? ['mcp:write'] : [],
         }),
       );
       this.secret.set(result.token);
