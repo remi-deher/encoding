@@ -457,7 +457,7 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   await widget.getByRole('textbox', { name: 'Votre question' }).fill('Analyser ce nœud');
   await widget.getByRole('textbox', { name: 'Votre question' }).press('Enter');
   await expect(widget.getByText('Réponse du widget', { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/ai\/activity$/);
+  await expect(page).toHaveURL(/\/activity$/);
   await widget.getByRole('textbox', { name: 'Votre question' }).fill('Brouillon conservé');
   await page.getByRole('button', { name: 'Fermer le panneau de l’assistant' }).click();
   await expect(launcher).toBeFocused();
