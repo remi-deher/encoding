@@ -18,4 +18,5 @@ jobs:
         with:
           node-version: '24'
       - run: node --check .github/scripts/cleanup-released-branches.mjs
-      - run: node --test .github/scripts/cleanup-released-branches.test.mjs
+      - run: node --check .github/scripts/ci-scopes.mjs
+      - run: node --test .github/scripts/*.test.mjs

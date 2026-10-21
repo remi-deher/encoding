@@ -1,0 +1,28 @@
+name: Monitoring
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - 'docs/operations/peer-cluster-alerts.yml'
+      - 'backend/tests/monitoring/**'
+      - '.github/workflows/monitoring.yml'
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'docs/operations/peer-cluster-alerts.yml'
+      - 'backend/tests/monitoring/**'
+      - '.github/workflows/monitoring.yml'
+permissions:
+  contents: read
+jobs:
+  peer-alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: >-
+          docker run --rm --entrypoint promtool -v "$PWD:/repo:ro"
+          prom/prometheus:v3.5.0 check rules /repo/docs/operations/peer-cluster-alerts.yml
+      - run: >-
+          docker run --rm --entrypoint promtool -v "$PWD:/repo:ro"
+          prom/prometheus:v3.5.0 test rules /repo/backend/tests/monitoring/peer-cluster-alerts.test.yml
