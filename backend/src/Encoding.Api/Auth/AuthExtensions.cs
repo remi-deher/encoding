@@ -80,9 +80,6 @@ public static class AuthExtensions
         return app;
     }
 
-        return services;
-    }
-
     public static WebApplication UseClusterAuthentication(this WebApplication app)
     {
         app.UseAuthentication();
