@@ -13,6 +13,9 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { ConfigurationSectionComponent } from '../../shared/ui/configuration-section.component';
 import { SystemLogViewerComponent } from '../../shared/ui/system-log-viewer/system-log-viewer.component';
+import { UserAccount } from '../../shared/models/auth';
+import { ApiTokenResponse } from '../../shared/models/api-token';
+import { AccessSummaryComponent } from './tabs/access-summary.component';
 import { ApiTokenTabComponent } from './tabs/api-token-tab.component';
 import { UserManagementTabComponent } from './tabs/user-management-tab.component';
 import { AiToolsTabComponent } from './tabs/ai-tools-tab.component';
@@ -41,6 +44,7 @@ export function settingsDomain(value: string | null): SettingsMainTab {
     CategoryTabsComponent,
     DetailDrawerComponent,
     ConfigurationSectionComponent,
+    AccessSummaryComponent,
     ApiTokenTabComponent,
     UserManagementTabComponent,
     AiToolsTabComponent,
@@ -81,7 +85,9 @@ export function settingsDomain(value: string | null): SettingsMainTab {
               <app-appearance-tab />
             }
             @case ('access') {
-              <app-user-management-tab /><app-api-token-tab />
+              <app-access-summary [users]="users()" [tokens]="tokens()" />
+              <app-user-management-tab (usersUpdated)="users.set($event)" />
+              <app-api-token-tab (tokensUpdated)="tokens.set($event)" />
             }
             @case ('connections') {
               <app-ai-tools-tab /><app-mcp-server-tab /><app-webhooks-tab />
@@ -118,6 +124,8 @@ export class SettingsPageComponent {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly activeMainTab = signal<SettingsMainTab>('interface');
+  protected readonly users = signal<readonly UserAccount[]>([]);
+  protected readonly tokens = signal<readonly ApiTokenResponse[]>([]);
   protected readonly descriptions: Record<SettingsMainTab, string> = {
     interface: 'Vos préférences pour cette interface.',
     access: 'Les comptes et les accès des applications à votre cluster.',

@@ -17,19 +17,23 @@ import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 import {
-  DataTableActionEvent,
-  DataTableColumn,
-  DataTableComponent,
-  DataTableRowAction,
-} from '../../../shared/ui/data-table.component';
+  AccessListAction,
+  AccessListActionEvent,
+  AccessListComponent,
+  AccessListRow,
+} from '../../../shared/ui/access-list.component';
 import { RecordFormComponent, RecordFormData } from '../../../shared/ui/record-form.component';
 import { SettingsEditor } from '../settings-editor';
+
+interface TokenRow extends AccessListRow {
+  readonly isActive: boolean;
+}
 
 @Component({
   selector: 'app-api-token-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    DataTableComponent,
+    AccessListComponent,
     MatButtonModule,
     ConfigurationSectionComponent,
     RecordFormComponent,
@@ -46,12 +50,9 @@ import { SettingsEditor } from '../settings-editor';
         <p role="alert">Impossible de charger les jetons.</p>
         <button matButton="text" (click)="refresh()">Réessayer</button>
       } @else {
-        <app-data-table
-          layout="resources"
-          [compactResources]="true"
-          [columns]="columns"
+        <app-access-list
           [rows]="rows()"
-          [rowActions]="actions"
+          [actions]="actions"
           (rowAction)="onAction($event)"
           emptyMessage="Aucun jeton d’API. Créez-en un pour autoriser une application."
         />
@@ -144,15 +145,7 @@ export class ApiTokenTabComponent {
     ],
     initialValues: { role: 'viewer', duration: 'never' },
   };
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Nom' },
-    { key: 'roleLabel', label: 'Rôle' },
-    { key: 'statusLabel', label: 'État' },
-    { key: 'prefix', label: 'Préfixe' },
-    { key: 'lastUsedLabel', label: 'Dernière utilisation' },
-    { key: 'expiresLabel', label: 'Expiration' },
-  ];
-  protected readonly actions: readonly DataTableRowAction[] = [
+  protected readonly actions: readonly AccessListAction<TokenRow>[] = [
     {
       id: 'revoke',
       label: 'Révoquer',
@@ -160,7 +153,7 @@ export class ApiTokenTabComponent {
       visibleWhen: (row) => !!row['isActive'],
       confirmation: (row) => ({
         title: 'Révoquer ce jeton ?',
-        message: `Les applications utilisant « ${row['name']} » perdront leur accès au cluster.`,
+        message: `Les applications utilisant « ${row.title} » perdront leur accès au cluster.`,
         confirmLabel: 'Révoquer',
       }),
     },
@@ -170,28 +163,45 @@ export class ApiTokenTabComponent {
       tone: 'danger',
       confirmation: (row) => ({
         title: 'Supprimer ce jeton ?',
-        message: `Le jeton « ${row['name']} » sera définitivement supprimé.`,
+        message: `Le jeton « ${row.title} » sera définitivement supprimé.`,
         confirmLabel: 'Supprimer',
       }),
     },
   ];
-  protected readonly rows = computed(() =>
-    this.tokens().map((token) => ({
-      id: token.id,
-      name: token.name,
-      roleLabel: token.role === 'admin' ? 'Administrateur' : 'Lecture seule',
-      isActive: token.isActive,
-      statusLabel: !token.isActive
-        ? 'Révoqué'
-        : token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now()
-          ? 'Expiré'
-          : 'Actif',
-      prefix: `${token.tokenPrefix}…`,
-      lastUsedLabel: token.lastUsedAt ? formatRelativeTime(token.lastUsedAt) : 'Jamais utilisé',
-      expiresLabel: token.expiresAt
-        ? new Date(token.expiresAt).toLocaleDateString('fr-FR')
-        : 'Sans expiration',
-    })),
+  protected readonly rows = computed<readonly TokenRow[]>(() =>
+    this.tokens().map((token) => {
+      const expired = !!token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now();
+      const usage = !token.isActive
+        ? { label: 'Révoqué', tone: 'danger' as const }
+        : expired
+          ? { label: 'Expiré', tone: 'danger' as const }
+          : token.lastUsedAt
+            ? {
+                label: `Dernier usage : ${formatRelativeTime(token.lastUsedAt)}`,
+                tone: 'success' as const,
+              }
+            : { label: 'Jamais utilisé', tone: 'warning' as const };
+      return {
+        id: token.id,
+        title: token.name,
+        kind: 'token' as const,
+        isActive: token.isActive,
+        monoDetail: `${token.tokenPrefix}…`,
+        details: [
+          token.expiresAt
+            ? `Expire le ${new Date(token.expiresAt).toLocaleDateString('fr-FR')}`
+            : 'Sans expiration',
+        ],
+        badges: [
+          {
+            label: token.role === 'admin' ? 'Administrateur' : 'Lecture seule',
+            tone: 'accent' as const,
+            plain: true,
+          },
+          usage,
+        ],
+      };
+    }),
   );
   constructor() {
     void this.refresh();
@@ -247,7 +257,7 @@ export class ApiTokenTabComponent {
         : 'Impossible de copier le jeton.',
     );
   }
-  protected async onAction(event: DataTableActionEvent): Promise<void> {
+  protected async onAction(event: AccessListActionEvent<TokenRow>): Promise<void> {
     try {
       await firstValueFrom(
         event.actionId === 'delete'
