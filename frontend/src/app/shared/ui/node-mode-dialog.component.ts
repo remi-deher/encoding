@@ -4,35 +4,30 @@ import {
   MatDialogActions,
   MatDialogContent,
   MatDialogRef,
-  MatDialogTitle,
   MAT_DIALOG_DATA,
 } from '@angular/material/dialog';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { DialogFrameComponent } from './dialog-frame.component';
 import { NodeMode, NodeModeDialogData } from '../models/node-mode';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-node-mode-dialog',
   imports: [
+    DialogFrameComponent,
     MatButtonModule,
     MatDialogActions,
     MatDialogContent,
-    MatDialogTitle,
     MatSlideToggleModule,
   ],
   template: `
-    <section class="app-dialog">
-      <header class="app-dialog-header">
-        <span class="app-dialog-icon" aria-hidden="true">◈</span>
-        <div class="app-dialog-heading">
-          <p class="app-dialog-eyebrow">Fonctions du nœud</p>
-          <h2 mat-dialog-title>
-            {{
-              data.remoteNodeName ? 'Mode de « ' + data.remoteNodeName + ' »' : 'Mode de ce nœud'
-            }}
-          </h2>
-        </div>
-      </header>
+    <app-dialog-frame
+      eyebrow="Fonctions du nœud"
+      icon="◈"
+      [heading]="
+        data.remoteNodeName ? 'Mode de « ' + data.remoteNodeName + ' »' : 'Mode de ce nœud'
+      "
+    >
       <mat-dialog-content class="app-dialog-body">
         @if (data.remoteNodeName) {
           <p class="note" role="note">
@@ -85,14 +80,9 @@ import { NodeMode, NodeModeDialogData } from '../models/node-mode';
           Appliquer
         </button>
       </mat-dialog-actions>
-    </section>
+    </app-dialog-frame>
   `,
   styles: `
-    h2 {
-      color: var(--text-primary);
-      font-size: var(--font-title-md);
-      font-weight: 700;
-    }
     mat-dialog-content {
       display: grid;
       gap: var(--space-1);
