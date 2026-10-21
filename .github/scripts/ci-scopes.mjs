@@ -21,7 +21,7 @@ export const scopes = [
   },
   {
     workflow: 'release-scripts', checks: ['release-scripts'],
-    paths: ['.github/scripts/**', '.github/workflows/release*.yml'],
+    paths: ['.github/scripts/**', '.github/workflows/release*.yml', '.github/workflows/promotion.yml', '.github/workflows/pr-policy.yml'],
   },
 ];
 

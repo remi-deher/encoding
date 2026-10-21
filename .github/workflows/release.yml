@@ -13,9 +13,6 @@ permissions:
   contents: write
   checks: read
   pull-requests: read
-env:
-  REQUIRED_CHECKS_JSON: >-
-    ["peer-alerts","backend-compile","backend-runtime-tests","backend-launcher-tests","backend-plugin-tests","backend-prototype-tests","image","ai-cli-native","frontend-fast","frontend-e2e","release-scripts"]
 jobs:
   wait-ci:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
@@ -36,17 +33,17 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           if [ "$GITHUB_REF_NAME" != "main" ]; then
-            echo "La publication n'est autorisée que depuis main."
+            echo "::error::La publication n'est autorisée que depuis main."
             echo green=false >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           merged_prs="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" \
             --jq '[.[] | select(.base.ref == "main" and .head.ref == "dev" and .merged_at != null)]')"
           if [ "$(jq length <<< "$merged_prs")" -eq 0 ]; then
-            echo "Aucune PR dev vers main fusionnée associée à ce commit; publication refusée."
+            echo "::error::Aucune PR dev vers main fusionnée associée à ce commit; publication refusée."
             echo green=false >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
 
           if git tag --points-at "$SHA" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -55,28 +52,8 @@ jobs:
             exit 0
           fi
 
-          sleep 60 # laisse les workflows Backend et Frontend s'enregistrer
-          # Chaque contrôle absent est recherché sur son propre périmètre de fichiers.
-          required="$(jq -r '.[]' <<<"$REQUIRED_CHECKS_JSON")"
-          check_shas="$(node .github/scripts/ci-scopes.mjs)"
-          other_shas="$(jq -r 'values[]' <<<"$check_shas" | sort -u | grep -v "^${SHA}$" || true)"
-          for _ in $(seq 1 120); do
-            runs="$(for s in $SHA $other_shas; do gh api "repos/${GITHUB_REPOSITORY}/commits/${s}/check-runs?per_page=100" \
-              | jq --arg s "$s" '[.check_runs[] | {name, status, conclusion, sha: $s}]'; done | jq -s 'add')"
-            failed=0; pending=0; missing=0
-            for check in $required; do
-              # Le résultat sur le commit de merge prime sur celui d'un commit antérieur.
-              source_sha="$(jq -r --arg n "$check" '.[$n]' <<<"$check_shas")"
-              matched="$(jq --arg n "$check" --arg s "$SHA" --arg source "$source_sha" '[.[] | select(.name == $n)] | ([.[] | select(.sha == $s)]) as $own | if ($own | length) > 0 then $own else [.[] | select(.sha == $source)] end' <<<"$runs")"
-              [ "$(jq length <<<"$matched")" -eq 0 ] && { missing=$((missing + 1)); continue; }
-              [ "$(jq '[.[] | select(.status != "completed")] | length' <<<"$matched")" -gt 0 ] && { pending=$((pending + 1)); continue; }
-              [ "$(jq '[.[] | select(.conclusion | IN("success","skipped","neutral") | not)] | length' <<<"$matched")" -gt 0 ] && failed=$((failed + 1))
-            done
-            if [ "$failed" -gt 0 ]; then echo "CI en échec : pas de publication."; echo green=false >> "$GITHUB_OUTPUT"; exit 0; fi
-            if [ "$missing" -eq 0 ] && [ "$pending" -eq 0 ]; then echo "Tous les checks requis sont verts."; echo green=true >> "$GITHUB_OUTPUT"; exit 0; fi
-            sleep 20
-          done
-          echo "Délai dépassé en attendant la CI."; echo green=false >> "$GITHUB_OUTPUT"
+          node .github/scripts/wait-ci.mjs
+          echo green=true >> "$GITHUB_OUTPUT"
   publish:
     needs: wait-ci
     if: needs.wait-ci.outputs.green == 'true'
