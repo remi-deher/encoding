@@ -117,6 +117,24 @@ export class ActivityPageComponent {
     VIEW_TO_GROUP[this.route.snapshot.queryParamMap.get('view') ?? ''] ?? 'all',
   );
   protected readonly search = signal('');
+  protected readonly filtersOpen = signal(false);
+  protected readonly activeFilters = computed(() => {
+    const filters: { id: string; label: string; clear: () => void }[] = [];
+    const kind = this.kindFilter();
+    if (kind !== 'all') {
+      filters.push({
+        id: 'kind',
+        label: kind === 'ai' ? 'Assistant IA' : 'Traitements',
+        clear: () => this.setKind('all'),
+      });
+    }
+    const group = this.groupFilter();
+    if (group !== 'all') {
+      const label = ACTIVITY_GROUPS.find((item) => item.id === group)?.label ?? group;
+      filters.push({ id: 'group', label, clear: () => this.setGroup('all') });
+    }
+    return filters;
+  });
   protected readonly doneLimit = signal(DONE_PAGE_SIZE);
   protected readonly busy = signal(false);
   protected readonly selectedKey = signal<string | null>(
@@ -385,6 +403,10 @@ export class ActivityPageComponent {
   protected setGroup(group: GroupFilter): void {
     this.groupFilter.set(group);
     this.doneLimit.set(DONE_PAGE_SIZE);
+  }
+  protected clearFilters(): void {
+    this.setKind('all');
+    this.setGroup('all');
   }
   protected showMoreDone(): void {
     this.doneLimit.update((limit) => limit + DONE_PAGE_SIZE);

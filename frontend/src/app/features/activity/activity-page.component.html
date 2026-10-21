@@ -14,59 +14,81 @@
       label="Média, flow, bibliothèque, demande…"
       [value]="search()"
       (valueChange)="search.set($event)"
-    />
-    <div class="chip-row" role="group" aria-label="Type d’activité">
-      <button
-        type="button"
-        class="chip"
-        [class.is-on]="kindFilter() === 'all'"
-        [attr.aria-pressed]="kindFilter() === 'all'"
-        (click)="setKind('all')"
-      >
-        Tout <b>{{ kindCounts().all }}</b>
-      </button>
-      <button
-        type="button"
-        class="chip"
-        [class.is-on]="kindFilter() === 'execution'"
-        [attr.aria-pressed]="kindFilter() === 'execution'"
-        (click)="setKind('execution')"
-      >
-        Traitements <b>{{ kindCounts().execution }}</b>
-      </button>
-      <button
-        type="button"
-        class="chip"
-        [class.is-on]="kindFilter() === 'ai'"
-        [attr.aria-pressed]="kindFilter() === 'ai'"
-        (click)="setKind('ai')"
-      >
-        Assistant IA <b>{{ kindCounts().ai }}</b>
-      </button>
-    </div>
-    <div class="chip-row" role="group" aria-label="État">
-      <button
-        type="button"
-        class="chip"
-        [class.is-on]="groupFilter() === 'all'"
-        [attr.aria-pressed]="groupFilter() === 'all'"
-        (click)="setGroup('all')"
-      >
-        Tous les états <b>{{ counts().all }}</b>
-      </button>
-      @for (group of groups; track group.id) {
-        <button
-          type="button"
-          class="chip"
-          [class.is-on]="groupFilter() === group.id"
-          [class.is-error]="group.id === 'errors' && counts().errors > 0"
-          [attr.aria-pressed]="groupFilter() === group.id"
-          (click)="setGroup(group.id)"
-        >
-          {{ group.label }} <b>{{ counts()[group.id] }}</b>
-        </button>
-      }
-    </div>
+      [filterCount]="activeFilters().length"
+      [(filtersOpen)]="filtersOpen"
+    >
+      <div search-filters class="filter-sections">
+        <p class="filter-title">Type</p>
+        <div class="chip-row" role="group" aria-label="Type d’activité">
+          <button
+            type="button"
+            class="chip"
+            [class.is-on]="kindFilter() === 'all'"
+            [attr.aria-pressed]="kindFilter() === 'all'"
+            (click)="setKind('all')"
+          >
+            Tout <b>{{ kindCounts().all }}</b>
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.is-on]="kindFilter() === 'execution'"
+            [attr.aria-pressed]="kindFilter() === 'execution'"
+            (click)="setKind('execution')"
+          >
+            Traitements <b>{{ kindCounts().execution }}</b>
+          </button>
+          <button
+            type="button"
+            class="chip"
+            [class.is-on]="kindFilter() === 'ai'"
+            [attr.aria-pressed]="kindFilter() === 'ai'"
+            (click)="setKind('ai')"
+          >
+            Assistant IA <b>{{ kindCounts().ai }}</b>
+          </button>
+        </div>
+        <p class="filter-title">État</p>
+        <div class="chip-row" role="group" aria-label="État">
+          <button
+            type="button"
+            class="chip"
+            [class.is-on]="groupFilter() === 'all'"
+            [attr.aria-pressed]="groupFilter() === 'all'"
+            (click)="setGroup('all')"
+          >
+            Tous les états <b>{{ counts().all }}</b>
+          </button>
+          @for (group of groups; track group.id) {
+            <button
+              type="button"
+              class="chip"
+              [class.is-on]="groupFilter() === group.id"
+              [class.is-error]="group.id === 'errors' && counts().errors > 0"
+              [attr.aria-pressed]="groupFilter() === group.id"
+              (click)="setGroup(group.id)"
+            >
+              {{ group.label }} <b>{{ counts()[group.id] }}</b>
+            </button>
+          }
+        </div>
+      </div>
+    </app-search-field>
+    @if (activeFilters().length > 0) {
+      <div class="chip-row active-filters" role="group" aria-label="Filtres actifs">
+        @for (filter of activeFilters(); track filter.id) {
+          <button
+            type="button"
+            class="chip is-on"
+            [attr.aria-label]="'Retirer le filtre ' + filter.label"
+            (click)="filter.clear()"
+          >
+            {{ filter.label }} <span aria-hidden="true">✕</span>
+          </button>
+        }
+        <button type="button" class="chip" (click)="clearFilters()">Tout effacer</button>
+      </div>
+    }
   </div>
 
   @if (feedback()) {

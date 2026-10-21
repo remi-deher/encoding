@@ -33,4 +33,31 @@ describe('SearchFieldComponent', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(emitted).toEqual(['', '']);
   });
+
+  it('opens a filter panel from the Filtres button and closes it on Escape', () => {
+    const fixture = TestBed.createComponent(SearchFieldComponent);
+    fixture.componentRef.setInput('label', 'Rechercher');
+    fixture.componentRef.setInput('filterCount', 2);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const button = host.querySelector('.search-field-filters') as HTMLButtonElement;
+    const panel = host.querySelector('.search-field-panel') as HTMLElement;
+
+    expect(button.textContent).toContain('2');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hasAttribute('inert')).toBe(true);
+
+    button.click();
+    fixture.detectChanges();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(panel.hasAttribute('inert')).toBe(false);
+
+    host.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.filtersOpen()).toBe(false);
+  });
+
+  it('has no filter button without filterCount', () => {
+    expect(create().host.querySelector('.search-field-filters')).toBeNull();
+  });
 });
