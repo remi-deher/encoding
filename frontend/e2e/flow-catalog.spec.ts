@@ -47,6 +47,35 @@ async function setup(
     deleted = true;
     return route.fulfill({ status: 204 });
   });
+  await page.route('**/api/v1/flows/' + id + '/edit', (r) =>
+    r.fulfill({
+      json: {
+        definition: {
+          formatVersion: 1,
+          id,
+          name: summary.name,
+          mediaType: 'video',
+          version: 1,
+          nodes: [],
+          connections: [],
+        },
+        backupStatus: 'ready',
+        createdAt: summary.updatedAt,
+      },
+    }),
+  );
+  await page.route('**/api/v1/flows/' + id + '/preflight', (r) =>
+    r.fulfill({
+      json: {
+        graph: { valid: true, issues: [] },
+        execution: {
+          workerCompatible: false,
+          compatibleWorkers: [],
+          observedAt: summary.updatedAt,
+        },
+      },
+    }),
+  );
   await page.goto('/flows');
   await expect(
     page.getByRole('button', { name: 'Autres actions pour Encodage cinéma' }),

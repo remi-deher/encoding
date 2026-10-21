@@ -343,3 +343,18 @@ app-flow-canvas {
     display: none;
   }
 }
+
+:host(.read-only) {
+  .insertion,
+  .step-configure,
+  .step-menu,
+  .drag-handle,
+  .fixed-handle,
+  .output-actions,
+  .input-port {
+    display: none;
+  }
+  .step-name {
+    cursor: default;
+  }
+}

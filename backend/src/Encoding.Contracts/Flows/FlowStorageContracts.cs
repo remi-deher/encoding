@@ -8,3 +8,6 @@ public sealed record FlowVersionResponse(FlowDefinition Definition, string Backu
 public sealed record FlowSummary(Guid Id, string Name, string MediaType, int Version, int NodeCount, string BackupStatus, DateTimeOffset UpdatedAt, bool IsDraft = false);
 public sealed record CloneFlowRequest(string? Name = null);
 public sealed record CreateFlowFromTemplateRequest(string? Name = null);
+
+public sealed record FlowDraftBackupSummary(int Revision, string BackupStatus, DateTimeOffset? CheckedAt);
+public sealed record FlowLibraryUsage(Guid LibraryId, string LibraryName, int Version, bool IsActive);

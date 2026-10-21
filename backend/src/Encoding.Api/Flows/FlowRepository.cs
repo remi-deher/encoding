@@ -6,7 +6,7 @@ using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Flows;
 
-public sealed class FlowRepository(DbDataSource dataSource, PeerConsensusService? peerConsensus = null)
+public sealed partial class FlowRepository(DbDataSource dataSource, PeerConsensusService? peerConsensus = null)
 {
     internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 

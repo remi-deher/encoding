@@ -1,3 +1,4 @@
+import { flowDocumentNodes } from '../../shared/models/flow-document-graph';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { MatButtonModule } from '@angular/material/button';
 import { FlowComponentDrop, FlowPaletteDrop } from '../../shared/ui/flow-palette-drag';
@@ -9,7 +10,6 @@ import { FlowValidation } from '../../shared/services/flow-validation';
 import {
   flowDocumentKey,
   flowPublishedVersion,
-  resolveFlowComponent,
   FlowDocument,
   FlowPluginCatalog,
 } from '../../shared/models/flow-validation';
@@ -35,10 +35,7 @@ import {
 } from '../../shared/models/flow-control-components';
 import { canConnectFlowGraph, flowConfigurationFieldError } from '../../shared/models/flow-graph';
 import { NotificationService } from '../../shared/services/notification.service';
-import {
-  FLOW_COMPONENT_CATALOG,
-  LEGACY_FLOW_COMPONENTS,
-} from '../../shared/models/flow-component-catalog';
+import { FLOW_COMPONENT_CATALOG } from '../../shared/models/flow-component-catalog';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import {
@@ -1121,45 +1118,7 @@ export class FlowEditorPageComponent {
     definition: FlowDocument,
     plugins: readonly FlowPluginCatalog[],
   ): FlowGraphNode[] {
-    return definition.nodes.map((node) => {
-      const resolved = resolveFlowComponent(plugins, node.component);
-      const plugin = resolved?.plugin;
-      const descriptor = resolved?.component;
-      const legacyComponent = LEGACY_FLOW_COMPONENTS.find(
-        (candidate) =>
-          candidate.pluginId === node.component.pluginId &&
-          candidate.id === node.component.componentId,
-      );
-      const component: FlowComponentDefinition = descriptor
-        ? { ...descriptor, pluginId: plugin!.id, pluginName: plugin!.name }
-        : legacyComponent
-          ? legacyComponent
-          : {
-              id: node.component.componentId,
-              name: node.name ?? node.component.componentId,
-              description:
-                'Cette version du composant est indisponible. Sa configuration est conservée.',
-              kind: 'action',
-              mediaType: 'general',
-              pluginId: node.component.pluginId,
-              pluginName: node.component.pluginId,
-              outputs: definition.connections
-                .filter((edge) => edge.sourceNodeId === node.id)
-                .map((edge) => ({
-                  id: edge.sourceOutputId,
-                  label: edge.sourceOutputId,
-                  description: '',
-                })),
-            };
-      return {
-        id: node.id,
-        name: node.name ?? undefined,
-        component,
-        reference: node.component,
-        configuration: node.configuration,
-        position: { x: 0, y: 0 },
-      };
-    });
+    return flowDocumentNodes(definition, plugins);
   }
 
   private readonly flowAssistant = inject(FlowEditorAssistant);

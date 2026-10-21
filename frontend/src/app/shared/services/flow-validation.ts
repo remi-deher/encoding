@@ -23,6 +23,44 @@ export class FlowValidation {
     return this.http.get<FlowVersionResponse>('/api/v1/flows/' + id + '/versions/' + version);
   }
 
+  draftBackups(id: string) {
+    return firstValueFrom(
+      this.http.get<
+        readonly { revision: number; backupStatus: string; checkedAt: string | null }[]
+      >('/api/v1/flows/' + id + '/draft-backups'),
+    );
+  }
+  draftBackup(id: string, revision: number) {
+    return firstValueFrom(
+      this.http.get<FlowDocument>('/api/v1/flows/' + id + '/draft-backups/' + revision),
+    );
+  }
+  usage(id: string) {
+    return firstValueFrom(
+      this.http.get<
+        readonly { libraryId: string; libraryName: string; version: number; isActive: boolean }[]
+      >('/api/v1/flows/' + id + '/usage'),
+    );
+  }
+  preflight(id: string) {
+    return firstValueFrom(
+      this.http.get<{
+        draftRevision: number | null;
+        publishedVersion: number;
+        graph: { valid: boolean; issues: readonly { message: string }[] };
+        execution: {
+          workerCompatible: boolean;
+          compatibleWorkers: readonly { id: string; name: string }[];
+          observedAt: string;
+        };
+      }>('/api/v1/flows/' + id + '/preflight'),
+    );
+  }
+  clone(id: string, name: string) {
+    return firstValueFrom(
+      this.http.post<FlowVersionResponse>('/api/v1/flows/' + id + '/clone', { name }),
+    );
+  }
   export(id: string) {
     return firstValueFrom(
       this.http.get('/api/v1/flows/' + id + '/export', { responseType: 'blob' }),
