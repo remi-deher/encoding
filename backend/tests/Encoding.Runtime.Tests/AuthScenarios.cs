@@ -244,6 +244,11 @@ internal static class AuthScenarios
         Check(await viewer.StatusAsync(put, "/api/v1/auth/password", new ChangePasswordRequest("mauvais-actuel", "nouveau-mot-de-passe")) == HttpStatusCode.BadRequest, "Changing a password requires the current one.");
         Check(await viewer.StatusAsync(put, "/api/v1/auth/password", new ChangePasswordRequest("lecteur-mot-de-passe", "nouveau-mot-de-passe")) == HttpStatusCode.NoContent, "A viewer changes their own password.");
         Check(await new Client(factory.CreateClient()).LoginAsync("lecteur", "lecteur-mot-de-passe") == HttpStatusCode.Unauthorized, "The old password stops working.");
+        Check(await new Client(factory.CreateClient()).LoginAsync("lecteur", "nouveau-mot-de-passe") == HttpStatusCode.OK, "The new password logs in.");
+        Check(await admin.StatusAsync(put, "/api/v1/auth/password", new ChangePasswordRequest(AdminPassword, "nouveau-admin-mot-de-passe")) == HttpStatusCode.NoContent, "An administrator changes their own password.");
+        Check(await new Client(factory.CreateClient()).LoginAsync("root", "nouveau-admin-mot-de-passe") == HttpStatusCode.OK, "The administrator's new password logs in.");
+        Check(await admin.StatusAsync(get, "/api/v1/libraries") == HttpStatusCode.OK, "The administrator's current session survives the change.");
+        Check(await admin.StatusAsync(put, "/api/v1/auth/password", new ChangePasswordRequest("nouveau-admin-mot-de-passe", AdminPassword)) == HttpStatusCode.NoContent, "The administrator restores the original password.");
 
         // Verrouillage progressif, sans énumération des comptes.
         Check(await admin.StatusAsync(post, "/api/v1/users", new CreateUserRequest("cible", "cible-mot-de-passe-1", UserRole.Viewer)) == HttpStatusCode.Created, "Create a throttling target.");
