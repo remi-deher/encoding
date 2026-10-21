@@ -57,6 +57,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
       [title]="title()"
       filterLabel="Scripts"
       searchLabel="Rechercher un script"
+      searchLayout="centered"
       [showToolbar]="summaries().length > 0"
       [emptyState]="summaries().length === 0 && !formOpen() ? emptyState : null"
       (emptyStateAction)="newScript()"

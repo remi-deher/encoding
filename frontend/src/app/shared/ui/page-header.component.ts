@@ -1,15 +1,5 @@
-import { Router } from '@angular/router';
-import { PageTitle } from '../services/page-title';
 import { NgTemplateOutlet } from '@angular/common';
-import {
-  ChangeDetectionStrategy,
-  Component,
-  TemplateRef,
-  input,
-  inject,
-  effect,
-  DestroyRef,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
 
 @Component({
   selector: 'app-page-header',
@@ -40,16 +30,5 @@ export class PageHeaderComponent {
   readonly showHeading = input(true);
   readonly layout = input<'default' | 'workspace'>('default');
   readonly description = input('');
-  readonly shellTitle = input<string>();
-  private readonly pageTitle = inject(PageTitle);
-  private readonly router = inject(Router);
-  constructor() {
-    effect(() => {
-      const title = this.shellTitle();
-      if (title) this.pageTitle.set(this, this.router.url, title);
-      else this.pageTitle.clear(this);
-    });
-    inject(DestroyRef).onDestroy(() => this.pageTitle.clear(this));
-  }
   readonly actions = input<TemplateRef<unknown> | undefined>();
 }

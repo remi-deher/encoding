@@ -1,6 +1,11 @@
 <app-management-catalog-template
   [title]="title()"
   [detailOpen]="selectedLibrary() !== null"
+  detailLayout="page"
+  searchLayout="centered"
+  searchLabel="Rechercher une bibliothèque"
+  [searchQuery]="searchQuery()"
+  (searchQueryChange)="searchQuery.set($event)"
   [actionOpen]="actionOpen()"
   [actionTitle]="actionTitle()"
   [actionDescription]="actionDescription()"

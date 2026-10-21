@@ -151,6 +151,17 @@ public sealed class AiSettingsService
         }
     }
 
+    /// <summary>Remplace uniquement la clé OpenAI (réplication entre nœuds) ; les autres réglages restent propres au nœud.</summary>
+    public void SetOpenAiApiKey(string? key)
+    {
+        lock (syncRoot)
+        {
+            var next = cachedSettings with { OpenAiApiKey = string.IsNullOrWhiteSpace(key) ? null : key };
+            SaveSettings(next);
+            cachedSettings = next;
+        }
+    }
+
     private AiSettingsDto LoadSettings(IConfiguration configuration)
     {
         try

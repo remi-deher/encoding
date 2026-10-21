@@ -60,7 +60,6 @@ import {
   FlowComponentPackSummary,
 } from '../../shared/models/flow-component-packs';
 import { FlowComponentPackInstance } from '../../shared/models/flow-validation';
-import { PageTitle } from '../../shared/services/page-title';
 import { FlowCommandBarComponent } from './editor/flow-command-bar.component';
 import { FlowPaletteDockComponent } from './editor/flow-palette-dock.component';
 import {
@@ -175,7 +174,6 @@ export class FlowEditorPageComponent {
   private readonly templates = inject(FlowTemplates);
   private readonly editorRouter = inject(Router);
   private readonly packApi = inject(FlowComponentPacks);
-  private readonly pageTitleService = inject(PageTitle);
 
   // Workbench shell state
   protected readonly graphEditor = viewChild(FlowGraphEditorComponent);
@@ -400,12 +398,6 @@ export class FlowEditorPageComponent {
     });
     this.flowAssistant.register(this, (nodeId) => this.prepareAiSession(nodeId));
     inject(DestroyRef).onDestroy(() => this.flowAssistant.unregister(this));
-    effect(() => {
-      const title = this.flowTitle();
-      this.pageTitleService.set(this, this.editorRouter.url, title);
-    });
-    inject(DestroyRef).onDestroy(() => this.pageTitleService.clear(this));
-
     void this.packApi.list().subscribe({
       next: (packs) => this.packCatalog.set(packs),
       error: () => this.packCatalog.set([]),

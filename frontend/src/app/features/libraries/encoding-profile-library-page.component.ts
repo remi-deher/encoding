@@ -63,6 +63,7 @@ interface EncoderGroup {
       [title]="title()"
       filterLabel="Profils d’encodage"
       searchLabel="Rechercher un profil"
+      searchLayout="centered"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
       [catalogState]="catalogState()"
@@ -321,7 +322,9 @@ export class EncodingProfileLibraryPageComponent {
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Profils d’encodage');
+  protected readonly title = computed(
+    () => (this.routeData()['title'] as string) ?? 'Profils d’encodage',
+  );
   protected readonly librarySections: readonly CategoryTabOption[] = [
     { value: 'media', label: 'Bibliothèques' },
     { value: 'scripts', label: 'Scripts' },

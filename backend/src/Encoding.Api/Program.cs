@@ -112,6 +112,8 @@ builder.Services.AddSingleton<AiClusterService>();
 builder.Services.AddSingleton<AiAssistantService>();
 builder.Services.AddHostedService<AiAssistantRetentionService>();
 builder.Services.AddHostedService<AiCatalogRefreshService>();
+builder.Services.AddSingleton<AiCredentialStore>();
+builder.Services.AddHostedService<AiCredentialSyncService>();
 builder.Services.AddHttpClient("AiCluster", client => client.Timeout = Timeout.InfiniteTimeSpan)
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<DeviceCodeAuthService>();

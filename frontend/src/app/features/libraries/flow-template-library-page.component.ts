@@ -1,8 +1,16 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import {
   DataTableColumn,
@@ -56,7 +64,8 @@ interface FlowTemplateRow extends DataTableRow {
       [detailOpen]="selectedTemplate() !== null"
       [detailTitle]="selectedTemplate()?.name ?? 'Modèle'"
       [detailDescription]="selectedTemplate()?.sourceFlowName ?? ''"
-      (detailClosed)="selectedTemplate.set(null)"
+      detailLayout="page"
+      searchLayout="centered"
       (actionClosed)="closeCreateFlow()"
     >
       <app-category-tabs
@@ -118,7 +127,9 @@ export class FlowTemplateLibraryPageComponent {
   private readonly routeData = toSignal(this.route.data, {
     initialValue: this.route.snapshot.data,
   });
-  protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Modèles de flow');
+  protected readonly title = computed(
+    () => (this.routeData()['title'] as string) ?? 'Modèles de flow',
+  );
   protected readonly librarySections: readonly CategoryTabOption[] = [
     { value: 'media', label: 'Bibliothèques' },
     { value: 'scripts', label: 'Scripts' },
@@ -223,8 +234,28 @@ export class FlowTemplateLibraryPageComponent {
     ];
   });
 
+  private readonly itemParam = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('template'))),
+    { initialValue: this.route.snapshot.queryParamMap.get('template') },
+  );
+
   constructor() {
     void this.loadTemplates();
+    // La fiche est portée par l'URL (?template=<id>) : le menu latéral et le bouton précédent
+    // du navigateur ramènent à la liste.
+    effect(() => {
+      const id = this.itemParam();
+      const items = this.templates();
+      untracked(() => {
+        if (!id) {
+          if (this.selectedTemplate()) this.selectedTemplate.set(null);
+          return;
+        }
+        if (this.selectedTemplate()?.id === id) return;
+        const item = items.find((candidate) => candidate.id === id);
+        if (item) this.selectedTemplate.set(item);
+      });
+    });
   }
 
   protected onSectionChanged(section: string): void {
@@ -235,9 +266,10 @@ export class FlowTemplateLibraryPageComponent {
   }
 
   protected openTemplate(row: DataTableRow): void {
-    this.selectedTemplate.set(
-      this.templates().find((template) => template.id === row['id']) ?? null,
-    );
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { template: String(row['id']) },
+    });
   }
 
   protected onRowAction(event: { readonly actionId: string; readonly row: DataTableRow }): void {
