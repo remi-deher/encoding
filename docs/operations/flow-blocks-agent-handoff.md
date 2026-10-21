@@ -2,7 +2,7 @@
 
 La reprise de l'étape 5 est terminée sur la branche `codex/flow-editor-compact-branches`. Les PR précédentes #189 et #190 ont été intégrées à `dev` avant cette stabilisation.
 
-Les cinq lots sont décrits dans [ADR 0079](../architecture/0079-flow-component-usability.md). La stabilisation corrige la composition audio/normalisation, la conformité de fréquence audio, la conversion ASS sans style, les résumés de règles, l'affichage des ressources et la visibilité inline. L'attribution exige désormais le jeu de polices sur le worker sélectionné.
+Les cinq lots sont décrits dans [ADR 0079](../architecture/domains/ui.md). La stabilisation corrige la composition audio/normalisation, la conformité de fréquence audio, la conversion ASS sans style, les résumés de règles, l'affichage des ressources et la visibilité inline. L'attribution exige désormais le jeu de polices sur le worker sélectionné.
 
 Les scénarios de ressources couvrent extraction réelle, stockage durable, reprise après relais, consommation sur un autre worker, référence absente sur une branche, référence future et empreinte invalide. Aucun média utilisateur n'est utilisé.
 

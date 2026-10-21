@@ -38,4 +38,4 @@ Double-cliquer une étape pour la configurer, ou l’atteindre avec Tab puis Ent
 
 ## Blocs de référence
 
-Le bloc structuré est le gabarit partagé. Déclarer inline: true sur un champ du schéma pour l’afficher dans le bloc ; les champs sont rendus dans leur ordre de déclaration. Les nombres peuvent déclarer suggestions pour l’édition par liste. Le panneau détaillé permet de saisir les autres valeurs valides. Les contrôles directs et le panneau partagent la validation. Voir docs/architecture/0011-flow-block-template.md pour le contrat et la frontière avec le futur backend des plugins.
+Le bloc structuré est le gabarit partagé. Déclarer inline: true sur un champ du schéma pour l’afficher dans le bloc ; les champs sont rendus dans leur ordre de déclaration. Les nombres peuvent déclarer suggestions pour l’édition par liste. Le panneau détaillé permet de saisir les autres valeurs valides. Les contrôles directs et le panneau partagent la validation. Voir docs/architecture/domains/plugins.md et docs/architecture/domains/ui.md pour le contrat et la frontière avec le futur backend des plugins.

@@ -1,0 +1,44 @@
+---
+domain: auth-ops
+updated: 2026-10-21
+legacy_adr: [0002, 0009, 0029, 0031, 0044, 0060-api, 0061-mcp, 0065, 0073]
+code:
+  - backend/src/Encoding.Api/Auth/
+  - backend/src/Encoding.Api/Mcp/
+  - backend/src/Encoding.Api/Logging/
+  - backend/src/Encoding.Api/Infrastructure/Operations/
+  - backend/src/Encoding.Core/Logging/
+  - frontend/src/app/features/auth/ , features/settings/
+tags: [authentification, rôles, session, csrf, jeton, mcp, openapi, santé, métriques, logs, rétention, supervision]
+---
+
+# Authentification, API d'automatisation et exploitation
+
+## Authentification et autorisation
+- Deux rôles : `admin` (tout) et `viewer` (lecture seule). Comptes dans SQLite, réconciliés ([replication-storage.md](replication-storage.md)) ; le dernier admin actif ne peut être ni rétrogradé, ni désactivé, ni supprimé.
+- **L'authentification est optionnelle : `Auth:Enabled` vaut `false` par défaut** et n'est pas positionné dans `backend/docker-compose.yml`. Désactivée, `SessionAuthenticationHandler` donne le rôle `admin` à tout appelant. Elle s'active par `Auth__Enabled=true` (création du premier admin par `POST /api/v1/auth/setup`, possible tant qu'aucun compte n'existe sur ce nœud). ⚠ Cela contredit l'intention « routes fermées par défaut » : voir [open-questions.md](../open-questions.md).
+- Session : cookie opaque `encoding_session` (HttpOnly, SameSite=Strict, Secure selon `Auth__CookieSecure`/HTTPS), SHA-256 stocké dans `user_sessions` (**local**, non réconcilié : on se connecte sur chaque serveur), expiration inactivité 480 min / absolue 168 h, rôle relu à chaque requête. Mots de passe PBKDF2-HMAC-SHA512 210 000 itérations, 12 à 256 caractères, verrouillage 1 min doublant jusqu'à 15 min après 5 échecs, réponses indiscernables.
+- **Politique unique de repli** (toute route, y compris futures) : session ou jeton obligatoire ; GET/HEAD tout rôle ; autres méthodes admin avec en-tête `X-Encoding-Csrf: 1` (exempté pour un jeton Bearer). Exceptions explicites : `.AllowViewer()` (POST sans effet d'état : validation/simulation, import MediaInfo, export, déconnexion, mot de passe propre), `.AllowAnonymous()` (santé, identité du cluster, `auth/status|setup|login`, protocole des nœuds : `enroll`, `enrollment-requests`, heartbeat, `runtime/nodes/{id}/**`, `leave`, fichiers de l'interface, webhooks d'intégration qui s'authentifient eux-mêmes), `.AllowNodeCredentials()` (`GET /executions/{id}` avec `X-Node-Token`). `/api/v1/users/**` : admin même en lecture. **Une nouvelle route est fermée par défaut** ; l'ouvrir exige une décision et la mise à jour du test qui énumère les routes anonymes.
+- Jumelage : approbation = admin ; enrôlement direct = fenêtre ouverte par un admin ; demandes en attente plafonnées (20, puis 429) ; routes anonymes limitées par adresse (20/min) ; derrière un proxy, `Auth__TrustForwardedHeaders`.
+- Limites : pas de SSO/OIDC ni de 2FA ; le rôle lecture est appliqué par le serveur mais l'UI affiche encore des boutons d'écriture.
+
+## Jetons API et MCP
+- Jetons `enc_pat_<64 hex>` (SHA-256 seul stocké, préfixe visible), rôle admin|viewer, expiration optionnelle, révocation ; table `api_tokens` **réconciliée** (n'importe quel serveur authentifie un jeton créé ailleurs). Un jeton cluster admin par défaut est émis à la création du cluster. `Authorization: Bearer` est examiné avant le cookie. `GET/POST /api/v1/tokens`, `DELETE /api/v1/tokens/{id}`. Schéma OpenAPI 3.1 avec `bearerAuth`.
+- Serveur **MCP** embarqué (JSON-RPC 2.0, protocole 2024-11-05) : SSE `GET /api/v1/mcp/sse` + `POST /api/v1/mcp/message`, HTTP direct `POST /api/v1/mcp`, stdio `dotnet Encoding.Api.dll mcp` (`ENCODING_API_URL`, `ENCODING_API_TOKEN`). Outils : flows (schéma, CRUD, clone, delete), bibliothèques, nœuds, exécutions, modèles, packs, config de plugins, logs système, introspection des outils média et validation de manifestes. Le catalogue d'outils fait foi dans `Mcp/McpService.cs` et `BusinessOperationCatalog.cs` (ne pas citer un nombre). Droits = ceux du jeton.
+- Suppression de flow via MCP/IA : sans `detachLibraries` (donc refusée si affecté).
+
+## Santé, métriques, journaux
+- `/health/live` (sans dépendance), `/health/ready` (base locale ; critère de retrait d'un répartiteur), `/health/details` (base, migrations, workers en ligne, baux expirés > 2 min, file de sauvegardes, écriture et espace libre des volumes). `/metrics` Prometheus par serveur (état de cluster lu localement, peut diverger pendant la convergence ; `Operations:Metrics:Token` ou `Enabled=false`). **`/metrics` et `/health/details` sont sans authentification utilisateur par défaut : limiter au réseau d'exploitation.** Métriques de processus et de rétention locales, remises à zéro au redémarrage ; l'agent worker n'expose pas ses propres métriques.
+- Journaux applicatifs : console JSON, `X-Correlation-Id` par requête, jamais la chaîne de requête ni les en-têtes.
+- **Journaux système et nœuds** (distincts des journaux de commandes de pipeline) : tampon circulaire de 2 000 entrées par processus (`SystemLogRingBuffer`), masquage des secrets (`SystemLogSanitizer`), bruit de routine filtré, persistance SQLite **locale non réconciliée** des niveaux ≥ Warning (`system_logs`, 5 000 lignes / 7 jours). `GET /api/v1/system/logs[/stream|/categories]` (admin, SSE avec heartbeat 15 s, relais vers un nœud distant par `nodeId`), outil MCP `get_system_logs`, console dans l'interface.
+- **Rétention des artefacts** : désactivée par défaut (`Operations:ArtifactRetention`), purge des exécutions terminées après `Days`/`FailedDays`, épargne les exécutions actives, les publications non confirmées et les médias réservés ; `DryRun` ; `.encoding-results/` jamais touché.
+- Procédures : `docs/operations/monitoring.md`, `backup-restore.md`, `release.md`.
+
+## Invariants
+1. Une route nouvelle est fermée par défaut.
+2. Aucun secret (jeton, mot de passe, clé de plugin) dans les journaux, erreurs, exports, ni réponses de configuration.
+3. Les sessions ne sont jamais copiées entre serveurs ; les jetons API le sont.
+4. Observabilité sans pollution : ne pas écrire de bruit de routine dans les journaux persistés.
+
+## Non livré / limites
+- SSO/OIDC, 2FA, métriques de l'agent, authentification de `/metrics` et `/health/details`, rotation automatique des jetons.

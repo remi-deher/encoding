@@ -25,11 +25,11 @@ Préserver Angular, Angular Material/CDK, les Signals et OnPush, ASP.NET Core/.N
 
 Références à consulter :
 
-- [0071 — Fournisseurs IA, sessions et reprise](../architecture/0071-ai-cli-tools-and-headless-authentication.md).
-- [0072 — Génération de flows](../architecture/0072-ai-flow-generator-and-copilot.md).
-- [0061 — Serveur MCP](../architecture/0061-model-context-protocol-server.md).
-- [0062 — Descriptions pour les agents](../architecture/0062-plugin-and-component-authoring-for-ai-and-mcp.md).
-- [0023 — Simulation de flows](../architecture/0023-flow-simulation.md).
+- [0071 — Fournisseurs IA, sessions et reprise](../architecture/domains/ai.md).
+- [0072 — Génération de flows](../architecture/domains/ai.md).
+- [0061 — Serveur MCP](../architecture/domains/auth-ops.md).
+- [0062 — Descriptions pour les agents](../architecture/domains/plugins.md).
+- [0023 — Simulation de flows](../architecture/domains/flows.md).
 - [Exploitation des fournisseurs IA](../operations/ai-providers.md).
 - [Présentation des ressources](interface-resource-layout.md).
 
