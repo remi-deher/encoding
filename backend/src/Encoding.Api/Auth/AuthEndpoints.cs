@@ -73,7 +73,10 @@ public static class AuthEndpoints
         {
             var errors = AuthService.ValidatePassword("newPassword", request.NewPassword);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            if (!http.Request.Cookies.TryGetValue(SessionAuthentication.CookieName, out var token)) return Results.Unauthorized();
+            // Un jeton API ou l'accès sans connexion (Auth:Enabled=false) n'a pas de compte ni de mot de passe à changer.
+            if (!http.Request.Cookies.TryGetValue(SessionAuthentication.CookieName, out var token)
+                || http.User.FindFirst("auth_type")?.Value == "api_token")
+                return Results.Json(new { title = "Aucune session de compte : connectez-vous avec votre compte pour changer le mot de passe." }, statusCode: StatusCodes.Status401Unauthorized);
             var changed = await service.ChangePasswordAsync(Current(http.User)!.Id, request.CurrentPassword ?? string.Empty, request.NewPassword, token, ct);
             return changed ? Results.NoContent() : Results.ValidationProblem(new Dictionary<string, string[]> { ["currentPassword"] = ["Le mot de passe actuel est incorrect."] });
         }).AllowViewer().WithName("ChangeOwnPassword");

@@ -1,0 +1,272 @@
+<app-page-header
+  title="Activité"
+  description="Traitements des flows et demandes de l’assistant IA, au même endroit."
+>
+  <span page-metadata class="activity-count-pill">{{ countText() }}</span>
+  <button page-actions matButton="outlined" type="button" (click)="refresh()">Actualiser</button>
+</app-page-header>
+
+<section class="activity-panel" aria-label="Activité">
+  <div class="activity-toolbar">
+    <app-search-field
+      class="activity-search"
+      variant="bar"
+      label="Média, flow, bibliothèque, demande…"
+      [value]="search()"
+      (valueChange)="search.set($event)"
+    />
+    <div class="chip-row" role="group" aria-label="Type d’activité">
+      <button
+        type="button"
+        class="chip"
+        [class.is-on]="kindFilter() === 'all'"
+        [attr.aria-pressed]="kindFilter() === 'all'"
+        (click)="setKind('all')"
+      >
+        Tout <b>{{ kindCounts().all }}</b>
+      </button>
+      <button
+        type="button"
+        class="chip"
+        [class.is-on]="kindFilter() === 'execution'"
+        [attr.aria-pressed]="kindFilter() === 'execution'"
+        (click)="setKind('execution')"
+      >
+        Traitements <b>{{ kindCounts().execution }}</b>
+      </button>
+      <button
+        type="button"
+        class="chip"
+        [class.is-on]="kindFilter() === 'ai'"
+        [attr.aria-pressed]="kindFilter() === 'ai'"
+        (click)="setKind('ai')"
+      >
+        Assistant IA <b>{{ kindCounts().ai }}</b>
+      </button>
+    </div>
+    <div class="chip-row" role="group" aria-label="État">
+      <button
+        type="button"
+        class="chip"
+        [class.is-on]="groupFilter() === 'all'"
+        [attr.aria-pressed]="groupFilter() === 'all'"
+        (click)="setGroup('all')"
+      >
+        Tous les états <b>{{ counts().all }}</b>
+      </button>
+      @for (group of groups; track group.id) {
+        <button
+          type="button"
+          class="chip"
+          [class.is-on]="groupFilter() === group.id"
+          [class.is-error]="group.id === 'errors' && counts().errors > 0"
+          [attr.aria-pressed]="groupFilter() === group.id"
+          (click)="setGroup(group.id)"
+        >
+          {{ group.label }} <b>{{ counts()[group.id] }}</b>
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (feedback()) {
+    <p class="activity-feedback" role="status">{{ feedback() }}</p>
+  }
+
+  @for (section of sections(); track section.id) {
+    <h2 class="section-title">{{ section.section }} · {{ section.total }}</h2>
+    <ul class="item-stack">
+      @for (item of section.items; track item.key) {
+        <li class="item-row" [class.is-selected]="selected()?.key === item.key">
+          <button type="button" class="item-main" (click)="open(item)">
+            <span class="item-icon" [class.is-ai]="item.kind === 'ai'" aria-hidden="true">
+              @if (item.kind === 'ai') {
+                ✦
+              } @else {
+                <app-icon name="play" />
+              }
+            </span>
+            <span class="item-text">
+              <span class="item-title">{{ item.title }}</span>
+              <span class="item-subtitle">{{ item.subtitle || '—' }}</span>
+              @if (item.progress !== null) {
+                <span
+                  class="item-progress"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  [attr.aria-valuenow]="item.progress"
+                >
+                  <i [style.width.%]="item.progress"></i>
+                </span>
+              }
+            </span>
+            <span class="item-meta">
+              <app-status-badge
+                [label]="item.progress !== null ? item.progress + ' %' : item.stateLabel"
+                [tone]="item.tone"
+              />
+              <span class="item-time">{{ item.time }}</span>
+            </span>
+          </button>
+          @if (canRetryItem(item)) {
+            <button
+              matButton="tonal"
+              type="button"
+              class="item-action"
+              [disabled]="busy()"
+              (click)="retry(item.execution!.id, item.execution!.media)"
+            >
+              Relancer
+            </button>
+          }
+        </li>
+      }
+    </ul>
+    @if (section.id === 'done' && section.total > section.items.length) {
+      <button matButton="text" type="button" class="more-button" (click)="showMoreDone()">
+        Afficher plus ({{ section.total - section.items.length }} restants)
+      </button>
+    }
+  } @empty {
+    <div class="empty-state">
+      <h2>Aucune activité</h2>
+      <p>Aucun élément ne correspond à ces filtres.</p>
+    </div>
+  }
+</section>
+
+<app-detail-drawer
+  [opened]="selected() !== null"
+  [modal]="true"
+  [title]="drawerTitle()"
+  [description]="drawerDescription()"
+  [content]="drawerContent()"
+  [footerActions]="drawerFooter()"
+  (closed)="close()"
+/>
+
+<ng-template #detailContent>
+  @if (selectedExecution(); as exec) {
+    <div class="detail-comparison" aria-label="Comparaison média et worker">
+      <div class="comparison-card">
+        <span class="comparison-label">Taille source</span>
+        <strong>{{ beforeSize() }}</strong>
+      </div>
+      <div class="comparison-arrow" aria-hidden="true"><app-icon name="forward" /></div>
+      <div class="comparison-card">
+        <span class="comparison-label">Taille finale</span>
+        <strong>{{ afterSize() }}</strong>
+      </div>
+      <div class="comparison-card">
+        <span class="comparison-label">Worker et progression</span>
+        <strong
+          >{{ exec.node ?? '—' }} ·
+          {{ exec.progress === null ? '—' : exec.progress + ' %' }}</strong
+        >
+      </div>
+    </div>
+    <mat-tab-group
+      class="detail-tabs"
+      aria-label="Informations de l’exécution"
+      [selectedIndex]="selectedDetailTab()"
+      (selectedIndexChange)="selectedDetailTab.set($event)"
+    >
+      <mat-tab label="Synthèse">
+        <div class="detail-tab"><app-detail-field-list [fields]="executionFields()" /></div>
+      </mat-tab>
+      <mat-tab label="Pipeline">
+        <div class="detail-tab">
+          <app-execution-pipeline-logs
+            [executionId]="exec.id"
+            [steps]="pipelineState().steps"
+            [feedback]="pipelineState().message"
+          />
+        </div>
+      </mat-tab>
+      <mat-tab label="Événements">
+        <div class="detail-tab">
+          <h3>Historique de l’exécution</h3>
+          @if (eventState().message) {
+            <p role="status">{{ eventState().message }}</p>
+          }
+          <app-data-table
+            [columns]="eventColumns"
+            [rows]="eventState().rows"
+            emptyMessage="Aucun événement enregistré."
+          />
+        </div>
+      </mat-tab>
+      <mat-tab label="Résultats">
+        <div class="detail-tab">
+          @if (artifactsState().message) {
+            <p role="status">{{ artifactsState().message }}</p>
+          }
+          @if (artifactsState().rows.length) {
+            <h3>Fichiers produits</h3>
+            <app-data-table
+              [columns]="artifactColumns"
+              [rows]="artifactsState().rows"
+              [rowActions]="artifactActions"
+              (rowAction)="downloadArtifact($event.row)"
+              emptyMessage="Aucun fichier produit."
+            />
+          }
+          @if (videoEncodingRows().length) {
+            <h3>Configuration vidéo retenue</h3>
+            <app-data-table
+              [columns]="videoEncodingColumns"
+              [rows]="videoEncodingRows()"
+              emptyMessage="Aucun encodeur vidéo résolu pour cette exécution."
+            />
+          }
+          @if (
+            !artifactsState().rows.length &&
+            !artifactsState().message &&
+            !videoEncodingRows().length
+          ) {
+            <p class="detail-empty">Aucun fichier ou réglage vidéo enregistré.</p>
+          }
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  } @else if (selectedAi(); as ai) {
+    <div class="detail-tab">
+      <app-detail-field-list [fields]="aiFields()" />
+      @if (ai.progress) {
+        <p class="detail-empty">
+          {{ ai.progress }}{{ ai.progressDetail ? ' · ' + ai.progressDetail : '' }}
+        </p>
+      }
+    </div>
+  }
+</ng-template>
+
+<ng-template #detailFooter>
+  @if (selectedAi(); as ai) {
+    @if (ai.conversationId) {
+      <a
+        matButton="tonal"
+        routerLink="/ai/assistant"
+        [queryParams]="{ conversation: ai.conversationId }"
+      >
+        Ouvrir la conversation
+      </a>
+    }
+  }
+  @if (canRetry()) {
+    <button
+      matButton="filled"
+      type="button"
+      [disabled]="busy()"
+      (click)="retry(selectedExecution()!.id, selectedExecution()!.media)"
+    >
+      Relancer
+    </button>
+  }
+  @if (canCancel()) {
+    <button matButton="outlined" type="button" [disabled]="busy()" (click)="cancelSelected()">
+      Annuler l’exécution
+    </button>
+  }
+</ng-template>

@@ -28,9 +28,9 @@ test('the overview loads on desktop and mobile without console errors', async ({
   expect(errors).toEqual([]);
 });
 
-test('the primary navigation reaches the tasks page', async ({ page }) => {
-  await page.goto('/tasks');
-  await expect(page.getByRole('heading', { name: /Tâches/ }).first()).toBeVisible();
+test('the primary navigation reaches the activity page', async ({ page }) => {
+  await page.goto('/activity');
+  await expect(page.getByRole('heading', { name: /Activité/ }).first()).toBeVisible();
 });
 
 test('the search command palette opens from the topbar and navigates to encoding profiles', async ({
