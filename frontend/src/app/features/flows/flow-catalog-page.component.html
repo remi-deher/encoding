@@ -51,23 +51,17 @@
   />
 
   <ng-template #detailContent catalogue-detail>
-    @if (flowSheet(); as sheet) {
-      <app-resource-sheet
-        ariaLabel="Fiche du flow"
-        [title]="sheet.title"
-        [subtitle]="sheet.subtitle"
-        [sections]="sheet.sections"
+    @if (selectedFlow(); as flow) {
+      <app-flow-details
+        [flowId]="flow.id"
+        [initialTab]="detailTab()"
+        (refreshed)="refreshDetails()"
       />
     }
   </ng-template>
 
   <ng-template #detailHeaderActions>
     @if (selectedFlow(); as flow) {
-      <app-drawer-action-button
-        label="Ouvrir l’éditeur"
-        [routerLink]="['/flows', flow.id, 'edit']"
-        [navigationInfo]="{ flowEditorDirection: 'forward' }"
-      />
       @if (auth.isAdmin()) {
         <button
           mat-icon-button
@@ -88,6 +82,16 @@
           </button>
         </mat-menu>
       }
+    }
+  </ng-template>
+
+  <ng-template #detailFooterActions>
+    @if (selectedFlow(); as flow) {
+      <app-drawer-action-button
+        label="Ouvrir l’éditeur"
+        [routerLink]="['/flows', flow.id, 'edit']"
+        [navigationInfo]="{ flowEditorDirection: 'forward' }"
+      />
     }
   </ng-template>
 

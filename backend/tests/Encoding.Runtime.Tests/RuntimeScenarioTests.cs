@@ -8,6 +8,9 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     private Harness.Fixture Scenarios => database.Scenarios ?? throw new InvalidOperationException("The SQLite fixture is not initialized.");
 
     [DatabaseFact]
+    public Task FlowDetailsPreviewAndRestoreKeepImmutableHistoryAndLibraryAssignments() => Scenarios.FlowDetailsHistoryAsync();
+
+    [DatabaseFact]
     public Task FlowSavingIsIdempotentAndConcurrencySafe() => Scenarios.FlowSavingAsync();
 
     [DatabaseFact]

@@ -162,3 +162,5 @@ La section **Modèles** contient des copies immuables de versions publiées de f
 Les groupes de nœuds sont manuels ou automatiques selon les caractéristiques déclarées du worker. Les étiquettes de groupe sont héritées par leurs membres ; les étiquettes propres au nœud prévalent. Les blocs de sélection appliquent ensemble le filtre de groupe et les étiquettes au moment de l’attribution ; voir [0034](docs/architecture/0034-node-groups-and-labels.md).
 
 La configuration des composants distingue les paramètres essentiels, avancés et inline ; sections et sélecteurs sont déclaratifs et partagés. Voir [0079](docs/architecture/0079-flow-component-usability.md).
+
+La fiche du catalogue de flows propose un aperçu en lecture seule, les versions et leur restauration en brouillon avec contrôle de concurrence, les affectations précises aux bibliothèques, le preflight et les sauvegardes immuables de brouillons. Voir [0080](docs/architecture/0080-flow-details-preview-and-history.md). La prévisualisation partage les blocs de l’éditeur et conserve une disposition locale distincte.

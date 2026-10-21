@@ -61,7 +61,7 @@ import {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-graph-editor',
-  host: { '[class.canvas-view]': "viewMode() === 'canvas'" },
+  host: { '[class.canvas-view]': "viewMode() === 'canvas'", '[class.read-only]': 'readOnly()' },
   imports: [
     NgTemplateOutlet,
     IconComponent,
@@ -99,7 +99,7 @@ export class FlowGraphEditorComponent {
       node.component.kind === 'pack'
     )
       return;
-    this.configurationRequested.emit(node.id);
+    if (!this.readOnly()) this.configurationRequested.emit(node.id);
   }
   protected branchColumns(count: number): string {
     return `repeat(${count}, max-content)`;
@@ -124,6 +124,7 @@ export class FlowGraphEditorComponent {
         : new Set(),
     );
   }
+  readonly readOnly = input(false);
   readonly layoutKey = input('flow');
   readonly duplicateRequested = output<string>();
   readonly aiRequested = output<string>();
@@ -149,6 +150,7 @@ export class FlowGraphEditorComponent {
   private contextEdgeId?: string;
   readonly paletteRequested = output<void>();
   protected backgroundMenu(position: ContextActionPosition): void {
+    if (this.readOnly()) return;
     this.contextNode = undefined;
     this.contextEdgeId = undefined;
     this.contextMenu.set({
@@ -157,6 +159,7 @@ export class FlowGraphEditorComponent {
     });
   }
   protected edgeMenu(event: { id: string; position: ContextActionPosition }): void {
+    if (this.readOnly()) return;
     this.contextNode = undefined;
     this.contextEdgeId = event.id;
     this.contextMenu.set({
@@ -210,10 +213,12 @@ export class FlowGraphEditorComponent {
     }
   }
   protected requestConfiguration(nodeId: string): void {
+    if (this.readOnly()) return;
     this.selectedNodeId.set(nodeId);
     this.configurationRequested.emit(nodeId);
   }
   protected openNodeMenu(position: ContextActionPosition, node: FlowGraphNode): void {
+    if (this.readOnly()) return;
     this.contextEdgeId = undefined;
     this.contextNode = node;
     this.selectedNodeId.set(node.id);
@@ -626,6 +631,7 @@ export class FlowGraphEditorComponent {
     );
   }
   protected drop(sequence: FlowSequence, event: CdkDragDrop<unknown>): void {
+    if (this.readOnly()) return;
     this.move(sequence, event.previousIndex, event.currentIndex);
   }
   protected focusNode(id: string): void {
