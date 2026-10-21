@@ -18,6 +18,7 @@ internal static class PluginTests
         InvalidManifestsAreRejected();
         WebhookThrottleBlocksRepeatedFailures();
         ServerOnlySettingsStayOffWorkers();
+        SandboxedProcessesGetAMinimalEnvironment();
     }
 
     private static void PathMappings()
@@ -176,5 +177,20 @@ internal static class PluginTests
         Check(filtered["sonarr"].ContainsKey("baseUrl") && !filtered["sonarr"].ContainsKey("webhookSecret"), "The worker receives the connection but not the webhook secret.");
         Check(filtered["unknown"].ContainsKey("webhookSecret"), "A plugin without a declared scope is passed through unchanged.");
         Console.WriteLine("PASS: server-only plugin settings are removed before reaching a worker.");
+    }
+
+    private static void SandboxedProcessesGetAMinimalEnvironment()
+    {
+        var current = new Dictionary<string, string?>
+        {
+            ["PATH"] = "/usr/bin", ["LANG"] = "fr_FR.UTF-8",
+            ["ConnectionStrings__Cluster"] = "Host=db;Password=hunter2", ["Node__Token"] = "t0ken", ["ANTHROPIC_API_KEY"] = "sk-x", ["HOME"] = "/root"
+        };
+        var minimal = Encoding.Core.Runtime.ProcessSandbox.MinimalEnvironment(current, "/work");
+        Check(minimal["PATH"] == "/usr/bin" && minimal["LANG"] == "fr_FR.UTF-8", "Locale and PATH are kept.");
+        Check(minimal["HOME"] == "/work" && minimal["TMPDIR"] == "/work", "HOME and TMPDIR point to the workspace.");
+        Check(!minimal.Keys.Any(name => name.Contains("Connection") || name.Contains("Token") || name.Contains("KEY")), "No secret or node setting reaches the sandboxed process.");
+        Check(Encoding.Core.Runtime.ProcessSandbox.MinimalEnvironment(new Dictionary<string, string?>(), "/work")["PATH"].Contains("/usr/bin"), "A default PATH is supplied.");
+        Console.WriteLine("PASS: sandboxed plugins and scripts receive an allow-listed environment.");
     }
 }
