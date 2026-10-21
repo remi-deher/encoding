@@ -71,22 +71,24 @@
   @if (mode() === 'manual') {
     <section class="editor-section">
       <div class="section-header">
-        <h3>Nœuds membres ({{ selectedNodeIds().size }} sélectionné{{ selectedNodeIds().size > 1 ? 's' : '' }})</h3>
+        <h3>
+          Nœuds membres ({{ selectedNodeIds().size }} sélectionné{{
+            selectedNodeIds().size > 1 ? 's' : ''
+          }})
+        </h3>
         <p>Cochez les nœuds faisant partie de ce groupe manuel.</p>
       </div>
 
       <div class="nodes-selection-toolbar">
-        <mat-form-field appearance="outline" class="search-field" subscriptSizing="dynamic">
-          <mat-label>Filtrer les nœuds</mat-label>
-          <input
-            matInput
-            type="search"
-            [value]="nodeSearchQuery()"
-            (input)="onSearchInput($event)"
-            name="nodeSearch"
-            placeholder="Rechercher par nom, système ou architecture..."
-          />
-        </mat-form-field>
+        <app-search-field
+          class="search-field"
+          variant="filled"
+          name="nodeSearch"
+          label="Filtrer les nœuds"
+          placeholder="Rechercher par nom, système ou architecture..."
+          [value]="nodeSearchQuery()"
+          (valueChange)="nodeSearchQuery.set($event)"
+        />
 
         <div class="selection-actions">
           <button matButton="outlined" type="button" (click)="selectAllVisibleNodes()">
@@ -109,10 +111,7 @@
           </div>
         } @else {
           @for (node of filteredNodes(); track node.id) {
-            <label
-              class="node-selection-item"
-              [class.is-checked]="selectedNodeIds().has(node.id)"
-            >
+            <label class="node-selection-item" [class.is-checked]="selectedNodeIds().has(node.id)">
               <mat-checkbox
                 [checked]="selectedNodeIds().has(node.id)"
                 (change)="toggleNode(node.id)"
@@ -126,12 +125,18 @@
                     [tone]="node.status === 'online' ? 'success' : 'neutral'"
                   />
                   @for (role of node.roles; track role) {
-                    <span class="node-role-badge">{{ role === 'worker' ? 'Worker' : 'Serveur' }}</span>
+                    <span class="node-role-badge">{{
+                      role === 'worker' ? 'Worker' : 'Serveur'
+                    }}</span>
                   }
                 </div>
                 <div class="node-item-details">
                   @if (node.inventory?.operatingSystem) {
-                    <span>{{ node.inventory?.operatingSystem }} ({{ node.inventory?.architecture }})</span>
+                    <span
+                      >{{ node.inventory?.operatingSystem }} ({{
+                        node.inventory?.architecture
+                      }})</span
+                    >
                   }
                   @if (node.inventory?.processorCount) {
                     <span>· {{ node.inventory?.processorCount }} CPU</span>
@@ -156,17 +161,17 @@
     <section class="editor-section">
       <div class="section-header">
         <h3>Critères d’attribution automatique</h3>
-        <p>Les nœuds du cluster qui valident tous ces critères feront automatiquement partie du groupe.</p>
+        <p>
+          Les nœuds du cluster qui valident tous ces critères feront automatiquement partie du
+          groupe.
+        </p>
       </div>
 
       <div class="fields-grid">
         <!-- Rôle requis -->
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Rôle requis</mat-label>
-          <mat-select
-            [value]="selectedRole()"
-            (valueChange)="selectedRole.set($event)"
-          >
+          <mat-select [value]="selectedRole()" (valueChange)="selectedRole.set($event)">
             <mat-option value="all">Tous les rôles</mat-option>
             <mat-option value="worker">Workers uniquement</mat-option>
             <mat-option value="server">Serveurs uniquement</mat-option>
@@ -176,10 +181,7 @@
         <!-- Système d'exploitation -->
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Système d’exploitation</mat-label>
-          <mat-select
-            [value]="selectedOs()"
-            (valueChange)="selectedOs.set($event)"
-          >
+          <mat-select [value]="selectedOs()" (valueChange)="selectedOs.set($event)">
             <mat-option value="">Indifférent</mat-option>
             @for (os of availableOs(); track os) {
               <mat-option [value]="os">{{ os }}</mat-option>
@@ -204,10 +206,7 @@
         <!-- Mémoire minimale en Go -->
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Mémoire minimale (Go)</mat-label>
-          <mat-select
-            [value]="minMemoryGb()"
-            (valueChange)="minMemoryGb.set($event)"
-          >
+          <mat-select [value]="minMemoryGb()" (valueChange)="minMemoryGb.set($event)">
             <mat-option [value]="null">Aucune restriction</mat-option>
             <mat-option [value]="4">≥ 4 Go</mat-option>
             <mat-option [value]="8">≥ 8 Go</mat-option>
@@ -292,7 +291,9 @@
         <div class="preview-header">
           <span>Aperçu des nœuds correspondants</span>
           <span class="preview-count">
-            {{ matchedNodes().length }} nœud{{ matchedNodes().length > 1 ? 's' : '' }} éligible{{ matchedNodes().length > 1 ? 's' : '' }}
+            {{ matchedNodes().length }} nœud{{ matchedNodes().length > 1 ? 's' : '' }} éligible{{
+              matchedNodes().length > 1 ? 's' : ''
+            }}
           </span>
         </div>
 
@@ -311,7 +312,8 @@
           </div>
         } @else {
           <p class="preview-empty-note">
-            ⚠️ Aucun nœud du cluster ne remplit actuellement ces critères. Le groupe sera vide jusqu'à ce qu'un nœud compatible soit détecté ou enrôlé.
+            ⚠️ Aucun nœud du cluster ne remplit actuellement ces critères. Le groupe sera vide
+            jusqu'à ce qu'un nœud compatible soit détecté ou enrôlé.
           </p>
         }
       </div>
@@ -323,7 +325,8 @@
     <div class="section-header">
       <h3>Étiquettes partagées (Labels)</h3>
       <p>
-        Ces étiquettes seront héritées par tous les membres du groupe. Les étiquettes locales d'un nœud remplacent celles du groupe pour une même clé.
+        Ces étiquettes seront héritées par tous les membres du groupe. Les étiquettes locales d'un
+        nœud remplacent celles du groupe pour une même clé.
       </p>
     </div>
 
@@ -355,12 +358,7 @@
           />
         </mat-form-field>
 
-        <button
-          matButton="tonal"
-          type="button"
-          class="add-label-btn"
-          (click)="addLabel()"
-        >
+        <button matButton="tonal" type="button" class="add-label-btn" (click)="addLabel()">
           Ajouter
         </button>
       </div>
@@ -400,11 +398,7 @@
     <button matButton="outlined" type="button" [disabled]="busy()" (click)="cancelled.emit()">
       Annuler
     </button>
-    <button
-      matButton="filled"
-      type="submit"
-      [disabled]="!canSave() || busy()"
-    >
+    <button matButton="filled" type="submit" [disabled]="!canSave() || busy()">
       {{ busy() ? 'Enregistrement…' : group() ? 'Mettre à jour le groupe' : 'Créer le groupe' }}
     </button>
   </div>

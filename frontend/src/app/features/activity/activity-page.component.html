@@ -8,10 +8,13 @@
 
 <section class="activity-panel" aria-label="Activité">
   <div class="activity-toolbar">
-    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="activity-search">
-      <mat-label>Média, flow, bibliothèque, demande…</mat-label>
-      <input matInput type="search" [value]="search()" (input)="onSearch($event)" />
-    </mat-form-field>
+    <app-search-field
+      class="activity-search"
+      variant="bar"
+      label="Média, flow, bibliothèque, demande…"
+      [value]="search()"
+      (valueChange)="search.set($event)"
+    />
     <div class="chip-row" role="group" aria-label="Type d’activité">
       <button
         type="button"

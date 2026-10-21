@@ -28,6 +28,7 @@ import {
   filterNodesByCriteria,
   validateLabelKey,
 } from '../../../shared/models/node-group-rules';
+import { SearchFieldComponent } from '../../../shared/ui/search-field.component';
 
 export interface SaveNodeGroupPayload {
   readonly name: string;
@@ -48,6 +49,7 @@ export interface SaveNodeGroupPayload {
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    SearchFieldComponent,
     StatusBadgeComponent,
   ],
   templateUrl: './node-group-editor.component.html',
@@ -258,7 +260,9 @@ export class NodeGroupEditorComponent {
       return;
     }
     if (!validateLabelKey(rawKey)) {
-      this.labelError.set('Format de clé invalide (lettres, chiffres, tirets et points autorisés).');
+      this.labelError.set(
+        'Format de clé invalide (lettres, chiffres, tirets et points autorisés).',
+      );
       return;
     }
     const val = this.newLabelValue().trim();
@@ -304,10 +308,6 @@ export class NodeGroupEditorComponent {
 
   protected onDescriptionInput(event: Event): void {
     this.description.set((event.target as HTMLTextAreaElement).value);
-  }
-
-  protected onSearchInput(event: Event): void {
-    this.nodeSearchQuery.set((event.target as HTMLInputElement).value);
   }
 
   protected onCpuInput(event: Event): void {

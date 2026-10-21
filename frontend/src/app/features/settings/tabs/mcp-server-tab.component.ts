@@ -19,6 +19,7 @@ import { McpToolDefinition } from '../../../shared/models/mcp';
 import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { McpService } from '../../../shared/services/mcp.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { SearchFieldComponent } from '../../../shared/ui/search-field.component';
 
 type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 
@@ -31,6 +32,7 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
     MatInputModule,
     MatSelectModule,
     MatExpansionModule,
+    SearchFieldComponent,
     ConfigurationSectionComponent,
   ],
   template: `
@@ -48,20 +50,19 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
         <button matButton="text" (click)="copyAddress()">Copier l’adresse</button>
       </div>
       <p class="note">
-        Authentification par jeton d’API. Le MCP est en lecture seule : un jeton administrateur n’écrit que s’il a reçu l’écriture MCP à sa création.
+        Authentification par jeton d’API. Le MCP est en lecture seule : un jeton administrateur
+        n’écrit que s’il a reçu l’écriture MCP à sa création.
       </p>
       <mat-expansion-panel class="catalog"
         ><mat-expansion-panel-header
           ><mat-panel-title>Catalogue des outils</mat-panel-title></mat-expansion-panel-header
         >
-        <mat-form-field appearance="outline" subscriptSizing="dynamic"
-          ><mat-label>Filtrer les outils</mat-label
-          ><input
-            matInput
-            type="search"
-            [value]="searchQuery()"
-            (input)="searchQuery.set($any($event.target).value)"
-        /></mat-form-field>
+        <app-search-field
+          variant="filled"
+          label="Filtrer les outils"
+          [value]="searchQuery()"
+          (valueChange)="searchQuery.set($event)"
+        />
         @for (tool of filteredTools(); track tool.name) {
           <article class="tool">
             <h3>
