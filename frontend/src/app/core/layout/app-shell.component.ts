@@ -1,11 +1,9 @@
-import { IconComponent } from '../../shared/ui/icon.component';
 import { FlowEditorAssistant } from '../../shared/services/flow-editor-assistant.service';
 import { FlowAiAssistantPanelComponent } from '../../features/flows/editor/flow-ai-assistant-panel.component';
 import {
   ExecutionTracking,
   INITIAL_EXECUTION_TRACKING,
 } from '../../shared/services/execution-tracking';
-import { PageTitle } from '../../shared/services/page-title';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
 import {
   ChangeDetectionStrategy,
@@ -37,7 +35,6 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    IconComponent,
     MatButtonModule,
     MatDialogModule,
     MatSidenavModule,
@@ -134,14 +131,6 @@ export class AppShellComponent {
     });
   }
 
-  private readonly dynamicTitle = inject(PageTitle);
-  protected readonly pageTitle = computed(() => {
-    const context = this.navigationEnd();
-    const override = this.dynamicTitle.current();
-    return override?.url === context.url ? override.title : context.title;
-  });
-  protected readonly sectionGroup = computed(() => this.navigationEnd().group);
-  protected readonly subSectionLabel = computed(() => this.navigationEnd().subLabel);
   protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
   protected readonly authMode = computed(() => this.navigationEnd().authMode);
   protected readonly assistantRouteActive = computed(() =>
@@ -469,9 +458,6 @@ export class AppShellComponent {
   }
 
   private getCurrentPageContext(): {
-    title: string;
-    group: string;
-    subLabel: string;
     url: string;
     workspaceMode: boolean;
     authMode: boolean;
@@ -482,17 +468,8 @@ export class AppShellComponent {
       route = route.firstChild;
     }
 
-    const nav = route.data['navigation'] as
-      { group?: string; label?: string; visible?: boolean } | undefined;
-    const title = (route.data['title'] as string | undefined) ?? 'Vue d’ensemble';
-    const subLabel =
-      nav && nav.visible === false && nav.label && nav.label !== title ? nav.label : '';
-
     return {
       url: this.router.url,
-      title,
-      group: nav?.group ?? '',
-      subLabel,
       workspaceMode: route.data['layout'] === 'workspace',
       authMode: route.data['authPage'] !== undefined,
     };
