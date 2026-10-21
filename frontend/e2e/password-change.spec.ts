@@ -106,3 +106,69 @@ test('toggles password visibility per field', async ({ page }) => {
     'password',
   );
 });
+
+test('shows the server explanation when there is no account session', async ({ page }) => {
+  await page.route('**/api/v1/auth/password', (route) =>
+    route.fulfill({
+      status: 401,
+      json: { title: 'Aucune session de compte : connectez-vous avec votre compte.' },
+    }),
+  );
+  const dialog = await openDialog(page);
+  await dialog.getByLabel('Mot de passe actuel', { exact: true }).fill(current);
+  await dialog.getByLabel('Nouveau mot de passe', { exact: true }).fill(next);
+  await dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true }).fill(next);
+  await dialog.getByRole('button', { name: 'Changer le mot de passe' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Aucune session de compte');
+});
+
+test('an administrator resets another account with the same dialog', async ({ page }) => {
+  const users = [
+    {
+      id: 'admin-id',
+      username: 'admin',
+      role: 'admin',
+      isActive: true,
+      createdAt: '2026-10-18T08:00:00Z',
+    },
+    {
+      id: 'viewer-id',
+      username: 'lecteur',
+      role: 'viewer',
+      isActive: true,
+      createdAt: '2026-10-18T08:00:00Z',
+    },
+  ];
+  await page.route('**/api/v1/users', (route) => route.fulfill({ json: users }));
+  let reset: { url: string; body: unknown } | undefined;
+  await page.route('**/api/v1/users/viewer-id/password', async (route) => {
+    reset = { url: route.request().url(), body: route.request().postDataJSON() };
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto('/settings?tab=access');
+  await page.getByRole('button', { name: 'Autres actions pour lecteur' }).click();
+  await page.getByRole('menuitem', { name: 'Réinitialiser le mot de passe' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Réinitialiser le mot de passe' });
+  await expect(dialog.getByLabel('Mot de passe actuel', { exact: true })).toHaveCount(0);
+  await dialog.getByLabel('Nouveau mot de passe', { exact: true }).fill('court');
+  await dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true }).fill('court');
+  await dialog.getByRole('button', { name: 'Réinitialiser' }).click();
+  await expect(dialog.getByText('au moins 12 caractères.', { exact: false }).first()).toBeVisible();
+  await dialog.getByLabel('Nouveau mot de passe', { exact: true }).fill(next);
+  await dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true }).fill(next);
+  await dialog.getByRole('button', { name: 'Réinitialiser' }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(reset?.body).toEqual({ newPassword: next });
+
+  // Sur son propre compte, l'action ouvre le changement avec le mot de passe actuel.
+  await page.getByRole('button', { name: 'Autres actions pour admin' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Réinitialiser le mot de passe' })).toHaveCount(
+    0,
+  );
+  await page.getByRole('menuitem', { name: 'Changer mon mot de passe' }).click();
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Changer le mot de passe' })
+      .getByLabel('Mot de passe actuel', { exact: true }),
+  ).toBeVisible();
+});

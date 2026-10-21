@@ -1,5 +1,12 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  inject,
+  signal,
+} from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import {
   AbstractControl,
   FormControl,
@@ -9,16 +16,22 @@ import {
   Validators,
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MINIMUM_PASSWORD_LENGTH } from '../../shared/models/auth';
 import { NotificationService } from '../../shared/services/notification.service';
+import { UserAccounts } from '../../shared/services/user-accounts';
 import { DialogFrameComponent } from '../../shared/ui/dialog-frame.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { AuthService } from './auth.service';
 
 const MAXIMUM_PASSWORD_LENGTH = 256;
+
+/** Sans cible, l’utilisateur change son propre mot de passe ; avec une cible, un administrateur le réinitialise. */
+export interface PasswordDialogData {
+  readonly target?: { readonly id: string; readonly username: string };
+}
 
 type PasswordField = 'currentPassword' | 'newPassword' | 'confirmation';
 
@@ -34,35 +47,39 @@ type PasswordField = 'currentPassword' | 'newPassword' | 'confirmation';
     ReactiveFormsModule,
   ],
   template: `
-    <app-dialog-frame eyebrow="Sécurité du compte" heading="Changer le mot de passe">
+    <app-dialog-frame eyebrow="Sécurité du compte" [heading]="title">
       <form class="password-form" [formGroup]="form" novalidate (ngSubmit)="save()">
         <div class="app-dialog-body">
           @if (formError(); as message) {
             <p class="form-error" role="alert">{{ message }}</p>
           }
-          <mat-form-field appearance="outline" subscriptSizing="dynamic">
-            <mat-label>Mot de passe actuel</mat-label>
-            <input
-              matInput
-              formControlName="currentPassword"
-              [type]="visible().currentPassword ? 'text' : 'password'"
-              autocomplete="current-password"
-              required
-            />
-            <button
-              matSuffix
-              type="button"
-              class="reveal"
-              [attr.aria-label]="revealLabel('currentPassword', 'le mot de passe actuel')"
-              [attr.aria-pressed]="visible().currentPassword"
-              (click)="toggle('currentPassword')"
-            >
-              <app-icon [name]="visible().currentPassword ? 'eye-off' : 'eye'" />
-            </button>
-            @if (error('currentPassword'); as message) {
-              <mat-error>{{ message }}</mat-error>
-            }
-          </mat-form-field>
+          @if (!target) {
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Mot de passe actuel</mat-label>
+              <input
+                matInput
+                formControlName="currentPassword"
+                [type]="visible().currentPassword ? 'text' : 'password'"
+                autocomplete="current-password"
+                required
+              />
+              <button
+                matSuffix
+                type="button"
+                class="reveal"
+                [attr.aria-label]="revealLabel('currentPassword', 'le mot de passe actuel')"
+                [attr.aria-pressed]="visible().currentPassword"
+                (click)="toggle('currentPassword')"
+              >
+                <app-icon [name]="visible().currentPassword ? 'eye-off' : 'eye'" />
+              </button>
+              @if (error('currentPassword'); as message) {
+                <mat-error>{{ message }}</mat-error>
+              }
+            </mat-form-field>
+          } @else {
+            <p class="session-note">Nouveau mot de passe de « {{ target.username }} ».</p>
+          }
 
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Nouveau mot de passe</mat-label>
@@ -113,14 +130,14 @@ type PasswordField = 'currentPassword' | 'newPassword' | 'confirmation';
             }
           </mat-form-field>
 
-          <p class="session-note">Vos autres sessions seront fermées. Celle-ci reste ouverte.</p>
+          <p class="session-note">{{ sessionNote }}</p>
         </div>
         <footer class="app-dialog-footer">
           <button matButton="text" type="button" [disabled]="busy()" (click)="dialogRef.close()">
             Annuler
           </button>
           <button matButton="filled" type="submit" [disabled]="busy()">
-            {{ busy() ? 'Modification…' : 'Changer le mot de passe' }}
+            {{ busy() ? 'Modification…' : target ? 'Réinitialiser' : 'Changer le mot de passe' }}
           </button>
         </footer>
       </form>
@@ -179,6 +196,16 @@ export class PasswordChangeDialogComponent {
   protected readonly dialogRef = inject(MatDialogRef<PasswordChangeDialogComponent>);
   private readonly notifications = inject(NotificationService);
   private readonly auth = inject(AuthService);
+  private readonly changeDetector = inject(ChangeDetectorRef);
+  private readonly accounts = inject(UserAccounts);
+  protected readonly target = inject<PasswordDialogData | null>(MAT_DIALOG_DATA, { optional: true })
+    ?.target;
+  protected readonly title = this.target
+    ? 'Réinitialiser le mot de passe'
+    : 'Changer le mot de passe';
+  protected readonly sessionNote = this.target
+    ? `Les sessions de « ${this.target.username} » seront fermées.`
+    : 'Vos autres sessions seront fermées. Celle-ci reste ouverte.';
   protected readonly minimumLength = MINIMUM_PASSWORD_LENGTH;
   protected readonly busy = signal(false);
   protected readonly formError = signal('');
@@ -216,6 +243,7 @@ export class PasswordChangeDialogComponent {
 
   constructor() {
     this.dialogRef.addPanelClass('app-dialog-panel');
+    if (this.target) this.form.controls.currentPassword.disable({ emitEvent: false });
     this.form.controls.currentPassword.valueChanges.subscribe(() =>
       this.form.controls.newPassword.updateValueAndValidity({ emitEvent: false }),
     );
@@ -255,11 +283,19 @@ export class PasswordChangeDialogComponent {
     this.busy.set(true);
     this.form.disable({ emitEvent: false });
     try {
-      await this.auth.changePassword(currentPassword, newPassword);
-      this.notifications.show('Votre mot de passe a été modifié.');
+      if (this.target) {
+        await firstValueFrom(this.accounts.resetPassword(this.target.id, newPassword));
+        this.notifications.show(
+          `Le mot de passe de « ${this.target.username} » a été réinitialisé.`,
+        );
+      } else {
+        await this.auth.changePassword(currentPassword, newPassword);
+        this.notifications.show('Votre mot de passe a été modifié.');
+      }
       this.dialogRef.close(true);
     } catch (error) {
       this.form.enable({ emitEvent: false });
+      if (this.target) this.form.controls.currentPassword.disable({ emitEvent: false });
       this.showServerError(error);
     } finally {
       this.busy.set(false);
@@ -281,9 +317,15 @@ export class PasswordChangeDialogComponent {
       control.markAsTouched();
       attached = true;
     }
-    if (attached) return;
+    if (attached) {
+      // L’état d’erreur Material se met à jour au passage suivant ; on le planifie explicitement.
+      this.changeDetector.markForCheck();
+      return;
+    }
     if (error instanceof HttpErrorResponse && error.status === 401)
-      this.formError.set('Votre session a expiré. Reconnectez-vous puis réessayez.');
+      this.formError.set(
+        AuthService.errorMessage(error, 'Votre session a expiré. Reconnectez-vous puis réessayez.'),
+      );
     else if (error instanceof HttpErrorResponse && error.status === 0)
       this.formError.set('Le serveur est injoignable. Vérifiez la connexion puis réessayez.');
     else
