@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { AiClusterView, AiNodeAvailability } from '../../../shared/models/ai-tools';
 import { aiTypeLabel } from '../../ai/components/ai-model-selection';
 
@@ -20,12 +19,24 @@ interface ProviderRow {
 }
 
 const REPLICATED = ['codex-cli', 'claude-cli', 'openai'] as const;
+const WHEN = new Intl.DateTimeFormat('fr-FR', {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** Date reçue d'un autre nœud : une valeur absente ou illisible (nœud d'une autre version) ne doit jamais faire échouer l'affichage. */
+export function formatSyncedAt(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : WHEN.format(time).replace(',', '');
+}
 
 /** Où chaque connexion IA du cluster est présente, et si chaque nœud est à jour (état déclaré par le nœud lui-même). */
 @Component({
   selector: 'app-ai-replication-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe],
   template: `
     @for (row of rows(); track row.id) {
       @if (row.reconnect) {
@@ -131,7 +142,6 @@ export class AiReplicationPanelComponent {
   readonly view = input.required<AiClusterView>();
   /** Limite l'affichage à un fournisseur (tiroir de détail). */
   readonly only = input<string | null>(null);
-  protected readonly datePipe = new DatePipe('fr');
 
   readonly rows = computed<readonly ProviderRow[]>(() => {
     const nodes = this.view().nodes;
@@ -185,7 +195,7 @@ export class AiReplicationPanelComponent {
     if (status.state === 'absent')
       return { ...base, label: 'Aucune connexion', tone: 'muted', detail: null };
     const behind = status.state === 'pending' || (status.revision ?? 0) < latest;
-    const when = status.syncedAt ? this.datePipe.transform(status.syncedAt, 'dd/MM HH:mm') : null;
+    const when = formatSyncedAt(status.syncedAt);
     return behind
       ? {
           ...base,
