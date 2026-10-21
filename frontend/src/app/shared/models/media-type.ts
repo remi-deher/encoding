@@ -11,3 +11,11 @@ export const MEDIA_TYPE_OPTIONS: readonly MediaTypeOption[] = [
   { value: 'music', label: 'Musique' },
   { value: 'subtitles', label: 'Sous-titres' },
 ];
+
+/** Icône de chaque type de média (jeu d’icônes partagé). */
+export const MEDIA_TYPE_ICONS = {
+  video: 'video',
+  image: 'image',
+  music: 'music',
+  subtitles: 'subtitles',
+} as const satisfies Record<MediaType, string>;

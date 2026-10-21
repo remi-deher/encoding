@@ -23,9 +23,9 @@ import {
   DataTableComponent,
   DataTableRow,
 } from '../../shared/ui/data-table.component';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { IconComponent } from '../../shared/ui/icon.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
-import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
+import { MEDIA_TYPE_ICONS, MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 import { FLOW_CREATION_FORM } from '../../shared/models/flow-creation';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
@@ -40,6 +40,8 @@ interface FlowRecord extends DataTableRow {
   readonly name: string;
   readonly category: MediaType;
   readonly mediaType: string;
+  readonly steps: string;
+  readonly nodeCount: number;
   readonly publishedVersion: number;
   readonly version: string;
   readonly summary: string;
@@ -58,7 +60,7 @@ interface FlowRecord extends DataTableRow {
     DataTableComponent,
     FlowDetailsComponent,
     ManagementCatalogTemplateComponent,
-    CategoryTabsComponent,
+    IconComponent,
     MatButtonModule,
     MatMenuModule,
     RecordFormComponent,
@@ -67,6 +69,7 @@ interface FlowRecord extends DataTableRow {
     FileImportComponent,
   ],
   templateUrl: './flow-catalog-page.component.html',
+  styleUrl: './flow-catalog-page.component.scss',
 })
 export class FlowCatalogPageComponent {
   protected readonly auth = inject(AuthService);
@@ -358,6 +361,8 @@ export class FlowCatalogPageComponent {
               ' · ' +
               flow.nodeCount +
               (flow.nodeCount === 1 ? ' étape' : ' étapes'),
+            steps: flow.nodeCount + (flow.nodeCount === 1 ? ' étape' : ' étapes'),
+            nodeCount: flow.nodeCount,
             publishedVersion: flow.version,
             version: 'v' + flow.version,
             summary: flow.nodeCount + ' étapes',
@@ -384,7 +389,6 @@ export class FlowCatalogPageComponent {
   private readonly records = computed(() => this.catalog().records);
 
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Flows');
-  protected readonly selectedCategory = signal('all');
   protected readonly searchQuery = signal('');
   protected readonly detailTab = signal(0);
   protected refreshDetails(): void {
@@ -415,39 +419,32 @@ export class FlowCatalogPageComponent {
   });
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom du flow', sortable: true },
-    { key: 'mediaType', label: 'Média & étapes', sortable: true },
+    { key: 'steps', label: 'Étapes', sortable: true, sortValueKey: 'nodeCount' },
     { key: 'status', label: 'État & version', sortable: true },
     { key: 'backup', label: 'Sauvegarde JSON', sortable: true },
     { key: 'modifiedAt', label: 'Modifié le', sortable: true, sortValueKey: 'modifiedOrder' },
   ];
 
-  protected readonly categoryOptions = computed<readonly CategoryTabOption[]>(() => [
-    { value: 'all', label: 'Tous', count: this.records().length },
-    ...MEDIA_TYPE_OPTIONS.map((category) => ({
-      ...category,
-      count: this.records().filter((flow) => flow.category === category.value).length,
-    })),
-  ]);
-
   protected readonly filteredFlows = computed(() => {
-    const category = this.selectedCategory();
     const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
     return this.records().filter(
       (flow) =>
-        (category === 'all' || flow.category === category) &&
-        (!query ||
-          flow.name.toLocaleLowerCase('fr-FR').includes(query) ||
-          flow.mediaType.toLocaleLowerCase('fr-FR').includes(query) ||
-          flow.summary.toLocaleLowerCase('fr-FR').includes(query) ||
-          flow.status.toLocaleLowerCase('fr-FR').includes(query) ||
-          flow.state.toLocaleLowerCase('fr-FR').includes(query)),
+        !query ||
+        flow.name.toLocaleLowerCase('fr-FR').includes(query) ||
+        flow.mediaType.toLocaleLowerCase('fr-FR').includes(query) ||
+        flow.summary.toLocaleLowerCase('fr-FR').includes(query) ||
+        flow.status.toLocaleLowerCase('fr-FR').includes(query) ||
+        flow.state.toLocaleLowerCase('fr-FR').includes(query),
     );
   });
   protected readonly rows = this.filteredFlows;
-
-  protected onCategoryChange(category: string): void {
-    this.selectedCategory.set(category);
-  }
+  protected readonly groups = computed(() =>
+    MEDIA_TYPE_OPTIONS.map((type) => ({
+      ...type,
+      icon: MEDIA_TYPE_ICONS[type.value],
+      rows: this.filteredFlows().filter((flow) => flow.category === type.value),
+    })).filter((group) => group.rows.length > 0),
+  );
 
   protected onFlowOpen(row: DataTableRow): void {
     this.detailTab.set(0);
