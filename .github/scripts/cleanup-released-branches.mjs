@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const run = (command, args) => execFileSync(command, args, { encoding: 'utf8' }).trim();
+// The closed-PR listing exceeds Node's default 1 MiB buffer once the history grows.
+const run = (command, args) => execFileSync(command, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }).trim();
 const api = (path) => JSON.parse(run('gh', ['api', path]));
 const pages = (path) => JSON.parse(run('gh', ['api', '--paginate', '--slurp', path])).flat();
 
