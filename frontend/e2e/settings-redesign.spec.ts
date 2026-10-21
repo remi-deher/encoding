@@ -88,6 +88,9 @@ test.beforeEach(async ({ page }) => {
     route.fulfill({ json: { items: [], offset: 0, hasMore: false } }),
   );
   await page.route('**/api/v1/tools/ai/cluster', (route) => route.fulfill({ json: { nodes: [] } }));
+  await page.route('**/api/v1/network/settings', (route) =>
+    route.fulfill({ json: { trustProxy: false, proxies: [] } }),
+  );
   await page.route('**/api/v1/system/logs?*', (route) =>
     route.fulfill({ json: { entries, totalBuffered: entries.length } }),
   );
@@ -99,15 +102,15 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test('four domains use the application shell and remain accessible on both themes', async ({
+test('five domains use the application shell and remain accessible on both themes', async ({
   page,
 }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/settings');
   const settings = page.locator('app-settings-page');
-  await expect(settings.getByRole('tab')).toHaveCount(4);
-  for (const domain of ['Interface', 'Accès', 'Connexions', 'Exploitation']) {
+  await expect(settings.getByRole('tab')).toHaveCount(5);
+  for (const domain of ['Interface', 'Accès', 'Connexions', 'Réseau', 'Exploitation']) {
     await settings.getByRole('tab', { name: domain, exact: true }).click();
     await expect(settings.getByRole('tab', { name: domain, exact: true })).toHaveAttribute(
       'aria-selected',
