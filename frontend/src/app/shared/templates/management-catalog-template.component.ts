@@ -6,6 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
 import { SearchFieldComponent } from '../ui/search-field.component';
 import { PageHeaderComponent } from '../ui/page-header.component';
@@ -24,7 +25,13 @@ export interface CatalogEmptyState {
 @Component({
   selector: 'app-management-catalog-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DetailDrawerComponent, MatButtonModule, PageHeaderComponent, SearchFieldComponent],
+  imports: [
+    DetailDrawerComponent,
+    MatButtonModule,
+    NgTemplateOutlet,
+    PageHeaderComponent,
+    SearchFieldComponent,
+  ],
   template: `
     <app-detail-drawer
       [opened]="actionOpen() || detailOpen()"
@@ -49,13 +56,16 @@ export interface CatalogEmptyState {
 
         <section class="catalog-panel" [attr.aria-label]="title()">
           @if (showToolbar()) {
+            <ng-template #filtersContent><ng-content select="[catalogue-filters]" /></ng-template>
             <div class="catalog-toolbar">
               <div class="catalog-filters">
-                @if (filterLabel()) {
+                @if (filterLabel() && searchLayout() === 'end') {
                   <span class="catalog-filter-label">{{ filterLabel() }}</span>
                 }
-                <div class="catalog-toolbar-row">
-                  <ng-content select="[catalogue-filters]" />
+                <div class="catalog-toolbar-row" [class.is-centered]="searchLayout() !== 'end'">
+                  @if (searchLayout() === 'end') {
+                    <ng-container [ngTemplateOutlet]="filtersContent" />
+                  }
                   @if (searchLabel()) {
                     <app-search-field
                       class="catalog-search"
@@ -63,7 +73,20 @@ export interface CatalogEmptyState {
                       [label]="searchLabel()"
                       [value]="searchQuery()"
                       (valueChange)="searchQueryChange.emit($event)"
-                    />
+                      [filterCount]="searchLayout() === 'centered-sheet' ? filterCount() : null"
+                    >
+                      @if (searchLayout() === 'centered-sheet') {
+                        <div search-filters class="catalog-sheet-filters">
+                          <ng-container [ngTemplateOutlet]="filtersContent" />
+                        </div>
+                      }
+                    </app-search-field>
+                  }
+                  @if (searchLayout() === 'centered') {
+                    <ng-container [ngTemplateOutlet]="filtersContent" />
+                  }
+                  @if (searchLayout() === 'centered-sheet') {
+                    <ng-content select="[catalogue-active-filters]" />
                   }
                 </div>
               </div>
@@ -123,6 +146,13 @@ export class ManagementCatalogTemplateComponent {
   readonly searchLabel = input('');
   readonly searchQuery = input('');
   readonly searchQueryChange = output<string>();
+  /**
+   * `end` : barre à droite, filtres à côté. `centered` : barre centrée, filtres dessous.
+   * `centered-sheet` : barre centrée, filtres dans une feuille ouverte par le bouton Filtres.
+   */
+  readonly searchLayout = input<'end' | 'centered' | 'centered-sheet'>('end');
+  /** Nombre de filtres actifs, affiché sur le bouton Filtres (`centered-sheet`). */
+  readonly filterCount = input(0);
   readonly note = input('');
   readonly showToolbar = input(true);
   readonly emptyState = input<CatalogEmptyState | null>(null);
