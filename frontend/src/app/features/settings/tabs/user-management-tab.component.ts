@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  output,
   signal,
   TemplateRef,
   viewChild,
@@ -20,23 +21,18 @@ import {
 import { NotificationService } from '../../../shared/services/notification.service';
 import { UserAccounts } from '../../../shared/services/user-accounts';
 import {
-  DataTableActionEvent,
-  DataTableColumn,
-  DataTableComponent,
-  DataTableRow,
-  DataTableRowAction,
-} from '../../../shared/ui/data-table.component';
+  AccessListAction,
+  AccessListActionEvent,
+  AccessListComponent,
+  AccessListRow,
+} from '../../../shared/ui/access-list.component';
 import { RecordFormComponent, RecordFormData } from '../../../shared/ui/record-form.component';
 
-interface UserRow extends DataTableRow {
-  readonly id: string;
+interface UserRow extends AccessListRow {
   readonly username: string;
-  readonly roleLabel: string;
   readonly role: string;
-  readonly statusLabel: string;
   readonly isActive: boolean;
   readonly isSelf: boolean;
-  readonly createdLabel: string;
 }
 
 @Component({
@@ -44,7 +40,7 @@ interface UserRow extends DataTableRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ConfigurationSectionComponent,
-    DataTableComponent,
+    AccessListComponent,
     MatButtonModule,
     RecordFormComponent,
   ],
@@ -62,12 +58,9 @@ interface UserRow extends DataTableRow {
         <p role="alert">Impossible de charger les utilisateurs.</p>
         <button matButton="text" (click)="refresh()">Réessayer</button>
       } @else {
-        <app-data-table
-          layout="resources"
-          [compactResources]="true"
-          [columns]="columns"
+        <app-access-list
           [rows]="filteredRows()"
-          [rowActions]="actions"
+          [actions]="actions"
           (rowAction)="onAction($event)"
           emptyMessage="Aucun utilisateur."
         />
@@ -90,55 +83,49 @@ export class UserManagementTabComponent {
   private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationService);
 
+  readonly usersUpdated = output<readonly UserAccount[]>();
   private readonly users = signal<readonly UserAccount[]>([]);
   protected readonly state = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly query = signal('');
   protected readonly busy = signal(false);
   protected readonly resetTarget = signal<UserRow | null>(null);
 
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'username', label: 'Utilisateur', sortable: true },
-    { key: 'roleLabel', label: 'Rôle', sortable: true },
-    { key: 'statusLabel', label: 'État', sortable: true },
-    { key: 'createdLabel', label: 'Créé le', sortable: true },
-  ];
-
-  protected readonly actions: readonly DataTableRowAction[] = [
+  protected readonly actions: readonly AccessListAction<UserRow>[] = [
     {
       id: 'make-admin',
       label: 'Passer administrateur',
-      visibleWhen: (row) => row['role'] === 'viewer',
+      visibleWhen: (row) => row.role === 'viewer',
     },
     {
       id: 'make-viewer',
       label: 'Passer en lecture seule',
-      visibleWhen: (row) => row['role'] === 'admin' && !row['isSelf'],
+      visibleWhen: (row) => row.role === 'admin' && !row.isSelf,
       confirmation: (row) => ({
         title: 'Retirer les droits d’administration ?',
-        message: `« ${row['username']} » pourra consulter le cluster sans pouvoir le modifier.`,
+        message: `« ${row.username} » pourra consulter le cluster sans pouvoir le modifier.`,
         confirmLabel: 'Passer en lecture seule',
       }),
     },
     {
       id: 'deactivate',
       label: 'Désactiver',
-      visibleWhen: (row) => !!row['isActive'] && !row['isSelf'],
+      visibleWhen: (row) => !!row.isActive && !row.isSelf,
       confirmation: (row) => ({
         title: 'Désactiver ce compte ?',
-        message: `Les sessions de « ${row['username']} » seront fermées immédiatement.`,
+        message: `Les sessions de « ${row.username} » seront fermées immédiatement.`,
         confirmLabel: 'Désactiver',
       }),
     },
-    { id: 'activate', label: 'Réactiver', visibleWhen: (row) => !row['isActive'] },
+    { id: 'activate', label: 'Réactiver', visibleWhen: (row) => !row.isActive },
     { id: 'password', label: 'Réinitialiser le mot de passe' },
     {
       id: 'delete',
       label: 'Supprimer',
       tone: 'danger',
-      visibleWhen: (row) => !row['isSelf'],
+      visibleWhen: (row) => !row.isSelf,
       confirmation: (row) => ({
         title: 'Supprimer ce compte ?',
-        message: `« ${row['username']} » ne pourra plus se connecter. Cette action est définitive.`,
+        message: `« ${row.username} » ne pourra plus se connecter. Cette action est définitive.`,
         confirmLabel: 'Supprimer',
       }),
     },
@@ -147,13 +134,19 @@ export class UserManagementTabComponent {
   protected readonly rows = computed<readonly UserRow[]>(() =>
     this.users().map((user) => ({
       id: user.id,
+      title: user.username,
+      kind: 'user' as const,
       username: user.username,
       role: user.role,
-      roleLabel: USER_ROLE_LABELS[user.role],
       isActive: user.isActive,
-      statusLabel: user.isActive ? 'Actif' : 'Désactivé',
       isSelf: user.id === this.auth.user()?.id,
-      createdLabel: new Date(user.createdAt).toLocaleDateString('fr-FR'),
+      details: [`Créé le ${new Date(user.createdAt).toLocaleDateString('fr-FR')}`],
+      badges: [
+        { label: USER_ROLE_LABELS[user.role], tone: 'accent' as const, plain: true },
+        user.isActive
+          ? { label: 'Actif', tone: 'success' as const }
+          : { label: 'Désactivé', tone: 'neutral' as const },
+      ],
     })),
   );
 
@@ -226,7 +219,9 @@ export class UserManagementTabComponent {
 
   async refresh(): Promise<void> {
     try {
-      this.users.set(await firstValueFrom(this.accounts.list()));
+      const list = await firstValueFrom(this.accounts.list());
+      this.users.set(list);
+      this.usersUpdated.emit(list);
       this.state.set('ready');
     } catch {
       this.state.set(this.users().length ? 'ready' : 'error');
@@ -248,8 +243,8 @@ export class UserManagementTabComponent {
     this.resetTarget.set(null);
   }
 
-  protected async onAction(event: DataTableActionEvent): Promise<void> {
-    const row = event.row as UserRow;
+  protected async onAction(event: AccessListActionEvent<UserRow>): Promise<void> {
+    const row = event.row;
     switch (event.actionId) {
       case 'password':
         this.resetTarget.set(row);
