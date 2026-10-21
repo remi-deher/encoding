@@ -44,8 +44,12 @@ Le redimensionnement conserve son comportement historique par défaut ; les rés
 
 Versions minimales : un composant ou une option peut exiger une version minimale de plugin ; l'éligibilité refuse un worker plus ancien, y compris via les anciens alias Base, tandis qu'un flow historique reste exécutable par un worker ancien compatible.
 
-Polices : l'inventaire des jeux de polices d'un nœud est facultatif et borné. Les suggestions viennent des workers observés ; un jeu vu sur un worker ne prouve pas sa présence sur tous les workers éligibles, donc aucune attribution compatible n'est promise.
+Polices : l'inventaire des jeux de polices d'un nœud est facultatif et borné. Seuls les dossiers contenant une police TTF/OTF/TTC non symbolique sont annoncés. Les suggestions viennent des workers observés ; l'aperçu, l'attribution et la reprise vérifient le jeu demandé sur le worker considéré. Un inventaire absent, vide ou différent rend ce worker inéligible pour ce segment. Les anciens workers doivent publier un inventaire après mise à jour avant de recevoir un bloc d'ajout de polices ; les noms de fichiers demandés et la présence effective restent contrôlés au traitement.
 
 Fichiers produits : `artifact:<identifiant-encodé>/<indice>` désigne un fichier additionnel d'un producteur précédent (capacité worker `artifact-references`). Le préfixe contient un caractère interdit dans les anciens chemins de bibliothèque : un chemin valide auparavant n'est jamais réinterprété.
 
-Limites restantes : pas de parcours runtime complet extraction → consommation avec reprise/relais, ni de test des combinaisons audio + normalisation dans un même plan, validés uniquement par les tests unitaires ciblés.
+Stabilisation : une piste audio reçoit un codec explicite et une chaîne de filtres ordonnée dans le plan FFmpeg. La normalisation conserve le codec de conversion demandé ; deux passes analysent la même chaîne préalable (rééchantillonnage et disposition compris). Les indices de sortie suivent le mapping lorsque les pistes non traitées sont retirées. Une fréquence explicitement demandée participe à la conformité audio ; les anciens réglages implicites restent conservés, et FLAC ne dépend pas d'un débit de compression avec perte.
+
+La conversion ciblée SRT → ASS fonctionne avec un style « aucun » : elle conserve alors l'en-tête converti. Les résumés des règles exposent les restrictions avancées actives. Les champs inline et l'inspecteur partagent la visibilité conditionnelle ; masquer un champ conserve sa valeur. Les références affichent le nom observé tout en stockant l'identité.
+
+Les tests utilisent de petits médias synthétiques pour couvrir conversion + normalisation, filtres multiples, indices remappés, extraction → relais → consommation sur deux workers et branche sans production. Une référence absente ou corrompue échoue explicitement, sans être demandée comme fichier de bibliothèque ni publiée.

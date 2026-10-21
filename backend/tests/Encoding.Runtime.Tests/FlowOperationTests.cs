@@ -27,6 +27,17 @@ public sealed class FlowOperationTests
     }
 
     [Fact]
+    public void ConversionWithoutStyleStillProducesAss()
+    {
+        const string text = "[Script Info]\nTitle: Original\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour";
+        var track = new SubtitleTrack(0, "subrip", "fra", "French", true, false, false, text);
+        var options = SubtitleOptions.From(FlowOperationConfiguration.Resolve("subtitles-convert-ass", Values(new { styleProfile = "none" })));
+        var plan = SubtitlePlanner.Plan([track], null, (1920, 1080), options);
+        Assert.True(plan.Changed);
+        Assert.Contains("Title: Original", Assert.Single(plan.Decisions).ReplacementAss);
+    }
+
+    [Fact]
     public void NamingAndDefaultSelectionAreIndependent()
     {
         var names = TrackNameOptions.From(FlowOperationConfiguration.Resolve("subtitles-name-tracks", Values(new { singleDefaultAudio = true })));

@@ -37,7 +37,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 | 3. Vidéo | `video-transcode` (HEVC, QSV demandé, CPU en repli) | 0069, 0075 | Si le repli est activé, une erreur FFmpeg sur NVENC, QSV ou VAAPI déclenche un seul nouvel essai CPU ; profondeur de couleur et métadonnées HDR conservées |
 | Déjà HEVC / HDR / 10 bits protégés | `conditions-video-codec`, `conditions-video-hdr`, `conditions-video-bitdepth` | 0067, 0068 | Blocs déjà disponibles : les relier à une branche qui copie la vidéo et saute `video-transcode` selon les règles du flow |
 | 2. Audio : stéréo→AAC, 2.1+→AC3 | `base-audio-rules` (ajouté au plan) | 0055 | Disposition ambiguë : sortie « Erreur » |
-| 1. Sous-titres | `base-subtitle-manage` | 0057 | Profil Crunchyroll intégré, non éditable |
+| 1. Sous-titres | `base-subtitle-manage` | 0057 | Profil Crunchyroll ou style personnalisé versionné |
 | Polices | `base-add-fonts` | 0057 | Jeu déclaré par le nœud |
 | 4. Assemblage mkvmerge en une écriture | `base-execute-processing` + les blocs ci-dessus | 0015, 0055–0057 | Le runtime valide déjà la présence du média, la durée avec sa tolérance générique et le décodage |
 | 4b. Noms de pistes | `base-track-names` (appliquer) | 0056 | Modèle de nom modifiable |
@@ -55,7 +55,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 | Plex injoignable pendant la vérification | Le flow continue ; la garde de publication refuse le remplacement de la source (le résultat distinct est publié) |
 | Disposition audio ambiguë | Sortie « Erreur » → Échec, source intacte |
 | Outil ou plugin absent sur le nœud | Le nœud ne reçoit pas le flow |
-| Perte du worker en cours de traitement | Le bail expire, un autre worker reprend au dernier point de contrôle sous une époque plus haute ; le disque reste réservé à l'exécution et l'ancien worker est écarté (test `DiskStaysReservedWhenItsWorkerIsLost`) |
+| Perte du worker en cours de traitement | Le bail expire et la tentative échoue ; une reprise explicite, ou une règle de reprise bornée du flow, crée une nouvelle exécution depuis l’entrée. Un relais explicite conserve son checkpoint (0015, 0021) |
 | Perte du nœud d'accès pendant la publication | La publication est reprise sans double bascule (0030) |
 
 ## Limites connues
@@ -65,3 +65,15 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 - **QSV n'a jamais été vérifié sur un vrai GPU** (hôtes TrueNAS) : à tester avant de compter sur l'encodage matériel.
 - **Modification sur place** (mkvpropedit avec sauvegarde de l'en-tête et restauration) n'existe pas : le flow travaille sur une copie.
 - Non exercés dans le conteneur de développement : Landlock, `ProcessTests`, un vrai serveur Plex, les hôtes TrueNAS.
+
+## Choisir et régler les blocs
+
+Pour une seule opération, préférer les blocs ciblés de sous-titres (conversion ASS, style, doublons, forcés, noms ou piste audio par défaut). Le bloc complet conserve ses options historiques pour les flows existants. Un style « aucun » sur la conversion SRT → ASS convertit le format sans remplacer le style fourni par la conversion.
+
+Les règles audio sont évaluées dans l'ordre : première correspondance, puis conservation des pistes sans correspondance. Les critères avancés actifs restent visibles dans le résumé replié. Une fréquence explicite est appliquée même si le codec est déjà conforme ; zéro conserve celle de la source. Dans un même plan, une normalisation conserve le codec de conversion demandé. Les normalisations multiples composent une chaîne de filtres.
+
+Les sélecteurs proposent les ressources observées et conservent une référence enregistrée qui n'est plus disponible. Le nom du worker est affiché, son identifiant reste stocké. Un jeu de polices doit être annoncé par le worker choisi ; un ancien worker sans inventaire doit être mis à jour. Une liste de fichiers de polices précise reste vérifiée au traitement.
+
+Pour réutiliser une extraction, choisir un fichier produit par une étape précédente : `artifact:<identifiant-encodé>/<indice>`, avec indice commençant à zéro. La référence survit au relais entre workers grâce au stockage durable. Si la branche suivie saute l'extraction, l'exécution échoue explicitement. Les fichiers de bibliothèque utilisent leurs chemins relatifs habituels.
+
+Les nouvelles opérations et options exigent les versions minimales déclarées par leur schéma (notamment les opérations ciblées Subtitles 1.1.0). Les références de fichiers produits exigent la capacité worker `artifact-references`. L'aperçu et l'attribution appliquent ces contrats ; la publication d'un flow ne garantit pas qu'un worker compatible soit actuellement connecté.

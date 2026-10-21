@@ -122,9 +122,9 @@ internal static class SubtitleScenarios
         NodeToolCapability[] Caps(string baseVersion, params NodeToolCapability[] more) => [new("plugin/base", baseVersion, ["general"], []), new("ffprobe", "7.0", ["video"], []), .. more];
         var ffmpeg = new NodeToolCapability("ffmpeg", "7.0", ["video"], []); var mkv = new NodeToolCapability("mkvtoolnix", "81.0", ["video"], []);
         Check(validator.Validate(Flow()).IsValid, "A flow with both blocks is valid.");
-        Check(eligibility.CanRun(Flow(), Caps("1.4.0", ffmpeg, mkv), worker), "A worker with FFmpeg, MKVToolNix and Base 1.4.0 can run it.");
-        Check(!eligibility.CanRun(Flow(), Caps("1.4.0", mkv), worker) && !eligibility.CanRun(Flow(), Caps("1.4.0", ffmpeg), worker), "Both FFmpeg and MKVToolNix are required.");
-        Check(!eligibility.CanRun(Flow(), Caps("1.3.0", ffmpeg, mkv), worker), "A worker that does not announce Base 1.4.0 never receives it.");
+        Check(eligibility.CanRun(Flow(), Caps("1.4.0", ffmpeg, mkv), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])), "A worker with FFmpeg, MKVToolNix and Base 1.4.0 can run it.");
+        Check(!eligibility.CanRun(Flow(), Caps("1.4.0", mkv), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])) && !eligibility.CanRun(Flow(), Caps("1.4.0", ffmpeg), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])), "Both FFmpeg and MKVToolNix are required.");
+        Check(!eligibility.CanRun(Flow(), Caps("1.3.0", ffmpeg, mkv), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])), "A worker that does not announce Base 1.4.0 never receives it.");
         var lockBlock = baseManifest.Components.Single(item => item.Id == "base-disk-lock"); var unlockBlock = baseManifest.Components.Single(item => item.Id == "base-disk-unlock");
         Check(lockBlock.Outputs.Select(item => item.Id).SequenceEqual(["acquired", "busy", "error"]) && unlockBlock.Outputs.Select(item => item.Id).SequenceEqual(["success", "error"]) && lockBlock.RequiredTools.Count == 0, "The disk blocks are declared in Base 1.5.0 and need no tool, so any worker can run them.");
         Check(SubtitleOptions.From(new Dictionary<string, JsonElement> { ["styleProfile"] = J("none"), ["setTitles"] = J(false) }) is { ApplyProfile: false, SetTitles: false, ConvertSrt: true }, "Options are read from the block configuration.");

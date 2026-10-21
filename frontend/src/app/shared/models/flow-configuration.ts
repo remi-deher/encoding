@@ -26,3 +26,19 @@ export function flowConfigurationValue(
           : '')
   );
 }
+
+export function isFlowConfigurationFieldVisible(
+  field: FlowComponentConfigurationField,
+  values: FlowComponentConfiguration,
+): boolean {
+  if (!field.visibleWhenFieldId) return true;
+  const value = values[field.visibleWhenFieldId];
+  if (field.visibleWhenEmpty)
+    return (
+      value === undefined ||
+      value === null ||
+      value === '' ||
+      (Array.isArray(value) && value.length === 0)
+    );
+  return field.visibleWhenValue === undefined || value === field.visibleWhenValue;
+}

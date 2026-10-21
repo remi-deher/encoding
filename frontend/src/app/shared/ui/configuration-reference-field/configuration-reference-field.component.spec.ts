@@ -43,6 +43,34 @@ describe('Configuration references', () => {
     await fixture.whenStable();
     expect(document.body.textContent).toContain('Anime');
   });
+  it('displays the observed worker name while retaining its stored identity', async () => {
+    const fixture = TestBed.createComponent(ConfigurationReferenceFieldComponent);
+    fixture.componentRef.setInput('field', {
+      id: 'worker',
+      type: 'text',
+      label: 'Worker',
+      editor: 'node',
+    });
+    fixture.componentRef.setInput('value', 'worker-id');
+    const changed = vi.fn();
+    fixture.componentInstance.valueChange.subscribe(changed);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/v1/nodes')
+      .flush([
+        {
+          id: 'worker-id',
+          name: 'Worker',
+          displayName: 'Encodeur salon',
+          roles: ['worker'],
+          status: 'online',
+        },
+      ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input').value).toBe('Encodeur salon · online');
+    expect(changed).not.toHaveBeenCalled();
+  });
   it('preserves an unavailable worker without silently selecting another', async () => {
     const fixture = TestBed.createComponent(ConfigurationReferenceFieldComponent);
     fixture.componentRef.setInput('field', {

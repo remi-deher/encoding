@@ -90,6 +90,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     if (!File.Exists(target)) await client.DownloadAsync(lease.ExecutionId, lease.Epoch, sha, target, job.Token);
                     return target;
                 }
+                if (path.StartsWith(FlowArtifactReference.Prefix, StringComparison.Ordinal))
+                    throw new FlowArtifactReferenceException("Référence de fichier produit invalide.");
                 path=path.Replace('\\','/');
                 RuntimeSourceState state;
                 while(true)
@@ -606,7 +608,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         catch(Exception exception)
         {
             logger.LogWarning("Exécution {ExecutionId} interrompue : {Type}",lease.ExecutionId,exception.GetType().Name);
-            if(!lost) await FailureAsync("failed",exception is MediaToolException?exception.Message:"L’exécution a échoué ; aucun remplacement de source n’a été effectué.");
+            if(!lost) await FailureAsync("failed",exception is MediaToolException or FlowArtifactReferenceException?exception.Message:"L’exécution a échoué ; aucun remplacement de source n’a été effectué.");
         }
         finally { job.Cancel(); await renewal; }
 

@@ -39,13 +39,18 @@ import { NodeGroupResponse } from '../../models/cluster';
       <mat-label>{{ field().label }}</mat-label>
       <input
         matInput
-        [value]="multiple() ? draft() : value()"
+        [value]="multiple() ? draft() : label(value())"
+        (focus)="query.set('')"
         [disabled]="disabled()"
         [matAutocomplete]="choices"
         (input)="edit($event)"
         (keydown.enter)="accept($event)"
       />
-      <mat-autocomplete #choices="matAutocomplete" (optionSelected)="choose($event.option.value)">
+      <mat-autocomplete
+        #choices="matAutocomplete"
+        [displayWith]="displayReference"
+        (optionSelected)="choose($event.option.value)"
+      >
         @for (option of filtered(); track option.value) {
           <mat-option [value]="option.value">{{ option.label }}</mat-option>
         }
@@ -80,8 +85,8 @@ import { NodeGroupResponse } from '../../models/cluster';
     }
     @if (field().editor === 'artifact') {
       <p>
-        Chemin relatif dans l’espace de travail du traitement. Aucun fichier personnel n’est
-        parcouru.
+        Chemin relatif à la bibliothèque ou référence artifact:étape/index vers un fichier produit
+        par une étape précédente.
       </p>
     }
     @if (field().editor === 'font-set') {
@@ -145,7 +150,9 @@ export class ConfigurationReferenceFieldComponent implements OnInit {
     if (editor !== 'node' && editor !== 'node-group' && editor !== 'font-set') return;
     try {
       if (editor === 'font-set') {
-        const nodes = await firstValueFrom(this.cluster.listNodes());
+        const nodes = (await firstValueFrom(this.cluster.listNodes())).filter((node) =>
+          node.roles.includes('worker'),
+        );
         const names = [...new Set(nodes.flatMap((node) => node.inventory?.fontSets ?? []))];
         this.observed.set(
           names.map((name) => ({
@@ -187,6 +194,8 @@ export class ConfigurationReferenceFieldComponent implements OnInit {
       this.loadMessage.set('Liste indisponible. Vous pouvez conserver ou saisir une référence.');
     }
   }
+  protected readonly displayReference = (value: string): string =>
+    this.multiple() ? value : this.label(value ?? '');
   protected label(value: string): string {
     return this.options().find((option) => option.value === value)?.label ?? value;
   }

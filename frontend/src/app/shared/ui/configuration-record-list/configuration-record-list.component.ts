@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { isFlowConfigurationFieldVisible } from '../../models/flow-configuration';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -74,13 +75,15 @@ import {
               }
             }
           }
-          <button matButton="text" type="button" (click)="toggleAdvanced(rowIndex)">
-            {{
-              advancedRows().has(rowIndex)
-                ? 'Réduire les options de sélection'
-                : 'Autres critères de sélection'
-            }}
-          </button>
+          @if (hasAdvanced()) {
+            <button matButton="text" type="button" (click)="toggleAdvanced(rowIndex)">
+              {{
+                advancedRows().has(rowIndex)
+                  ? 'Réduire les options de sélection'
+                  : 'Autres critères de sélection'
+              }}
+            </button>
+          }
           <div class="actions">
             <button
               matButton="text"
@@ -177,11 +180,11 @@ export class ConfigurationRecordListComponent {
   protected summary(row: FlowConfigurationRecord): string {
     return (
       this.field()
-        .itemFields.filter((field) => field.importance !== 'advanced')
-        .flatMap((field) => {
+        .itemFields.flatMap((field) => {
           if (!this.visible(field, row)) return [];
           const value = row[field.id];
           if (value === null || value === undefined || value === '' || value === 0) return [];
+          if (field.importance === 'advanced' && value === field.defaultValue) return [];
           const label =
             field.type === 'select'
               ? (field.options.find((option) => option.value === value)?.label ?? String(value))
@@ -192,12 +195,7 @@ export class ConfigurationRecordListComponent {
     );
   }
   protected visible(field: FlowComponentConfigurationField, row: FlowConfigurationRecord): boolean {
-    return (
-      !field.visibleWhenFieldId ||
-      (field.visibleWhenEmpty
-        ? !row[field.visibleWhenFieldId]
-        : row[field.visibleWhenFieldId] === field.visibleWhenValue)
-    );
+    return isFlowConfigurationFieldVisible(field, row);
   }
   protected add(): void {
     const row: Record<string, string | number | boolean | null> = {};

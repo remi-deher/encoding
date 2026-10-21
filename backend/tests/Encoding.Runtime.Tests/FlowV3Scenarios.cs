@@ -60,10 +60,10 @@ internal static class FlowV3Scenarios
             .. ffmpeg ? new[] { new NodeToolCapability("ffmpeg", "7.0", ["video"], ["cpu"], ["libx265", "aac", "ac3"]) } : [],
             .. mkv ? new[] { new NodeToolCapability("mkvtoolnix", "81.0", ["video"], []) } : []];
         var baseVersion = registry.Plugins.Single(item => item.Id == "base").Version; var plexVersion = registry.Plugins.Single(item => item.Id == "plex").Version;
-        Check(eligibility.CanRun(flow, Caps(baseVersion, plexVersion), worker), "A worker with FFmpeg, MKVToolNix, Base and Plex at the right versions can run it.");
-        Check(!eligibility.CanRun(flow, Caps(baseVersion, plexVersion, mkv: false), worker), "Without MKVToolNix nobody receives it.");
-        Check(!eligibility.CanRun(flow, Caps(baseVersion, plexVersion, ffmpeg: false), worker), "Without FFmpeg nobody receives it.");
-        Check(!eligibility.CanRun(flow, Caps("1.4.0", plexVersion), worker), "A worker that does not announce Base with the disk blocks never receives it.");
-        Check(!eligibility.CanRun(flow, Caps(baseVersion, "1.0.0"), worker), "A worker with the old Plex plugin never receives it.");
+        Check(eligibility.CanRun(flow, Caps(baseVersion, plexVersion), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])), "A worker with FFmpeg, MKVToolNix, Base and Plex at the right versions can run it.");
+        Check(!eligibility.CanRun(flow, Caps(baseVersion, plexVersion, mkv: false), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])), "Without MKVToolNix nobody receives it.");
+        Check(!eligibility.CanRun(flow, Caps(baseVersion, plexVersion, ffmpeg: false), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])), "Without FFmpeg nobody receives it.");
+        Check(!eligibility.CanRun(flow, Caps("1.4.0", plexVersion), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])), "A worker that does not announce Base with the disk blocks never receives it.");
+        Check(!eligibility.CanRun(flow, Caps(baseVersion, "1.0.0"), worker, inventory: new Encoding.Contracts.Nodes.NodeInventory("test", "x64", 1, 1, FontSets: ["Crunchyroll"])), "A worker with the old Plex plugin never receives it.");
     }
 }

@@ -49,6 +49,42 @@ public sealed class MediaProcessingIntegrationTests
             var normalized = await actions.FfmpegPlanAsync([new("audio-normalize", Config(new { trackId = 0, normalizationProfile = "broadcast", normalizationMethod = "twoPass" }))], source, directory, "normalize", Guid.NewGuid(), CancellationToken.None);
             Assert.NotNull(normalized.Primary);
             await scanner.ScanAsync(normalized.Primary, CancellationToken.None);
+            foreach (var reverse in new[] { false, true })
+            {
+                RuntimePlanStep convert = new("audio-transcode", Config(new { trackId = 1, audioCodec = "ac3", bitrateKbps = 256, channels = "2", sampleRate = 48000 }));
+                RuntimePlanStep normalize = new("audio-normalize", Config(new { trackId = 1, normalizationProfile = "broadcast", normalizationMethod = "twoPass" }));
+                var composed = await actions.FfmpegPlanAsync(reverse ? [normalize, convert] : [convert, normalize], source, directory, "composed" + reverse, Guid.NewGuid(), CancellationToken.None);
+                var result = await scanner.ScanAsync(composed.Primary!, CancellationToken.None);
+                var streams = result.GetProperty("streams").EnumerateArray().Where(stream => stream.GetProperty("codec_type").GetString() == "audio").ToArray();
+                Assert.Equal("ac3", streams[1].GetProperty("codec_name").GetString());
+                Assert.Equal("aac", streams[0].GetProperty("codec_name").GetString());
+            }
+            using var capture = RuntimeCommandCapture.Begin();
+            var invocation = Guid.NewGuid();
+            using (capture.BeginStep("multiple-normalizations", invocation))
+                await actions.FfmpegPlanAsync([
+                    new("audio-normalize", Config(new { trackId = 0, normalizationProfile = "broadcast" })),
+                    new("audio-normalize", Config(new { trackId = 0, normalizationProfile = "night" }))
+                ], source, directory, "multiple", Guid.NewGuid(), CancellationToken.None);
+            var command = Assert.Single(capture.ForStep("multiple-normalizations", invocation)).Command;
+            Assert.Single(System.Text.RegularExpressions.Regex.Matches(command, "-filter:a:0"));
+            Assert.Contains("loudnorm=I=-23", command);
+            Assert.Contains(",loudnorm=I=-18", command);
+            var selectedOnly = await actions.FfmpegPlanAsync([
+                new("audio-normalize", Config(new { trackId = 1 })),
+                new("audio-transcode", Config(new { trackId = 1, audioCodec = "ac3", channels = "2", sampleRate = 48000 }))
+            ], source, directory, "selected-only", Guid.NewGuid(), CancellationToken.None, preserve: false);
+            var selectedMetadata = await scanner.ScanAsync(selectedOnly.Primary!, CancellationToken.None);
+            var selectedStream = Assert.Single(selectedMetadata.GetProperty("streams").EnumerateArray());
+            Assert.Equal("ac3", selectedStream.GetProperty("codec_name").GetString());
+            var flacSource = Path.Combine(directory, "source.flac");
+            await tools.CheckedAsync("ffmpeg", ["-v", "error", "-y", "-i", source, "-map", "0:a:0", "-c:a", "flac", flacSource], directory, CancellationToken.None);
+            var remuxed = await actions.FfmpegPlanAsync([
+                new("audio-normalize", Config(new { trackId = 0 })),
+                new("video-remux-media", Config(new { container = "mkv" }))
+            ], flacSource, directory, "explicit-container", Guid.NewGuid(), CancellationToken.None);
+            Assert.Equal(".mkv", Path.GetExtension(remuxed.Primary));
+            await scanner.ScanAsync(remuxed.Primary!, CancellationToken.None);
             Assert.Equal(original, await SafeMediaPaths.DigestAsync(source, CancellationToken.None));
         }
         finally
