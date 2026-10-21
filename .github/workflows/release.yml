@@ -41,7 +41,9 @@ jobs:
           merged_prs="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" \
             --jq '[.[] | select(.base.ref == "main" and .head.ref == "dev" and .merged_at != null)]')"
           if [ "$(jq length <<< "$merged_prs")" -eq 0 ]; then
-            echo "::error::Aucune PR dev vers main fusionnée associée à ce commit; publication refusée."
+            msg="Aucune PR dev vers main fusionnée n'est associée à ce commit (commit direct sur main ?) : aucune image n'est publiée. Reporter le changement dans dev et publier via une PR dev vers main."
+            echo "::error::$msg"
+            echo "- Publication refusée : $msg" >> "$GITHUB_STEP_SUMMARY"
             echo green=false >> "$GITHUB_OUTPUT"
             exit 1
           fi
