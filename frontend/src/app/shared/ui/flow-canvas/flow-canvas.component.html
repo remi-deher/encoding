@@ -3,9 +3,13 @@
   ><span>{{ (scale() * 100).toFixed(0) }} %</span
   ><button mat-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button
   ><button mat-button (click)="fit()">Tout afficher</button>
-  <button mat-button (click)="autoLayout()"><app-icon name="sort" />Disposition automatique</button>
-  @if (canUndoLayout()) {
-    <button mat-button (click)="undoLayout()">Annuler la disposition</button>
+  @if (!readOnly()) {
+    <button mat-button (click)="autoLayout()">
+      <app-icon name="sort" />Disposition automatique
+    </button>
+    @if (canUndoLayout()) {
+      <button mat-button (click)="undoLayout()">Annuler la disposition</button>
+    }
   }
   @if (pending(); as selection) {
     <span role="status"
@@ -23,7 +27,7 @@
   (pointerdown)="pan($event)"
   (wheel)="wheel($event)"
   appContextActions
-  (contextActions)="menu($event)"
+  (contextActions)="!readOnly() && menu($event)"
   tabindex="0"
   aria-label="Canvas libre du flow"
 >
@@ -62,9 +66,10 @@
             class="wire-hit"
             [attr.d]="path(edge)"
             appContextActions
-            (contextActions)="menu($event, undefined, edge)"
+            (contextActions)="!readOnly() && menu($event, undefined, edge)"
             (click)="
-              menu({ x: $event.clientX, y: $event.clientY, origin: viewport }, undefined, edge)
+              !readOnly() &&
+                menu({ x: $event.clientX, y: $event.clientY, origin: viewport }, undefined, edge)
             "
           />
         }
@@ -83,11 +88,12 @@
           [style.--node-color]="colors(node.component).color"
           [style.--output-count]="node.component.outputs.length"
           cdkDrag
+          [cdkDragDisabled]="readOnly()"
           [cdkDragScale]="scale()"
           (cdkDragMoved)="dragging(node, $event)"
           (cdkDragEnded)="move(node, $event)"
           appContextActions
-          (contextActions)="menu($event, node)"
+          (contextActions)="!readOnly() && menu($event, node)"
           tabindex="0"
           (click)="selectNode.emit(node.id)"
           (dblclick)="edit(node)"
@@ -101,6 +107,7 @@
               [class.valid]="canFinish(node)"
               (click)="$event.stopPropagation(); finish(node.id)"
               [attr.aria-label]="'Relier à ' + (node.name || node.component.name)"
+              [disabled]="readOnly()"
             ></button>
           }
           <header>
@@ -141,14 +148,16 @@
               <div class="output-row">
                 <button
                   mat-button
+                  [disabled]="readOnly()"
                   (click)="
                     $event.stopPropagation(); insert.emit({ sourceNodeId: node.id, output: port })
                   "
                   [attr.aria-label]="'Ajouter sur la sortie ' + port.label"
                 >
-                  {{ port.label }} ＋</button
+                  {{ port.label }} {{ readOnly() ? '' : '＋' }}</button
                 ><button
                   class="port output"
+                  [disabled]="readOnly()"
                   [attr.data-port]="'output:' + port.id"
                   (pointerdown)="begin(node, port, $event)"
                   (click)="$event.stopPropagation()"

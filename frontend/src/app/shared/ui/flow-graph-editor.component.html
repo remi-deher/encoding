@@ -15,7 +15,8 @@
 </ng-template>
 @if (viewMode() === 'canvas') {
   <app-flow-canvas
-    (componentDropped)="componentDropped.emit($event)"
+    (componentDropped)="!readOnly() && componentDropped.emit($event)"
+    [readOnly]="readOnly()"
     [nodes]="visualNodes()"
     [mediaType]="mediaType()"
     [simulationResult]="simulationResult()"
@@ -47,7 +48,7 @@
     (contextActions)="backgroundMenu($event)"
     class="structured-editor"
     appFlowComponentDrop
-    (componentDropped)="componentDropped.emit($event)"
+    (componentDropped)="!readOnly() && componentDropped.emit($event)"
     [class.structured-editor_compact]="compactView()"
     aria-label="Composition du flow par étapes"
   >
@@ -122,6 +123,7 @@
         cdkDragLockAxis="y"
         (cdkDragEnded)="measureConnections()"
         [cdkDragDisabled]="
+          readOnly() ||
           step.reference ||
           (!canMove(sequence, index, index - 1) && !canMove(sequence, index, index + 1))
         "
@@ -154,7 +156,8 @@
             tabindex="0"
             role="group"
             [attr.aria-label]="
-              (step.node.name || step.node.component.name) + ' — Entrée pour configurer'
+              (step.node.name || step.node.component.name) +
+              (readOnly() ? '' : ' — Entrée pour configurer')
             "
             aria-keyshortcuts="Enter"
             (dblclick)="openConfiguration(step.node, $event)"
@@ -166,7 +169,7 @@
                 class="connection-port input-port"
                 type="button"
                 [attr.data-node-id]="step.node.id"
-                [disabled]="!canLinkTo(step.node)"
+                [disabled]="readOnly() || !canLinkTo(step.node)"
                 [class.valid-target]="canLinkTo(step.node)"
                 [class.port-connected]="incomingCount(step.node) > 0"
                 [attr.title]="
@@ -254,7 +257,7 @@
             @if (incomingCount(step.node) > 1) {
               <p class="continuation-label">{{ incomingCount(step.node) }} liaisons entrantes</p>
             }
-            @if (!compactView()) {
+            @if (!compactView() && !readOnly()) {
               <p class="step-summary">{{ step.node.component.description }}</p>
               @if (packForVisualNode(step.node); as pack) {
                 <button mat-button type="button" (click)="togglePack(pack)">

@@ -1,9 +1,9 @@
-import { compareFlowVersions } from '../../shared/models/flow-version-comparison';
+import { FlowDetailsComponent } from './editor/flow-details.component';
 import { FlowDocument } from '../../shared/models/flow-validation';
 import { FlowComponentDefinition } from '../../shared/models/flow-component';
 import { RecordFormData } from '../../shared/ui/record-form.component';
 import { MatDialog } from '@angular/material/dialog';
-import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
+import { FlowDeleteDialogComponent } from './flow-delete-dialog.component';
 import { FileDownload } from '../../shared/services/file-download';
 import { NotificationService } from '../../shared/services/notification.service';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -25,10 +25,6 @@ import {
 } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
-import {
-  ResourceSheetComponent,
-  ResourceSheetSection,
-} from '../../shared/ui/resource-sheet.component';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 import { FLOW_CREATION_FORM } from '../../shared/models/flow-creation';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
@@ -60,7 +56,7 @@ interface FlowRecord extends DataTableRow {
   selector: 'app-flow-catalog-page',
   imports: [
     DataTableComponent,
-    ResourceSheetComponent,
+    FlowDetailsComponent,
     ManagementCatalogTemplateComponent,
     CategoryTabsComponent,
     MatButtonModule,
@@ -82,9 +78,8 @@ export class FlowCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
 
-  private readonly comparisonVersions = signal<readonly FlowDocument[] | null>(null);
-  private readonly comparisonForm = signal<RecordFormData | null>(null);
-  protected readonly actionForm = computed(() => this.comparisonForm() ?? this.flowCreationForm);
+  private readonly actionDefinition = signal<RecordFormData | null>(null);
+  protected readonly actionForm = computed(() => this.actionDefinition() ?? this.flowCreationForm);
   private readonly templateSource = signal<{
     readonly id: string;
     readonly version: number;
@@ -141,7 +136,7 @@ export class FlowCatalogPageComponent {
           description: values['description'] ?? '',
         });
         this.packSource.set(null);
-        this.comparisonForm.set(null);
+        this.actionDefinition.set(null);
         this.clearSourcePreview();
         this.actionOpen.set(false);
         this.notifications.show('Pack créé depuis la version publiée du flow.');
@@ -164,7 +159,7 @@ export class FlowCatalogPageComponent {
           description: values['description'] ?? '',
         });
         this.templateSource.set(null);
-        this.comparisonForm.set(null);
+        this.actionDefinition.set(null);
         this.clearSourcePreview();
         this.actionOpen.set(false);
         this.notifications.show('Modèle créé depuis la version publiée du flow.');
@@ -174,28 +169,6 @@ export class FlowCatalogPageComponent {
             ? (error.error?.title ?? 'Création du modèle impossible.')
             : 'Création du modèle impossible.',
         );
-      }
-      return;
-    }
-    const versions = this.comparisonVersions();
-    if (versions) {
-      const before = versions.find((version) => version.version === Number(values['before']));
-      const after = versions.find((version) => version.version === Number(values['after']));
-      if (before && after) {
-        const differences = compareFlowVersions(before, after);
-        this.actionOpen.set(false);
-        this.dialog.open(ConfirmationDialogComponent, {
-          data: {
-            title: 'Comparaison v' + before.version + ' et v' + after.version,
-            mode: 'information',
-            items: differences.slice(0, 100),
-            emptyMessage: 'Aucune différence de définition.',
-            message:
-              differences.length > 100
-                ? 'Les 100 premières différences sont affichées.'
-                : undefined,
-          },
-        });
       }
       return;
     }
@@ -267,9 +240,8 @@ export class FlowCatalogPageComponent {
       const version = Number(event.row['publishedVersion']);
       this.packSource.set({ id: String(event.row['id']), version });
       this.templateSource.set(null);
-      this.comparisonVersions.set(null);
       void this.loadSourcePreview(String(event.row['id']), version);
-      this.comparisonForm.set({
+      this.actionDefinition.set({
         title: 'Créer un pack de composants depuis un flow',
         description: `La version publiée v${version} sera copiée avec une entrée et ses sorties de flow.`,
         submitLabel: 'Créer le pack',
@@ -286,9 +258,8 @@ export class FlowCatalogPageComponent {
       const version = Number(event.row['publishedVersion']);
       this.templateSource.set({ id: String(event.row['id']), version });
       this.packSource.set(null);
-      this.comparisonVersions.set(null);
       void this.loadSourcePreview(String(event.row['id']), version);
-      this.comparisonForm.set({
+      this.actionDefinition.set({
         title: 'Créer un modèle depuis un flow',
         description: `La version publiée v${version} sera copiée. Le flow d’origine ne sera pas modifié.`,
         submitLabel: 'Créer le modèle',
@@ -316,49 +287,8 @@ export class FlowCatalogPageComponent {
       return;
     }
     if (event.actionId === 'versions') {
-      try {
-        const versions = await this.api.versions(String(event.row['id']));
-        if (versions.length < 2) {
-          this.dialog.open(ConfirmationDialogComponent, {
-            data: {
-              title: 'Versions du flow',
-              mode: 'information',
-              message: 'Une seconde version publiée est nécessaire pour comparer.',
-              items: versions.map((v) => ({ label: 'Version ' + v.version, detail: v.name })),
-            },
-          });
-          return;
-        }
-        this.comparisonVersions.set(versions);
-        this.comparisonForm.set({
-          title: 'Comparer les versions',
-          description: 'Choisissez deux versions publiées du flow.',
-          submitLabel: 'Comparer',
-          initialValues: {
-            before: String(versions.at(-2)!.version),
-            after: String(versions.at(-1)!.version),
-          },
-          fields: [
-            {
-              id: 'before',
-              label: 'Version de référence',
-              type: 'select',
-              required: true,
-              options: versions.map((v) => ({ value: String(v.version), label: 'v' + v.version })),
-            },
-            {
-              id: 'after',
-              label: 'Version à comparer',
-              type: 'select',
-              required: true,
-              options: versions.map((v) => ({ value: String(v.version), label: 'v' + v.version })),
-            },
-          ],
-        });
-        this.actionOpen.set(true);
-      } catch {
-        this.notifications.show('Historique indisponible.');
-      }
+      this.onFlowOpen(event.row);
+      this.detailTab.set(1);
       return;
     }
     try {
@@ -387,21 +317,12 @@ export class FlowCatalogPageComponent {
       name = String(row['name']);
     this.deletingFlow.set(id);
     try {
+      const libraries = await this.api.usage(id);
       const confirmed = await firstValueFrom(
-        this.dialog
-          .open(ConfirmationDialogComponent, {
-            data: {
-              title: `Supprimer le flow « ${name} » ?`,
-              message:
-                'Le flow et son brouillon seront retirés du catalogue. Les versions publiées et l’historique des exécutions sont conservés. La suppression est refusée si le flow est affecté à une bibliothèque ou possède une exécution en cours.',
-              confirmLabel: 'Supprimer',
-              confirmColor: 'var(--danger)',
-            },
-          })
-          .afterClosed(),
+        this.dialog.open(FlowDeleteDialogComponent, { data: { name, libraries } }).afterClosed(),
       );
       if (!confirmed) return;
-      await this.api.remove(id);
+      await this.api.remove(id, libraries.length > 0);
       if (this.selectedFlow()?.id === id) this.onDetailClosed();
       this.refreshCatalog.next();
       this.notifications.show(`Le flow « ${name} » a été supprimé.`);
@@ -465,66 +386,33 @@ export class FlowCatalogPageComponent {
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Flows');
   protected readonly selectedCategory = signal('all');
   protected readonly searchQuery = signal('');
+  protected readonly detailTab = signal(0);
+  protected refreshDetails(): void {
+    this.refreshCatalog.next();
+  }
   protected readonly actionOpen = signal(false);
   protected readonly flowCreationForm = FLOW_CREATION_FORM;
   protected readonly selectedFlow = signal<FlowRecord | null>(null);
-  protected readonly detailTitle = computed(() => this.selectedFlow()?.name ?? 'Flow');
+  protected readonly detailTitle = computed(
+    () =>
+      this.records().find((flow) => flow.id === this.selectedFlow()?.id)?.name ??
+      this.selectedFlow()?.name ??
+      'Flow',
+  );
   protected readonly detailDescription = computed(() => {
     const flow = this.selectedFlow();
-    return flow ? `${flow.mediaType} · ${flow.version} · ${flow.state}` : 'Détails du flow';
+    if (!flow) return 'Détails du flow';
+    return (
+      flow.mediaType +
+      ' · ' +
+      (flow.state === 'Brouillon'
+        ? 'Brouillon · ' +
+          (flow.publishedVersion > 0
+            ? 'Dernière publication ' + flow.version
+            : 'Aucune version publiée')
+        : flow.state + ' · ' + flow.version)
+    );
   });
-  protected readonly flowSheet = computed<{
-    readonly title: string;
-    readonly subtitle: string;
-    readonly sections: readonly ResourceSheetSection[];
-  } | null>(() => {
-    const flow = this.selectedFlow();
-    if (!flow) return null;
-    const sections: readonly ResourceSheetSection[] = [
-      {
-        id: 'flow',
-        title: 'Définition',
-        items: [
-          {
-            label: flow.mediaType,
-            detail: `Sauvegarde JSON : ${flow.backup}`,
-            badges: [
-              {
-                label: flow.state,
-                tone: flow.state === 'Publié' ? 'success' : 'warning',
-              },
-              { label: flow.version, tone: 'accent' },
-            ],
-          },
-        ],
-        fields: [
-          { label: 'Type de média', value: flow.mediaType },
-          { label: 'Version', value: flow.version },
-          { label: 'État', value: flow.state },
-          { label: 'Sauvegarde JSON', value: flow.backup },
-        ],
-      },
-      {
-        id: 'processing',
-        title: 'Traitement',
-        metrics: [
-          { label: 'Résumé', value: flow.summary },
-          { label: 'Composants', value: flow.components },
-        ],
-      },
-      {
-        id: 'history',
-        title: 'Historique',
-        fields: [{ label: 'Dernière modification', value: flow.modifiedAt }],
-      },
-    ];
-    return {
-      title: flow.name,
-      subtitle: `${flow.mediaType} · ${flow.version} · ${flow.state}`,
-      sections,
-    };
-  });
-
   protected readonly columns: readonly DataTableColumn[] = [
     { key: 'name', label: 'Nom du flow', sortable: true },
     { key: 'mediaType', label: 'Média & étapes', sortable: true },
@@ -562,6 +450,7 @@ export class FlowCatalogPageComponent {
   }
 
   protected onFlowOpen(row: DataTableRow): void {
+    this.detailTab.set(0);
     this.selectedFlow.set(this.records().find((flow) => flow.id === row['id']) ?? null);
   }
 
@@ -571,8 +460,7 @@ export class FlowCatalogPageComponent {
 
   protected openFlowCreation(): void {
     this.clearSourcePreview();
-    this.comparisonVersions.set(null);
-    this.comparisonForm.set(null);
+    this.actionDefinition.set(null);
     this.templateSource.set(null);
     this.packSource.set(null);
     this.actionOpen.set(true);

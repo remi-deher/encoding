@@ -77,6 +77,14 @@ public static class FlowEndpoints
                 : ApiProblem.NotFound();
         }).WithName("ExportSingleFlow");
 
+        flows.MapGet("/{id:guid}/usage", async (Guid id, FlowRepository repository, CancellationToken ct) =>
+            Results.Ok(await repository.UsageAsync(id, ct))).WithName("GetFlowLibraryUsage");
+        flows.MapGet("/{id:guid}/draft-backups", async (Guid id, FlowRepository repository, CancellationToken ct) =>
+            Results.Ok(await repository.DraftBackupsAsync(id, ct))).WithName("ListFlowDraftBackups");
+        flows.MapGet("/{id:guid}/draft-backups/{revision:int}", async (Guid id, int revision, FlowRepository repository, CancellationToken ct) =>
+            await repository.DraftBackupAsync(id, revision, ct) is { } saved ? (IResult)Results.Ok(saved) : ApiProblem.NotFound())
+            .WithName("GetFlowDraftBackup");
+
         flows.MapGet("/{id:guid}/versions", async (Guid id, FlowRepository repository, CancellationToken ct) =>
             Results.Ok(await repository.VersionsAsync(id, ct)))
             .WithName("ListFlowVersions");
@@ -129,9 +137,9 @@ public static class FlowEndpoints
             return Results.Ok(saved);
         }).AddEndpointFilter<ValidateSaveFlowFilter>().WithName("PublishFlowVersion");
 
-        flows.MapDelete("/{id:guid}", async (Guid id, FlowRepository repository, CancellationToken ct) =>
+        flows.MapDelete("/{id:guid}", async (Guid id, bool? detachLibraries, FlowRepository repository, CancellationToken ct) =>
         {
-            var (result, reason) = await repository.DeleteFlowAsync(id, ct);
+            var (result, reason) = await repository.DeleteFlowAsync(id, ct, detachLibraries: detachLibraries == true);
             return result switch
             {
                 FlowDeleteResult.Deleted => Results.NoContent(),

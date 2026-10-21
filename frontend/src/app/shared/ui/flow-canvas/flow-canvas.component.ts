@@ -41,6 +41,7 @@ import { NotificationService } from '../../services/notification.service';
 import { routeFlowLink } from '../flow-link-routing';
 @Component({
   selector: 'app-flow-canvas',
+  host: { '[class.read-only]': 'readOnly()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FlowComponentDrop,
@@ -56,6 +57,7 @@ import { routeFlowLink } from '../flow-link-routing';
   styleUrl: './flow-canvas.component.scss',
 })
 export class FlowCanvasComponent {
+  readonly readOnly = input(false);
   readonly mediaType = input<MediaType>('video');
   readonly simulationResult = input<SimulationResult | null>(null);
   readonly simulationDetailsRequested = output<void>();
@@ -64,6 +66,7 @@ export class FlowCanvasComponent {
   }
   readonly componentDropped = output<FlowPaletteDrop>();
   protected dropComponent(event: FlowPaletteDrop): void {
+    if (this.readOnly()) return;
     const view = this.viewport()?.nativeElement;
     if (!view) return;
     const rect = this.surface()?.nativeElement.getBoundingClientRect();
@@ -307,6 +310,7 @@ export class FlowCanvasComponent {
     );
   }
   protected edit(node: FlowGraphNode): void {
+    if (this.readOnly()) return;
     if (node.component.kind === 'pack') this.guided.emit(node.id);
     else this.configure.emit(node.id);
   }
@@ -407,6 +411,7 @@ export class FlowCanvasComponent {
     return `M ${a.x} ${a.y} V ${middle} H ${p.x} V ${p.y}`;
   }
   protected begin(node: FlowGraphNode, output: FlowComponentOutput, event?: PointerEvent): void {
+    if (this.readOnly()) return;
     event?.stopPropagation();
     if (
       this.connections().some((e) => e.sourceNodeId === node.id && e.sourceOutputId === output.id)
@@ -474,6 +479,7 @@ export class FlowCanvasComponent {
     node?: FlowGraphNode,
     edge?: FlowGraphConnection,
   ): void {
+    if (this.readOnly()) return;
     this.contextTarget = { node, edge };
     this.context.set({
       ...position,
@@ -508,6 +514,7 @@ export class FlowCanvasComponent {
     this.menu({ x: r.left, y: r.bottom, origin }, node);
   }
   protected action(id: string): void {
+    if (this.readOnly()) return;
     const { node, edge } = this.contextTarget;
     this.context.set(null);
     if (id === 'configure' && node) this.configure.emit(node.id);

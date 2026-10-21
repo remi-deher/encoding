@@ -247,3 +247,17 @@ header span {
 .wire.muted {
   opacity: 0.25;
 }
+
+:host(.read-only) {
+  .drag,
+  .more,
+  .canvas-heading > button[mat-icon-button] {
+    display: none;
+  }
+  .canvas-title {
+    cursor: default;
+  }
+  .canvas-outputs button {
+    pointer-events: none;
+  }
+}
