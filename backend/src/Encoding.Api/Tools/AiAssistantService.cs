@@ -137,6 +137,7 @@ public sealed class AiAssistantService(
             await store.DeleteAsync(ConversationKey(stored.OwnerId, stored.Conversation.Id), ct);
             await store.DeleteAsync(SessionOwnerKey(stored.Conversation.Id), ct);
             await store.DeleteAsync("session/" + stored.Conversation.Id, ct);
+        await store.DeleteAsync(AiClusterService.CoordinatorKey(stored.Conversation.Id), ct);
             foreach (var requestId in stored.TurnPromptSnapshots?.Keys ?? Array.Empty<Guid>())
             {
                 var plannerRequestId = DeriveRequestId(
@@ -465,6 +466,7 @@ public sealed class AiAssistantService(
         await store.DeleteAsync(ConversationKey(stored.OwnerId, stored.Conversation.Id), ct);
         await store.DeleteAsync(SessionOwnerKey(stored.Conversation.Id), ct);
         await store.DeleteAsync("session/" + stored.Conversation.Id, ct);
+            await store.DeleteAsync(AiClusterService.CoordinatorKey(stored.Conversation.Id), ct);
         for (var attempt = 1; attempt <= MaxTitleAttemptTurns; attempt++)
         {
             var titleSessionId = $"{stored.Conversation.Id.Split('.')[0]}.{TitleRequestId(stored.Conversation.Id, attempt):N}";

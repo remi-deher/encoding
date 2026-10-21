@@ -366,20 +366,28 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         if (prompt.Scope is { } scope && (string.IsNullOrWhiteSpace(scope.Operation) || scope.Operation.Length > 80
             || new[] { scope.LibraryId, scope.FlowId, scope.MediaId, scope.ExecutionId }.Any(value => value == Guid.Empty)))
             throw new ArgumentException("Périmètre de session IA invalide.");
-        var owner = Owner(id);
+        var owner = await OwnerAsync(id, ct);
         if (owner != transport.LocalId)
         {
             if (localOnly) return new(false, "", "Ce nœud ne coordonne pas cette session.", SessionId: id, RequestId: requestId);
+            var ownerSeen = false;
             foreach (var url in await transport.PeersAsync(ct))
             {
                 try
                 {
                     var node = await transport.CallAsync<AiNodeAvailability>(url, "availability", new { }, TimeSpan.FromSeconds(15), ct);
-                    if (node.NodeId == owner) return await transport.CallAsync<AiCompletionResult>(url, "generate", new AiGenerateRequest(provider, prompt with { SessionId = id, RequestId = requestId }, allowModelChanges), TimeSpan.FromMinutes(35), ct);
+                    if (node.NodeId != owner) continue;
+                    ownerSeen = true;
+                    return await transport.CallAsync<AiCompletionResult>(url, "generate", new AiGenerateRequest(provider, prompt with { SessionId = id, RequestId = requestId }, allowModelChanges), TimeSpan.FromMinutes(35), ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested) { }
             }
-            return new(false, "", "Coordinateur de session indisponible. Le contexte validé est conservé ; réessayez après son retour.", SessionId: id, RequestId: requestId);
+            // Reprise : seulement si le coordinateur n'a répondu à aucune sonde (jamais après une demande acceptée, dont le résultat
+            // reste ambigu) et si le dernier checkpoint validé est déjà présent sur ce nœud, pour ne jamais repartir d'un contexte vide.
+            if (ownerSeen || await GetSessionAsync(id, ct) is null)
+                return new(false, "", "Coordinateur de session indisponible. Le contexte validé est conservé ; réessayez après son retour.", SessionId: id, RequestId: requestId);
+            await store.SaveAsync(CoordinatorKey(id), transport.LocalId.ToString("N"), ct);
+            services?.GetService<ILogger<AiClusterService>>()?.LogWarning("Session IA {Session} reprise par ce nœud : son coordinateur {Coordinator} est injoignable.", id, owner);
         }
         var gate = gates.GetOrAdd(id, _ => new(1));
         if (!await gate.WaitAsync(0, ct)) return new(false, "", "Une demande est déjà en cours dans cette session.", SessionId: id, RequestId: requestId);
@@ -495,6 +503,10 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
         await store.SaveAsync("session/" + fork.Id, fork, ct);
         return fork;
     }
+    public static string CoordinatorKey(string id) => "session-coordinator/" + id;
+    /// <summary>Coordinateur de la session : celui de son identifiant, sauf reprise explicite par un autre nœud (la plus récente gagne).</summary>
+    private async Task<Guid> OwnerAsync(string id, CancellationToken ct) =>
+        await store.ReadAsync<string>(CoordinatorKey(id), ct) is { } taken && Guid.TryParseExact(taken, "N", out var node) && node != Guid.Empty ? node : Owner(id);
     private static Guid Owner(string id)
     {
         var parts = id.Split('.');
