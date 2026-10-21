@@ -42,12 +42,14 @@ public sealed record ApiTokenResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset? ExpiresAt,
     DateTimeOffset? LastUsedAt,
-    DateTimeOffset? RevokedAt);
+    DateTimeOffset? RevokedAt,
+    IReadOnlyList<string>? Scopes = null);
 
 public sealed record CreateApiTokenRequest(
     string Name,
     string? Role = "admin",
-    DateTimeOffset? ExpiresAt = null);
+    DateTimeOffset? ExpiresAt = null,
+    IReadOnlyList<string>? Scopes = null);
 
 public sealed record CreatedApiTokenResponse(
     Guid Id,
@@ -56,5 +58,6 @@ public sealed record CreatedApiTokenResponse(
     string Role,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ExpiresAt,
-    string Token);
+    string Token,
+    IReadOnlyList<string>? Scopes = null);
 

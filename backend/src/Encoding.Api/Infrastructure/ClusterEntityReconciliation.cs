@@ -40,7 +40,7 @@ public sealed class ClusterEntityReconciliation(
         new("flow_scripts", ["id", "draft_revision", "draft_name", "draft_language", "draft_description", "draft_code", "published_version", "created_at", "updated_at"], ["id"]),
         new("encoding_profiles", ["id", "draft_revision", "draft_name", "draft_description", "draft_targets", "published_version", "created_at", "updated_at"], ["id"], ["draft_targets"]),
         new("users", ["id", "username", "password_hash", "role", "is_active", "failed_attempts", "locked_until", "created_at", "updated_at"], ["id"]),
-        new("api_tokens", ["id", "name", "token_hash", "token_prefix", "role", "is_active", "created_at", "expires_at", "last_used_at", "revoked_at"], ["id"], binaryColumns: ["token_hash"]),
+        new("api_tokens", ["id", "name", "token_hash", "token_prefix", "role", "is_active", "created_at", "expires_at", "last_used_at", "revoked_at", "scopes"], ["id"], binaryColumns: ["token_hash"]),
         new("plugin_configurations", ["plugin_id", "revision", "encrypted_values", "updated_at"], ["plugin_id"], binaryColumns: ["encrypted_values"]),
         new("flow_plugin_configurations", ["flow_id", "plugin_id", "revision", "encrypted_values", "updated_at"], ["flow_id", "plugin_id"], binaryColumns: ["encrypted_values"]),
         new("enrollment_window", ["id", "open_until"], ["id"]),

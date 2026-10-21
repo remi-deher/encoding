@@ -422,9 +422,46 @@ internal static class ApiImprovementsScenarios
                 Check(schemaJson.Contains("availableComponents") && schemaJson.Contains("base-input-file"), "MCP get_flow_schema returns available components.");
             }
 
+            // D0. Portées des jetons : lecture seule par défaut sur le MCP, écriture par portée explicite, validation à la création.
+            using (var unscopedWrite = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "2.0", id = 40, method = "tools/call",
+                @params = new { name = "create_library", arguments = new { name = "Interdite" } }
+            }))
+            {
+                var unscopedJson = await unscopedWrite.Content.ReadAsStringAsync();
+                Check(unscopedJson.Contains("\"isError\":true") && unscopedJson.Contains("libraries:write"),
+                    "A token without scope cannot write through MCP and is told which scope it needs. Response: " + unscopedJson);
+            }
+            Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/business-operations/execute", new { name = "create_library", arguments = new { name = "Interdite" } }, csrf: false)
+                  == HttpStatusCode.Forbidden, "Business operations apply the same token scopes.");
+            Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Role inconnu", "operator"), csrf: false)
+                  == HttpStatusCode.BadRequest, "An unknown token role is rejected instead of becoming admin.");
+            Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Portee inconnue", "admin", null, ["root"]), csrf: false)
+                  == HttpStatusCode.BadRequest, "An unknown token scope is rejected.");
+            Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Lecture avec ecriture", "viewer", null, ["mcp:write"]), csrf: false)
+                  == HttpStatusCode.BadRequest, "A viewer token cannot carry a write scope.");
+            string scopedPlaintext;
+            using (var scopedCreate = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Agent flows", "admin", null, ["flows:write"]), csrf: false))
+            {
+                Check(scopedCreate.StatusCode == HttpStatusCode.Created, "A scoped token is created.");
+                var scopedDoc = await scopedCreate.Content.ReadFromJsonAsync<CreatedApiTokenResponse>(Json);
+                Check(scopedDoc!.Scopes is ["flows:write"], "The created token reports its scopes.");
+                scopedPlaintext = scopedDoc.Token;
+            }
+            var mcpWriter = new TestClient(factory.CreateClient(new() { HandleCookies = false, AllowAutoRedirect = false })) { BearerToken = scopedPlaintext };
+            using (var wrongDomain = await mcpWriter.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            {
+                jsonrpc = "2.0", id = 41, method = "tools/call",
+                @params = new { name = "create_library", arguments = new { name = "Interdite" } }
+            }))
+            {
+                Check((await wrongDomain.Content.ReadAsStringAsync()).Contains("\"isError\":true"), "A flows:write token cannot write in the libraries domain.");
+            }
+
             // D. Appel d'outil (tools/call : create_flow)
             Guid mcpFlowId = Guid.NewGuid();
-            using (var createFlowResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            using (var createFlowResp = await mcpWriter.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
             {
                 jsonrpc = "2.0",
                 id = 4,
@@ -457,7 +494,7 @@ internal static class ApiImprovementsScenarios
             }
 
             // E. Appel d'outil (tools/call : delete_flow)
-            using (var deleteFlowResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            using (var deleteFlowResp = await mcpWriter.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
             {
                 jsonrpc = "2.0",
                 id = 5,
@@ -523,7 +560,7 @@ internal static class ApiImprovementsScenarios
             // G. Nouveaux outils MCP : Scripts, Profils d'encodage, Modèles, Packs et Plugins
             // Test Script : création puis publication
             Guid scriptId = Guid.NewGuid();
-            using (var createScriptResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            using (var createScriptResp = await mcpWriter.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
             {
                 jsonrpc = "2.0",
                 id = 20,
@@ -547,7 +584,7 @@ internal static class ApiImprovementsScenarios
                 Check((scriptJson.Contains("Script cr") || scriptJson.Contains(@"Script cr\u00E9\u00E9")) && (scriptJson.Contains("succ") || scriptJson.Contains(@"succ\u00E8s")), $"MCP save_script creates draft. Response: {scriptJson}");
             }
 
-            using (var publishScriptResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
+            using (var publishScriptResp = await mcpWriter.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
             {
                 jsonrpc = "2.0",
                 id = 21,

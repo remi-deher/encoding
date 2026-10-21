@@ -5,7 +5,7 @@ using Encoding.Contracts.Auth;
 
 namespace Encoding.Api.Auth;
 
-public sealed record ApiTokenRecord(Guid Id, string Name, string Role);
+public sealed record ApiTokenRecord(Guid Id, string Name, string Role, IReadOnlyList<string> Scopes);
 
 public sealed class ApiTokenRepository(DbDataSource dataSource)
 {
@@ -15,8 +15,10 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
         string name,
         string role,
         DateTimeOffset? expiresAt,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<string>? scopes = null)
     {
+        scopes ??= [];
         var id = Guid.NewGuid();
         var plaintext = "enc_pat_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         var prefix = plaintext[..16] + "...";
@@ -25,8 +27,8 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
 
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var command = Sql.Command("""
-            INSERT INTO api_tokens (id, name, token_hash, token_prefix, role, is_active, created_at, expires_at)
-            VALUES (@id, @name, @hash, @prefix, @role, true, clock_timestamp(), @expires)
+            INSERT INTO api_tokens (id, name, token_hash, token_prefix, role, is_active, created_at, expires_at, scopes)
+            VALUES (@id, @name, @hash, @prefix, @role, true, clock_timestamp(), @expires, @scopes)
             """, connection);
 
         command.Parameters.AddWithValue("id", id);
@@ -35,6 +37,7 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
         command.Parameters.AddWithValue("prefix", prefix);
         command.Parameters.AddWithValue("role", normalizedRole);
         command.Parameters.AddWithValue("expires", (object?)expiresAt ?? DBNull.Value);
+        command.Parameters.AddWithValue("scopes", (object?)ApiTokenScopes.Serialize(scopes) ?? DBNull.Value);
 
         await command.ExecuteNonQueryAsync(ct);
 
@@ -47,7 +50,8 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
             DateTimeOffset.UtcNow,
             expiresAt,
             null,
-            null);
+            null,
+            scopes);
 
         return (summary, plaintext);
     }
@@ -84,7 +88,7 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var command = Sql.Command("""
-            SELECT id, name, role, last_used_at
+            SELECT id, name, role, last_used_at, scopes
             FROM api_tokens
             WHERE token_hash = @hash
               AND is_active = true
@@ -100,6 +104,7 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
         var name = reader.GetString(1);
         var role = reader.GetString(2);
         var lastUsedAt = reader.IsDBNull(3) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(3);
+        var scopes = ApiTokenScopes.Parse(reader.IsDBNull(4) ? null : reader.GetString(4));
         await reader.CloseAsync();
 
         var now = DateTimeOffset.UtcNow;
@@ -110,14 +115,14 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
             await touch.ExecuteNonQueryAsync(ct);
         }
 
-        return new ApiTokenRecord(id, name, role);
+        return new ApiTokenRecord(id, name, role, scopes);
     }
 
     public async Task<IReadOnlyList<ApiTokenResponse>> ListAsync(CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var command = Sql.Command("""
-            SELECT id, name, token_prefix, role, is_active, created_at, expires_at, last_used_at, revoked_at
+            SELECT id, name, token_prefix, role, is_active, created_at, expires_at, last_used_at, revoked_at, scopes
             FROM api_tokens
             ORDER BY created_at DESC, id
             """, connection);
@@ -135,7 +140,8 @@ public sealed class ApiTokenRepository(DbDataSource dataSource)
                 reader.GetFieldValue<DateTimeOffset>(5),
                 reader.IsDBNull(6) ? null : reader.GetFieldValue<DateTimeOffset>(6),
                 reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7),
-                reader.IsDBNull(8) ? null : reader.GetFieldValue<DateTimeOffset>(8)));
+                reader.IsDBNull(8) ? null : reader.GetFieldValue<DateTimeOffset>(8),
+                ApiTokenScopes.Parse(reader.IsDBNull(9) ? null : reader.GetString(9))));
         }
         return list;
     }

@@ -8,7 +8,7 @@ namespace Encoding.Api.Infrastructure.PeerCluster;
 
 public sealed record PeerProtocolStatus(int Protocol, string Schema, long Revision, bool Ready, Guid PeerId, string Thumbprint,
     IReadOnlyList<string>? Members = null);
-public sealed record PeerForwardedUser(string Id, string Name, string Role);
+public sealed record PeerForwardedUser(string Id, string Name, string Role, string? AuthType = null, string? Scopes = null);
 
 public static class PeerRequestRouting
 {
@@ -105,7 +105,8 @@ public static class PeerRequestRouting
         if (context.User.Identity?.IsAuthenticated == true)
         {
             var assertion = new PeerForwardedUser(context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "",
-                context.User.Identity.Name ?? "", context.User.IsInRole("admin") ? "admin" : "viewer");
+                context.User.Identity.Name ?? "", context.User.IsInRole("admin") ? "admin" : "viewer",
+                context.User.FindFirstValue("auth_type"), context.User.FindFirstValue(ApiTokenScopes.ClaimType));
             request.Headers.TryAddWithoutValidation(PrincipalHeader,
                 Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(assertion, Json)));
         }
@@ -128,9 +129,14 @@ public static class PeerRequestRouting
         {
             var user = JsonSerializer.Deserialize<PeerForwardedUser>(Convert.FromBase64String(header), Json);
             if (user is null || !Guid.TryParse(user.Id, out _) || user.Role is not ("admin" or "viewer")) return false;
-            context.Items[PrincipalItem] = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.NameIdentifier, user.Id), new Claim(ClaimTypes.Name, user.Name), new Claim(ClaimTypes.Role, user.Role)],
-                SessionAuthentication.Scheme));
+            var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, user.Id), new(ClaimTypes.Name, user.Name), new(ClaimTypes.Role, user.Role) };
+            // Un jeton API garde sa nature et ses portées d’écriture en traversant le maillage : sinon il deviendrait un administrateur de session.
+            if (user.AuthType == "api_token")
+            {
+                claims.Add(new Claim("auth_type", "api_token"));
+                claims.Add(new Claim(ApiTokenScopes.ClaimType, user.Scopes ?? string.Empty));
+            }
+            context.Items[PrincipalItem] = new ClaimsPrincipal(new ClaimsIdentity(claims, SessionAuthentication.Scheme));
             return true;
         }
         catch (Exception exception) when (exception is FormatException or JsonException) { return false; }
