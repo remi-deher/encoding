@@ -23,6 +23,8 @@ internal static class FlowV3ClusterScenarios
         var imported = validator.ValidateDocument(JsonDocument.Parse(File.ReadAllText(TemplatePath())).RootElement);
         Check(imported.Result.IsValid && imported.Definition?.Id == FlowV3ClusterTemplate.FlowId, "The importable file passes the import validation.");
         Check(flow.Nodes.All(node => node.Component.ComponentId != "base-disk-lock"), "The cluster flow takes no disk lock.");
+        Check(eligibility.RequiresDirectAccess(flow), "The first segment is only taken by a node that mounts the library, so a transfer node cannot take it and then have nowhere to relay.");
+        Check(!eligibility.RequiresDirectAccess(flow, "need"), "The relay destination receives the file by transfer.");
 
         string? Next(string node, string output) => FlowPath.NextNodeId(flow, node, output);
         foreach (var node in flow.Nodes)

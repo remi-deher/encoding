@@ -94,6 +94,7 @@ Fichier vidéo → Lecture Plex ──lecture──→ Reporter 10 min
             Plan FFmpeg → Vidéo HEVC (matériel) → Audio → … → Contrôles → Terminé
 ```
 
+- Le flow commence par « Exiger un accès direct » (strict) : seul un nœud qui monte la bibliothèque prend le fichier en premier. Sans cela, le .51 pourrait le prendre par transfert, répondre « non » et n'avoir personne à qui le relayer (le relais ne revient pas au même nœud).
 - **Oui** : le nœud a la bibliothèque montée directement et un encodeur utilisable du profil (QSV ou VAAPI) : il encode sur place. Typiquement le .51 pour ses bibliothèques USB.
 - **Non** : un nœud sans GPU utilisable (le .50 pour MEDIA 1, 2…) confie le fichier à un nœud capable ; le fichier est lu depuis le nœud d'accès par transfert. Si aucun nœud capable n'est en ligne, l'exécution échoue après la grâce habituelle.
 - Le profil intégré est matériel seul (QSV puis VAAPI, sans CPU, sans repli). Après import, remplacer dans le bloc vidéo par le profil du même nom créé sur le cluster.
