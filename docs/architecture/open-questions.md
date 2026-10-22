@@ -31,8 +31,8 @@ Fournisseurs `custom`/`managed`, manifeste `tool.json`, `/opt/encoding/tools/`, 
 ### 7. Store de plugins : compléments
 Déjà livré (PR #205). Reste : réplication de l'état entre serveurs (aujourd'hui local), signature des paquets, contrôle de `minEngineVersion`/`requiredTools`, désactivation sans retrait, refus de retrait d'un plugin utilisé, synchronisation périodique, adresse du dépôt officiel (non définie).
 
-### 8. Aucun déclencheur « après publication »
-`media.published` est enregistré mais personne ne le consomme : Plex et *ARR ne sont pas rafraîchis automatiquement après publication. Nécessaire pour boucler le cycle encodage → publication → bibliothèque de lecture.
+### 8. ~~Aucun déclencheur « après publication »~~ — traitée
+Résolue par l'ADR [0003](adr/0003-publication-etape-de-flow.md) : le bloc `base-publish-result` publie au milieu du flow et les blocs Plex, Radarr, Sonarr, Jellyfin le suivent. `media.published` reste un événement d'audit. Reste : un runner réel n'a pas encore exécuté le bloc de bout en bout, et le modèle de flow livré (FileFlows V3) n'utilise pas encore ce bloc.
 
 ### 9. Compatibilité entre versions de nœuds
 Seule la version de protocole (`Current = 1`) est contrôlée. Pas de plage de schéma, pas de règle « serveurs avant workers », pas de N/N-1 en mode Raft. Les migrations doivent rester additives en attendant.

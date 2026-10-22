@@ -260,6 +260,24 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         foreach(var change in response.VariableChanges) variables[change.Key]=change.Value;
                         if(response.CandidateArtifactId is { } candidate) await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate),[]),node.Id);
                     }
+                    else if(id=="base-publish-result")
+                    {
+                        await EnsureScanAsync();
+                        if(variables.ContainsKey("runtime.published")) throw new PublishResultException("Le résultat a déjà été publié par un bloc de ce flow.");
+                        if(context.Plan.Count>0) throw new PublishResultException("Le plan de traitement n'a pas été exécuté : placez la publication après « Exécuter le traitement ».");
+                        if(context.CurrentSha256==sourceSha) output="unchanged";
+                        else
+                        {
+                            await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),"succeeded",
+                                "Résultat validé ; publication demandée par le flow.",context.CurrentSha256,context.Extension,context.BeforeMetadata,context.CurrentMetadata,null,commandCapture.Pending(),true),job.Token);
+                            RuntimePublicationState published;
+                            while(!(published=await client.PublicationStateAsync(lease.ExecutionId,lease.Epoch,job.Token)).Published) await Task.Delay(TimeSpan.FromSeconds(2),job.Token);
+                            variables["runtime.published"]=JsonSerializer.SerializeToElement(new { path=published.Path,sha256=context.CurrentSha256 });
+                            await RenewAsync(job.Token);
+                            logger.LogInformation("Publication {Node} confirmée : {Path}.",node.Id,published.Path);
+                            output="published";
+                        }
+                    }
                     else if(id=="mkv-edit-in-place")
                     {
                         await EnsureScanAsync();
@@ -507,6 +525,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     logger.LogInformation("Règles audio {Node} non applicables : {Detail}",node.Id,exception.Message);
                     output="error";
                 }
+                catch(PublishResultException exception)
+                {
+                    logger.LogWarning("Publication {Node} impossible : {Detail}",node.Id,exception.Message);
+                    output="error";
+                }
                 catch(InPlaceEditException exception)
                 {
                     logger.LogWarning("Modification sur place {Node} refusée : {Detail}",node.Id,exception.Message);
@@ -571,7 +594,10 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             var failed=terminal=="failed" || terminal is null && lastOutput=="error";
             if(context.Plan.Count>0 && !failed) throw new IOException("Le flow se termine avec un plan non exécuté.");
 
-            var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=sourceSha;
+            // Après une publication par bloc (ADR 0003), la référence est le fichier publié : la fin du flow ne republie pas.
+            var publishedSha=variables.TryGetValue("runtime.published",out var publication) && publication.TryGetProperty("sha256",out var publishedDigest)?publishedDigest.GetString():null;
+            var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=(publishedSha??sourceSha);
+            if(changed && publishedSha is not null) throw new IOException("Le média a été modifié après sa publication ; ce résultat ne peut pas être publié une seconde fois.");
             if(changed && variables.ContainsKey("runtime.inPlaceEdited")) throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),failed?"failed":terminal=="deferred"?"deferred":"succeeded",
                 failed?"Le flow a atteint une fin en échec.":"Flow terminé ; scans média réalisés.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null,

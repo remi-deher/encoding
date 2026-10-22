@@ -195,6 +195,8 @@ public static class RuntimeEndpoints
         });
         group.MapGet("/executions/{id:guid}/source",async(Guid nodeId,Guid id,long epoch,RuntimeArtifactStore artifacts,RuntimeRepository runtime,CancellationToken ct)=>
             await artifacts.AuthorizeAsync(id,nodeId,epoch,ct) ? (IResult)Results.Ok(await runtime.SourceAsync(id,ct)) : Results.Conflict());
+        group.MapGet("/executions/{id:guid}/publication",async(Guid nodeId,Guid id,long epoch,RuntimeArtifactStore artifacts,RuntimeTransferRepository transfers,CancellationToken ct)=>
+            await artifacts.AuthorizeAsync(id,nodeId,epoch,ct) && await transfers.PublicationStateAsync(id,ct) is { } state ? (IResult)Results.Ok(state) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/publication",async(Guid nodeId,Guid id,ConfirmRuntimePublication request,RuntimeTransferRepository transfers,CancellationToken ct)=>
             await transfers.ConfirmAsync(id,nodeId,request,ct) ? (IResult)Results.NoContent() : Results.Conflict());
         group.MapGet("/replacements",async(Guid nodeId,SourceReplacementRepository replacements,CancellationToken ct)=>Results.Ok(await replacements.TasksAsync(nodeId,ct)));
