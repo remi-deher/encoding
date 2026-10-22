@@ -146,8 +146,7 @@ test('an administrator resets another account with the same dialog', async ({ pa
     await route.fulfill({ status: 204 });
   });
   await page.goto('/settings?tab=access');
-  await page.getByRole('button', { name: 'Autres actions pour lecteur' }).click();
-  await page.getByRole('menuitem', { name: 'Réinitialiser le mot de passe' }).click();
+  await page.getByRole('button', { name: 'Changer le mot de passe de lecteur' }).click();
   const dialog = page.getByRole('dialog', { name: 'Réinitialiser le mot de passe' });
   await expect(dialog.getByLabel('Mot de passe actuel', { exact: true })).toHaveCount(0);
   await dialog.getByLabel('Nouveau mot de passe', { exact: true }).fill('court');
@@ -161,11 +160,7 @@ test('an administrator resets another account with the same dialog', async ({ pa
   expect(reset?.body).toEqual({ newPassword: next });
 
   // Sur son propre compte, l'action ouvre le changement avec le mot de passe actuel.
-  await page.getByRole('button', { name: 'Autres actions pour admin' }).click();
-  await expect(page.getByRole('menuitem', { name: 'Réinitialiser le mot de passe' })).toHaveCount(
-    0,
-  );
-  await page.getByRole('menuitem', { name: 'Changer mon mot de passe' }).click();
+  await page.getByRole('button', { name: 'Changer le mot de passe de admin' }).click();
   await expect(
     page
       .getByRole('dialog', { name: 'Changer le mot de passe' })
