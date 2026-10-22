@@ -7,11 +7,16 @@ inputs:
 runs:
   using: composite
   steps:
+    - id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: echo "value=apt-$RUNNER_OS-${ImageVersion:-unknown}-$(echo "$PACKAGES" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
     - id: cache
       uses: actions/cache/restore@v4
       with:
         path: ~/apt-debs
-        key: apt-${{ runner.os }}-${{ env.ImageVersion }}-${{ replace(inputs.packages, ' ', '+') }}
+        key: ${{ steps.key.outputs.value }}
     - shell: bash
       env:
         PACKAGES: ${{ inputs.packages }}
@@ -22,4 +27,4 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: ~/apt-debs
-        key: apt-${{ runner.os }}-${{ env.ImageVersion }}-${{ replace(inputs.packages, ' ', '+') }}
+        key: ${{ steps.key.outputs.value }}
