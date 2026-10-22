@@ -80,6 +80,9 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     public Task ReplicatedExecutionCannotBeClaimedOnAnotherServer() => Scenarios.ReplicatedExecutionCannotBeClaimedOnAnotherServerAsync();
 
     [DatabaseFact]
+    public Task ResumeOnAnotherDirectWorkerWhenTheDeadWorkerWasTheAccessNode() => Scenarios.ResumeOnAnotherDirectWorkerWhenTheDeadWorkerWasTheAccessNodeAsync();
+
+    [DatabaseFact]
     public Task WaitMediaPolicy() => Scenarios.WaitMediaPolicyAsync();
 
     [DatabaseFact]

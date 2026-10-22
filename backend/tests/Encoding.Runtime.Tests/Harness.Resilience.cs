@@ -104,5 +104,26 @@ internal static partial class Harness
             Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up.");await ExpireAsync(id);await RecoverCancellationAsync(id);
             Console.WriteLine("PASS: a replicated execution is visible but unassignable on another server; leases stay local.");
         }
+
+        /// <summary>Stockage partagé : chaque worker a un accès direct. Si le worker qui détenait le média est perdu, un autre worker en accès direct reprend (plus de « nœud source » épinglé sur le worker mort).</summary>
+        public async Task ResumeOnAnotherDirectWorkerWhenTheDeadWorkerWasTheAccessNodeAsync()
+        {
+            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"variable","base-variable",new(){["name"]=J("kept"),["value"]=J("7")}),Node(registry,"end","base-complete-flow"));
+            var(id,first,context)=await EnqueueAsync(flow);
+            await CompleteAsync(id,a,first,"entry",context);
+            await using(var shared=db.CreateCommand("UPDATE library_node_accesses SET mode='direct',local_path=@root,transfer_source_node_id=NULL WHERE node_id IN (@b,@c) AND library_id=(SELECT library_id FROM execution_work WHERE execution_id=@id)"))
+            { shared.Parameters.AddWithValue("root",directory); shared.Parameters.AddWithValue("b",b); shared.Parameters.AddWithValue("c",c); shared.Parameters.AddWithValue("id",id); await shared.ExecuteNonQueryAsync(); }
+            await ExpireAsync(id);
+            await using(var gone=db.CreateCommand("UPDATE cluster_nodes SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE id=@a")){ gone.Parameters.AddWithValue("a",a); await gone.ExecuteNonQueryAsync(); }
+            var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance,new NodeGroupRepository(db),eligibility,new NodePresenceOptions(TimeSpan.FromMinutes(5)));
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            var state=await executions.GetAsync(id,CancellationToken.None);
+            Check(state!.State=="running","Another worker with direct access to the library keeps the execution alive: "+state.Detail);
+            var resumed=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The surviving direct worker must resume the execution.");
+            Check(resumed.ExecutionId==id && resumed.Checkpoint?.NextNodeId=="variable","The resume continues at the last checkpoint.");
+            Check(resumed.SourceNodeId==b && resumed.SourceRoot==directory,"The resuming worker uses its own direct access, not the lost worker's.");
+            Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up.");await ExpireAsync(id);await RecoverCancellationAsync(id);
+            Console.WriteLine("PASS: a resume does not stay pinned to the lost worker's own library access.");
+        }
     }
 }
