@@ -51,7 +51,8 @@ public sealed class AiAssistantService(
                 && (c.Provider != "codex-cli" || settings.CodexEnabled)
                 && (c.Provider != "claude-cli" || settings.ClaudeEnabled)
                 && (c.Provider != "ollama" || settings.OllamaEnabled)
-                && (c.Provider != "openai" || settings.OpenAiEnabled))
+                && (c.Provider != "openai" || settings.OpenAiEnabled)
+                && (c.Provider != "anthropic" || settings.AnthropicEnabled))
             .SelectMany(c => c.Models.Where(m => !policy.DisabledModels.Any(d => d.Provider == c.Provider && d.Model == m.Id))
                 .Select(m => new AiAssistantModelOption(c.Provider, m.Id, m.Label, m.ReasoningEfforts,
                     node.NodeId, node.Name, m.DefaultReasoningEffort, m.ReasoningKnown, m.IsDefault)))).ToArray();

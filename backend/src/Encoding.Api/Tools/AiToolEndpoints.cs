@@ -85,7 +85,8 @@ public static class AiToolEndpoints
     private static IResult PublicSettings(AiSettingsDto settings) => Results.Ok(new
     {
         settings.DefaultProvider, settings.OllamaBaseUrl, settings.OllamaModel, settings.OpenAiBaseUrl,
-        settings.OpenAiModel, HasOpenAiApiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey), settings.TimeoutSeconds, settings.SubtitleBatchSize,
+        settings.OpenAiModel, HasOpenAiApiKey = !string.IsNullOrWhiteSpace(settings.OpenAiApiKey),
+        HasAnthropicApiKey = !string.IsNullOrWhiteSpace(settings.AnthropicApiKey), settings.AnthropicModel, settings.AnthropicEnabled, settings.TimeoutSeconds, settings.SubtitleBatchSize,
         settings.AssistantProvider, settings.FlowProvider, settings.AssistantLocalOnly, settings.FlowLocalOnly,
         settings.DefaultModel, settings.DefaultReasoningEffort, settings.AssistantModel, settings.AssistantReasoningEffort,
         settings.FlowModel, settings.FlowReasoningEffort,

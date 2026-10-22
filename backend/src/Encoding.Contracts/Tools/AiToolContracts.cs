@@ -84,7 +84,10 @@ public sealed record AiSettingsDto(
     string? AssistantModel = null,
     string? AssistantReasoningEffort = null,
     string? FlowModel = null,
-    string? FlowReasoningEffort = null);
+    string? FlowReasoningEffort = null,
+    string? AnthropicApiKey = null,
+    string AnthropicModel = "claude-sonnet-5-5",
+    bool AnthropicEnabled = true);
 
 /// <summary>Requête de mise à jour de la configuration de l'IA.</summary>
 public sealed record AiSettingsUpdateRequest(
@@ -111,4 +114,7 @@ public sealed record AiSettingsUpdateRequest(
     string? AssistantModel = null,
     string? AssistantReasoningEffort = null,
     string? FlowModel = null,
-    string? FlowReasoningEffort = null);
+    string? FlowReasoningEffort = null,
+    string? AnthropicApiKey = null,
+    string? AnthropicModel = null,
+    bool? AnthropicEnabled = null);
