@@ -111,7 +111,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
               SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
               WHERE a.library_id=w.library_id AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
                 AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
-                AND (w.handoff_selector IS NULL OR w.source_node_id IS NULL OR a.node_id=w.source_node_id OR w.handoff_selector->>'mode'='resume'))
+                AND (w.handoff_selector IS NULL OR w.source_node_id IS NULL OR a.node_id=w.source_node_id OR w.handoff_selector->>'mode'='resume' OR w.handoff_selector->>'resumed' IN (1,'true')))
             LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED
             """, connection, tx))
         {
@@ -257,7 +257,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                     if(await originalAccess.ScalarBoolAsync(ct)) { source=originalSource; if(source!=worker) root=null; }
                     // Après la perte d'un worker, l'accès d'origine peut être le worker perdu lui-même (accès direct sur chaque worker) :
                     // la reprise utilise alors l'accès propre du worker qui la reçoit, déjà résolu ci-dessus.
-                    else if(item.Selector.Mode!=RuntimeHandoffSelector.ResumeMode) continue;
+                    else if(!item.Selector.IsResume) continue;
                 }
             }
             var pluginSettings=item.Settings is {} savedSettings?pluginConfigurations.ReadSnapshot(savedSettings)

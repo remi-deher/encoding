@@ -111,6 +111,14 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         catch(ArgumentException) { return false; }
         var detail=$"Le worker a perdu sa connexion ; reprise {resumes+1}/{MaximumResumes} depuis le dernier checkpoint par un autre worker éligible.";
         if(!await ExecutionRepository.RecordInTransactionAsync(id,new(Guid.NewGuid(),revision,"running",worker,null,detail),c,tx,ct)) return false;
+        // La destination du dernier relais (nœud, groupe, étiquettes) reste la règle de la reprise : un encodage confié à .51 ne reprend pas ailleurs.
+        RuntimeHandoffSelector? previousSelector=null;
+        await using(var read=Sql.Command("SELECT handoff_selector::text FROM execution_work WHERE execution_id=@id",c,tx))
+        {
+            read.Parameters.AddWithValue("id",id);
+            if(await read.ExecuteScalarAsync(ct) is string stored) previousSelector=JsonSerializer.Deserialize<RuntimeHandoffSelector>(stored,Json);
+        }
+        var resumeSelector=(previousSelector??new RuntimeHandoffSelector("eligible")) with { Resumed=true };
         await using var yield=Sql.Command("""
           UPDATE execution_work SET handoff_pending=true,handoff_selector=@selector,previous_worker_node_id=@worker,
             worker_node_id=NULL,lease_until=NULL,lease_epoch=lease_epoch+1,resume_count=resume_count+1 WHERE execution_id=@id;
@@ -118,7 +126,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
           DELETE FROM disk_locks WHERE execution_id=@id;
           """,c,tx);
         yield.Parameters.AddWithValue("id",id); yield.Parameters.AddWithValue("worker",worker.Value);
-        yield.Parameters.AddWithValue("selector",SqlKind.Json,JsonSerializer.Serialize(new RuntimeHandoffSelector(RuntimeHandoffSelector.ResumeMode),Json));
+        yield.Parameters.AddWithValue("selector",SqlKind.Json,JsonSerializer.Serialize(resumeSelector,Json));
         await yield.ExecuteNonQueryAsync(ct);
         logger.LogInformation("L’exécution {ExecutionId} est reprise au dernier checkpoint après perte du worker {WorkerId} (reprise {Resume}/{Maximum}).",id,worker,resumes+1,MaximumResumes);
         return true;
@@ -150,11 +158,11 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             var checkpoint=item.Checkpoint is null?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(item.Checkpoint,Json);
             if(flow is null || selector is null) continue;
             // Un worker qui redémarre doit pouvoir revenir avant qu'une reprise soit déclarée impossible.
-            if(selector.Mode==RuntimeHandoffSelector.ResumeMode && DateTimeOffset.UtcNow-item.Updated<ResumeGrace) continue;
+            if(selector.IsResume && DateTimeOffset.UtcNow-item.Updated<ResumeGrace) continue;
             if(await HasEligibleWorkerAsync(item,flow,selector,checkpoint,ct)) continue;
 
             await using var c=await dataSource.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
-            var detail=selector.Mode==RuntimeHandoffSelector.ResumeMode?"Aucun worker éligible n’a pu reprendre cette tâche après la perte de son worker (capacités, accès au média ou limites) ; l’exécution échoue.":"Aucun worker en ligne ne correspond à la destination de ce relais ou de cette relance ; l’exécution échoue.";
+            var detail=selector.IsResume?"Aucun worker éligible n’a pu reprendre cette tâche après la perte de son worker (capacités, accès au média ou limites) ; l’exécution échoue.":"Aucun worker en ligne ne correspond à la destination de ce relais ou de cette relance ; l’exécution échoue.";
             if(await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",item.Actor,null,detail),c,tx,ct))
             {
                 await RuntimeRepository.ReleaseAsync(item.Id,c,tx,ct);
@@ -192,7 +200,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         var needsWrite=eligibility!.RequiresWriteAccess(flow,entry,checkpoint is not null);
         foreach(var candidate in candidates)
         {
-            if(candidate.Id==item.Previous && selector.Mode!=RuntimeHandoffSelector.ResumeMode || candidate.Capacity<=0) continue;
+            if(candidate.Id==item.Previous && !selector.IsResume || candidate.Capacity<=0) continue;
             var identity=await nodeGroups!.GetNodeIdentityAsync(candidate.Id,ct);
             if(!selector.Accepts(candidate.Id,item.Previous??Guid.Empty,identity)) continue;
             if(candidate.ScheduleEnabled && candidate.Timezone is not null && candidate.Slots is not null
