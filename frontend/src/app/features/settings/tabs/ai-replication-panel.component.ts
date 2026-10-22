@@ -128,7 +128,7 @@ export function formatSyncedAt(value: unknown): string | null {
       color: var(--text-primary);
     }
     .tone-muted .state {
-      color: var(--text-muted);
+      color: var(--text-secondary);
     }
     .banner {
       padding: var(--space-2) var(--space-4);

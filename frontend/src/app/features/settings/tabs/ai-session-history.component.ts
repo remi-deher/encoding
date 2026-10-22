@@ -4,22 +4,23 @@ import { MatButtonModule } from '@angular/material/button';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { AiSessionPage, AiSessionState, AiSessionSummary } from '../../../shared/models/ai-tools';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 
 @Component({
   selector: 'app-ai-session-history',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, DecimalPipe, MatButtonModule],
+  imports: [ConfigurationSectionComponent, DatePipe, DecimalPipe, MatButtonModule],
   template: `
-    <section aria-labelledby="ai-history-title">
-      <header>
-        <div>
-          <h3 id="ai-history-title">Sessions et traitements IA</h3>
-          <p>Historique de l’application, indépendant des conversations web des fournisseurs.</p>
-        </div>
+    <app-configuration-section
+      title="Sessions et traitements IA"
+      description="Historique de l’application, indépendant des conversations web des fournisseurs."
+      icon="terminal"
+    >
+      <div section-actions>
         <button matButton="tonal" type="button" [disabled]="loading()" (click)="refresh()">
           {{ loading() ? 'Chargement…' : 'Actualiser l’historique' }}
         </button>
-      </header>
+      </div>
       @if (page(); as result) {
         <p>
           État au dernier chargement. Les mises à jour des autres nœuds peuvent apparaître avec un
@@ -114,12 +115,9 @@ import { AiSessionPage, AiSessionState, AiSessionSummary } from '../../../shared
           consommer du quota.
         </p>
       }
-    </section>
+    </app-configuration-section>
   `,
   styles: `
-    section {
-      margin-block-start: 24px;
-    }
     header {
       display: flex;
       align-items: center;

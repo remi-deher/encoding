@@ -27,10 +27,12 @@ import { NetworkTabComponent } from './tabs/network-tab.component';
 import { AppearanceTabComponent } from './tabs/appearance-tab.component';
 import { SettingsEditor } from './settings-editor';
 
-export type SettingsMainTab = 'interface' | 'access' | 'connections' | 'network' | 'operations';
+export type SettingsMainTab =
+  'interface' | 'access' | 'ai' | 'connections' | 'network' | 'operations';
 export function settingsDomain(value: string | null): SettingsMainTab {
   if (['access', 'security', 'tokens', 'users'].includes(value ?? '')) return 'access';
-  if (['connections', 'integrations', 'mcp', 'webhooks', 'ai'].includes(value ?? ''))
+  if (['ai', 'mcp', 'assistant'].includes(value ?? '')) return 'ai';
+  if (['connections', 'integrations', 'webhooks', 'metrics'].includes(value ?? ''))
     return 'connections';
   if (['network', 'proxy', 'reverse-proxy'].includes(value ?? '')) return 'network';
   if (['operations', 'system', 'overview', 'logs', 'system-logs'].includes(value ?? ''))
@@ -92,8 +94,11 @@ export function settingsDomain(value: string | null): SettingsMainTab {
               <app-user-management-tab (usersUpdated)="users.set($event)" />
               <app-api-token-tab (tokensUpdated)="tokens.set($event)" />
             }
+            @case ('ai') {
+              <app-ai-tools-tab /><app-mcp-server-tab />
+            }
             @case ('connections') {
-              <app-ai-tools-tab /><app-mcp-server-tab /><app-webhooks-tab />
+              <app-webhooks-tab /><app-metrics-tab />
             }
             @case ('network') {
               <app-network-tab />
@@ -105,7 +110,6 @@ export function settingsDomain(value: string | null): SettingsMainTab {
                 description="Événements des services sur le nœud consulté."
                 ><app-system-log-viewer
               /></app-configuration-section>
-              <app-metrics-tab />
             }
           }
         </div>
@@ -115,7 +119,7 @@ export function settingsDomain(value: string | null): SettingsMainTab {
   styles: `
     .settings-content {
       display: grid;
-      gap: var(--space-5);
+      gap: var(--space-6);
       margin-top: var(--space-6);
       max-width: 1160px;
       min-width: 0;
@@ -135,13 +139,15 @@ export class SettingsPageComponent {
   protected readonly descriptions: Record<SettingsMainTab, string> = {
     interface: 'Vos préférences pour cette interface.',
     access: 'Les comptes et les accès des applications à votre cluster.',
-    connections: 'Les services que votre cluster utilise et les applications qui s’y connectent.',
+    ai: 'Le moteur, les fournisseurs, la consommation et les assistants externes.',
+    connections: 'Les applications qui s’adressent à votre cluster et la supervision.',
     network: 'L’accès à ce nœud derrière un reverse proxy.',
     operations: 'La santé des services et les événements de ce nœud.',
   };
   protected readonly mainTabs: readonly CategoryTabOption[] = [
     { value: 'interface', label: 'Interface' },
     { value: 'access', label: 'Accès' },
+    { value: 'ai', label: 'IA' },
     { value: 'connections', label: 'Connexions' },
     { value: 'network', label: 'Réseau' },
     { value: 'operations', label: 'Exploitation' },

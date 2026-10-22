@@ -102,15 +102,15 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test('five domains use the application shell and remain accessible on both themes', async ({
+test('six domains use the application shell and remain accessible on both themes', async ({
   page,
 }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/settings');
   const settings = page.locator('app-settings-page');
-  await expect(settings.getByRole('tab')).toHaveCount(5);
-  for (const domain of ['Interface', 'Accès', 'Connexions', 'Réseau', 'Exploitation']) {
+  await expect(settings.getByRole('tab')).toHaveCount(6);
+  for (const domain of ['Interface', 'Accès', 'IA', 'Connexions', 'Réseau', 'Exploitation']) {
     await settings.getByRole('tab', { name: domain, exact: true }).click();
     await expect(settings.getByRole('tab', { name: domain, exact: true })).toHaveAttribute(
       'aria-selected',
@@ -239,14 +239,14 @@ test('discard protection applies to tab clicks and browser history, without doub
   page,
 }) => {
   await page.goto('/settings?tab=interface');
-  await page.getByRole('tab', { name: 'Connexions', exact: true }).click();
+  await page.getByRole('tab', { name: 'IA', exact: true }).click();
   await page.getByRole('combobox', { name: 'Type d’IA', exact: true }).first().click();
   await page.getByRole('option', { name: 'OpenAI · API', exact: true }).click();
   await page.goBack();
   let confirmation = page.getByRole('dialog', { name: 'Quitter sans enregistrer ?', exact: true });
   await expect(confirmation).toBeVisible();
   await confirmation.getByRole('button', { name: 'Annuler', exact: true }).click();
-  await expect(page.getByRole('tab', { name: 'Connexions', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: 'IA', exact: true })).toHaveAttribute(
     'aria-selected',
     'true',
   );

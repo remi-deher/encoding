@@ -7,6 +7,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
+import {
+  SettingRowComponent,
+  SettingGroupComponent,
+} from '../../../shared/ui/settings/setting-row.component';
+import { SettingsNoticeComponent } from '../../../shared/ui/settings/settings-notice.component';
+import { SettingsSaveBarComponent } from '../../../shared/ui/settings/settings-save-bar.component';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { NetworkSettingsService } from '../../../shared/services/network-settings.service';
 
@@ -20,72 +26,73 @@ import { NetworkSettingsService } from '../../../shared/services/network-setting
     MatInputModule,
     MatSlideToggleModule,
     ConfigurationSectionComponent,
+    SettingRowComponent,
+    SettingGroupComponent,
+    SettingsNoticeComponent,
+    SettingsSaveBarComponent,
   ],
   template: `
     <app-configuration-section
       title="Reverse proxy"
-      description="Réglage propre à ce nœud : adresses des proxies dont les en-têtes X-Forwarded-* sont crus."
+      description="Réglage propre à ce nœud."
+      icon="server"
     >
-      <p class="hint">
-        Derrière un reverse proxy, déclarez son adresse pour que les limites de requêtes, les
-        journaux et le cookie sécurisé utilisent l’adresse et le schéma réels du visiteur. Une
-        adresse déclarée par erreur permettrait à son appelant de falsifier ces informations.
-      </p>
-      <mat-slide-toggle
-        [checked]="trustProxy()"
-        [disabled]="busy()"
-        (change)="trustProxy.set($event.checked)"
-        >Faire confiance au reverse proxy</mat-slide-toggle
-      >
-      <mat-form-field appearance="outline" class="field">
-        <mat-label>Adresses ou réseaux (une par ligne)</mat-label>
-        <textarea
-          matInput
-          rows="4"
-          [ngModel]="proxiesText()"
-          (ngModelChange)="proxiesText.set($event)"
-          [disabled]="busy()"
-          placeholder="192.168.1.10&#10;172.18.0.0/16"
-        ></textarea>
-        @if (error()) {
-          <mat-error>{{ error() }}</mat-error>
-        }
-      </mat-form-field>
-      @if (detectionMessage()) {
-        <p class="detection" role="status">{{ detectionMessage() }}</p>
-      }
-      <div class="actions">
-        <button matButton="tonal" [disabled]="busy()" (click)="detect()">
-          Détecter le proxy de cette connexion
-        </button>
-        <button matButton="filled" [disabled]="busy() || !dirty()" (click)="save()">
-          Enregistrer
-        </button>
-      </div>
+      <app-settings-notice tone="warning">
+        Une adresse déclarée par erreur permettrait à son appelant de falsifier l’adresse et le
+        schéma vus par l’application.
+      </app-settings-notice>
+      <app-setting-group>
+        <app-setting-row
+          label="Faire confiance au reverse proxy"
+          hint="Utilise ses en-têtes X-Forwarded-* pour les limites de requêtes, les journaux et le cookie sécurisé."
+        >
+          <mat-slide-toggle
+            aria-label="Faire confiance au reverse proxy"
+            [checked]="trustProxy()"
+            [disabled]="busy()"
+            (change)="trustProxy.set($event.checked)"
+          />
+        </app-setting-row>
+        <app-setting-row
+          label="Adresses ou réseaux du proxy"
+          hint="Une par ligne, par exemple 192.168.1.10 ou 172.18.0.0/16."
+          [stacked]="true"
+        >
+          <mat-form-field appearance="outline" class="field" subscriptSizing="dynamic">
+            <mat-label>Adresses ou réseaux</mat-label>
+            <textarea
+              matInput
+              rows="4"
+              [ngModel]="proxiesText()"
+              (ngModelChange)="proxiesText.set($event)"
+              [disabled]="busy()"
+              placeholder="192.168.1.10&#10;172.18.0.0/16"
+            ></textarea>
+            @if (error()) {
+              <mat-error>{{ error() }}</mat-error>
+            }
+          </mat-form-field>
+          @if (detectionMessage()) {
+            <app-settings-notice tone="info">{{ detectionMessage() }}</app-settings-notice>
+          }
+          <button matButton="tonal" [disabled]="busy()" (click)="detect()">
+            Détecter le proxy de cette connexion
+          </button>
+        </app-setting-row>
+      </app-setting-group>
     </app-configuration-section>
+    <app-settings-save-bar
+      [visible]="dirty()"
+      [busy]="busy()"
+      (saved)="save()"
+      (cancelled)="cancel()"
+    />
   `,
+
   styles: `
-    .hint,
-    .detection {
-      color: var(--text-secondary);
-      line-height: 1.6;
-      margin: 0 0 var(--space-4);
-    }
-    .detection {
-      padding: var(--space-3) var(--space-4);
-      border-radius: var(--radius-md);
-      background: var(--surface-container-low);
-    }
     .field {
       display: block;
       width: 100%;
-      margin-top: var(--space-4);
-    }
-    .actions {
-      display: flex;
-      gap: var(--space-3);
-      flex-wrap: wrap;
-      justify-content: flex-end;
     }
   `,
 })
@@ -121,6 +128,12 @@ export class NetworkTabComponent {
       this.trustProxy() !== this.saved.trustProxy ||
       this.proxiesText().trim() !== this.saved.proxies
     );
+  }
+
+  protected cancel(): void {
+    this.apply(this.saved.trustProxy, this.saved.proxies);
+    this.error.set('');
+    this.detectionMessage.set('');
   }
 
   protected save(): void {

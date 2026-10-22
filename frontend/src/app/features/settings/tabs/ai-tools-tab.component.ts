@@ -26,6 +26,12 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
+import {
+  SettingGroupComponent,
+  SettingRowComponent,
+} from '../../../shared/ui/settings/setting-row.component';
+import { SettingsNoticeComponent } from '../../../shared/ui/settings/settings-notice.component';
+import { SettingsSaveBarComponent } from '../../../shared/ui/settings/settings-save-bar.component';
 import { SettingsEditor } from '../settings-editor';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -48,6 +54,10 @@ import { aiEffortLabel, aiTypeLabel } from '../../ai/components/ai-model-selecti
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ConfigurationSectionComponent,
+    SettingGroupComponent,
+    SettingRowComponent,
+    SettingsNoticeComponent,
+    SettingsSaveBarComponent,
     AiQuotaPanelComponent,
     AiReplicationPanelComponent,
     AiUsagePanelComponent,
@@ -91,6 +101,21 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
       return this.openAiBaseUrl() && this.openAiModel() ? 'Configuré' : 'Non configuré';
     const tool = this.tools().find((item) => item.id === id);
     return tool ? this.authLabel(tool.authStatus.state) : 'État indisponible';
+  }
+  providerEnabled(id: string): boolean {
+    if (id === 'ollama') return this.ollamaEnabled();
+    if (id === 'openai') return this.openAiEnabled();
+    return id === 'codex-cli' ? this.codexEnabled() : this.claudeEnabled();
+  }
+  setProviderEnabled(id: string, enabled: boolean): void {
+    if (id === 'ollama') this.ollamaEnabled.set(enabled);
+    else if (id === 'openai') this.openAiEnabled.set(enabled);
+    else if (id === 'codex-cli') this.codexEnabled.set(enabled);
+    else this.claudeEnabled.set(enabled);
+  }
+  removeProvider(id: string): void {
+    if (id === 'ollama' || id === 'openai') this.deleteProviderConfiguration(id);
+    else this.revoke(id);
   }
   deleteProviderConfiguration(id: string): void {
     if (id === 'ollama') {

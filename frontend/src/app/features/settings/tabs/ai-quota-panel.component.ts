@@ -15,22 +15,29 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { interval } from 'rxjs';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { AiNodeQuotas, AiQuotaSnapshot } from '../../../shared/models/ai-tools';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 
 @Component({
   selector: 'app-ai-quota-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, DecimalPipe, MatButtonModule, MatProgressBarModule],
+  imports: [
+    ConfigurationSectionComponent,
+    DatePipe,
+    DecimalPipe,
+    MatButtonModule,
+    MatProgressBarModule,
+  ],
   template: `
-    <section aria-labelledby="quota-title">
-      <header>
-        <div>
-          <h3 id="quota-title">Quotas des abonnements</h3>
-          <p>Limites du compte fournisseur, incluant son utilisation en dehors de l’application.</p>
-        </div>
+    <app-configuration-section
+      title="Quotas des abonnements"
+      description="Limites du compte fournisseur, incluant son utilisation en dehors de l’application."
+      icon="api"
+    >
+      <div section-actions>
         <button matButton="tonal" type="button" [disabled]="loading()" (click)="refresh()">
           {{ loading() ? 'Lecture des quotas…' : 'Actualiser les quotas' }}
         </button>
-      </header>
+      </div>
       <p>
         Actualisation chaque minute. Plusieurs nœuds peuvent utiliser le même compte : leurs quotas
         ne s’additionnent pas.
@@ -109,12 +116,9 @@ import { AiNodeQuotas, AiQuotaSnapshot } from '../../../shared/models/ai-tools';
           <p>Aucune observation de quota disponible.</p>
         }
       }
-    </section>
+    </app-configuration-section>
   `,
   styles: `
-    section {
-      margin-block: 24px;
-    }
     header {
       display: flex;
       align-items: center;
