@@ -95,6 +95,9 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     public Task UncertainPluginSideEffectIsNotRepeatedAfterWorkerLoss() => Scenarios.UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync();
 
     [DatabaseFact]
+    public Task RelayWaitsForABusyWorker() => Scenarios.RelayWaitsForABusyWorkerAsync();
+
+    [DatabaseFact]
     public Task ResumeWaitsForAnEligibleWorker() => Scenarios.ResumeWaitsForAnEligibleWorkerAsync();
 
     [DatabaseFact]
