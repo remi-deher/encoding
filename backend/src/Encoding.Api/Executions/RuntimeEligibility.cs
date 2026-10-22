@@ -94,14 +94,19 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 if(toolId is null || !capabilities.Any(capability=>capability.ToolId==toolId
                     && (string.IsNullOrWhiteSpace(minimum) || Version.TryParse(capability.Version,out var actual) && Version.TryParse(minimum,out var min) && actual>=min)
                     && (string.IsNullOrWhiteSpace(required) || capability.AccelerationTypes.Contains(required,StringComparer.Ordinal)))) return false;
-                if(!string.IsNullOrWhiteSpace(encoder))
+                var kind=node.Configuration.TryGetValue("encoderKind",out var requestedKind)?requestedKind.GetString():null;
+                var kindOnly=kind is "hardware" or "cpu";
+                if(!string.IsNullOrWhiteSpace(encoder) || kindOnly)
                 {
                     var ffmpeg = capabilities.FirstOrDefault(c => string.Equals(c.ToolId, "ffmpeg", StringComparison.OrdinalIgnoreCase));
                     if (ffmpeg is null) return false;
-                    var sought = encoder.Trim();
+                    var sought = encoder?.Trim() ?? "";
+                    // Type d'encodage : « matériel » exclut le CPU, « cpu » exclut tout accélérateur.
+                    bool KindMatches(string acceleration) => kind switch { "hardware" => acceleration != "cpu", "cpu" => acceleration == "cpu", _ => true };
                     var matching = Encoding.Contracts.Flows.VideoEncoderCatalog.All
-                        .Where(desc => string.Equals(desc.Codec, sought, StringComparison.OrdinalIgnoreCase) || string.Equals(desc.Id, sought, StringComparison.OrdinalIgnoreCase))
+                        .Where(desc => (sought.Length == 0 || string.Equals(desc.Codec, sought, StringComparison.OrdinalIgnoreCase) || string.Equals(desc.Id, sought, StringComparison.OrdinalIgnoreCase)) && KindMatches(desc.Acceleration))
                         .ToList();
+                    if (sought.Length == 0 && matching.Count == 0) return false;
                     var usable = ffmpeg.EncoderChecks?.Where(c => c.Status == "usable").Select(c => c.EncoderId) ?? [];
                     var av = ffmpeg.Encoders ?? [];
                     var supported = matching.Count > 0
