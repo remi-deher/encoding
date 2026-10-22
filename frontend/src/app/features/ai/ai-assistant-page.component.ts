@@ -5,7 +5,10 @@ import { map, Observable } from 'rxjs';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
-import { AiConversationComposerComponent } from './components/ai-conversation-composer.component';
+import {
+  AI_ASSISTANT_FILE_ACCEPT,
+  AiConversationComposerComponent,
+} from './components/ai-conversation-composer.component';
 import { aiEffortLabel, aiModelKey } from './components/ai-model-selection';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
@@ -157,6 +160,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly loadingAssistantOptions = signal(true);
   protected readonly prompt = signal('');
   protected readonly modelSettingsOpen = signal(false);
+  protected readonly fileAccept = AI_ASSISTANT_FILE_ACCEPT;
   protected readonly attachments = signal<readonly AiAssistantFileAttachment[]>([]);
   protected readonly attachmentName = computed(
     () =>
