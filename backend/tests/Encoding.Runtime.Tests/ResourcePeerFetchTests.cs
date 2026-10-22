@@ -1,6 +1,8 @@
 using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
 using System.Security.Cryptography;
 using Encoding.Api.Auth;
 using Encoding.Api.Infrastructure;
@@ -36,6 +38,8 @@ public sealed class ResourcePeerFetchTests
         private SqliteDataSource serverDatabase = null!;
         private SqliteDataSource clientDatabase = null!;
         public ResourceBlobStore ServerBlobs { get; private set; } = null!;
+        public ResourceRepository ServerResources { get; private set; } = null!;
+        public DbDataSource ServerDatabase => serverDatabase;
         public ResourceBlobStore ClientBlobs { get; private set; } = null!;
         public ResourceBlobFetcher Fetcher { get; private set; } = null!;
         public ClusterPeerIdentityStore Identity { get; private set; } = null!;
@@ -79,6 +83,7 @@ public sealed class ResourcePeerFetchTests
             });
             pair.peerClient = new HttpClient(pair.factory.Server.CreateHandler());
             pair.ServerBlobs = pair.factory.Services.GetRequiredService<ResourceBlobStore>();
+            pair.ServerResources = pair.factory.Services.GetRequiredService<ResourceRepository>();
             pair.ClientBlobs = new ResourceBlobStore(clientConfiguration);
             var journal = new ClusterReconciliationRepository(pair.clientDatabase);
             await journal.AddPeerEndpointAsync(PeerUrl, "test", CancellationToken.None);
@@ -184,6 +189,49 @@ public sealed class ResourcePeerFetchTests
         Assert.False(await stranger.Fetcher.EnsureAsync(hidden.Sha256, hidden.Bytes, CancellationToken.None));
         using var refused = await stranger.Client.SendAsync(stranger.SignedGet(hidden.Sha256));
         Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+    }
+
+    [Fact]
+    public async Task AWorkerReadsAVersionAndDownloadsItsFilesWithItsNodeToken()
+    {
+        await using var pair = await Pair.CreateAsync();
+        var file = await StoreAsync(pair.ServerBlobs, Font);
+        var resourceId = Guid.NewGuid();
+        await pair.ServerResources.CreateAsync(resourceId, "font", "Crunchyroll", "", [new(file.Name, file.Sha256)], CancellationToken.None);
+        var nodeId = Guid.NewGuid();
+        const string token = "worker-token";
+        await using (var insert = pair.ServerDatabase.CreateCommand("INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,capabilities,last_seen_at,node_token_hash) VALUES(@id,'worker',@roles,1,'[]',@seen,@hash)"))
+        {
+            insert.Parameters.AddWithValue("id", nodeId);
+            insert.Parameters.AddWithValue("roles", "[\"worker\"]");
+            insert.Parameters.AddWithValue("seen", DateTimeOffset.UtcNow);
+            insert.Parameters.AddWithValue("hash", SqlKind.Bytes, SHA256.HashData("worker-token"u8));
+            await insert.ExecuteNonQueryAsync();
+        }
+
+        async Task<HttpResponseMessage> GetAsync(string path, string? nodeToken)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{PeerUrl}api/v1/runtime/nodes/{nodeId:D}/{path}");
+            if (nodeToken is not null) request.Headers.Add("X-Node-Token", nodeToken);
+            return await pair.Client.SendAsync(request);
+        }
+
+        using (var version = await GetAsync($"resources/{resourceId:D}/versions/1", token))
+        {
+            Assert.Equal(HttpStatusCode.OK, version.StatusCode);
+            var info = await version.Content.ReadFromJsonAsync<Encoding.Contracts.Flows.ResourceVersionInfo>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            Assert.Equal(file.Sha256, Assert.Single(info!.Files).Sha256);
+        }
+        using (var blob = await GetAsync($"resources/blobs/{file.Sha256}", token))
+            Assert.Equal(Font, await blob.Content.ReadAsByteArrayAsync());
+        using (var unknown = await GetAsync($"resources/{resourceId:D}/versions/9", token))
+            Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        using (var absent = await GetAsync($"resources/blobs/{new string('b', 64)}", token))
+            Assert.Equal(HttpStatusCode.NotFound, absent.StatusCode);
+        using (var wrongToken = await GetAsync($"resources/blobs/{file.Sha256}", "other"))
+            Assert.Equal(HttpStatusCode.Unauthorized, wrongToken.StatusCode);
+        using (var noToken = await GetAsync($"resources/blobs/{file.Sha256}", null))
+            Assert.Equal(HttpStatusCode.Unauthorized, noToken.StatusCode);
     }
 
     private static async Task TrustPeerAsync(DbDataSource database, Guid clusterId, ClusterPeerIdentityStore peer)

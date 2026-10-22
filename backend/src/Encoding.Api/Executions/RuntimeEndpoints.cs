@@ -2,6 +2,8 @@ using Encoding.Api.Auth;
 using Encoding.Api.Tools;
 using Encoding.Contracts.Tools;
 using Encoding.Api.Flows;
+using Encoding.Api.Resources;
+using Encoding.Contracts.Flows;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Libraries;
 using Encoding.Contracts.Executions;
@@ -211,6 +213,23 @@ public static class RuntimeEndpoints
             if(feature is { IsReadOnly:false }) feature.MaxRequestBodySize=configuration.GetValue<long>("Runtime:MaxArtifactBytes",1024L*1024*1024*1024);
             try { return await artifacts.PutAsync(id,nodeId,epoch,digest,request.Body,original==true,ct,inputPath) ? Results.Created(request.Path,null) : Results.Conflict(); }
             catch(InvalidDataException e) { return Results.BadRequest(new { title=e.Message }); }
+        });
+        // Ressources du catalogue (ADR 0006) : le worker lit la liste des fichiers d'une version puis les télécharge un à un.
+        // Si ce serveur n'a pas encore l'octet, il le récupère d'abord auprès d'un pair (délai borné).
+        group.MapGet("/resources",async(ResourceRepository resources,CancellationToken ct)=>
+            Results.Ok((await resources.LatestVersionsAsync(ct)).Select(item=>new ResourceVersionInfo(item.ResourceId,item.Version,item.Files.Select(file=>new ResourceFileInfo(file.Name,file.Sha256,file.Bytes)).ToArray())).ToArray()));
+        group.MapGet("/resources/{resourceId:guid}/versions/{version:int}",async(Guid resourceId,int version,ResourceRepository resources,CancellationToken ct)=>
+            await resources.GetVersionAsync(resourceId,version,ct) is { } item
+                ? Results.Ok(new ResourceVersionInfo(item.ResourceId,item.Version,item.Files.Select(file=>new ResourceFileInfo(file.Name,file.Sha256,file.Bytes)).ToArray()))
+                : Results.NotFound());
+        group.MapGet("/resources/blobs/{digest}",async(string digest,ResourceRepository resources,ResourceBlobStore blobs,ResourceBlobFetcher fetcher,CancellationToken ct)=>
+        {
+            if(!ResourceBlobStore.ValidDigest(digest)) return Results.NotFound();
+            if(!blobs.Exists(digest))
+            {
+                if(await resources.FindFileAsync(digest,ct) is not { } known || !await fetcher.EnsureAsync(digest,known.Bytes,ct)) return Results.NotFound();
+            }
+            return Results.File(blobs.OpenRead(digest),"application/octet-stream",enableRangeProcessing:true);
         });
         group.MapGet("/executions/{id:guid}/dav/{digest}",async(Guid nodeId,Guid id,string digest,long epoch,RuntimeArtifactStore artifacts,CancellationToken ct)=>
         {
