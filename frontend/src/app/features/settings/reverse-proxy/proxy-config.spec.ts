@@ -85,11 +85,23 @@ describe('proxy-config', () => {
     );
   });
 
-  it('limits Nginx Proxy Manager to one node and says so', () => {
+  it('gives Nginx Proxy Manager the first node in its notes and fallbacks in the custom block', () => {
     const out = generateProxyConfig(input({ proxy: 'npm' }));
     expect(out.text).toContain('proxy_buffering off;');
+    expect(out.text).toContain('error_page 502 503 504 = @encoding_1;');
+    expect(out.text).toContain('location @encoding_1 {');
+    expect(out.text).toContain('proxy_pass http://192.168.1.51:8090;');
+    expect(out.text).not.toContain('192.168.1.50');
     expect(out.notes.join(' ')).toContain('192.168.1.50');
-    expect(out.notes.join(' ')).toContain('un seul nœud');
+  });
+
+  it('chains several fallbacks for Nginx Proxy Manager and omits them with one node', () => {
+    const three = parseBackends('a:1\nb:2\nc:3');
+    const chained = generateProxyConfig(input({ proxy: 'npm', backends: three })).text;
+    expect(chained).toContain('location @encoding_2 {');
+    expect(chained.match(/error_page 502 503 504 = @encoding_2;/g)).toHaveLength(1);
+    const single = generateProxyConfig(input({ proxy: 'npm', redundancy: false })).text;
+    expect(single).not.toContain('@encoding_1');
   });
 
   it('falls back to a placeholder domain', () => {

@@ -18,7 +18,7 @@ L'application pose elle-même `X-Content-Type-Options`, `X-Frame-Options: DENY`,
 
 ## Générer une configuration
 
-**Paramètres > Réseau > Reverse proxy > Générer une configuration** produit un fichier prêt à copier ou à télécharger pour Nginx, Caddy, Traefik ou Nginx Proxy Manager. Le nom de domaine vient de l'URL publique, les nœuds serveurs de ce nœud et des pairs connus (adresses modifiables). La case « Redondance de l'interface web » déclare tous les nœuds serveurs : le premier reçoit le trafic, les autres prennent le relais (sonde `/health/ready` avec Caddy et Traefik, bascule passive avec Nginx ; Nginx Proxy Manager n'accepte qu'un nœud). La configuration désactive la mise en tampon des flux SSE et fixe une limite d'envoi de 100 Mo. Le HTTPS est désactivé par défaut ; le certificat reste à la charge du proxy.
+**Paramètres > Réseau > Reverse proxy > Générer une configuration** produit un fichier prêt à copier ou à télécharger pour Nginx, Caddy, Traefik ou Nginx Proxy Manager. Le nom de domaine vient de l'URL publique, les nœuds serveurs de ce nœud et des pairs connus (adresses modifiables). La case « Redondance de l'interface web » déclare tous les nœuds serveurs : le premier reçoit le trafic, les autres prennent le relais (sonde `/health/ready` avec Caddy et Traefik, bascule passive avec Nginx et avec Nginx Proxy Manager, où les nœuds de secours se déclarent dans « Custom Nginx Configuration »). La configuration désactive la mise en tampon des flux SSE et fixe une limite d'envoi de 100 Mo. Le HTTPS est désactivé par défaut ; le certificat reste à la charge du proxy.
 
 ## Ports
 

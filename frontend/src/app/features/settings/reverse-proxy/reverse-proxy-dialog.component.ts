@@ -91,13 +91,7 @@ import {
             Redondance de l’interface web
           </mat-checkbox>
           @if (!canRedundancy()) {
-            <p class="hint">
-              {{
-                proxy() === 'npm'
-                  ? 'Nginx Proxy Manager n’accepte qu’un nœud : choisissez Nginx, Caddy ou Traefik.'
-                  : 'Ajoutez au moins deux nœuds serveurs pour activer la redondance.'
-              }}
-            </p>
+            <p class="hint">Ajoutez au moins deux nœuds serveurs pour activer la redondance.</p>
           }
           @if (proxy() !== 'npm') {
             <mat-checkbox [checked]="https()" (change)="https.set($event.checked)">
@@ -192,9 +186,7 @@ export class ReverseProxyDialogComponent {
   protected readonly https = signal(false);
 
   protected readonly backends = computed(() => parseBackends(this.backendsText()));
-  protected readonly canRedundancy = computed(
-    () => this.proxy() !== 'npm' && this.backends().length > 1,
-  );
+  protected readonly canRedundancy = computed(() => this.backends().length > 1);
   protected readonly redundancyOn = computed(() => this.canRedundancy() && this.redundancy());
   protected readonly output = computed(() =>
     generateProxyConfig({

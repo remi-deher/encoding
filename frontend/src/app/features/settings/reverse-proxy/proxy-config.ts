@@ -79,8 +79,7 @@ export function domainOf(publicUrl: string | null | undefined): string | null {
 
 export function generateProxyConfig(input: ProxyConfigInput): ProxyConfigOutput {
   const domain = input.domain.trim() || DEFAULT_DOMAIN;
-  const backends =
-    input.redundancy && input.proxy !== 'npm' ? input.backends : input.backends.slice(0, 1);
+  const backends = input.redundancy ? input.backends : input.backends.slice(0, 1);
   switch (input.proxy) {
     case 'nginx':
       return nginx(domain, backends, input.https);
@@ -89,7 +88,7 @@ export function generateProxyConfig(input: ProxyConfigInput): ProxyConfigOutput 
     case 'traefik':
       return traefik(domain, backends, input.https);
     case 'npm':
-      return npm(domain, backends, input.redundancy ? input.backends.length : 1);
+      return npm(domain, backends);
   }
 }
 
@@ -267,27 +266,53 @@ function traefik(
   return { fileName: 'encoding.yml', text: lines.join('\n'), notes };
 }
 
-function npm(domain: string, backends: readonly ProxyBackend[], wanted: number): ProxyConfigOutput {
+function npm(domain: string, backends: readonly ProxyBackend[]): ProxyConfigOutput {
   const first = backends[0];
-  const text = [
+  const fallbacks = backends.slice(1);
+  const lines = [
     `client_max_body_size ${MAX_BODY_MB}m;`,
     '# Flux en direct (suivi des exécutions, journaux) : pas de mise en tampon.',
     'proxy_buffering off;',
     `proxy_read_timeout ${STREAM_TIMEOUT};`,
     `proxy_send_timeout ${STREAM_TIMEOUT};`,
-    '',
-  ].join('\n');
+  ];
+  if (fallbacks.length) {
+    lines.push(
+      '',
+      '# Nœuds de secours : utilisés si le précédent ne répond plus.',
+      'proxy_intercept_errors on;',
+      'proxy_connect_timeout 3s;',
+      'error_page 502 503 504 = @encoding_1;',
+    );
+    fallbacks.forEach((backend, index) => {
+      const next =
+        index < fallbacks.length - 1 ? `error_page 502 503 504 = @encoding_${index + 2};` : null;
+      lines.push(
+        '',
+        `location @encoding_${index + 1} {`,
+        `    proxy_pass ${backend.scheme}://${backend.host};`,
+        '    proxy_http_version 1.1;',
+        '    proxy_set_header Connection "";',
+        '    proxy_set_header Host $host;',
+        '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;',
+        '    proxy_set_header X-Forwarded-Proto $scheme;',
+        ...(next ? ['    proxy_intercept_errors on;', `    ${next}`] : []),
+        '}',
+      );
+    });
+  }
+  lines.push('');
   const port = first ? first.host.split(':').pop() : '…';
   const notes = [
     `Dans Nginx Proxy Manager, créez un « Proxy Host » pour ${domain}.`,
     `Onglet Details : schéma ${first?.scheme ?? 'http'}, hôte ${first ? first.host.replace(/:\d+$/, '') : '…'}, port ${port}. Activez « Websockets Support ».`,
-    'Onglet Advanced : collez le texte ci-contre. Le HTTPS se règle dans l’onglet SSL.',
-    ...(wanted > 1
+    'Onglet Advanced : collez le texte ci-contre dans « Custom Nginx Configuration ». Le HTTPS se règle dans l’onglet SSL.',
+    ...(fallbacks.length
       ? [
-          'Nginx Proxy Manager n’accepte qu’un seul nœud dans son interface : pour la redondance, utilisez Nginx, Caddy ou Traefik.',
+          'Le nœud saisi dans Details reçoit le trafic ; les suivants prennent le relais s’il répond par une erreur 502, 503 ou 504 (bascule passive, sans sonde de santé).',
         ]
       : []),
     REMINDER,
   ];
-  return { fileName: 'encoding-npm.conf', text, notes };
+  return { fileName: 'encoding-npm.conf', text: lines.join('\n'), notes };
 }
