@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
+import { MatSlideToggleChange, MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatDialog } from '@angular/material/dialog';
 import { PasswordChangeDialogComponent } from '../../../core/auth/password-change-dialog.component';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
@@ -23,16 +24,17 @@ import {
 import { NotificationService } from '../../../shared/services/notification.service';
 import { UserAccounts } from '../../../shared/services/user-accounts';
 import {
-  AccessListAction,
-  AccessListActionEvent,
-  AccessListComponent,
-  AccessListRow,
-} from '../../../shared/ui/access-list.component';
+  SettingGroupComponent,
+  SettingRowComponent,
+} from '../../../shared/ui/settings/setting-row.component';
+import { ConfirmationDialogComponent } from '../../../shared/ui/confirmation-dialog.component';
 import { RecordFormComponent, RecordFormData } from '../../../shared/ui/record-form.component';
 
-interface UserRow extends AccessListRow {
+interface UserRow {
+  readonly id: string;
   readonly username: string;
   readonly role: string;
+  readonly meta: string;
   readonly isActive: boolean;
   readonly isSelf: boolean;
 }
@@ -42,16 +44,20 @@ interface UserRow extends AccessListRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ConfigurationSectionComponent,
-    AccessListComponent,
+    SettingGroupComponent,
+    SettingRowComponent,
     MatButtonModule,
+    MatSlideToggleModule,
     RecordFormComponent,
   ],
   template: `
     <app-configuration-section
       title="Utilisateurs"
       description="Les personnes qui peuvent accéder au cluster."
+      icon="settings"
+      [badge]="'' + users().length"
     >
-      <button section-actions matButton="filled" type="button" (click)="newUser()">
+      <button section-actions matButton="tonal" type="button" (click)="newUser()">
         Créer un compte
       </button>
       @if (state() === 'loading') {
@@ -60,12 +66,25 @@ interface UserRow extends AccessListRow {
         <p role="alert">Impossible de charger les utilisateurs.</p>
         <button matButton="text" (click)="refresh()">Réessayer</button>
       } @else {
-        <app-access-list
-          [rows]="filteredRows()"
-          [actions]="actions"
-          (rowAction)="onAction($event)"
-          emptyMessage="Aucun utilisateur."
-        />
+        <app-setting-group>
+          @for (row of filteredRows(); track row.id) {
+            <app-setting-row [label]="row.username" [hint]="row.meta" [dense]="true">
+              <span row-lead class="avatar" aria-hidden="true">{{ initial(row) }}</span>
+              <mat-slide-toggle
+                [checked]="row.isActive"
+                [disabled]="row.isSelf || busy()"
+                [attr.aria-label]="'Compte actif : ' + row.username"
+                (change)="setActive(row, $event)"
+                >Actif</mat-slide-toggle
+              >
+              <button matButton="outlined" type="button" (click)="changePassword(row)">
+                Changer le mot de passe
+              </button>
+            </app-setting-row>
+          } @empty {
+            <p>Aucun utilisateur.</p>
+          }
+        </app-setting-group>
       }
     </app-configuration-section>
     <ng-template #userEditor
@@ -75,6 +94,20 @@ interface UserRow extends AccessListRow {
         (submitted)="submit($event)"
         (cancelled)="editor.close()"
     /></ng-template>
+  `,
+  styles: `
+    .avatar {
+      display: grid;
+      place-items: center;
+      flex: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: var(--font-label);
+      font-weight: 700;
+    }
   `,
 })
 export class UserManagementTabComponent {
@@ -87,70 +120,27 @@ export class UserManagementTabComponent {
   private readonly notifications = inject(NotificationService);
 
   readonly usersUpdated = output<readonly UserAccount[]>();
-  private readonly users = signal<readonly UserAccount[]>([]);
+  protected readonly users = signal<readonly UserAccount[]>([]);
   protected readonly state = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly query = signal('');
   protected readonly busy = signal(false);
 
-  protected readonly actions: readonly AccessListAction<UserRow>[] = [
-    {
-      id: 'make-admin',
-      label: 'Passer administrateur',
-      visibleWhen: (row) => row.role === 'viewer',
-    },
-    {
-      id: 'make-viewer',
-      label: 'Passer en lecture seule',
-      visibleWhen: (row) => row.role === 'admin' && !row.isSelf,
-      confirmation: (row) => ({
-        title: 'Retirer les droits d’administration ?',
-        message: `« ${row.username} » pourra consulter le cluster sans pouvoir le modifier.`,
-        confirmLabel: 'Passer en lecture seule',
-      }),
-    },
-    {
-      id: 'deactivate',
-      label: 'Désactiver',
-      visibleWhen: (row) => !!row.isActive && !row.isSelf,
-      confirmation: (row) => ({
-        title: 'Désactiver ce compte ?',
-        message: `Les sessions de « ${row.username} » seront fermées immédiatement.`,
-        confirmLabel: 'Désactiver',
-      }),
-    },
-    { id: 'activate', label: 'Réactiver', visibleWhen: (row) => !row.isActive },
-    { id: 'own-password', label: 'Changer mon mot de passe', visibleWhen: (row) => row.isSelf },
-    { id: 'password', label: 'Réinitialiser le mot de passe', visibleWhen: (row) => !row.isSelf },
-    {
-      id: 'delete',
-      label: 'Supprimer',
-      tone: 'danger',
-      visibleWhen: (row) => !row.isSelf,
-      confirmation: (row) => ({
-        title: 'Supprimer ce compte ?',
-        message: `« ${row.username} » ne pourra plus se connecter. Cette action est définitive.`,
-        confirmLabel: 'Supprimer',
-      }),
-    },
-  ];
-
   protected readonly rows = computed<readonly UserRow[]>(() =>
-    this.users().map((user) => ({
-      id: user.id,
-      title: user.username,
-      kind: 'user' as const,
-      username: user.username,
-      role: user.role,
-      isActive: user.isActive,
-      isSelf: user.id === this.auth.user()?.id,
-      details: [`Créé le ${new Date(user.createdAt).toLocaleDateString('fr-FR')}`],
-      badges: [
-        { label: USER_ROLE_LABELS[user.role], tone: 'accent' as const, plain: true },
-        user.isActive
-          ? { label: 'Actif', tone: 'success' as const }
-          : { label: 'Désactivé', tone: 'neutral' as const },
-      ],
-    })),
+    this.users().map((user) => {
+      const isSelf = user.id === this.auth.user()?.id;
+      return {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        isActive: user.isActive,
+        isSelf,
+        meta: [
+          USER_ROLE_LABELS[user.role],
+          ...(isSelf ? ['vous'] : []),
+          `créé le ${new Date(user.createdAt).toLocaleDateString('fr-FR')}`,
+        ].join(' · '),
+      };
+    }),
   );
 
   protected readonly filteredRows = computed(() => {
@@ -223,41 +213,51 @@ export class UserManagementTabComponent {
     this.editor.reset();
   }
 
-  protected async onAction(event: AccessListActionEvent<UserRow>): Promise<void> {
-    const row = event.row;
-    switch (event.actionId) {
-      // Même fenêtre, mêmes règles et mêmes messages que « Changer le mot de passe » du menu du compte.
-      case 'own-password':
-        this.dialog.open(PasswordChangeDialogComponent);
-        return;
-      case 'password':
-        this.dialog.open(PasswordChangeDialogComponent, {
-          data: { target: { id: row.id, username: row.username } },
-        });
-        return;
-      case 'make-admin':
-        return this.run(
-          this.accounts.update(row.id, 'admin', row.isActive),
-          `« ${row.username} » est administrateur.`,
-        );
-      case 'make-viewer':
-        return this.run(
-          this.accounts.update(row.id, 'viewer', row.isActive),
-          `« ${row.username} » est en lecture seule.`,
-        );
-      case 'deactivate':
-        return this.run(
-          this.accounts.update(row.id, row.role as 'admin' | 'viewer', false),
-          `« ${row.username} » est désactivé.`,
-        );
-      case 'activate':
-        return this.run(
-          this.accounts.update(row.id, row.role as 'admin' | 'viewer', true),
-          `« ${row.username} » est réactivé.`,
-        );
-      case 'delete':
-        return this.run(this.accounts.remove(row.id), `« ${row.username} » a été supprimé.`);
+  protected initial(row: UserRow): string {
+    return row.username.charAt(0).toUpperCase();
+  }
+
+  // Même fenêtre, mêmes règles et mêmes messages que « Changer le mot de passe » du menu du compte.
+  protected changePassword(row: UserRow): void {
+    this.dialog.open(
+      PasswordChangeDialogComponent,
+      row.isSelf ? undefined : { data: { target: { id: row.id, username: row.username } } },
+    );
+  }
+
+  protected setActive(row: UserRow, change: MatSlideToggleChange): void {
+    const active = change.checked;
+    const role = row.role as 'admin' | 'viewer';
+    if (active) {
+      void this.run(
+        this.accounts.update(row.id, role, true),
+        `« ${row.username} » est réactivé.`,
+      ).then((done) => {
+        if (!done) change.source.checked = false;
+      });
+      return;
     }
+    this.dialog
+      .open(ConfirmationDialogComponent, {
+        data: {
+          title: 'Désactiver ce compte ?',
+          message: `Les sessions de « ${row.username} » seront fermées immédiatement.`,
+          confirmLabel: 'Désactiver',
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed: boolean | undefined) => {
+        if (confirmed) {
+          void this.run(
+            this.accounts.update(row.id, role, false),
+            `« ${row.username} » est désactivé.`,
+          ).then((done) => {
+            if (!done) change.source.checked = true;
+          });
+        } else {
+          change.source.checked = true;
+        }
+      });
   }
 
   protected async submit(value: Record<string, string>): Promise<void> {
@@ -280,13 +280,15 @@ export class UserManagementTabComponent {
     }
   }
 
-  private async run(request: Observable<unknown>, success: string): Promise<void> {
+  private async run(request: Observable<unknown>, success: string): Promise<boolean> {
     try {
       await firstValueFrom(request);
       this.notifications.show(success);
       await this.refresh();
+      return true;
     } catch (error) {
       this.notifications.show(AuthService.errorMessage(error, 'L’opération a échoué.'));
+      return false;
     }
   }
 }

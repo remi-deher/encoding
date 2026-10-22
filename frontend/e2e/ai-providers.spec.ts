@@ -88,7 +88,7 @@ test('provider settings remain focused, accessible and usable in both themes', a
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/settings?tab=ai');
   const tab = page.locator('app-ai-tools-tab');
-  await expect(tab.getByRole('heading', { name: 'Fournisseurs IA' })).toBeVisible();
+  await expect(tab.getByRole('heading', { name: 'Fournisseurs', exact: true })).toBeVisible();
   await tab.getByRole('button', { name: 'Configurer Ollama', exact: true }).click();
   let editor = page.getByRole('dialog', { name: 'Ollama', exact: true });
   await expect(editor.getByLabel('Adresse du serveur')).toBeVisible();

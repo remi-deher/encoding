@@ -82,6 +82,14 @@ L’interface adopte les principes de **Material 3 Expressive** pour offrir une 
   - Dans une fiche ouverte : les actions globales sur la ressource vivent dans l’en-tête.
   - Tous les retours d’action (succès, erreur) passent par `NotificationService`.
 
+### Gabarit des Paramètres
+Tous les onglets de Paramètres utilisent le même gabarit (`shared/ui/configuration-section.component.ts` et `shared/ui/settings/`) :
+- `app-configuration-section` : pastille (`icon`), titre h2, description, puce d’état (`badge`) et actions d’en-tête (`section-actions`, boutons tonals).
+- `app-setting-group` + `app-setting-row` : pile de lignes groupées ; libellé et aide à gauche, contrôle à droite ; `stacked` pour un champ large, `dense` pour une liste, `row-lead` pour une pastille.
+- `app-settings-notice` : seul bloc d’aide ou d’avertissement.
+- `app-settings-save-bar` : « Annuler / Enregistrer » collés en bas, visibles seulement s’il y a des modifications. Un réglage sans conséquence (thème, interrupteur d’un compte) s’applique immédiatement, sans barre.
+- Les réglages rarement utiles tiennent dans un seul dépliant « Options avancées » en bas de la section ; l’édition d’un élément se fait dans le tiroir au gabarit commun.
+
 ---
 
 ## 4. Intégrité des métriques, Accessibilité et Mobile

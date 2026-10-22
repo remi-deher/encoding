@@ -4,16 +4,18 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { AiClusterModelCatalog } from '../../../shared/models/ai-tools';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 
 @Component({
   selector: 'app-ai-model-catalog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatSlideToggleModule],
+  imports: [ConfigurationSectionComponent, MatSlideToggleModule],
   template: `
-    <section aria-labelledby="ai-models-title">
-      <header>
-        <h3 id="ai-models-title">Modèles disponibles</h3>
-      </header>
+    <app-configuration-section
+      title="Modèles disponibles"
+      description="Choisissez les modèles proposés à l’assistant et aux flows."
+      icon="pack"
+    >
       @if (loading()) {
         <p role="status">Lecture des catalogues fournisseurs…</p>
       }
@@ -51,12 +53,9 @@ import { AiClusterModelCatalog } from '../../../shared/models/ai-tools';
       @if (!loading() && !catalog()?.nodes?.length && !error()) {
         <p>Aucune connexion disponible.</p>
       }
-    </section>
+    </app-configuration-section>
   `,
   styles: `
-    section {
-      margin-block: var(--space-5);
-    }
     header {
       display: flex;
       align-items: center;

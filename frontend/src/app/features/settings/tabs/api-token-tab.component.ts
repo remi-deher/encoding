@@ -45,7 +45,8 @@ interface TokenRow extends AccessListRow {
   template: `
     <app-configuration-section
       title="Jetons d’API"
-      description="Un accès dédié à chaque application ou script."
+      description="Un accès dédié à chaque application ou script. La valeur complète n’est affichée qu’une fois, à la création."
+      icon="api"
     >
       <button section-actions matButton="tonal" (click)="openCreate()">Créer un jeton</button>
       @if (state() === 'loading') {
@@ -61,7 +62,6 @@ interface TokenRow extends AccessListRow {
           emptyMessage="Aucun jeton d’API. Créez-en un pour autoriser une application."
         />
       }
-      <p class="note">La valeur complète d’un jeton est affichée une seule fois, à sa création.</p>
     </app-configuration-section>
     <ng-template #tokenEditor>
       @if (secret()) {
@@ -83,11 +83,6 @@ interface TokenRow extends AccessListRow {
     </ng-template>
   `,
   styles: `
-    .note {
-      margin: var(--space-4) 0 0;
-      font-size: var(--font-label);
-      color: var(--text-secondary);
-    }
     .secret-content {
       display: grid;
       gap: var(--space-4);

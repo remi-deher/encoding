@@ -14,22 +14,20 @@ import { MatButtonModule } from '@angular/material/button';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { AiClusterUsage, AiUsageTotals } from '../../../shared/models/ai-tools';
 import { aiTypeLabel } from '../../ai/components/ai-model-selection';
+import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 
 /** Tokens rapportés par les fournisseurs, par nœud exécutant et au global ; jamais estimés. */
 @Component({
   selector: 'app-ai-usage-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, MatButtonModule],
+  imports: [ConfigurationSectionComponent, DecimalPipe, MatButtonModule],
   template: `
-    <section aria-labelledby="usage-title">
-      <header>
-        <div>
-          <h3 id="usage-title">Consommation de tokens</h3>
-          <p>
-            Tokens rapportés par les fournisseurs pour les demandes du cluster, regroupés par nœud
-            qui a exécuté la demande.
-          </p>
-        </div>
+    <app-configuration-section
+      title="Consommation de tokens"
+      description="Tokens rapportés par les fournisseurs, regroupés par nœud qui a exécuté la demande."
+      icon="api"
+    >
+      <div section-actions>
         <div class="periods" role="group" aria-label="Période">
           @for (option of periods; track option) {
             <button
@@ -44,7 +42,7 @@ import { aiTypeLabel } from '../../ai/components/ai-model-selection';
             </button>
           }
         </div>
-      </header>
+      </div>
       @if (error()) {
         <p role="status">{{ error() }}</p>
       }
@@ -93,12 +91,9 @@ import { aiTypeLabel } from '../../ai/components/ai-model-selection';
       } @else if (loading()) {
         <p role="status">Calcul de la consommation…</p>
       }
-    </section>
+    </app-configuration-section>
   `,
   styles: `
-    section {
-      margin-block: 24px;
-    }
     header {
       display: flex;
       align-items: center;
