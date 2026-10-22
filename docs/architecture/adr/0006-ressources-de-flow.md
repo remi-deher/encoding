@@ -23,7 +23,7 @@ tags: [ressource, police, image, audio, catalogue, version, sha-256, distributio
 2. **Modèle** : ressource = identifiant, type (`font`, `image`, `audio`, `other`), nom, description. Chaque ressource a des **versions immuables** (comme les scripts et profils) : numéro, nom de fichier, taille, type MIME détecté, **SHA-256**. Un flow référence `resourceId` + version (+ empreinte) ; il ne suit jamais « la dernière ». Le jeu de polices est une ressource de type `font` regroupant plusieurs fichiers.
 3. **Distribution** : un worker ne lit plus un inventaire disque ; le serveur du nœud lui sert la version par empreinte, avec contrôle d'intégrité et reprise, par le même canal que les artefacts d'exécution. Copie dans l'espace temporaire de l'exécution, jamais de chemin libre. Le bloc ne dépend plus de `fontSets` pour une ressource référencée ; `fontSets` reste le repli pour un bloc qui nomme un jeu local.
 4. **Blocs** : `subtitles-add-fonts` (et les blocs d'image ou d'audio à venir) acceptent une référence de ressource. Le champ est un sélecteur du catalogue, validé par le backend (existence, type, version).
-5. **Sécurité** : envoi réservé au rôle `admin` ; liste blanche de types et d'extensions (`.ttf`, `.otf`, `.ttc`, images, audio usuels), taille maximale par fichier et par ressource, contenu vérifié par signature et non par extension, nom de fichier normalisé, aucun chemin issu de l'utilisateur. Avertissement de licence à l'envoi pour les polices.
+5. **Sécurité** : envoi réservé au rôle `admin` ; liste blanche de types et d'extensions (`.ttf`, `.otf`, `.ttc`, images, audio usuels), taille maximale par fichier et par ressource, contenu vérifié par signature et non par extension, nom de fichier normalisé, aucun chemin issu de l'utilisateur.
 6. **Compatibilité de versions** : un composant qui accepte une ressource est livré dans une version mineure du plugin ; un agent plus ancien ne peut pas réclamer un segment qui en contient (même mécanisme que `nodes-library-access`). Les références historiques (`fontSet`) restent résolubles ; les flows existants ne changent pas.
 
 ## Choix arrêtés
@@ -32,10 +32,13 @@ tags: [ressource, police, image, audio, catalogue, version, sha-256, distributio
 - **Portée** (par défaut, à rouvrir si besoin) : toutes les ressources sont partagées par tout le cluster ; pas de ressource propre à un flow.
 - **Types livrés d'emblée** : polices seules. Images et audio s'ajoutent quand un bloc les consomme.
 
-## Reste à décider avant le code
-- Tailles maximales par fichier et par ressource.
-- Sort d'une version supprimée tant qu'un flow la référence (recommandé : suppression refusée).
-- Migration du jeu « Crunchyroll » déjà copié sur les nœuds (recommandé : import manuel dans le catalogue, `fontSet` conservé en repli).
+## Choix complémentaires (Rémi, 2026-10-22)
+- **Tailles maximales** : 20 Mio par fichier, 100 Mio par ressource.
+- **Version supprimée alors qu'un flow la référence** : suppression refusée ; le message indique le flow et le bloc qui la contiennent.
+- **Jeu « Crunchyroll » déjà copié sur les nœuds** : le dossier local est supprimé ; Rémi importe les polices à la main dans le catalogue. Le repli `fontSet` reste pour les flows existants qui nomment un jeu local.
+- **Rôles** : envoi et suppression pour `admin`, lecture pour `viewer`.
+- **Licence** : aucun avertissement ni champ à l'envoi.
+- **Récupération par un pair** : livrée dans une PR séparée (protocole à concevoir après lecture du maillage).
 
 ## Alternatives écartées
 - **Octets dans l'entité réconciliée ou volume partagé** : le premier alourdit le journal, le second ajoute un prérequis de déploiement. Le lot du journal est borné en nombre d'événements (32), pas en octets : des fichiers de plusieurs mégaoctets alourdiraient chaque échange et chaque reprise.
