@@ -14,7 +14,11 @@ import {
 import { SettingsNoticeComponent } from '../../../shared/ui/settings/settings-notice.component';
 import { SettingsSaveBarComponent } from '../../../shared/ui/settings/settings-save-bar.component';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { NetworkSettingsService } from '../../../shared/services/network-settings.service';
+import { PublicUrlService } from '../../../shared/services/public-url.service';
+import {
+  NetworkSettings,
+  NetworkSettingsService,
+} from '../../../shared/services/network-settings.service';
 
 @Component({
   selector: 'app-network-tab',
@@ -32,6 +36,36 @@ import { NetworkSettingsService } from '../../../shared/services/network-setting
     SettingsSaveBarComponent,
   ],
   template: `
+    <app-configuration-section
+      title="Adresse publique"
+      description="Réglage propre à ce nœud."
+      icon="link"
+    >
+      <app-setting-group>
+        <app-setting-row
+          label="URL publique"
+          hint="Adresse par laquelle ce nœud est joignable. Elle remplace celle du navigateur dans les adresses à copier (webhooks, Prometheus, assistants MCP). Laissez vide pour utiliser l’adresse de la page."
+          [stacked]="true"
+        >
+          <mat-form-field appearance="outline" class="field" subscriptSizing="dynamic">
+            <mat-label>URL publique</mat-label>
+            <input
+              matInput
+              type="url"
+              inputmode="url"
+              autocomplete="off"
+              [ngModel]="publicUrl()"
+              (ngModelChange)="publicUrl.set($event)"
+              [disabled]="busy()"
+              [placeholder]="browserOrigin"
+            />
+          </mat-form-field>
+          @if (urlError()) {
+            <app-settings-notice tone="danger">{{ urlError() }}</app-settings-notice>
+          }
+        </app-setting-row>
+      </app-setting-group>
+    </app-configuration-section>
     <app-configuration-section
       title="Reverse proxy"
       description="Réglage propre à ce nœud."
@@ -68,10 +102,10 @@ import { NetworkSettingsService } from '../../../shared/services/network-setting
               [disabled]="busy()"
               placeholder="192.168.1.10&#10;172.18.0.0/16"
             ></textarea>
-            @if (error()) {
-              <mat-error>{{ error() }}</mat-error>
-            }
           </mat-form-field>
+          @if (error()) {
+            <app-settings-notice tone="danger">{{ error() }}</app-settings-notice>
+          }
           @if (detectionMessage()) {
             <app-settings-notice tone="info">{{ detectionMessage() }}</app-settings-notice>
           }
@@ -90,6 +124,10 @@ import { NetworkSettingsService } from '../../../shared/services/network-setting
   `,
 
   styles: `
+    :host {
+      display: grid;
+      gap: var(--space-6);
+    }
     .field {
       display: block;
       width: 100%;
@@ -100,7 +138,11 @@ export class NetworkTabComponent {
   private readonly service = inject(NetworkSettingsService);
   private readonly notifications = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
-  private saved = { trustProxy: false, proxies: '' };
+  private saved = { trustProxy: false, proxies: '', publicUrl: '' };
+  private readonly publicUrlService = inject(PublicUrlService);
+  protected readonly browserOrigin = window.location.origin;
+  protected readonly publicUrl = signal('');
+  protected readonly urlError = signal('');
   protected readonly trustProxy = signal(false);
   protected readonly proxiesText = signal('');
   protected readonly busy = signal(true);
@@ -113,7 +155,7 @@ export class NetworkTabComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (settings) => {
-          this.apply(settings.trustProxy, settings.proxies.join('\n'));
+          this.apply(settings);
           this.busy.set(false);
         },
         error: () => {
@@ -126,30 +168,43 @@ export class NetworkTabComponent {
   protected dirty(): boolean {
     return (
       this.trustProxy() !== this.saved.trustProxy ||
-      this.proxiesText().trim() !== this.saved.proxies
+      this.proxiesText().trim() !== this.saved.proxies ||
+      this.publicUrl().trim() !== this.saved.publicUrl
     );
   }
 
   protected cancel(): void {
-    this.apply(this.saved.trustProxy, this.saved.proxies);
+    this.trustProxy.set(this.saved.trustProxy);
+    this.proxiesText.set(this.saved.proxies);
+    this.publicUrl.set(this.saved.publicUrl);
     this.error.set('');
+    this.urlError.set('');
     this.detectionMessage.set('');
   }
 
   protected save(): void {
     this.busy.set(true);
     this.error.set('');
+    this.urlError.set('');
     this.service
-      .save({ trustProxy: this.trustProxy(), proxies: this.parse() })
+      .save({
+        trustProxy: this.trustProxy(),
+        proxies: this.parse(),
+        publicUrl: this.publicUrl().trim() || null,
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (settings) => {
-          this.apply(settings.trustProxy, settings.proxies.join('\n'));
+          this.apply(settings);
           this.busy.set(false);
           this.notifications.show('Réglage réseau enregistré.');
         },
         error: (failure: HttpErrorResponse) => {
-          this.error.set(failure.error?.errors?.proxies?.[0] ?? 'Enregistrement refusé.');
+          const errors = failure.error?.errors;
+          this.urlError.set(errors?.publicUrl?.[0] ?? '');
+          this.error.set(
+            errors?.proxies?.[0] ?? (errors?.publicUrl ? '' : 'Enregistrement refusé.'),
+          );
           this.busy.set(false);
         },
       });
@@ -197,9 +252,15 @@ export class NetworkTabComponent {
       .filter((item) => item.length > 0);
   }
 
-  private apply(trustProxy: boolean, proxies: string): void {
-    this.saved = { trustProxy, proxies };
-    this.trustProxy.set(trustProxy);
-    this.proxiesText.set(proxies);
+  private apply(settings: NetworkSettings): void {
+    this.saved = {
+      trustProxy: settings.trustProxy,
+      proxies: (settings.proxies ?? []).join('\n'),
+      publicUrl: settings.publicUrl ?? '',
+    };
+    this.trustProxy.set(this.saved.trustProxy);
+    this.proxiesText.set(this.saved.proxies);
+    this.publicUrl.set(this.saved.publicUrl);
+    this.publicUrlService.set(settings.publicUrl);
   }
 }

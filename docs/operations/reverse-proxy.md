@@ -6,7 +6,7 @@ L'interface et l'API sont servies à la **racine** d'un (sous-)domaine (pas de s
 
 | Réglage | Rôle |
 | --- | --- |
-| **Paramètres > Réseau** | Proxies de confiance de **ce nœud** : adresses ou réseaux CIDR, avec un bouton « Détecter le proxy de cette connexion » (ouvrir l'interface à travers le proxy, puis cliquer). Enregistré dans `network-settings.json` du dossier de données, appliqué sans redémarrage. |
+| **Paramètres > Réseau** | Proxies de confiance de **ce nœud** : adresses ou réseaux CIDR, avec un bouton « Détecter le proxy de cette connexion » (ouvrir l'interface à travers le proxy, puis cliquer). Enregistré dans `network-settings.json` du dossier de données, appliqué sans redémarrage. Le même écran porte l'**URL publique** de ce nœud (ex. `https://encoding.example.com`) : l'interface l'affiche à la place de l'adresse du navigateur dans les adresses à copier (webhooks, Prometheus, MCP). Vide = adresse de la page ; elle n'a aucun effet sur la sécurité ni sur le routage. |
 | `Auth__TrustForwardedHeaders=true` + `Auth__KnownProxies` / `Auth__KnownNetworks` | Valeurs de départ, lues seulement si aucun réglage n'a encore été enregistré dans l'interface. |
 | `Auth__CookieSecure=true` | Force `Secure` sur le cookie de session derrière un proxy TLS. |
 | `Security__Hsts` (vrai), `Security__HstsMaxAgeDays` (365) | HSTS, émis seulement quand la requête est HTTPS. |

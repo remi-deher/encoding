@@ -23,6 +23,7 @@ import { SettingsEditor } from '../settings-editor';
 import { McpToolDefinition } from '../../../shared/models/mcp';
 import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { McpService } from '../../../shared/services/mcp.service';
+import { PublicUrlService } from '../../../shared/services/public-url.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SearchFieldComponent } from '../../../shared/ui/search-field.component';
 
@@ -229,12 +230,10 @@ export class McpServerTabComponent {
     () => this.clientToken().trim() || '<JETON_API_COMPLET>',
   );
 
-  protected readonly serverBaseUrl = computed(() => {
-    if (typeof window !== 'undefined' && window.location) {
-      return window.location.origin;
-    }
-    return 'http://localhost:5000';
-  });
+  private readonly publicUrl = inject(PublicUrlService);
+  protected readonly serverBaseUrl = computed(
+    () => this.publicUrl.origin() || 'http://localhost:5000',
+  );
 
   protected readonly configSnippet = computed(() => {
     const baseUrl = this.serverBaseUrl();
