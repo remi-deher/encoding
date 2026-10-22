@@ -18,6 +18,20 @@
       "configuration": {}
     },
     {
+      "id": "direct",
+      "name": "Acc\u00E8s direct obligatoire",
+      "component": {
+        "pluginId": "nodes",
+        "pluginVersion": "1.7.0",
+        "componentId": "nodes-require-direct-access",
+        "componentVersion": "1.0.0",
+        "configurationSchemaVersion": 1
+      },
+      "configuration": {
+        "mode": "strict"
+      }
+    },
+    {
       "id": "playback",
       "name": "Lecture en cours dans Plex",
       "component": {
@@ -287,6 +301,12 @@
     {
       "id": "entry-success",
       "sourceNodeId": "entry",
+      "sourceOutputId": "success",
+      "targetNodeId": "direct"
+    },
+    {
+      "id": "direct-success",
+      "sourceNodeId": "direct",
       "sourceOutputId": "success",
       "targetNodeId": "playback"
     },

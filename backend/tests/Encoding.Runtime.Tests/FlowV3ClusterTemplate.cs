@@ -28,6 +28,7 @@ internal static class FlowV3ClusterTemplate
         var nodes = new List<FlowNodeDefinition>
         {
             Node("entry", "Fichier vidéo", "base", "base-input-video"),
+            Node("direct", "Accès direct obligatoire", "nodes", "nodes-require-direct-access", new() { ["mode"] = J("strict") }),
             Node("playback", "Lecture en cours dans Plex", "plex", "plex-check-playback", new() { ["scope"] = J("file"), ["includeNextEpisode"] = J(true), ["nextEpisodeMarginMinutes"] = J(15) }),
             Node("defer-playing", "Reporter : lecture en cours", "base", "base-defer-processing", new() { ["delayMinutes"] = J(10), ["reason"] = J("Lecture en cours dans Plex") }),
             Node("snapshot", "Noms de pistes d'origine", "subtitles", "subtitles-track-names", new() { ["mode"] = J("snapshot") }),
@@ -55,7 +56,7 @@ internal static class FlowV3ClusterTemplate
         };
         var edges = new List<FlowConnectionDefinition>();
         void Link(string from, string output, string to) => edges.Add(new($"{from}-{output}", from, output, to));
-        Link("entry", "success", "playback");
+        Link("entry", "success", "direct"); Link("direct", "success", "playback");
         Link("playback", "playing", "defer-playing"); Link("playback", "idle", "snapshot"); Link("playback", "error", "snapshot");
         Link("snapshot", "success", "access"); Link("snapshot", "unchanged", "access"); Link("snapshot", "error", "fail");
         Link("access", "yes", "prepare"); Link("access", "no", "relay");
