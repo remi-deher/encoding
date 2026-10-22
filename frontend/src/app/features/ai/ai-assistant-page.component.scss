@@ -1,4 +1,5 @@
 :host {
+  position: relative;
   display: block;
   height: calc(100dvh - 112px);
   min-height: 360px;
@@ -451,4 +452,18 @@
   color: var(--text-secondary);
   font-size: var(--font-label);
   white-space: nowrap;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: var(--space-2);
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent-strong);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--accent-soft) 88%, transparent);
+  color: var(--accent-strong);
+  font-weight: 600;
+  pointer-events: none;
 }

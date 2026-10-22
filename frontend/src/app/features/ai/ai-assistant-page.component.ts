@@ -89,7 +89,14 @@ interface AssistantResourceOption {
   ],
   templateUrl: './ai-assistant-page.component.html',
   styleUrl: './ai-assistant-page.component.scss',
-  host: { '[class.assistant-panel-mode]': 'panelMode()' },
+  host: {
+    '[class.assistant-panel-mode]': 'panelMode()',
+    '[class.is-dragging-files]': 'draggingFiles()',
+    '(dragenter)': 'onDragOver($event)',
+    '(dragover)': 'onDragOver($event)',
+    '(dragleave)': 'onDragLeave($event)',
+    '(drop)': 'onDrop($event)',
+  },
 })
 export class AiAssistantPageComponent implements OnDestroy {
   readonly panelMode = input(false);
@@ -161,6 +168,7 @@ export class AiAssistantPageComponent implements OnDestroy {
   protected readonly prompt = signal('');
   protected readonly modelSettingsOpen = signal(false);
   protected readonly fileAccept = AI_ASSISTANT_FILE_ACCEPT;
+  protected readonly draggingFiles = signal(false);
   protected readonly attachments = signal<readonly AiAssistantFileAttachment[]>([]);
   protected readonly attachmentName = computed(
     () =>
@@ -333,6 +341,36 @@ export class AiAssistantPageComponent implements OnDestroy {
 
   protected selectEffort(value: string | null): void {
     this.selectedReasoningEffort.set(value || null);
+  }
+
+  protected chooseResource(type: AssistantResourceType): void {
+    this.selectResourceType(type);
+    this.openWorkspace();
+  }
+
+  protected onDragOver(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    if (this.sending() || this.hasPendingRequest()) {
+      event.dataTransfer.dropEffect = 'none';
+      return;
+    }
+    this.draggingFiles.set(true);
+  }
+
+  protected onDragLeave(event: DragEvent): void {
+    const host = event.currentTarget as HTMLElement;
+    if (!event.relatedTarget || !host.contains(event.relatedTarget as Node)) {
+      this.draggingFiles.set(false);
+    }
+  }
+
+  protected async onDrop(event: DragEvent): Promise<void> {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    this.draggingFiles.set(false);
+    if (this.sending() || this.hasPendingRequest()) return;
+    for (const file of Array.from(event.dataTransfer.files)) await this.selectAttachment(file);
   }
 
   protected openWorkspace(): void {

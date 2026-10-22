@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, model, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
+import { IconComponent } from '../../../shared/ui/icon.component';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { AiAssistantModelOption } from '../../../shared/models/ai-tools';
@@ -15,6 +17,8 @@ export const AI_ASSISTANT_FILE_ACCEPT =
   imports: [
     FormsModule,
     MatButtonModule,
+    MatMenuModule,
+    IconComponent,
     MatInputModule,
     MatFormFieldModule,
     AiModelSelectorComponent,
@@ -54,47 +58,35 @@ export const AI_ASSISTANT_FILE_ACCEPT =
         <button
           mat-icon-button
           type="button"
-          aria-label="Ressources, fichiers et outils de l’assistant"
-          title="Ressources, fichiers et outils"
-          (click)="attach.emit()"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            aria-hidden="true"
-          >
-            <path d="M12 5v14M5 12h14" stroke-linecap="round" />
-          </svg>
-        </button>
-        <button
-          mat-icon-button
-          type="button"
-          class="attach-file"
-          aria-label="Joindre un fichier texte"
-          title="Joindre un fichier"
+          aria-label="Joindre un fichier ou une ressource"
+          title="Joindre"
           [disabled]="locked()"
-          (click)="fileInput.click()"
+          [matMenuTriggerFor]="attachMenu"
         >
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            aria-hidden="true"
-          >
-            <path
-              d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L14.5 7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
+          <app-icon name="add" />
         </button>
+        <mat-menu #attachMenu="matMenu">
+          <button mat-menu-item type="button" (click)="fileInput.click()">
+            <app-icon name="attach" />
+            <span>Joindre un fichier</span>
+          </button>
+          <button mat-menu-item type="button" (click)="resourceChosen.emit('flow')">
+            <app-icon name="flow" />
+            <span>Un flow</span>
+          </button>
+          <button mat-menu-item type="button" (click)="resourceChosen.emit('execution')">
+            <app-icon name="history" />
+            <span>Une exécution</span>
+          </button>
+          <button mat-menu-item type="button" (click)="resourceChosen.emit('node')">
+            <app-icon name="server" />
+            <span>Un nœud</span>
+          </button>
+          <button mat-menu-item type="button" (click)="resourceChosen.emit('library')">
+            <app-icon name="library" />
+            <span>Une bibliothèque</span>
+          </button>
+        </mat-menu>
         <input
           #fileInput
           class="visually-hidden"
@@ -216,11 +208,8 @@ export const AI_ASSISTANT_FILE_ACCEPT =
     .composer-tools > button:first-child {
       order: 2;
     }
-    .composer-tools > button:not(:first-child):not(.send-button):not(.attach-file) {
+    .composer-tools > button:not(:first-child):not(.send-button) {
       order: 3;
-    }
-    .attach-file {
-      order: 2;
     }
     .send-button {
       flex: 0 0 40px;
@@ -229,7 +218,7 @@ export const AI_ASSISTANT_FILE_ACCEPT =
     @container (max-width: 420px) {
       .composer-tools {
         display: grid;
-        grid-template-columns: 40px 40px minmax(0, 1fr) 40px;
+        grid-template-columns: 40px minmax(0, 1fr) 40px;
       }
       app-ai-model-selector {
         grid-column: 1/-1;
@@ -239,17 +228,13 @@ export const AI_ASSISTANT_FILE_ACCEPT =
         grid-column: 1;
         grid-row: 2;
       }
-      .attach-file {
+      .composer-tools > button:not(:first-child):not(.send-button) {
         grid-column: 2;
-        grid-row: 2;
-      }
-      .composer-tools > button:not(:first-child):not(.send-button):not(.attach-file) {
-        grid-column: 3;
         grid-row: 2;
         justify-self: end;
       }
       .send-button {
-        grid-column: 4;
+        grid-column: 3;
         grid-row: 2;
       }
     }
@@ -275,7 +260,7 @@ export class AiConversationComposerComponent {
   readonly settingsOpenChange = output<boolean>();
   readonly send = output<void>();
   readonly cancel = output<void>();
-  readonly attach = output<void>();
+  readonly resourceChosen = output<'flow' | 'execution' | 'node' | 'library'>();
   readonly fileRemoved = output<void>();
   readonly filesChosen = output<Event>();
   protected readonly fileAccept = AI_ASSISTANT_FILE_ACCEPT;

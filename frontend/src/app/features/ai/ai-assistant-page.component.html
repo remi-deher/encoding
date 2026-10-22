@@ -575,10 +575,15 @@
         (effortChange)="selectEffort($event)"
         (send)="send()"
         (cancel)="cancelRequest()"
-        (attach)="openWorkspace()"
+        (resourceChosen)="chooseResource($event)"
         (fileRemoved)="removeAttachment()"
         (filesChosen)="selectAttachments($event)"
       />
     </footer>
   </mat-drawer-content>
 </mat-drawer-container>
+@if (draggingFiles()) {
+  <div class="drop-overlay" aria-hidden="true">
+    <span>Déposez vos fichiers pour les joindre</span>
+  </div>
+}
