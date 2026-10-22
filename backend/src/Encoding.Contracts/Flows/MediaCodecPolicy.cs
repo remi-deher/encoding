@@ -4,6 +4,27 @@ namespace Encoding.Contracts.Flows;
 
 public static class MediaCodecPolicy
 {
+    /// <summary>Le worker (ffmpeg annoncé) a-t-il un encodeur utilisable du profil de chaque bloc vidéo du flow ? Faux sans bloc vidéo à profil.</summary>
+    public static bool ProfileEncoderUsable(FlowDefinition flow, Encoding.Contracts.Nodes.NodeToolCapability? ffmpeg)
+    {
+        var videoNodes = flow.Nodes.Where(node => node.Component.ComponentId is "base-transcode-video" or "video-transcode"
+            && node.Configuration.TryGetValue("encodingProfile", out var profile) && profile.ValueKind == JsonValueKind.Object).ToList();
+        if (ffmpeg is null || videoNodes.Count == 0) return false;
+        var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        foreach (var node in videoNodes)
+        {
+            var profile = node.Configuration["encodingProfile"].Deserialize<EncodingProfileSnapshot>(web);
+            if (profile is null) return false;
+            var codec = node.Configuration.TryGetValue("videoCodec", out var codecValue) ? codecValue.GetString()! : "hevc";
+            var retryWithCpu = node.Configuration.TryGetValue("retryWithCpu", out var retry) && retry.ValueKind == JsonValueKind.True;
+            var encoders = ffmpeg.Encoders ?? [];
+            var usable = ResolveVideoEncoder(codec, "automatic", null, profile, encoders, ffmpeg.AccelerationTypes, ffmpeg.EncoderChecks) is not null
+                || retryWithCpu && ResolveCpuFallbackVideoEncoder(codec, profile, encoders, ffmpeg.AccelerationTypes, ffmpeg.EncoderChecks) is not null;
+            if (!usable) return false;
+        }
+        return true;
+    }
+
     public static string? VideoEncoder(string codec,string hardware,IReadOnlyList<string> available)
     {
         var candidates = VideoEncoderCatalog.All.Where(encoder => encoder.Codec == codec && encoder.Acceleration == hardware);
