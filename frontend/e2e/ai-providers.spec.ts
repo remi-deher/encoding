@@ -185,17 +185,29 @@ test('settings navigation and system health use shared components in both themes
   await page.route('**/health/details', (route) =>
     route.fulfill({
       json: {
-        status: 'healthy',
-        totalDurationMs: 4,
-        checks: [{ name: 'database', status: 'healthy', durationMs: 4 }],
+        status: 'degraded',
+        totalDurationMs: 2004,
+        checks: [
+          { name: 'database', status: 'healthy', durationMs: 4 },
+          {
+            name: 'cluster',
+            status: 'degraded',
+            durationMs: 2000,
+            description: 'Le nœud truenas-51 ne répond plus.',
+          },
+        ],
       },
     }),
   );
   await page.goto('/settings?tab=system');
   const settings = page.locator('app-settings-page');
-  await expect(settings.locator('app-resource-sheet')).toHaveCount(2);
-  await settings.getByRole('button', { name: 'Identité du cluster' }).click();
+  await expect(settings.getByText('Base de données')).toBeVisible();
+  await expect(settings.getByText('Le nœud truenas-51 ne répond plus.')).toBeVisible();
+  await expect(settings.getByText('Opérationnel').first()).toBeVisible();
   await expect(settings.getByText('Cluster de test')).toBeVisible();
+  await expect(
+    settings.getByRole('region', { name: 'Cluster' }).getByRole('button', { name: 'Copier' }),
+  ).toBeVisible();
   for (const theme of ['light', 'dark']) {
     await page.evaluate(
       (value) => document.documentElement.setAttribute('data-theme', value),
