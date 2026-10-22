@@ -268,7 +268,7 @@
             <mat-slide-toggle
               [checked]="providerEnabled(provider.id)"
               [disabled]="!isAdmin() || savingSettings()"
-              [attr.aria-label]="'Activer ' + provider.name"
+              [aria-label]="'Actif : ' + provider.name"
               (change)="setProviderEnabled(provider.id, $event.checked)"
               >Actif</mat-slide-toggle
             >
