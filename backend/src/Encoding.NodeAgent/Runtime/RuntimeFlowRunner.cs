@@ -268,8 +268,12 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(context.CurrentSha256==sourceSha) output="unchanged";
                         else
                         {
-                            await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),"succeeded",
-                                "Résultat validé ; publication demandée par le flow.",context.CurrentSha256,context.Extension,context.BeforeMetadata,context.CurrentMetadata,null,commandCapture.Pending(),true),job.Token);
+                            // Rejouable après une reprise (ADR 0004) : une publication déjà demandée ou faite pour ce même résultat est adoptée, jamais refaite.
+                            var already=await client.PublicationStateAsync(lease.ExecutionId,lease.Epoch,job.Token);
+                            if(already.Requested && already.Sha256!=context.CurrentSha256) throw new PublishResultException("Un autre résultat a déjà été publié pour cette exécution.");
+                            if(!already.Requested)
+                                await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),"succeeded",
+                                    "Résultat validé ; publication demandée par le flow.",context.CurrentSha256,context.Extension,context.BeforeMetadata,context.CurrentMetadata,null,commandCapture.Pending(),true),job.Token);
                             RuntimePublicationState published;
                             while(!(published=await client.PublicationStateAsync(lease.ExecutionId,lease.Epoch,job.Token)).Published) await Task.Delay(TimeSpan.FromSeconds(2),job.Token);
                             variables["runtime.published"]=JsonSerializer.SerializeToElement(new { path=published.Path,sha256=context.CurrentSha256 });

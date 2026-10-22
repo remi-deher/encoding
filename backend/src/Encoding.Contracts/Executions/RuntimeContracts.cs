@@ -51,6 +51,6 @@ public sealed record FinishRuntimeExecution(long Epoch, Guid EventId, int Expect
     JsonElement? BeforeMetadata = null, JsonElement? AfterMetadata = null, int? DeferMinutes = null,
     IReadOnlyList<RuntimeStepCommand>? Commands = null, bool ContinueFlow = false);
 /// <summary>État de la publication demandée par un bloc de flow (ADR 0003) : le worker reprend le flow lorsque <see cref="Published"/> est vrai.</summary>
-public sealed record RuntimePublicationState(bool Published, string? Path, string? Sha256);
+public sealed record RuntimePublicationState(bool Published, string? Path, string? Sha256, bool Requested = false);
 public sealed record ReportRuntimeCommand(long Epoch, string NodeId, Guid InvocationId, RuntimeCommandLog Command);
 public sealed record ConfirmRuntimePublication(long Epoch, Guid EventId, int ExpectedRevision, string PublishedPath, string Sha256, SourceReplacementReport? Replacement = null);

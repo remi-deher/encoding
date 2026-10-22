@@ -86,6 +86,15 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     public Task UncertainPluginSideEffectIsNotRepeatedAfterWorkerLoss() => Scenarios.UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync();
 
     [DatabaseFact]
+    public Task ResumeWaitsForAnEligibleWorker() => Scenarios.ResumeWaitsForAnEligibleWorkerAsync();
+
+    [DatabaseFact]
+    public Task ReplayableStepIsResumedAfterWorkerLoss() => Scenarios.ReplayableStepIsResumedAfterWorkerLossAsync();
+
+    [DatabaseFact]
+    public Task RetryPolicyKeepsPriorityOverResume() => Scenarios.RetryPolicyKeepsPriorityOverResumeAsync();
+
+    [DatabaseFact]
     public Task FlowRetryPolicyIsBounded() => Scenarios.BoundedFlowRetryAsync();
 
     [MediaToolsFact]
