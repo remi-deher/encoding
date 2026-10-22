@@ -57,13 +57,6 @@ public sealed class ContractTests
     }
 
     [Fact]
-    public void ClusterFlowPlacesTheEncodingOnACapableNode()
-    {
-        var (registry, validator, eligibility) = Harness.Services();
-        FlowV3ClusterScenarios.Run(registry, validator, eligibility);
-    }
-
-    [Fact]
     public void CrunchyrollFlowIsValidImportableAndEndsExplicitlyOnEveryFailure()
     {
         var (registry, validator, eligibility) = Harness.Services();

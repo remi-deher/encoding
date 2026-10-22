@@ -77,26 +77,3 @@ Les sélecteurs proposent les ressources observées et conservent une référenc
 Pour réutiliser une extraction, choisir un fichier produit par une étape précédente : `artifact:<identifiant-encodé>/<indice>`, avec indice commençant à zéro. La référence survit au relais entre workers grâce au stockage durable. Si la branche suivie saute l'extraction, l'exécution échoue explicitement. Les fichiers de bibliothèque utilisent leurs chemins relatifs habituels.
 
 Les nouvelles opérations et options exigent les versions minimales déclarées par leur schéma (notamment les opérations ciblées Subtitles 1.1.0). Les références de fichiers produits exigent la capacité worker `artifact-references`. L'aperçu et l'attribution appliquent ces contrats ; la publication d'un flow ne garantit pas qu'un worker compatible soit actuellement connecté.
-
-## Variante cluster : le nœud qui a les fichiers s'en occupe, l'encodage H.265 va sur un nœud capable
-
-Fichier importable : [`flow-templates/hevc-aac-ass-cluster.flow.json`](flow-templates/hevc-aac-ass-cluster.flow.json). Même traitement que ci-dessus, sans verrou de disque, avec ce placement :
-
-```
-Fichier vidéo → Lecture Plex ──lecture──→ Reporter 10 min
-                    │ libre / erreur
-                    ▼
-        Noms de pistes (instantané) → Bibliothèque sur ce nœud (et encodeur du profil)
-              oui │                                   │ non
-                  │                      Confier à un nœud capable
-                  │                      → Exiger l'encodeur du profil
-                  ▼                                   ▼
-            Plan FFmpeg → Vidéo HEVC (matériel) → Audio → … → Contrôles → Terminé
-```
-
-- Le flow commence par « Exiger un accès direct » (strict) : seul un nœud qui monte la bibliothèque prend le fichier en premier. Sans cela, le .51 pourrait le prendre par transfert, répondre « non » et n'avoir personne à qui le relayer (le relais ne revient pas au même nœud).
-- **Oui** : le nœud a la bibliothèque montée directement et un encodeur utilisable du profil (QSV ou VAAPI) : il encode sur place. Typiquement le .51 pour ses bibliothèques USB.
-- **Non** : un nœud sans GPU utilisable (le .50 pour MEDIA 1, 2…) confie le fichier à un nœud capable ; le fichier est lu depuis le nœud d'accès par transfert. Si aucun nœud capable n'est en ligne, l'exécution échoue après la grâce habituelle.
-- Le profil intégré est matériel seul (QSV puis VAAPI, sans CPU, sans repli). Après import, remplacer dans le bloc vidéo par le profil du même nom créé sur le cluster.
-- Remux et changements d'en-tête MKV sont à part : ils doivent rester sur le nœud qui a le fichier (bloc « Exiger un accès direct »).
-- Limite : un fichier déjà conforme (déjà HEVC) d'une bibliothèque du .50 est tout de même transféré au nœud capable avant d'être reconnu comme conforme.
