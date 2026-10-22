@@ -5,7 +5,7 @@ export const scopes = [
   {
     workflow: 'backend',
     checks: ['backend-compile', 'backend-runtime-tests', 'backend-launcher-tests', 'backend-plugin-tests', 'backend-prototype-tests', 'backend-static-checks', 'ai-cli-native'],
-    paths: ['backend/**', '!backend/tests/monitoring/**', '.github/workflows/backend.yml'],
+    paths: ['backend/**', '!backend/tests/monitoring/**', '.github/workflows/backend.yml', '.github/actions/apt-install/**', '.github/scripts/apt-install.sh'],
   },
   {
     workflow: 'frontend', checks: ['frontend-fast', 'frontend-e2e'],

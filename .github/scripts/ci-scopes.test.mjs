@@ -50,3 +50,7 @@ test('release resolves checks independently and rejects missing history', () => 
   for (const scope of scopes) for (const check of scope.checks) assert.equal(result[check], expected.get(scope.workflow));
   assert.throws(() => checkCommits('a'.repeat(40), () => ''), /Missing CI source/);
 });
+test('the apt install action reruns the backend suites', () => {
+  assert.deepEqual(affected('.github/actions/apt-install/action.yml'), ['backend']);
+  assert.deepEqual(affected('.github/scripts/apt-install.sh'), ['backend', 'release-scripts']);
+});
