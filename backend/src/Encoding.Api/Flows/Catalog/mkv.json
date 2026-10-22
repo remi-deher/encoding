@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "mkv",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Matroska & MKV",
   "supportedHostContractVersions": [
     1
@@ -763,6 +763,116 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
+      "producesFiles": false
+    },
+    {
+      "id": "mkv-edit-in-place",
+      "version": "1.0.0",
+      "name": "Modifier une piste sur place (source)",
+      "description": "Change la langue, le nom et les drapeaux d’une piste, et au besoin le titre du conteneur, directement dans le fichier MKV de la bibliothèque, sans créer de nouveau fichier. Une copie intégrale est faite avant l’écriture ; si les pistes, pièces jointes, chapitres ou la durée changent, ou si une propriété n’est pas appliquée, le fichier d’origine est restauré. Réservé au worker qui a un accès direct à la bibliothèque (placez « Exiger un accès direct » en mode strict avant ce bloc), à placer avant tout bloc qui modifie le média. Le fichier source est modifié : à n’utiliser que si c’est voulu.",
+      "kind": "action",
+      "mediaType": "video",
+      "supportedFlowMediaTypes": [
+        "video"
+      ],
+      "outputs": [
+        {
+          "id": "success",
+          "label": "Suite",
+          "description": "Les propriétés ont été appliquées sur place et vérifiées."
+        },
+        {
+          "id": "unchanged",
+          "label": "Déjà conforme",
+          "description": "Les propriétés demandées sont déjà en place ; rien n’a été écrit."
+        },
+        {
+          "id": "error",
+          "label": "Erreur",
+          "description": "La modification a été refusée ou a échoué ; la source est inchangée ou restaurée."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": [
+          {
+            "id": "trackId",
+            "label": "Identifiant de piste",
+            "type": "number",
+            "inline": true,
+            "defaultValue": 0,
+            "min": 0,
+            "step": 1,
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "language",
+            "label": "Langue",
+            "type": "text",
+            "required": false,
+            "description": "Code de langue, par exemple fra ou eng. Vide : langue inchangée.",
+            "editor": "language",
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "trackName",
+            "label": "Nom de la piste",
+            "type": "text",
+            "required": false,
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "defaultTrack",
+            "label": "Piste par défaut",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "forcedTrack",
+            "label": "Piste forcée",
+            "type": "boolean",
+            "inline": true,
+            "defaultValue": false,
+            "importance": "basic",
+            "section": "Paramètres"
+          },
+          {
+            "id": "containerTitle",
+            "label": "Titre du conteneur",
+            "type": "text",
+            "required": false,
+            "description": "Vide : titre inchangé.",
+            "importance": "advanced",
+            "section": "Paramètres"
+          },
+          {
+            "id": "keepBackup",
+            "label": "Conserver la copie de sauvegarde",
+            "type": "boolean",
+            "defaultValue": false,
+            "description": "Par défaut, la copie intégrale est supprimée une fois la modification vérifiée. Si vous la conservez, elle reste dans .encoding-replaced/<exécution>/ et n’est jamais purgée automatiquement.",
+            "importance": "advanced",
+            "section": "Sécurité"
+          }
+        ]
+      },
+      "requiredTools": [
+        {
+          "toolId": "mkvtoolnix",
+          "minimumVersion": null,
+          "requiredCapabilities": []
+        }
+      ],
+      "requiresMedia": true,
+      "requiresWriteAccess": true,
+      "compatiblePluginVersions": [],
+      "minimumRuntimePluginVersion": "1.1.0",
       "producesFiles": false
     }
   ]

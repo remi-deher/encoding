@@ -260,6 +260,20 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         foreach(var change in response.VariableChanges) variables[change.Key]=change.Value;
                         if(response.CandidateArtifactId is { } candidate) await ApplyOutcomeAsync(new(SafeMediaPaths.Resolve(directory,candidate),[]),node.Id);
                     }
+                    else if(id=="mkv-edit-in-place")
+                    {
+                        await EnsureScanAsync();
+                        if(lease.SourceNodeId!=client.NodeId || lease.SourceRoot is null)
+                            throw new InPlaceEditException("La modification sur place exige un worker avec accès direct à la bibliothèque : placez « Exiger un accès direct » (mode strict) avant ce bloc.");
+                        if(context.Plan.Count>0 || context.CurrentSha256!=sourceSha || variables.ContainsKey("runtime.inPlaceEdited"))
+                            throw new InPlaceEditException("La modification sur place doit précéder tout autre bloc qui modifie le média, et ne peut être utilisée qu'une fois par flow.");
+                        var edit=InPlaceTrackEdit.From(c);
+                        var result=await new InPlaceMkvEditor(tools).ApplyAsync(lease.SourceRoot,Path.Combine(options.DataDirectory,"media-locks"),lease.ExecutionId,lease.MediaPath,sourceSha,
+                            edit.Arguments,edit.AlreadyApplied,edit.Verify,directory,MediaActions.Flag(c,"keepBackup"),()=>!job.IsCancellationRequested,job.Token);
+                        logger.LogInformation("Modification sur place {Node} : {Detail}",node.Id,result.Detail);
+                        if(result.Status=="unchanged") output="unchanged";
+                        else variables["runtime.inPlaceEdited"]=JsonSerializer.SerializeToElement(result.NewSha256);
+                    }
                     else if(id is "base-track-names" or "subtitles-track-names" || FlowOperationConfiguration.IsNamingOperation(id))
                     {
                         await EnsureScanAsync();
@@ -493,6 +507,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     logger.LogInformation("Règles audio {Node} non applicables : {Detail}",node.Id,exception.Message);
                     output="error";
                 }
+                catch(InPlaceEditException exception)
+                {
+                    logger.LogWarning("Modification sur place {Node} refusée : {Detail}",node.Id,exception.Message);
+                    output="error";
+                }
                 catch(SubtitleException exception)
                 {
                     logger.LogInformation("Sous-titres ou polices {Node} non applicables : {Detail}",node.Id,exception.Message);
@@ -553,6 +572,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             if(context.Plan.Count>0 && !failed) throw new IOException("Le flow se termine avec un plan non exécuté.");
 
             var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=sourceSha;
+            if(changed && variables.ContainsKey("runtime.inPlaceEdited")) throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),failed?"failed":terminal=="deferred"?"deferred":"succeeded",
                 failed?"Le flow a atteint une fin en échec.":"Flow terminé ; scans média réalisés.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null,
                 commandCapture.Pending()),job.Token);

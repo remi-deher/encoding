@@ -52,8 +52,9 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 1. Une seule tâche à la fois modifie un média ; la source est préservée jusqu'à validation et publication réussies.
 2. Époque + bail partout ; jamais de reprise silencieuse d'un effet incertain.
 3. Les opérations sont idempotentes ou détectent le doublon ; pas de boucle de relance automatique.
-4. Le remplacement n'a lieu que par la politique explicite de la bibliothèque, jamais depuis un flow seul.
+4. Le remplacement n'a lieu que par la politique explicite de la bibliothèque, jamais depuis un flow seul. Seule exception : `mkv-edit-in-place` modifie les en-têtes de la source (ADR [0002](../adr/0002-modification-mkv-sur-place.md)) avec copie intégrale vérifiée et restauration.
 
 ## Non livré / limites
+- **Modification sur place** : bloc `mkv-edit-in-place` (ADR 0002) sur le worker à accès direct ; copie intégrale, contrôle `mkvmerge -J`, restauration. Pas d'événement `media.modified`, pas de reprise automatique depuis l'intention, non vérifié sur NFS/SMB.
 - Pas de réattribution automatique entre serveurs ; pas de relance déclenchée par `media.published` ; pas d'interface de suppression/recréation des verrous de disque par accès bibliothèque (nom saisi dans le bloc).
 - Non vérifié en réel : Landlock dans le conteneur de production, GPU, Plex/Jellyfin réels, NAS/NFS (atomicité du renommage), reprise multi-hôtes sous charge.
