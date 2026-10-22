@@ -4,8 +4,11 @@ using Encoding.Api.Auth;
 
 namespace Encoding.Api.Infrastructure;
 
-/// <summary>Réglage réseau propre à ce nœud : reverse proxy dont les en-têtes <c>X-Forwarded-*</c> sont crus.</summary>
-public sealed record NetworkSettings(bool TrustProxy, IReadOnlyList<string> Proxies)
+/// <summary>
+/// Réglage réseau propre à ce nœud : reverse proxy dont les en-têtes <c>X-Forwarded-*</c> sont crus, et URL publique
+/// (adresse par laquelle ce nœud est joignable, affichée à la place de celle du navigateur ; vide = adresse du navigateur).
+/// </summary>
+public sealed record NetworkSettings(bool TrustProxy, IReadOnlyList<string> Proxies, string? PublicUrl = null)
 {
     public static readonly NetworkSettings Default = new(false, []);
 }
@@ -44,8 +47,10 @@ public sealed class NetworkSettingsService
     }
 
     /// <summary>Valide et enregistre ; renvoie les erreurs par champ, vide si accepté.</summary>
-    public IReadOnlyDictionary<string, string[]> Save(bool trustProxy, IEnumerable<string>? proxies)
+    public IReadOnlyDictionary<string, string[]> Save(bool trustProxy, IEnumerable<string>? proxies, string? publicUrl = null)
     {
+        if (!TryNormalizePublicUrl(publicUrl, out var normalizedUrl))
+            return new Dictionary<string, string[]> { ["publicUrl"] = ["Indiquez une adresse complète, par exemple https://encoding.example.com."] };
         var entries = (proxies ?? []).Select(item => item?.Trim() ?? string.Empty).Where(item => item.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (entries.Length > MaximumEntries)
@@ -55,7 +60,7 @@ public sealed class NetworkSettingsService
             return new Dictionary<string, string[]> { ["proxies"] = [$"Adresse ou réseau invalide : {string.Join(", ", invalid)}."] };
         if (trustProxy && entries.Length == 0)
             return new Dictionary<string, string[]> { ["proxies"] = ["Indiquez au moins une adresse de proxy pour activer la confiance."] };
-        var next = new NetworkSettings(trustProxy, entries);
+        var next = new NetworkSettings(trustProxy, entries, normalizedUrl);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var temporary = path + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(next, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
@@ -68,13 +73,32 @@ public sealed class NetworkSettingsService
         return new Dictionary<string, string[]>();
     }
 
+    /// <summary>Accepte une adresse http(s) absolue, sans identifiants, requête ni ancre ; retire le « / » final. Vide = non définie.</summary>
+    public static bool TryNormalizePublicUrl(string? value, out string? normalized)
+    {
+        normalized = null;
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return true;
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https")
+            || uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0
+            || string.IsNullOrEmpty(uri.Host))
+            return false;
+        normalized = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+        return true;
+    }
+
     private NetworkSettings Load(IConfiguration configuration)
     {
         try
         {
             if (File.Exists(path)
                 && JsonSerializer.Deserialize<NetworkSettings>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web)) is { } stored)
-                return stored with { Proxies = stored.Proxies?.Where(ProxyMatcher.IsValidEntry).ToArray() ?? [] };
+                return stored with
+                {
+                    Proxies = stored.Proxies?.Where(ProxyMatcher.IsValidEntry).ToArray() ?? [],
+                    PublicUrl = TryNormalizePublicUrl(stored.PublicUrl, out var url) ? url : null,
+                };
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -157,7 +181,7 @@ public static class NetworkSettingsExtensions
         group.MapGet("/settings", (NetworkSettingsService settings) => Results.Ok(settings.Current)).WithName("GetNetworkSettings");
         group.MapPut("/settings", (NetworkSettingsRequest request, NetworkSettingsService settings) =>
         {
-            var errors = settings.Save(request.TrustProxy, request.Proxies);
+            var errors = settings.Save(request.TrustProxy, request.Proxies, request.PublicUrl);
             return errors.Count > 0 ? Results.ValidationProblem(errors.ToDictionary(pair => pair.Key, pair => pair.Value)) : Results.Ok(settings.Current);
         }).WithName("UpdateNetworkSettings");
         // Observe la requête reçue : si elle traverse un proxy qui pose les en-têtes habituels, l'adresse directe est le proxy à déclarer.
@@ -186,7 +210,7 @@ public static class NetworkSettingsExtensions
     }
 }
 
-public sealed record NetworkSettingsRequest(bool TrustProxy, IReadOnlyList<string>? Proxies);
+public sealed record NetworkSettingsRequest(bool TrustProxy, IReadOnlyList<string>? Proxies, string? PublicUrl = null);
 
 public sealed record NetworkDetectionResponse(
     string? ProxyAddress, bool ForwardedHeadersSeen, bool PrivateAddress, bool AlreadyTrusted, string ForwardedFor, string ForwardedProto);

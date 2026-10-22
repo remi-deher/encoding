@@ -208,6 +208,8 @@ test('settings navigation and system health use shared components in both themes
   await expect(
     settings.getByRole('region', { name: 'Cluster' }).getByRole('button', { name: 'Copier' }),
   ).toBeVisible();
+  // Row backgrounds animate on theme change: axe must not sample a colour halfway between themes.
+  await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; }' });
   for (const theme of ['light', 'dark']) {
     await page.evaluate(
       (value) => document.documentElement.setAttribute('data-theme', value),
