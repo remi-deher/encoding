@@ -1,3 +1,4 @@
+import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -12,11 +13,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom, map } from 'rxjs';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
-import {
-  DataTableColumn,
-  DataTableComponent,
-  DataTableRow,
-} from '../../shared/ui/data-table.component';
+import { DataTableRow } from '../../shared/ui/data-table.component';
 import {
   ResourceSheetComponent,
   ResourceSheetSection,
@@ -41,8 +38,8 @@ interface PackRow extends DataTableRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-component-pack-library-page',
   imports: [
+    ResourceListComponent,
     CategoryTabsComponent,
-    DataTableComponent,
     ManagementCatalogTemplateComponent,
     ResourceSheetComponent,
   ],
@@ -68,15 +65,13 @@ interface PackRow extends DataTableRow {
         selected="packs"
         (selectedChange)="onSectionChanged($event)"
       />
-      <app-data-table
+      <app-resource-list
         catalogue-table
-        layout="resources"
-        [columns]="columns"
-        [rows]="filteredRows()"
-        [rowOpenable]="true"
-        rowOpenLabel="Consulter le pack"
-        (rowOpen)="openPack($event)"
+        icon="pack"
+        [items]="items()"
+        openLabel="Ouvrir"
         emptyMessage="Aucun pack. Créez-en un depuis une version publiée dans Flows."
+        (open)="openPack({ id: $event })"
       />
       <ng-template #detailContent catalogue-detail>
         @if (selectedPack(); as pack) {
@@ -117,13 +112,6 @@ export class ComponentPackLibraryPageComponent {
     'idle',
   );
   protected readonly query = signal('');
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Pack', sortable: true },
-    { key: 'mediaType', label: 'Type de média', sortable: true },
-    { key: 'components', label: 'Composants', sortable: true },
-    { key: 'source', label: 'Flow source', sortable: true },
-    { key: 'version', label: 'Version source', sortable: true },
-  ];
   protected readonly rows = computed<readonly PackRow[]>(() =>
     this.packs().map((pack) => ({
       id: pack.id,
@@ -146,6 +134,18 @@ export class ComponentPackLibraryPageComponent {
         )
       : this.rows();
   });
+  protected readonly items = computed<readonly ResourceListItem[]>(() =>
+    this.filteredRows().map((row) => ({
+      id: row.id,
+      name: row.name,
+      subtitle: row.description || undefined,
+      tags: [
+        { label: row.mediaType },
+        { label: `${row.components} composant(s)` },
+        { label: `${row.source} · ${row.version}`, tone: 'ok' as const },
+      ],
+    })),
+  );
   protected readonly packSubtitle = computed(() => {
     const pack = this.selectedPack();
     if (!pack) return '';

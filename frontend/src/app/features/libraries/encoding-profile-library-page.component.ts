@@ -1,3 +1,4 @@
+import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
@@ -15,11 +16,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
-import {
-  DataTableColumn,
-  DataTableComponent,
-  DataTableRow,
-} from '../../shared/ui/data-table.component';
+import { DataTableRow } from '../../shared/ui/data-table.component';
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 import { NotificationService } from '../../shared/services/notification.service';
 import { EncodingProfiles } from '../../shared/services/encoding-profiles';
@@ -49,8 +46,8 @@ interface EncoderGroup {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-encoding-profile-library-page',
   imports: [
+    ResourceListComponent,
     CategoryTabsComponent,
-    DataTableComponent,
     ManagementCatalogTemplateComponent,
     MatButtonModule,
     MatFormFieldModule,
@@ -83,15 +80,13 @@ interface EncoderGroup {
         selected="encoding"
         (selectedChange)="onSectionChanged($event)"
       />
-      <app-data-table
+      <app-resource-list
         catalogue-table
-        layout="resources"
-        [columns]="columns"
-        [rows]="rows()"
-        [rowOpenable]="true"
-        rowOpenLabel="Configurer le profil"
+        icon="video"
+        [items]="items()"
+        openLabel="Configurer"
         emptyMessage="Aucun profil ne correspond à la recherche."
-        (rowOpen)="selectProfile($event['id'] + '')"
+        (open)="selectProfile($event)"
       />
       <ng-template #actionContent>
         <form [formGroup]="metadataForm" (ngSubmit)="saveDraft()">
@@ -365,12 +360,6 @@ export class EncodingProfileLibraryPageComponent {
     }),
   });
   protected readonly targetsForm = new FormRecord<FormControl<string>>({});
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Profil', sortable: true },
-    { key: 'version', label: 'Version publiée', sortable: true },
-    { key: 'encoderCount', label: 'Encodeurs', sortable: true },
-    { key: 'state', label: 'État', sortable: true },
-  ];
   protected readonly codecFilterOptions: readonly CategoryTabOption[] = [
     { value: 'all', label: 'Tous les codecs' },
     { value: 'hevc', label: 'H.265 / HEVC' },
@@ -420,6 +409,19 @@ export class EncodingProfileLibraryPageComponent {
         )
       : this.allRows();
   });
+
+  protected readonly items = computed<readonly ResourceListItem[]>(() =>
+    this.rows().map((row) => ({
+      id: String(row.id),
+      name: row.name,
+      subtitle: row.description || undefined,
+      tags: [
+        { label: `Version publiée v${String(row.version).replace(/^v/, '')}`, tone: 'ok' as const },
+        { label: `${row.encoderCount} encodeur(s)` },
+        { label: row.state },
+      ],
+    })),
+  );
 
   constructor() {
     void this.load();

@@ -32,19 +32,15 @@
     (selectedChange)="onSectionChanged($event)"
   />
 
-  <app-data-table
-    layout="resources"
+  <app-resource-list
     catalogue-table
-    [columns]="columns"
-    [rows]="filteredLibraries()"
-    [rowOpenable]="true"
-    rowOpenLabel="Consulter"
-    [rowActions]="libraryRowActions"
-    [separateRowActionColumns]="true"
-    (rowOpen)="onLibraryOpen($event)"
-    (rowAction)="onLibraryAction($event)"
-    (toggleChange)="onLibraryToggle($event)"
+    [items]="libraryItems()"
+    [actions]="libraryRowActions"
+    openLabel="Ouvrir"
     emptyMessage="Aucune bibliothèque n’est déclarée."
+    (open)="onLibraryOpen({ id: $event })"
+    (action)="onLibraryAction($event)"
+    (toggleChange)="onLibraryItemToggle($event)"
   />
 
   <ng-template #detailContent catalogue-detail>

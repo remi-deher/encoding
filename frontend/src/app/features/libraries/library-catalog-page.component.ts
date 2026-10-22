@@ -50,6 +50,13 @@ import {
   DataTableSelectionActionEvent,
 } from '../../shared/ui/data-table.component';
 
+import {
+  ResourceListComponent,
+  ResourceListItem,
+  ResourceListTag,
+  ResourceListToggleEvent,
+} from '../../shared/ui/resource-list.component';
+
 import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
 
 import {
@@ -140,6 +147,7 @@ interface LibraryAccessRecord extends DataTableRow {
 
   imports: [
     DataTableComponent,
+    ResourceListComponent,
 
     ResourceSheetComponent,
 
@@ -1032,47 +1040,6 @@ export class LibraryCatalogPageComponent {
     };
   });
 
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Nom', sortable: true },
-
-    {
-      key: 'isActive',
-
-      label: 'Activation',
-
-      toggle: {
-        showStatusLabel: false,
-        ariaLabel: (row, checked) =>
-          `${checked ? 'Désactiver' : 'Activer'} la bibliothèque ${row['name']}`,
-
-        disabledWhen: (row) => this.activationBusy().has(String(row['id'])),
-
-        confirmation: (row, checked) =>
-          checked
-            ? undefined
-            : {
-                title: 'Désactiver cette bibliothèque ?',
-
-                message: `« ${row['name']} » ne sera plus disponible pour le cluster. Ses accès configurés seront conservés.`,
-
-                confirmLabel: 'Désactiver',
-              },
-      },
-    },
-
-    { key: 'assignedFlow', label: 'Flow attribué', sortable: true },
-
-    { key: 'monitoring', label: 'Surveillance', sortable: true },
-
-    { key: 'configuredNodes', label: 'Accès déclarés', sortable: true },
-
-    { key: 'accessModes', label: 'Modes d’accès', sortable: true },
-
-    { key: 'modifiedAt', label: 'Créée le', sortable: true, sortValueKey: 'modifiedOrder' },
-  ];
-
-  protected readonly libraryColumns = this.columns;
-
   protected readonly filteredLibraries = computed<readonly LibraryRecord[]>(() => {
     const selectedId = this.selectedLibrary()?.id;
     const workflow = this.workflowState();
@@ -1111,7 +1078,9 @@ export class LibraryCatalogPageComponent {
     });
   });
 
-  protected readonly libraryRows = this.filteredLibraries;
+  protected readonly libraryItems = computed<readonly ResourceListItem[]>(() =>
+    this.filteredLibraries().map((library) => this.toListItem(library)),
+  );
 
   constructor() {
     this.refresh();
@@ -1135,6 +1104,37 @@ export class LibraryCatalogPageComponent {
   protected onLibraryOpen(row: DataTableRow): void {
     const id = String(row['id']);
     void this.router.navigate([], { relativeTo: this.route, queryParams: { library: id } });
+  }
+
+  private toListItem(library: LibraryRecord): ResourceListItem {
+    const hasFlow = library.assignedFlow !== 'Aucun flow';
+    const tags: ResourceListTag[] = [
+      hasFlow
+        ? { label: `Flow : ${library.assignedFlow}`, tone: 'ok' }
+        : { label: 'Flow à attribuer', tone: 'warn' },
+      library.configuredNodeCount
+        ? { label: library.accessModes }
+        : { label: 'Aucun nœud n’a accès', tone: 'warn' },
+      { label: `Surveillance ${library.monitoring.toLocaleLowerCase('fr')}` },
+    ];
+    if (!library.isActive) tags.unshift({ label: 'Désactivée', tone: 'warn' });
+
+    return {
+      id: library.id,
+      name: library.name,
+      subtitle: `Créée le ${library.modifiedAt}`,
+      tags,
+      toggle: {
+        checked: library.isActive,
+        disabled: this.activationBusy().has(library.id),
+        ariaLabel: `Activer la bibliothèque ${library.name}`,
+        confirmOff: {
+          title: 'Désactiver cette bibliothèque ?',
+          message: `« ${library.name} » ne sera plus disponible pour le cluster. Ses accès configurés seront conservés.`,
+          confirmLabel: 'Désactiver',
+        },
+      },
+    };
   }
 
   private openLibrary(library: LibraryRecord): void {
@@ -1192,8 +1192,8 @@ export class LibraryCatalogPageComponent {
     }
   }
 
-  protected onLibraryToggle(event: DataTableToggleEvent): void {
-    const library = this.libraries().find((item) => item.id === event.row['id']);
+  protected onLibraryItemToggle(event: ResourceListToggleEvent): void {
+    const library = this.libraries().find((item) => item.id === event.id);
 
     if (library) this.setLibraryActive(library, event.checked);
   }
