@@ -99,22 +99,29 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
       return this.ollamaBaseUrl() && this.ollamaModel() ? 'Configuré' : 'Non configuré';
     if (id === 'openai')
       return this.openAiBaseUrl() && this.openAiModel() ? 'Configuré' : 'Non configuré';
+    if (id === 'anthropic')
+      return this.anthropicModel() && (this.hasAnthropicApiKey() || this.anthropicApiKey())
+        ? 'Configuré'
+        : 'Non configuré';
     const tool = this.tools().find((item) => item.id === id);
     return tool ? this.authLabel(tool.authStatus.state) : 'État indisponible';
   }
   providerEnabled(id: string): boolean {
     if (id === 'ollama') return this.ollamaEnabled();
     if (id === 'openai') return this.openAiEnabled();
+    if (id === 'anthropic') return this.anthropicEnabled();
     return id === 'codex-cli' ? this.codexEnabled() : this.claudeEnabled();
   }
   setProviderEnabled(id: string, enabled: boolean): void {
     if (id === 'ollama') this.ollamaEnabled.set(enabled);
     else if (id === 'openai') this.openAiEnabled.set(enabled);
+    else if (id === 'anthropic') this.anthropicEnabled.set(enabled);
     else if (id === 'codex-cli') this.codexEnabled.set(enabled);
     else this.claudeEnabled.set(enabled);
   }
   removeProvider(id: string): void {
-    if (id === 'ollama' || id === 'openai') this.deleteProviderConfiguration(id);
+    if (id === 'ollama' || id === 'openai' || id === 'anthropic')
+      this.deleteProviderConfiguration(id);
     else this.revoke(id);
   }
   deleteProviderConfiguration(id: string): void {
@@ -127,6 +134,10 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
       this.openAiBaseUrl.set('');
       this.openAiModel.set('');
       this.openAiApiKey.set('');
+    } else if (id === 'anthropic') {
+      this.anthropicEnabled.set(false);
+      this.anthropicModel.set('');
+      this.anthropicApiKey.set('');
     }
   }
   private readonly aiService = inject(AiToolsService);
@@ -136,6 +147,7 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
   readonly providers = [
     { id: 'ollama', name: 'Ollama' },
     { id: 'openai', name: 'OpenAI / API compatible' },
+    { id: 'anthropic', name: 'API Anthropic' },
     { id: 'codex-cli', name: 'Codex CLI' },
     { id: 'claude-cli', name: 'Claude Code' },
   ];
@@ -165,6 +177,10 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
   readonly openAiModel = signal('');
   readonly openAiApiKey = signal('');
   readonly hasOpenAiApiKey = signal(false);
+  readonly anthropicModel = signal('');
+  readonly anthropicApiKey = signal('');
+  readonly hasAnthropicApiKey = signal(false);
+  readonly anthropicEnabled = signal(true);
   readonly ollamaEnabled = signal(true);
   readonly openAiEnabled = signal(true);
   readonly codexEnabled = signal(true);
@@ -194,6 +210,9 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
       this.openAiBaseUrl(),
       this.openAiModel(),
       this.openAiApiKey(),
+      this.anthropicModel(),
+      this.anthropicApiKey(),
+      this.anthropicEnabled(),
       this.ollamaEnabled(),
       this.openAiEnabled(),
       this.codexEnabled(),
@@ -263,6 +282,7 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
   private applySettings(settings: AiSettings): void {
     this.savedSettings = settings;
     this.openAiApiKey.set('');
+    this.anthropicApiKey.set('');
     this.defaultProvider.set(settings.defaultProvider);
     this.defaultModel.set(settings.defaultModel ?? null);
     this.defaultReasoningEffort.set(settings.defaultReasoningEffort ?? null);
@@ -271,6 +291,9 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
     this.openAiBaseUrl.set(settings.openAiBaseUrl);
     this.openAiModel.set(settings.openAiModel);
     this.hasOpenAiApiKey.set(settings.hasOpenAiApiKey ?? false);
+    this.anthropicModel.set(settings.anthropicModel ?? '');
+    this.hasAnthropicApiKey.set(settings.hasAnthropicApiKey ?? false);
+    this.anthropicEnabled.set(settings.anthropicEnabled ?? Boolean(settings.hasAnthropicApiKey));
     this.ollamaEnabled.set(settings.ollamaEnabled ?? Boolean(settings.ollamaModel));
     this.openAiEnabled.set(settings.openAiEnabled ?? Boolean(settings.openAiModel));
     this.codexEnabled.set(settings.codexEnabled ?? true);
@@ -320,7 +343,8 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
     }
     if (
       (this.defaultProvider() === 'ollama' && !this.ollamaEnabled()) ||
-      (this.defaultProvider() === 'openai' && !this.openAiEnabled())
+      (this.defaultProvider() === 'openai' && !this.openAiEnabled()) ||
+      (this.defaultProvider() === 'anthropic' && !this.anthropicEnabled())
     ) {
       this.notifications.show('Le moteur par défaut doit être activé avant l’enregistrement.');
       return;
@@ -333,6 +357,9 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
       openAiBaseUrl: this.openAiBaseUrl().trim(),
       openAiModel: this.openAiModel().trim(),
       openAiApiKey: this.openAiApiKey().trim() || null,
+      anthropicModel: this.anthropicModel().trim(),
+      anthropicApiKey: this.anthropicApiKey().trim() || null,
+      anthropicEnabled: this.anthropicEnabled(),
       ollamaEnabled: this.ollamaEnabled(),
       openAiEnabled: this.openAiEnabled(),
       codexEnabled: this.codexEnabled(),
@@ -356,6 +383,7 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
       next: (settings) => {
         this.applySettings(settings);
         this.openAiApiKey.set('');
+        this.anthropicApiKey.set('');
         this.savedFingerprint = this.fingerprint();
         this.savingSettings.set(false);
         this.notifications.show('Configuration IA enregistrée avec succès.');

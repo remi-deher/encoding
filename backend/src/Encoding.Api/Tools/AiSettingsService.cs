@@ -88,10 +88,10 @@ public sealed class AiSettingsService
 
     public AiSettingsDto UpdateSettings(AiSettingsUpdateRequest update)
     {
-        if (update.DefaultProvider is not null && update.DefaultProvider is not ("ollama" or "openai" or "codex-cli" or "claude-cli"))
+        if (update.DefaultProvider is not null && update.DefaultProvider is not ("ollama" or "openai" or "anthropic" or "codex-cli" or "claude-cli"))
             throw new ArgumentException("Fournisseur IA inconnu.");
         foreach (var provider in new[] { update.AssistantProvider, update.FlowProvider }.OfType<string>())
-            if (provider is not ("default" or "ollama" or "openai" or "codex-cli" or "claude-cli"))
+            if (provider is not ("default" or "ollama" or "openai" or "anthropic" or "codex-cli" or "claude-cli"))
                 throw new ArgumentException("Fournisseur IA inconnu.");
         var effectiveAssistantProvider = update.AssistantProvider == "default" ? update.DefaultProvider ?? cachedSettings.DefaultProvider
             : update.AssistantProvider ?? cachedSettings.AssistantProvider ?? update.DefaultProvider ?? cachedSettings.DefaultProvider;
@@ -115,8 +115,9 @@ public sealed class AiSettingsService
         {
             var ollamaEnabled = update.OllamaEnabled ?? cachedSettings.OllamaEnabled;
             var openAiEnabled = update.OpenAiEnabled ?? cachedSettings.OpenAiEnabled;
+            var anthropicEnabled = update.AnthropicEnabled ?? cachedSettings.AnthropicEnabled;
             var nextDefault = !string.IsNullOrWhiteSpace(update.DefaultProvider) ? update.DefaultProvider : cachedSettings.DefaultProvider;
-            if (nextDefault == "ollama" && !ollamaEnabled || nextDefault == "openai" && !openAiEnabled)
+            if (nextDefault == "ollama" && !ollamaEnabled || nextDefault == "openai" && !openAiEnabled || nextDefault == "anthropic" && !anthropicEnabled)
                 throw new ArgumentException("Le moteur par défaut doit être activé et configuré.");
             var next = new AiSettingsDto(
                 DefaultProvider: nextDefault,
@@ -142,7 +143,10 @@ public sealed class AiSettingsService
                 AssistantModel: UpdateOptional(update.AssistantModel, cachedSettings.AssistantModel),
                 AssistantReasoningEffort: UpdateOptional(update.AssistantReasoningEffort, cachedSettings.AssistantReasoningEffort),
                 FlowModel: UpdateOptional(update.FlowModel, cachedSettings.FlowModel),
-                FlowReasoningEffort: UpdateOptional(update.FlowReasoningEffort, cachedSettings.FlowReasoningEffort)
+                FlowReasoningEffort: UpdateOptional(update.FlowReasoningEffort, cachedSettings.FlowReasoningEffort),
+                AnthropicApiKey: update.AnthropicEnabled == false ? null : update.AnthropicApiKey ?? cachedSettings.AnthropicApiKey,
+                AnthropicModel: update.AnthropicEnabled == false ? string.Empty : !string.IsNullOrWhiteSpace(update.AnthropicModel) ? update.AnthropicModel.Trim() : cachedSettings.AnthropicModel,
+                AnthropicEnabled: anthropicEnabled
             );
 
             SaveSettings(next);
@@ -162,6 +166,20 @@ public sealed class AiSettingsService
         }
     }
 
+    /// <summary>Remplace uniquement la clé Anthropic (réplication entre nœuds).</summary>
+    public void SetAnthropicApiKey(string? key)
+    {
+        lock (syncRoot)
+        {
+            var next = cachedSettings with { AnthropicApiKey = string.IsNullOrWhiteSpace(key) ? null : key };
+            SaveSettings(next);
+            cachedSettings = next;
+        }
+    }
+
+    private static string? Unprotect(IDataProtector protector, string? value) =>
+        value is not null && value.StartsWith("protected:", StringComparison.Ordinal) ? protector.Unprotect(value[10..]) : value;
+
     private AiSettingsDto LoadSettings(IConfiguration configuration)
     {
         try
@@ -170,7 +188,7 @@ public sealed class AiSettingsService
             {
                 var json = File.ReadAllText(settingsFilePath);
                 var loaded = JsonSerializer.Deserialize<AiSettingsDto>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                if (loaded is not null) return loaded with { OpenAiApiKey = loaded.OpenAiApiKey is { } key && key.StartsWith("protected:", StringComparison.Ordinal) ? protector.Unprotect(key[10..]) : loaded.OpenAiApiKey };
+                if (loaded is not null) return loaded with { OpenAiApiKey = Unprotect(protector, loaded.OpenAiApiKey), AnthropicApiKey = Unprotect(protector, loaded.AnthropicApiKey) };
             }
         }
         catch
@@ -188,9 +206,12 @@ public sealed class AiSettingsService
             TimeoutSeconds: int.TryParse(configuration["AiTools:TimeoutSeconds"], out var t) && t > 0 ? t : 120,
             SubtitleBatchSize: int.TryParse(configuration["AiTools:SubtitleBatchSize"], out var b) && b > 0 ? b : 80,
             AssistantConversationRetentionDays: int.TryParse(configuration["AiTools:AssistantConversationRetentionDays"], out var c) && c > 0 ? c : 90,
-            AssistantActivityRetentionDays: int.TryParse(configuration["AiTools:AssistantActivityRetentionDays"], out var a) && a > 0 ? a : 30
+            AssistantActivityRetentionDays: int.TryParse(configuration["AiTools:AssistantActivityRetentionDays"], out var a) && a > 0 ? a : 30,
+            AnthropicApiKey: configuration["AiTools:Anthropic:ApiKey"]
         );
     }
+
+    private string? Protect(string? secret) => secret is { Length: > 0 } ? "protected:" + protector.Protect(secret) : null;
 
     private void SaveSettings(AiSettingsDto settings)
     {
@@ -201,7 +222,7 @@ public sealed class AiSettingsService
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        var json = JsonSerializer.Serialize(settings with { OpenAiApiKey = settings.OpenAiApiKey is { Length: > 0 } secret ? "protected:" + protector.Protect(secret) : null }, new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        var json = JsonSerializer.Serialize(settings with { OpenAiApiKey = Protect(settings.OpenAiApiKey), AnthropicApiKey = Protect(settings.AnthropicApiKey) }, new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             WriteIndented = true
         });

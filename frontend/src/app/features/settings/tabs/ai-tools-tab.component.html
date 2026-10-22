@@ -238,7 +238,7 @@
 
     <app-configuration-section
       title="Fournisseurs"
-      description="Les connexions Codex, Claude Code et la clé OpenAI sont copiées chiffrées sur tous les nœuds : si le serveur tombe, les flows IA continuent."
+      description="Les connexions Codex, Claude Code et les clés OpenAI et Anthropic sont copiées chiffrées sur tous les nœuds : si le serveur tombe, les flows IA continuent."
       icon="api"
     >
       <button
@@ -257,7 +257,11 @@
               row-lead
               class="provider-icon"
               [name]="
-                provider.id === 'ollama' ? 'server' : provider.id === 'openai' ? 'api' : 'terminal'
+                provider.id === 'ollama'
+                  ? 'server'
+                  : provider.id === 'openai' || provider.id === 'anthropic'
+                    ? 'api'
+                    : 'terminal'
               "
             />
             <span class="provider-status">{{ providerStatus(provider.id) }}</span>
@@ -305,9 +309,9 @@
 <ng-template #providerEditor>
   <form #providerForm="ngForm" class="provider-editor" (ngSubmit)="saveSettings()">
     <p>
-      Les connexions Codex, Claude Code et la clé OpenAI sont partagées avec tout le cluster : les
-      modifier ici les modifie sur chaque nœud. Les adresses et modèles Ollama et OpenAI restent
-      propres à ce nœud.
+      Les connexions Codex, Claude Code et les clés OpenAI et Anthropic sont partagées avec tout le
+      cluster : les modifier ici les modifie sur chaque nœud. Les adresses et modèles Ollama et
+      OpenAI restent propres à ce nœud.
     </p>
     @if (cluster(); as view) {
       <section class="drawer-replication" aria-label="Réplication par nœud">
@@ -380,6 +384,37 @@
           </mat-form-field>
         </div>
       }
+      @case ('anthropic') {
+        <div class="fields">
+          <mat-form-field appearance="outline"
+            ><mat-label>Modèle</mat-label
+            ><input
+              matInput
+              name="anthropicModel"
+              placeholder="claude-sonnet-5-5"
+              [(ngModel)]="anthropicModel"
+              [readonly]="!isAdmin()"
+              required
+          /></mat-form-field>
+          <mat-form-field appearance="outline"
+            ><mat-label>Clé API</mat-label
+            ><input
+              matInput
+              name="anthropicApiKey"
+              type="password"
+              autocomplete="new-password"
+              [(ngModel)]="anthropicApiKey"
+              [readonly]="!isAdmin()"
+              [required]="!hasAnthropicApiKey()"
+            />
+            <mat-hint>{{
+              hasAnthropicApiKey()
+                ? 'Clé enregistrée. Laissez vide pour la conserver.'
+                : 'La clé sera copiée chiffrée sur tous les nœuds.'
+            }}</mat-hint>
+          </mat-form-field>
+        </div>
+      }
       @default {
         @if (selectedTool(); as tool) {
           <div
@@ -435,7 +470,11 @@
         >
           Annuler
         </button>
-        @if (selectedProvider() === 'ollama' || selectedProvider() === 'openai') {
+        @if (
+          selectedProvider() === 'ollama' ||
+          selectedProvider() === 'openai' ||
+          selectedProvider() === 'anthropic'
+        ) {
           <button
             matButton="filled"
             type="submit"

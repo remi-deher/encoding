@@ -18,7 +18,7 @@ interface ProviderRow {
   readonly nodes: readonly NodeState[];
 }
 
-const REPLICATED = ['codex-cli', 'claude-cli', 'openai'] as const;
+const REPLICATED = ['codex-cli', 'claude-cli', 'openai', 'anthropic'] as const;
 const WHEN = new Intl.DateTimeFormat('fr-FR', {
   day: '2-digit',
   month: '2-digit',
