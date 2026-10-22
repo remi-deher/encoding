@@ -40,7 +40,7 @@ public sealed class DockerClusterTests
         public async Task StartServerAsync()
         {
             Directory.CreateDirectory(Media);
-            File.SetUnixFileMode(Media, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Media, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
             await DockerAsync("network", "create", Network);
             var port = FreePort();
             await RunAsync(ServerName, "--hostname", ServerName, "-p", $"127.0.0.1:{port}:8080",
@@ -236,7 +236,7 @@ public sealed class DockerClusterTests
         await process.WaitForExitAsync();
         Assert.True(process.ExitCode == 0, error);
         // Les conteneurs tournent en non-root : le média de test doit rester lisible et modifiable par eux.
-        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.OtherRead | UnixFileMode.OtherWrite);
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.OtherRead | UnixFileMode.OtherWrite);
     }
 
     private static async Task WaitAsync(Func<Task<bool>> condition, int seconds, string description, Cluster? cluster = null)
