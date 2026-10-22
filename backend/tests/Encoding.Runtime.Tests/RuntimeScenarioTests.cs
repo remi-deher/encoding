@@ -71,6 +71,18 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     public Task SourceReplacementLifecycle() => Scenarios.ReplacementLifecycleAsync();
 
     [DatabaseFact]
+    public Task PublishStepKeepsTheExecutionActive() => Scenarios.PublishStepKeepsTheExecutionActiveAsync();
+
+    [DatabaseFact]
+    public Task PublicationRequestedBeforeWorkerLossIsAdoptedNotRepeated() => Scenarios.PublicationRequestedBeforeWorkerLossIsAdoptedNotRepeatedAsync();
+
+    [DatabaseFact]
+    public Task ReplicatedExecutionCannotBeClaimedOnAnotherServer() => Scenarios.ReplicatedExecutionCannotBeClaimedOnAnotherServerAsync();
+
+    [DatabaseFact]
+    public Task ResumeOnAnotherDirectWorkerWhenTheDeadWorkerWasTheAccessNode() => Scenarios.ResumeOnAnotherDirectWorkerWhenTheDeadWorkerWasTheAccessNodeAsync();
+
+    [DatabaseFact]
     public Task WaitMediaPolicy() => Scenarios.WaitMediaPolicyAsync();
 
     [DatabaseFact]
@@ -81,6 +93,15 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
 
     [DatabaseFact]
     public Task UncertainPluginSideEffectIsNotRepeatedAfterWorkerLoss() => Scenarios.UncertainPluginStepIsNotRepeatedAfterWorkerLossAsync();
+
+    [DatabaseFact]
+    public Task ResumeWaitsForAnEligibleWorker() => Scenarios.ResumeWaitsForAnEligibleWorkerAsync();
+
+    [DatabaseFact]
+    public Task ReplayableStepIsResumedAfterWorkerLoss() => Scenarios.ReplayableStepIsResumedAfterWorkerLossAsync();
+
+    [DatabaseFact]
+    public Task RetryPolicyKeepsPriorityOverResume() => Scenarios.RetryPolicyKeepsPriorityOverResumeAsync();
 
     [DatabaseFact]
     public Task FlowRetryPolicyIsBounded() => Scenarios.BoundedFlowRetryAsync();

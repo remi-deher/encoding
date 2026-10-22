@@ -43,7 +43,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 | 4b. Noms de pistes | `base-track-names` (appliquer) | 0056 | Modèle de nom modifiable |
 | 29, 13. Garde Plex puis remplacement atomique | politique de remplacement de la bibliothèque + garde Plex | 0030, 0059 | Remplacement désactivé par défaut ; garde pour tous les remplacements du cluster |
 | Contrôles post-assemblage | `probe-validate-output` | 0075 | Vérifie au choix HEVC, pistes vidéo/audio, codecs audio et sous-titres, canaux/disposition/LFE, chapitres, pièces jointes, durée et événements ASS |
-| 14–15, 26–27. Actualisation Plex / Radarr / Sonarr | événement durable `media.published` ajouté au journal après publication | 0075 | Comprend chemin et SHA-256 ; aucun consommateur n'existe encore : ni les plugins ni le serveur n'actualisent Plex/Radarr/Sonarr à partir de cet événement (voir [open-questions](../architecture/open-questions.md)) |
+| 14–15, 26–27. Actualisation Plex / Radarr / Sonarr | `base-publish-result` puis `plex-refresh-library`, `radarr-refresh-movie`, `sonarr-refresh-series` | 0003 | Le bloc de publication fait passer le fichier en place pendant le flow ; les actualisations le suivent. Le modèle importable ne les contient pas encore |
 | Scripts avec `Flow.Execute` | `base-script` avec l'aide `tools` | 0054 | Bac à sable Landlock conservé |
 
 ## Comportement dans les cas d'échec
@@ -55,15 +55,15 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 | Plex injoignable pendant la vérification | Le flow continue ; la garde de publication refuse le remplacement de la source (le résultat distinct est publié) |
 | Disposition audio ambiguë | Sortie « Erreur » → Échec, source intacte |
 | Outil ou plugin absent sur le nœud | Le nœud ne reçoit pas le flow |
-| Perte du worker en cours de traitement | Le bail expire et la tentative échoue ; une reprise explicite, ou une règle de reprise bornée du flow, crée une nouvelle exécution depuis l’entrée. Un relais explicite conserve son checkpoint (0015, 0021) |
+| Perte du worker en cours de traitement | Le bail expire ; l’exécution est reprise au dernier checkpoint par un autre worker éligible (2 reprises au plus, ADR 0004). Un bloc à effet incertain (script, modification sur place, recherche Sonarr/Radarr) échoue et se relance explicitement ; un encodage interrompu est refait depuis le début du bloc |
 | Perte du nœud d'accès pendant la publication | La publication est reprise sans double bascule ([runtime](../architecture/domains/runtime.md)) |
 
 ## Limites connues
 
-- **Actualisation Plex / Radarr / Sonarr** : `media.published` est émis après confirmation de publication et consultable dans les événements d'exécution. Les plugins Plex, Radarr et Sonarr ne sont pas encore abonnés à cet événement ; leurs actions ne sont donc pas déclenchées automatiquement.
+- **Actualisation Plex / Radarr / Sonarr** : placer `base-publish-result` après « Exécuter le traitement », puis les blocs d'actualisation (ADR 0003). Le modèle importable `hevc-aac-ass.flow.json` n'est pas encore modifié : il publie toujours à sa fin.
 - **Contrôles ASS** : le bloc peut comparer les événements texte source/sortie lorsqu'on active l'option. La comparaison du résultat aux fichiers ASS préparés et au plan de sous-titres FileFlows reste propre à ce script.
 - **QSV n'a jamais été vérifié sur un vrai GPU** (hôtes TrueNAS) : à tester avant de compter sur l'encodage matériel.
-- **Modification sur place** (mkvpropedit avec sauvegarde de l'en-tête et restauration) n'existe pas : le flow travaille sur une copie.
+- **Modification sur place** : le bloc `mkv-edit-in-place` (ADR [0002](../architecture/adr/0002-modification-mkv-sur-place.md)) modifie langue, nom et drapeaux d'une piste directement dans la source, avec copie intégrale et restauration. Il n'est pas dans le flow importable : un flow « métadonnées seules » peut l'utiliser à la place du remux. Il ne gère ni chapitres ni pièces jointes (ajout de polices sur place non couvert).
 - Non exercés dans le conteneur de développement : Landlock, `ProcessTests`, un vrai serveur Plex, les hôtes TrueNAS.
 
 ## Choisir et régler les blocs

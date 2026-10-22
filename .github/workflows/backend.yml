@@ -69,6 +69,31 @@ jobs:
           name: backend-runtime-test-results
           path: test-results
           retention-days: 14
+  backend-multiprocess-tests:
+    runs-on: ubuntu-latest
+    needs: backend-compile
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore backend/Encoding.sln
+      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Real server and workers, SIGKILL of the encoding worker
+        run: >-
+          dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
+          --filter "FullyQualifiedName~WorkerProcessLossTests"
+          --logger "trx;LogFileName=multiprocess.trx" --results-directory test-results
+        env:
+          ENCODING_TEST_MULTIPROCESS: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-multiprocess-test-results
+          path: test-results
+          retention-days: 14
   backend-launcher-tests:
     runs-on: ubuntu-latest
     needs: backend-compile

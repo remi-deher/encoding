@@ -31,8 +31,8 @@ Fournisseurs `custom`/`managed`, manifeste `tool.json`, `/opt/encoding/tools/`, 
 ### 7. Store de plugins : compléments
 Déjà livré (PR #205). Reste : réplication de l'état entre serveurs (aujourd'hui local), signature des paquets, contrôle de `minEngineVersion`/`requiredTools`, désactivation sans retrait, refus de retrait d'un plugin utilisé, synchronisation périodique, adresse du dépôt officiel (non définie).
 
-### 8. Aucun déclencheur « après publication »
-`media.published` est enregistré mais personne ne le consomme : Plex et *ARR ne sont pas rafraîchis automatiquement après publication. Nécessaire pour boucler le cycle encodage → publication → bibliothèque de lecture.
+### 8. ~~Aucun déclencheur « après publication »~~ — traitée
+Résolue par l'ADR [0003](adr/0003-publication-etape-de-flow.md) : le bloc `base-publish-result` publie au milieu du flow et les blocs Plex, Radarr, Sonarr, Jellyfin le suivent. `media.published` reste un événement d'audit. Reste : un runner réel n'a pas encore exécuté le bloc de bout en bout, et le modèle de flow livré (FileFlows V3) n'utilise pas encore ce bloc.
 
 ### 9. Compatibilité entre versions de nœuds
 Seule la version de protocole (`Current = 1`) est contrôlée. Pas de plage de schéma, pas de règle « serveurs avant workers », pas de N/N-1 en mode Raft. Les migrations doivent rester additives en attendant.
@@ -46,3 +46,6 @@ Seule la version de protocole (`Current = 1`) est contrôlée. Pas de plage de s
 
 ## Non vérifié en conditions réelles (à ne pas présenter comme garanti)
 Landlock en conteneur de production ; GPU réel (QSV, VAAPI, NVENC) ; Plex/Jellyfin/Sonarr/Radarr réels ; NAS/NFS (atomicité du renommage et des verrous) ; cluster multi-hôtes sous charge (changement de mode, reprise après perte de worker) ; thème sombre et mobile de la page Nœuds et de l'éditeur de flow.
+
+## Reprise après perte du worker (ADR 0004)
+Livrée : reprise au dernier checkpoint, bornée à 2, blocs rejouables. Reste à décider : attendre le retour du nœud d'accès (au lieu d'échouer) quand le traitement continue ailleurs ; reprendre le verrou de disque libéré ; checkpoint intermédiaire à l'intérieur d'un encodage long (aujourd'hui, le bloc est refait depuis son début).

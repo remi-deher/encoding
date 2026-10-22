@@ -34,6 +34,7 @@ public sealed class RuntimeClient : IDisposable
         }
         return (await response.Content.ReadFromJsonAsync<T>(AgentJson.Options,ct))!;
     }
+    public Task<RuntimePublicationState> PublicationStateAsync(Guid id,long epoch,CancellationToken ct)=>GetAsync<RuntimePublicationState>($"executions/{id:D}/publication?epoch={epoch}",ct);
     public async Task<ExecutionResponse> ExecutionAsync(Guid id,CancellationToken ct)=>(await http.GetFromJsonAsync<ExecutionResponse>($"api/v1/executions/{id:D}",AgentJson.Options,ct))!;
     public async Task PutAsync(Guid id,long epoch,string file,string sha,bool original,CancellationToken ct,string? inputPath=null)
     {

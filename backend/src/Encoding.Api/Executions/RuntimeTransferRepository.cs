@@ -29,19 +29,20 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
         if(request.PublishedPath is null || request.PublishedPath.Length>2048 || !RuntimeArtifactStore.ValidDigest(request.Sha256)) return false;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await RuntimeRepository.FenceAsync(id,source,request.Epoch,c,tx,ct,true)) return false;
-        Guid worker; Guid library; string original; string sourceSha; string resultSha; int? graceHours; string mediaPolicy;
-        await using(var read=Sql.Command("SELECT worker_node_id,library_id,media_path,source_sha,result_sha,replacement_grace_hours,media_policy FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
+        Guid worker; Guid library; string original; string sourceSha; string resultSha; int? graceHours; string mediaPolicy; bool continueFlow;
+        await using(var read=Sql.Command("SELECT worker_node_id,library_id,media_path,source_sha,result_sha,replacement_grace_hours,media_policy,continue_after_publication FROM execution_work WHERE execution_id=@id AND result_sha=@sha AND publication_requested AND @path='.encoding-results/'||execution_id::text||'/result'||result_extension",c,tx))
         {
             read.Parameters.AddWithValue("id",id); read.Parameters.AddWithValue("sha",request.Sha256); read.Parameters.AddWithValue("path",request.PublishedPath);
             await using var row=await read.ExecuteReaderAsync(ct); if(!await row.ReadAsync(ct)) return false;
-            worker=row.GetGuid(0); library=row.GetGuid(1); original=row.GetString(2); sourceSha=row.GetString(3); resultSha=row.GetString(4); graceHours=row.IsDBNull(5)?null:row.GetInt32(5); mediaPolicy=row.GetString(6);
+            worker=row.GetGuid(0); library=row.GetGuid(1); original=row.GetString(2); sourceSha=row.GetString(3); resultSha=row.GetString(4); graceHours=row.IsDBNull(5)?null:row.GetInt32(5); mediaPolicy=row.GetString(6); continueFlow=row.GetBoolean(7);
         }
         var replacement=graceHours is null?null:request.Replacement;
         if(replacement is not null && !SourceReplacementRepository.ValidReport(id,original,replacement)) return false;
         var detail=replacement?.Status=="replaced"?"Résultat validé et publié ; source remplacée, sauvegarde conservée pendant la période de grâce."
             :graceHours is not null?"Résultat validé et publié ; remplacement non effectué, fichier source conservé"+(replacement?.Detail is {} reason?" : "+reason:"."):mediaPolicy=="beside"?"Résultat validé et publié à côté de la source (politique du flow) ; fichier source conservé."
             :mediaPolicy=="overwrite"?"Résultat validé et publié ; écrasement demandé par le flow mais la bibliothèque n’a pas de politique de remplacement active : fichier source conservé.":"Résultat validé et publié ; fichier source conservé.";
-        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"succeeded",worker,100,detail),c,tx,ct)) return false;
+        // Publication demandée par un bloc de flow (ADR 0003) : l'exécution reste active, le worker reprend le flow sur le fichier publié.
+        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,continueFlow?"running":"succeeded",worker,continueFlow?null:100,detail),c,tx,ct)) return false;
         if(replacement is not null) await SourceReplacementRepository.RecordInTransactionAsync(id,library,source,original,sourceSha,resultSha,graceHours!.Value,replacement,c,tx,ct);
         await using var update=Sql.Command("UPDATE execution_work SET published_path=@path WHERE execution_id=@id",c,tx);
         update.Parameters.AddWithValue("id",id); update.Parameters.AddWithValue("path",request.PublishedPath); await update.ExecuteNonQueryAsync(ct);
@@ -54,7 +55,17 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
             published.Parameters.AddWithValue("detail","Média publié : "+request.PublishedPath+" (SHA-256 : "+request.Sha256+").");
             await published.ExecuteNonQueryAsync(ct);
         }
-        await RuntimeRepository.ReleaseAsync(id,c,tx,ct); await tx.CommitAsync(ct); broadcaster?.Publish(id); return true;
+        if(!continueFlow) await RuntimeRepository.ReleaseAsync(id,c,tx,ct);
+        await tx.CommitAsync(ct); broadcaster?.Publish(id); return true;
+    }
+    /// <summary>Publication déjà confirmée par le nœud d'accès pour une exécution dont le flow continue (ADR 0003).</summary>
+    public async Task<RuntimePublicationState?> PublicationStateAsync(Guid id,CancellationToken ct)
+    {
+        await using var cmd=dataSource.CreateCommand("SELECT published_path,result_sha,publication_requested FROM execution_work WHERE execution_id=@id");
+        cmd.Parameters.AddWithValue("id",id); await using var r=await cmd.ExecuteReaderAsync(ct);
+        if(!await r.ReadAsync(ct)) return null;
+        var requested=r.GetBoolean(2);
+        return r.IsDBNull(0)?new(false,null,r.IsDBNull(1)?null:r.GetString(1),requested):new(true,r.GetString(0),r.IsDBNull(1)?null:r.GetString(1),requested);
     }
     public async Task<bool> FinishAsync(Guid id,Guid worker,FinishRuntimeExecution request,CancellationToken ct,bool sourceFailure=false)
     {
@@ -88,7 +99,14 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
             if(request.State!="failed") return false;
             await using var read=Sql.Command("SELECT worker_node_id FROM execution_work WHERE execution_id=@id",c,tx); read.Parameters.AddWithValue("id",id); worker=(await read.ScalarGuidAsync(ct))!.Value;
         }
-        if(request.State is "succeeded" or "deferred")
+        if(request.ContinueFlow)
+        {
+            // Publication au milieu du flow : état « succeeded » avec un résultat, une seule fois, sans fin de flow.
+            if(sourceFailure || request.State!="succeeded" || request.ResultSha256 is null || request.BeforeMetadata is null || request.AfterMetadata is null) return false;
+            await using var already=Sql.Command("SELECT publication_requested FROM execution_work WHERE execution_id=@id",c,tx); already.Parameters.AddWithValue("id",id);
+            if(await already.ScalarBoolAsync(ct)) return false;
+        }
+        else if(request.State is "succeeded" or "deferred")
         {
             await using var reached=Sql.Command("SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1",c,tx);
             reached.Parameters.AddWithValue("id",id);
@@ -108,13 +126,15 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
         if(request.State=="succeeded" && request.ResultSha256 is { } sha)
         {
             if(!RuntimeArtifactStore.ValidDigest(sha) || request.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(request.Extension,"^\\.[a-zA-Z0-9]{1,10}$")) return false;
+            // Un résultat déjà publié par un bloc du flow ne peut pas être remplacé par un second.
+            await using(var published=Sql.Command("SELECT published_path IS NOT NULL FROM execution_work WHERE execution_id=@id",c,tx)) { published.Parameters.AddWithValue("id",id); if(await published.ScalarBoolAsync(ct)) return false; }
             await using var set=Sql.Command("""
-              UPDATE execution_work w SET result_sha=@sha,result_extension=@extension,publication_requested=true,
+              UPDATE execution_work w SET result_sha=@sha,result_extension=@extension,publication_requested=true,continue_after_publication=@continue,
               replacement_grace_hours=CASE WHEN w.media_policy='beside' THEN NULL ELSE (SELECT p.grace_period_hours FROM library_replacement_policies p WHERE p.library_id=w.library_id AND p.enabled) END
               WHERE execution_id=@id AND EXISTS(SELECT 1 FROM execution_artifacts a WHERE a.execution_id=w.execution_id AND a.sha256=@sha)
               AND EXISTS(SELECT 1 FROM library_node_accesses a WHERE a.library_id=w.library_id AND a.node_id=w.source_node_id AND a.is_enabled AND a.can_write)
               """,c,tx);
-            set.Parameters.AddWithValue("id",id); set.Parameters.AddWithValue("sha",sha); set.Parameters.AddWithValue("extension",request.Extension);
+            set.Parameters.AddWithValue("id",id); set.Parameters.AddWithValue("sha",sha); set.Parameters.AddWithValue("extension",request.Extension); set.Parameters.AddWithValue("continue",request.ContinueFlow);
             if(await set.ExecuteNonQueryAsync(ct)!=1) return false;
             if(!await ExecutionRepository.RecordInTransactionAsync(id,new(request.EventId,request.ExpectedRevision,"running",worker,null,"Résultat validé ; publication demandée au nœud d’accès."),c,tx,ct)) return false;
         }

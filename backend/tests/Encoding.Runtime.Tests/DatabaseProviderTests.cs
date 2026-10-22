@@ -42,7 +42,7 @@ public sealed class DatabaseProviderTests
         var firstStatus = await DatabaseMigrator.StatusAsync(database.Db, contentRoot, CancellationToken.None);
         Assert.Empty(firstStatus.Pending);
         Assert.Empty(firstStatus.Unknown);
-        Assert.Equal("0044_ai_credentials", firstStatus.Latest);
+        Assert.Equal("0046_execution_resume_count", firstStatus.Latest);
         await using (var identity = database.Db.CreateCommand("SELECT count(*) FROM cluster_identity"))
             Assert.Equal(1L, await identity.ExecuteScalarAsync());
 
