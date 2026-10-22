@@ -46,6 +46,38 @@ public sealed class AiModelCatalogTests
     }
 
     [Fact]
+    public void ClaudeAliasDefaultIsDroppedAndResolvedModelIsShown()
+    {
+        using var doc = JsonDocument.Parse("""
+            {"models":[{"value":"default","resolvedModel":"claude-sonnet-5-5","displayName":"Default (recommended)"},
+              {"value":"opus","resolvedModel":"claude-opus-5-5","displayName":"Opus"}]}
+            """);
+        var models = AiModelProtocol.ParseClaude(doc.RootElement);
+        var single = Assert.Single(models);
+        Assert.Equal("opus", single.Id);
+        Assert.Equal("Opus · claude-opus-5-5", single.Label);
+    }
+
+    [Fact]
+    public void AnthropicModelsAndMessagesResponsesAreParsed()
+    {
+        using var list = JsonDocument.Parse("""{"data":[{"id":"claude-opus-5-5","display_name":"Claude Opus 5.5"},{"id":"claude-opus-5-5"},{"display_name":"x"}]}""");
+        var models = AiModelProtocol.ParseAnthropic(list.RootElement);
+        Assert.Equal("claude-opus-5-5", Assert.Single(models).Id);
+        using var reply = JsonDocument.Parse("""
+            {"model":"claude-opus-5-5","stop_reason":"end_turn","content":[{"type":"thinking","thinking":""},{"type":"text","text":"Bonjour"}],
+             "usage":{"input_tokens":10,"cache_read_input_tokens":5,"output_tokens":3}}
+            """);
+        var result = AnthropicAiClient.Parse(reply.RootElement);
+        Assert.True(result.Success);
+        Assert.Equal("Bonjour", result.Content);
+        Assert.Equal(15, result.Usage!.InputTokens);
+        Assert.Equal(3, result.Usage.OutputTokens);
+        using var refusal = JsonDocument.Parse("""{"stop_reason":"refusal","content":[]}""");
+        Assert.False(AnthropicAiClient.Parse(refusal.RootElement).Success);
+    }
+
+    [Fact]
     public async Task CodexDiscoveryPaginatesWithoutGeneratingAndConcurrentReadsAreCached()
     {
         if (OperatingSystem.IsWindows()) return;

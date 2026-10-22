@@ -80,6 +80,9 @@ export interface AiSettings {
   readonly openAiModel: string;
   readonly openAiApiKey?: string | null;
   readonly hasOpenAiApiKey?: boolean;
+  readonly anthropicModel?: string;
+  readonly hasAnthropicApiKey?: boolean;
+  readonly anthropicEnabled?: boolean;
   readonly timeoutSeconds: number;
   readonly subtitleBatchSize: number;
   readonly assistantProvider?: string | null;
@@ -104,6 +107,9 @@ export interface AiSettingsUpdateRequest {
   readonly defaultProvider?: string;
   readonly ollamaBaseUrl?: string;
   readonly ollamaModel?: string;
+  readonly anthropicModel?: string;
+  readonly anthropicApiKey?: string | null;
+  readonly anthropicEnabled?: boolean;
   readonly openAiBaseUrl?: string;
   readonly openAiModel?: string;
   readonly openAiApiKey?: string | null;

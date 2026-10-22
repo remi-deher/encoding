@@ -57,6 +57,7 @@ public sealed class AiMetadataEnrichmentService(IHttpClientFactory clients, ICon
             "claude-cli" => settings.ClaudeEnabled,
             "ollama" => settings.OllamaEnabled,
             "openai" => settings.OpenAiEnabled,
+            "anthropic" => settings.AnthropicEnabled,
             _ => false,
         };
         if (!enabled || settings.FlowLocalOnly && provider != "ollama")

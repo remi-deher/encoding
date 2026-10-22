@@ -47,6 +47,15 @@ public sealed class AiClientFactory(
             return new OpenAiCompatibleAiClient(client, model, key, supportsReasoningEffort: true);
         }
 
+        if (provider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))
+        {
+            var model = !string.IsNullOrWhiteSpace(settings.AnthropicModel) ? settings.AnthropicModel : "claude-sonnet-5-5";
+            var key = settings.AnthropicApiKey ?? configuration["AiTools:Anthropic:ApiKey"];
+            var client = httpClientFactory.CreateClient("AiClient");
+            client.BaseAddress = new Uri("https://api.anthropic.com/v1/");
+            return new AnthropicAiClient(client, model, key);
+        }
+
         // Par défaut : CLI officielle (Codex ou Claude)
         var toolId = provider.Equals("claude-cli", StringComparison.OrdinalIgnoreCase) || provider.Equals("claude", StringComparison.OrdinalIgnoreCase)
             ? "claude-cli"

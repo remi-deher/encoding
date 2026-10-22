@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 export interface NetworkSettings {
   readonly trustProxy: boolean;
   readonly proxies: readonly string[];
+  readonly publicUrl?: string | null;
 }
 
 export interface NetworkDetection {

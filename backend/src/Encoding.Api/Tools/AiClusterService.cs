@@ -49,6 +49,11 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
                 providers.Add("openai");
                 models["openai"] = local.OpenAiModel;
             }
+            if (local.AnthropicEnabled && !string.IsNullOrWhiteSpace(local.AnthropicModel) && !string.IsNullOrWhiteSpace(local.AnthropicApiKey))
+            {
+                providers.Add("anthropic");
+                models["anthropic"] = local.AnthropicModel;
+            }
             name = await localNode.ResolveDisplayNameAsync(token);
             if (modelCatalog is not null)
             {
@@ -127,7 +132,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     private static AiNodeAvailability[] CreateLoadingPeerNodes(IReadOnlyList<string> peerUrls)
     {
         var now = DateTimeOffset.UtcNow;
-        var providers = new[] { "codex-cli", "claude-cli", "openai", "ollama" };
+        var providers = new[] { "codex-cli", "claude-cli", "openai", "anthropic", "ollama" };
         return peerUrls.Select((url, index) => new AiNodeAvailability(
             new Guid(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)).AsSpan(0, 16)),
             $"Nœud distant {index + 1}", [], true,
@@ -137,7 +142,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     public async Task<AiNodeModelCatalog> LocalModelsAsync(bool refresh, CancellationToken ct)
     {
         if (refresh && modelCatalog is not null)
-            foreach (var provider in new[] { "codex-cli", "claude-cli", "openai", "ollama" }) modelCatalog.Invalidate(provider);
+            foreach (var provider in new[] { "codex-cli", "claude-cli", "openai", "anthropic", "ollama" }) modelCatalog.Invalidate(provider);
         var local = await LocalAsync(ct);
         return new(local.NodeId, local.Name, local.Catalogs ?? []);
     }
@@ -163,7 +168,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             .Where(p => !p.Enabled).Select(p => new AiDisabledModel(p.Provider, p.Model)).ToArray());
     public async Task<AiModelPolicy> UpdateModelPolicyAsync(AiModelPolicyUpdate update, CancellationToken ct)
     {
-        if (update.Provider is not ("codex-cli" or "claude-cli" or "openai" or "ollama")
+        if (update.Provider is not ("codex-cli" or "claude-cli" or "openai" or "anthropic" or "ollama")
             || string.IsNullOrWhiteSpace(update.Model) || update.Model.Length > 256 || update.Model.Any(char.IsControl))
             throw new ArgumentException("Modèle ou fournisseur invalide.");
         // One replicated key per provider/model prevents concurrent edits to different models overwriting one another.
@@ -355,7 +360,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     public async Task<AiCompletionResult> GenerateAsync(string? provider, AiPrompt prompt, CancellationToken ct, bool localOnly = false, bool allowModelChanges = false)
     {
         provider ??= (await GetSettingsAsync(ct)).DefaultProvider;
-        if (provider is not ("codex-cli" or "claude-cli" or "ollama" or "openai")) throw new ArgumentException("Fournisseur IA inconnu.");
+        if (provider is not ("codex-cli" or "claude-cli" or "ollama" or "openai" or "anthropic")) throw new ArgumentException("Fournisseur IA inconnu.");
         if (localOnly && provider != "ollama") return new(false, "", "Le mode local uniquement exige Ollama.");
         if (localOnly && (!Uri.TryCreate(settings.GetSettings().OllamaBaseUrl, UriKind.Absolute, out var localUri) || !localUri.IsLoopback))
             return new(false, "", "Ollama doit être configuré sur une adresse de boucle locale pour cette politique.");
@@ -560,6 +565,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             AssistantActivityRetentionDays = shared.AssistantActivityRetentionDays,
             OllamaEnabled = shared.OllamaEnabled,
             OpenAiEnabled = shared.OpenAiEnabled,
+            AnthropicEnabled = shared.AnthropicEnabled,
             CodexEnabled = shared.CodexEnabled,
             ClaudeEnabled = shared.ClaudeEnabled
         };
@@ -567,7 +573,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
     public async Task<AiSettingsDto> UpdateSettingsAsync(AiSettingsUpdateRequest update, CancellationToken ct)
     {
         var saved = settings.UpdateSettings(update);
-        await store.SaveAsync("settings", saved with { OpenAiApiKey = null }, ct);
+        await store.SaveAsync("settings", saved with { OpenAiApiKey = null, AnthropicApiKey = null }, ct);
         return saved;
     }
 }

@@ -141,7 +141,7 @@ export class SettingsPageComponent {
     access: 'Les comptes et les accès des applications à votre cluster.',
     ai: 'Le moteur, les fournisseurs, la consommation et les assistants externes.',
     connections: 'Les applications qui s’adressent à votre cluster et la supervision.',
-    network: 'L’accès à ce nœud derrière un reverse proxy.',
+    network: 'L’adresse publique de ce nœud et son reverse proxy.',
     operations: 'La santé des services et les événements de ce nœud.',
   };
   protected readonly mainTabs: readonly CategoryTabOption[] = [

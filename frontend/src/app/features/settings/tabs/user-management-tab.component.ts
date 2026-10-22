@@ -73,7 +73,7 @@ interface UserRow {
               <mat-slide-toggle
                 [checked]="row.isActive"
                 [disabled]="row.isSelf || busy()"
-                [attr.aria-label]="'Compte actif : ' + row.username"
+                [aria-label]="'Actif : ' + row.username"
                 (change)="setActive(row, $event)"
                 >Actif</mat-slide-toggle
               >

@@ -87,8 +87,23 @@ public sealed class AiModelCatalogService(AiCliRuntime runtime, AiSettingsServic
                 }
                 else
                 {
+                    if (provider == "anthropic")
+                    {
+                        if (string.IsNullOrWhiteSpace(local.AnthropicApiKey)) throw new InvalidOperationException();
+                        using var anthropicRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.anthropic.com/v1/models?limit=100");
+                        anthropicRequest.Headers.Add("x-api-key", local.AnthropicApiKey);
+                        anthropicRequest.Headers.Add("anthropic-version", AnthropicAiClient.ApiVersion);
+                        using var anthropicResponse = await clients.CreateClient("AiClient").SendAsync(anthropicRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                        anthropicResponse.EnsureSuccessStatusCode();
+                        await using var anthropicStream = await anthropicResponse.Content.ReadAsStreamAsync(timeout.Token);
+                        using var anthropicDoc = JsonDocument.Parse(await AiClusterTransport.ReadAsync(anthropicStream, timeout.Token));
+                        models = AiModelProtocol.ParseAnthropic(anthropicDoc.RootElement).Select(m => m with { IsDefault = m.Id == local.AnthropicModel }).ToArray();
+                        var checkedAt = clock.GetUtcNow();
+                        return Publish(provider, entry, fingerprint, new(provider, models.Count > 0 ? "available" : "unavailable", models, checkedAt, checkedAt,
+                            models.Count == 0 ? "Le fournisseur ne publie aucun modèle utilisable." : null));
+                    }
                     var url = provider == "ollama" ? local.OllamaBaseUrl : local.OpenAiBaseUrl;
-                    if (provider is not ("ollama" or "openai") || string.IsNullOrWhiteSpace(url)) throw new InvalidOperationException();
+                    if (provider is not ("ollama" or "openai" or "anthropic") || string.IsNullOrWhiteSpace(url)) throw new InvalidOperationException();
                     if (provider == "ollama" && !new Uri(url).AbsolutePath.TrimEnd('/').EndsWith("/v1", StringComparison.Ordinal)) url = url.TrimEnd('/') + "/v1/";
                     using var request = new HttpRequestMessage(HttpMethod.Get, url.TrimEnd('/') + "/models");
                     if (provider == "openai" && !string.IsNullOrWhiteSpace(local.OpenAiApiKey))
@@ -134,6 +149,7 @@ public sealed class AiModelCatalogService(AiCliRuntime runtime, AiSettingsServic
         var local = settings.GetSettings();
         // Local comparison only; the key is never returned or logged.
         return connectionRevision + (provider == "openai" ? local.OpenAiBaseUrl + local.OpenAiApiKey + local.OpenAiModel
+            : provider == "anthropic" ? local.AnthropicApiKey + local.AnthropicModel
             : provider == "ollama" ? local.OllamaBaseUrl + local.OllamaModel : runtime.Find(provider));
     }
 

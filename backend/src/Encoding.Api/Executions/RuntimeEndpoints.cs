@@ -58,7 +58,7 @@ public static class RuntimeEndpoints
                 && targetValue.ValueKind == JsonValueKind.String ? targetValue.GetString() : null;
             var sourceLanguage = configuration.TryGetValue("sourceLanguage", out var sourceValue)
                 && sourceValue.ValueKind == JsonValueKind.String ? sourceValue.GetString() : "auto";
-            if (provider is not ("codex-cli" or "claude-cli" or "ollama" or "openai")
+            if (provider is not ("codex-cli" or "claude-cli" or "ollama" or "openai" or "anthropic")
                 || string.IsNullOrWhiteSpace(targetLanguage) || targetLanguage.Length > 64
                 || string.IsNullOrWhiteSpace(sourceLanguage) || sourceLanguage.Length > 64)
                 return Results.Ok(new RuntimeAiSubtitleTranslationResponse(false, ErrorCode: "error",
@@ -71,6 +71,7 @@ public static class RuntimeEndpoints
                 "claude-cli" => settings.ClaudeEnabled,
                 "ollama" => settings.OllamaEnabled,
                 "openai" => settings.OpenAiEnabled,
+                "anthropic" => settings.AnthropicEnabled,
                 _ => false,
             };
             if (!enabled || settings.FlowLocalOnly && provider != "ollama")

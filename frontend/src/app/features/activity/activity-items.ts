@@ -39,6 +39,7 @@ const AI_PROVIDERS: Readonly<Record<string, string>> = {
   'claude-cli': 'Claude Code',
   ollama: 'Ollama',
   openai: 'OpenAI',
+  anthropic: 'Anthropic',
 };
 const AI_OPERATIONS: Readonly<Record<string, string>> = {
   assistant: 'Assistant',

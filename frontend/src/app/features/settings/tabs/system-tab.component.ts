@@ -1,13 +1,15 @@
-import {
-  ResourceSheetComponent,
-  ResourceSheetSection,
-} from '../../../shared/ui/resource-sheet.component';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
-import { MatExpansionModule } from '@angular/material/expansion';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
+import { StatusBadgeComponent, StatusTone } from '../../../shared/ui/status-badge.component';
+import {
+  SettingGroupComponent,
+  SettingRowComponent,
+} from '../../../shared/ui/settings/setting-row.component';
+import { SettingsNoticeComponent } from '../../../shared/ui/settings/settings-notice.component';
+import { ClipboardService } from '../../../shared/services/clipboard.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 
 interface HealthCheckEntry {
@@ -31,69 +33,133 @@ interface ClusterIdentityResponse {
   readonly hasClusterToken: boolean;
 }
 
+const STATUS_ORDER = { unhealthy: 0, degraded: 1, healthy: 2 } as const;
+
 @Component({
   selector: 'app-system-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatButtonModule,
-    ResourceSheetComponent,
-    MatExpansionModule,
     ConfigurationSectionComponent,
+    SettingGroupComponent,
+    SettingRowComponent,
+    SettingsNoticeComponent,
+    StatusBadgeComponent,
   ],
   template: `
     <app-configuration-section
       title="Santé du système"
       description="État des services sur le nœud consulté."
+      icon="check"
     >
       <button section-actions matButton="tonal" [disabled]="refreshing()" (click)="refreshAll()">
         {{ refreshing() ? 'Actualisation…' : 'Actualiser la santé' }}
       </button>
       @if (health(); as value) {
-        <p class="health-overview" [class.degraded]="value.status !== 'healthy'" role="status">
-          {{ healthLabel(value.status) }}
+        <div class="banner" [class]="'banner tone-' + tone(value.status)" role="status">
+          <span class="dot" aria-hidden="true"></span>
+          <strong>{{ healthLabel(value.status) }}</strong>
+          <span class="banner-detail">{{ summary() }}</span>
+          <span class="banner-spacer"></span>
           @if (lastChecked()) {
-            · Dernier contrôle : {{ lastChecked() }}
+            <span class="banner-detail">Dernier contrôle : {{ lastChecked() }}</span>
           }
-        </p>
+        </div>
+        <app-setting-group>
+          @for (check of checks(); track check.name) {
+            <app-setting-row
+              class="service"
+              [class.attention]="check.status !== 'healthy'"
+              [label]="formatCheckName(check.name)"
+              [hint]="check.description ?? ''"
+            >
+              <span class="duration">{{ check.durationMs }} ms</span>
+              <app-status-badge [label]="healthLabel(check.status)" [tone]="tone(check.status)" />
+            </app-setting-row>
+          }
+        </app-setting-group>
       } @else {
-        <p role="status">
+        <app-settings-notice [tone]="refreshing() ? 'neutral' : 'warning'">
           {{ refreshing() ? 'Chargement des diagnostics…' : 'Diagnostics indisponibles.' }}
-        </p>
+        </app-settings-notice>
       }
-      <app-resource-sheet
-        ariaLabel="Diagnostics système"
-        title="Services"
-        [sections]="healthSections()"
-      />
-      <mat-expansion-panel
-        ><mat-expansion-panel-header
-          ><mat-panel-title>Identité du cluster</mat-panel-title></mat-expansion-panel-header
-        ><app-resource-sheet
-          ariaLabel="Identité du cluster"
-          title="Installation"
-          [sections]="clusterSections()"
-      /></mat-expansion-panel>
+    </app-configuration-section>
+
+    <app-configuration-section
+      title="Cluster"
+      description="Identité de cette installation."
+      icon="server"
+    >
+      @if (cluster(); as value) {
+        <app-setting-group>
+          <app-setting-row label="Nom du cluster">
+            <span>{{ value.name || 'Nœud autonome' }}</span>
+          </app-setting-row>
+          <app-setting-row label="Mode">
+            <span>{{ value.standalone ? 'Autonome' : 'Cluster maillé' }}</span>
+          </app-setting-row>
+          <app-setting-row label="Identifiant">
+            <code>{{ value.id }}</code>
+            <button matButton="outlined" (click)="copyId(value.id)">Copier</button>
+          </app-setting-row>
+        </app-setting-group>
+      } @else {
+        <app-settings-notice tone="warning">Identité indisponible.</app-settings-notice>
+      }
     </app-configuration-section>
   `,
   styles: `
     :host {
-      display: block;
+      display: contents;
     }
-    .health-overview {
+    .banner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-3);
       padding: var(--space-3) var(--space-4);
+      margin-bottom: 3px;
+      border-radius: var(--radius-xl) var(--radius-xl) var(--radius-sm) var(--radius-sm);
       background: var(--success-soft);
       color: var(--success);
-      border-radius: var(--radius-md);
-      margin: 0 0 var(--space-4);
     }
-    .health-overview.degraded {
+    .banner.tone-warning {
       background: var(--warning-soft);
       color: var(--warning);
     }
-    mat-expansion-panel {
-      margin-top: var(--space-4);
-      background: var(--surface-container-low);
-      box-shadow: none;
+    .banner.tone-danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+    .banner strong {
+      font-size: var(--font-title-sm, 1rem);
+    }
+    .banner-detail {
+      font-size: var(--font-label);
+    }
+    .banner-spacer {
+      flex: 1;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: currentColor;
+      flex: none;
+    }
+    .banner + app-setting-group app-setting-row:first-child {
+      border-top-left-radius: var(--radius-sm);
+      border-top-right-radius: var(--radius-sm);
+    }
+    .service.attention {
+      box-shadow: inset 4px 0 var(--warning);
+    }
+    .duration,
+    code {
+      font-family: var(--font-mono, ui-monospace, monospace);
+      font-size: var(--font-label);
+      color: var(--text-secondary);
+      overflow-wrap: anywhere;
     }
   `,
 })
@@ -106,49 +172,32 @@ export class SystemTabComponent {
   protected readonly cluster = signal<ClusterIdentityResponse | null>(null);
   protected readonly health = signal<HealthDetailsResponse | null>(null);
 
-  protected readonly clusterSections = computed<readonly ResourceSheetSection[]>(() => {
-    const cl = this.cluster();
-    return [
-      {
-        id: 'identity',
-        title: 'Installation',
-        notice: cl ? undefined : 'Identité indisponible.',
-        fields: cl
-          ? [
-              { label: 'Nom du cluster', value: cl.name || 'Nœud autonome' },
-              { label: 'Identifiant', value: cl.id, mono: true },
-              { label: 'Mode', value: cl.standalone ? 'Autonome' : 'Cluster maillé' },
-            ]
-          : [],
-      },
-    ];
+  private readonly clipboard = inject(ClipboardService);
+
+  protected readonly checks = computed(() =>
+    [...(this.health()?.checks ?? [])].sort(
+      (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status],
+    ),
+  );
+  protected readonly summary = computed(() => {
+    const checks = this.checks();
+    const attention = checks.filter((check) => check.status !== 'healthy').length;
+    if (attention === 0) return `${checks.length} services contrôlés`;
+    return attention === 1
+      ? '1 service demande votre attention'
+      : `${attention} services demandent votre attention`;
   });
-  protected readonly healthSections = computed<readonly ResourceSheetSection[]>(() => {
-    const health = this.health();
-    if (!health)
-      return [{ id: 'unavailable', title: 'Diagnostics', notice: 'Diagnostics indisponibles.' }];
-    return health.checks.map((check) => ({
-      id: check.name,
-      title: this.formatCheckName(check.name),
-      caption: check.description || undefined,
-      items: [
-        {
-          label: `${check.durationMs} ms`,
-          badges: [
-            {
-              label: this.healthLabel(check.status),
-              tone:
-                check.status === 'healthy'
-                  ? 'success'
-                  : check.status === 'degraded'
-                    ? 'warning'
-                    : 'danger',
-            },
-          ],
-        },
-      ],
-    }));
-  });
+
+  protected tone(status: string): StatusTone {
+    return status === 'healthy' ? 'success' : status === 'degraded' ? 'warning' : 'danger';
+  }
+
+  protected async copyId(id: string): Promise<void> {
+    this.notifications.show(
+      (await this.clipboard.copy(id)) ? 'Identifiant copié.' : 'Copie impossible.',
+    );
+  }
+
   protected healthLabel(status: string): string {
     return status === 'healthy'
       ? 'Opérationnel'

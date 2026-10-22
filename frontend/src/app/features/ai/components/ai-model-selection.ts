@@ -13,6 +13,7 @@ export function aiTypeLabel(provider: string): string {
         'codex-cli': 'ChatGPT',
         'claude-cli': 'Claude',
         openai: 'OpenAI · API',
+        anthropic: 'Claude · API',
         ollama: 'Ollama',
       } as Record<string, string>
     )[provider] ?? provider

@@ -6,7 +6,7 @@ using Encoding.Contracts.Tools;
 namespace Encoding.Api.Tools;
 
 /// <summary>
-/// Garde les connexions IA identiques sur tous les nœuds (Codex CLI, Claude Code, clé OpenAI). Chaque nœud compare sa connexion locale
+/// Garde les connexions IA identiques sur tous les nœuds (Codex CLI, Claude Code, clés OpenAI et Anthropic). Chaque nœud compare sa connexion locale
 /// à la dernière valeur synchronisée : un changement local (connexion, renouvellement, déconnexion) est publié ; un changement distant est
 /// appliqué. Si les deux ont changé, la modification la plus récente l’emporte. Les secrets ne passent jamais par les journaux.
 /// </summary>
@@ -20,7 +20,8 @@ public sealed class AiCredentialSyncService(AiCredentialStore store, AiCliRuntim
         new("codex-cli", () => ReadFile(runtime.CodexAuthPath), value => WriteFile(runtime.CodexAuthPath, value), () => Modified(runtime.CodexAuthPath)),
         new("claude-cli", runtime.ReadClaudeToken, value => { if (value is null) runtime.DeleteClaudeToken(); else runtime.SaveClaudeToken(value); },
             () => Modified(Path.Combine(runtime.Profile("claude-cli"), "oauth-token.protected"))),
-        new("openai", () => settings.GetSettings().OpenAiApiKey, settings.SetOpenAiApiKey, () => Modified(Path.Combine(runtime.Root, "settings.json")))
+        new("openai", () => settings.GetSettings().OpenAiApiKey, settings.SetOpenAiApiKey, () => Modified(Path.Combine(runtime.Root, "settings.json"))),
+        new("anthropic", () => settings.GetSettings().AnthropicApiKey, settings.SetAnthropicApiKey, () => Modified(Path.Combine(runtime.Root, "settings.json")))
     ];
     private readonly ConcurrentDictionary<string, AiCredentialStatus> statuses = new();
 

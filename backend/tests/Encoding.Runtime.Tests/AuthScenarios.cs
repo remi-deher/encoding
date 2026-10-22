@@ -57,8 +57,15 @@ internal static class AuthScenarios
             Check(service.Save(true, []).Count == 1, "Trust cannot be enabled without a proxy address.");
             Check(service.Save(true, ["bad"]).Count == 1, "An invalid proxy address is refused.");
             Check(service.Save(true, ["192.168.1.10"]).Count == 0 && service.IsTrustedProxy(System.Net.IPAddress.Parse("192.168.1.10")), "A declared proxy is trusted after saving.");
+            Check(service.Save(true, ["192.168.1.10"], "encoding.example.com").ContainsKey("publicUrl")
+                && service.Save(true, ["192.168.1.10"], "ftp://encoding.example.com").ContainsKey("publicUrl")
+                && service.Save(true, ["192.168.1.10"], "https://user:pass@encoding.example.com").ContainsKey("publicUrl")
+                && service.Save(true, ["192.168.1.10"], "https://encoding.example.com/?a=1").ContainsKey("publicUrl"), "An incomplete or unsafe public URL is refused.");
+            Check(service.Save(true, ["192.168.1.10"], " https://encoding.example.com/ ").Count == 0 && service.Current.PublicUrl == "https://encoding.example.com", "A public URL is trimmed and loses its trailing slash.");
             var reloaded = new NetworkSettingsService(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Network:SettingsFile"] = settingsFile }).Build());
             Check(reloaded.IsTrustedProxy(System.Net.IPAddress.Parse("192.168.1.10")), "The proxy setting survives a restart.");
+            Check(reloaded.Current.PublicUrl == "https://encoding.example.com", "The public URL survives a restart.");
+            Check(service.Save(true, ["192.168.1.10"], "").Count == 0 && service.Current.PublicUrl is null, "An empty public URL clears the setting.");
         }
         finally { File.Delete(settingsFile); }
         Console.WriteLine("PASS: trusted proxy matching and settings persistence.");

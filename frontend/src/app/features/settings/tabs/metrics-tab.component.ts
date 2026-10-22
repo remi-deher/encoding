@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 import {
@@ -6,6 +6,7 @@ import {
   SettingGroupComponent,
 } from '../../../shared/ui/settings/setting-row.component';
 import { ClipboardService } from '../../../shared/services/clipboard.service';
+import { PublicUrlService } from '../../../shared/services/public-url.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 @Component({
   selector: 'app-metrics-tab',
@@ -24,7 +25,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
     >
       <app-setting-group>
         <app-setting-row label="Adresse de collecte">
-          <code row-detail>{{ address }}</code>
+          <code row-detail>{{ address() }}</code>
           <button matButton="tonal" (click)="copy()">Copier</button>
         </app-setting-row>
       </app-setting-group>
@@ -40,10 +41,11 @@ import { NotificationService } from '../../../shared/services/notification.servi
 export class MetricsTabComponent {
   private readonly clipboard = inject(ClipboardService);
   private readonly notifications = inject(NotificationService);
-  protected readonly address = `${window.location.origin}/metrics`;
+  private readonly publicUrl = inject(PublicUrlService);
+  protected readonly address = computed(() => `${this.publicUrl.origin()}/metrics`);
   protected async copy(): Promise<void> {
     this.notifications.show(
-      (await this.clipboard.copy(this.address))
+      (await this.clipboard.copy(this.address()))
         ? 'Adresse copiée.'
         : 'Impossible de copier l’adresse.',
     );

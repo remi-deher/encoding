@@ -7,6 +7,7 @@ import {
   SettingGroupComponent,
 } from '../../../shared/ui/settings/setting-row.component';
 import { ClipboardService } from '../../../shared/services/clipboard.service';
+import { PublicUrlService } from '../../../shared/services/public-url.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 @Component({
   selector: 'app-webhooks-tab',
@@ -27,7 +28,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
       <app-setting-group>
         @for (endpoint of endpoints; track endpoint.name) {
           <app-setting-row [label]="endpoint.name">
-            <code row-detail>{{ baseUrl + endpoint.path }}</code>
+            <code row-detail>{{ baseUrl() + endpoint.path }}</code>
             <button
               matButton="tonal"
               [attr.aria-label]="'Copier l’adresse ' + endpoint.name"
@@ -70,14 +71,15 @@ import { NotificationService } from '../../../shared/services/notification.servi
 export class WebhooksTabComponent {
   private readonly clipboard = inject(ClipboardService);
   private readonly notifications = inject(NotificationService);
-  protected readonly baseUrl = window.location.origin;
+  private readonly publicUrl = inject(PublicUrlService);
+  protected readonly baseUrl = this.publicUrl.origin;
   protected readonly endpoints = [
     { name: 'Sonarr', path: '/api/v1/integrations/sonarr/webhook' },
     { name: 'Radarr', path: '/api/v1/integrations/radarr/webhook' },
   ];
   protected async copy(path: string): Promise<void> {
     this.notifications.show(
-      (await this.clipboard.copy(this.baseUrl + path))
+      (await this.clipboard.copy(this.baseUrl() + path))
         ? 'Adresse copiée.'
         : 'Impossible de copier l’adresse.',
     );

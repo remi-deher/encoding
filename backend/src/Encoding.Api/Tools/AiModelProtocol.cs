@@ -50,11 +50,25 @@ public static class AiModelProtocol
         return result.DistinctBy(m => m.Id).ToArray();
     }
 
+    /// <summary>`default` is a CLI alias that duplicates another entry; the resolved model is shown beside the alias instead.</summary>
     public static IReadOnlyList<AiDiscoveredModel> ParseClaude(JsonElement root) => Rows(root, "models")
-        .Select(row => (Row: row, Id: Text(row, "value"))).Where(item => item.Id is not null)
-        .Select(item => new AiDiscoveredModel(item.Id!, Text(item.Row, "displayName") ?? item.Id!,
+        .Select(row => (Row: row, Id: Text(row, "value"))).Where(item => item.Id is not null and not "default")
+        .Select(item => new AiDiscoveredModel(item.Id!, ClaudeLabel(item.Row, item.Id!),
             Strings(item.Row, "supportedEffortLevels"), ReasoningKnown: item.Row.TryGetProperty("supportedEffortLevels", out _)
                 || item.Row.TryGetProperty("supportsEffort", out var support) && support.ValueKind == JsonValueKind.False))
+        .DistinctBy(m => m.Id).ToArray();
+
+    private static string ClaudeLabel(JsonElement row, string id)
+    {
+        var name = Text(row, "displayName") ?? id;
+        return Text(row, "resolvedModel") is { } resolved && resolved != id ? name + " · " + resolved : name;
+    }
+
+    /// <summary>Models API of Anthropic: `id` and `display_name`, newest first.</summary>
+    public static IReadOnlyList<AiDiscoveredModel> ParseAnthropic(JsonElement root) => Rows(root, "data")
+        .Select(row => (Id: Text(row, "id"), Name: Text(row, "display_name"))).Where(item => item.Id is not null)
+        .Select(item => new AiDiscoveredModel(item.Id!, item.Name is null ? item.Id! : item.Name + " · " + item.Id,
+            [], ReasoningKnown: false))
         .DistinctBy(m => m.Id).ToArray();
 
     public static IReadOnlyList<AiDiscoveredModel> ParseHttp(JsonElement root) => Rows(root, "data")

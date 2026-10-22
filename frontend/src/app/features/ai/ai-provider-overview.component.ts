@@ -17,6 +17,7 @@ interface ProviderSummary {
 const PROVIDERS = [
   { id: 'ollama', name: 'Ollama' },
   { id: 'openai', name: 'OpenAI / API compatible' },
+  { id: 'anthropic', name: 'API Anthropic' },
   { id: 'codex-cli', name: 'Codex CLI' },
   { id: 'claude-cli', name: 'Claude Code' },
 ] as const;
@@ -333,6 +334,17 @@ export class AiProviderOverviewComponent {
           detail: configured
             ? 'Valeurs chargées · origine enregistrée ou défaut non distinguée'
             : 'Adresse ou modèle manquant',
+        };
+      }
+      if (provider.id === 'anthropic') {
+        if (!settings) return this.unknownProvider(provider.id, provider.name);
+        const configured = Boolean(settings.anthropicModel?.trim() && settings.hasAnthropicApiKey);
+        return {
+          id: provider.id,
+          name: provider.name,
+          configured,
+          status: configured ? 'Valeurs présentes' : 'Valeurs manquantes',
+          detail: configured ? 'Modèle et clé API enregistrés' : 'Modèle ou clé API manquant',
         };
       }
       if (provider.id === 'openai') {
