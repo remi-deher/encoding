@@ -56,7 +56,7 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg mediainfo mkvtoolnix python3
+      - run: .github/scripts/apt-install.sh ffmpeg mediainfo mkvtoolnix python3
       - run: mkvmerge --version
       - run: >-
           dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
@@ -80,7 +80,7 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: .github/scripts/apt-install.sh ffmpeg
       - name: Real server and workers, SIGKILL of the encoding worker
         run: >-
           dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
@@ -117,7 +117,7 @@ jobs:
         run: docker pull mrcryllix/encoding:latest
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: .github/scripts/apt-install.sh ffmpeg
       - name: Real containers on a Docker network (docker kill of a worker, mixed versions)
         run: >-
           dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
@@ -156,7 +156,7 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg mediainfo python3
+      - run: .github/scripts/apt-install.sh ffmpeg mediainfo python3
       - run: python3 -m unittest discover -s backend/plugins/tests -v
       - run: dotnet run --project backend/tests/Encoding.Plugins.Tests --configuration Release
   backend-prototype-tests:
