@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "nodes",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "name": "Nœuds",
   "supportedHostContractVersions": [
     1
@@ -70,7 +70,8 @@
         "1.1.0",
         "1.2.0",
         "1.3.0",
-        "1.4.0"
+        "1.4.0",
+        "1.5.0"
       ]
     },
     {
@@ -137,8 +138,10 @@
             "id": "encoderKind",
             "type": "select",
             "label": "Type d’encodage",
-            "description": "Facultatif, avec « Encodeur ou codec requis ». Matériel : seuls les encodeurs matériels utilisables sur le worker comptent (QSV, NVENC, VAAPI), jamais le CPU. CPU : seuls les encodeurs logiciels. Sans encodeur renseigné, tout encodeur du type choisi convient.",
+            "description": "Facultatif, avec « Encodeur ou codec requis ». Matériel : seuls les encodeurs matériels utilisables sur le worker comptent (QSV, NVENC, VAAPI), jamais le CPU. CPU : seuls les encodeurs logiciels. Sans encodeur renseigné, tout encodeur du type choisi convient. « Selon le profil d’encodage du flow » exige un encodeur utilisable parmi les cibles du profil du bloc vidéo (le codec et l’encodeur ci-dessus sont alors ignorés).",
             "defaultValue": "any",
+            "requiresPluginVersion": "1.6.0",
+            "requiresPluginVersionValue": "profile",
             "options": [
               {
                 "value": "any",
@@ -151,6 +154,10 @@
               {
                 "value": "cpu",
                 "label": "CPU (logiciel)"
+              },
+              {
+                "value": "profile",
+                "label": "Selon le profil d’encodage du flow"
               }
             ],
             "importance": "basic",
@@ -166,7 +173,8 @@
         "1.1.0",
         "1.2.0",
         "1.3.0",
-        "1.4.0"
+        "1.4.0",
+        "1.5.0"
       ]
     },
     {
@@ -258,7 +266,8 @@
         "1.1.0",
         "1.2.0",
         "1.3.0",
-        "1.4.0"
+        "1.4.0",
+        "1.5.0"
       ]
     },
     {
@@ -330,7 +339,8 @@
       "compatiblePluginVersions": [
         "1.2.0",
         "1.3.0",
-        "1.4.0"
+        "1.4.0",
+        "1.5.0"
       ]
     },
     {
@@ -383,7 +393,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.3.0",
-        "1.4.0"
+        "1.4.0",
+        "1.5.0"
       ]
     },
     {
@@ -419,7 +430,8 @@
       "requiresMedia": false,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.4.0"
+        "1.4.0",
+        "1.5.0"
       ]
     }
   ],

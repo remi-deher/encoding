@@ -110,8 +110,35 @@ internal static partial class Harness
         Check(eligibility.CanRun(Flow("hardware", null), gpu, worker) && !eligibility.CanRun(Flow("hardware", null), cpuOnly, worker), "Hardware without a codec accepts any hardware encoder.");
         Check(eligibility.CanRun(Flow("cpu"), cpuOnly, worker) && !eligibility.CanRun(Flow("cpu"), Worker("hevc_qsv"), worker), "CPU: only software encoders qualify.");
         Check(eligibility.CanRun(Flow("any"), cpuOnly, worker) && eligibility.CanRun(Flow(null), cpuOnly, worker), "Any / unset keeps the previous behaviour.");
-        Check(!eligibility.CanRun(Flow("hardware"), gpu.Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.4.0" } : cap).ToArray(), worker),
-            "An agent announcing nodes 1.4.0 does not receive a flow that uses the new setting.");
+        Check(!eligibility.CanRun(Flow("hardware"), gpu.Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.5.0" } : cap).ToArray(), worker),
+            "An agent announcing nodes 1.5.0 does not receive a flow that uses the new setting.");
+    }
+
+    /// <summary>« Selon le profil d'encodage du flow » : le relais exige un encodeur utilisable du profil du bloc vidéo.</summary>
+    internal static void ProfileEncoderContracts()
+    {
+        var (registry, validator, eligibility) = Services();
+        NodeToolCapability Ffmpeg(params string[] usable) => new("ffmpeg", "7.0", ["video"], ["cpu", "qsv", "vaapi"], usable,
+            EncoderChecks: [.. usable.Select(id => new NodeEncoderCapability(id, "usable"))]);
+        NodeToolCapability[] Worker(params string[] usable) => [.. Capabilities(false), Ffmpeg(usable)];
+        FlowDefinition Flow(bool retryWithCpu = false, params EncodingProfileTarget[] targets)
+        {
+            var profile = new EncodingProfileSnapshot(Guid.NewGuid(), 1, "Matériel", "", targets);
+            var video = Node(registry, "encode", "video-transcode", new() { ["encoderMode"] = J("automatic"), ["videoCodec"] = J("hevc"), ["retryWithCpu"] = J(retryWithCpu), ["encodingProfile"] = JsonSerializer.SerializeToElement(profile, new JsonSerializerOptions(JsonSerializerDefaults.Web)) });
+            return new FlowDefinition(1, Guid.NewGuid(), 1, "Profile fixture", "video",
+                [Node(registry, "entry", "base-input-file"), Node(registry, "need", "nodes-require-capability", new() { ["toolId"] = J("ffmpeg"), ["encoderKind"] = J("profile") }), video, Node(registry, "end", "base-complete-flow")],
+                [new("a", "entry", "success", "need"), new("b", "need", "success", "encode"), new("c", "encode", "success", "end")]);
+        }
+        EncodingProfileTarget[] hardware = [new("hevc_qsv", 25, "medium", 0), new("hevc_vaapi", 23, "", 1)];
+        var worker = Guid.NewGuid();
+        var check = validator.Validate(Flow(false, hardware)); Check(check.IsValid, "The profile choice is a valid setting: " + string.Join("; ", check.Issues.Select(i => i.Path + " " + i.Message)));
+        Check(eligibility.CanRun(Flow(false, hardware), Worker("hevc_qsv"), worker), "A worker with the first target of the profile qualifies.");
+        Check(eligibility.CanRun(Flow(false, hardware), Worker("hevc_vaapi"), worker), "Any usable target of the profile is enough.");
+        Check(!eligibility.CanRun(Flow(false, hardware), Worker("libx265"), worker), "A CPU-only worker is refused when the profile has hardware targets only.");
+        Check(eligibility.CanRun(Flow(true, hardware), Worker("libx265"), worker), "The CPU fallback of the video block is honoured.");
+        Check(!eligibility.CanRun(Flow(false, [new("hevc_nvenc", 25, "medium", 0)]), Worker("hevc_qsv"), worker), "A profile change moves the requirement.");
+        Check(!eligibility.CanRun(Flow(false, hardware), Worker("hevc_qsv").Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.5.0" } : cap).ToArray(), worker),
+            "An agent announcing nodes 1.5.0 does not receive a flow that uses the profile choice.");
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
@@ -119,7 +146,7 @@ internal static partial class Harness
         new("plugin/video", "1.1.0", ["general"], []),
         new("plugin/audio", "1.0.0", ["general"], []),
         new("plugin/subtitles", "1.0.0", ["general"], []),
-        new("plugin/nodes", "1.5.0", ["general"], []),
+        new("plugin/nodes", "1.6.0", ["general"], []),
         new("plugin/conditions", "1.2.0", ["general"], []),
         new("plugin/plex", "1.1.0", ["general"], ["process"]),
         new("ffprobe", "7.0", ["video"], []),

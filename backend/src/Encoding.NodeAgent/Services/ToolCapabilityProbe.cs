@@ -42,7 +42,7 @@ public sealed class ToolCapabilityProbe(
                 new("plugin/images", "1.0.0", ["general"], []),
                 new("plugin/probe", "1.0.0", ["general"], []),
                 new("ai-runtime", "1.0.0", ["subtitles", "video", "music"], []),
-                new("plugin/nodes", "1.5.0", ["general"], []),
+                new("plugin/nodes", "1.6.0", ["general"], []),
                 new("plugin/conditions", "1.2.0", ["general"], [])
             };
             // L'aide tools des scripts (0054) exige le même bac à sable que les scripts eux-mêmes.
