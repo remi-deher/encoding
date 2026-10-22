@@ -23,6 +23,9 @@ public sealed class ContractTests
     public void RequireCapabilityEncoderKindSeparatesHardwareFromCpu() => Harness.EncoderKindContracts();
 
     [Fact]
+    public void RequireCapabilityFollowsTheVideoEncodingProfile() => Harness.ProfileEncoderContracts();
+
+    [Fact]
     public void NativeConditionsEvaluateNestedGroupsAndMetadataSnapshots()
     {
         var (registry, validator, eligibility) = Harness.Services();
