@@ -1,10 +1,15 @@
 import { ChangeDetectionStrategy, Component, input, model, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
+import { IconComponent } from '../../../shared/ui/icon.component';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { AiAssistantModelOption } from '../../../shared/models/ai-tools';
 import { AiModelSelectorComponent } from './ai-model-selector.component';
+
+export const AI_ASSISTANT_FILE_ACCEPT =
+  'Dockerfile,Makefile,.env,.txt,.md,.markdown,.rst,.csv,.tsv,.log,.out,.json,.jsonc,.json5,.yaml,.yml,.xml,.toml,.ini,.conf,.config,.properties,.srt,.ass,.ssa,.vtt,.sub,.smi,.sami,.ttml,.dfxp,.mpl,.lrc,.sbv,.ffmetadata,.ffpreset,.ffscript,.ffconcat,.filter,.m3u,.m3u8,.nfo,.prx,.avs,.avsi,.vpy,.qpfile,.chapters,.edl,.cue,.xspf,.pls,.mpd,.csproj,.sln,.props,.targets,.editorconfig,.gitignore,.cs,.fs,.vb,.ts,.tsx,.js,.jsx,.mjs,.cjs,.py,.pyw,.sh,.bash,.zsh,.ps1,.psm1,.bat,.cmd,.sql,.html,.htm,.css,.scss,.less,.proto,.graphql,.gql';
 
 @Component({
   selector: 'app-ai-conversation-composer',
@@ -12,6 +17,8 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
   imports: [
     FormsModule,
     MatButtonModule,
+    MatMenuModule,
+    IconComponent,
     MatInputModule,
     MatFormFieldModule,
     AiModelSelectorComponent,
@@ -51,22 +58,44 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
         <button
           mat-icon-button
           type="button"
-          aria-label="Ressources, fichiers et outils de l’assistant"
-          title="Ressources, fichiers et outils"
-          (click)="attach.emit()"
+          aria-label="Joindre un fichier ou une ressource"
+          title="Joindre"
+          [disabled]="locked()"
+          [matMenuTriggerFor]="attachMenu"
         >
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            aria-hidden="true"
-          >
-            <path d="M12 5v14M5 12h14" stroke-linecap="round" />
-          </svg>
+          <app-icon name="add" />
         </button>
+        <mat-menu #attachMenu="matMenu">
+          <button mat-menu-item type="button" (click)="fileInput.click()">
+            <app-icon name="attach" />
+            <span>Joindre un fichier</span>
+          </button>
+          <button mat-menu-item type="button" (click)="resourceChosen.emit('flow')">
+            <app-icon name="flow" />
+            <span>Un flow</span>
+          </button>
+          <button mat-menu-item type="button" (click)="resourceChosen.emit('execution')">
+            <app-icon name="history" />
+            <span>Une exécution</span>
+          </button>
+          <button mat-menu-item type="button" (click)="resourceChosen.emit('node')">
+            <app-icon name="server" />
+            <span>Un nœud</span>
+          </button>
+          <button mat-menu-item type="button" (click)="resourceChosen.emit('library')">
+            <app-icon name="library" />
+            <span>Une bibliothèque</span>
+          </button>
+        </mat-menu>
+        <input
+          #fileInput
+          class="visually-hidden"
+          type="file"
+          multiple
+          [accept]="fileAccept"
+          aria-label="Choisir des fichiers texte à joindre"
+          (change)="filesChosen.emit($event)"
+        />
         <app-ai-model-selector
           [options]="options()"
           [selectedKey]="selectedKey()"
@@ -231,8 +260,10 @@ export class AiConversationComposerComponent {
   readonly settingsOpenChange = output<boolean>();
   readonly send = output<void>();
   readonly cancel = output<void>();
-  readonly attach = output<void>();
+  readonly resourceChosen = output<'flow' | 'execution' | 'node' | 'library'>();
   readonly fileRemoved = output<void>();
+  readonly filesChosen = output<Event>();
+  protected readonly fileAccept = AI_ASSISTANT_FILE_ACCEPT;
   protected clearAttachment(): void {
     this.fileRemoved.emit();
   }

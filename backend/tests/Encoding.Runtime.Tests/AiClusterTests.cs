@@ -93,6 +93,18 @@ public sealed class AiClusterTests
     }
 
     [Fact]
+    public async Task LargeAssistantPromptIsAcceptedUpToTheAssistantContextLimit()
+    {
+        await using var mesh = await Mesh.CreateAsync();
+        var large = new string('x', 150_000);
+        var generated = await mesh.First.Service.GenerateAsync("openai", new("instructions", large), Ct);
+        Assert.True(generated.Success, generated.ErrorMessage);
+
+        var tooLarge = new string('x', AiClusterService.MaximumPromptCharacters + 1);
+        await Assert.ThrowsAsync<ArgumentException>(() => mesh.First.Service.GenerateAsync("openai", new("instructions", tooLarge), Ct));
+    }
+
+    [Fact]
     public async Task SessionHistorySkipsTombstonesAfterExpiration()
     {
         await using var mesh = await Mesh.CreateAsync();

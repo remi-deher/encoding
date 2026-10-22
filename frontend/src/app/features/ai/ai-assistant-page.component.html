@@ -231,7 +231,7 @@
           class="visually-hidden"
           type="file"
           multiple
-          accept="Dockerfile,Makefile,.env,.txt,.md,.markdown,.rst,.csv,.tsv,.log,.out,.json,.jsonc,.json5,.yaml,.yml,.xml,.toml,.ini,.conf,.config,.properties,.srt,.ass,.ssa,.vtt,.sub,.smi,.sami,.ttml,.dfxp,.mpl,.lrc,.sbv,.ffmetadata,.ffpreset,.ffscript,.ffconcat,.filter,.m3u,.m3u8,.nfo,.prx,.avs,.avsi,.vpy,.qpfile,.chapters,.edl,.cue,.xspf,.pls,.mpd,.csproj,.sln,.props,.targets,.editorconfig,.gitignore,.cs,.fs,.vb,.ts,.tsx,.js,.jsx,.mjs,.cjs,.py,.pyw,.sh,.bash,.zsh,.ps1,.psm1,.bat,.cmd,.sql,.html,.htm,.css,.scss,.less,.proto,.graphql,.gql"
+          [accept]="fileAccept"
           aria-label="Choisir des fichiers texte à joindre"
           (change)="selectAttachments($event)"
         />
@@ -575,9 +575,15 @@
         (effortChange)="selectEffort($event)"
         (send)="send()"
         (cancel)="cancelRequest()"
-        (attach)="openWorkspace()"
+        (resourceChosen)="chooseResource($event)"
         (fileRemoved)="removeAttachment()"
+        (filesChosen)="selectAttachments($event)"
       />
     </footer>
   </mat-drawer-content>
 </mat-drawer-container>
+@if (draggingFiles()) {
+  <div class="drop-overlay" aria-hidden="true">
+    <span>Déposez vos fichiers pour les joindre</span>
+  </div>
+}
