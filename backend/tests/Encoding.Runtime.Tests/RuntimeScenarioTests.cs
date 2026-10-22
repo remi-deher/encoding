@@ -74,6 +74,12 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     public Task PublishStepKeepsTheExecutionActive() => Scenarios.PublishStepKeepsTheExecutionActiveAsync();
 
     [DatabaseFact]
+    public Task PublicationRequestedBeforeWorkerLossIsAdoptedNotRepeated() => Scenarios.PublicationRequestedBeforeWorkerLossIsAdoptedNotRepeatedAsync();
+
+    [DatabaseFact]
+    public Task ReplicatedExecutionCannotBeClaimedOnAnotherServer() => Scenarios.ReplicatedExecutionCannotBeClaimedOnAnotherServerAsync();
+
+    [DatabaseFact]
     public Task WaitMediaPolicy() => Scenarios.WaitMediaPolicyAsync();
 
     [DatabaseFact]
