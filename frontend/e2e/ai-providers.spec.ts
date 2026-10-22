@@ -162,9 +162,9 @@ test('Codex only shows the supplied code and closing cancels the attempt', async
   );
   await expect(dialog.getByRole('button', { name: 'Copier le lien' })).toBeVisible();
   await expect(dialog.getByText('https://', { exact: false })).toHaveCount(0);
-  expect(
-    await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
-  ).toBe(true);
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+    true,
+  );
   await expect(dialog.getByText(/Simuler/)).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Fermer', exact: true }).click();
   await expect.poll(() => cancelled).toBe(true);
@@ -302,9 +302,9 @@ test('Claude browser authentication accepts the return code from the redesigned 
   );
   await expect(dialog.getByRole('button', { name: 'Copier le lien' })).toBeVisible();
   await expect(dialog.getByText('https://', { exact: false })).toHaveCount(0);
-  expect(
-    await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
-  ).toBe(true);
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+    true,
+  );
   await dialog.getByLabel('Code de retour Claude').fill('return-code');
   await dialog.getByRole('button', { name: 'Transmettre le code à Claude Code' }).click();
   await expect.poll(() => submitted).toEqual({ input: 'return-code' });
