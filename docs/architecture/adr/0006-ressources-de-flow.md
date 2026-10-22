@@ -32,8 +32,13 @@ tags: [ressource, police, image, audio, catalogue, version, sha-256, distributio
 - **Portée** (par défaut, à rouvrir si besoin) : toutes les ressources sont partagées par tout le cluster ; pas de ressource propre à un flow.
 - **Types livrés d'emblée** : polices seules. Images et audio s'ajoutent quand un bloc les consomme.
 
+## Reste à décider avant le code
+- Tailles maximales par fichier et par ressource.
+- Sort d'une version supprimée tant qu'un flow la référence (recommandé : suppression refusée).
+- Migration du jeu « Crunchyroll » déjà copié sur les nœuds (recommandé : import manuel dans le catalogue, `fontSet` conservé en repli).
+
 ## Alternatives écartées
-- **Octets dans l'entité réconciliée ou volume partagé** : le premier alourdit le journal, le second ajoute un prérequis de déploiement.
+- **Octets dans l'entité réconciliée ou volume partagé** : le premier alourdit le journal, le second ajoute un prérequis de déploiement. Le lot du journal est borné en nombre d'événements (32), pas en octets : des fichiers de plusieurs mégaoctets alourdiraient chaque échange et chaque reprise.
 - **Tout mettre dans une bibliothèque média** : mélange deux concepts (déclencheur de traitement et ressource consommée), impose des chemins locaux par nœud et expose la ressource à la surveillance et au remplacement.
 - **Garder des dossiers locaux et automatiser la copie** (script ou outil d'administration) : ne résout ni la dérive entre nœuds, ni l'éligibilité, ni la traçabilité par version.
 - **Embarquer les octets dans la définition du flow** : alourdit chaque version, duplique les fichiers, dépasse vite la limite de taille d'import et de document.
