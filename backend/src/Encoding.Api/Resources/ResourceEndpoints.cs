@@ -1,5 +1,7 @@
 using System.Data.Common;
 using Encoding.Api.Infrastructure.Data;
+using Encoding.Api.Auth;
+using Encoding.Api.Infrastructure;
 using Microsoft.AspNetCore.Http.Features;
 
 namespace Encoding.Api.Resources;
@@ -57,6 +59,28 @@ public static class ResourceEndpoints
             }
             catch (ResourceException exception) { return Results.UnprocessableEntity(new { title = exception.Message }); }
         }).WithName("AddResourceVersion");
+
+        // Lecture d'un fichier par un pair admis (reprise par Range). Pas de corps : la signature couvre la méthode, le chemin
+        // et l'horodatage ; l'octet est adressé par son empreinte, que le demandeur revérifie à l'arrivée.
+        app.MapGet(ResourceBlobFetcher.RoutePrefix + "{digest}", async (string digest, HttpContext http, ClusterIdentityRepository identityRepository,
+            ClusterPeerAdmissionRepository peerAdmissions, ResourceBlobStore blobs, CancellationToken ct) =>
+        {
+            if (!ResourceBlobStore.ValidDigest(digest)) return Results.NotFound();
+            if (!Guid.TryParse(http.Request.Headers[ClusterReconciliationSignature.PeerHeader], out var peerId)) return Results.Unauthorized();
+            var identity = await identityRepository.GetAsync(ct);
+            var publicKey = await peerAdmissions.GetActivePublicKeyAsync(identity.Id, peerId, ct);
+            if (publicKey is null || !ClusterReconciliationSignature.Verify(publicKey, peerId,
+                    http.Request.Headers[ClusterReconciliationSignature.TimeHeader],
+                    http.Request.Headers[ClusterReconciliationSignature.SignatureHeader], ResourceBlobFetcher.SignedRequest(digest)))
+                return Results.Unauthorized();
+            return blobs.Exists(digest)
+                ? Results.File(blobs.OpenRead(digest), "application/octet-stream", enableRangeProcessing: true)
+                : Results.NotFound();
+        })
+        .AllowAnonymous()
+        .RequireRateLimiting(AuthExtensions.ClusterMeshPolicy)
+        .WithTags("Cluster reconciliation")
+        .WithName("GetClusterResourceBlob");
 
         resources.MapDelete("/{id:guid}", async (Guid id, ResourceRepository repository, CancellationToken ct) =>
         {

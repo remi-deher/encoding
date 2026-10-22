@@ -518,6 +518,7 @@ internal static class AuthScenarios
             "GET /api/v1/auth/status",
             "GET /api/v1/cluster",
             "GET /api/v1/cluster/reconciliation/local-identity",
+            "GET /api/v1/cluster/resources/blobs/{digest}",
             "GET /health/live",
             "* /health/ready",
             "POST /api/v1/auth/login",
