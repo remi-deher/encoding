@@ -77,7 +77,12 @@ interface UserRow {
                 (change)="setActive(row, $event)"
                 >Actif</mat-slide-toggle
               >
-              <button matButton="outlined" type="button" (click)="changePassword(row)">
+              <button
+                matButton="outlined"
+                type="button"
+                [attr.aria-label]="'Changer le mot de passe de ' + row.username"
+                (click)="changePassword(row)"
+              >
                 Changer le mot de passe
               </button>
             </app-setting-row>
