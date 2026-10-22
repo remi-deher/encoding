@@ -18,3 +18,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | --- | --- | --- | --- |
 | [0001](0001-replication-connexions-ia.md) | Réplication chiffrée des connexions IA | implemented | ai |
 | [0002](0002-modification-mkv-sur-place.md) | Modification MKV sur place par bloc dédié | proposed | runtime |
+| [0003](0003-publication-etape-de-flow.md) | Publication comme étape de flow, distincte de la fin du flow | proposed | flows |
