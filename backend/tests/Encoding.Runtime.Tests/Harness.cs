@@ -93,7 +93,7 @@ internal static partial class Harness
         new("plugin/video", "1.1.0", ["general"], []),
         new("plugin/audio", "1.0.0", ["general"], []),
         new("plugin/subtitles", "1.0.0", ["general"], []),
-        new("plugin/nodes", "1.3.0", ["general"], []),
+        new("plugin/nodes", "1.4.0", ["general"], []),
         new("plugin/conditions", "1.2.0", ["general"], []),
         new("plugin/plex", "1.1.0", ["general"], ["process"]),
         new("ffprobe", "7.0", ["video"], []),
@@ -543,6 +543,25 @@ internal static partial class Harness
             await using(var preserved=File.OpenRead(librarySource))
                 Check(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(preserved))==Convert.ToHexStringLower(originalSha),"A rejected completion leaves the library source unchanged.");
             Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"Another worker cannot retry the rejected execution.");
+        }
+        public async Task LibraryAccessBlockBranchesOnDirectAccessAsync()
+        {
+            foreach(var direct in new[]{true,false})
+            {
+                var flow=new FlowDefinition(1,Guid.NewGuid(),1,"Library access","video",
+                    [Node(registry,"entry","base-input-file"),Node(registry,"access","nodes-library-access"),
+                     Node(registry,"local","base-complete-flow",new(){["result"]=J("success")}),
+                     Node(registry,"elsewhere","base-complete-flow",new(){["result"]=J("failed"),["message"]=J("Fichier sans accès direct sur ce nœud.")})],
+                    [new("a","entry","success","access"),new("b","access","yes","local"),new("c","access","no","elsewhere")]);
+                var(id,lease,_)=await EnqueueAsync(flow);
+                using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(20)); using var client=Client(a);
+                // Accès par transfert : le worker reçoit une copie, sans chemin local de la bibliothèque.
+                await Runner("library-access-"+direct,out _).RunAsync(direct?lease:lease with { SourceRoot=null },client,deadline.Token);
+                // Le média fictif échoue ensuite au scan : seul le checkpoint du bloc, écrit avant, compte ici.
+                Check(await ScalarAsync<string>("SELECT checkpoint->>'outputId' FROM execution_steps WHERE execution_id=@id AND node_id='access' AND completed_at IS NOT NULL",("id",id))==(direct?"yes":"no"),
+                    direct?"A node that mounts the library follows « Oui ».":"A node without direct access follows « Non ».");
+            }
+            Console.WriteLine("PASS: the library access block branches on direct access.");
         }
         public async Task EarlyRunnerAsync()
         {
