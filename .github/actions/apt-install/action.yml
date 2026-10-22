@@ -1,0 +1,25 @@
+name: Installer des paquets apt
+description: Installe des paquets apt avec un cache des .deb, pour que les jobs ne dépendent pas de la vitesse du miroir.
+inputs:
+  packages:
+    description: Paquets séparés par des espaces.
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/apt-debs
+        key: apt-${{ runner.os }}-${{ env.ImageVersion }}-${{ replace(inputs.packages, ' ', '+') }}
+    - shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        APT_DEBS_DIR="$HOME/apt-debs" "$GITHUB_ACTION_PATH/../../scripts/apt-install.sh" $PACKAGES
+    - if: steps.cache.outputs.cache-hit != 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: ~/apt-debs
+        key: apt-${{ runner.os }}-${{ env.ImageVersion }}-${{ replace(inputs.packages, ' ', '+') }}
