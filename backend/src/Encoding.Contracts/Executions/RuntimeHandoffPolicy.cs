@@ -5,13 +5,17 @@ using Encoding.Contracts.Nodes;
 
 namespace Encoding.Contracts.Executions;
 
-public sealed record RuntimeHandoffSelector(string Mode, Guid? TargetNodeId = null, Guid? TargetGroupId = null, string? RequiredLabels = null)
+public sealed record RuntimeHandoffSelector(string Mode, Guid? TargetNodeId = null, Guid? TargetGroupId = null, string? RequiredLabels = null, bool Resumed = false)
 {
-    /// <summary>Reprise automatique après perte du worker (ADR 0004) : tout worker éligible, y compris celui qui revient en ligne.</summary>
+    /// <summary>Ancienne forme d'une reprise (ADR 0004), conservée pour lire les lignes déjà écrites : tout worker éligible.</summary>
     public const string ResumeMode = "resume";
 
-    public bool Accepts(Guid candidate, Guid previousWorker, NodeIdentityResponse? identity = null) => Mode == ResumeMode || candidate != previousWorker
-        && (Mode == "eligible" || Mode == "node" && TargetNodeId == candidate
+    /// <summary>Vrai pour une reprise après perte du worker : la destination du dernier relais est conservée, mais le worker perdu peut revenir.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsResume => Resumed || Mode == ResumeMode;
+
+    public bool Accepts(Guid candidate, Guid previousWorker, NodeIdentityResponse? identity = null) => (IsResume || candidate != previousWorker)
+        && (Mode is "eligible" or ResumeMode || Mode == "node" && TargetNodeId == candidate
             || Mode == "selector" && identity is not null
                 && (TargetGroupId is null || identity.GroupIds.Contains(TargetGroupId.Value))
                 && NodeLabelSelector.Matches(RequiredLabels, identity.EffectiveLabels));

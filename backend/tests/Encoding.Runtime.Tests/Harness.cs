@@ -557,7 +557,7 @@ internal static partial class Harness
             Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"An interrupted receiver attempt is not reassigned before the recovery service hands it back.");
             var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
             await recovery.ProcessOnceAsync(CancellationToken.None);
-            var again=await runtime.ClaimAsync(c,CancellationToken.None)??throw new InvalidOperationException("The disconnected receiver's attempt must be resumed by another worker.");
+            var again=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The relay destination must resume the disconnected receiver's attempt.");
             Check(again.ExecutionId==id && again.Checkpoint?.Context.Variables["selected"].GetInt32()==42,"The resumed attempt keeps the relay checkpoint.");
             Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up the resumed relay.");await ExpireAsync(id);await RecoverCancellationAsync(id);
         }

@@ -231,6 +231,31 @@ internal static partial class Harness
             Console.WriteLine("PASS: an interrupted replayable step is replayed by the resuming worker.");
         }
 
+        public async Task ResumeKeepsTheRelayDestinationAsync()
+        {
+            await ResetNodesAsync();
+            var flow=Chain(Node(registry,"entry","base-input-file"),Node(registry,"variable","base-variable",new(){["name"]=J("kept"),["value"]=J("7")}),Node(registry,"end","base-complete-flow"));
+            var(id,first,context)=await EnqueueAsync(flow);
+            await CompleteAsync(id,a,first,"entry",context);
+            // Le dernier relais du flow désignait le nœud b (encodage confié à un seul nœud) : sa destination reste la règle de la reprise.
+            await using(var relay=db.CreateCommand("UPDATE execution_work SET handoff_selector=@selector WHERE execution_id=@id"))
+            { relay.Parameters.AddWithValue("id",id); relay.Parameters.AddWithValue("selector",SqlKind.Json,JsonSerializer.Serialize(new RuntimeHandoffSelector("node",b),new JsonSerializerOptions(JsonSerializerDefaults.Web))); await relay.ExecuteNonQueryAsync(); }
+            await ExpireAsync(id);
+            var recovery=FullRecovery();
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check(await runtime.ClaimAsync(c,CancellationToken.None) is null && await runtime.ClaimAsync(a,CancellationToken.None) is null,"A resume never leaves the node chosen by the last relay while that node is available.");
+            var resumed=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The relay destination resumes the execution.");
+            Check(resumed.ExecutionId==id && resumed.Checkpoint?.NextNodeId=="variable","The destination resumes at the checkpoint.");
+            // Si ce nœud est perdu à son tour, la reprise ne part pas ailleurs : elle échoue après le délai de grâce.
+            await ExpireAsync(id);
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            await using(var aged=db.CreateCommand("UPDATE executions SET updated_at=clock_timestamp()-interval '10 minutes' WHERE id=@id")){ aged.Parameters.AddWithValue("id",id); await aged.ExecuteNonQueryAsync(); }
+            await using(var down=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=0 WHERE id=@b")){ down.Parameters.AddWithValue("b",b); await down.ExecuteNonQueryAsync(); }
+            await recovery.ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="failed","With the relay destination unavailable the resume fails instead of moving to another node.");
+            Console.WriteLine("PASS: a resume keeps the destination of the last relay.");
+        }
+
         public async Task RetryPolicyKeepsPriorityOverResumeAsync()
         {
             await ResetNodesAsync();
