@@ -103,3 +103,6 @@ code {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+button app-icon {
+  margin-inline-end: var(--space-2);
+}
