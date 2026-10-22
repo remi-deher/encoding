@@ -1,10 +1,10 @@
 # Flow « HEVC + AAC/AC3 + ASS (Crunchyroll) » : équivalent du flow FileFlows V3
 
-Ce flow reconstruit le flow FileFlows « V3 – HEVC + AAC/AC3 + ASS Crunchyroll ». Il est fourni comme fichier importable : [`flow-templates/hevc-aac-ass.flow.json`](flow-templates/hevc-aac-ass.flow.json). Le graphe active le repli d'un encodeur matériel vers CPU (QSV dans cet exemple) et ajoute un bloc de validation configurable après l'assemblage.
+Ce guide décrit comment reconstruire dans l'application le flow FileFlows « V3 – HEVC + AAC/AC3 + ASS Crunchyroll » avec les blocs du catalogue. Aucun fichier de flow n'est livré avec le projet : on le construit dans l'éditeur. Le graphe active le repli d'un encodeur matériel vers CPU (QSV dans cet exemple) et ajoute un bloc de validation configurable après l'assemblage.
 
 ## Mettre le flow en service
 
-1. Page **Flows** : importer `hevc-aac-ass.flow.json` (import JSON, voir [flows](../architecture/domains/flows.md)). Le flow est créé en version 1, identifiant fixe ; un second import identique est sans effet.
+1. Page **Flows** : créer le flow dans l'éditeur avec les blocs du déroulé ci-dessous (voir [flows](../architecture/domains/flows.md)).
 2. Ouvrir le flow dans l'éditeur : régler le nom du disque du bloc **Verrou de disque** (`disque-1` par défaut ; le même nom pour toutes les bibliothèques d'un même disque physique), le jeu de polices et les contrôles de sortie. Cet exemple choisit QSV et active le repli CPU; le même réglage fonctionne aussi avec NVENC et VAAPI. Si une branche conserve des sources HDR/10-bit dans leur codec d'origine, choisir **HEVC ou codec source conservé** dans le validateur. Publier.
 3. Attribuer la version publiée à une bibliothèque. Si besoin, créer un modèle depuis cette version ([flows](../architecture/domains/flows.md)) pour en dériver d'autres flows.
 4. Prérequis sur les nœuds : FFmpeg, MKVToolNix, plugin `base` 1.6.0 ou plus, plugin `plex` 1.1.0 (déclarés dans `Runtime:Plugins`, voir `docker-compose.yml`), et le dossier de polices du nœud (`ENCODING_FONT_DIR/Crunchyroll/…`). Un nœud qui ne satisfait pas ces conditions ne reçoit pas le flow.
@@ -43,7 +43,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 | 4b. Noms de pistes | `base-track-names` (appliquer) | 0056 | Modèle de nom modifiable |
 | 29, 13. Garde Plex puis remplacement atomique | politique de remplacement de la bibliothèque + garde Plex | 0030, 0059 | Remplacement désactivé par défaut ; garde pour tous les remplacements du cluster |
 | Contrôles post-assemblage | `probe-validate-output` | 0075 | Vérifie au choix HEVC, pistes vidéo/audio, codecs audio et sous-titres, canaux/disposition/LFE, chapitres, pièces jointes, durée et événements ASS |
-| 14–15, 26–27. Actualisation Plex / Radarr / Sonarr | `base-publish-result` puis `plex-refresh-library`, `radarr-refresh-movie`, `sonarr-refresh-series` | 0003 | Le bloc de publication fait passer le fichier en place pendant le flow ; les actualisations le suivent. Le modèle importable ne les contient pas encore |
+| 14–15, 26–27. Actualisation Plex / Radarr / Sonarr | `base-publish-result` puis `plex-refresh-library`, `radarr-refresh-movie`, `sonarr-refresh-series` | 0003 | Le bloc de publication fait passer le fichier en place pendant le flow ; les actualisations le suivent. |
 | Scripts avec `Flow.Execute` | `base-script` avec l'aide `tools` | 0054 | Bac à sable Landlock conservé |
 
 ## Comportement dans les cas d'échec
@@ -60,7 +60,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 
 ## Limites connues
 
-- **Actualisation Plex / Radarr / Sonarr** : placer `base-publish-result` après « Exécuter le traitement », puis les blocs d'actualisation (ADR 0003). Le modèle importable `hevc-aac-ass.flow.json` n'est pas encore modifié : il publie toujours à sa fin.
+- **Actualisation Plex / Radarr / Sonarr** : placer `base-publish-result` après « Exécuter le traitement », puis les blocs d'actualisation (ADR 0003).
 - **Contrôles ASS** : le bloc peut comparer les événements texte source/sortie lorsqu'on active l'option. La comparaison du résultat aux fichiers ASS préparés et au plan de sous-titres FileFlows reste propre à ce script.
 - **QSV n'a jamais été vérifié sur un vrai GPU** (hôtes TrueNAS) : à tester avant de compter sur l'encodage matériel.
 - **Modification sur place** : le bloc `mkv-edit-in-place` (ADR [0002](../architecture/adr/0002-modification-mkv-sur-place.md)) modifie langue, nom et drapeaux d'une piste directement dans la source, avec copie intégrale et restauration. Il n'est pas dans le flow importable : un flow « métadonnées seules » peut l'utiliser à la place du remux. Il ne gère ni chapitres ni pièces jointes (ajout de polices sur place non couvert).
