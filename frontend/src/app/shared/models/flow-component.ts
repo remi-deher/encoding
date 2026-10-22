@@ -102,7 +102,8 @@ interface FlowComponentConfigurationFieldBase {
     | 'indices'
     | 'labels'
     | 'artifact'
-    | 'font-set';
+    | 'font-set'
+    | 'resource';
   readonly visibleWhenFieldId?: string;
   readonly visibleWhenValue?: string;
   readonly visibleWhenEmpty?: boolean;

@@ -379,6 +379,7 @@ export class LibraryCatalogPageComponent {
     { value: 'templates', label: 'Modèles de flow' },
     { value: 'packs', label: 'Packs de composants' },
     { value: 'encoding', label: 'Profils d’encodage' },
+    { value: 'resources', label: 'Ressources' },
   ];
   protected readonly selectedSection = signal('media');
   protected onSectionChanged(section: string): void {
@@ -386,6 +387,7 @@ export class LibraryCatalogPageComponent {
     if (section === 'templates') void this.router.navigateByUrl('/libraries/templates');
     if (section === 'packs') void this.router.navigateByUrl('/libraries/packs');
     if (section === 'encoding') void this.router.navigateByUrl('/libraries/encoding-profiles');
+    if (section === 'resources') void this.router.navigateByUrl('/libraries/resources');
   }
 
   protected readonly actionOpen = signal(false);

@@ -22,6 +22,7 @@ import {
   LANGUAGE_CHOICES,
 } from '../../models/configuration-choice';
 import { ClusterApi } from '../../services/cluster-api';
+import { FlowResources } from '../../services/flow-resources';
 import { NodeGroupResponse } from '../../models/cluster';
 
 @Component({
@@ -92,6 +93,12 @@ import { NodeGroupResponse } from '../../models/cluster';
     @if (field().editor === 'font-set') {
       <p>Nom du jeu installé sur les workers. Sa présence sera vérifiée à l’exécution.</p>
     }
+    @if (field().editor === 'resource') {
+      <p>
+        Ressource du catalogue (Bibliothèques, Ressources). Le flow garde la version choisie ; les
+        nœuds récupèrent les fichiers automatiquement.
+      </p>
+    }
     @if (field().editor === 'node') {
       <p>
         L’état affiché est observé. L’éligibilité dépend aussi des capacités et de l’accès à la
@@ -118,6 +125,7 @@ import { NodeGroupResponse } from '../../models/cluster';
 export class ConfigurationReferenceFieldComponent implements OnInit {
   private readonly cluster = inject(ClusterApi);
   private readonly http = inject(HttpClient);
+  private readonly resourcesApi = inject(FlowResources);
   readonly field = input.required<FlowComponentConfigurationField>();
   readonly value = input('');
   readonly disabled = input(false);
@@ -147,8 +155,34 @@ export class ConfigurationReferenceFieldComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     const editor = this.field().editor;
-    if (editor !== 'node' && editor !== 'node-group' && editor !== 'font-set') return;
+    if (
+      editor !== 'node' &&
+      editor !== 'node-group' &&
+      editor !== 'font-set' &&
+      editor !== 'resource'
+    )
+      return;
     try {
+      if (editor === 'resource') {
+        const summaries = await this.resourcesApi.list();
+        const details = await Promise.all(
+          summaries.map((summary) => this.resourcesApi.get(summary.id)),
+        );
+        const options = details.flatMap((resource) =>
+          resource.versions.map((version) => ({
+            value: `${resource.summary.id}:${version.version}`,
+            label:
+              `${resource.summary.name} · v${version.version}` +
+              (version.version === resource.summary.latestVersion ? ' (dernière)' : ''),
+          })),
+        );
+        this.observed.set(options);
+        if (!options.length)
+          this.loadMessage.set(
+            'Aucune ressource dans le catalogue. Ajoutez des polices dans Bibliothèques, Ressources.',
+          );
+        return;
+      }
       if (editor === 'font-set') {
         const nodes = (await firstValueFrom(this.cluster.listNodes())).filter((node) =>
           node.roles.includes('worker'),
