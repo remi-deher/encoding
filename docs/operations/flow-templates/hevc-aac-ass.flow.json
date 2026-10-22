@@ -10,7 +10,7 @@
       "name": "Fichier vid\u00E9o",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.7.0",
+        "pluginVersion": "1.8.0",
         "componentId": "base-input-video",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -38,7 +38,7 @@
       "name": "Reporter : lecture en cours",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.7.0",
+        "pluginVersion": "1.8.0",
         "componentId": "base-defer-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -53,7 +53,7 @@
       "name": "Verrou de disque",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.7.0",
+        "pluginVersion": "1.8.0",
         "componentId": "base-disk-lock",
         "componentVersion": "1.5.0",
         "configurationSchemaVersion": 1
@@ -67,7 +67,7 @@
       "name": "Reporter : disque occup\u00E9",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.7.0",
+        "pluginVersion": "1.8.0",
         "componentId": "base-defer-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -96,7 +96,7 @@
       "name": "Pr\u00E9parer le plan FFmpeg",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.7.0",
+        "pluginVersion": "1.8.0",
         "componentId": "base-prepare-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -146,7 +146,7 @@
       "name": "Ex\u00E9cuter le plan (une \u00E9criture)",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.7.0",
+        "pluginVersion": "1.8.0",
         "componentId": "base-execute-processing",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -225,7 +225,7 @@
       "name": "Termin\u00E9",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.7.0",
+        "pluginVersion": "1.8.0",
         "componentId": "base-complete-flow",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1
@@ -239,7 +239,7 @@
       "name": "\u00C9chec",
       "component": {
         "pluginId": "base",
-        "pluginVersion": "1.7.0",
+        "pluginVersion": "1.8.0",
         "componentId": "base-complete-flow",
         "componentVersion": "1.0.0",
         "configurationSchemaVersion": 1

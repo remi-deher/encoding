@@ -71,6 +71,9 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     public Task SourceReplacementLifecycle() => Scenarios.ReplacementLifecycleAsync();
 
     [DatabaseFact]
+    public Task PublishStepKeepsTheExecutionActive() => Scenarios.PublishStepKeepsTheExecutionActiveAsync();
+
+    [DatabaseFact]
     public Task WaitMediaPolicy() => Scenarios.WaitMediaPolicyAsync();
 
     [DatabaseFact]
