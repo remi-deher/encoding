@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
+import { MatDialog } from '@angular/material/dialog';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -14,6 +15,7 @@ import {
 import { SettingsNoticeComponent } from '../../../shared/ui/settings/settings-notice.component';
 import { SettingsSaveBarComponent } from '../../../shared/ui/settings/settings-save-bar.component';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { ReverseProxyDialogComponent } from '../reverse-proxy/reverse-proxy-dialog.component';
 import { PublicUrlService } from '../../../shared/services/public-url.service';
 import {
   NetworkSettings,
@@ -71,6 +73,9 @@ import {
       description="Réglage propre à ce nœud."
       icon="server"
     >
+      <button section-actions matButton="tonal" type="button" (click)="openGenerator()">
+        Générer une configuration
+      </button>
       <app-settings-notice tone="warning">
         Une adresse déclarée par erreur permettrait à son appelant de falsifier l’adresse et le
         schéma vus par l’application.
@@ -138,6 +143,7 @@ export class NetworkTabComponent {
   private readonly service = inject(NetworkSettingsService);
   private readonly notifications = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly dialog = inject(MatDialog);
   private saved = { trustProxy: false, proxies: '', publicUrl: '' };
   private readonly publicUrlService = inject(PublicUrlService);
   protected readonly browserOrigin = window.location.origin;
@@ -163,6 +169,10 @@ export class NetworkTabComponent {
           this.busy.set(false);
         },
       });
+  }
+
+  protected openGenerator(): void {
+    this.dialog.open(ReverseProxyDialogComponent, { width: '720px', maxWidth: '96vw' });
   }
 
   protected dirty(): boolean {
