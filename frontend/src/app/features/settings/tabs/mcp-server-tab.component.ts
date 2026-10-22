@@ -14,6 +14,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
+import { RouterLink } from '@angular/router';
+import {
+  SettingGroupComponent,
+  SettingRowComponent,
+} from '../../../shared/ui/settings/setting-row.component';
 import { SettingsEditor } from '../settings-editor';
 import { McpToolDefinition } from '../../../shared/models/mcp';
 import { ClipboardService } from '../../../shared/services/clipboard.service';
@@ -34,52 +39,62 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
     MatExpansionModule,
     SearchFieldComponent,
     ConfigurationSectionComponent,
+    SettingGroupComponent,
+    SettingRowComponent,
+    RouterLink,
   ],
   template: `
     <app-configuration-section
-      title="Serveur MCP"
-      description="Donnez accès au cluster à votre assistant ou à votre éditeur."
+      title="Assistants externes (MCP)"
+      description="Donnez accès au cluster à votre assistant ou à votre éditeur. Lecture seule par défaut."
+      icon="terminal"
     >
       <button section-actions matButton="tonal" type="button" (click)="openClient()">
         Configurer un client
       </button>
-      <div class="endpoint">
-        <div>
-          <span>Adresse de connexion</span><code>{{ serverBaseUrl() }}/api/v1/mcp/sse</code>
-        </div>
-        <button matButton="text" (click)="copyAddress()">Copier l’adresse</button>
-      </div>
-      <p class="note">
-        Authentification par jeton d’API. Le MCP est en lecture seule : un jeton administrateur
-        n’écrit que s’il a reçu l’écriture MCP à sa création.
-      </p>
-      <mat-expansion-panel class="catalog"
-        ><mat-expansion-panel-header
-          ><mat-panel-title>Catalogue des outils</mat-panel-title></mat-expansion-panel-header
+      <app-setting-group>
+        <app-setting-row label="Adresse de connexion">
+          <code row-detail>{{ serverBaseUrl() }}/api/v1/mcp/sse</code>
+          <button matButton="tonal" type="button" (click)="copyAddress()">Copier</button>
+        </app-setting-row>
+        <app-setting-row
+          label="Authentification"
+          hint="Par jeton d’API. Un jeton administrateur n’écrit que s’il a reçu l’écriture MCP à sa création."
         >
-        <app-search-field
-          variant="filled"
-          label="Filtrer les outils"
-          [value]="searchQuery()"
-          (valueChange)="searchQuery.set($event)"
-        />
-        @for (tool of filteredTools(); track tool.name) {
-          <article class="tool">
-            <h3>
-              <code>{{ tool.name }}</code>
-            </h3>
-            <p>{{ tool.description }}</p>
-            @for (property of toolProperties(tool); track property.name) {
-              <span class="argument"
-                >{{ property.name }}{{ property.required ? ' (requis)' : '' }} ·
-                {{ property.type }}</span
-              >
-            }
-          </article>
-        } @empty {
-          <p>Aucun outil disponible avec ces critères.</p>
-        }
-      </mat-expansion-panel>
+          <a matButton="outlined" routerLink="/settings" [queryParams]="{ tab: 'access' }"
+            >Gérer les jetons</a
+          >
+        </app-setting-row>
+        <mat-expansion-panel class="catalog"
+          ><mat-expansion-panel-header
+            ><mat-panel-title
+              >Options avancées : catalogue des outils</mat-panel-title
+            ></mat-expansion-panel-header
+          >
+          <app-search-field
+            variant="filled"
+            label="Filtrer les outils"
+            [value]="searchQuery()"
+            (valueChange)="searchQuery.set($event)"
+          />
+          @for (tool of filteredTools(); track tool.name) {
+            <article class="tool">
+              <h3>
+                <code>{{ tool.name }}</code>
+              </h3>
+              <p>{{ tool.description }}</p>
+              @for (property of toolProperties(tool); track property.name) {
+                <span class="argument"
+                  >{{ property.name }}{{ property.required ? ' (requis)' : '' }} ·
+                  {{ property.type }}</span
+                >
+              }
+            </article>
+          } @empty {
+            <p>Aucun outil disponible avec ces critères.</p>
+          }
+        </mat-expansion-panel>
+      </app-setting-group>
     </app-configuration-section>
     <ng-template #clientEditor
       ><div class="client-editor">
@@ -145,10 +160,10 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
     .note {
       font-size: var(--font-label);
     }
-    .catalog {
+    .mat-expansion-panel.catalog {
       box-shadow: none;
       background: var(--surface-container-low);
-      margin-top: var(--space-4);
+      border-radius: var(--radius-sm) var(--radius-sm) var(--radius-xl) var(--radius-xl);
     }
     .client-editor {
       display: grid;

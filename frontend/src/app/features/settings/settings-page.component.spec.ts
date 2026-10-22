@@ -17,11 +17,11 @@ describe('SettingsPageComponent', () => {
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement };
   }
-  it('shows five domains, a single editing drawer, and appearance by default', async () => {
+  it('shows six domains, a single editing drawer, and appearance by default', async () => {
     const { element } = await setup();
     expect(
       [...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent?.trim()),
-    ).toEqual(['Interface', 'Accès', 'Connexions', 'Réseau', 'Exploitation']);
+    ).toEqual(['Interface', 'Accès', 'IA', 'Connexions', 'Réseau', 'Exploitation']);
     expect(element.querySelector('app-appearance-tab')).not.toBeNull();
     expect(element.querySelectorAll('app-detail-drawer')).toHaveLength(1);
   });
@@ -33,20 +33,28 @@ describe('SettingsPageComponent', () => {
       expect(element.querySelector('app-api-token-tab')).not.toBeNull();
     },
   );
-  it('renders all connection sections together, with no provider sub-tabs', async () => {
+  it('groups the AI engine, providers and MCP in the IA domain, with no sub-tabs', async () => {
     const { element } = await setup('?tab=ai');
     expect(element.querySelector('app-ai-tools-tab')).not.toBeNull();
     expect(element.querySelector('app-mcp-server-tab')).not.toBeNull();
-    expect(element.querySelector('app-webhooks-tab')).not.toBeNull();
-    expect(element.querySelectorAll('[role="tab"]')).toHaveLength(5);
+    expect(element.querySelector('app-webhooks-tab')).toBeNull();
+    expect(element.querySelectorAll('[role="tab"]')).toHaveLength(6);
   });
+  it.each(['connections', 'integrations', 'webhooks', 'metrics'])(
+    'keeps webhooks and Prometheus under Connexions: %s',
+    async (tab) => {
+      const { element } = await setup(`?tab=${tab}`);
+      expect(element.querySelector('app-webhooks-tab')).not.toBeNull();
+      expect(element.querySelector('app-metrics-tab')).not.toBeNull();
+      expect(element.querySelector('app-ai-tools-tab')).toBeNull();
+    },
+  );
   it.each(['system', 'logs', 'system-logs', 'overview', 'operations'])(
     'keeps operation deep links working: %s',
     async (tab) => {
       const { element } = await setup(`?tab=${tab}`);
       expect(element.querySelector('app-system-tab')).not.toBeNull();
       expect(element.querySelector('app-system-log-viewer')).not.toBeNull();
-      expect(element.querySelector('app-metrics-tab')).not.toBeNull();
       expect(element.querySelector('app-appearance-tab')).toBeNull();
     },
   );

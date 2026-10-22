@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { McpServerTabComponent } from './mcp-server-tab.component';
 import { McpService } from '../../../shared/services/mcp.service';
@@ -12,6 +13,7 @@ describe('McpServerTabComponent', () => {
     await TestBed.configureTestingModule({
       imports: [McpServerTabComponent],
       providers: [
+        provideRouter([]),
         {
           provide: McpService,
           useValue: {
@@ -45,7 +47,7 @@ describe('McpServerTabComponent', () => {
   }
   it('shows the endpoint and the real catalog without a second navigation shell', async () => {
     const { element } = await setup();
-    expect(element.textContent).toContain('Serveur MCP');
+    expect(element.textContent).toContain('Assistants externes (MCP)');
     expect(element.textContent).toContain('/api/v1/mcp/sse');
     expect(element.textContent).toContain('get_library_by_id');
     expect(element.querySelector('[role="tablist"]')).toBeNull();
