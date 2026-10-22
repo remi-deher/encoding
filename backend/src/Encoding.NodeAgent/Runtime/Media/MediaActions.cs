@@ -215,18 +215,29 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
     }
 
     /// <summary>Polices (0057) : ajoute en pièces jointes les polices d'un jeu du dossier déclaré par le nœud (<c>ENCODING_FONT_DIR</c>) qui ne sont pas déjà dans le MKV. Jamais de chemin libre.</summary>
-    public async Task<MediaActionOutcome> AddFontsAsync(IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,CancellationToken ct)
+    public async Task<MediaActionOutcome> AddFontsAsync(IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,CancellationToken ct,string? resourceFolder=null)
     {
         if(Path.GetExtension(current)!=".mkv") return new(null,[]);
-        var root=Path.GetFullPath(Environment.GetEnvironmentVariable("ENCODING_FONT_DIR") is { Length: >0 } configured?configured:"/app/common/Fonts");
-        var set=Text(c,"fontSet","Crunchyroll");
-        if(set.Length==0||!System.Text.RegularExpressions.Regex.IsMatch(set,@"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")||set.Contains("..",StringComparison.Ordinal)) throw new SubtitleException("Nom de jeu de polices invalide.");
-        var folder=Path.GetFullPath(Path.Combine(root,set));
-        if(!folder.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,StringComparison.Ordinal)||!Directory.Exists(folder)) throw new SubtitleException($"Jeu de polices « {set} » introuvable sur ce nœud.");
         var extensions = new[] { ".ttf", ".otf", ".ttc" };
-        var names=Text(c,"fonts").Split([',','\n',';'],StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).ToList();
+        string folder,set; List<string> names;
+        if(resourceFolder is not null)
+        {
+            // Ressource du catalogue (ADR 0006) : déjà téléchargée et vérifiée par le runner ; toutes ses polices sont ajoutées.
+            folder=resourceFolder; set="ressource";
+            names=Directory.EnumerateFiles(folder).Select(Path.GetFileName).Where(name=>extensions.Contains(Path.GetExtension(name)!.ToLowerInvariant())).Order(StringComparer.Ordinal).ToList()!;
+            if(names.Count==0) throw new SubtitleException("La ressource ne contient aucune police.");
+        }
+        else
+        {
+        var root=Path.GetFullPath(Environment.GetEnvironmentVariable("ENCODING_FONT_DIR") is { Length: >0 } configured?configured:"/app/common/Fonts");
+        set=Text(c,"fontSet","Crunchyroll");
+        if(set.Length==0||!System.Text.RegularExpressions.Regex.IsMatch(set,@"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")||set.Contains("..",StringComparison.Ordinal)) throw new SubtitleException("Nom de jeu de polices invalide.");
+        folder=Path.GetFullPath(Path.Combine(root,set));
+        if(!folder.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,StringComparison.Ordinal)||!Directory.Exists(folder)) throw new SubtitleException($"Jeu de polices « {set} » introuvable sur ce nœud.");
+        names=Text(c,"fonts").Split([',','\n',';'],StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).ToList();
         if(names.Count==0) names=Directory.EnumerateFiles(folder).Select(Path.GetFileName).Where(name=>extensions.Contains(Path.GetExtension(name)!.ToLowerInvariant())).Order(StringComparer.Ordinal).ToList()!;
         if(names.Count==0) throw new SubtitleException($"Le jeu de polices « {set} » ne contient aucune police.");
+        }
         foreach(var name in names)
             if(name!=Path.GetFileName(name)||!extensions.Contains(Path.GetExtension(name).ToLowerInvariant())||!File.Exists(Path.Combine(folder,name)))
                 throw new SubtitleException($"Police « {name} » introuvable dans le jeu « {set} ».");

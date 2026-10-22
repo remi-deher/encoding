@@ -37,7 +37,7 @@ public sealed class ToolCapabilityProbe(
                 new(FlowArtifactReference.Capability, "1.0.0", ["general"], []),
                 new("plugin/video", "1.2.0", ["general"], []),
                 new("plugin/audio", "1.1.0", ["general"], []),
-                new("plugin/subtitles", "1.2.0", ["general"], []),
+                new("plugin/subtitles", "1.3.0", ["general"], []),
                 new("plugin/mkv", "1.1.0", ["general"], []),
                 new("plugin/images", "1.0.0", ["general"], []),
                 new("plugin/probe", "1.0.0", ["general"], []),

@@ -128,10 +128,13 @@ public static class FlowEndpoints
             await repository.GetAsync(id, version, ct) is { } flow ? (IResult)Results.Ok(flow) : ApiProblem.NotFound())
             .WithName("GetFlowVersion");
 
-        flows.MapPut("/{id:guid}", async (Guid id, SaveFlowRequest request, FlowDefinitionValidator validator, FlowRepository repository, CancellationToken ct) =>
+        flows.MapPut("/{id:guid}", async (Guid id, SaveFlowRequest request, FlowDefinitionValidator validator, FlowRepository repository,
+            Encoding.Api.Resources.ResourceRepository resources, CancellationToken ct) =>
         {
             var (_, validation) = validator.ValidateDocument(JsonSerializer.SerializeToElement(request.Definition, FlowRepository.JsonOptions));
             if (!validation.IsValid) return (IResult)Results.UnprocessableEntity(validation);
+            if (await Encoding.Api.Resources.ResourceReferenceCheck.ProblemsAsync(request.Definition, resources, ct) is { Count: > 0 } missing)
+                return Results.UnprocessableEntity(new { title = string.Join(" ", missing), problems = missing });
             if (await repository.SaveAsync(request, ct) is not { } saved)
                 return ApiProblem.Conflict("Une autre version a été enregistrée. Rechargez le flow avant de publier vos modifications.");
             return Results.Ok(saved);

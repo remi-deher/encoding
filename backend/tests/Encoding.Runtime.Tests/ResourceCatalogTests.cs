@@ -3,6 +3,7 @@ using Encoding.Api.Infrastructure;
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Infrastructure.Data.Sqlite;
 using Encoding.Api.Resources;
+using Encoding.Contracts.Flows;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -135,5 +136,25 @@ public sealed class ResourceCatalogTests
         Assert.Equal("Crunchyroll", replicated!.Summary.Name);
         Assert.Equal(file.Sha256, Assert.Single(Assert.Single(replicated.Versions).Files).Sha256);
         Assert.False(target.Blobs.Exists(file.Sha256));
+    }
+
+    [Fact]
+    public async Task PublishingChecksThatTheReferencedResourceVersionExists()
+    {
+        await using var scope = await Scope.CreateAsync();
+        var file = await scope.Blobs.PutAsync(new MemoryStream(Font), "Arial.ttf", "font", CancellationToken.None);
+        var id = Guid.NewGuid();
+        await scope.Repository.CreateAsync(id, "font", "Polices", "", [new(file.Name, file.Sha256)], CancellationToken.None);
+        var (registry, _, _) = Harness.Services();
+        FlowDefinition Flow(string resource) => new(1, Guid.NewGuid(), 1, "Flow", "video", [
+            new("input", null, registry.FindReference("base-input-file")!, new Dictionary<string, JsonElement>()),
+            new("fonts", "Polices", registry.FindReference("subtitles-add-fonts")!, new Dictionary<string, JsonElement> { ["resource"] = JsonSerializer.SerializeToElement(resource) })
+        ], [new("next", "input", "success", "fonts")]);
+
+        Assert.Empty(await ResourceReferenceCheck.ProblemsAsync(Flow(""), scope.Repository, CancellationToken.None));
+        Assert.Empty(await ResourceReferenceCheck.ProblemsAsync(Flow($"{id}:1"), scope.Repository, CancellationToken.None));
+        Assert.Contains("n'a pas de version 2", Assert.Single(await ResourceReferenceCheck.ProblemsAsync(Flow($"{id}:2"), scope.Repository, CancellationToken.None)));
+        Assert.Contains("n'a pas de version 1", Assert.Single(await ResourceReferenceCheck.ProblemsAsync(Flow($"{Guid.NewGuid()}:1"), scope.Repository, CancellationToken.None)));
+        Assert.Contains("invalide", Assert.Single(await ResourceReferenceCheck.ProblemsAsync(Flow("n'importe quoi"), scope.Repository, CancellationToken.None)));
     }
 }

@@ -104,15 +104,37 @@ public sealed class ResourceRepository(DbDataSource dataSource, ResourceBlobStor
         return await GetVersionAsync(id, next, ct);
     }
 
-    /// <summary>Fichiers de la dernière version de chaque ressource que le magasin local n'a pas encore.</summary>
-    public async Task<IReadOnlyList<ResourceFile>> MissingLatestFilesAsync(Func<string, bool> isPresent, CancellationToken ct)
+    /// <summary>Dernière version de chaque ressource (préchargement des workers).</summary>
+    public async Task<IReadOnlyList<ResourceVersion>> LatestVersionsAsync(CancellationToken ct)
     {
         var latest = new Dictionary<Guid, ResourceVersion>();
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var command = Sql.Command("SELECT resource_id,version,files::text,total_bytes,created_at FROM flow_resource_versions ORDER BY version", connection);
+        await using var command = dataSource.CreateCommand("SELECT resource_id,version,files::text,total_bytes,created_at FROM flow_resource_versions ORDER BY version");
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct)) { var version = ReadVersion(reader); latest[version.ResourceId] = version; }
-        return latest.Values.SelectMany(version => version.Files).Where(file => !isPresent(file.Sha256)).DistinctBy(file => file.Sha256).ToArray();
+        return latest.Values.ToArray();
+    }
+
+    /// <summary>Retrouve un fichier par son empreinte dans les métadonnées (taille attendue pour une récupération).</summary>
+    public async Task<ResourceFile?> FindFileAsync(string digest, CancellationToken ct)
+    {
+        if (!ResourceBlobStore.ValidDigest(digest)) return null;
+        await using var command = dataSource.CreateCommand("SELECT resource_id,version,files::text,total_bytes,created_at FROM flow_resource_versions WHERE files::text LIKE @pattern");
+        command.Parameters.AddWithValue("pattern", "%" + digest + "%");
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            if (ReadVersion(reader).Files.FirstOrDefault(file => file.Sha256 == digest) is { } file) return file;
+        return null;
+    }
+
+    /// <summary>Fichiers de toutes les versions que le magasin local n'a pas encore (un flow référence une version précise).</summary>
+    public async Task<IReadOnlyList<ResourceFile>> MissingFilesAsync(Func<string, bool> isPresent, CancellationToken ct)
+    {
+        var files = new List<ResourceFile>();
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var command = Sql.Command("SELECT resource_id,version,files::text,total_bytes,created_at FROM flow_resource_versions ORDER BY version DESC", connection);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct)) files.AddRange(ReadVersion(reader).Files);
+        return files.Where(file => !isPresent(file.Sha256)).DistinctBy(file => file.Sha256).ToArray();
     }
 
     /// <summary>Flows (toutes versions) qui référencent la ressource, avec le bloc concerné.</summary>

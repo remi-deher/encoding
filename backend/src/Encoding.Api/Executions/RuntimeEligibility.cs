@@ -74,8 +74,10 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             if (!matches) return false;
             if (componentId is "base-add-fonts" or "subtitles-add-fonts")
             {
+                // Une ressource du catalogue est récupérée par le worker lui-même : aucun jeu de polices local n'est exigé.
+                var fromResource = node.Configuration.TryGetValue("resource", out var resource) && resource.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(resource.GetString());
                 var fontSet = node.Configuration.TryGetValue("fontSet", out var configuredSet) && configuredSet.ValueKind == JsonValueKind.String ? configuredSet.GetString() : "Crunchyroll";
-                if (inventory?.FontSets?.Contains(fontSet ?? "", StringComparer.Ordinal) != true) return false;
+                if (!fromResource && inventory?.FontSets?.Contains(fontSet ?? "", StringComparer.Ordinal) != true) return false;
             }
             if (node.Configuration.TryGetValue("sourceFile", out var fileReference) && fileReference.ValueKind == JsonValueKind.String
                 && fileReference.GetString()!.StartsWith(FlowArtifactReference.Prefix, StringComparison.Ordinal)

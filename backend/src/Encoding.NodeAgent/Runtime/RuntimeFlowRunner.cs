@@ -330,7 +330,19 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     else if(id is "base-add-fonts" or "subtitles-add-fonts")
                     {
                         await EnsureScanAsync();
-                        var outcome=await actions.AddFontsAsync(c,current,directory,node.Id,job.Token);
+                        string? resourceFolder=null;
+                        if(MediaActions.Text(c,"resource") is { Length: >0 } resourceText)
+                        {
+                            if(!Encoding.Contracts.Flows.ResourceReference.TryParse(resourceText,out var resourceReference)) throw new SubtitleException("Référence de ressource de polices invalide.");
+                            try
+                            {
+                                var info=await client.ResourceVersionAsync(resourceReference,job.Token);
+                                resourceFolder=Path.Combine(directory,"resources",resourceReference.Id.ToString("N")+"-"+resourceReference.Version);
+                                await client.EnsureResourceAsync(info,ResourceCache.Root(options),resourceFolder,job.Token);
+                            }
+                            catch(Exception exception) when (exception is HttpRequestException or IOException) { throw new SubtitleException("Ressource de polices indisponible : "+exception.Message); }
+                        }
+                        var outcome=await actions.AddFontsAsync(c,current,directory,node.Id,job.Token,resourceFolder);
                         if(outcome.Primary is null) output="unchanged";
                         else
                         {
