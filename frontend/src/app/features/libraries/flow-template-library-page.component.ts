@@ -1,3 +1,4 @@
+import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -12,11 +13,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom, map } from 'rxjs';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
-import {
-  DataTableColumn,
-  DataTableComponent,
-  DataTableRow,
-} from '../../shared/ui/data-table.component';
+import { DataTableRow } from '../../shared/ui/data-table.component';
 import {
   ResourceSheetComponent,
   ResourceSheetSection,
@@ -42,8 +39,8 @@ interface FlowTemplateRow extends DataTableRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-template-library-page',
   imports: [
+    ResourceListComponent,
     CategoryTabsComponent,
-    DataTableComponent,
     DrawerActionButtonComponent,
     ManagementCatalogTemplateComponent,
     RecordFormComponent,
@@ -76,17 +73,14 @@ interface FlowTemplateRow extends DataTableRow {
         (selectedChange)="onSectionChanged($event)"
       />
 
-      <app-data-table
+      <app-resource-list
         catalogue-table
-        layout="resources"
-        [columns]="columns"
-        [rows]="filteredRows()"
-        [rowOpenable]="true"
-        rowOpenLabel="Consulter le modèle"
-        [rowActions]="rowActions"
-        [separateRowActionColumns]="true"
-        (rowOpen)="openTemplate($event)"
-        (rowAction)="onRowAction($event)"
+        icon="copy"
+        [items]="items()"
+        [actions]="rowActions"
+        openLabel="Ouvrir"
+        (open)="openTemplate({ id: $event })"
+        (action)="onRowAction($event)"
         emptyMessage="Aucun modèle. Depuis Flows, ouvrez le menu d’un flow publié puis choisissez Créer un modèle."
       />
 
@@ -156,13 +150,6 @@ export class FlowTemplateLibraryPageComponent {
     };
   });
   protected readonly query = signal('');
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Modèle', sortable: true },
-    { key: 'mediaType', label: 'Type de média', sortable: true },
-    { key: 'source', label: 'Flow source', sortable: true },
-    { key: 'sourceVersion', label: 'Version source', sortable: true },
-    { key: 'components', label: 'Composants', sortable: true },
-  ];
   protected readonly rowActions = [{ id: 'create-flow', label: 'Créer un flow' }];
   protected readonly rows = computed<readonly FlowTemplateRow[]>(() =>
     this.templates().map((template) => ({
@@ -188,6 +175,18 @@ export class FlowTemplateLibraryPageComponent {
         )
       : this.rows();
   });
+  protected readonly items = computed<readonly ResourceListItem[]>(() =>
+    this.filteredRows().map((row) => ({
+      id: row.id,
+      name: row.name,
+      subtitle: row.description || undefined,
+      tags: [
+        { label: row.mediaType },
+        { label: `${row.components} composant(s)` },
+        { label: `${row.source} · ${row.sourceVersion}`, tone: 'ok' as const },
+      ],
+    })),
+  );
   protected readonly templateSubtitle = computed(() => {
     const template = this.selectedTemplate();
     if (!template) return '';
