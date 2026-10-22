@@ -971,7 +971,7 @@ public sealed class AiAssistantService(
                     var toolContext = new ResolvedContext(
                         new AiAssistantSource("tool", Guid.NewGuid(), toolResult.Label, toolResult.Href),
                         JsonSerializer.Serialize(toolResult.Data));
-                    if (toolContext.Data.Length + contextualPrompt.Length > 120_000)
+                    if (toolContext.Data.Length > 80_000 || toolContext.Data.Length + contextualPrompt.Length > 1_200_000)
                         throw new ArgumentException("Le résultat de l’outil dépasse la taille de contexte prise en charge.");
                     allSources = [.. allSources, toolContext.Source];
                     contextualPrompt = AppendModelToolResult(contextualPrompt, toolContext);

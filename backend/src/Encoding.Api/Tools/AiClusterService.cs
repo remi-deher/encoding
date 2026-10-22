@@ -357,6 +357,8 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             turns.All(t => t.Usage?.CachedInputTokens is not null) ? turns.Sum(t => t.Usage!.CachedInputTokens!.Value) : null,
             turns.All(t => t.Usage?.EstimatedCostUsd is not null) ? turns.Sum(t => t.Usage!.EstimatedCostUsd!.Value) : null);
     }
+    // Doit couvrir le contexte maximal que l'assistant accepte (message + fichiers joints, 1 200 000 caractères) et le prompt système.
+    public const int MaximumPromptCharacters = 1_300_000;
     public async Task<AiCompletionResult> GenerateAsync(string? provider, AiPrompt prompt, CancellationToken ct, bool localOnly = false, bool allowModelChanges = false)
     {
         provider ??= (await GetSettingsAsync(ct)).DefaultProvider;
@@ -366,7 +368,7 @@ public sealed class AiClusterService(AiClusterTransport transport, AiClusterStor
             return new(false, "", "Ollama doit être configuré sur une adresse de boucle locale pour cette politique.");
         var requestId = prompt.RequestId ?? Guid.NewGuid();
         var id = prompt.SessionId ?? $"{transport.LocalId:N}.{requestId:N}";
-        if (requestId == Guid.Empty || string.IsNullOrWhiteSpace(prompt.UserPrompt) || prompt.UserPrompt.Length + prompt.SystemPrompt.Length > 120000)
+        if (requestId == Guid.Empty || string.IsNullOrWhiteSpace(prompt.UserPrompt) || prompt.UserPrompt.Length + prompt.SystemPrompt.Length > MaximumPromptCharacters)
             throw new ArgumentException("Demande IA invalide ou trop volumineuse.");
         if (prompt.Scope is { } scope && (string.IsNullOrWhiteSpace(scope.Operation) || scope.Operation.Length > 80
             || new[] { scope.LibraryId, scope.FlowId, scope.MediaId, scope.ExecutionId }.Any(value => value == Guid.Empty)))
