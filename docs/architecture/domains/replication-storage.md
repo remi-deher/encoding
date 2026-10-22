@@ -27,8 +27,8 @@ tags: [sqlite, migrations, maillage, réconciliation, lww, raft, sauvegarde, tom
 - Chaque serveur garde sa base ; les serveurs d'un cluster se découvrent par mDNS (`_encoding._tcp`) et par adresses mémorisées (`cluster_sync_peer_endpoints`, gossip transitif, `Cluster:Reconciliation:Peers` en secours) et échangent un **journal append-only** par `POST /api/v1/cluster/reconciliation/exchange` (lots bornés, `(origine, séquence)` déduplique, relais avec origine conservée).
 - Conflits : **dernier écrivain gagne par entité** (horodatage UTC, puis origine et séquence), suppressions = tombstones. Les horloges doivent être synchronisées. Une projection en conflit de contrainte unique est gardée en attente.
 - Sécurité : identité RSA par serveur, admissions signées répliquées (tout serveur admis peut approuver une jonction), échanges signés, secrets du journal chiffrés AES-GCM avec la clé de données du cluster (créée à la création du cluster, stockée chiffrée sur chaque serveur). Clés privées et Data Protection dans `PluginSettings:KeyDirectory` : à sauvegarder.
-- **Réconcilié** : cluster et nœuds (rôles, capacités, présence, groupes), utilisateurs, demandes de jumelage, jetons API, bibliothèques (chemins, accès, limites, politiques de remplacement, inventaire), flows/brouillons/versions, scripts, profils, modèles, packs, config et dérogations de plugins (secrets rechiffrés localement), historique durable des exécutions (événements, étapes, checkpoints, reçus), réglages IA.
-- **Local, jamais répliqué** : baux et réservations, `execution_work`, attentes actives, scans en cours, files de déclenchement, sessions utilisateur, opérations de remplacement en cours, verrous de disque, `system_logs`, paquets du Store de plugins, fichiers binaires (médias, artefacts, sauvegardes JSON régénérées par chaque serveur).
+- **Réconcilié** : cluster et nœuds (rôles, capacités, présence, groupes), utilisateurs, demandes de jumelage, jetons API, bibliothèques (chemins, accès, limites, politiques de remplacement, inventaire), flows/brouillons/versions, scripts, profils, **métadonnées des ressources de flow** (`flow_resources`, `flow_resource_versions`, migration 0047), modèles, packs, config et dérogations de plugins (secrets rechiffrés localement), historique durable des exécutions (événements, étapes, checkpoints, reçus), réglages IA.
+- **Local, jamais répliqué** : baux et réservations, `execution_work`, attentes actives, scans en cours, files de déclenchement, sessions utilisateur, opérations de remplacement en cours, verrous de disque, `system_logs`, paquets du Store de plugins, fichiers binaires (**octets des ressources de flow** : magasin adressé par empreinte `Resources:Directory`, par serveur ; médias, artefacts, sauvegardes JSON régénérées par chaque serveur).
 - Conséquence centrale : **aucune exclusion de travail entre bases indépendantes n'est revendiquée**. Une exécution reste attribuée au serveur qui l'a créée ; la reprise après perte est une relance explicite ([runtime.md](runtime.md)).
 
 ### Mode pair à pair optionnel (Raft) : prévisualisation
@@ -44,6 +44,12 @@ tags: [sqlite, migrations, maillage, réconciliation, lww, raft, sauvegarde, tom
 2. Toute nouvelle table métier : décider explicitement « réconciliée » (l'inscrire dans `ClusterEntityReconciliation.Tables`, avec tombstone si suppression) ou « locale » (le documenter ici).
 3. Une migration appliquée ne se modifie jamais ; numéro unique ; additive tant que N/N-1 n'est pas garanti.
 4. Les secrets ne vont jamais en clair dans le journal, les sauvegardes, les exports ni les journaux.
+
+## Ressources de flow (ADR 0006, PR 1)
+- Métadonnées (ressource, versions immuables, noms de fichiers, tailles, SHA-256) réconciliées comme les scripts ; **octets** dans `Resources:Directory` (défaut `<Node:DataDirectory>/resources/ab/<sha256>`), jamais dans le journal : c'est l'exception assumée à l'invariant « binaires jamais réconciliés ».
+- Envoi : `POST /api/v1/resources/blobs?kind=font&name=…` (corps brut, un fichier, 20 Mio au plus, extension et signature contrôlées), puis `POST /api/v1/resources` ou `…/{id}/versions` qui référencent les empreintes ; 100 Mio par version. Écriture réservée à `admin`, lecture à tout rôle.
+- Suppression : refusée (409) tant qu'un flow, toute version confondue, référence l'identifiant ; le message nomme le flow et le bloc. Un fichier n'est effacé du magasin que si aucune version ne l'utilise encore.
+- Non livré : récupération d'un octet absent auprès d'un pair (PR 2), bloc de polices et interface (PR 3, 4). Un fichier envoyé sans être référencé reste dans le magasin (nettoyage à prévoir).
 
 ## Non livré / limites
 - Pas de plage de schéma ni de règle de mise à jour progressive entre serveurs.

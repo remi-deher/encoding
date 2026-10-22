@@ -60,6 +60,8 @@ public sealed class ClusterEntityReconciliation(
         new("flow_draft_backups", ["flow_id", "revision", "definition"], ["flow_id", "revision"], ["definition"], detectDeletes: false),
         new("flow_script_versions", ["script_id", "version", "name", "language", "description", "code", "created_at"], ["script_id", "version"], immutable: true),
         new("encoding_profile_versions", ["profile_id", "version", "name", "description", "targets", "created_at"], ["profile_id", "version"], ["targets"], immutable: true),
+        new("flow_resources", ["id", "kind", "name", "description", "created_at", "updated_at"], ["id"]),
+        new("flow_resource_versions", ["resource_id", "version", "files", "total_bytes", "created_at"], ["resource_id", "version"], ["files"], immutable: true),
         new("flow_templates", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "definition", "created_at"], ["id"], ["definition"]),
         new("flow_component_packs", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "input_node_id", "definition", "outputs", "created_at"], ["id"], ["definition", "outputs"]),
         new("library_flow_assignments", ["library_id", "flow_id", "flow_version", "revision"], ["library_id"]),
