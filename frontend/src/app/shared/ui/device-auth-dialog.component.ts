@@ -57,16 +57,18 @@ export interface DeviceAuthDialogData {
       <mat-dialog-content class="app-dialog-body device-auth-body">
         @if (data.prompt.userCode) {
           <p class="instruction">
-            Ouvrez le lien officiel ci-dessous dans votre navigateur et saisissez le code fourni par
-            {{ data.toolName }} :
+            Ouvrez le lien de connexion dans votre navigateur, puis saisissez le code ci-dessous
+            lorsque {{ data.toolName }} le demande.
           </p>
         } @else {
           <p class="instruction">
-            Ouvrez le lien officiel ci-dessous dans votre navigateur pour vous connecter à
-            {{ data.toolName }}. Si la page vous fournit un code à coller dans la CLI, saisissez-le
-            ici pour terminer la connexion sur ce nœud.
+            Ouvrez le lien de connexion dans votre navigateur et connectez-vous à
+            {{ data.toolName }}. Si la page affiche un code, collez-le ci-dessous.
           </p>
         }
+        <p class="instruction">
+          Une fois associé, le compte est copié chiffré sur tous les nœuds du cluster.
+        </p>
 
         @if (data.prompt.userCode; as userCode) {
           <div class="code-box">
@@ -86,8 +88,12 @@ export interface DeviceAuthDialogData {
             rel="noopener noreferrer"
           >
             <app-icon name="outward" />
-            Ouvrir {{ data.prompt.verificationUri }}
+            Ouvrir le lien
           </a>
+          <button matButton="outlined" type="button" (click)="copyLink()">
+            <app-icon [name]="linkCopied() ? 'check' : 'copy'" />
+            {{ linkCopied() ? 'Lien copié !' : 'Copier le lien' }}
+          </button>
         </div>
 
         @if (data.prompt.requiresInput && !inputSubmitted()) {
@@ -155,7 +161,7 @@ export interface DeviceAuthDialogData {
         display: flex;
         flex-direction: column;
         gap: 16px;
-        padding: 16px 0;
+        padding: 16px 20px;
       }
       .instruction {
         margin: 0;
@@ -182,8 +188,13 @@ export interface DeviceAuthDialogData {
       }
       .action-link-box {
         display: flex;
+        flex-wrap: wrap;
         justify-content: center;
+        gap: var(--space-3);
         margin: 8px 0;
+      }
+      .device-auth-body {
+        overflow-x: hidden;
       }
       .status-indicator {
         display: flex;
@@ -240,6 +251,17 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
   readonly isChecking = signal(false);
   readonly isAuthorized = signal(false);
 
+  readonly linkCopied = signal(false);
+
+  async copyLink(): Promise<void> {
+    if (!(await this.clipboard.copy(this.data.prompt.verificationUri))) {
+      this.notifications.show('Impossible de copier le lien.');
+      return;
+    }
+    this.linkCopied.set(true);
+    setTimeout(() => this.linkCopied.set(false), 3000);
+  }
+
   copyCode(): void {
     const userCode = this.data.prompt.userCode;
     if (!userCode) return;
@@ -281,7 +303,7 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
         if (attemptState === 'authorized') {
           this.isAuthorized.set(true);
           clearInterval(this.polling);
-          this.notifications.show('Compte associé sur ce nœud.');
+          this.notifications.show('Compte associé.');
           this.dialogRef.close({ success: true });
         } else if (attemptState === 'failed' || attemptState === 'expired') {
           this.expired.set(true);
