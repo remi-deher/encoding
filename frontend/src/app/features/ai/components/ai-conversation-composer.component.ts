@@ -6,6 +6,9 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { AiAssistantModelOption } from '../../../shared/models/ai-tools';
 import { AiModelSelectorComponent } from './ai-model-selector.component';
 
+export const AI_ASSISTANT_FILE_ACCEPT =
+  'Dockerfile,Makefile,.env,.txt,.md,.markdown,.rst,.csv,.tsv,.log,.out,.json,.jsonc,.json5,.yaml,.yml,.xml,.toml,.ini,.conf,.config,.properties,.srt,.ass,.ssa,.vtt,.sub,.smi,.sami,.ttml,.dfxp,.mpl,.lrc,.sbv,.ffmetadata,.ffpreset,.ffscript,.ffconcat,.filter,.m3u,.m3u8,.nfo,.prx,.avs,.avsi,.vpy,.qpfile,.chapters,.edl,.cue,.xspf,.pls,.mpd,.csproj,.sln,.props,.targets,.editorconfig,.gitignore,.cs,.fs,.vb,.ts,.tsx,.js,.jsx,.mjs,.cjs,.py,.pyw,.sh,.bash,.zsh,.ps1,.psm1,.bat,.cmd,.sql,.html,.htm,.css,.scss,.less,.proto,.graphql,.gql';
+
 @Component({
   selector: 'app-ai-conversation-composer',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -67,6 +70,40 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
             <path d="M12 5v14M5 12h14" stroke-linecap="round" />
           </svg>
         </button>
+        <button
+          mat-icon-button
+          type="button"
+          class="attach-file"
+          aria-label="Joindre un fichier texte"
+          title="Joindre un fichier"
+          [disabled]="locked()"
+          (click)="fileInput.click()"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            aria-hidden="true"
+          >
+            <path
+              d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L14.5 7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <input
+          #fileInput
+          class="visually-hidden"
+          type="file"
+          multiple
+          [accept]="fileAccept"
+          aria-label="Choisir des fichiers texte à joindre"
+          (change)="filesChosen.emit($event)"
+        />
         <app-ai-model-selector
           [options]="options()"
           [selectedKey]="selectedKey()"
@@ -179,8 +216,11 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
     .composer-tools > button:first-child {
       order: 2;
     }
-    .composer-tools > button:not(:first-child):not(.send-button) {
+    .composer-tools > button:not(:first-child):not(.send-button):not(.attach-file) {
       order: 3;
+    }
+    .attach-file {
+      order: 2;
     }
     .send-button {
       flex: 0 0 40px;
@@ -189,7 +229,7 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
     @container (max-width: 420px) {
       .composer-tools {
         display: grid;
-        grid-template-columns: 40px minmax(0, 1fr) 40px;
+        grid-template-columns: 40px 40px minmax(0, 1fr) 40px;
       }
       app-ai-model-selector {
         grid-column: 1/-1;
@@ -199,13 +239,17 @@ import { AiModelSelectorComponent } from './ai-model-selector.component';
         grid-column: 1;
         grid-row: 2;
       }
-      .composer-tools > button:not(:first-child):not(.send-button) {
+      .attach-file {
         grid-column: 2;
+        grid-row: 2;
+      }
+      .composer-tools > button:not(:first-child):not(.send-button):not(.attach-file) {
+        grid-column: 3;
         grid-row: 2;
         justify-self: end;
       }
       .send-button {
-        grid-column: 3;
+        grid-column: 4;
         grid-row: 2;
       }
     }
@@ -233,6 +277,8 @@ export class AiConversationComposerComponent {
   readonly cancel = output<void>();
   readonly attach = output<void>();
   readonly fileRemoved = output<void>();
+  readonly filesChosen = output<Event>();
+  protected readonly fileAccept = AI_ASSISTANT_FILE_ACCEPT;
   protected clearAttachment(): void {
     this.fileRemoved.emit();
   }
