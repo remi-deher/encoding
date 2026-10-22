@@ -91,6 +91,8 @@ builder.Services.AddSingleton<FlowComponentPackRepository>();
 builder.Services.AddSingleton<EncodingProfileRepository>();
 builder.Services.AddSingleton<Encoding.Api.Resources.ResourceBlobStore>();
 builder.Services.AddSingleton<Encoding.Api.Resources.ResourceRepository>();
+builder.Services.AddSingleton<Encoding.Api.Resources.ResourceBlobFetcher>();
+builder.Services.AddHostedService<Encoding.Api.Resources.ResourcePrefetchService>();
 builder.Services.AddSingleton<PluginConfigurationRepository>();
 builder.Services.AddSingleton<WebhookAuthThrottle>();
 builder.Services.AddSingleton<PluginStoreService>();

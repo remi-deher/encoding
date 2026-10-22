@@ -104,6 +104,17 @@ public sealed class ResourceRepository(DbDataSource dataSource, ResourceBlobStor
         return await GetVersionAsync(id, next, ct);
     }
 
+    /// <summary>Fichiers de la dernière version de chaque ressource que le magasin local n'a pas encore.</summary>
+    public async Task<IReadOnlyList<ResourceFile>> MissingLatestFilesAsync(Func<string, bool> isPresent, CancellationToken ct)
+    {
+        var latest = new Dictionary<Guid, ResourceVersion>();
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var command = Sql.Command("SELECT resource_id,version,files::text,total_bytes,created_at FROM flow_resource_versions ORDER BY version", connection);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct)) { var version = ReadVersion(reader); latest[version.ResourceId] = version; }
+        return latest.Values.SelectMany(version => version.Files).Where(file => !isPresent(file.Sha256)).DistinctBy(file => file.Sha256).ToArray();
+    }
+
     /// <summary>Flows (toutes versions) qui référencent la ressource, avec le bloc concerné.</summary>
     public async Task<IReadOnlyList<ResourceUsage>> UsageAsync(Guid id, CancellationToken ct)
     {

@@ -29,6 +29,22 @@ public sealed class ResourceBlobStore(IConfiguration configuration)
         return Path.Combine(root, digest[..2], digest);
     }
 
+    /// <summary>Fichier de transfert en cours (reprise par <c>Range</c>) ; le nom ne se confond pas avec un fichier publié.</summary>
+    public string PartialPathFor(string digest)
+    {
+        if (!ValidDigest(digest)) throw new ArgumentException("Empreinte SHA-256 invalide.");
+        return Path.Combine(root, "partial", digest + ".part");
+    }
+
+    /// <summary>Publie un fichier déjà vérifié sous son empreinte, sans écraser un fichier existant.</summary>
+    public void Publish(string verifiedFile, string digest)
+    {
+        var target = PathFor(digest);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        if (File.Exists(target)) File.Delete(verifiedFile);
+        else File.Move(verifiedFile, target);
+    }
+
     public bool Exists(string digest) => ValidDigest(digest) && File.Exists(PathFor(digest));
 
     public Stream OpenRead(string digest) => new FileStream(PathFor(digest), FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
