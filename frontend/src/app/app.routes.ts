@@ -127,6 +127,25 @@ const applicationRoutes: Routes = [
     },
   },
   {
+    path: 'libraries/resources',
+    loadComponent: () =>
+      import('./features/libraries/resource-library-page.component').then(
+        (module) => module.ResourceLibraryPageComponent,
+      ),
+    data: {
+      title: 'Ressources',
+      navigation: {
+        group: 'Ressources',
+        label: 'Ressources',
+        glyph: '◫',
+        order: 5,
+        visible: false,
+        keywords: ['polices', 'fonts', 'fichiers'],
+      },
+      description: 'Partagez des polices avec tous les nœuds du cluster.',
+    },
+  },
+  {
     path: 'libraries/templates',
     loadComponent: () =>
       import('./features/libraries/flow-template-library-page.component').then(
