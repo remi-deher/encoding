@@ -6,6 +6,8 @@ public sealed class ContractTests
 {
     [Fact]
     public void RelayContractsSegmentEligibilityInheritanceAndOldAgentCompatibility() => Harness.RelayContracts();
+    [Fact]
+    public void LibraryLocalBlockPrunesBranchesPerWorkerAccess() => Harness.LibraryLocalContracts();
 
     [Fact]
     public void NativeConditionsEvaluateNestedGroupsAndMetadataSnapshots()

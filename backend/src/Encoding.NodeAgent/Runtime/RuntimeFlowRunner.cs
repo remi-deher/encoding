@@ -160,6 +160,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(handoff.Mode=="node" && handoff.TargetNodeId==client.NodeId)
                             throw new IOException("Le relais doit sélectionner un autre worker.");
                     }
+                    else if(RuntimeHandoffPolicy.IsLibraryLocal(node)) output=lease.SourceNodeId==client.NodeId?"yes":"no";
                     else if(node.Component.PluginId=="nodes"
                         && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability"))
                     {

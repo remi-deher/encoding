@@ -151,6 +151,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                     source=originalSource; if(source!=worker) root=null;
                 }
             }
+            if(item.Probe is null && item.Flow.Nodes.Any(RuntimeHandoffPolicy.IsLibraryLocal)
+                && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity,source==worker)) continue;
             var pluginSettings=item.Settings is {} savedSettings?pluginConfigurations.ReadSnapshot(savedSettings)
                 :await pluginConfigurations.ResolveEffectiveAsync(item.Flow.Id,item.Flow.Nodes.Select(node=>node.Component.PluginId).Where(id=>id!="base"),c,tx,ct);
             var segmentEntry=item.Checkpoint?.NextNodeId??(item.Checkpoint is null?item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id:null);

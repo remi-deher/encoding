@@ -59,7 +59,14 @@ public static class RuntimeHandoffPolicy
     }
 
     /// <summary>All possible sequential paths in this segment; stop at the next relay boundary.</summary>
-    public static IReadOnlyList<FlowNodeDefinition> Segment(FlowDefinition flow, string entryNodeId)
+    public static bool IsLibraryLocal(FlowNodeDefinition node) => node.Component.PluginId == "nodes"
+        && node.Component.ComponentId == "nodes-library-local";
+
+    /// <summary>
+    /// <paramref name="libraryLocal"/> known: only the branch the worker will really follow after a "library on this node" block is kept;
+    /// unknown (<c>null</c>): both branches are kept.
+    /// </summary>
+    public static IReadOnlyList<FlowNodeDefinition> Segment(FlowDefinition flow, string entryNodeId, bool? libraryLocal = null)
     {
         var nodes = flow.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
         var outgoing = flow.Connections.ToLookup(edge => edge.SourceNodeId);
@@ -71,7 +78,11 @@ public static class RuntimeHandoffPolicy
             if (!seen.Add(id)) continue;
             var node = nodes[id]; result.Add(node);
             if (IsHandoff(node)) continue;
-            foreach (var edge in outgoing[id]) pending.Push(edge.TargetNodeId);
+            foreach (var edge in outgoing[id])
+            {
+                if (libraryLocal is { } local && IsLibraryLocal(node) && edge.SourceOutputId != (local ? "yes" : "no")) continue;
+                pending.Push(edge.TargetNodeId);
+            }
         }
         return result;
     }

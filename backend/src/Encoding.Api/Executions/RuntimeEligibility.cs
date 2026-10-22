@@ -16,11 +16,14 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
             && (c.Version==node.Component.PluginVersion || c.Version==registry.RuntimePluginVersion(node.Component)));
     }
 
-    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null)
+    public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null,bool? libraryLocal=null)
     {
+        // Accès à la bibliothèque encore inconnu : le worker doit pouvoir suivre au moins l'une des deux branches.
+        if(libraryLocal is null && flow.Nodes.Any(RuntimeHandoffPolicy.IsLibraryLocal))
+            return CanRun(flow,capabilities,workerId,nextNodeId,resumed,context,identity,true) || CanRun(flow,capabilities,workerId,nextNodeId,resumed,context,identity,false);
         if(!validator.Validate(flow).IsValid) return false;
         var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
-        var segment=entry is null?Array.Empty<FlowNodeDefinition>():RuntimeHandoffPolicy.Segment(flow,entry);
+        var segment=entry is null?Array.Empty<FlowNodeDefinition>():RuntimeHandoffPolicy.Segment(flow,entry,libraryLocal);
         var planned=(context?.Plan??[]).Select((step,index)=>new FlowNodeDefinition("plan-"+index,null,
             new("base","1.0.0",step.ComponentId,"1.0.0",1),step.Configuration));
         foreach(var node in segment.Concat(planned))

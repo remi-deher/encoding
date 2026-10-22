@@ -50,6 +50,11 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                     output = ConditionTree.Evaluate(tree, new(context with { Variables = variables }, file.SourceNodeId, worker, file.LibraryId, file.Name, "source"), observations.Add) ? "yes" : "no";
                     detail = output == "yes" ? "Conditions satisfaites avec les données courantes." : "Conditions non satisfaites avec les données courantes.";
                 }
+                else if (RuntimeHandoffPolicy.IsLibraryLocal(node))
+                {
+                    output = file.SourceNodeId == worker ? "yes" : "no";
+                    detail = output == "yes" ? "La bibliothèque est montée sur le worker courant du profil." : "Le worker courant du profil n’a pas d’accès direct à la bibliothèque.";
+                }
                 else if (node.Component.PluginId == "base" && id.StartsWith("base-input-", StringComparison.Ordinal))
                     detail = "Profil de test utilisé ; aucun fichier de bibliothèque n’est ouvert.";
                 else if (node.Component.PluginId == "base" && id == "base-variable")

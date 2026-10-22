@@ -75,8 +75,48 @@ internal static partial class Harness
         Check(RuntimeHandoffPolicy.Segment(branch, "entry").Any(node => node.Id == "other"), "All possible branches within the segment are considered.");
     }
 
+    /// <summary>« Bibliothèque sur ce nœud » : branche Oui = encodage sur place, Non = relais vers un worker capable puis encodage.</summary>
+    internal static void LibraryLocalContracts()
+    {
+        var (registry, validator, eligibility) = Services();
+        var other = Guid.NewGuid(); var holder = Guid.NewGuid();
+        var check = Node(registry, "local", "nodes-library-local");
+        var encode = Node(registry, "encode", "base-transcode-video");
+        var relay = Node(registry, "relay", "nodes-handoff", new() { ["mode"] = J("eligible") });
+        var flow = new FlowDefinition(1, Guid.NewGuid(), 1, "Library local fixture", "video",
+            [Node(registry, "entry", "base-input-file"), check, encode, relay, Node(registry, "end", "base-complete-flow")],
+            [new("a", "entry", "success", "local"), new("b", "local", "yes", "encode"), new("c", "local", "no", "relay"),
+             new("d", "relay", "success", "encode"), new("e", "encode", "success", "end")]);
+        Check(validator.Validate(flow).IsValid, "A library-local block with a yes branch and a relay branch publishes.");
+        Check(RuntimeHandoffPolicy.Segment(flow, "entry").Select(node => node.Id).Order().SequenceEqual(["encode", "end", "entry", "local", "relay"]),
+            "Without knowing the access, both branches belong to the segment.");
+        Check(RuntimeHandoffPolicy.Segment(flow, "entry", true).Select(node => node.Id).Contains("encode") && !RuntimeHandoffPolicy.Segment(flow, "entry", true).Any(node => node.Id == "relay"),
+            "A worker holding the library only follows the yes branch.");
+        Check(RuntimeHandoffPolicy.Segment(flow, "entry", false).Select(node => node.Id).SequenceEqual(["entry", "local", "relay"]),
+            "A worker without direct access stops at the relay and never needs the encoder.");
+        Check(eligibility.CanRun(flow, Capabilities(false), other, libraryLocal: false), "A worker without access nor encoder can run the relay branch.");
+        Check(!eligibility.CanRun(flow, Capabilities(false), holder, libraryLocal: true), "The library holder needs the encoder to take the yes branch.");
+        Check(eligibility.CanRun(flow, Capabilities(true), holder, libraryLocal: true), "A capable library holder takes the yes branch.");
+        Check(eligibility.CanRun(flow, Capabilities(false), other), "Before the access is resolved, one satisfiable branch is enough.");
+        Check(!eligibility.CanRun(flow, Capabilities(false).Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.1.0" } : cap).ToArray(), other, libraryLocal: false),
+            "An agent announcing nodes 1.1.0 cannot evaluate the new block.");
+        var routing = flow with { Nodes = [flow.Nodes[0], check, Node(registry, "ok", "base-variable", new() { ["name"] = J("path"), ["value"] = J("local") }),
+            Node(registry, "ko", "base-variable", new() { ["name"] = J("path"), ["value"] = J("remote") }), Node(registry, "end", "base-complete-flow")],
+            Connections = [new("a", "entry", "success", "local"), new("b", "local", "yes", "ok"), new("c", "local", "no", "ko"),
+                new("d", "ok", "success", "end"), new("e", "ko", "success", "end")] };
+        var metadata = JsonSerializer.SerializeToElement(new { format = new { duration = 1, size = 1 }, streams = Array.Empty<object>() });
+        FlowSimulationResult Simulate(Guid source, Guid worker) => new FlowSimulator(registry, validator).Simulate(new(
+            JsonSerializer.SerializeToElement(routing, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            new("a/film.mkv", metadata, new Dictionary<string, JsonElement>(), source, worker)));
+        Check(Simulate(holder, holder).Steps.Any(step => step.NodeId == "ok") && Simulate(holder, other).Steps.Any(step => step.NodeId == "ko"),
+            "The simulation follows yes when the worker is the access node and no otherwise.");
+        Check(registry.Resolve(relay.Component with { PluginVersion = "1.1.0" }) is not null
+            && registry.Resolve(Node(registry, "legacy", "nodes-run-on-node").Component with { PluginVersion = "1.1.0" }) is not null,
+            "Flows saved with nodes 1.1.0 stay resolvable.");
+    }
+
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
-        new("plugin/base", "1.1.0", ["general"], []), new("plugin/nodes", "1.1.0", ["general"], []),new("plugin/conditions","1.0.0",["general"],[]),
+        new("plugin/base", "1.1.0", ["general"], []), new("plugin/nodes", "1.2.0", ["general"], []),new("plugin/conditions","1.0.0",["general"],[]),
         new("plugin/plex","1.0.0",["general"],["process"]),new("ffprobe", "7.0", ["video"], []), .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
 
     private static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)

@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "nodes",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Nœuds",
   "supportedHostContractVersions": [
     1
@@ -57,7 +57,8 @@
       "requiresMedia": false,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -111,7 +112,8 @@
       "requiresMedia": false,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     {
@@ -184,6 +186,42 @@
             "placeholder": "gpu=nvidia,region=eu"
           }
         ]
+      },
+      "requiredTools": [],
+      "requiresMedia": false,
+      "requiresWriteAccess": false,
+      "compatiblePluginVersions": [
+        "1.1.0"
+      ]
+    },
+    {
+      "id": "nodes-library-local",
+      "version": "1.0.0",
+      "name": "Bibliothèque sur ce nœud",
+      "description": "Indique si le worker courant accède directement à la bibliothèque du fichier. Oui : il peut traiter le fichier sur place. Non : le fichier n’est atteint que par transfert ; reliez cette sortie à un relais vers un worker capable ou à un échec.",
+      "kind": "condition",
+      "mediaType": "general",
+      "supportedFlowMediaTypes": [
+        "video",
+        "image",
+        "music",
+        "subtitles"
+      ],
+      "outputs": [
+        {
+          "id": "yes",
+          "label": "Oui",
+          "description": "La bibliothèque est montée sur le worker courant."
+        },
+        {
+          "id": "no",
+          "label": "Non",
+          "description": "Le worker courant n’a pas d’accès direct à la bibliothèque."
+        }
+      ],
+      "configurationSchema": {
+        "version": 1,
+        "fields": []
       },
       "requiredTools": [],
       "requiresMedia": false,
