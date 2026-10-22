@@ -206,12 +206,8 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             if(candidate.ScheduleEnabled && candidate.Timezone is not null && candidate.Slots is not null
                 && !new NodeSchedule(true,candidate.Timezone,candidate.Slots).IsOpen(DateTimeOffset.UtcNow)) continue;
             if(!eligibility.CanRun(flow,candidate.Capabilities,candidate.Id,entry,checkpoint is not null,checkpoint?.Context,identity,candidate.Inventory)) continue;
+            // Un worker occupé (baux actifs au maximum de sa capacité) reste un destinataire valide : il prend la tâche en file dès qu'il se libère.
             await using var c=await dataSource.OpenConnectionAsync(ct);
-            await using(var active=Sql.Command("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@worker AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')",c))
-            {
-                active.Parameters.AddWithValue("worker",candidate.Id);
-                if(Convert.ToInt32(await active.ExecuteScalarAsync(ct),System.Globalization.CultureInfo.InvariantCulture)>=candidate.Capacity) continue;
-            }
             await using(var access=Sql.Command("""
               SELECT EXISTS(
                 SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id

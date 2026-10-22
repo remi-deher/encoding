@@ -213,6 +213,23 @@ internal static partial class Harness
             Console.WriteLine("PASS: a resume waits for an eligible worker, then fails explicitly.");
         }
 
+        /// <summary>Le seul destinataire capable du relais est occupé : l'exécution attend qu'il se libère au lieu d'échouer.</summary>
+        public async Task RelayWaitsForABusyWorkerAsync()
+        {
+            await ResetNodesAsync();
+            var(id,lease,context)=await EnqueueAsync(RelayFlow());
+            await CompleteAsync(id,a,lease,"entry",context);await CompleteAsync(id,a,lease,"variable",context);await CompleteAsync(id,a,lease,"relay",context);
+            var(busyId,_,_)=await EnqueueAsync(RelayFlow());
+            await using(var setup=db.CreateCommand("UPDATE cluster_nodes SET max_concurrent_tasks=CASE WHEN id=@b THEN 1 ELSE 0 END; UPDATE execution_work SET worker_node_id=@b WHERE execution_id=@busy")){ setup.Parameters.AddWithValue("b",b); setup.Parameters.AddWithValue("busy",busyId); await setup.ExecuteNonQueryAsync(); }
+            await FullRecovery().ProcessOnceAsync(CancellationToken.None);
+            Check((await executions.GetAsync(id,CancellationToken.None))!.State=="running","A relay whose only capable destination is busy waits instead of failing.");
+            await ExpireAsync(busyId);
+            Check(await runtime.ClaimAsync(b,CancellationToken.None) is { } received && received.ExecutionId==id,"The destination takes the waiting relay once it is free.");
+            Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up the relay.");await ExpireAsync(id);await RecoverCancellationAsync(id);
+            Check(await executions.CancelAsync(busyId,CancellationToken.None),"Clean up the busy execution.");await RecoverCancellationAsync(busyId);
+            Console.WriteLine("PASS: a relay waits for a busy destination.");
+        }
+
         public async Task ReplayableStepIsResumedAfterWorkerLossAsync()
         {
             await ResetNodesAsync();
