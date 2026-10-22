@@ -94,14 +94,20 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 if(toolId is null || !capabilities.Any(capability=>capability.ToolId==toolId
                     && (string.IsNullOrWhiteSpace(minimum) || Version.TryParse(capability.Version,out var actual) && Version.TryParse(minimum,out var min) && actual>=min)
                     && (string.IsNullOrWhiteSpace(required) || capability.AccelerationTypes.Contains(required,StringComparer.Ordinal)))) return false;
-                if(!string.IsNullOrWhiteSpace(encoder))
+                var kind=node.Configuration.TryGetValue("encoderKind",out var requestedKind)?requestedKind.GetString():null;
+                if(kind=="profile" && !ProfileEncoderUsable(flow,capabilities)) return false;
+                var kindOnly=kind is "hardware" or "cpu";
+                if(!string.IsNullOrWhiteSpace(encoder) || kindOnly)
                 {
                     var ffmpeg = capabilities.FirstOrDefault(c => string.Equals(c.ToolId, "ffmpeg", StringComparison.OrdinalIgnoreCase));
                     if (ffmpeg is null) return false;
-                    var sought = encoder.Trim();
+                    var sought = encoder?.Trim() ?? "";
+                    // Type d'encodage : « matériel » exclut le CPU, « cpu » exclut tout accélérateur.
+                    bool KindMatches(string acceleration) => kind switch { "hardware" => acceleration != "cpu", "cpu" => acceleration == "cpu", _ => true };
                     var matching = Encoding.Contracts.Flows.VideoEncoderCatalog.All
-                        .Where(desc => string.Equals(desc.Codec, sought, StringComparison.OrdinalIgnoreCase) || string.Equals(desc.Id, sought, StringComparison.OrdinalIgnoreCase))
+                        .Where(desc => (sought.Length == 0 || string.Equals(desc.Codec, sought, StringComparison.OrdinalIgnoreCase) || string.Equals(desc.Id, sought, StringComparison.OrdinalIgnoreCase)) && KindMatches(desc.Acceleration))
                         .ToList();
+                    if (sought.Length == 0 && matching.Count == 0) return false;
                     var usable = ffmpeg.EncoderChecks?.Where(c => c.Status == "usable").Select(c => c.EncoderId) ?? [];
                     var av = ffmpeg.Encoders ?? [];
                     var supported = matching.Count > 0
@@ -162,6 +168,27 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
         }
         // Every media execution records a source scan before completion, even if no transformation is selected.
         return capabilities.Any(c=>c.ToolId=="ffprobe");
+    }
+
+    /// <summary>« Selon le profil d'encodage du flow » : le worker doit avoir un encodeur utilisable du profil de chaque bloc vidéo du flow.</summary>
+    private bool ProfileEncoderUsable(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities)
+    {
+        var ffmpeg=capabilities.FirstOrDefault(capability=>capability.ToolId=="ffmpeg");
+        var videoNodes=flow.Nodes.Where(node=>node.Component.ComponentId is "base-transcode-video" or "video-transcode"
+            && node.Configuration.TryGetValue("encodingProfile",out var profile) && profile.ValueKind==JsonValueKind.Object).ToList();
+        if(ffmpeg is null || videoNodes.Count==0) return false;
+        foreach(var node in videoNodes)
+        {
+            var profile=node.Configuration["encodingProfile"].Deserialize<EncodingProfileSnapshot>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if(profile is null) return false;
+            var codec=node.Configuration.TryGetValue("videoCodec",out var codecValue)?codecValue.GetString()!:"hevc";
+            var retryWithCpu=node.Configuration.TryGetValue("retryWithCpu",out var retry)&&retry.ValueKind==JsonValueKind.True;
+            var encoders=ffmpeg.Encoders??[];
+            var usable=MediaCodecPolicy.ResolveVideoEncoder(codec,"automatic",null,profile,encoders,ffmpeg.AccelerationTypes,ffmpeg.EncoderChecks) is not null
+                || retryWithCpu && MediaCodecPolicy.ResolveCpuFallbackVideoEncoder(codec,profile,encoders,ffmpeg.AccelerationTypes,ffmpeg.EncoderChecks) is not null;
+            if(!usable) return false;
+        }
+        return true;
     }
 
     private static bool IsBaseVersionSatisfied(string actualVersion, string componentId)

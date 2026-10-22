@@ -88,12 +88,65 @@ internal static partial class Harness
         Check(eligibility.PrefersDirectAccess(preferFlow), "Prefer mode sets PrefersDirectAccess.");
     }
 
+    /// <summary>« Exiger une capacité » avec un type d'encodage : matériel exclut le CPU, CPU exclut les accélérateurs.</summary>
+    internal static void EncoderKindContracts()
+    {
+        var (registry, validator, eligibility) = Services();
+        NodeToolCapability[] Worker(params string[] encoders) => [.. Capabilities(false), new NodeToolCapability("ffmpeg", "7.0", ["video"], ["cpu"], encoders)];
+        FlowDefinition Flow(string? kind, string? encoder = "hevc")
+        {
+            var values = new Dictionary<string, JsonElement> { ["toolId"] = J("ffmpeg") };
+            if (encoder is not null) values["requiredEncoder"] = J(encoder);
+            if (kind is not null) values["encoderKind"] = J(kind);
+            return new FlowDefinition(1, Guid.NewGuid(), 1, "Encoder kind fixture", "video",
+                [Node(registry, "entry", "base-input-file"), Node(registry, "need", "nodes-require-capability", values), Node(registry, "end", "base-complete-flow")],
+                [new("a", "entry", "success", "need"), new("b", "need", "success", "end")]);
+        }
+        var cpuOnly = Worker("libx265"); var gpu = Worker("libx265", "hevc_qsv"); var worker = Guid.NewGuid();
+        Check(validator.Validate(Flow("hardware")).IsValid, "The encoder kind is a valid setting.");
+        Check(!eligibility.CanRun(Flow("hardware"), cpuOnly, worker), "Hardware: a CPU-only encoder does not qualify even though it encodes HEVC.");
+        Check(eligibility.CanRun(Flow("hardware"), gpu, worker), "Hardware: a worker with a hardware HEVC encoder qualifies.");
+        Check(!eligibility.CanRun(Flow("hardware", "h264"), gpu, worker), "Hardware: the codec still has to match.");
+        Check(eligibility.CanRun(Flow("hardware", null), gpu, worker) && !eligibility.CanRun(Flow("hardware", null), cpuOnly, worker), "Hardware without a codec accepts any hardware encoder.");
+        Check(eligibility.CanRun(Flow("cpu"), cpuOnly, worker) && !eligibility.CanRun(Flow("cpu"), Worker("hevc_qsv"), worker), "CPU: only software encoders qualify.");
+        Check(eligibility.CanRun(Flow("any"), cpuOnly, worker) && eligibility.CanRun(Flow(null), cpuOnly, worker), "Any / unset keeps the previous behaviour.");
+        Check(!eligibility.CanRun(Flow("hardware"), gpu.Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.5.0" } : cap).ToArray(), worker),
+            "An agent announcing nodes 1.5.0 does not receive a flow that uses the new setting.");
+    }
+
+    /// <summary>« Selon le profil d'encodage du flow » : le relais exige un encodeur utilisable du profil du bloc vidéo.</summary>
+    internal static void ProfileEncoderContracts()
+    {
+        var (registry, validator, eligibility) = Services();
+        NodeToolCapability Ffmpeg(params string[] usable) => new("ffmpeg", "7.0", ["video"], ["cpu", "qsv", "vaapi"], usable,
+            EncoderChecks: [.. usable.Select(id => new NodeEncoderCapability(id, "usable"))]);
+        NodeToolCapability[] Worker(params string[] usable) => [.. Capabilities(false), Ffmpeg(usable)];
+        FlowDefinition Flow(bool retryWithCpu = false, params EncodingProfileTarget[] targets)
+        {
+            var profile = new EncodingProfileSnapshot(Guid.NewGuid(), 1, "Matériel", "", targets);
+            var video = Node(registry, "encode", "video-transcode", new() { ["encoderMode"] = J("automatic"), ["videoCodec"] = J("hevc"), ["retryWithCpu"] = J(retryWithCpu), ["encodingProfile"] = JsonSerializer.SerializeToElement(profile, new JsonSerializerOptions(JsonSerializerDefaults.Web)) });
+            return new FlowDefinition(1, Guid.NewGuid(), 1, "Profile fixture", "video",
+                [Node(registry, "entry", "base-input-file"), Node(registry, "need", "nodes-require-capability", new() { ["toolId"] = J("ffmpeg"), ["encoderKind"] = J("profile") }), video, Node(registry, "end", "base-complete-flow")],
+                [new("a", "entry", "success", "need"), new("b", "need", "success", "encode"), new("c", "encode", "success", "end")]);
+        }
+        EncodingProfileTarget[] hardware = [new("hevc_qsv", 25, "medium", 0), new("hevc_vaapi", 23, "", 1)];
+        var worker = Guid.NewGuid();
+        var check = validator.Validate(Flow(false, hardware)); Check(check.IsValid, "The profile choice is a valid setting: " + string.Join("; ", check.Issues.Select(i => i.Path + " " + i.Message)));
+        Check(eligibility.CanRun(Flow(false, hardware), Worker("hevc_qsv"), worker), "A worker with the first target of the profile qualifies.");
+        Check(eligibility.CanRun(Flow(false, hardware), Worker("hevc_vaapi"), worker), "Any usable target of the profile is enough.");
+        Check(!eligibility.CanRun(Flow(false, hardware), Worker("libx265"), worker), "A CPU-only worker is refused when the profile has hardware targets only.");
+        Check(eligibility.CanRun(Flow(true, hardware), Worker("libx265"), worker), "The CPU fallback of the video block is honoured.");
+        Check(!eligibility.CanRun(Flow(false, [new("hevc_nvenc", 25, "medium", 0)]), Worker("hevc_qsv"), worker), "A profile change moves the requirement.");
+        Check(!eligibility.CanRun(Flow(false, hardware), Worker("hevc_qsv").Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.5.0" } : cap).ToArray(), worker),
+            "An agent announcing nodes 1.5.0 does not receive a flow that uses the profile choice.");
+    }
+
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
         new("plugin/base", "1.8.0", ["general"], []),
         new("plugin/video", "1.1.0", ["general"], []),
         new("plugin/audio", "1.0.0", ["general"], []),
         new("plugin/subtitles", "1.0.0", ["general"], []),
-        new("plugin/nodes", "1.3.0", ["general"], []),
+        new("plugin/nodes", "1.6.0", ["general"], []),
         new("plugin/conditions", "1.2.0", ["general"], []),
         new("plugin/plex", "1.1.0", ["general"], ["process"]),
         new("ffprobe", "7.0", ["video"], []),
@@ -544,6 +597,25 @@ internal static partial class Harness
                 Check(Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(preserved))==Convert.ToHexStringLower(originalSha),"A rejected completion leaves the library source unchanged.");
             Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"Another worker cannot retry the rejected execution.");
         }
+        public async Task LibraryAccessBlockBranchesOnDirectAccessAsync()
+        {
+            foreach(var direct in new[]{true,false})
+            {
+                var flow=new FlowDefinition(1,Guid.NewGuid(),1,"Library access","video",
+                    [Node(registry,"entry","base-input-file"),Node(registry,"access","nodes-library-access"),
+                     Node(registry,"local","base-complete-flow",new(){["result"]=J("success")}),
+                     Node(registry,"elsewhere","base-complete-flow",new(){["result"]=J("failed"),["message"]=J("Fichier sans accès direct sur ce nœud.")})],
+                    [new("a","entry","success","access"),new("b","access","yes","local"),new("c","access","no","elsewhere")]);
+                var(id,lease,_)=await EnqueueAsync(flow);
+                using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(20)); using var client=Client(a);
+                // Accès par transfert : le worker reçoit une copie, sans chemin local de la bibliothèque.
+                await Runner("library-access-"+direct,out _).RunAsync(direct?lease:lease with { SourceRoot=null },client,deadline.Token);
+                // Le média fictif échoue ensuite au scan : seul le checkpoint du bloc, écrit avant, compte ici.
+                Check(await ScalarAsync<string>("SELECT checkpoint->>'outputId' FROM execution_steps WHERE execution_id=@id AND node_id='access' AND completed_at IS NOT NULL",("id",id))==(direct?"yes":"no"),
+                    direct?"A node that mounts the library follows « Oui ».":"A node without direct access follows « Non ».");
+            }
+            Console.WriteLine("PASS: the library access block branches on direct access.");
+        }
         public async Task EarlyRunnerAsync()
         {
             var(id,lease,context)=await EnqueueAsync(RelayFlow());
@@ -557,7 +629,7 @@ internal static partial class Harness
             Check(await runtime.ClaimAsync(b,CancellationToken.None) is null,"An interrupted receiver attempt is not reassigned before the recovery service hands it back.");
             var recovery=new RuntimeRecoveryService(db,NullLogger<RuntimeRecoveryService>.Instance);
             await recovery.ProcessOnceAsync(CancellationToken.None);
-            var again=await runtime.ClaimAsync(c,CancellationToken.None)??throw new InvalidOperationException("The disconnected receiver's attempt must be resumed by another worker.");
+            var again=await runtime.ClaimAsync(b,CancellationToken.None)??throw new InvalidOperationException("The relay destination must resume the disconnected receiver's attempt.");
             Check(again.ExecutionId==id && again.Checkpoint?.Context.Variables["selected"].GetInt32()==42,"The resumed attempt keeps the relay checkpoint.");
             Check(await executions.CancelAsync(id,CancellationToken.None),"Clean up the resumed relay.");await ExpireAsync(id);await RecoverCancellationAsync(id);
         }

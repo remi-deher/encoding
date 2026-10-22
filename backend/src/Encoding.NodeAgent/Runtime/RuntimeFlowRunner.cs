@@ -205,6 +205,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     {
                         // This block declares an execution policy; retry decisions are made by the server after a lost lease.
                     }
+                    else if(node.Component.PluginId=="nodes" && id=="nodes-library-access")
+                    {
+                        // Ce worker est le nœud d'accès du fichier et le monte directement (accès par transfert : « non »).
+                        output=lease.SourceNodeId==client.NodeId && lease.SourceRoot is not null?"yes":"no";
+                    }
                     else if(node.Component.PluginId=="nodes"
                         && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability" or "nodes-require-direct-access"))
                     {

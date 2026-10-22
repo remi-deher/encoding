@@ -101,6 +101,12 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     public Task ReplayableStepIsResumedAfterWorkerLoss() => Scenarios.ReplayableStepIsResumedAfterWorkerLossAsync();
 
     [DatabaseFact]
+    public Task LibraryAccessBlockBranchesOnDirectAccess() => Scenarios.LibraryAccessBlockBranchesOnDirectAccessAsync();
+
+    [DatabaseFact]
+    public Task ResumeKeepsTheRelayDestination() => Scenarios.ResumeKeepsTheRelayDestinationAsync();
+
+    [DatabaseFact]
     public Task RetryPolicyKeepsPriorityOverResume() => Scenarios.RetryPolicyKeepsPriorityOverResumeAsync();
 
     [DatabaseFact]
