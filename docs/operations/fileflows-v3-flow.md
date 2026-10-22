@@ -55,7 +55,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 | Plex injoignable pendant la vérification | Le flow continue ; la garde de publication refuse le remplacement de la source (le résultat distinct est publié) |
 | Disposition audio ambiguë | Sortie « Erreur » → Échec, source intacte |
 | Outil ou plugin absent sur le nœud | Le nœud ne reçoit pas le flow |
-| Perte du worker en cours de traitement | Le bail expire et la tentative échoue ; une reprise explicite, ou une règle de reprise bornée du flow, crée une nouvelle exécution depuis l’entrée. Un relais explicite conserve son checkpoint (0015, 0021) |
+| Perte du worker en cours de traitement | Le bail expire ; l’exécution est reprise au dernier checkpoint par un autre worker éligible (2 reprises au plus, ADR 0004). Un bloc à effet incertain (script, modification sur place, recherche Sonarr/Radarr) échoue et se relance explicitement ; un encodage interrompu est refait depuis le début du bloc |
 | Perte du nœud d'accès pendant la publication | La publication est reprise sans double bascule ([runtime](../architecture/domains/runtime.md)) |
 
 ## Limites connues

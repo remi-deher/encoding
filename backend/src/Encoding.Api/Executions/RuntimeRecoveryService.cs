@@ -30,33 +30,42 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         }
     }
 
+    /// <summary>Reprises automatiques d'une même exécution après perte du worker (ADR 0004).</summary>
+    public const int MaximumResumes=2;
+    private static readonly TimeSpan ResumeGrace=TimeSpan.FromMinutes(2);
+
     /// <summary>
-    /// Closes cancelled work and fails an attempt whose assigned worker lost its lease.
-    /// Only an explicit relay or wait (worker_node_id = NULL) may be claimed again under
-    /// the same execution ID. A failed attempt must be retried as a new execution.
+    /// Closes cancelled work. An attempt whose assigned worker lost its lease is resumed at its last durable checkpoint by another
+    /// eligible worker (same execution ID, bounded) when every unfinished step is replayable; otherwise it fails and must be retried
+    /// as a new execution. An explicit relay or wait (worker_node_id = NULL) is claimed again under the same execution ID.
     /// </summary>
     public async Task<int> ProcessOnceAsync(CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         await RuntimeRepository.FailUnavailableSourcesAsync(c, tx, offlineAfter, ct);
-        var expired=new List<(Guid Id,Guid? Worker,int Revision,string State,int Attempt,string Flow,bool HasNonIdempotentStep)>();
+        var expired=new List<(Guid Id,Guid? Worker,int Revision,string State,int Attempt,string Flow,bool HasNonIdempotentStep,bool Uncertain,bool Waiting,int Resumes)>();
         await using(var cmd=Sql.Command("""
           SELECT e.id,e.node_id,e.revision,e.state,e.attempt,e.flow_definition::text,
-            EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id AND NOT s.idempotent)
+            EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id AND NOT s.idempotent),
+            EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NULL AND NOT s.idempotent),
+            EXISTS(SELECT 1 FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting'),w.resume_count
           FROM executions e JOIN execution_work w ON w.execution_id=e.id
           WHERE (e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()))
              OR (e.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until IS NOT NULL AND w.lease_until<=clock_timestamp())
           ORDER BY e.updated_at LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED
           """,c,tx))
         await using(var r=await cmd.ExecuteReaderAsync(ct))
-        { while(await r.ReadAsync(ct)) expired.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetInt32(4),r.GetString(5),r.GetBoolean(6))); }
+        { while(await r.ReadAsync(ct)) expired.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetInt32(4),r.GetString(5),r.GetBoolean(6),r.GetBoolean(7),r.GetBoolean(8),r.GetInt32(9))); }
         foreach(var item in expired)
         {
             var cancelled=item.State=="cancelling";
+            if(!cancelled && await TryResumeAsync(item.Id,item.Worker,item.Revision,item.Attempt,item.Flow,item.Uncertain,item.Waiting,item.Resumes,c,tx,ct)) continue;
             var detail=cancelled
                 ? "Annulation terminée après expiration du bail ; la source est conservée."
-                : item.HasNonIdempotentStep
+                : item.Uncertain
                     ? "Le worker a perdu sa connexion pendant une étape à effet externe. Le résultat est incertain ; la tâche est en erreur et nécessite une relance explicite."
+                : item.Resumes>=MaximumResumes
+                    ? $"Le worker a perdu sa connexion et la tâche a déjà été reprise {MaximumResumes} fois ; elle est en erreur et nécessite une relance explicite."
                 : "Le worker a perdu sa connexion pendant cette tentative. La tâche est en erreur ; une relance doit créer une nouvelle tentative.";
             if(await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,cancelled?"cancelled":"failed",item.Worker,null,detail),c,tx,ct))
             {
@@ -85,23 +94,53 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         return expired.Count+await FailUnavailableTargetsAsync(ct);
     }
 
+    /// <summary>
+    /// Rend l'exécution à la file des relais : même identité, époque suivante, dernier checkpoint durable. Le worker suivant est choisi
+    /// par les règles d'attribution habituelles (capacités, accès au média, limites, charge). Refusée si une étape à effet externe est
+    /// inachevée, si une attente est en cours, si la borne est atteinte ou si le flow a sa propre règle de relance.
+    /// </summary>
+    private async Task<bool> TryResumeAsync(Guid id,Guid? worker,int revision,int attempt,string flowJson,bool uncertain,bool waiting,int resumes,
+        System.Data.Common.DbConnection c,System.Data.Common.DbTransaction tx,CancellationToken ct)
+    {
+        if(worker is null || uncertain || waiting || resumes>=MaximumResumes) return false;
+        try
+        {
+            var flow=JsonSerializer.Deserialize<FlowDefinition>(flowJson,Json);
+            if(flow is null || RuntimeRetryPolicy.Resolve(flow) is not null) return false;
+        }
+        catch(ArgumentException) { return false; }
+        var detail=$"Le worker a perdu sa connexion ; reprise {resumes+1}/{MaximumResumes} depuis le dernier checkpoint par un autre worker éligible.";
+        if(!await ExecutionRepository.RecordInTransactionAsync(id,new(Guid.NewGuid(),revision,"running",worker,null,detail),c,tx,ct)) return false;
+        await using var yield=Sql.Command("""
+          UPDATE execution_work SET handoff_pending=true,handoff_selector=@selector,previous_worker_node_id=@worker,
+            worker_node_id=NULL,lease_until=NULL,lease_epoch=lease_epoch+1,resume_count=resume_count+1 WHERE execution_id=@id;
+          UPDATE media_reservations SET lease_epoch=(SELECT lease_epoch FROM execution_work WHERE execution_id=@id),lease_until='infinity'::timestamptz WHERE execution_id=@id;
+          DELETE FROM disk_locks WHERE execution_id=@id;
+          """,c,tx);
+        yield.Parameters.AddWithValue("id",id); yield.Parameters.AddWithValue("worker",worker.Value);
+        yield.Parameters.AddWithValue("selector",SqlKind.Json,JsonSerializer.Serialize(new RuntimeHandoffSelector(RuntimeHandoffSelector.ResumeMode),Json));
+        await yield.ExecuteNonQueryAsync(ct);
+        logger.LogInformation("L’exécution {ExecutionId} est reprise au dernier checkpoint après perte du worker {WorkerId} (reprise {Resume}/{Maximum}).",id,worker,resumes+1,MaximumResumes);
+        return true;
+    }
+
     private async Task<int> FailUnavailableTargetsAsync(CancellationToken ct)
     {
         if(nodeGroups is null || eligibility is null) return 0;
         var targets=new List<(Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,
-            Guid Library,Guid? Source,string? Checkpoint)>();
+            Guid Library,Guid? Source,string? Checkpoint,DateTimeOffset Updated)>();
         await using(var c=await dataSource.OpenConnectionAsync(ct))
         await using(var cmd=Sql.Command("""
           SELECT e.id,e.node_id,e.revision,e.state,e.flow_definition::text,w.handoff_selector::text,
             w.previous_worker_node_id,w.library_id,w.source_node_id,
-            (SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1)
+            (SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),e.updated_at
           FROM executions e JOIN execution_work w ON w.execution_id=e.id
           WHERE w.worker_node_id IS NULL AND w.handoff_selector IS NOT NULL AND w.available_at<=clock_timestamp()
             AND ((e.state='running' AND w.handoff_pending) OR (e.state='queued' AND e.retry_of IS NOT NULL))
           ORDER BY e.updated_at LIMIT 100
           """,c))
         await using(var r=await cmd.ExecuteReaderAsync(ct))
-        { while(await r.ReadAsync(ct)) targets.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetString(4),r.GetString(5),r.IsDBNull(6)?null:r.GetGuid(6),r.GetGuid(7),r.IsDBNull(8)?null:r.GetGuid(8),r.IsDBNull(9)?null:r.GetString(9))); }
+        { while(await r.ReadAsync(ct)) targets.Add((r.GetGuid(0),r.IsDBNull(1)?null:r.GetGuid(1),r.GetInt32(2),r.GetString(3),r.GetString(4),r.GetString(5),r.IsDBNull(6)?null:r.GetGuid(6),r.GetGuid(7),r.IsDBNull(8)?null:r.GetGuid(8),r.IsDBNull(9)?null:r.GetString(9),r.GetFieldValue<DateTimeOffset>(10))); }
 
         var failed=0;
         foreach(var item in targets)
@@ -109,10 +148,13 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             var flow=JsonSerializer.Deserialize<FlowDefinition>(item.Flow,Json);
             var selector=JsonSerializer.Deserialize<RuntimeHandoffSelector>(item.Selector,Json);
             var checkpoint=item.Checkpoint is null?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(item.Checkpoint,Json);
-            if(flow is null || selector is null || await HasEligibleWorkerAsync(item,flow,selector,checkpoint,ct)) continue;
+            if(flow is null || selector is null) continue;
+            // Un worker qui redémarre doit pouvoir revenir avant qu'une reprise soit déclarée impossible.
+            if(selector.Mode==RuntimeHandoffSelector.ResumeMode && DateTimeOffset.UtcNow-item.Updated<ResumeGrace) continue;
+            if(await HasEligibleWorkerAsync(item,flow,selector,checkpoint,ct)) continue;
 
             await using var c=await dataSource.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
-            var detail="Aucun worker en ligne ne correspond à la destination de ce relais ou de cette relance ; l’exécution échoue.";
+            var detail=selector.Mode==RuntimeHandoffSelector.ResumeMode?"Aucun worker éligible n’a pu reprendre cette tâche après la perte de son worker (capacités, accès au média ou limites) ; l’exécution échoue.":"Aucun worker en ligne ne correspond à la destination de ce relais ou de cette relance ; l’exécution échoue.";
             if(await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",item.Actor,null,detail),c,tx,ct))
             {
                 await RuntimeRepository.ReleaseAsync(item.Id,c,tx,ct);
@@ -125,7 +167,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
     }
 
     private async Task<bool> HasEligibleWorkerAsync(
-        (Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,Guid Library,Guid? Source,string? Checkpoint) item,
+        (Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,Guid Library,Guid? Source,string? Checkpoint,DateTimeOffset Updated) item,
         FlowDefinition flow,RuntimeHandoffSelector selector,RuntimeCheckpoint? checkpoint,CancellationToken ct)
     {
         var candidates=new List<(Guid Id,NodeToolCapability[] Capabilities,int Capacity,bool ScheduleEnabled,string? Timezone,string? Slots,NodeInventory? Inventory)>();
@@ -150,7 +192,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         var needsWrite=eligibility!.RequiresWriteAccess(flow,entry,checkpoint is not null);
         foreach(var candidate in candidates)
         {
-            if(candidate.Id==item.Previous || candidate.Capacity<=0) continue;
+            if(candidate.Id==item.Previous && selector.Mode!=RuntimeHandoffSelector.ResumeMode || candidate.Capacity<=0) continue;
             var identity=await nodeGroups!.GetNodeIdentityAsync(candidate.Id,ct);
             if(!selector.Accepts(candidate.Id,item.Previous??Guid.Empty,identity)) continue;
             if(candidate.ScheduleEnabled && candidate.Timezone is not null && candidate.Slots is not null

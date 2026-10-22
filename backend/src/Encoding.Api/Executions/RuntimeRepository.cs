@@ -374,9 +374,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
           SELECT invocation_id,checkpoint::text FROM execution_steps WHERE execution_id=@id AND node_id=@node
           """,c,tx);
         start.Parameters.AddWithValue("id",id); start.Parameters.AddWithValue("node",request.NodeId); start.Parameters.AddWithValue("invocation",Guid.NewGuid());
-        start.Parameters.AddWithValue("idempotent",node.Component.PluginId is "nodes" or "conditions"
-            || node.Component.PluginId=="base" && node.Component.ComponentId!="base-script"
-            || node.Component.PluginId=="ai" && (node.Component.ComponentId is "ai-translate-subtitles" or "ai-metadata-enricher"));
+        start.Parameters.AddWithValue("idempotent",RuntimeStepEffects.IsReplayable(node.Component.PluginId,node.Component.ComponentId));
         await using var r=await start.ExecuteReaderAsync(ct); await r.ReadAsync(ct);
         var result=new StartedRuntimeStep(r.GetGuid(0),r.IsDBNull(1)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(1),Json));
         await r.DisposeAsync(); await tx.CommitAsync(ct); return result;

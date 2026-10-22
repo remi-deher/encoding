@@ -7,7 +7,10 @@ namespace Encoding.Contracts.Executions;
 
 public sealed record RuntimeHandoffSelector(string Mode, Guid? TargetNodeId = null, Guid? TargetGroupId = null, string? RequiredLabels = null)
 {
-    public bool Accepts(Guid candidate, Guid previousWorker, NodeIdentityResponse? identity = null) => candidate != previousWorker
+    /// <summary>Reprise automatique après perte du worker (ADR 0004) : tout worker éligible, y compris celui qui revient en ligne.</summary>
+    public const string ResumeMode = "resume";
+
+    public bool Accepts(Guid candidate, Guid previousWorker, NodeIdentityResponse? identity = null) => Mode == ResumeMode || candidate != previousWorker
         && (Mode == "eligible" || Mode == "node" && TargetNodeId == candidate
             || Mode == "selector" && identity is not null
                 && (TargetGroupId is null || identity.GroupIds.Contains(TargetGroupId.Value))

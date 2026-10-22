@@ -22,6 +22,7 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 
 ## Attribution, baux, reprise
 - Chaque serveur attribue **uniquement** les travaux de sa base locale, en transaction d'écriture immédiate. Le worker doit être présent, accepter du travail ([cluster.md](cluster.md)), avoir une place, les outils et encodeurs vérifiés, les versions exactes des plugins et un accès direct ou par transfert. Segments : `nodes-run-on-node`, `nodes-require-capability`, `nodes-require-direct-access` (strict ou préférence) contraignent le worker d'un segment.
+- **Reprise après perte du worker** (ADR [0004](../adr/0004-reprise-au-checkpoint.md)) : à l'expiration du bail, l'exécution est rendue à la file des relais (même identité, époque suivante, réservation conservée, verrous de disque libérés) et réclamée par un worker éligible selon les règles habituelles (capacités, accès au média, limites, charge), au plus 2 fois (`resume_count`). Étapes à effet incertain (`base-script`, `mkv-edit-in-place`, recherches Sonarr/Radarr, plugins inconnus), sonde d'attente en cours ou règle de flow `nodes-retry-on-worker-loss` : échec comme avant. Sans worker éligible pendant 2 minutes : échec.
 - Bail 60 s renouvelé toutes les 15 s, **époque** croissante, réservation unique par bibliothèque/chemin. Tout rapport, renouvellement, transfert et publication vérifie époque et expiration ; un ancien worker est refusé (409). Checkpoint et événement dans la même transaction.
 - **Perte du worker** : la tentative échoue, la réservation est libérée, **aucune réattribution silencieuse sous le même identifiant**. Reprise = nouvelle exécution depuis l'entrée, manuelle ou par `nodes-retry-on-worker-loss` (1 à 10 tentatives, cible worker/groupe/étiquettes), refusée automatiquement si une étape du précédent essai est non idempotente. Un script ou plugin interrompu avant son checkpoint a un effet incertain : échec + relance explicite.
 - Plafonds de traitement : global nœud, global bibliothèque, couple nœud/bibliothèque ; tous doivent autoriser ; maxima sans réservation ; diminuer une limite ne tue pas l'actif.
@@ -50,7 +51,7 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 
 ## Invariants
 1. Une seule tâche à la fois modifie un média ; la source est préservée jusqu'à validation et publication réussies.
-2. Époque + bail partout ; jamais de reprise silencieuse d'un effet incertain.
+2. Époque + bail partout ; jamais de reprise d'un effet incertain. Une étape rejouable interrompue est rejouée par un autre worker depuis le dernier checkpoint (ADR [0004](../adr/0004-reprise-au-checkpoint.md)).
 3. Les opérations sont idempotentes ou détectent le doublon ; pas de boucle de relance automatique.
 4. Le remplacement n'a lieu que par la politique explicite de la bibliothèque, jamais depuis un flow seul. Seule exception : `mkv-edit-in-place` modifie les en-têtes de la source (ADR [0002](../adr/0002-modification-mkv-sur-place.md)) avec copie intégrale vérifiée et restauration.
 

@@ -61,10 +61,11 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
     /// <summary>Publication déjà confirmée par le nœud d'accès pour une exécution dont le flow continue (ADR 0003).</summary>
     public async Task<RuntimePublicationState?> PublicationStateAsync(Guid id,CancellationToken ct)
     {
-        await using var cmd=dataSource.CreateCommand("SELECT published_path,result_sha FROM execution_work WHERE execution_id=@id");
+        await using var cmd=dataSource.CreateCommand("SELECT published_path,result_sha,publication_requested FROM execution_work WHERE execution_id=@id");
         cmd.Parameters.AddWithValue("id",id); await using var r=await cmd.ExecuteReaderAsync(ct);
         if(!await r.ReadAsync(ct)) return null;
-        return r.IsDBNull(0)?new(false,null,null):new(true,r.GetString(0),r.IsDBNull(1)?null:r.GetString(1));
+        var requested=r.GetBoolean(2);
+        return r.IsDBNull(0)?new(false,null,r.IsDBNull(1)?null:r.GetString(1),requested):new(true,r.GetString(0),r.IsDBNull(1)?null:r.GetString(1),requested);
     }
     public async Task<bool> FinishAsync(Guid id,Guid worker,FinishRuntimeExecution request,CancellationToken ct,bool sourceFailure=false)
     {

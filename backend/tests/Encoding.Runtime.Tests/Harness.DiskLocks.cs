@@ -81,7 +81,7 @@ internal static partial class Harness
             Check(await executions.CancelAsync(w, token), "Cancel the waiting execution."); await ExpireAsync(w); await RecoverCancellationAsync(w);
         }
 
-        /// <summary>La perte du worker échoue cette tentative ; la récupération clôt l'exécution et libère le verrou.</summary>
+        /// <summary>La perte du worker libère le verrou ; l'exécution est reprise (ADR 0004) sans le garder pour un worker disparu.</summary>
         public async Task DiskLockReleasedAfterWorkerLossAsync()
         {
             var flow = new FlowDefinition(1, Guid.NewGuid(), 1, "Disk fixture", "video",
@@ -96,8 +96,8 @@ internal static partial class Harness
             Check(await runtime.ClaimAsync(b, token) is null, "Another worker cannot silently resume the assigned attempt.");
             var recovery = new RuntimeRecoveryService(db, NullLogger<RuntimeRecoveryService>.Instance);
             await recovery.ProcessOnceAsync(token);
-            Check((await executions.GetAsync(x, token))?.State == "failed", "The disconnected worker's attempt is marked failed.");
-            Check(await LockHolderAsync("nas-loss") is null, "Closing the failed attempt releases its disk lock.");
+            Check((await executions.GetAsync(x, token))?.State == "running" && await ScalarAsync<long>("SELECT count(*) FROM execution_work WHERE execution_id=@id AND worker_node_id IS NULL AND handoff_pending", ("id", x)) == 1, "The disconnected worker's attempt is handed back for a resume.");
+            Check(await LockHolderAsync("nas-loss") is null, "Resuming releases the lost worker's disk lock.");
             Check((await Locks.TryAcquireAsync(y, a, new(second.Epoch, "nas-loss"), token)) is { Acquired: true }, "A later explicit task can acquire the released disk.");
             var secondState = (await executions.GetAsync(y, token))?.State;
             Check(secondState is "running" or "cancelling", "The second execution remains active after the first worker fails.");
@@ -105,6 +105,7 @@ internal static partial class Harness
             {
                 Check(await executions.CancelAsync(y, token), "Cancel the second execution."); await ExpireAsync(y); await RecoverCancellationAsync(y);
             }
+            Check(await executions.CancelAsync(x, token), "Cancel the resumable execution."); await RecoverCancellationAsync(x);
         }
 
         private static bool Throws(Action action) { try { action(); return false; } catch (ArgumentException) { return true; } }

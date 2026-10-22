@@ -46,3 +46,6 @@ Seule la version de protocole (`Current = 1`) est contrôlée. Pas de plage de s
 
 ## Non vérifié en conditions réelles (à ne pas présenter comme garanti)
 Landlock en conteneur de production ; GPU réel (QSV, VAAPI, NVENC) ; Plex/Jellyfin/Sonarr/Radarr réels ; NAS/NFS (atomicité du renommage et des verrous) ; cluster multi-hôtes sous charge (changement de mode, reprise après perte de worker) ; thème sombre et mobile de la page Nœuds et de l'éditeur de flow.
+
+## Reprise après perte du worker (ADR 0004)
+Livrée : reprise au dernier checkpoint, bornée à 2, blocs rejouables. Reste à décider : attendre le retour du nœud d'accès (au lieu d'échouer) quand le traitement continue ailleurs ; reprendre le verrou de disque libéré ; checkpoint intermédiaire à l'intérieur d'un encodage long (aujourd'hui, le bloc est refait depuis son début).

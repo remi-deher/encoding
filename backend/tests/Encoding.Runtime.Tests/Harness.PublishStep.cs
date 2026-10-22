@@ -24,6 +24,8 @@ internal static partial class Harness
             Check(await ScalarAsync<string>("SELECT state FROM executions WHERE id=@id",("id",id))=="running","The execution stays active while the publication is pending.");
             Check(await ScalarAsync<bool>("SELECT continue_after_publication FROM execution_work WHERE execution_id=@id",("id",id)),"The request remembers that the flow continues.");
             Check(!(await transfers.PublicationStateAsync(id,CancellationToken.None))!.Published,"Nothing is published before the access node confirms.");
+            var pending=(await transfers.PublicationStateAsync(id,CancellationToken.None))!;
+            Check(pending.Requested && pending.Sha256==resultSha,"A resumed worker can see that this result's publication was already requested and must not request it again.");
             Check((await transfers.ListAsync(a,CancellationToken.None)).Any(item=>item.ExecutionId==id && item.Publish),"The access node sees the publication request.");
 
             var execution=await executions.GetAsync(id,CancellationToken.None);

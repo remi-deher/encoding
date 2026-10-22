@@ -444,16 +444,17 @@ public sealed class PeerClusterIntegrationTests
         for (var index = 0; index < 3; index++) Restart(index);
         await ThreeReadyAsync();
         await WaitUntilAsync(ConvergedAsync, TimeSpan.FromSeconds(20), "complete cluster restart", processes);
-        // No worker renews this lease after the deliberately rejected stale fence. Its
-        // eventual failure is expected even if backup/restore finishes in under 60s.
+        // No worker renews this lease after the deliberately rejected stale fence. Its lease expiry is handled
+        // even if backup/restore finishes in under 60s: the execution is handed back for a resume (ADR 0004).
         await WaitUntilAsync(async () => (await Task.WhenAll(clients.Select(client =>
-            client.GetFromJsonAsync<ExecutionResponse>($"api/v1/executions/{fixture.Execution:D}")))).All(execution => execution?.State == "failed"),
+            client.GetFromJsonAsync<ExecutionResponse>($"api/v1/executions/{fixture.Execution:D}")))).All(execution =>
+                execution?.State == "running" && execution.Detail?.Contains("reprise 1/2", StringComparison.Ordinal) == true),
             TimeSpan.FromSeconds(70), "expired worker attempt after restored cluster", processes);
         foreach (var client in clients)
         {
             Assert.Contains((await client.GetFromJsonAsync<LibraryResponse[]>("api/v1/libraries"))!, library => library.Name == "Must replay from WAL");
             var execution = await client.GetFromJsonAsync<ExecutionResponse>($"api/v1/executions/{fixture.Execution:D}");
-            Assert.Equal("failed", execution!.State);
+            Assert.Equal("running", execution!.State);
             Assert.Equal(fixture.Worker, execution.NodeId);
             var metrics = await client.GetStringAsync("metrics");
             Assert.Contains("encoding_peer_projection_revision", metrics);
