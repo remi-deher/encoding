@@ -445,11 +445,8 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   await openModelSettings(widget);
   await widget.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
-  await widget
-    .getByRole('button', { name: 'Ressources, fichiers et outils de l’assistant' })
-    .click();
-  await widget.getByRole('combobox', { name: 'Type de ressource' }).click();
-  await page.getByRole('option', { name: 'Nœuds', exact: true }).click();
+  await widget.getByRole('button', { name: 'Joindre un fichier ou une ressource' }).click();
+  await page.getByRole('menuitem', { name: 'Un nœud' }).click();
   await widget.getByRole('combobox', { name: 'Ressource', exact: true }).click();
   await page.getByRole('option', { name: 'Salon', exact: true }).click();
   await widget.getByRole('button', { name: 'Joindre', exact: true }).click();
