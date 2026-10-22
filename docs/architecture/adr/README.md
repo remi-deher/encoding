@@ -17,3 +17,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | Numéro | Titre | Statut | Domaine |
 | --- | --- | --- | --- |
 | [0001](0001-replication-connexions-ia.md) | Réplication chiffrée des connexions IA | implemented | ai |
+| [0002](0002-modification-mkv-sur-place.md) | Modification MKV sur place par bloc dédié | implemented | runtime |

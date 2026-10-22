@@ -63,7 +63,7 @@ N'importe quelle étape en erreur → Échec (la source reste intacte)
 - **Actualisation Plex / Radarr / Sonarr** : `media.published` est émis après confirmation de publication et consultable dans les événements d'exécution. Les plugins Plex, Radarr et Sonarr ne sont pas encore abonnés à cet événement ; leurs actions ne sont donc pas déclenchées automatiquement.
 - **Contrôles ASS** : le bloc peut comparer les événements texte source/sortie lorsqu'on active l'option. La comparaison du résultat aux fichiers ASS préparés et au plan de sous-titres FileFlows reste propre à ce script.
 - **QSV n'a jamais été vérifié sur un vrai GPU** (hôtes TrueNAS) : à tester avant de compter sur l'encodage matériel.
-- **Modification sur place** (mkvpropedit avec sauvegarde de l'en-tête et restauration) n'existe pas : le flow travaille sur une copie.
+- **Modification sur place** : le bloc `mkv-edit-in-place` (ADR [0002](../architecture/adr/0002-modification-mkv-sur-place.md)) modifie langue, nom et drapeaux d'une piste directement dans la source, avec copie intégrale et restauration. Il n'est pas dans le flow importable : un flow « métadonnées seules » peut l'utiliser à la place du remux. Il ne gère ni chapitres ni pièces jointes (ajout de polices sur place non couvert).
 - Non exercés dans le conteneur de développement : Landlock, `ProcessTests`, un vrai serveur Plex, les hôtes TrueNAS.
 
 ## Choisir et régler les blocs

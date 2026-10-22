@@ -38,7 +38,7 @@ public sealed class ToolCapabilityProbe(
                 new("plugin/video", "1.2.0", ["general"], []),
                 new("plugin/audio", "1.1.0", ["general"], []),
                 new("plugin/subtitles", "1.2.0", ["general"], []),
-                new("plugin/mkv", "1.0.0", ["general"], []),
+                new("plugin/mkv", "1.1.0", ["general"], []),
                 new("plugin/images", "1.0.0", ["general"], []),
                 new("plugin/probe", "1.0.0", ["general"], []),
                 new("ai-runtime", "1.0.0", ["subtitles", "video", "music"], []),
