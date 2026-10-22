@@ -1,3 +1,4 @@
+import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -13,11 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { CodeEditorComponent } from '../../shared/ui/code-editor.component';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
-import {
-  DataTableColumn,
-  DataTableComponent,
-  DataTableRow,
-} from '../../shared/ui/data-table.component';
+import { DataTableRow } from '../../shared/ui/data-table.component';
 import {
   CatalogEmptyState,
   ManagementCatalogTemplateComponent,
@@ -41,9 +38,9 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-script-library-page',
   imports: [
+    ResourceListComponent,
     CategoryTabsComponent,
     CodeEditorComponent,
-    DataTableComponent,
     ManagementCatalogTemplateComponent,
     MatButtonModule,
     MatExpansionModule,
@@ -85,15 +82,13 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
         (selectedChange)="onSectionChanged($event)"
       />
 
-      <app-data-table
+      <app-resource-list
         catalogue-table
-        layout="resources"
-        [columns]="columns"
-        [rows]="rows()"
-        [rowOpenable]="true"
-        rowOpenLabel="Modifier le script"
+        icon="terminal"
+        [items]="items()"
+        openLabel="Modifier"
         emptyMessage="Aucun script ne correspond à la recherche."
-        (rowOpen)="selectScript($event['id'] + '')"
+        (open)="selectScript($event)"
       />
 
       <ng-template #actionContent>
@@ -288,14 +283,6 @@ export class ScriptLibraryPageComponent {
     }),
     code: new FormControl('', { nonNullable: true, validators: [Validators.maxLength(200000)] }),
   });
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Script', sortable: true },
-    { key: 'languageLabel', label: 'Langage', sortable: true },
-    { key: 'publicationLabel', label: 'Publication', sortable: true },
-    { key: 'revisionLabel', label: 'Brouillon', sortable: true },
-    { key: 'updatedLabel', label: 'Modifié le', sortable: true, sortValueKey: 'updatedAt' },
-    { key: 'description', label: 'Description' },
-  ];
   protected readonly note = computed(() =>
     this.summaries().length
       ? 'Les flows publiés conservent le code et la version de script choisis. Modifier un script crée un brouillon ; seule sa publication crée une nouvelle version.'
@@ -312,6 +299,24 @@ export class ScriptLibraryPageComponent {
       updatedAt: script.updatedAt,
       updatedLabel: this.formatDate(script.updatedAt),
       description: script.draftDescription || '—',
+    })),
+  );
+  protected readonly items = computed<readonly ResourceListItem[]>(() =>
+    this.rows().map((row) => ({
+      id: String(row['id']),
+      name: String(row['name']),
+      subtitle: row['description'] === '—' ? undefined : String(row['description']),
+      tags: [
+        { label: String(row['languageLabel']) },
+        {
+          label: String(row['publicationLabel']),
+          tone: String(row['publicationLabel']).startsWith('Publié')
+            ? ('ok' as const)
+            : ('warn' as const),
+        },
+        { label: `Brouillon ${row['revisionLabel']}` },
+        { label: `Modifié le ${row['updatedLabel']}` },
+      ],
     })),
   );
   protected readonly versions = computed(() =>

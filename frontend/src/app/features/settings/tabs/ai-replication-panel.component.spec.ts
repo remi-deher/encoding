@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AiReplicationPanelComponent } from './ai-replication-panel.component';
+import { AiReplicationPanelComponent, formatSyncedAt } from './ai-replication-panel.component';
 import { AiClusterView } from '../../../shared/models/ai-tools';
 
 describe('AiReplicationPanelComponent', () => {
@@ -25,10 +25,10 @@ describe('AiReplicationPanelComponent', () => {
     ],
   };
 
-  function render(): string {
+  function render(current: AiClusterView = view): string {
     TestBed.configureTestingModule({ imports: [AiReplicationPanelComponent] });
     const fixture = TestBed.createComponent(AiReplicationPanelComponent);
-    fixture.componentRef.setInput('view', view);
+    fixture.componentRef.setInput('view', current);
     fixture.detectChanges();
     return fixture.nativeElement.textContent as string;
   }
@@ -46,5 +46,27 @@ describe('AiReplicationPanelComponent', () => {
     const text = render();
     expect(text).toContain('doit être reconnecté sur 1 nœud');
     expect(text).toContain('Local à chaque nœud');
+  });
+
+  it('affiche la date .NET reçue et ignore une date illisible sans lever d’erreur', () => {
+    const node = (syncedAt: unknown) =>
+      ({
+        nodeId: 'x',
+        name: 'n',
+        providers: [],
+        reachable: true,
+        credentials: [{ provider: 'claude-cli', state: 'synced', revision: 1, syncedAt }],
+      }) as never;
+    expect(render({ nodes: [node('2026-10-21T22:12:10.1234567+00:00')] })).toContain('À jour');
+    for (const bad of ['pas une date', {}, '', 42e30]) {
+      TestBed.resetTestingModule();
+      expect(render({ nodes: [node(bad)] })).toContain('À jour');
+    }
+  });
+
+  it('formate la date au format jj/mm hh:mm', () => {
+    expect(formatSyncedAt('2026-10-21T22:12:10.1234567Z')).toMatch(/^21\/10 \d\d:\d\d$/);
+    expect(formatSyncedAt(null)).toBeNull();
+    expect(formatSyncedAt('x')).toBeNull();
   });
 });

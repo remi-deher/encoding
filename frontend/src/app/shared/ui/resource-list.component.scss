@@ -1,0 +1,128 @@
+.resource-list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  list-style: none;
+}
+
+.resource-item {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1.4fr) minmax(0, 1.6fr) auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--surface-container);
+  transition:
+    background-color 220ms var(--motion-spring-fast),
+    border-radius 220ms var(--motion-spring-fast);
+}
+
+.resource-item:first-child {
+  border-start-start-radius: var(--radius-xl);
+  border-start-end-radius: var(--radius-xl);
+}
+
+.resource-item:last-child {
+  border-end-start-radius: var(--radius-xl);
+  border-end-end-radius: var(--radius-xl);
+}
+
+.resource-item:hover {
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-high);
+}
+
+.resource-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft, var(--surface-container-highest));
+  color: var(--accent);
+}
+
+.resource-title {
+  min-width: 0;
+}
+
+.resource-title h3 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-title p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.resource-tag {
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-container-highest);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+}
+
+.resource-tag_ok {
+  background: var(--accent-soft, var(--surface-container-highest));
+  color: var(--accent);
+}
+
+.resource-tag_warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.resource-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.resource-menu-item_danger {
+  color: var(--danger-strong);
+}
+
+.resource-empty {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 760px) {
+  .resource-item {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: var(--space-3);
+  }
+
+  .resource-tags {
+    grid-column: 2 / -1;
+  }
+
+  .resource-toggle {
+    grid-column: 2 / -1;
+  }
+
+  .resource-actions {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}

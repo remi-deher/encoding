@@ -369,8 +369,11 @@
 }
 
 .card-sort {
-  --mat-form-field-outlined-container-shape: var(--radius-pill);
+  /* Material sizes the notch pieces from this radius: a pill value (999px) stretches the field. */
+  --mat-form-field-outlined-container-shape: 1.5rem;
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: var(--space-2);
 }
