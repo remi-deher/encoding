@@ -20,6 +20,9 @@ public sealed class ContractTests
     public void FlowValidationRejectsInvalidGraphsAndIncompatibleComponents() => FlowValidationScenarios.Run();
 
     [Fact]
+    public void RequireCapabilityEncoderKindSeparatesHardwareFromCpu() => Harness.EncoderKindContracts();
+
+    [Fact]
     public void NativeConditionsEvaluateNestedGroupsAndMetadataSnapshots()
     {
         var (registry, validator, eligibility) = Harness.Services();

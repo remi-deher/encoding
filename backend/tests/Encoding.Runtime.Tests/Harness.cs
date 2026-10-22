@@ -88,12 +88,38 @@ internal static partial class Harness
         Check(eligibility.PrefersDirectAccess(preferFlow), "Prefer mode sets PrefersDirectAccess.");
     }
 
+    /// <summary>« Exiger une capacité » avec un type d'encodage : matériel exclut le CPU, CPU exclut les accélérateurs.</summary>
+    internal static void EncoderKindContracts()
+    {
+        var (registry, validator, eligibility) = Services();
+        NodeToolCapability[] Worker(params string[] encoders) => [.. Capabilities(false), new NodeToolCapability("ffmpeg", "7.0", ["video"], ["cpu"], encoders)];
+        FlowDefinition Flow(string? kind, string? encoder = "hevc")
+        {
+            var values = new Dictionary<string, JsonElement> { ["toolId"] = J("ffmpeg") };
+            if (encoder is not null) values["requiredEncoder"] = J(encoder);
+            if (kind is not null) values["encoderKind"] = J(kind);
+            return new FlowDefinition(1, Guid.NewGuid(), 1, "Encoder kind fixture", "video",
+                [Node(registry, "entry", "base-input-file"), Node(registry, "need", "nodes-require-capability", values), Node(registry, "end", "base-complete-flow")],
+                [new("a", "entry", "success", "need"), new("b", "need", "success", "end")]);
+        }
+        var cpuOnly = Worker("libx265"); var gpu = Worker("libx265", "hevc_qsv"); var worker = Guid.NewGuid();
+        Check(validator.Validate(Flow("hardware")).IsValid, "The encoder kind is a valid setting.");
+        Check(!eligibility.CanRun(Flow("hardware"), cpuOnly, worker), "Hardware: a CPU-only encoder does not qualify even though it encodes HEVC.");
+        Check(eligibility.CanRun(Flow("hardware"), gpu, worker), "Hardware: a worker with a hardware HEVC encoder qualifies.");
+        Check(!eligibility.CanRun(Flow("hardware", "h264"), gpu, worker), "Hardware: the codec still has to match.");
+        Check(eligibility.CanRun(Flow("hardware", null), gpu, worker) && !eligibility.CanRun(Flow("hardware", null), cpuOnly, worker), "Hardware without a codec accepts any hardware encoder.");
+        Check(eligibility.CanRun(Flow("cpu"), cpuOnly, worker) && !eligibility.CanRun(Flow("cpu"), Worker("hevc_qsv"), worker), "CPU: only software encoders qualify.");
+        Check(eligibility.CanRun(Flow("any"), cpuOnly, worker) && eligibility.CanRun(Flow(null), cpuOnly, worker), "Any / unset keeps the previous behaviour.");
+        Check(!eligibility.CanRun(Flow("hardware"), gpu.Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.4.0" } : cap).ToArray(), worker),
+            "An agent announcing nodes 1.4.0 does not receive a flow that uses the new setting.");
+    }
+
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
         new("plugin/base", "1.8.0", ["general"], []),
         new("plugin/video", "1.1.0", ["general"], []),
         new("plugin/audio", "1.0.0", ["general"], []),
         new("plugin/subtitles", "1.0.0", ["general"], []),
-        new("plugin/nodes", "1.4.0", ["general"], []),
+        new("plugin/nodes", "1.5.0", ["general"], []),
         new("plugin/conditions", "1.2.0", ["general"], []),
         new("plugin/plex", "1.1.0", ["general"], ["process"]),
         new("ffprobe", "7.0", ["video"], []),
