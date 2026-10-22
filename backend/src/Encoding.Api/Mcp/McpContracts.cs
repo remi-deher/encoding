@@ -74,9 +74,9 @@ public sealed record McpInitializeResult(
     [property: JsonPropertyName("serverInfo")] McpServerInfo ServerInfo);
 
 public sealed record McpCapabilities(
-    [property: JsonPropertyName("tools")] McpToolsCapability? Tools = null,
-    [property: JsonPropertyName("resources")] object? Resources = null,
-    [property: JsonPropertyName("prompts")] object? Prompts = null);
+    [property: JsonPropertyName("tools")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] McpToolsCapability? Tools = null,
+    [property: JsonPropertyName("resources")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] object? Resources = null,
+    [property: JsonPropertyName("prompts")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] object? Prompts = null);
 
 public sealed record McpToolsCapability(
     [property: JsonPropertyName("listChanged")] bool ListChanged = false);

@@ -349,6 +349,9 @@ internal static class ApiImprovementsScenarios
                 using var envelope = JsonDocument.Parse(initJson);
                 Check(envelope.RootElement.TryGetProperty("result", out _) && !envelope.RootElement.TryGetProperty("error", out _),
                     "MCP success envelope contains result and omits error.");
+                var capabilities = envelope.RootElement.GetProperty("result").GetProperty("capabilities");
+                Check(capabilities.TryGetProperty("tools", out _) && !capabilities.TryGetProperty("prompts", out _) && !capabilities.TryGetProperty("resources", out _),
+                    "MCP initialize capabilities omit unsupported prompts and resources instead of null.");
             }
 
             using (var invalidRpcResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/mcp", new
