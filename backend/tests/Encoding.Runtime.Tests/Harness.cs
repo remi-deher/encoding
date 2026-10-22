@@ -110,8 +110,8 @@ internal static partial class Harness
         Check(eligibility.CanRun(Flow("hardware", null), gpu, worker) && !eligibility.CanRun(Flow("hardware", null), cpuOnly, worker), "Hardware without a codec accepts any hardware encoder.");
         Check(eligibility.CanRun(Flow("cpu"), cpuOnly, worker) && !eligibility.CanRun(Flow("cpu"), Worker("hevc_qsv"), worker), "CPU: only software encoders qualify.");
         Check(eligibility.CanRun(Flow("any"), cpuOnly, worker) && eligibility.CanRun(Flow(null), cpuOnly, worker), "Any / unset keeps the previous behaviour.");
-        Check(!eligibility.CanRun(Flow("hardware"), gpu.Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.5.0" } : cap).ToArray(), worker),
-            "An agent announcing nodes 1.5.0 does not receive a flow that uses the new setting.");
+        Check(!eligibility.CanRun(Flow("hardware"), gpu.Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.6.0" } : cap).ToArray(), worker),
+            "An agent announcing nodes 1.6.0 does not receive a flow that uses the new setting.");
     }
 
     /// <summary>« Selon le profil d'encodage du flow » : le relais exige un encodeur utilisable du profil du bloc vidéo.</summary>
@@ -137,8 +137,8 @@ internal static partial class Harness
         Check(!eligibility.CanRun(Flow(false, hardware), Worker("libx265"), worker), "A CPU-only worker is refused when the profile has hardware targets only.");
         Check(eligibility.CanRun(Flow(true, hardware), Worker("libx265"), worker), "The CPU fallback of the video block is honoured.");
         Check(!eligibility.CanRun(Flow(false, [new("hevc_nvenc", 25, "medium", 0)]), Worker("hevc_qsv"), worker), "A profile change moves the requirement.");
-        Check(!eligibility.CanRun(Flow(false, hardware), Worker("hevc_qsv").Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.5.0" } : cap).ToArray(), worker),
-            "An agent announcing nodes 1.5.0 does not receive a flow that uses the profile choice.");
+        Check(!eligibility.CanRun(Flow(false, hardware), Worker("hevc_qsv").Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.6.0" } : cap).ToArray(), worker),
+            "An agent announcing nodes 1.6.0 does not receive a flow that uses the profile choice.");
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
@@ -146,7 +146,7 @@ internal static partial class Harness
         new("plugin/video", "1.1.0", ["general"], []),
         new("plugin/audio", "1.0.0", ["general"], []),
         new("plugin/subtitles", "1.0.0", ["general"], []),
-        new("plugin/nodes", "1.6.0", ["general"], []),
+        new("plugin/nodes", "1.7.0", ["general"], []),
         new("plugin/conditions", "1.2.0", ["general"], []),
         new("plugin/plex", "1.1.0", ["general"], ["process"]),
         new("ffprobe", "7.0", ["video"], []),
@@ -163,6 +163,37 @@ internal static partial class Harness
     }
     private static FlowDefinition Chain(params FlowNodeDefinition[] nodes) => new(1, Guid.NewGuid(), 1, "Relay fixture", "video", nodes,
         nodes.Zip(nodes.Skip(1), (source, target) => new FlowConnectionDefinition(source.Id + "-" + target.Id, source.Id, "success", target.Id)).ToArray());
+
+    private sealed class FixedProbe(params string[] usable) : IToolCapabilityProbe
+    {
+        public Task<IReadOnlyList<NodeToolCapability>> DiscoverAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<NodeToolCapability>>(
+            [.. Capabilities(false), new NodeToolCapability("ffmpeg", "7.0", ["video"], ["cpu", "qsv"], usable, [.. usable.Select(id => new NodeEncoderCapability(id, "usable"))])]);
+    }
+
+    private static FlowDefinition HardwareProfileFlow(FlowComponentRegistry registry, bool requireEncoder)
+    {
+        var profile = new EncodingProfileSnapshot(Guid.NewGuid(), 1, "Matériel", "", [new("hevc_qsv", 25, "medium", 0)]);
+        var video = Node(registry, "encode", "video-transcode", new() { ["encoderMode"] = J("automatic"), ["videoCodec"] = J("hevc"), ["encodingProfile"] = JsonSerializer.SerializeToElement(profile, new JsonSerializerOptions(JsonSerializerDefaults.Web)) });
+        return new FlowDefinition(1, Guid.NewGuid(), 1, "Library access with encoder", "video",
+            [Node(registry, "entry", "base-input-file"), Node(registry, "access", "nodes-library-access", new() { ["requireProfileEncoder"] = J(requireEncoder) }), video,
+             Node(registry, "relay", "nodes-handoff"), Node(registry, "end", "base-complete-flow")],
+            [new("a", "entry", "success", "access"), new("b", "access", "yes", "encode"), new("c", "encode", "success", "end"), new("d", "access", "no", "relay"), new("e", "relay", "success", "end")]);
+    }
+
+    /// <summary>« Bibliothèque sur ce nœud » avec « et encodeur du profil » : un nœud d'accès sans encodeur n'est pas écarté, il répond « non ».</summary>
+    internal static void LibraryAccessWithEncoderContracts()
+    {
+        var (registry, validator, eligibility) = Services();
+        var flow = HardwareProfileFlow(registry, true); var plain = HardwareProfileFlow(registry, false);
+        var cpuOnly = Capabilities(false).Concat([new NodeToolCapability("ffmpeg", "7.0", ["video"], ["cpu"], ["libx265"])]).ToArray();
+        var gpu = Capabilities(false).Concat([new NodeToolCapability("ffmpeg", "7.0", ["video"], ["cpu", "qsv"], ["hevc_qsv"], [new("hevc_qsv", "usable")])]).ToArray();
+        var worker = Guid.NewGuid();
+        var check = validator.Validate(flow); Check(check.IsValid, "The option is a valid setting: " + string.Join("; ", check.Issues.Select(i => i.Path + " " + i.Message)));
+        Check(eligibility.CanRun(flow, gpu, worker), "A node with the profile encoder takes the flow.");
+        Check(eligibility.CanRun(flow, cpuOnly, worker), "A node without the profile encoder still takes the flow: its « Oui » branch is not asked of it.");
+        Check(!eligibility.CanRun(plain, cpuOnly, worker), "Without the option, every branch is still checked.");
+        Check(!eligibility.CanRun(flow, gpu.Select(cap => cap.ToolId == "plugin/nodes" ? cap with { Version = "1.6.0" } : cap).ToArray(), worker), "An agent announcing nodes 1.6.0 does not receive a flow that uses the option.");
+    }
 
     private sealed class Probe : IToolCapabilityProbe
     {
@@ -544,11 +575,11 @@ internal static partial class Harness
             await using var command=db.CreateCommand("SELECT count(*) FROM media_reservations WHERE execution_id=@id");command.Parameters.AddWithValue("id",id);
             Check((long)(await command.ExecuteScalarAsync())! ==0,"Cancellation releases the reservation.");
         }
-        private RuntimeFlowRunner Runner(string name,out NodeAgentOptions options)
+        private RuntimeFlowRunner Runner(string name,out NodeAgentOptions options,IToolCapabilityProbe? capabilities=null)
         {
             options=NodeAgentOptions.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Node:DataDirectory"]=Path.Combine(directory,name) }).Build());
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
-            return new(options,scanner,new MediaActions(tools,scanner,new Probe()),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),NullLogger<RuntimeFlowRunner>.Instance);
+            return new(options,scanner,new MediaActions(tools,scanner,new Probe()),tools,new PluginProcessHost(tools,new ConfigurationBuilder().Build(),options),capabilities??new Probe(),NullLogger<RuntimeFlowRunner>.Instance);
         }
         public async Task ConflictDuringCheckpointFailsExecutionAsync()
         {
@@ -613,6 +644,15 @@ internal static partial class Harness
                 // Le média fictif échoue ensuite au scan : seul le checkpoint du bloc, écrit avant, compte ici.
                 Check(await ScalarAsync<string>("SELECT checkpoint->>'outputId' FROM execution_steps WHERE execution_id=@id AND node_id='access' AND completed_at IS NOT NULL",("id",id))==(direct?"yes":"no"),
                     direct?"A node that mounts the library follows « Oui ».":"A node without direct access follows « Non ».");
+            }
+            foreach(var capable in new[]{true,false})
+            {
+                var gated=HardwareProfileFlow(registry,true);
+                var(id,lease,_)=await EnqueueAsync(gated);
+                using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(20)); using var client=Client(a);
+                await Runner("library-access-encoder-"+capable,out _,capable?new FixedProbe("hevc_qsv"):new FixedProbe("libx265")).RunAsync(lease,client,deadline.Token);
+                Check(await ScalarAsync<string>("SELECT checkpoint->>'outputId' FROM execution_steps WHERE execution_id=@id AND node_id='access' AND completed_at IS NOT NULL",("id",id))==(capable?"yes":"no"),
+                    capable?"A direct-access node with the profile encoder follows « Oui ».":"A direct-access node without the profile encoder follows « Non ».");
             }
             Console.WriteLine("PASS: the library access block branches on direct access.");
         }

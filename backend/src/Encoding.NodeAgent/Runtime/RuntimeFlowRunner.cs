@@ -6,7 +6,7 @@ using Encoding.NodeAgent.Runtime.Media;
 
 namespace Encoding.NodeAgent.Runtime;
 
-public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scanner,MediaActions actions,ProcessToolRunner tools,PluginProcessHost plugins,ILogger<RuntimeFlowRunner> logger)
+public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scanner,MediaActions actions,ProcessToolRunner tools,PluginProcessHost plugins,Encoding.NodeAgent.Services.IToolCapabilityProbe capabilities,ILogger<RuntimeFlowRunner> logger)
 {
     public async Task RunAsync(RuntimeLease lease,RuntimeClient client,CancellationToken stoppingToken)
     {
@@ -208,7 +208,10 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     else if(node.Component.PluginId=="nodes" && id=="nodes-library-access")
                     {
                         // Ce worker est le nœud d'accès du fichier et le monte directement (accès par transfert : « non »).
-                        output=lease.SourceNodeId==client.NodeId && lease.SourceRoot is not null?"yes":"no";
+                        var direct=lease.SourceNodeId==client.NodeId && lease.SourceRoot is not null;
+                        if(direct && RuntimeHandoffPolicy.LibraryAccessNeedsEncoder(node))
+                            direct=Encoding.Contracts.Flows.MediaCodecPolicy.ProfileEncoderUsable(lease.Flow,(await capabilities.DiscoverAsync(job.Token)).FirstOrDefault(c=>c.ToolId=="ffmpeg"));
+                        output=direct?"yes":"no";
                     }
                     else if(node.Component.PluginId=="nodes"
                         && (node.Component.ComponentId is "nodes-run-on-node" or "nodes-require-capability" or "nodes-require-direct-access"))

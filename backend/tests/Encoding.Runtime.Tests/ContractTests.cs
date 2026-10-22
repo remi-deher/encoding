@@ -23,6 +23,9 @@ public sealed class ContractTests
     public void RequireCapabilityEncoderKindSeparatesHardwareFromCpu() => Harness.EncoderKindContracts();
 
     [Fact]
+    public void LibraryAccessCanRequireTheProfileEncoder() => Harness.LibraryAccessWithEncoderContracts();
+
+    [Fact]
     public void RequireCapabilityFollowsTheVideoEncodingProfile() => Harness.ProfileEncoderContracts();
 
     [Fact]
@@ -51,6 +54,13 @@ public sealed class ContractTests
     {
         var (registry, validator, eligibility) = Harness.Services();
         TrackNameScenarios.Run(registry, validator, eligibility);
+    }
+
+    [Fact]
+    public void ClusterFlowPlacesTheEncodingOnACapableNode()
+    {
+        var (registry, validator, eligibility) = Harness.Services();
+        FlowV3ClusterScenarios.Run(registry, validator, eligibility);
     }
 
     [Fact]

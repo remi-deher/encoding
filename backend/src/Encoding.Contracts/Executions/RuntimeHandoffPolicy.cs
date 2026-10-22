@@ -107,8 +107,12 @@ public static class RuntimeHandoffPolicy
         throw new ArgumentException("La destination du relais n’est pas prise en charge.");
     }
 
+    /// <summary>Le bloc « Bibliothèque sur ce nœud » exige-t-il aussi un encodeur utilisable du profil pour répondre « oui » ?</summary>
+    public static bool LibraryAccessNeedsEncoder(FlowNodeDefinition node) => node.Configuration.TryGetValue("requireProfileEncoder", out var value)
+        && value.ValueKind == JsonValueKind.True;
+
     /// <summary>All possible sequential paths in this segment; stop at the next relay boundary.</summary>
-    public static IReadOnlyList<FlowNodeDefinition> Segment(FlowDefinition flow, string entryNodeId)
+    public static IReadOnlyList<FlowNodeDefinition> Segment(FlowDefinition flow, string entryNodeId, Func<FlowConnectionDefinition, bool>? follow = null)
     {
         var nodes = flow.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
         var outgoing = flow.Connections.ToLookup(edge => edge.SourceNodeId);
@@ -120,7 +124,7 @@ public static class RuntimeHandoffPolicy
             if (!seen.Add(id)) continue;
             var node = nodes[id]; result.Add(node);
             if (IsHandoff(node)) continue;
-            foreach (var edge in outgoing[id]) pending.Push(edge.TargetNodeId);
+            foreach (var edge in outgoing[id]) if (follow is null || follow(edge)) pending.Push(edge.TargetNodeId);
         }
         return result;
     }
