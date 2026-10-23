@@ -100,7 +100,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                 var incoming=Path.Combine(directory,"result"+transfer.ResultExtension);
                 await client.DownloadAsync(transfer.ExecutionId,transfer.Epoch,transfer.ResultSha256,incoming,ct);
                 var before=await scanner.ScanAsync(original,ct);
-                await scanner.ValidateAsync(incoming,transfer.MediaType,before,ct,false);
+                await scanner.ValidateAsync(incoming,transfer.MediaType,before,ct);
                 var relative=$".encoding-results/{transfer.ExecutionId:D}/result{transfer.ResultExtension}";
                 var target=SafeMediaPaths.Resolve(transfer.Root,relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!); target=SafeMediaPaths.Resolve(transfer.Root,relative);
