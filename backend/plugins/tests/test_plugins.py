@@ -177,6 +177,17 @@ class ProtocolTests(unittest.TestCase):
         code = plugin.run(io.StringIO(json.dumps({"type": "execute", "contractVersion": 1, "invocation": inv}) + "\n"), out, err)
         self.assertEqual((code, out.getvalue(), err.getvalue().strip()), (1, "", "service injoignable"))
 
+    def test_sdk_exposes_metadata_and_reports_an_explicit_candidate(self):
+        plugin = sdk.Plugin(self.manifest)
+        plugin.component("example-tag-file")(lambda ctx: sdk.Outcome.output("success", candidate="result.mkv"))
+        plugin.component("example-name-matches")(lambda ctx: sdk.Outcome.output("yes"))
+        result = plugin.simulate("example-tag-file")
+        self.assertEqual("result.mkv", result["candidateArtifactId"])
+        context = sdk.Context({"context": {"currentArtifactId": None, "currentMetadata": {"streams": []}, "beforeMetadata": {"source": True}}})
+        self.assertIsNone(context.current_file)
+        self.assertEqual({"streams": []}, context.current_metadata)
+        self.assertEqual({"source": True}, context.before_metadata)
+
 
 class PathMappingTests(unittest.TestCase):
     """Mêmes vecteurs que les tests C# de LibraryPathMapping : les deux implémentations doivent concorder."""
@@ -595,8 +606,9 @@ class AuthoringToolsTests(unittest.TestCase):
         manifest["components"][0]["outputs"] = [{"id": "a", "label": "A"}, {"id": "a", "label": "B", "description": "d"}]
         manifest["components"][0]["configurationSchema"]["fields"][0]["type"] = "telepathy"
         manifest["components"][1]["timeoutSeconds"] = 0
+        manifest["components"][1]["mediaEffect"] = "disableIntegrity"
         problems = " | ".join(sdk.validate_manifest(manifest))
-        for expected in ("id :", "version :", "dupliqué", "n'a pas de description", "telepathy", "timeoutSeconds"):
+        for expected in ("id :", "version :", "dupliqué", "n'a pas de description", "telepathy", "timeoutSeconds", "mediaEffect"):
             self.assertIn(expected, problems)
         self.assertEqual(["Le manifeste doit être un objet JSON."], sdk.validate_manifest([]))
 
@@ -615,6 +627,33 @@ class AuthoringToolsTests(unittest.TestCase):
         code, _, err = run_process(EXAMPLE, ["--simulate", "nope"], "")
         self.assertEqual(1, code)
         self.assertIn("absent du manifeste", err)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js absent")
+    def test_javascript_sdk_reports_candidates_and_validates_media_effects(self):
+        script = """
+import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+const sdkUrl = pathToFileURL(process.argv[1]);
+process.argv[1] = 'sdk-contract-test';
+const { Plugin, Outcome, Context, validateManifest } = await import(sdkUrl);
+const manifest = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const plugin = new Plugin(manifest);
+for (const component of manifest.components) plugin.component(component.id, () => Outcome.output(component.outputs[0].id, '', {}, 'result.mkv'));
+const result = await plugin.simulate(manifest.components[0].id);
+const context = new Context({ context: { currentMetadata: { streams: [] } } });
+manifest.components[0].mediaEffect = 'disableIntegrity';
+console.log(JSON.stringify({ candidate: result.candidateArtifactId, metadata: context.currentMetadata,
+  current: context.currentFile, problems: validateManifest(manifest) }));
+"""
+        process = subprocess.run([shutil.which("node"), "--input-type=module", "-e", script,
+                                  os.path.join(PLUGINS, "sdk", "encoding-plugin-sdk.mjs"),
+                                  os.path.join(PLUGINS, "example-js", "manifest.json")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, process.returncode, process.stderr)
+        result = json.loads(process.stdout)
+        self.assertEqual("result.mkv", result["candidate"])
+        self.assertEqual({"streams": []}, result["metadata"])
+        self.assertIsNone(result["current"])
+        self.assertIn("mediaEffect", " | ".join(result["problems"]))
 
     @unittest.skipUnless(shutil.which("node"), "Node.js absent")
     def test_javascript_sdk_speaks_the_same_protocol(self):

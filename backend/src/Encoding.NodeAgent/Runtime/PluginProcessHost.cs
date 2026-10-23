@@ -101,6 +101,7 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
         var manifest=await DescribeAsync(plugin,ct);
         var component=manifest.Components.FirstOrDefault(component=>component.Id==invocation.Component.ComponentId && component.Version==invocation.Component.ComponentVersion && component.ConfigurationSchema.Version==invocation.Component.ConfigurationSchemaVersion)
             ??throw new IOException("Version de composant absente du processus plugin.");
+        var mediaEffect=new MediaEffectGuard(component.MediaEffect,workspace,invocation.Context.CurrentArtifactId);
         var input=JsonSerializer.Serialize(new { type="execute",contractVersion=1,invocation },Json)+"\n";
         // Le composant peut raccourcir l'échéance du bail (timeoutSeconds du manifeste), jamais la prolonger.
         var timeout=invocation.Deadline-DateTimeOffset.UtcNow;
@@ -119,6 +120,7 @@ public sealed class PluginProcessHost(ProcessToolRunner processes,IConfiguration
             || (response.OutputId is null)==(response.TerminalResult is null)) throw new IOException("Réponse plugin incompatible avec l’invocation.");
         if(response.OutputId is { } outputId && component.Outputs.All(output=>output.Id!=outputId))
             throw new IOException($"Le plugin a choisi la sortie « {outputId} » que le composant {component.Id} ne déclare pas.");
+        response=response with { CandidateArtifactId=mediaEffect.Validate(response.CandidateArtifactId) };
         var changes=response.VariableChanges??new Dictionary<string,JsonElement>();
         if(changes.Count>MaxVariableChanges || changes.Keys.Any(name=>string.IsNullOrWhiteSpace(name) || name.Length>MaxVariableNameLength)
             || changes.Values.Sum(value=>value.GetRawText().Length)>MaxVariableBytes)

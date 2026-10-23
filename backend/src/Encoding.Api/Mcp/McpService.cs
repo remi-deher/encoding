@@ -1552,6 +1552,9 @@ public sealed class McpService(
             {
                 compIndex++;
                 var compId = comp.TryGetProperty("id", out var cId) ? cId.GetString() : $"composant_{compIndex}";
+                if (comp.TryGetProperty("mediaEffect", out var effect) && effect.ValueKind != JsonValueKind.Null
+                    && (effect.ValueKind != JsonValueKind.String || !MediaEffects.IsValid(effect.GetString())))
+                    errors.Add($"Composant '{compId}' : mediaEffect doit être readOnly, producesOutput ou modifiesCurrent.");
 
                 if (!comp.TryGetProperty("description", out var cDesc) || (cDesc.GetString() ?? "").Length < 10)
                     suggestions.Add($"Composant '{compId}' : Fournir une description détaillée (> 10 caractères) pour aider l'IA à comprendre le rôle du bloc.");
