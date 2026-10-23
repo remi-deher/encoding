@@ -1,7 +1,6 @@
 <app-management-catalog-template
   [title]="title()"
   [detailOpen]="selectedLibrary() !== null"
-  detailLayout="page"
   searchLayout="centered"
   searchLabel="Rechercher une bibliothèque"
   [searchQuery]="searchQuery()"
@@ -36,11 +35,14 @@
     catalogue-table
     [items]="libraryItems()"
     [actions]="libraryRowActions"
+    [selectable]="true"
+    [selectionActions]="librarySelectionActions"
     openLabel="Ouvrir"
     emptyMessage="Aucune bibliothèque n’est déclarée."
     (open)="onLibraryOpen({ id: $event })"
     (action)="onLibraryAction($event)"
     (toggleChange)="onLibraryItemToggle($event)"
+    (selectionAction)="onLibrarySelection($event)"
   />
 
   <ng-template #detailContent catalogue-detail>

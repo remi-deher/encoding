@@ -1257,12 +1257,17 @@ export class FlowEditorPageComponent {
         this.notifications.show('Aucune modification à enregistrer.');
         return;
       }
-      const { saved, published, validation } = await this.serverValidation.saveAutomatically(
+      const result = await this.serverValidation.saveAutomatically(
         document,
         expected,
         this.draftRevision(),
         unchanged,
       );
+      if ('noChanges' in result && result.noChanges) {
+        this.notifications.show('Aucune modification à publier.');
+        return;
+      }
+      const { saved, published, validation } = result;
       if (!saved) {
         this.notifications.show(
           'Le brouillon est déjà enregistré. Publication impossible : ' +

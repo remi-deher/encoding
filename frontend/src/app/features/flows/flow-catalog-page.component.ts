@@ -1,9 +1,10 @@
 import { FlowDetailsComponent } from './editor/flow-details.component';
-import { FlowDocument } from '../../shared/models/flow-validation';
+import { FlowDocument, flowDocumentKey } from '../../shared/models/flow-validation';
 import { FlowComponentDefinition } from '../../shared/models/flow-component';
 import { RecordFormData } from '../../shared/ui/record-form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { FlowDeleteDialogComponent } from './flow-delete-dialog.component';
+import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { FileDownload } from '../../shared/services/file-download';
 import { NotificationService } from '../../shared/services/notification.service';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -14,6 +15,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import {
   DataTableColumn,
@@ -65,6 +67,7 @@ interface FlowRecord extends DataTableRow {
     ManagementCatalogTemplateComponent,
     IconComponent,
     MatButtonModule,
+    MatCheckboxModule,
     MatMenuModule,
     RecordFormComponent,
     DrawerActionButtonComponent,
@@ -216,6 +219,14 @@ export class FlowCatalogPageComponent {
     },
   ];
   protected readonly selectionActions = [{ id: 'export', label: 'Exporter la sélection (ZIP)' }];
+  protected readonly selectedFlowIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly selectedFlowRows = computed(() =>
+    this.filteredFlows().filter((flow) => this.selectedFlowIds().has(flow.id)),
+  );
+  protected readonly selectedDraftCount = computed(
+    () => this.selectedFlowRows().filter((flow) => flow.state === 'Brouillon').length,
+  );
+  protected readonly selectingFlows = signal(false);
   protected async onListAction(event: DataTableListActionEvent): Promise<void> {
     if (!event.file) return;
     try {
@@ -315,6 +326,113 @@ export class FlowCatalogPageComponent {
     } catch {
       this.notifications.show('Export de la sélection impossible.');
     }
+  }
+  protected toggleFlowSelection(id: string, checked: boolean): void {
+    this.selectedFlowIds.update((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+  protected clearFlowSelection(): void {
+    this.selectedFlowIds.set(new Set());
+  }
+  protected async publishSelected(): Promise<void> {
+    if (!this.auth.isAdmin() || this.selectingFlows()) return;
+    const drafts = this.selectedFlowRows().filter((flow) => flow.state === 'Brouillon');
+    if (!drafts.length) return;
+    const accepted = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          data: {
+            title: `Publier jusqu’à ${drafts.length} brouillon(s) ?`,
+            message:
+              'Seuls les brouillons valides et différents de leur dernière version publiée seront publiés. Les autres seront ignorés.',
+            confirmLabel: 'Vérifier et publier',
+          },
+        })
+        .afterClosed(),
+    );
+    if (!accepted) return;
+    this.selectingFlows.set(true);
+    let published = 0,
+      unchanged = 0,
+      failed = 0;
+    for (const flow of drafts) {
+      try {
+        const draft = await this.api.get(flow.id);
+        if (draft.draftRevision == null) {
+          unchanged++;
+          continue;
+        }
+        const currentVersion = draft.publishedVersion ?? 0;
+        if (currentVersion > 0) {
+          const current = await firstValueFrom(this.api.versionStatus(flow.id, currentVersion));
+          if (flowDocumentKey(current.definition) === flowDocumentKey(draft.definition)) {
+            unchanged++;
+            continue;
+          }
+        }
+        const validation = await this.api.validateDocument(draft.definition);
+        if (!validation.isValid) {
+          failed++;
+          continue;
+        }
+        await this.api.save(draft.definition, currentVersion, draft.draftRevision);
+        published++;
+      } catch {
+        failed++;
+      }
+    }
+    this.selectingFlows.set(false);
+    this.selectedFlowIds.set(new Set());
+    this.refreshCatalog.next();
+    this.notifications.show(
+      `${published} publié(s), ${unchanged} sans changement, ${failed} en échec ou invalide(s).`,
+    );
+  }
+  protected async deleteSelected(): Promise<void> {
+    if (!this.auth.isAdmin() || this.selectingFlows()) return;
+    const flows = [...this.selectedFlowRows()];
+    if (!flows.length) return;
+    const usageById = new Map<string, Awaited<ReturnType<FlowValidation['usage']>>>();
+    this.selectingFlows.set(true);
+    try {
+      await Promise.all(
+        flows.map(async (flow) => usageById.set(flow.id, await this.api.usage(flow.id))),
+      );
+    } catch (error) {
+      this.selectingFlows.set(false);
+      this.notifications.show(
+        AuthService.errorMessage(error, 'Impossible de vérifier les bibliothèques attribuées.'),
+      );
+      return;
+    }
+    this.selectingFlows.set(false);
+    const usages = [...usageById.values()].flat();
+    const accepted = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          data: {
+            title: `Supprimer ${flows.length} flow(s) ?`,
+            message: `Les flows sélectionnés seront supprimés. ${usages.length ? `Les bibliothèques utilisant ces flows perdront leur attribution : ${usages.map((item) => item.libraryName).join(', ')}.` : ''} Cette action est irréversible.`,
+            confirmLabel: 'Supprimer',
+            variant: 'danger',
+          },
+        })
+        .afterClosed(),
+    );
+    if (!accepted) return;
+    this.selectingFlows.set(true);
+    const results = await Promise.allSettled(
+      flows.map((flow) => this.api.remove(flow.id, (usageById.get(flow.id)?.length ?? 0) > 0)),
+    );
+    this.selectingFlows.set(false);
+    this.selectedFlowIds.set(new Set());
+    this.refreshCatalog.next();
+    const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+    this.notifications.show(`${succeeded}/${flows.length} flow(s) supprimé(s).`);
   }
   private readonly api = inject(FlowValidation);
   protected async confirmDeleteFlow(row: DataTableRow): Promise<void> {
