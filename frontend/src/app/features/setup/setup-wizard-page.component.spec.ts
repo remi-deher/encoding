@@ -108,6 +108,44 @@ describe('SetupWizardPageComponent', () => {
     expect(el.textContent).toContain('NVENC');
   });
 
+  it('displays anonymous setup node sheet with IP address, announced URL and hardware when session is not yet created', () => {
+    statusSignal.set(null);
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    fixture.componentInstance['setupSheet'].set({
+      name: 'encoding-host',
+      displayName: 'Nœud Salon',
+      agentAvailable: true,
+      inventory: {
+        operatingSystem: 'Ubuntu 24.04 LTS',
+        architecture: 'X64',
+        processorCount: 8,
+        memoryMb: 16384,
+        processorModel: 'Intel Core i5-12400',
+        gpus: [{ name: 'Intel UHD Graphics 730', vendor: 'Intel', driver: 'i915', device: 'card0' }],
+      },
+      tools: [
+        {
+          toolId: 'ffmpeg',
+          accelerationTypes: ['qsv'],
+          encoderChecks: [{ encoderId: 'hevc_qsv', status: 'usable' }],
+        },
+      ],
+      addresses: [{ interface: 'eth0', address: '192.168.1.42' }],
+      urls: ['https://transcodage.deher.net'],
+    });
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.textContent).toContain('Nœud Salon');
+    expect(el.textContent).toContain('encoding-host · Ubuntu 24.04 LTS (X64)');
+    expect(el.textContent).toContain('192.168.1.42 (eth0)');
+    expect(el.textContent).toContain('URL annoncée : https://transcodage.deher.net');
+    expect(el.textContent).toContain('Intel Core i5-12400 (8 cœurs)');
+    expect(el.textContent).toContain('16 Go');
+    expect(el.textContent).toContain('Intel UHD Graphics 730');
+    expect(el.textContent).toContain('QSV');
+  });
+
   it('renders the contextual panel dynamically when switching operation modes', () => {
     const fixture = TestBed.createComponent(SetupWizardPageComponent);
     fixture.detectChanges();

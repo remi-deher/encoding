@@ -20,6 +20,7 @@ import {
   DiscoveredCluster,
   LocalNodePairing,
   LocalNodeStatus,
+  SetupNodeSheet,
 } from '../models/local-node';
 import { NodeMode, NodeModeStatus } from '../models/node-mode';
 import { ConfirmationDialogComponent } from '../ui/confirmation-dialog.component';
@@ -41,6 +42,7 @@ export class LocalNodeController {
   readonly isAdmin = computed(() => this.auth.isAdmin() || this.auth.setupRequired());
   readonly identity = signal<ClusterIdentity | null>(null);
   readonly status = signal<LocalNodeStatus | null>(null);
+  readonly setupNode = signal<SetupNodeSheet | null>(null);
   readonly mode = signal<NodeModeStatus | null>(null);
   readonly clusters = signal<readonly DiscoveredCluster[]>([]);
   readonly loading = signal(true);
@@ -108,31 +110,74 @@ export class LocalNodeController {
     merge(timer(0, 5_000), this.refreshRequested)
       .pipe(
         exhaustMap(() =>
-          forkJoin({
-            identity: this.api.identity().pipe(
-              timeout(8_000),
-              catchError(() => of(null)),
-            ),
-            mode: this.http.get<NodeModeStatus>('/api/v1/node/mode').pipe(
-              timeout(8_000),
-              catchError(() => of(null)),
-            ),
-            agent: forkJoin({
-              status: this.http.get<LocalNodeStatus>('/api/v1/local-node/status'),
-              clusters: this.http.get<readonly DiscoveredCluster[]>('/api/v1/local-node/clusters'),
-            }).pipe(
-              timeout(8_000),
-              catchError(() => of(null)),
-            ),
-          }),
+          this.auth.setupRequired()
+            ? forkJoin({
+                identity: this.api.identity().pipe(
+                  timeout(8_000),
+                  catchError(() => of(null)),
+                ),
+                setupNode: this.http.get<SetupNodeSheet>('/api/v1/auth/setup/node').pipe(
+                  timeout(8_000),
+                  catchError(() => of(null)),
+                ),
+                mode: of(null),
+                agent: of(null),
+              })
+            : forkJoin({
+                identity: this.api.identity().pipe(
+                  timeout(8_000),
+                  catchError(() => of(null)),
+                ),
+                setupNode: of(null),
+                mode: this.http.get<NodeModeStatus>('/api/v1/node/mode').pipe(
+                  timeout(8_000),
+                  catchError(() => of(null)),
+                ),
+                agent: forkJoin({
+                  status: this.http.get<LocalNodeStatus>('/api/v1/local-node/status'),
+                  clusters: this.http.get<readonly DiscoveredCluster[]>('/api/v1/local-node/clusters'),
+                }).pipe(
+                  timeout(8_000),
+                  catchError(() => of(null)),
+                ),
+              }),
         ),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe(({ identity, mode, agent }) => {
+      .subscribe(({ identity, setupNode, mode, agent }) => {
         this.identityUnavailable.set(identity === null);
-        this.modeUnavailable.set(mode === null);
-        this.agentUnavailable.set(agent === null);
+        this.modeUnavailable.set(!this.auth.setupRequired() && mode === null);
+        this.agentUnavailable.set(
+          this.auth.setupRequired() ? !setupNode?.agentAvailable : agent === null,
+        );
         if (identity) this.identity.set(identity);
+        if (setupNode) {
+          this.setupNode.set(setupNode);
+          this.status.set({
+            nodeId: '',
+            name: setupNode.name ?? 'localhost',
+            displayName: setupNode.displayName,
+            roles: [],
+            maxConcurrentTasks: 0,
+            automaticEnrollmentEnabled: false,
+            capabilities: (setupNode.tools ?? []).map((tool) => ({
+              toolId: tool.toolId,
+              version: '',
+              mediaTypes: [],
+              accelerationTypes: tool.accelerationTypes,
+              encoderChecks: tool.encoderChecks,
+            })),
+            inventory: setupNode.inventory,
+            isEnrolled: false,
+            pairingKey: null,
+            pairingExpiresAt: null,
+            clusterId: null,
+            clusterName: null,
+            verificationCode: null,
+            switching: null,
+            switchFailure: null,
+          });
+        }
         if (mode) this.mode.set(mode);
         if (agent) {
           this.clusters.set(agent.clusters);
