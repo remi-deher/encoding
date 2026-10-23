@@ -87,7 +87,7 @@ public sealed class ResourcePeerFetchTests
             pair.ClientBlobs = new ResourceBlobStore(clientConfiguration);
             var journal = new ClusterReconciliationRepository(pair.clientDatabase);
             await journal.AddPeerEndpointAsync(PeerUrl, "test", CancellationToken.None);
-            pair.Fetcher = new ResourceBlobFetcher(pair.ClientBlobs, new ClusterIdentityRepository(pair.clientDatabase), pair.Identity, journal,
+            pair.Fetcher = new ResourceBlobFetcher(pair.ClientBlobs, pair.Identity, journal,
                 clientConfiguration, new FixedHttpClientFactory(pair.peerClient), NullLogger<ResourceBlobFetcher>.Instance);
             return pair;
         }
