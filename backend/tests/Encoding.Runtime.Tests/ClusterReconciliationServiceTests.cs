@@ -12,6 +12,116 @@ namespace Encoding.Runtime.Tests;
 
 public sealed class ClusterReconciliationServiceTests
 {
+    [Theory]
+    [InlineData(70, 3)]
+    [InlineData(300, ClusterReconciliationService.MaximumExchangesPerPeer)]
+    public async Task OutgoingBacklogDrainsImmediatelyWithinTheExchangeBudget(int count, int expectedExchanges)
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        for (var i = 0; i < count; i++) await fixture.Journal.SetRegisterAsync("test." + i, "1", CancellationToken.None);
+        var acknowledged = new Dictionary<Guid, long>();
+        var sent = new HashSet<Guid>();
+        var calls = 0;
+        using var client = new HttpClient(new Handler(async (request, ct) =>
+        {
+            calls++;
+            var exchange = JsonSerializer.Deserialize<ClusterReconciliationExchangeRequest>(await request.Content!.ReadAsByteArrayAsync(ct), Fixture.Json)!;
+            foreach (var change in exchange.Changes)
+            {
+                Assert.True(sent.Add(change.EventId));
+                acknowledged[change.OriginId] = change.Sequence;
+            }
+            return fixture.Response(acknowledged);
+        }));
+        using var service = fixture.Service(client, new ManualClock());
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://peer.test/"], CancellationToken.None);
+        Assert.Equal(expectedExchanges, calls);
+        Assert.Equal(Math.Min(count, ClusterReconciliationRepository.MaximumBatchSize * expectedExchanges), sent.Count);
+        // The next cycle resumes from the persisted acknowledgement, without resending a page.
+        if (sent.Count < count)
+        {
+            await service.ReconcilePeersAsync(fixture.ClusterId, ["http://peer.test/"], CancellationToken.None);
+            Assert.Equal(count, sent.Count);
+        }
+    }
+
+    [Fact]
+    public async Task IncomingBacklogDrainsUsingRemoteAndLocalVectors()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var origin = Guid.NewGuid();
+        var changes = Enumerable.Range(1, 70).Select(i => new ClusterChangeEvent(Guid.NewGuid(), fixture.ClusterId,
+            origin, i, "register.set", JsonSerializer.Serialize(new { key = "remote." + i, value = "1" }), DateTimeOffset.UtcNow)).ToArray();
+        var calls = 0;
+        using var client = new HttpClient(new Handler(async (request, ct) =>
+        {
+            calls++;
+            var exchange = JsonSerializer.Deserialize<ClusterReconciliationExchangeRequest>(await request.Content!.ReadAsByteArrayAsync(ct), Fixture.Json)!;
+            var vector = new Dictionary<Guid, long>(exchange.KnownSequences) { [origin] = 70 };
+            return fixture.Response(vector, changes.Where(change => change.Sequence > exchange.KnownSequences.GetValueOrDefault(origin)).Take(32).ToArray());
+        }));
+        using var service = fixture.Service(client, new ManualClock());
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://peer.test/"], CancellationToken.None);
+        Assert.Equal(3, calls);
+        Assert.Equal(70, (await fixture.Journal.GetVectorAsync(CancellationToken.None))[origin]);
+    }
+
+    [Fact]
+    public async Task ByteShortenedPageStillDrainsTheRemainingEvents()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var value = JsonSerializer.Serialize(new string('x', 900_000));
+        for (var i = 0; i < 20; i++) await fixture.Journal.SetRegisterAsync("large." + i, value, CancellationToken.None);
+        var acknowledged = new Dictionary<Guid, long>();
+        var pageSizes = new List<int>();
+        using var client = new HttpClient(new Handler(async (request, ct) =>
+        {
+            var body = await request.Content!.ReadAsByteArrayAsync(ct);
+            Assert.True(body.Length <= ClusterReconciliationSignature.MaximumBodyBytes);
+            var exchange = JsonSerializer.Deserialize<ClusterReconciliationExchangeRequest>(body, Fixture.Json)!;
+            pageSizes.Add(exchange.Changes.Count);
+            foreach (var change in exchange.Changes) acknowledged[change.OriginId] = change.Sequence;
+            return fixture.Response(acknowledged);
+        }));
+        using var service = fixture.Service(client, new ManualClock());
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://peer.test/"], CancellationToken.None);
+        Assert.True(pageSizes.Count > 1);
+        Assert.InRange(pageSizes[0], 1, 19);
+        Assert.Equal(20, pageSizes.Sum());
+    }
+
+    [Fact]
+    public async Task UnchangingPeerDoesNotCauseAnExchangeLoop()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await fixture.Journal.SetRegisterAsync("test", "1", CancellationToken.None);
+        var calls = 0;
+        using var client = new HttpClient(new Handler((_, _) => { calls++; return Task.FromResult(fixture.Response()); }));
+        using var service = fixture.Service(client, new ManualClock());
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://peer.test/"], CancellationToken.None);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task TimeBudgetYieldsToTheNextPeer()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        for (var i = 0; i < 70; i++) await fixture.Journal.SetRegisterAsync("test." + i, "1", CancellationToken.None);
+        var clock = new ManualClock();
+        var hosts = new List<string>();
+        using var client = new HttpClient(new Handler(async (request, ct) =>
+        {
+            hosts.Add(request.RequestUri!.Host);
+            var exchange = JsonSerializer.Deserialize<ClusterReconciliationExchangeRequest>(await request.Content!.ReadAsByteArrayAsync(ct), Fixture.Json)!;
+            var vector = exchange.Changes.GroupBy(change => change.OriginId).ToDictionary(group => group.Key, group => group.Max(change => change.Sequence));
+            clock.Advance(ClusterReconciliationService.CatchUpBudget);
+            return fixture.Response(vector);
+        }));
+        using var service = fixture.Service(client, clock);
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://first.test/", "http://second.test/"], CancellationToken.None);
+        Assert.Equal(["first.test", "second.test"], hosts);
+    }
+
     [Fact]
     public async Task TimeoutRecordsPeerFailureAndContinuesToTheNextPeerAndNextCycle()
     {
@@ -80,9 +190,17 @@ public sealed class ClusterReconciliationServiceTests
         public HttpClient CreateClient(string name) => client;
     }
 
+    private sealed class ManualClock : TimeProvider
+    {
+        private long timestamp;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => timestamp;
+        public void Advance(TimeSpan elapsed) => timestamp += elapsed.Ticks;
+    }
+
     private sealed class Fixture : IAsyncDisposable
     {
-        private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+        public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
         private readonly string root = Path.Combine(Path.GetTempPath(), "encoding-mesh-service-" + Guid.NewGuid().ToString("N"));
         private readonly EphemeralDataProtectionProvider protection = new();
         private IConfiguration configuration = null!;
@@ -113,11 +231,11 @@ public sealed class ClusterReconciliationServiceTests
             return fixture;
         }
 
-        public ClusterReconciliationService Service(HttpClient client) => new(
+        public ClusterReconciliationService Service(HttpClient client, TimeProvider? clock = null) => new(
             new(Database.Db), Journal,
             new(Database.Db, keys, protection, NullLogger<ClusterEntityReconciliation>.Instance),
             identity, admissions, keys, Health, configuration, new ClientFactory(client),
-            NullLogger<ClusterReconciliationService>.Instance);
+            NullLogger<ClusterReconciliationService>.Instance, clock);
 
         public HttpResponseMessage Response(IReadOnlyDictionary<Guid, long>? vector = null, IReadOnlyList<ClusterChangeEvent>? changes = null)
         {

@@ -15,8 +15,13 @@ public sealed class ClusterReconciliationService(
     ClusterReconciliationHealth health,
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory,
-    ILogger<ClusterReconciliationService> logger) : BackgroundService
+    ILogger<ClusterReconciliationService> logger,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
+    internal const int MaximumExchangesPerPeer = 8;
+    internal const long MaximumBytesPerPeer = 64L * 1024 * 1024;
+    internal static readonly TimeSpan CatchUpBudget = TimeSpan.FromSeconds(2);
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly ConcurrentDictionary<string, Guid> discoveredPeers = new(StringComparer.OrdinalIgnoreCase);
     private MdnsBrowser? browser;
@@ -125,7 +130,17 @@ public sealed class ClusterReconciliationService(
             health.BeginAttempt(peerUrl);
             try
             {
-                await ReconcilePeerAsync(currentClusterId, peerUrl, stoppingToken);
+                var started = clock.GetTimestamp();
+                long transferred = 0;
+                for (var batch = 0; batch < MaximumExchangesPerPeer; batch++)
+                {
+                    stoppingToken.ThrowIfCancellationRequested();
+                    var progress = await ReconcilePeerAsync(currentClusterId, peerUrl, stoppingToken);
+                    transferred += progress.Bytes;
+                    if (!progress.HasMore || !progress.MadeProgress
+                        || clock.GetElapsedTime(started) >= CatchUpBudget
+                        || transferred + 2L * ClusterReconciliationSignature.MaximumBodyBytes > MaximumBytesPerPeer) break;
+                }
                 health.Succeed(peerUrl);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
@@ -154,7 +169,12 @@ public sealed class ClusterReconciliationService(
             .ToArray();
     }
 
-    private async Task ReconcilePeerAsync(Guid currentClusterId, string peerUrl, CancellationToken ct)
+    private sealed record ExchangeProgress(bool HasMore, bool MadeProgress, long Bytes);
+
+    private static bool IsAhead(IReadOnlyDictionary<Guid, long> first, IReadOnlyDictionary<Guid, long> second) =>
+        first.Any(pair => pair.Value > second.GetValueOrDefault(pair.Key));
+
+    private async Task<ExchangeProgress> ReconcilePeerAsync(Guid currentClusterId, string peerUrl, CancellationToken ct)
     {
         var remoteVector = await repository.GetPeerVectorAsync(peerUrl, ct);
         var localVector = await repository.GetVectorAsync(ct);
@@ -234,6 +254,12 @@ public sealed class ClusterReconciliationService(
         }
         if (outgoing.Count > 0 || exchange.Changes.Count > 0)
             logger.LogDebug("Réconciliation avec {PeerUrl} : {Sent} événements envoyés, {Received} reçus.", peerUrl, outgoing.Count, exchange.Changes.Count);
+        var receivedVector = await repository.GetVectorAsync(ct);
+        // Vectors, not batch length, detect remaining work: the byte limit can shorten
+        // a full page. Stop on an unchanging peer to avoid polling it in a tight loop.
+        return new(IsAhead(localVector, exchange.KnownSequences) || IsAhead(exchange.KnownSequences, receivedVector),
+            IsAhead(exchange.KnownSequences, remoteVector) || IsAhead(receivedVector, localVector),
+            (long)requestBody.Length + responseBody.Length);
     }
 
     private void OnServiceFound(ServiceProfile service)
