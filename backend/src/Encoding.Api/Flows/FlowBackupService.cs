@@ -31,10 +31,9 @@ public sealed class FlowBackupService(DbDataSource dataSource, IConfiguration co
         }
     }
 
-    private async Task<bool> ProcessOneAsync(bool draft,CancellationToken ct)
+    public async Task<bool> ProcessOneAsync(bool draft,CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var tx = await connection.BeginTransactionAsync(ct);
         Guid id; int version; string document;
         var select=draft ? """
             SELECT b.flow_id,b.revision,b.definition::text FROM flow_draft_backups b WHERE b.next_attempt_at<=clock_timestamp()
@@ -45,6 +44,11 @@ public sealed class FlowBackupService(DbDataSource dataSource, IConfiguration co
             WHERE b.next_attempt_at <= clock_timestamp() ORDER BY b.next_attempt_at,b.flow_id,b.version
             LIMIT 1 FOR UPDATE OF b SKIP LOCKED
             """;
+        // Read-only admission hint. Reread under the transaction before claiming the job.
+        await using (var available = Sql.Command(select.Replace(" FOR UPDATE OF b SKIP LOCKED", "", StringComparison.Ordinal), connection))
+        await using (var reader = await available.ExecuteReaderAsync(ct))
+            if (!await reader.ReadAsync(ct)) return false;
+        await using var tx = await connection.BeginTransactionAsync(ct);
         await using (var command = Sql.Command(select,connection,tx))
         await using (var reader = await command.ExecuteReaderAsync(ct))
         {

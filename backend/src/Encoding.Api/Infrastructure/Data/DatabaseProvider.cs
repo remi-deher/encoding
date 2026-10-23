@@ -20,6 +20,10 @@ public static class DatabaseProvider
         {
             throw new InvalidOperationException("La connexion doit être une chaîne SQLite valide, par exemple Data Source=./data/cluster.db.", exception);
         }
-        return new SqliteDataSource(connection);
+        var writer = configuration.GetSection("Database:Writer").Get<SqliteWriterOptions>() ?? new();
+        // Raft retains its existing coordinator/capture path until it has its own integration tests.
+        // In particular it must not wait for a projection while holding a second local writer gate.
+        if (configuration.GetValue("PeerCluster:Enabled", false)) writer = writer with { Enabled = false };
+        return new SqliteDataSource(connection, writer);
     }
 }

@@ -21,7 +21,7 @@ public sealed record PeerDatabaseTransaction(int Version, long Revision, string 
 public sealed class PeerDatabaseSchema(DbDataSource source, string protectionKeyId = "")
 {
     public static readonly HashSet<string> LocalTables = new(StringComparer.Ordinal)
-        { "schema_migrations", "users", "user_sessions" };
+        { "schema_migrations", "users", "user_sessions", "cluster_sync_capture_tables", "cluster_sync_dirty_entities" };
     public PeerTable[] Tables { get; private set; } = [];
     public string Fingerprint { get; private set; } = "";
     internal static DbCommand Command(DbConnection connection, DbTransaction? transaction, string sql)

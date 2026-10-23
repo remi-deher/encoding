@@ -27,8 +27,28 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
         WriteProcess(writer);
         WriteRetention(writer);
         WriteHttp(writer);
+        WriteSqliteWriter(writer);
         WritePeers(writer);
         return writer.ToString();
+    }
+
+    private void WriteSqliteWriter(PrometheusWriter writer)
+    {
+        var source = dataSource is PeerDataSource peer ? peer.Inner : dataSource;
+        if (source is not Data.Sqlite.SqliteDataSource sqlite) return;
+        var state = sqlite.Writer.Snapshot();
+        writer.Gauge("encoding_sqlite_writer_enabled", "1 si la file locale d’écriture est activée.", sqlite.Writer.Options.Enabled ? 1 : 0);
+        writer.Gauge("encoding_sqlite_writer_critical_only", "1 si seules les écritures critiques utilisent la file.", sqlite.Writer.Options.CriticalOnly ? 1 : 0);
+        writer.Gauge("encoding_sqlite_writer_pending", "Écritures ordinaires en attente.", state.Pending);
+        writer.Gauge("encoding_sqlite_writer_urgent_pending", "Écritures urgentes en attente.", state.UrgentPending);
+        writer.Gauge("encoding_sqlite_writer_active", "1 si un écrivain détient la file locale.", state.Active ? 1 : 0);
+        writer.Counter("encoding_sqlite_writer_admitted_total", "Unités d’écriture admises.", state.Admitted);
+        writer.Counter("encoding_sqlite_writer_rejected_total", "Refus pour saturation.", state.Rejected);
+        writer.Counter("encoding_sqlite_writer_expired_total", "Demandes expirées avant admission.", state.Expired);
+        writer.Counter("encoding_sqlite_writer_begin_retries_total", "Nouvelles tentatives de BEGIN après verrou transitoire.", state.Retries);
+        writer.Counter("encoding_sqlite_writer_long_holds_total", "Détentions au-delà du seuil configuré.", state.LongHolds);
+        writer.Counter("encoding_sqlite_writer_wait_seconds_total", "Temps cumulé d’attente des écritures admises.", state.WaitSeconds);
+        writer.Counter("encoding_sqlite_writer_hold_seconds_total", "Temps cumulé de détention de l’écrivain.", state.HoldSeconds);
     }
 
     private void WritePeers(PrometheusWriter writer)

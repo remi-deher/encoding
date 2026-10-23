@@ -1,6 +1,6 @@
 ---
 domain: runtime
-updated: 2026-10-21
+updated: 2026-10-23
 legacy_adr: [0005, 0009, 0015, 0016, 0018, 0020, 0021, 0028, 0030, 0033, 0054, 0058, 0059, 0064, 0066, 0075]
 code:
   - backend/src/Encoding.Api/Executions/
@@ -19,6 +19,9 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 - États : `queued`, `running`, `cancelling`, `succeeded`, `failed`, `cancelled`. Une transition et son événement sont écrits dans la même transaction ; rapports idempotents (identifiant d'événement + révision attendue) ; transitions terminales figées. Annulation en cours = demande confirmée après arrêt des processus. Une relance conserve l'échec et crée une tentative liée (une seule relance concurrente).
 - L'historique durable est réconcilié entre serveurs ; les tâches et baux actifs restent locaux au serveur qui les a créés ([replication-storage.md](replication-storage.md)). `GET /api/v1/executions` (≤ 200, actives d'abord), `…/{id}/events`, `…/{id}/pipeline` (étapes, commandes, sorties tronquées à 32 Ko, secrets masqués ; stdout/stderr des scripts et plugins exclus).
 - Création uniquement depuis une bibliothèque (version de flow attribuée), jamais avec une définition arbitraire.
+
+## Sondages sans travail
+- La récupération des baux et l’évaluation des attentes vérifient d’abord en lecture seule s’il existe des candidats. Sans candidat, aucune transaction d’écriture n’est ouverte. Les prédicats sont revérifiés dans la transaction avant toute décision ; un travail apparu après la prélecture est traité au passage suivant. La vérification des sources inaccessibles et celle des destinations de relais restent exécutées.
 
 ## Attribution, baux, reprise
 - Chaque serveur attribue **uniquement** les travaux de sa base locale, en transaction d'écriture immédiate. Le worker doit être présent, accepter du travail ([cluster.md](cluster.md)), avoir une place, les outils et encodeurs vérifiés, les versions exactes des plugins et un accès direct ou par transfert. Segments : `nodes-run-on-node`, `nodes-require-capability`, `nodes-require-direct-access` (strict ou préférence) contraignent le worker d'un segment.
@@ -63,3 +66,6 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 - **Modification sur place** : bloc `mkv-edit-in-place` (ADR 0002) sur le worker à accès direct ; copie intégrale, contrôle `mkvmerge -J`, restauration. Pas d'événement `media.modified`, pas de reprise automatique depuis l'intention, non vérifié sur NFS/SMB.
 - Pas de réattribution automatique entre serveurs ; pas de relance déclenchée par `media.published` (les actualisations après publication se placent dans le flow, après `base-publish-result`) ; pas d'interface de suppression/recréation des verrous de disque par accès bibliothèque (nom saisi dans le bloc).
 - Non vérifié en réel : Landlock dans le conteneur de production, GPU, Plex/Jellyfin réels, NAS/NFS (atomicité du renommage), reprise multi-hôtes sous charge.
+
+## Accès de stockage du répartiteur
+- Migration additive 0048 : index couvrants des baux actifs par worker et bibliothèque, et index partiel du dernier checkpoint terminé. Les mêmes prédicats, plafonds, époques et ordres d’attribution sont conservés. Plans observés et coût d’entretien des index : [sqlite-runtime-query-plans.md](../../testing/sqlite-runtime-query-plans.md).

@@ -11,7 +11,10 @@ public sealed record DatabaseTransferResult(IReadOnlyDictionary<string, long> Ro
 /// <summary>Copies an SQLite database into a migrated, empty SQLite database without merging data.</summary>
 public static class DatabaseTransfer
 {
-    private static readonly HashSet<string> Skipped = new(StringComparer.Ordinal) { "schema_migrations" };
+    // Capture invalidations are local to a source's writers. The target migration seeds its own
+    // full capture, and copying business rows fires its triggers; never restore a foreign acknowledgement.
+    private static readonly HashSet<string> Skipped = new(StringComparer.Ordinal)
+        { "schema_migrations", "cluster_sync_capture_tables", "cluster_sync_dirty_entities" };
     private static readonly HashSet<string> Replaced = new(StringComparer.Ordinal) { "cluster_identity" };
 
     public static async Task<DatabaseTransferResult> CopyAsync(DbDataSource source, DbDataSource target, CancellationToken ct)
