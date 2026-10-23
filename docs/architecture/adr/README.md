@@ -22,3 +22,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0004](0004-reprise-au-checkpoint.md) | Reprise au checkpoint après perte du worker, blocs rejouables | implemented | runtime |
 | [0005](0005-bloc-bibliotheque-sur-ce-noeud.md) | Bloc « Bibliothèque sur ce nœud » : brancher un flow selon l'accès direct | implemented | flows |
 | [0006](0006-ressources-de-flow.md) | Ressources de flow : fichiers partagés du cluster (polices, images, audio) | accepted | flows |
+| [0007](0007-validation-par-empreinte-des-flux.md) | Décodage complet seulement quand les flux A/V changent (empreinte des paquets) | proposed | runtime |
