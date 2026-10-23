@@ -16,7 +16,7 @@ namespace Encoding.Api.Infrastructure;
 /// Réconcilie les données durables du cluster sous forme d'entités LWW. Les files d'exécution, baux,
 /// réservations, sessions et secrets DP locaux restent en dehors de cette liste.
 /// </summary>
-public sealed class ClusterEntityReconciliation(
+public sealed partial class ClusterEntityReconciliation(
     DbDataSource dataSource,
     ClusterDataKeyStore dataKeyStore,
     IDataProtectionProvider protection,
@@ -100,18 +100,20 @@ public sealed class ClusterEntityReconciliation(
         var changedScans = new List<(string LibraryId, string ScanId)>();
         var preparedMedia = new Dictionary<(string LibraryId, string ScanId), List<EntitySnapshot>>();
         DateTimeOffset? receiptMaxCursor = null;
+        Dictionary<string, CaptureSelection> selections;
         await using (var readConnection = await dataSource.OpenConnectionAsync(ct))
         {
-            foreach (var table in Tables)
+            await using var readTransaction = await readConnection.BeginTransactionAsync(System.Data.IsolationLevel.Snapshot, ct);
+            selections = await ReadCaptureSelectionsAsync(readConnection, readTransaction, ct);
+            foreach (var table in Tables.Where(table => selections.ContainsKey(table.Name)))
             {
-                var cursor = table.DeltaColumn is null ? null : await ReadTableCursorAsync(readConnection, table.Name, ct);
+                var selection = selections[table.Name];
                 var predicates = new List<string>();
                 if (table.Filter is not null) predicates.Add(table.Filter);
-                if (cursor is not null) predicates.Add($"{table.DeltaColumn} >= @cursor");
+                if (!selection.FullScan) predicates.Add(SelectedKeysPredicate(table));
                 var where = predicates.Count == 0 ? "" : " WHERE " + string.Join(" AND ", predicates);
                 await using var command = Sql.Command($"SELECT {string.Join(",", table.Columns)} FROM {table.Name}{where}{(table.OrderBy.Length == 0 ? "" : " ORDER BY " + string.Join(",", table.OrderBy))}", readConnection);
-                if (cursor is not null)
-                    command.Parameters.AddWithValue("cursor", cursor.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff'Z'", CultureInfo.InvariantCulture));
+                BindSelectedKeys(command, selection);
                 await using var reader = await command.ExecuteReaderAsync(ct);
                 while (await reader.ReadAsync(ct))
                 {
@@ -131,29 +133,31 @@ public sealed class ClusterEntityReconciliation(
 
             // A receipt refers to library_media.id, which is local to a scan on SQLite. Carry its
             // stable path instead and resolve the destination's local media ID when projecting it.
-            var receiptCursor = await ReadTableCursorAsync(readConnection, ProcessingReceiptTable.Name, ct);
-            var receiptFilter = receiptCursor is null ? "" : " WHERE e.updated_at >= @cursor";
-            await using var receipts = Sql.Command($"""
-                SELECT r.library_id,m.relative_path,r.flow_id,r.flow_version,r.byte_length,r.modified_at,r.execution_id,e.updated_at
-                FROM library_processing_receipts r
-                JOIN library_media m ON m.id=r.file_id
-                JOIN executions e ON e.id=r.execution_id
-                {receiptFilter}
-                ORDER BY e.updated_at,r.library_id,m.relative_path
-                """, readConnection);
-            if (receiptCursor is not null)
-                receipts.Parameters.AddWithValue("cursor", receiptCursor.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff'Z'", CultureInfo.InvariantCulture));
-            await using (var reader = await receipts.ExecuteReaderAsync(ct))
+            if (selections.TryGetValue(ProcessingReceiptTable.Name, out var receiptSelection))
             {
-                while (await reader.ReadAsync(ct))
+                var receiptFilter = receiptSelection.FullScan ? "" : " WHERE " + SelectedKeysPredicate(ProcessingReceiptTable, "r");
+                await using var receipts = Sql.Command($"""
+                    SELECT r.library_id,m.relative_path,r.flow_id,r.flow_version,r.byte_length,r.modified_at,r.execution_id,e.updated_at
+                    FROM library_processing_receipts r
+                    JOIN library_media m ON m.id=r.file_id
+                    JOIN executions e ON e.id=r.execution_id
+                    {receiptFilter}
+                    ORDER BY e.updated_at,r.library_id,m.relative_path
+                    """, readConnection);
+                BindSelectedKeys(receipts, receiptSelection);
+                await using (var reader = await receipts.ExecuteReaderAsync(ct))
                 {
-                    var row = ReadRow(reader, ProcessingReceiptTable);
-                    var key = MakeKey(row, ProcessingReceiptTable.KeyColumns);
-                    var cursor = ReadInstant(reader.GetValue(7));
-                    if (receiptMaxCursor is null || cursor > receiptMaxCursor) receiptMaxCursor = cursor;
-                    snapshots.Add(new(ProcessingReceiptTable, key, row, Fingerprint(row, ProcessingReceiptTable), cursor));
+                    while (await reader.ReadAsync(ct))
+                    {
+                        var row = ReadRow(reader, ProcessingReceiptTable);
+                        var key = MakeKey(row, ProcessingReceiptTable.KeyColumns);
+                        var cursor = ReadInstant(reader.GetValue(7));
+                        if (receiptMaxCursor is null || cursor > receiptMaxCursor) receiptMaxCursor = cursor;
+                        snapshots.Add(new(ProcessingReceiptTable, key, row, Fingerprint(row, ProcessingReceiptTable), cursor));
+                    }
                 }
             }
+
             // Inventory hashing is done before writer admission. A completed scan is checkpointed
             // only after all its media events have committed, so cancellation between batches is resumable.
             foreach (var scan in snapshots.Where(item => item.Table.Name == "library_scans"))
@@ -176,15 +180,17 @@ public sealed class ClusterEntityReconciliation(
 
         }
 
-        if (snapshots.Count == 0 && presence.Count == 0) return 0;
+        logger.LogDebug(new EventId(9010, "CaptureSelectionRead"), "Capture locale : {Tables} tables modifiées, {Rows} lignes préparées.", selections.Count, snapshots.Count);
+        if (selections.Count == 0) return 0;
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var capture = await CaptureWriter.CreateAsync(this, connection, ct);
         var local = capture.Identity;
         var captured = 0;
-        foreach (var table in Tables)
+        foreach (var table in Tables.Where(table => selections.ContainsKey(table.Name)))
         {
+            var selection = selections[table.Name];
             var tableGroup = snapshots.Where(item => item.Table.Name == table.Name).ToArray();
-            var existing = await ReadEntityStatesAsync(connection, capture.Transaction, table.Name, ct);
+            var existing = await ReadEntityStatesAsync(connection, capture.Transaction, table.Name, ct, selection.FullScan ? null : selection.Keys);
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var snapshot in tableGroup)
             {
@@ -221,7 +227,9 @@ public sealed class ClusterEntityReconciliation(
                 await UpsertTableCursorAsync(connection, capture.Transaction, table.Name, maxCursor, ct);
         }
 
-        var receiptStates = await ReadEntityStatesAsync(connection, capture.Transaction, ProcessingReceiptTable.Name, ct);
+        var receiptStates = selections.TryGetValue(ProcessingReceiptTable.Name, out var receiptWork)
+            ? await ReadEntityStatesAsync(connection, capture.Transaction, ProcessingReceiptTable.Name, ct, receiptWork.FullScan ? null : receiptWork.Keys)
+            : new Dictionary<string, EntityState>(StringComparer.Ordinal);
         foreach (var snapshot in snapshots.Where(item => item.Table.Name == ProcessingReceiptTable.Name))
         {
             if (receiptStates.TryGetValue(snapshot.Key, out var state) && !state.IsDeleted && state.Fingerprint == snapshot.Fingerprint) continue;
@@ -291,6 +299,7 @@ public sealed class ClusterEntityReconciliation(
             await capture.AdvanceAsync(ct);
         }
 
+        await AcknowledgeCaptureAsync(connection, capture.Transaction, selections.Values, ct);
         await capture.CommitAsync(ct);
         if (captured > 0) logger.LogInformation("{Count} changements locaux ajoutés au journal de réconciliation.", captured);
         return captured;
@@ -825,11 +834,13 @@ public sealed class ClusterEntityReconciliation(
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    private async Task<Dictionary<string, EntityState>> ReadEntityStatesAsync(DbConnection connection, DbTransaction transaction, string type, CancellationToken ct)
+    private async Task<Dictionary<string, EntityState>> ReadEntityStatesAsync(DbConnection connection, DbTransaction transaction, string type, CancellationToken ct, IReadOnlyCollection<string>? keys = null)
     {
         var states = new Dictionary<string, EntityState>(StringComparer.Ordinal);
-        await using var command = Sql.Command("SELECT entity_key,fingerprint,occurred_at,origin_id,sequence,is_deleted FROM cluster_sync_entities WHERE entity_type=@type", connection, transaction);
+        var filter = keys is null ? "" : " AND entity_key IN(SELECT value FROM json_each(@keys))";
+        await using var command = Sql.Command("SELECT entity_key,fingerprint,occurred_at,origin_id,sequence,is_deleted FROM cluster_sync_entities WHERE entity_type=@type" + filter, connection, transaction);
         command.Parameters.AddWithValue("type", type);
+        if (keys is not null) command.Parameters.AddWithValue("keys", JsonSerializer.Serialize(keys, JsonOptions));
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct)) states[reader.GetString(0)] = new(reader.GetString(1), ReadInstant(reader.GetValue(2)), ReadGuid(reader, 3), Convert.ToInt64(reader.GetValue(4), CultureInfo.InvariantCulture), Convert.ToBoolean(reader.GetValue(5), CultureInfo.InvariantCulture));
         return states;
