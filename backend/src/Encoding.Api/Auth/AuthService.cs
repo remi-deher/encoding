@@ -72,6 +72,21 @@ public sealed partial class AuthService(UserRepository users, AuthOptions option
 
     public Task LogoutAsync(string token, CancellationToken ct) => users.DeleteSessionAsync(TokenHash(token), ct);
 
+    public async Task<bool> ReauthenticateAsync(Guid userId, string password, CancellationToken ct)
+    {
+        var credentials = await users.FindCredentialsAsync(userId, ct);
+        if (credentials is null || !credentials.IsActive
+            || credentials.LockedUntil is { } until && until > DateTimeOffset.UtcNow)
+            return false;
+        if (!PasswordHasher.Verify(password, credentials.PasswordHash, out var needsRehash))
+        {
+            await users.RecordFailureAsync(userId, options.MaxFailedAttempts, ct);
+            return false;
+        }
+        await users.RecordSuccessAsync(userId, needsRehash ? PasswordHasher.Hash(password) : null, ct);
+        return true;
+    }
+
     /// <summary>Change le mot de passe de l’utilisateur courant après vérification de l’actuel ; ses autres sessions sont révoquées.</summary>
     public async Task<bool> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, string sessionToken, CancellationToken ct)
     {

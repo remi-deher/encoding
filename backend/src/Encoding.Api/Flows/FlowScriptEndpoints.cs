@@ -64,7 +64,6 @@ public static class FlowScriptEndpoints
         scripts.MapGet("/{id:guid}/versions/{version:int}", async (Guid id, int version, FlowScriptRepository repository, CancellationToken ct) =>
             version < 1 ? Results.BadRequest() : await repository.GetVersionAsync(id, version, ct) is { } published ? Results.Ok(published) : Results.NotFound())
             .WithName("GetFlowScriptVersion");
-
         // Import / export : mêmes règles d'écriture que le reste des scripts (admin seulement, donc POST, y compris pour l'export).
         // Rien n'est exécuté ; un nom déjà pris crée une nouvelle révision de brouillon et ne touche jamais une version publiée.
         scripts.MapPost("/import", async (HttpRequest request, string name, FlowScriptRepository repository, CancellationToken ct) =>
@@ -131,6 +130,9 @@ public static class FlowScriptEndpoints
                 }
             return Results.File(output.ToArray(), "application/zip", "scripts.zip");
         }).WithName("ExportFlowScripts");
+        scripts.MapDelete("/{id:guid}", async (Guid id, FlowScriptRepository repository, CancellationToken ct) =>
+            await repository.DeleteAsync(id, ct) ? Results.NoContent() : Results.NotFound())
+            .WithName("DeleteFlowScript");
     }
 
     private static Dictionary<string, string[]> Validate(FlowScriptDraft? draft, bool allowEmptyCode)

@@ -57,6 +57,15 @@ public sealed class ResourceRepository(DbDataSource dataSource, ResourceBlobStor
         return await reader.ReadAsync(ct) ? ReadVersion(reader) : null;
     }
 
+    public async Task<ResourceDetails?> UpdateAsync(Guid id, string name, string description, CancellationToken ct)
+    {
+        await using var command = dataSource.CreateCommand("UPDATE flow_resources SET name=@name,description=@description,updated_at=now() WHERE id=@id");
+        command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("name", name.Trim());
+        command.Parameters.AddWithValue("description", description.Trim());
+        return await command.ExecuteNonQueryAsync(ct) > 0 ? await GetAsync(id, ct) : null;
+    }
+
     /// <summary>Crée la ressource avec sa première version ; les fichiers doivent déjà être dans le magasin.</summary>
     public async Task<ResourceDetails?> CreateAsync(Guid id, string kind, string name, string description, IReadOnlyList<ResourceFileReference> files, CancellationToken ct)
     {

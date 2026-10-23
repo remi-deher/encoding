@@ -9,6 +9,7 @@ using Encoding.Api.Logging;
 using Encoding.Api.Mcp;
 using Encoding.Api.Nodes;
 using Encoding.Api.Plugins;
+using Encoding.Api.Resources;
 using Encoding.Contracts.Logging;
 using Encoding.Contracts.Tools;
 using Encoding.Core.Logging;
@@ -354,6 +355,8 @@ public sealed class SystemLogMcpTests
         services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(30)));
         services.AddSingleton<ExecutionRepository>();
         services.AddSingleton<FlowScriptRepository>();
+        services.AddSingleton(new ResourceBlobStore(config));
+        services.AddSingleton<ResourceRepository>();
         services.AddSingleton<EncodingProfileRepository>();
         services.AddSingleton<FlowTemplateRepository>();
         services.AddSingleton<FlowComponentPackRepository>();
