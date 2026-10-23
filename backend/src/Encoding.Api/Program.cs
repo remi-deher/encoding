@@ -164,7 +164,6 @@ builder.Services.AddSingleton<ClusterDataKeyStore>();
 builder.Services.AddSingleton<ClusterPeerAdmissionRepository>();
 builder.Services.AddSingleton<ClusterReconciliationRepository>();
 builder.Services.AddSingleton<ClusterEntityReconciliation>();
-builder.Services.AddSingleton<ClusterReconciliationHealth>();
 builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.ControlUrlSetting]);
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
 builder.Services.AddHttpClient("ClusterReconciliation", client => client.Timeout = TimeSpan.FromSeconds(10))

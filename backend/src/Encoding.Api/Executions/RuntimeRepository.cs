@@ -171,51 +171,72 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             if (await FailUnavailableSourcesAsync(recovery, recoveryTransaction, presence.OfflineAfter, ct) > 0)
                 await recoveryTransaction.CommitAsync(ct);
         }
-        return await ClaimAvailableAsync(worker, ct);
+        ClaimCursor? after = null;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await ClaimAvailableAsync(worker, after, ct);
+            if (page.Lease is not null || page.Next is null) return page.Lease;
+            // Each page releases its transaction/admission before scanning the next one,
+            // so heartbeats and renewals can run while a heterogeneous queue is searched.
+            after = page.Next;
+        }
     }
 
-    private async Task<RuntimeLease?> ClaimAvailableAsync(Guid worker, CancellationToken ct)
+    private const int CandidatePageSize = 100;
+    private sealed record ClaimCursor(DateTimeOffset QueuedAt, Guid Id);
+    private sealed record ClaimPage(RuntimeLease? Lease, ClaimCursor? Next = null);
+
+    private async Task<ClaimPage> ClaimAvailableAsync(Guid worker, ClaimCursor? after, CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         IReadOnlyList<NodeToolCapability> capabilities; int capacity; NodeInventory? inventory;
         await using(var node=Sql.Command("SELECT capabilities::text,COALESCE((SELECT p.max_concurrent_tasks FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id),max_concurrent_tasks),(SELECT p.schedule_timezone FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),(SELECT p.schedule_slots FROM node_processing_settings p WHERE p.node_id=cluster_nodes.id AND p.schedule_enabled),inventory::text FROM cluster_nodes WHERE id=@node AND deleted_at IS NULL AND accepts_work AND 'worker'=ANY(roles) AND last_seen_at>clock_timestamp()-@offline FOR UPDATE",c,tx))
         {
             node.Parameters.AddWithValue("offline",presence.OfflineAfter); node.Parameters.AddWithValue("node",worker); await using var r=await node.ExecuteReaderAsync(ct);
-            if(!await r.ReadAsync(ct)) return null;
+            if(!await r.ReadAsync(ct)) return new(null);
             capabilities=JsonSerializer.Deserialize<NodeToolCapability[]>(r.GetString(0),Json)??[]; capacity=r.GetInt32(1); inventory=r.IsDBNull(4)?null:JsonSerializer.Deserialize<NodeInventory>(r.GetString(4),Json);
             // Le calendrier ne bloque que les nouveaux démarrages : les baux actifs ne sont ni révoqués ni interrompus.
-            if(!r.IsDBNull(2) && !r.IsDBNull(3) && !new NodeSchedule(true,r.GetString(2),r.GetString(3)).IsOpen(DateTimeOffset.UtcNow)) return null;
+            if(!r.IsDBNull(2) && !r.IsDBNull(3) && !new NodeSchedule(true,r.GetString(2),r.GetString(3)).IsOpen(DateTimeOffset.UtcNow)) return new(null);
         }
         await using(var active=Sql.Command("SELECT count(*) FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.worker_node_id=@worker AND w.lease_until>clock_timestamp() AND e.state IN ('running','cancelling')",c,tx))
-        { active.Parameters.AddWithValue("worker",worker); if((long)(await active.ExecuteScalarAsync(ct))!>=capacity) return null; }
+        { active.Parameters.AddWithValue("worker",worker); if((long)(await active.ExecuteScalarAsync(ct))!>=capacity) return new(null); }
         var nodeIdentity=await nodeGroups.GetNodeIdentityAsync(worker,ct);
-        if(nodeIdentity is null) return null;
+        if(nodeIdentity is null) return new(null);
         var candidates=new List<(Guid Id,Guid Library,string Path,string Key,FlowDefinition Flow,int Attempt,int Revision,long Epoch,
-            RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe)>();
-        await using(var read=Sql.Command("""
+            RuntimeCheckpoint? Checkpoint,RuntimeHandoffSelector? Selector,Guid? PreviousWorker,Guid? Source,byte[]? Settings,RuntimeWaitProbe? Probe,DateTimeOffset QueuedAt)>();
+        var cursorPredicate = after is null ? "" : "AND (e.queued_at,e.id) > (@after_time,@after_id)";
+        await using(var read=Sql.Command($"""
           SELECT e.id,w.library_id,w.media_path,w.media_key,e.flow_definition::text,e.attempt,e.revision,w.lease_epoch,
             (SELECT checkpoint::text FROM execution_steps WHERE execution_id=e.id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1),
             w.handoff_selector::text,w.previous_worker_node_id,w.source_node_id,w.plugin_configuration_snapshot,
-            CASE WHEN w.wait_probe_due THEN (SELECT x.spec::text FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting') END
+            CASE WHEN w.wait_probe_due THEN (SELECT x.spec::text FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting') END,e.queued_at
           FROM execution_work w JOIN executions e ON e.id=w.execution_id JOIN libraries l ON l.id=w.library_id
           WHERE (e.state='queued' OR e.state='running' AND w.worker_node_id IS NULL)
           AND l.is_active AND w.available_at<=clock_timestamp()
           AND w.lease_until IS NULL
+          {cursorPredicate}
           AND NOT EXISTS(SELECT 1 FROM library_processing_settings p WHERE p.library_id=l.id AND p.max_concurrent_tasks IS NOT NULL
             AND p.max_concurrent_tasks<=(SELECT count(*) FROM execution_work aw JOIN executions ae ON ae.id=aw.execution_id WHERE aw.library_id=l.id AND aw.lease_until>clock_timestamp() AND ae.state IN ('running','cancelling')))
           AND NOT EXISTS(SELECT 1 FROM library_node_processing_limits p WHERE p.library_id=l.id AND p.node_id=@worker
             AND p.max_concurrent_tasks<=(SELECT count(*) FROM execution_work aw JOIN executions ae ON ae.id=aw.execution_id WHERE aw.library_id=l.id AND aw.worker_node_id=@worker AND aw.lease_until>clock_timestamp() AND ae.state IN ('running','cancelling')))
-          ORDER BY e.queued_at,e.id LIMIT 100
+          ORDER BY e.queued_at,e.id LIMIT @page_size
           FOR UPDATE OF e,w SKIP LOCKED
           """,c,tx))
         {
             read.Parameters.AddWithValue("worker",worker);
+            if (after is not null)
+            {
+                read.Parameters.AddWithValue("after_time", after.QueuedAt);
+                read.Parameters.AddWithValue("after_id", after.Id);
+            }
+            read.Parameters.AddWithValue("page_size", CandidatePageSize);
             await using var r=await read.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct)) candidates.Add((r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetString(3),JsonSerializer.Deserialize<FlowDefinition>(r.GetString(4),Json)!,r.GetInt32(5),r.GetInt32(6),r.GetInt64(7),
                 r.IsDBNull(8)?null:JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(8),Json),
                 r.IsDBNull(9)?null:JsonSerializer.Deserialize<RuntimeHandoffSelector>(r.GetString(9),Json),
                 r.IsDBNull(10)?null:r.GetGuid(10),r.IsDBNull(11)?null:r.GetGuid(11),r.IsDBNull(12)?null:(byte[])r[12],
-                r.IsDBNull(13)?null:ExecutionWaitRepository.ProbeOf(JsonSerializer.Deserialize<RuntimeWait>(r.GetString(13),Json)!)));
+                r.IsDBNull(13)?null:ExecutionWaitRepository.ProbeOf(JsonSerializer.Deserialize<RuntimeWait>(r.GetString(13),Json)!),r.GetFieldValue<DateTimeOffset>(14)));
         }
         foreach(var item in candidates)
         {
@@ -307,7 +328,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                         await using var actor=Sql.Command("UPDATE executions SET node_id=@worker WHERE id=@id",c,tx);
                         actor.Parameters.AddWithValue("id",item.Id); actor.Parameters.AddWithValue("worker",worker); await actor.ExecuteNonQueryAsync(ct);
                         await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,"La configuration du relais ne désigne pas un worker valide."),c,tx,ct);
-                        await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return null;
+                        await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return new(null);
                     }
                     if(destination.Mode=="node" && destination.TargetNodeId==worker) returnsToSelf=true;
                 }
@@ -339,11 +360,11 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 if((await uncertain.ScalarBoolAsync(ct)))
                 {
                     await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"failed",worker,null,"Une étape externe a un effet incertain après interruption. Une relance explicite est nécessaire."),c,tx,ct);
-                    await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return null;
+                    await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return new(null);
                 }
             }
             if(!await ExecutionRepository.RecordInTransactionAsync(item.Id,new(Guid.NewGuid(),item.Revision,"running",worker,null,
-                item.Probe is not null?"Vérification de la condition d'attente confiée au worker.":item.Selector is null?"Flow attribué au worker ; bail actif.":"Relais attribué au worker ; reprise depuis le checkpoint durable."),c,tx,ct)) return null;
+                item.Probe is not null?"Vérification de la condition d'attente confiée au worker.":item.Selector is null?"Flow attribué au worker ; bail actif.":"Relais attribué au worker ; reprise depuis le checkpoint durable."),c,tx,ct)) return new(null);
             RuntimeCheckpoint? checkpoint=null; string? sourceSha=null; DateTimeOffset expires;
             await using(var state=Sql.Command("SELECT source_sha,lease_until,(SELECT checkpoint::text FROM execution_steps WHERE execution_id=@id AND completed_at IS NOT NULL ORDER BY completed_revision DESC LIMIT 1) FROM execution_work WHERE execution_id=@id",c,tx))
             {
@@ -358,9 +379,10 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 prepare.Parameters.AddWithValue("id",item.Id); prepare.Parameters.AddWithValue("requested",!directRead);
                 await prepare.ExecuteNonQueryAsync(ct);
             }
-            await tx.CommitAsync(ct); return new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead);
+            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead));
         }
-        return null;
+        return new(null, candidates.Count == CandidatePageSize
+            ? new(candidates[^1].QueuedAt, candidates[^1].Id) : null);
     }
 
     public async Task<bool> PrepareSourceAsync(Guid id,Guid worker,long epoch,CancellationToken ct)

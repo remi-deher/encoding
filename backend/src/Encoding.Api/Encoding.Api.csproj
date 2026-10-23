@@ -6,6 +6,9 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Encoding.Runtime.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="DotNext.AspNetCore.Cluster" Version="6.10.0" />
     <PackageReference Include="Haukcode.Mdns" Version="1.0.21" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />

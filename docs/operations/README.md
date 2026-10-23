@@ -8,6 +8,7 @@ Documents opérationnels (procédures, supervision, suivis). Pour l'état du sys
 | [backup-restore.md](backup-restore.md) | Sauvegarde et restauration SQLite, volumes, perte d'un nœud | replication-storage | à jour |
 | [reverse-proxy.md](reverse-proxy.md) | Reverse proxy, en-têtes de sécurité, proxies de confiance, ports | auth-ops | à jour ; non testé derrière un vrai proxy |
 | [monitoring.md](monitoring.md) | Santé, métriques Prometheus, alertes, journaux, rétention | auth-ops | à jour |
+| [stabilisation-2026-10-23.md](stabilisation-2026-10-23.md) | Bilan de l'incident de lenteur, ce qui est validé ou non, reste à faire | replication-storage, cluster | suivi ; rien validé en production |
 | [sqlite-writer.md](sqlite-writer.md) | File d’écriture SQLite, paramètres, métriques et déploiement progressif | replication-storage | validation locale ; production non vérifiée |
 | [ai-providers.md](ai-providers.md) | Installation et connexion des fournisseurs IA | ai | à jour |
 | [ai-metadata-enrichment.md](ai-metadata-enrichment.md) | Bloc d'enrichissement IA des métadonnées | ai, plugins | à jour |
