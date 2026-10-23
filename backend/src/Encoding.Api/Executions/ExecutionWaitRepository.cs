@@ -87,6 +87,16 @@ public sealed class ExecutionWaitRepository(DbDataSource dataSource,NodePresence
     /// <summary>Évalue les attentes dues. Chaque décision est prise une seule fois (verrou de ligne, SKIP LOCKED) quel que soit le nombre de serveurs.</summary>
     public async Task<int> ProcessDueAsync(CancellationToken ct)
     {
+        // Skip idle polls without taking SQLite's writer lock. The transaction below rechecks
+        // both cleanup and due-work conditions, so a concurrent resolution is still safe.
+        await using (var readConnection = await dataSource.OpenConnectionAsync(ct))
+        await using (var pending = Sql.Command("""
+            SELECT EXISTS(SELECT 1 FROM execution_waits x JOIN executions e ON e.id=x.execution_id
+              WHERE x.state='waiting' AND (e.state IN('cancelled','failed','succeeded','deferred')
+                OR (e.state='running' AND x.next_check_at<=clock_timestamp()
+                  AND EXISTS(SELECT 1 FROM execution_work w WHERE w.execution_id=e.id))))
+            """, readConnection))
+            if (!await pending.ScalarBoolAsync(ct)) return 0;
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         await using(var closed=Sql.Command("""
           UPDATE execution_waits SET state='cancelled',resolved_at=clock_timestamp()

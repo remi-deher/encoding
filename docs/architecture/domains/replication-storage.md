@@ -1,6 +1,6 @@
 ---
 domain: replication-storage
-updated: 2026-10-21
+updated: 2026-10-23
 legacy_adr: [0001, 0004, 0014, 0029, 0043, 0049, 0060-peer, 0061-peer]
 code:
   - backend/src/Encoding.Api/Infrastructure/Data/
@@ -34,6 +34,9 @@ tags: [sqlite, migrations, maillage, réconciliation, lww, raft, sauvegarde, tom
 ### Mode pair à pair optionnel (Raft) : prévisualisation
 - `PeerCluster__Enabled=true` (défaut `false`) active un mode distinct : trois serveurs votants, journal Raft (DotNext), transactions SQL répliquées par capture de lignes (`PeerDataSource`), baux avec terme Raft, certificats approuvés, port pair séparé. Même version requise sur tous les pairs (pas de N/N-1), image d'import limitée à 64 Mio. Procédures : `docs/operations/peer-cluster-preview.md`, `peer-cluster-production-todo.md`, règles d'alerte `peer-cluster-alerts.yml`.
 - **Contradiction à trancher** : ce mode et le maillage LWW ont des garanties opposées (quorum et exclusion forte vs convergence éventuelle sans quorum). Le principe affiché du produit est « sans quorum ». Voir [open-questions.md](../open-questions.md). Ne pas étendre le mode Raft avant décision.
+
+### Sondages de sauvegarde
+- La présence d’un travail de sauvegarde dû est consultée sans transaction d’écriture ; le travail est relu sous transaction avant traitement. Un sondage vide ne prend donc pas le verrou SQLite. La publication atomique et les délais de reprise restent inchangés.
 
 ### Sauvegardes de flows
 - Chaque version publiée et chaque révision de brouillon écrit un travail local dans la même transaction ; `{id}.v{version}.json` est écrit atomiquement (temporaire, flush, déplacement sans écrasement) dans `FlowBackups:Directory` (volume séparé). Un fichier existant d'empreinte différente est conservé et signalé `failed`. Retentative 30 s, revérification 10 min, aucune suppression automatique. Statuts `pending/ready/failed` **locaux** à chaque serveur. Les fichiers sont des instantanés récupérables, pas une autorité d'écriture.
