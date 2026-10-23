@@ -1,10 +1,11 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
+import { PageSystemActionsComponent } from './page-system-actions.component';
 
 @Component({
   selector: 'app-page-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, PageSystemActionsComponent],
   template: `
     <div class="page-header" [class.page-header_workspace]="layout() === 'workspace'">
       <div class="page-heading" [class.page-heading_empty]="!showHeading()">
@@ -16,9 +17,14 @@ import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular
         }
         <div class="page-metadata"><ng-content select="[page-metadata]" /></div>
       </div>
-      <div class="page-actions">
-        <ng-content select="[page-actions]" />
-        <ng-container [ngTemplateOutlet]="actions()" />
+      <div class="page-header-end">
+        <div class="page-actions">
+          <ng-content select="[page-actions]" />
+          <ng-container [ngTemplateOutlet]="actions()" />
+        </div>
+        @if (showSystemActions()) {
+          <app-page-system-actions />
+        }
       </div>
       <div class="page-tools"><ng-content select="[page-tools]" /></div>
     </div>
@@ -31,4 +37,5 @@ export class PageHeaderComponent {
   readonly layout = input<'default' | 'workspace'>('default');
   readonly description = input('');
   readonly actions = input<TemplateRef<unknown> | undefined>();
+  readonly showSystemActions = input(false);
 }

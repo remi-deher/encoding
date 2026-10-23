@@ -53,11 +53,16 @@ export interface CatalogEmptyState {
             [title]="detailTitle()"
             [description]="detailDescription()"
             [actions]="detailHeaderActions()"
+            [showSystemActions]="true"
           />
           <ng-container [ngTemplateOutlet]="detailContent()" />
         } @else {
           @if (showPageHeader()) {
-            <app-page-header [title]="title()" [actions]="pageActions()" />
+            <app-page-header
+              [title]="title()"
+              [actions]="pageActions()"
+              [showSystemActions]="true"
+            />
           }
           <div class="catalog-navigation-wrapper">
             <ng-content select="[catalogue-navigation]" />
@@ -72,7 +77,11 @@ export interface CatalogEmptyState {
                   @if (filterLabel() && searchLayout() === 'end') {
                     <span class="catalog-filter-label">{{ filterLabel() }}</span>
                   }
-                  <div class="catalog-toolbar-row" [class.is-centered]="searchLayout() !== 'end'">
+                  <div
+                    class="catalog-toolbar-row"
+                    [class.is-centered]="searchLayout() !== 'end'"
+                    [class.has-actions]="toolbarActions() !== undefined"
+                  >
                     @if (searchLayout() === 'end') {
                       <ng-container [ngTemplateOutlet]="filtersContent" />
                     }
@@ -97,6 +106,11 @@ export interface CatalogEmptyState {
                     }
                     @if (searchLayout() === 'centered-sheet') {
                       <ng-content select="[catalogue-active-filters]" />
+                    }
+                    @if (toolbarActions(); as actions) {
+                      <div class="catalog-toolbar-actions">
+                        <ng-container [ngTemplateOutlet]="actions" />
+                      </div>
                     }
                   </div>
                 </div>
@@ -190,6 +204,9 @@ export class ManagementCatalogTemplateComponent {
   readonly detailClosed = output<void>();
   readonly actionClosed = output<void>();
   protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
+  protected readonly toolbarActions = contentChild('catalogueToolbarActions', {
+    read: TemplateRef,
+  });
   protected readonly detailContent = contentChild('detailContent', { read: TemplateRef });
   protected readonly detailFooterActions = contentChild('detailFooterActions', {
     read: TemplateRef,

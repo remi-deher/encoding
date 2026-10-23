@@ -86,73 +86,23 @@
     }
 
     <mat-sidenav-content class="page-transition-region">
-      @if (!authMode() && !workspaceMode()) {
-        <header class="shell-topbar" aria-label="Barre de contexte et d’outils système">
+      @if (!authMode() && !workspaceMode() && isCompactNavigation()) {
+        <header class="shell-topbar" aria-label="Navigation de la page">
           <div class="topbar-start">
-            @if (isCompactNavigation()) {
-              <button
-                matButton="text"
-                class="navigation-menu-toggle"
-                type="button"
-                [attr.aria-label]="
-                  navigationOpened() ? 'Fermer la navigation' : 'Ouvrir la navigation'
-                "
-                [attr.aria-expanded]="navigationOpened()"
-                (click)="toggleNavigationCollapsed()"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 7h16M4 12h16M4 17h16" />
-                </svg>
-              </button>
-            }
-          </div>
-
-          <div class="topbar-search">
             <button
+              matButton="text"
+              class="navigation-menu-toggle"
               type="button"
-              class="topbar-search-pill"
-              (click)="openSearchPalette()"
-              aria-label="Rechercher une page ou une ressource (⌘K)"
+              [attr.aria-label]="
+                navigationOpened() ? 'Fermer la navigation' : 'Ouvrir la navigation'
+              "
+              [attr.aria-expanded]="navigationOpened()"
+              (click)="toggleNavigationCollapsed()"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="10.8" cy="10.8" r="6.8" />
-                <path d="m16 16 5 5" />
+                <path d="M4 7h16M4 12h16M4 17h16" />
               </svg>
-              <span class="search-trigger-placeholder">Rechercher…</span>
-              <kbd class="search-shortcut" aria-hidden="true">⌘K</kbd>
             </button>
-          </div>
-
-          <div class="topbar-end">
-            <a
-              class="topbar-cluster-pill"
-              routerLink="/nodes"
-              [queryParams]="{ tab: 'cluster' }"
-              [class.is-offline]="!clusterHealthy()"
-              [attr.aria-label]="'État du cluster : ' + clusterLabel()"
-              [matTooltip]="'État du cluster : ' + clusterLabel()"
-            >
-              <span
-                class="cluster-indicator-dot"
-                [class.is-offline]="!clusterHealthy()"
-                aria-hidden="true"
-              ></span>
-              <span class="cluster-indicator-label">{{ clusterLabel() }}</span>
-            </a>
-
-            <a
-              class="topbar-tasks-pill"
-              routerLink="/activity"
-              [queryParams]="{ view: 'active' }"
-              [attr.aria-label]="activeJobsLabel()"
-              [matTooltip]="activeJobsLabel()"
-            >
-              <span class="tasks-pulse-dot" aria-hidden="true"></span>
-              <span>{{ activeJobsLabel() }}</span>
-            </a>
-
-            <app-theme-toggle class="topbar-theme-toggle" />
-            <app-user-menu [collapsed]="true" />
           </div>
         </header>
       }
