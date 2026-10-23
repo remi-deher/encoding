@@ -66,6 +66,7 @@ jobs:
       - run: mkvmerge --version
       - run: >-
           dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build
+          --filter "Category!=Stress"
           --logger "trx;LogFileName=results.trx" --collect:"XPlat Code Coverage" --results-directory test-results
         env:
           ENCODING_TEST_REQUIRE_MEDIA_TOOLS: '1'

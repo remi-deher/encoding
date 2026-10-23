@@ -49,3 +49,9 @@ python3 -m unittest discover -s backend/plugins/tests -v
 ```
 
 Les tests Python lancent le SDK, le plugin d’exemple et les plugins Sonarr/Radarr comme processus réels contre un faux service HTTP local ; ils n’utilisent aucun service personnel.
+
+## Charge et contention SQLite
+
+`LoadContentionTests` tourne à chaque PR (quelques secondes) : une lecture cohérente (`Snapshot`) ne bloque jamais un écrivain, heartbeats, aperçu des exécutions et récupération partagent une grosse file sans erreur `database is locked`, et un heartbeat retardé ne fait échouer aucune exécution en file alors qu'un nœud réellement perdu le fait. Les bornes de latence sont larges : elles détectent une régression, pas une performance précise.
+
+`LoadStressTests` (`Category=Stress`) est exclu des PR et lancé chaque nuit par `.github/workflows/stress.yml` (ou à la demande) : 20 000 exécutions, 30 nœuds, 60 s par défaut (`ENCODING_STRESS_EXECUTIONS`, `ENCODING_STRESS_NODES`, `ENCODING_STRESS_SECONDS`). En local : `dotnet test backend/tests/Encoding.Runtime.Tests --filter "Category=Stress"`.
