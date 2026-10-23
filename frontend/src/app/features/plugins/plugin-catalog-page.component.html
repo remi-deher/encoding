@@ -301,6 +301,9 @@
               dérogations.
             </p>
           </div>
+          @if (selectedPlugin()?.id === 'plex') {
+            <app-plex-setup-assistant (configurationSaved)="onAssistantSaved($event)" />
+          }
           <app-component-configuration-form
             [schema]="schema"
             [values]="configurationValues()"

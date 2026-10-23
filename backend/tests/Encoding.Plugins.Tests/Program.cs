@@ -8,6 +8,7 @@ if (args.FirstOrDefault() == "--isolated-process") return ProcessSandbox.Run(arg
 
 
 PluginTests.Run();
+PlexSetupTests.Run();
 await StoreTests.RunAsync();
 HardwareInventoryTests.Run();
 GpuDeviceSelectorTests.Run();
