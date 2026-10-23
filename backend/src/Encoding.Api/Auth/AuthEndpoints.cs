@@ -49,6 +49,15 @@ public static class AuthEndpoints
             return Results.Created("/api/v1/auth/me", login.User);
         }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("SetupFirstAdministrator");
 
+        // Fiche du nœud local pour l'assistant (décision du propriétaire du 2026-10-23) : ouverte sans compte seulement
+        // tant qu'aucun administrateur n'existe, puis 404. Liste blanche de champs, sans secret ni identifiant de cluster.
+        auth.MapGet("/setup/node", async (AuthService service, IHttpClientFactory clients, IConfiguration configuration,
+            Encoding.Api.Infrastructure.NetworkSettingsService network, CancellationToken ct) =>
+        {
+            if (!await service.SetupRequiredAsync(ct)) return Results.NotFound();
+            return Results.Ok(await Encoding.Api.Nodes.SetupNodeProbe.ReadAsync(clients, configuration, network, ct));
+        }).AllowAnonymous().RequireRateLimiting(AuthExtensions.SetupProbePolicy).WithName("GetSetupNode");
+
         auth.MapPost("/login", async (LoginRequest request, HttpContext http, AuthService service, AuthOptions options, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrEmpty(request.Password) || request.Password.Length > AuthService.MaximumPasswordLength)

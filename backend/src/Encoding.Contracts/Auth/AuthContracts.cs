@@ -16,6 +16,29 @@ public sealed record SetupRequest(
     string? Mode = null,
     string? ClusterName = null);
 
+/// <summary>
+/// Fiche du nœud local montrée par l'assistant de premier démarrage, avant toute session (liste blanche de champs) :
+/// aucune clé de jumelage, aucun code de vérification, aucun identifiant de cluster.
+/// <c>Inventory</c> et <c>Tools</c> valent null tant que l'agent local n'a pas répondu (état inconnu, pas « absent »).
+/// </summary>
+public sealed record SetupNodeResponse(
+    string? Name,
+    string? DisplayName,
+    bool AgentAvailable,
+    Encoding.Contracts.Nodes.NodeInventory? Inventory,
+    IReadOnlyList<SetupNodeTool>? Tools,
+    IReadOnlyList<SetupNodeAddress> Addresses,
+    IReadOnlyList<string> Urls);
+
+/// <summary>Outil détecté réduit à ce qu'il faut pour déduire l'accélération matérielle (sans version ni empreinte).</summary>
+public sealed record SetupNodeTool(
+    string ToolId,
+    IReadOnlyList<string> AccelerationTypes,
+    IReadOnlyList<Encoding.Contracts.Nodes.NodeEncoderCapability> EncoderChecks);
+
+/// <summary>Adresse IP d'une interface active vue par le processus du nœud (dans un conteneur : son réseau à lui).</summary>
+public sealed record SetupNodeAddress(string Interface, string Address);
+
 public sealed record LoginRequest(string Username, string Password);
 
 public sealed record CreateUserRequest(string Username, string Password, UserRole Role);

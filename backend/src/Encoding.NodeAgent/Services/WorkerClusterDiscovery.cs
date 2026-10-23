@@ -199,7 +199,7 @@ public sealed class WorkerClusterDiscovery(
             ? configuredName
             : service.InstanceName;
         var cluster = new DiscoveredCluster(clusterId, clusterName, uri.AbsoluteUri.EndsWith('/') ? uri.AbsoluteUri : uri.AbsoluteUri + '/', DateTimeOffset.UtcNow);
-        clusters[clusterId] = cluster;
+        clusters.AddOrUpdate(clusterId, cluster, (_, existing) => existing.Source == "configured" ? existing : cluster);
         logger.LogInformation("Cluster découvert : {ClusterName} ({ClusterId}).", cluster.Name, cluster.Id);
     }
 

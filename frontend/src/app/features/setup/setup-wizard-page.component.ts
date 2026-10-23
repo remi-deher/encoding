@@ -1,5 +1,9 @@
 import { IconComponent } from '../../shared/ui/icon.component';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { HttpClient } from '@angular/common/http';
+import { catchError, exhaustMap, of, timeout, timer } from 'rxjs';
+import { SetupNodeSheet } from '../../shared/models/local-node';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -89,6 +93,13 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
             </div>
 
             <div class="hardware-tiles">
+              <div class="hardware-tile hardware-tile--wide">
+                <span class="tile-label">Adresse IP / Réseau</span>
+                <span class="tile-value tile-value--mono">{{ networkAddressInfo() }}</span>
+                @if (networkUrlHint(); as urlHint) {
+                  <span class="tile-hint">{{ urlHint }}</span>
+                }
+              </div>
               <div class="hardware-tile">
                 <span class="tile-label">Processeur</span>
                 <span class="tile-value">{{ cpuInfo() }}</span>
@@ -709,6 +720,15 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       font-size: 13px;
       font-weight: 700;
     }
+    .tile-value--mono {
+      font-family: ui-monospace, monospace;
+      word-break: break-all;
+    }
+    .tile-hint {
+      font-size: 12px;
+      color: var(--text-secondary);
+      word-break: break-all;
+    }
     .telemetry-footnote {
       margin: 0;
       display: flex;
@@ -917,7 +937,10 @@ export class SetupWizardPageComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly notifications = inject(NotificationService);
+  private readonly http = inject(HttpClient, { optional: true });
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly localController = inject(LocalNodeController);
+  protected readonly setupSheet = signal<SetupNodeSheet | null>(null);
 
   protected readonly currentStep = signal(0);
   protected readonly busy = signal(false);
@@ -933,6 +956,26 @@ export class SetupWizardPageComponent {
   protected readonly passwordVisible = signal(false);
   protected readonly adminSubmitted = signal(false);
   protected readonly minimumPasswordLength = MINIMUM_PASSWORD_LENGTH;
+
+  constructor() {
+    if (this.http) {
+      timer(0, 5_000)
+        .pipe(
+          exhaustMap(() =>
+            this.http!.get<SetupNodeSheet>('/api/v1/auth/setup/node').pipe(
+              timeout(8_000),
+              catchError(() => of(null)),
+            ),
+          ),
+          takeUntilDestroyed(this.destroyRef),
+        )
+        .subscribe((sheet) => {
+          if (sheet) {
+            this.setupSheet.set(sheet);
+          }
+        });
+    }
+  }
   /** Mêmes règles que le serveur ; les erreurs apparaissent après saisie ou première validation. */
   protected readonly adminErrors = computed(() => {
     const username = this.adminUsername().trim();
@@ -962,19 +1005,53 @@ export class SetupWizardPageComponent {
 
   protected readonly defaultNodeName = computed(() => {
     const status = this.localController.status();
-    return status?.displayName || status?.name || 'Mon Serveur';
+    const sheet = this.setupSheet();
+    return status?.displayName || sheet?.displayName || status?.name || sheet?.name || 'Mon Serveur';
   });
 
   protected readonly effectiveNodeName = computed(() => {
     return this.nodeName().trim() || this.defaultNodeName();
   });
 
+  protected readonly resolvedInventory = computed(
+    () => this.localController.status()?.inventory ?? this.setupSheet()?.inventory ?? null,
+  );
+
   protected readonly hostPlatformLabel = computed(() => {
     const status = this.localController.status();
-    const inv = status?.inventory;
-    const host = status?.name || 'localhost';
+    const sheet = this.setupSheet();
+    const inv = this.resolvedInventory();
+    const host = status?.name || sheet?.name || 'localhost';
     if (!inv) return `Hôte : ${host}`;
     return `${host} · ${inv.operatingSystem} (${inv.architecture})`;
+  });
+
+  protected readonly networkAddressInfo = computed(() => {
+    const sheet = this.setupSheet();
+    const addresses = sheet?.addresses ?? [];
+    if (addresses.length > 0) {
+      return addresses
+        .map((item) => (item.interface ? `${item.address} (${item.interface})` : item.address))
+        .join(' · ');
+    }
+    const urls = sheet?.urls ?? [];
+    if (urls.length > 0) {
+      return urls.join(' · ');
+    }
+    if (!sheet && !this.localController.status()) {
+      return 'Détection en cours…';
+    }
+    return 'Locale uniquement';
+  });
+
+  protected readonly networkUrlHint = computed(() => {
+    const sheet = this.setupSheet();
+    const addresses = sheet?.addresses ?? [];
+    const urls = sheet?.urls ?? [];
+    if (addresses.length > 0 && urls.length > 0) {
+      return `URL annoncée : ${urls.join(' · ')}`;
+    }
+    return null;
   });
 
   protected readonly defaultClusterName = computed(() => {
@@ -982,28 +1059,36 @@ export class SetupWizardPageComponent {
   });
 
   protected readonly cpuInfo = computed(() => {
-    const inv = this.localController.status()?.inventory;
+    const inv = this.resolvedInventory();
     if (!inv) return 'Détection en cours…';
-    return inv.processorModel?.trim() || `${inv.processorCount} cœurs`;
+    const model = inv.processorModel?.trim();
+    if (model && inv.processorCount > 0) {
+      return `${model} (${inv.processorCount} cœurs)`;
+    }
+    return model || `${inv.processorCount} cœurs`;
   });
 
   protected readonly memoryInfo = computed(() => {
-    const inv = this.localController.status()?.inventory;
+    const inv = this.resolvedInventory();
     if (!inv) return 'Détection en cours…';
     return formatMemory(inv.memoryMb);
   });
 
   protected readonly gpuInfo = computed(() => {
-    const inv = this.localController.status()?.inventory;
-    if (!inv?.gpus || inv.gpus.length === 0) return 'Aucun GPU dédié détecté';
+    const inv = this.resolvedInventory();
+    if (!inv) return 'Détection en cours…';
+    if (!inv.gpus || inv.gpus.length === 0) return 'Aucun GPU dédié détecté';
     return inv.gpus.map((g) => g.name).join(' · ');
   });
 
   protected readonly gpuAccelerationInfo = computed(() => {
     const status = this.localController.status();
-    if (!status) return 'Détection en cours…';
-    const caps = status.capabilities ?? [];
-    if (caps.length === 0) return 'Détection en cours…';
+    const sheet = this.setupSheet();
+    const caps = status?.capabilities ?? sheet?.tools ?? null;
+    if (!caps || caps.length === 0) {
+      if (sheet && !sheet.agentAvailable) return 'Agent local indisponible';
+      return 'Détection en cours…';
+    }
 
     const ACCEL_DISPLAY: Readonly<Record<string, string>> = {
       nvenc: 'NVENC',

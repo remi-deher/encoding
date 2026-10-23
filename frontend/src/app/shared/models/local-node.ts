@@ -1,4 +1,31 @@
-import { NodeInventory, NodeRole, NodeToolCapability } from './cluster';
+import {
+  NodeEncoderCapability,
+  NodeInventory,
+  NodeRole,
+  NodeToolCapability,
+} from './cluster';
+
+export interface SetupNodeAddress {
+  readonly interface: string;
+  readonly address: string;
+}
+
+export interface SetupNodeTool {
+  readonly toolId: string;
+  readonly accelerationTypes: readonly string[];
+  readonly encoderChecks: readonly NodeEncoderCapability[];
+}
+
+/** Fiche du nœud local pour l'assistant de premier démarrage (`/api/v1/auth/setup/node`), sans secret ni identifiant de cluster. */
+export interface SetupNodeSheet {
+  readonly name: string | null;
+  readonly displayName: string | null;
+  readonly agentAvailable: boolean;
+  readonly inventory: NodeInventory | null;
+  readonly tools: readonly SetupNodeTool[] | null;
+  readonly addresses: readonly SetupNodeAddress[];
+  readonly urls: readonly string[];
+}
 
 export interface ClusterIdentity {
   readonly id: string;

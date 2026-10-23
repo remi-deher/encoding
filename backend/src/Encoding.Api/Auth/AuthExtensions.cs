@@ -10,6 +10,8 @@ public static class AuthExtensions
     public const string AnonymousPolicy = "anonymous-protocol";
     public const string ClusterMeshPolicy = "cluster-mesh";
     public const string HeavyOperationsPolicy = "heavy-operations";
+    /// <summary>Lecture répétée de la fiche du nœud par l'assistant de premier démarrage ; quota distinct de la connexion.</summary>
+    public const string SetupProbePolicy = "setup-probe";
     public const string AdministratorPolicy = "Administrator";
 
     public static IServiceCollection AddClusterAuthentication(this IServiceCollection services, IConfiguration configuration)
@@ -44,6 +46,9 @@ public static class AuthExtensions
             limiter.AddPolicy(ClusterMeshPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
                 http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 1200, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            limiter.AddPolicy(SetupProbePolicy, http => RateLimitPartition.GetFixedWindowLimiter(
+                http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
             // Quota pour les opérations intensives (découverte disque, import/export ZIP de flows).
             limiter.AddPolicy(HeavyOperationsPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
                 http.User.Identity?.Name ?? http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
