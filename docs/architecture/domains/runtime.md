@@ -66,3 +66,6 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 - **Modification sur place** : bloc `mkv-edit-in-place` (ADR 0002) sur le worker à accès direct ; copie intégrale, contrôle `mkvmerge -J`, restauration. Pas d'événement `media.modified`, pas de reprise automatique depuis l'intention, non vérifié sur NFS/SMB.
 - Pas de réattribution automatique entre serveurs ; pas de relance déclenchée par `media.published` (les actualisations après publication se placent dans le flow, après `base-publish-result`) ; pas d'interface de suppression/recréation des verrous de disque par accès bibliothèque (nom saisi dans le bloc).
 - Non vérifié en réel : Landlock dans le conteneur de production, GPU, Plex/Jellyfin réels, NAS/NFS (atomicité du renommage), reprise multi-hôtes sous charge.
+
+## Accès de stockage du répartiteur
+- Migration additive 0048 : index couvrants des baux actifs par worker et bibliothèque, et index partiel du dernier checkpoint terminé. Les mêmes prédicats, plafonds, époques et ordres d’attribution sont conservés. Plans observés et coût d’entretien des index : [sqlite-runtime-query-plans.md](../../testing/sqlite-runtime-query-plans.md).
