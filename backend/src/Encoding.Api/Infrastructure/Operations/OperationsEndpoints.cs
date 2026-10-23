@@ -73,6 +73,17 @@ public static class OperationsEndpoints
             var started = Stopwatch.GetTimestamp();
             using var scope = logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId });
             try { await next(context); }
+            catch (Exception exception) when (!context.Response.HasStarted &&
+                (exception is Data.Sqlite.SqliteWriteUnavailableException
+                    or Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 5 or 6 }))
+            {
+                context.Response.Headers.RetryAfter = "1";
+                await Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Stockage temporairement occupé.",
+                    detail: "Réessayez cette opération après un court délai.",
+                    extensions: new Dictionary<string, object?> { ["code"] = "sqlite_write_unavailable" })
+                    .ExecuteAsync(context);
+            }
             finally
             {
                 var elapsed = Stopwatch.GetTimestamp() - started;

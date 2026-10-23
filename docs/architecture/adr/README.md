@@ -24,4 +24,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0006](0006-ressources-de-flow.md) | Ressources de flow : fichiers partagés du cluster (polices, images, audio) | accepted | flows |
 | [0007](0007-decodage-unique-avant-publication.md) | Un seul décodage complet, juste avant la publication | accepted | runtime |
 | [0008](0008-assistant-de-configuration-plex.md) | Assistant de configuration Plex : connexion plex.tv et correspondance des bibliothèques | implemented | plugins |
-| [0009](0009-ecrivain-sqlite-unique-par-noeud.md) | Écrivain SQLite unique par nœud | proposed | replication-storage |
+| [0009](0009-ecrivain-sqlite-unique-par-noeud.md) | Écrivain SQLite unique par nœud | implemented | replication-storage |
