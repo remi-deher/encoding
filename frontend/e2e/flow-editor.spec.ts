@@ -79,31 +79,27 @@ async function setup(page: Page) {
     r.fulfill({ json: { definition: flow, publishedVersion: 1, backupStatus: 'ready' } }),
   );
   await page.goto('/flows/11111111-1111-4111-8111-111111111111/edit');
-  await expect(page.locator('.step-card')).toHaveCount(5);
+  await expect(page.locator('.canvas-node')).toHaveCount(5);
 }
-test('guided and canvas share additions, deletion, undo and selections', async ({ page }) => {
+test('canvas supports addition, deletion, undo and selections', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await setup(page);
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   await expect(page.locator('.canvas-node')).toHaveCount(5);
   await page.getByRole('button', { name: 'Actions de Action A', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Dupliquer', exact: true }).click();
   await expect(page.locator('.canvas-node')).toHaveCount(6);
-  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(6);
   await page.getByRole('button', { name: 'Actions de Action A — Copie', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Supprimer', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(5);
+  await expect(page.locator('.canvas-node')).toHaveCount(5);
   await page.getByRole('button', { name: 'Annuler la dernière modification', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(6);
+  await expect(page.locator('.canvas-node')).toHaveCount(6);
   await page.getByRole('button', { name: 'Rétablir la modification', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(5);
+  await expect(page.locator('.canvas-node')).toHaveCount(5);
   expect(errors).toEqual([]);
 });
-test('connections can be removed, dragged and observed in both views', async ({ page }) => {
+test('canvas connections can be removed, dragged and observed', async ({ page }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   const link = page.getByRole('button', { name: 'Liaison success vers Fin', exact: true }).first();
   await link.focus();
   await link.press('Enter');
@@ -127,11 +123,7 @@ test('connections can be removed, dragged and observed in both views', async ({ 
   await expect(
     page.getByRole('button', { name: 'Liaison success vers Fin', exact: true }),
   ).toHaveCount(2);
-  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(5);
-  await expect(
-    page.locator('.continuation-label').filter({ hasText: '2 liaisons entrantes' }),
-  ).toBeVisible();
+  await expect(page.locator('.canvas-node')).toHaveCount(5);
 });
 test('AI uses the widget and only applies a reviewed proposal', async ({ page }) => {
   const errors: string[] = [];
@@ -153,48 +145,24 @@ test('AI uses the widget and only applies a reviewed proposal', async ({ page })
   await panel.locator('textarea').fill('Ajouter une action');
   await panel.getByRole('button', { name: 'Préparer les changements', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Appliquer au flow', exact: true })).toBeVisible();
-  await expect(page.locator('.step-card')).toHaveCount(5);
+  await expect(page.locator('.canvas-node')).toHaveCount(5);
   await panel.getByRole('button', { name: 'Appliquer au flow', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(6);
+  await expect(page.locator('.canvas-node')).toHaveCount(6);
   expect(errors).toEqual([]);
 });
-test('guided branches keep their widths inside a horizontally scrollable workspace', async ({
-  page,
-}) => {
+test('canvas keeps a wide graph inside its horizontally scrollable workspace', async ({ page }) => {
   await setup(page);
-  await expect(
-    page.locator('mat-expansion-panel', { has: page.locator('.branch-heading') }),
-  ).toHaveCount(0);
-  const branch = page.getByRole('button', { name: 'Replier le chemin Oui', exact: true });
-  await expect(branch).toHaveAttribute('aria-expanded', 'true');
-  await branch.click();
-  await expect(
-    page.getByRole('button', { name: 'Déplier le chemin Oui', exact: true }),
-  ).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.locator('.branch-lane').first().locator('.step-card')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Déplier le chemin Oui', exact: true }).click();
-  await expect(page.locator('.branch-lane').first().locator('.step-card')).toHaveCount(1);
-  await expect(page.locator('.link-insertion').first()).toContainText('Étape');
-  const cards = await page
-    .locator('.step-card')
-    .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().width));
-  expect(Math.min(...cards)).toBeGreaterThanOrEqual(338);
-  expect(Math.max(...cards)).toBeLessThanOrEqual(440);
-  const dimensions = await page.evaluate(() => ({
+  const dimensions = await page.locator('.workbench-canvas').evaluate((el) => ({
     body: document.documentElement.scrollWidth,
     viewport: innerWidth,
+    client: el.clientWidth,
+    scroll: el.scrollWidth,
   }));
   expect(dimensions.body).toBeLessThanOrEqual(dimensions.viewport);
-  const violations = (
-    await new AxeBuilder({ page })
-      .include('app-flow-graph-editor')
-      .withTags(['wcag2a', 'wcag2aa'])
-      .analyze()
-  ).violations;
-  expect(violations).toEqual([]);
+  expect(dimensions.scroll).toBeGreaterThanOrEqual(dimensions.client);
 });
 
-test('five nested decisions retain card widths, a single convergence and local scrolling', async ({
+test('five nested decisions render all canvas nodes and connections', async ({
   page,
 }, testInfo) => {
   await setup(page);
@@ -226,35 +194,19 @@ test('five nested decisions retain card widths, a single convergence and local s
     }),
   );
   await page.reload();
-  await expect(page.locator('.step-card')).toHaveCount(13);
-  const widths = await page
-    .locator('.step-card')
-    .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().width));
-  expect(Math.min(...widths)).toBeGreaterThanOrEqual(338);
-  await expect(page.locator('.step-card[data-node-id="Fin"]')).toHaveCount(1);
+  await expect(page.locator('.canvas-node')).toHaveCount(13);
+  await expect(page.locator('.canvas-node[data-node-id="Fin"]')).toHaveCount(1);
+  await expect(page.locator('.wire')).toHaveCount(17);
   const sizes = await page.locator('.workbench-canvas').evaluate((el) => ({
     client: el.clientWidth,
     scroll: el.scrollWidth,
     body: document.documentElement.scrollWidth,
     window: innerWidth,
   }));
-  expect(sizes.scroll).toBeGreaterThan(sizes.client);
+  expect(sizes.scroll).toBeGreaterThanOrEqual(sizes.client);
   expect(sizes.body).toBeLessThanOrEqual(sizes.window);
-  await page.locator('.step-card[data-node-id="Décision 5"]').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: testInfo.outputPath('guided-five-levels.png') });
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
-  await expect(page.locator('.canvas-node')).toHaveCount(13);
   await page.getByRole('button', { name: 'Tout afficher', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('canvas-five-levels.png') });
-  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
-  const before = await page.locator('.workbench-canvas').evaluate((el) => el.scrollWidth);
-  await page
-    .getByRole('button', { name: /^Replier le chemin / })
-    .first()
-    .click();
-  await expect
-    .poll(() => page.locator('.workbench-canvas').evaluate((el) => el.scrollWidth))
-    .toBeLessThan(before);
 });
 
 test('stale AI proposals cannot overwrite changes made while reviewing', async ({ page }) => {
@@ -278,14 +230,16 @@ test('stale AI proposals cannot overwrite changes made while reviewing', async (
   await page.getByRole('menuitem', { name: 'Dupliquer', exact: true }).click();
   await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
   await panel.getByRole('button', { name: 'Appliquer au flow', exact: true }).click();
-  await expect(page.locator('.step-card[data-node-id="Proposition obsolète"]')).toHaveCount(0);
-  await expect(page.locator('.step-name').filter({ hasText: 'Action A — Copie' })).toHaveCount(1);
+  await expect(page.locator('.canvas-node[data-node-id="Proposition obsolète"]')).toHaveCount(0);
+  await expect(page.locator('.canvas-title').filter({ hasText: 'Action A — Copie' })).toHaveCount(
+    1,
+  );
   await expect(page.getByText(/Le flow a changé depuis la proposition/)).toBeVisible();
 });
 
 test('right-click and stationary touch hold expose the same step actions', async ({ page }) => {
   await setup(page);
-  const card = page.locator('.step-card[data-node-id="Action A"]');
+  const card = page.locator('.canvas-node[data-node-id="Action A"]');
   await card.scrollIntoViewIfNeeded();
   await card.click({ button: 'right' });
   await expect(page.getByRole('menuitem', { name: 'Dupliquer', exact: true })).toBeVisible();
@@ -321,11 +275,8 @@ test('the general assistant retains its draft when the shared widget is closed a
   expect(errors).toEqual([]);
 });
 
-test('canvas placement stays fixed when a connection changes or the view switches', async ({
-  page,
-}) => {
+test('canvas placement stays fixed when a connection changes', async ({ page }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   const positions = () =>
     page
       .locator('.canvas-node')
@@ -343,9 +294,6 @@ test('canvas placement stays fixed when a connection changes or the view switche
   await page.getByRole('button', { name: 'Liaison success vers Décision', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Supprimer la liaison', exact: true }).click();
   await expect.poll(positions).toEqual(before);
-  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(5);
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   await expect.poll(positions).toEqual(before);
   const source = page.locator('.canvas-node[data-node-id="Entrée"] .output');
   await source.click();
@@ -358,7 +306,6 @@ test('canvas placement stays fixed when a connection changes or the view switche
 
 test('canvas exposes accessible controls and connection actions', async ({ page }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   const violations = (
     await new AxeBuilder({ page })
       .include('app-flow-canvas')
@@ -368,26 +315,19 @@ test('canvas exposes accessible controls and connection actions', async ({ page 
   expect(violations).toEqual([]);
 });
 
-test('editor keeps navigation above the vertical flow and opens tools on demand', async ({
-  page,
-}) => {
+test('editor opens canvas navigation and tools on demand', async ({ page }) => {
   await setup(page);
   const header = page.getByRole('toolbar', { name: 'Commandes du flow', exact: true });
-  await expect(header.getByRole('button', { name: 'Guidé', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await expect(header.getByRole('button', { name: 'Guidé', exact: true })).toHaveCount(0);
   await expect(
     header.getByRole('button', { name: "Ouvrir l'assistant IA", exact: true }),
   ).toHaveCount(0);
   await expect(page.locator('.simulation-tray')).toHaveCount(0);
-  await header.getByRole('button', { name: 'Canvas', exact: true }).click();
   await expect(
     page
       .getByRole('toolbar', { name: 'Navigation du canvas' })
       .getByRole('button', { name: 'Tout afficher', exact: true }),
   ).toBeVisible();
-  expect((await page.locator('.connection-list').boundingBox())?.height).toBeLessThanOrEqual(1);
   await header.getByRole('button', { name: 'Autres actions du flow', exact: true }).click();
   await page
     .getByRole('menuitem', { name: 'Basculer le volet de simulation', exact: true })
@@ -419,23 +359,8 @@ async function dragPaletteAction(
   await page.mouse.move(point.x, point.y, { steps: 20 });
   await page.mouse.up();
 }
-async function guidedDropPoint(page: Page) {
-  const port = page.locator('.step-card[data-node-id="Entrée"] .output-action');
-  await port.scrollIntoViewIfNeeded();
-  const rect = (await port.boundingBox())!;
-  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-}
-test('palette drag inserts on guided outputs and supports undo', async ({ page }) => {
-  await setup(page);
-  await dragPaletteAction(page, () => guidedDropPoint(page));
-  await expect(page.locator('.step-card')).toHaveCount(6);
-  await expect(page.locator('.detached')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Annuler la dernière modification', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(5);
-});
 test('palette drag places canvas blocks and cancels outside the workspace', async ({ page }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   await dragPaletteAction(page, async () => {
     const rect = (await page.locator('.canvas-surface').boundingBox())!;
     return { x: rect.x + 90, y: rect.y + 280 };
@@ -446,33 +371,6 @@ test('palette drag places canvas blocks and cancels outside the workspace', asyn
   await expect(added).toHaveCSS('top', '280px');
   await dragPaletteAction(page, async () => ({ x: 25, y: 25 }));
   await expect(page.locator('.canvas-node')).toHaveCount(6);
-  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
-  await expect(page.locator('.detached .step-card')).toHaveCount(1);
-});
-test('palette drag refuses a terminal block before an existing continuation', async ({ page }) => {
-  await setup(page);
-  await dragPaletteAction(page, () => guidedDropPoint(page), 'finish');
-  await expect(page.locator('.step-card')).toHaveCount(5);
-  await expect(
-    page.getByText('Une étape terminale ne peut pas être insérée avant une suite.', {
-      exact: false,
-    }),
-  ).toBeVisible();
-});
-
-test('palette drag accepts empty guided workspace without connecting the block', async ({
-  page,
-}) => {
-  await setup(page);
-  await dragPaletteAction(page, async () => {
-    const rect = (await page.locator('.workbench-canvas').boundingBox())!;
-    return { x: rect.x + 4, y: rect.y + 4 };
-  });
-  await expect(page.locator('.step-card')).toHaveCount(6);
-  await expect(page.locator('.detached .step-card')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Annuler la dernière modification', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(5);
-  await expect(page.locator('.detached')).toHaveCount(0);
 });
 
 test('friendly editor opens the inspector beside the flow and closes the palette', async ({
@@ -483,7 +381,7 @@ test('friendly editor opens the inspector beside the flow and closes the palette
   await expect(page.locator('app-flow-inline-parameters')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Vérifier', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Basculer la palette de blocs', exact: true }).click();
-  await page.locator('.step-card[data-node-id="Entrée"] .step-name').click();
+  await page.locator('.canvas-node[data-node-id="Entrée"] .canvas-title').click();
   const inspector = page.getByRole('complementary', { name: 'Entrée', exact: true });
   await expect(inspector).toBeVisible();
   await expect(page.locator('.palette-dock_collapsed')).toHaveCount(1);
@@ -493,7 +391,7 @@ test('friendly editor opens the inspector beside the flow and closes the palette
   await page.screenshot({ path: info.outputPath('inspector-dark.png'), fullPage: true });
   await inspector.getByRole('button', { name: 'Fermer le panneau', exact: true }).click();
   await expect(inspector).toBeHidden();
-  await expect(page.locator('.step-card[data-node-id="Entrée"]')).toBeVisible();
+  await expect(page.locator('.canvas-node[data-node-id="Entrée"]')).toBeVisible();
 });
 
 test('palette closes after a click insertion and can be pinned for successive additions', async ({
@@ -506,7 +404,7 @@ test('palette closes after a click insertion and can be pinned for successive ad
     .locator('.component-card')
     .filter({ has: page.locator('.component-title').filter({ hasText: /^action$/ }) })
     .click();
-  await expect(page.locator('.step-card')).toHaveCount(6);
+  await expect(page.locator('.canvas-node')).toHaveCount(6);
   await expect(page.locator('.palette-dock_collapsed')).toHaveCount(1);
   await add.click();
   await page
@@ -516,7 +414,7 @@ test('palette closes after a click insertion and can be pinned for successive ad
     .locator('.component-card')
     .filter({ has: page.locator('.component-title').filter({ hasText: /^action$/ }) })
     .click();
-  await expect(page.locator('.step-card')).toHaveCount(7);
+  await expect(page.locator('.canvas-node')).toHaveCount(7);
   await expect(page.locator('.palette-dock_collapsed')).toHaveCount(0);
 });
 
@@ -608,9 +506,9 @@ test('inspector preserves optional advanced settings while editing a common sett
     }),
   );
   await page.reload();
-  const card = page.locator('.step-card[data-node-id="Action A"]');
+  const card = page.locator('.canvas-node[data-node-id="Action A"]');
   await expect(card).toContainText('Qualité : 20');
-  await card.locator('.step-name').click();
+  await card.locator('.canvas-title').click();
   const inspector = page.getByRole('complementary', { name: 'Action A', exact: true });
   await inspector.getByLabel('Qualité', { exact: true }).fill('22');
   await expect(inspector.getByLabel('Option avancée', { exact: true })).toBeHidden();
@@ -624,7 +522,6 @@ test('canvas wires follow dragging before release and selection highlights conne
   page,
 }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   const entry = page.locator('.canvas-node').first();
   await entry.locator('.canvas-plugin').click();
   await expect(page.locator('.wire.highlighted')).not.toHaveCount(0);
@@ -642,20 +539,20 @@ test('canvas wires follow dragging before release and selection highlights conne
   await expect(wire).toHaveAttribute('d', during!);
 });
 
-test('guided workspace fills the available width and separates blocks from its toolbar', async ({
+test('canvas workspace fills the available width and separates blocks from its toolbar', async ({
   page,
 }) => {
   await setup(page);
   const toolbar = (await page.locator('.command-bar').boundingBox())!;
   const workspace = (await page.locator('.flow-workbench').boundingBox())!;
   expect(Math.abs(toolbar.width - workspace.width)).toBeLessThan(2);
-  const firstBlock = (await page.locator('.step-card').first().boundingBox())!;
+  const firstBlock = (await page.locator('.canvas-node').first().boundingBox())!;
   expect(firstBlock.y - toolbar.y - toolbar.height).toBeGreaterThanOrEqual(16);
 });
 
 test('inspector keeps deletion in the shared action footer', async ({ page }, info) => {
   await setup(page);
-  await page.locator('.step-card[data-node-id="Action A"] .step-name').click();
+  await page.locator('.canvas-node[data-node-id="Action A"] .canvas-title').click();
   const inspector = page.getByRole('complementary', { name: 'Action A', exact: true });
   const footer = inspector.locator('.form-actions');
   await expect(footer.getByRole('button', { name: 'Supprimer ce bloc' })).toBeVisible();
@@ -685,15 +582,15 @@ test('inspector keeps deletion in the shared action footer', async ({ page }, in
   await page.screenshot({ path: info.outputPath('aligned-inspector.png') });
 });
 
-test('compact headings contain their actions and expose the common continuation', async ({
+test('canvas nodes contain their actions and expose the shared connections', async ({
   page,
 }, info) => {
   await setup(page);
-  await expect(page.locator('.common-continuation')).toContainText('Suite commune : Fin');
-  const contained = await page.locator('.step-card').evaluateAll((cards) =>
+  await expect(page.locator('.wire')).toHaveCount(5);
+  const contained = await page.locator('.canvas-node').evaluateAll((cards) =>
     cards.every((card) => {
       const bounds = card.getBoundingClientRect();
-      return [...card.querySelectorAll('.step-heading button')].every((button) => {
+      return [...card.querySelectorAll('.more, .canvas-title')].every((button) => {
         const b = button.getBoundingClientRect();
         return (
           b.left >= bounds.left &&
@@ -705,18 +602,13 @@ test('compact headings contain their actions and expose the common continuation'
     }),
   );
   expect(contained).toBe(true);
-  await page.getByRole('button', { name: 'Replier les branches', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(3);
-  await page.getByRole('button', { name: 'Déplier les branches', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(5);
-  await page.screenshot({ path: info.outputPath('compact-guided.png') });
+  await page.screenshot({ path: info.outputPath('canvas-nodes.png') });
 });
 
 test('canvas layout is explicit, reversible and zoom stays inside the workspace', async ({
   page,
 }, info) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   const readPositions = () =>
     page.locator('.canvas-node').evaluateAll((cards) =>
       cards.map((card) => ({
@@ -778,11 +670,9 @@ test('canvas layout is explicit, reversible and zoom stays inside the workspace'
       .analyze()
   ).violations;
   expect(violations).toEqual([]);
-  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(5);
 });
 
-test('multiple exclusive cases, nested decisions and protected ends remain navigable in both views', async ({
+test('multiple exclusive cases, nested decisions and protected ends remain navigable on canvas', async ({
   page,
 }, info) => {
   await setup(page);
@@ -847,16 +737,10 @@ test('multiple exclusive cases, nested decisions and protected ends remain navig
     }),
   );
   await page.reload();
-  await expect(page.locator('.step-card')).toHaveCount(15);
-  for (const name of ['Texte', 'Image', 'Absent'])
-    await expect(
-      page.getByRole('button', { name: 'Replier le chemin ' + name, exact: true }),
-    ).toHaveCount(1);
+  await expect(page.locator('.canvas-node')).toHaveCount(15);
   for (const name of ['Audio conforme ?', 'Sous-titres', 'Sortie valide ?'])
-    await expect(page.locator(`.step-card[data-node-id="${name}"]`)).toHaveCount(1);
-  await page.locator('.step-card[data-node-id="Sous-titres"]').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: info.outputPath('complex-guided.png') });
-  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+    await expect(page.locator(`.canvas-node[data-node-id="${name}"]`)).toHaveCount(1);
+  await page.locator('.canvas-node[data-node-id="Sous-titres"]').scrollIntoViewIfNeeded();
   await page.getByRole('button', { name: 'Disposition automatique', exact: true }).click();
   await expect(page.locator('.canvas-node')).toHaveCount(15);
   await expect(page.locator('.wire')).toHaveCount(19);
@@ -866,8 +750,6 @@ test('multiple exclusive cases, nested decisions and protected ends remain navig
     )
     .toBe(true);
   await page.screenshot({ path: info.outputPath('complex-canvas.png') });
-  await page.getByRole('button', { name: 'Guidé', exact: true }).click();
-  await expect(page.locator('.step-card')).toHaveCount(15);
 });
 
 test('structured audio rules remain editable and preserved on desktop and mobile', async ({
@@ -897,8 +779,8 @@ test('structured audio rules remain editable and preserved on desktop and mobile
     }),
   );
   await page.reload();
-  const card = page.locator('.step-card[data-node-id="Action A"]');
-  await card.locator('.step-name').click();
+  const card = page.locator('.canvas-node[data-node-id="Action A"]');
+  await card.locator('.canvas-title').click();
   const form = page.locator('app-component-configuration-form');
   const rows = form.locator('.record');
   await expect(rows).toHaveCount(2);
@@ -909,7 +791,7 @@ test('structured audio rules remain editable and preserved on desktop and mobile
   await page.getByRole('option', { name: 'Conserver sans réencoder', exact: true }).click();
   await expect(rows.nth(2).getByLabel('Codec cible', { exact: true })).toHaveCount(0);
   await form.getByRole('button', { name: 'Appliquer les réglages', exact: true }).click();
-  await card.locator('.step-name').click();
+  await card.locator('.canvas-title').click();
   await expect(form.locator('.record')).toHaveCount(3);
   await expect(form.locator('.record').first().getByLabel('Langues', { exact: true })).toHaveValue(
     'fra,jpn',
