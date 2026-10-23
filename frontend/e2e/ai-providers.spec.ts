@@ -401,6 +401,7 @@ test('application sessions show observed usage and exchanges on desktop and mobi
     }),
   );
   await page.goto('/settings?tab=ai');
+  await page.getByRole('button', { name: /Suivi de l’IA/ }).click();
   const history = page.locator('app-ai-session-history');
   await history.getByRole('button', { name: 'Actualiser l’historique' }).click();
   await expect(history.getByText('Création de flow', { exact: true })).toBeVisible();
@@ -466,6 +467,7 @@ test('subscription quotas show windows and mark failed refreshes as old', async 
         }),
   );
   await page.goto('/settings?tab=ai');
+  await page.getByRole('button', { name: /Suivi de l’IA/ }).click();
   const quotas = page.locator('app-ai-quota-panel');
   await expect(quotas.getByText('15 % restant', { exact: true })).toBeVisible();
   await expect(quotas.getByText('Quota bientôt atteint')).toBeVisible();

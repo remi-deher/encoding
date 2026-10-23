@@ -281,6 +281,7 @@ test('administrators disable discovered models through the backend policy', asyn
     });
   });
   await page.goto('/settings?tab=ai');
+  await page.getByRole('button', { name: /Modèles disponibles/ }).click();
   const panel = page.locator('app-ai-model-catalog');
   const toggle = panel.getByRole('switch', { name: 'Modèle fourni A' });
   await expect(toggle).toBeChecked();

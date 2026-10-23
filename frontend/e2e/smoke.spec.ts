@@ -33,13 +33,12 @@ test('the primary navigation reaches the activity page', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /Activité/ }).first()).toBeVisible();
 });
 
-test('the search command palette opens from the topbar and navigates to encoding profiles', async ({
+test('the search command palette opens with Ctrl+K and navigates to encoding profiles', async ({
   page,
 }) => {
   await page.goto('/');
-  const searchBtn = page.getByRole('button', { name: /Rechercher une page/ });
-  await expect(searchBtn).toBeVisible();
-  await searchBtn.click();
+  await expect(page.getByRole('heading').first()).toBeVisible();
+  await page.keyboard.press('Control+k');
 
   const combobox = page.getByRole('combobox', { name: /Rechercher une destination/ });
   await expect(combobox).toBeVisible();
