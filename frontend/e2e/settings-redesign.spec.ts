@@ -228,6 +228,7 @@ test('creates accounts and API tokens through one shared drawer and clears one-t
   await page.getByRole('button', { name: 'Créer un jeton', exact: true }).click();
   drawer = page.getByRole('dialog', { name: 'Créer un jeton', exact: true });
   await drawer.getByRole('textbox', { name: 'Nom du jeton', exact: true }).fill('Diagnostic agent');
+  await drawer.getByLabel('Mot de passe du compte', { exact: true }).fill('very-long-password');
   await drawer.getByRole('button', { name: 'Créer le jeton', exact: true }).click();
   await expect(drawer.getByText('enc_pat_ONE_TIME_SECRET', { exact: true })).toBeVisible();
   await drawer.getByRole('button', { name: 'Terminer', exact: true }).click();
