@@ -49,7 +49,7 @@ Le worker découvre les clusters annoncés en DNS-SD/mDNS (`_encoding._tcp`). Le
 
 Ce parcours (confirmation locale) n’est accepté que si un administrateur a ouvert la **fenêtre d’enrôlement direct** depuis **Nœuds → Ajouter un nœud** (10 minutes). Autre parcours, sans fenêtre : cliquer sur **Générer une clé** dans **Nœuds → Ce nœud et son cluster** du nœud à ajouter, puis ouvrir **Ajouter un nœud** dans le catalogue du serveur et saisir la clé ; l’approbation exige un administrateur. Elle expire après 10 minutes et ne peut servir qu’une fois. Le worker attend la confirmation sur son heartbeat avant de se déclarer enrôlé.
 
-L’acceptation automatique se règle sur le worker avec `Worker__AutoAcceptEnrollment` (Compose : `WORKER_AUTO_ACCEPT_ENROLLMENT`). Elle est désactivée par défaut. Lorsqu’elle est activée, le worker accepte automatiquement le seul cluster détecté ; s’il en voit plusieurs, il attend un choix explicite.
+L’acceptation automatique se règle sur le worker avec `Worker__AutoAcceptEnrollment` (Compose : `WORKER_AUTO_ACCEPT_ENROLLMENT`). Elle est désactivée par défaut. Lorsqu’elle est activée, le worker rejoint le cluster explicitement configuré par `Cluster__ApiBaseUrl` ; sans cette configuration, il accepte automatiquement le seul cluster détecté et attend un choix explicite s’il en voit plusieurs.
 
 L’identité et le jeton aléatoire sont créés par l’agent, puis conservés dans son répertoire de données. Le serveur stocke uniquement le SHA-256 du jeton et l’exige pour les heartbeats via `X-Node-Token`. Les répétitions d’un enrôlement avec la même identité et le même jeton sont idempotentes. Un worker déjà enrôlé ne peut pas être déplacé par l’interface ; il faut réinitialiser son identité locale après avoir arrêté l’agent.
 

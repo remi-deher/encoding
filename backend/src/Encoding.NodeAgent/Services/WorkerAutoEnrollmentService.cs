@@ -43,10 +43,11 @@ public sealed class WorkerAutoEnrollmentService(
                     await enrollment.EnrollAsync(local.Id, stoppingToken);
                     logger.LogInformation("Le nœud local a rejoint le cluster {ClusterId}.", local.Id);
                 }
-                else if (options.AutomaticEnrollmentEnabled && !identity.IsEnrolled && clusters.Count == 1)
+                else if (options.AutomaticEnrollmentEnabled && !identity.IsEnrolled
+                    && GetAutomaticEnrollmentTarget(clusters, options.ClusterApiBaseUrl is not null) is { } automaticTarget)
                 {
-                    await enrollment.EnrollAsync(clusters[0].Id, stoppingToken);
-                    logger.LogInformation("L’enrôlement automatique auprès du cluster {ClusterId} est terminé.", clusters[0].Id);
+                    await enrollment.EnrollAsync(automaticTarget.Id, stoppingToken);
+                    logger.LogInformation("L’enrôlement automatique auprès du cluster {ClusterId} est terminé.", automaticTarget.Id);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -61,4 +62,8 @@ public sealed class WorkerAutoEnrollmentService(
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
     }
+
+    internal static DiscoveredCluster? GetAutomaticEnrollmentTarget(IReadOnlyList<DiscoveredCluster> clusters, bool hasConfiguredApiBaseUrl) =>
+        clusters.FirstOrDefault(cluster => cluster.Source == "configured")
+        ?? (hasConfiguredApiBaseUrl || clusters.Count != 1 ? null : clusters[0]);
 }
