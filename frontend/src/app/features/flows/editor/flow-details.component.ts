@@ -9,7 +9,6 @@ import {
   OnDestroy,
   output,
 } from '@angular/core';
-import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatButtonModule } from '@angular/material/button';
@@ -42,7 +41,6 @@ type Selection =
   selector: 'app-flow-details',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    NgTemplateOutlet,
     RouterLink,
     MatTabsModule,
     MatButtonModule,
