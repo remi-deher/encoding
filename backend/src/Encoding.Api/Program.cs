@@ -104,6 +104,9 @@ builder.Services.AddHttpClient(PluginRepositoryService.HttpClientName, client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Encoding-PluginStore/1.0");
 }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = true, MaxAutomaticRedirections = 3 });
 builder.Services.AddSingleton<PluginConnectionTester>();
+builder.Services.AddSingleton<Encoding.Api.Plugins.Plex.PlexApiClient>();
+builder.Services.AddSingleton<Encoding.Api.Plugins.Plex.PlexSetupSession>();
+builder.Services.AddSingleton<Encoding.Api.Plugins.Plex.PlexSetupService>();
 builder.Services.AddSingleton<McpService>();
 builder.Services.AddSingleton<IntegrationTriggerRepository>();
 builder.Services.AddSingleton<IntegrationTriggerService>();
@@ -133,6 +136,8 @@ builder.Services.AddHttpClient(Encoding.Api.Nodes.LocalNodeEndpoints.HttpClientN
 }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
     .AddHttpMessageHandler<LocalAgentAuthenticationHandler>();
 builder.Services.AddHttpClient("PluginConnectionTest", client => client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient(Encoding.Api.Plugins.Plex.PlexApiClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient("MetadataSources", client => client.Timeout = TimeSpan.FromSeconds(15))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
@@ -259,6 +264,7 @@ app.MapEncodingProfileEndpoints();
 Encoding.Api.Resources.ResourceEndpoints.MapResourceEndpoints(app);
 app.MapFlowSimulationEndpoints();
 app.MapPluginConfigurationEndpoints();
+Encoding.Api.Plugins.Plex.PlexSetupEndpoints.MapPlexSetupEndpoints(app);
 app.MapPluginStoreEndpoints();
 app.MapArrWebhookEndpoints();
 app.MapRuntimeEndpoints();

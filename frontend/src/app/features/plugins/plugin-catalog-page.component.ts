@@ -18,9 +18,13 @@ import {
   FlowComponentConfiguration,
   FlowComponentConfigurationSchema,
 } from '../../shared/models/flow-component';
-import { FlowPluginCatalog } from '../../shared/models/flow-validation';
+import {
+  FlowPluginCatalog,
+  PluginConfigurationResponse,
+} from '../../shared/models/flow-validation';
 import { FlowComponentDefinition } from '../../shared/models/flow-component';
 import { FlowComponentListComponent } from '../../shared/ui/flow-component-list.component';
+import { PlexSetupAssistantComponent } from './plex-setup-assistant.component';
 import {
   ResourceSheetComponent,
   ResourceSheetSection,
@@ -198,7 +202,8 @@ const PLUGIN_RECORDS: readonly PluginRecord[] = [
     version: '1.0.0',
     components: 'Scan, attente et vérification de présence',
     runtime: 'Processus plugin livré avec l’image worker (déclaré dans Runtime:Plugins)',
-    configuration: 'Connexion, correspondance des chemins et test de connexion',
+    configuration:
+      'Assistant : connexion Plex, choix du serveur et correspondance des bibliothèques',
     state: 'Catalogue intégré',
     iconUrl: '/plugins/plex.svg',
   },
@@ -263,6 +268,7 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
     CategoryTabsComponent,
     ComponentConfigurationFormComponent,
     FlowComponentListComponent,
+    PlexSetupAssistantComponent,
     MatTabsModule,
     MatButtonModule,
   ],
@@ -679,6 +685,14 @@ export class PluginCatalogPageComponent {
     } finally {
       if (operation === this.configurationOperation) this.configurationBusy.set(false);
     }
+  }
+
+  /** L'assistant Plex a enregistré la configuration : le formulaire reflète les valeurs et la révision du serveur. */
+  protected onAssistantSaved(saved: PluginConfigurationResponse): void {
+    if (this.selectedPlugin()?.id !== saved.pluginId) return;
+    this.configurationValues.set(saved.values);
+    this.configuredSecrets.set(saved.configuredSecrets);
+    this.configurationRevision.set(saved.revision);
   }
 
   protected onConfigurationCancelled(): void {
