@@ -103,6 +103,15 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 var file=Path.Combine(directory,"input-"+Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(path)))[..16]+Path.GetExtension(path));
                 await client.DownloadAsync(lease.ExecutionId,lease.Epoch,state.Inputs![path],file,job.Token); return file;
             }
+            // ADR 0007 : un seul décodage complet, du fichier exact qui va être publié ; mémorisé par SHA-256 (une reprise le refait).
+            string? decodedSha=null;
+            async Task EnsureDecodedAsync()
+            {
+                if(decodedSha==context.CurrentSha256) return;
+                await EnsureFilesAsync();
+                await scanner.DecodeAsync(current,lease.Flow.MediaType,job.Token);
+                decodedSha=context.CurrentSha256;
+            }
             async Task ApplyOutcomeAsync(MediaActionOutcome outcome,string node)
             {
                 if(outcome.VideoEncodings is { Count: > 0 })
@@ -276,6 +285,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(context.CurrentSha256==sourceSha) output="unchanged";
                         else
                         {
+                            await EnsureDecodedAsync();
                             // Rejouable après une reprise (ADR 0004) : une publication déjà demandée ou faite pour ce même résultat est adoptée, jamais refaite.
                             var already=await client.PublicationStateAsync(lease.ExecutionId,lease.Epoch,job.Token);
                             if(already.Requested && already.Sha256!=context.CurrentSha256) throw new PublishResultException("Un autre résultat a déjà été publié pour cette exécution.");
@@ -623,6 +633,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=(publishedSha??sourceSha);
             if(changed && publishedSha is not null) throw new IOException("Le média a été modifié après sa publication ; ce résultat ne peut pas être publié une seconde fois.");
             if(changed && variables.ContainsKey("runtime.inPlaceEdited")) throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
+            if(changed) await EnsureDecodedAsync();
             await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/finish",new FinishRuntimeExecution(lease.Epoch,Guid.NewGuid(),Volatile.Read(ref revision),failed?"failed":terminal=="deferred"?"deferred":"succeeded",
                 failed?"Le flow a atteint une fin en échec.":"Flow terminé ; scans média réalisés.",changed?context.CurrentSha256:null,changed?context.Extension:null,context.BeforeMetadata,context.CurrentMetadata,terminal=="deferred"?(variables.TryGetValue("runtime.deferMinutes",out var delay)?delay.GetInt32():2):null,
                 commandCapture.Pending()),job.Token);

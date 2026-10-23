@@ -25,46 +25,21 @@
 }
 
 <ng-template #homeContent>
-  <p class="cluster-name">{{ clusterName() }}</p>
-  <app-page-header title="Vue d’ensemble" [actions]="pageActionsTemplate()" />
+  <app-page-header
+    title="Vue d’ensemble"
+    [actions]="pageActionsTemplate()"
+    [showSystemActions]="true"
+  >
+    <span page-metadata class="cluster-name">{{ clusterName() }}</span>
+  </app-page-header>
 
-  <div class="overview-view-bar" role="group" aria-label="Vues d’ensemble">
-    <button
-      type="button"
-      class="overview-view-button"
-      [class.is-active]="overviewView() === 'general'"
-      [attr.aria-pressed]="overviewView() === 'general'"
-      (click)="overviewView.set('general')"
-    >
-      <span aria-hidden="true">▦</span> Général
-    </button>
-    <button
-      type="button"
-      class="overview-view-button"
-      [class.is-active]="overviewView() === 'ai'"
-      [attr.aria-pressed]="overviewView() === 'ai'"
-      (click)="overviewView.set('ai')"
-    >
-      <span aria-hidden="true">✦</span> IA
-    </button>
-    <button
-      type="button"
-      class="overview-view-button"
-      [class.is-active]="overviewView() === 'activity'"
-      [attr.aria-pressed]="overviewView() === 'activity'"
-      (click)="overviewView.set('activity')"
-    >
-      <span aria-hidden="true">◷</span> Activité
-    </button>
-    <button
-      type="button"
-      class="overview-view-button"
-      [class.is-active]="overviewView() === 'infrastructure'"
-      [attr.aria-pressed]="overviewView() === 'infrastructure'"
-      (click)="overviewView.set('infrastructure')"
-    >
-      <span aria-hidden="true">▤</span> Infrastructure
-    </button>
+  <div class="overview-tabs-wrapper">
+    <app-category-tabs
+      label="Vues d’ensemble"
+      [options]="overviewTabs"
+      [selected]="overviewView()"
+      (selectedChange)="onOverviewViewChanged($event)"
+    />
   </div>
 
   @if (state().status === 'loading') {

@@ -36,19 +36,26 @@ import { IconComponent, IconName } from './icon.component';
       display: block;
       min-width: 0;
     }
+    .configuration-section {
+      min-width: 0;
+      padding: clamp(16px, 1.8vw, 24px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-2xl);
+      background: var(--surface-container-lowest);
+    }
     .section-heading {
       display: flex;
       align-items: flex-start;
       gap: var(--space-3);
-      margin: 0 var(--space-1) var(--space-3);
+      margin: 0 0 var(--space-4);
       flex-wrap: wrap;
     }
     .section-icon {
       display: grid;
       place-items: center;
       flex: none;
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: var(--radius-md);
       background: var(--accent-soft);
       color: var(--accent);
@@ -92,9 +99,19 @@ import { IconComponent, IconName } from './icon.component';
       align-items: center;
       gap: var(--space-2);
       flex-wrap: wrap;
+      margin-inline-start: auto;
     }
     .section-actions:empty {
       display: none;
+    }
+    @media (max-width: 600px) {
+      .configuration-section {
+        padding: var(--space-4);
+        border-radius: var(--radius-xl);
+      }
+      .section-text {
+        min-width: 0;
+      }
     }
   `,
 })

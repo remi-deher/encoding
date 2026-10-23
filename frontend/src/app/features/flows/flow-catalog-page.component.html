@@ -10,8 +10,8 @@
   (actionClosed)="closeFlowCreation()"
   filterLabel=""
   searchLabel="Rechercher un flow"
-  searchLayout="centered"
-  [showToolbar]="totalCount() > 0"
+  searchLayout="end"
+  [showToolbar]="true"
   [emptyState]="catalogState() === 'ready' && totalCount() === 0 ? emptyState : null"
   (emptyStateAction)="openFlowCreation()"
   [searchQuery]="searchQuery()"
@@ -21,7 +21,7 @@
     catalogState() === 'loading' ? 'Chargement des flows…' : 'Impossible de charger les flows.'
   "
 >
-  <ng-template #pageActions>
+  <ng-template #catalogueToolbarActions>
     <app-file-import
       label="Importer"
       accept=".json,.zip"

@@ -1,6 +1,6 @@
 :host {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-4);
   min-width: 0;
 }
 h3,
@@ -30,7 +30,31 @@ p {
 }
 :host form {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-4);
+}
+.ai-secondary-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl) !important;
+  background: var(--surface-container-low);
+  box-shadow: none !important;
+}
+.ai-secondary-panel mat-expansion-panel-header {
+  min-height: 64px;
+}
+.ai-secondary-panel mat-panel-title {
+  flex: 0 0 auto;
+  font-weight: 650;
+}
+.ai-secondary-panel mat-panel-description {
+  justify-content: flex-end;
+  color: var(--text-secondary);
+}
+.ai-follow-up {
+  display: grid;
+  gap: var(--space-4);
+  padding-bottom: var(--space-2);
 }
 .mat-expansion-panel.advanced {
   background: var(--surface-container-low);
@@ -101,6 +125,9 @@ code {
 @media (max-width: 720px) {
   .usage-model-fields {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .ai-secondary-panel mat-panel-description {
+    display: none;
   }
 }
 button app-icon {

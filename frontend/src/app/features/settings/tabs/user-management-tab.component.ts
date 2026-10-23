@@ -73,10 +73,9 @@ interface UserRow {
               <mat-slide-toggle
                 [checked]="row.isActive"
                 [disabled]="row.isSelf || busy()"
-                [aria-label]="'Actif : ' + row.username"
+                [aria-label]="(row.isActive ? 'Désactiver ' : 'Activer ') + row.username"
                 (change)="setActive(row, $event)"
-                >Actif</mat-slide-toggle
-              >
+              />
               <button
                 matButton="outlined"
                 type="button"
