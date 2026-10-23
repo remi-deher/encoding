@@ -71,3 +71,9 @@ tags: [sqlite, migrations, maillage, réconciliation, lww, raft, sauvegarde, tom
 - Pas de restauration guidée des sauvegardes de flows ; pas de rétention des sauvegardes.
 - Les artefacts doivent être sur un stockage accessible aux serveurs concernés (`Runtime:ArtifactDirectory`) ; un volume local n'établit pas de haute disponibilité inter-hôtes.
 - Maillage : un changement qui conserve taille et date n'est pas concerné ici (voir sondage de surveillance dans [runtime.md](runtime.md)) ; deux créations isolées de même nom attendent la résolution de la collision.
+
+## Transactions de capture bornées
+- La capture locale valide des lots d’au plus 64 événements et libère l’écrivain entre les lots. Chaque événement, son empreinte d’entité et l’allocation de sa séquence restent atomiques ; un curseur n’avance qu’après le traitement complet de son groupe source.
+- Après libération de l’écrivain, les candidats sont revérifiés contre l’état courant et la ligne locale pour ne pas publier un ancien instantané après une projection concurrente. Les suppressions sont confirmées par l’absence de la ligne ; la présence doit toujours correspondre à l’instantané préparé.
+- Une interruption peut laisser des lots déjà validés : le passage suivant reprend sans dupliquer les entités inchangées. Les séquences sont relues à chaque nouveau lot. Le format et l’ordre logique du journal restent inchangés ; la borne porte sur les événements, pas sur une durée maximale de transaction.
+- Les empreintes des inventaires média sont préparées avant l’admission. Un marqueur local `scan-inventory/<scanId>` dans `cluster_sync_table_cursors` n’est validé qu’après la fin de l’inventaire ; une reprise ne perd donc pas les médias dont le scan a déjà été journalisé dans un lot précédent. Ce marqueur est local et n’est pas échangé entre pairs.
