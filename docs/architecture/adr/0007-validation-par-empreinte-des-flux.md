@@ -24,12 +24,12 @@ Le décodage protège un seul risque : un flux audio/vidéo **illisible** (corru
    - **différente** ou **sans référence** (première écriture, réencodage vidéo ou audio, flux retirés ou réordonnés, conversion de conteneur qui modifie les paquets) : décodage complet, avec calcul de l'empreinte **dans la même exécution de ffmpeg** (deux sorties, une lecture) ; succès → `AvFingerprint` et `ValidatedSha256` mis à jour.
    La règle se fonde sur ce qui est **prouvé** sur le fichier, jamais sur ce que le bloc ou le script déclare : un script qui corrompt un flux en déclarant une modification d'en-tête est détecté (empreinte différente → décodage).
 3. **Garde avant publication.** `base-publish-result` refuse de demander la publication si `ValidatedSha256 ≠ CurrentSha256` : il lance alors le décodage complet lui-même (cas d'un checkpoint ancien, d'une reprise après perte du worker sans preuve, d'un fichier restauré). Un fichier publié a donc toujours des flux A/V décodés sans erreur ou identiques à des flux qui l'ont été.
-4. **Rattrapage de secours** : `ENCODING_RUNTIME_ALWAYS_DECODE=1` (option du nœud, pas de réglage d'interface) rétablit l'ancien comportement : décodage après chaque étape.
-5. Le transfert vers le nœud d'accès (`RuntimeTransferService`) garde son contrôle sans décodage (déjà le cas) ; le SHA-256 vérifié sur le transfert prouve qu'il s'agit du fichier validé.
+4. Le transfert vers le nœud d'accès (`RuntimeTransferService`) garde son contrôle sans décodage (déjà le cas) ; le SHA-256 vérifié sur le transfert prouve qu'il s'agit du fichier validé.
 
 ## Alternatives écartées
 - **Règle déclarative par bloc** (« ce bloc ne réencode pas ») : les scripts (`candidate`) et les plugins n'ont pas de déclaration fiable ; un bloc mal classé laisserait passer une corruption.
 - **Un seul décodage, juste avant publication** : plus simple mais une étape qui échoue tard fait perdre tout le traitement, et le diagnostic ne désigne plus l'étape fautive. Reste possible comme option si Rémi préfère l'économie maximale.
+- **Option de nœud pour rétablir l'ancien comportement** : refusée par Rémi (2026-10-23).
 - **Aucune empreinte, décodage seulement après réencodage connu** : reposerait sur la classification des blocs (voir plus haut).
 - **Empreinte des seuls en-têtes ffprobe** : ne détecte pas une corruption des données.
 
@@ -39,5 +39,5 @@ Le décodage protège un seul risque : un flux audio/vidéo **illisible** (corru
 - Conversion de conteneur qui transforme les paquets (ex. TS → MKV) : empreinte différente, donc décodage ; sûr, pas de gain.
 - Compatibilité cluster : champs optionnels du checkpoint, ignorés par un ancien serveur (le checkpoint les perd : le nœud suivant décode, plus lent mais sûr) ; pas de migration. Un ancien worker continue de décoder à chaque étape.
 - Interaction avec ADR 0004 : après reprise, la preuve voyage dans le checkpoint ; sans preuve (checkpoint ancien) la garde de l'article 3 décode.
-- Tests prévus (`TEST_RULES.md`) : pas de décodage après étape d'en-tête ni remux ; décodage après réencodage ; décodage final avant publication si la preuve manque ; corruption introduite par une étape intermédiaire détectée avant publication ; reprise sans preuve ne saute pas la validation ; `ALWAYS_DECODE`.
+- Tests prévus (`TEST_RULES.md`) : pas de décodage après étape d'en-tête ni remux ; décodage après réencodage ; décodage final avant publication si la preuve manque ; corruption introduite par une étape intermédiaire détectée avant publication ; reprise sans preuve ne saute pas la validation .
 - Non vérifié en réel : gains sur .50/.51 et stockage réseau (mesure prévue dans le bac à sable `SANDBOX_V6_vs_V3_20261023`, après accord).
