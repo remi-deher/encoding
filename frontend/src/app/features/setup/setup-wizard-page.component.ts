@@ -559,7 +559,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       display: block;
       min-height: 100%;
       padding: var(--space-4);
-      background: radial-gradient(ellipse at 50% 0, var(--accent-soft), transparent 65%);
+      background: var(--page-background);
     }
     .setup-progress {
       border-radius: var(--radius-pill);
@@ -886,7 +886,16 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
     .input-with-button {
       display: flex;
       justify-content: flex-end;
-      gap: var(--space-2);
+      align-items: center;
+      gap: var(--space-3);
+    }
+    .workbench-actions button {
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 var(--space-4);
+      font-weight: 700;
     }
     .input-with-button .text-input {
       flex: 1;
