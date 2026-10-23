@@ -42,4 +42,36 @@ export class FlowScripts {
       this.http.post<FlowScriptVersion>(`${this.base}/${id}/publish`, { expectedRevision }),
     );
   }
+
+  /** Importe un fichier .py ou .js : crée un brouillon, ou une nouvelle révision de brouillon si le nom existe. */
+  importFile(file: File) {
+    return firstValueFrom(
+      this.http.post<{ created: boolean; script: FlowScriptDetails }>(
+        `${this.base}/import?name=${encodeURIComponent(file.name)}`,
+        file,
+        { headers: { 'Content-Type': 'application/octet-stream' } },
+      ),
+    );
+  }
+
+  /** Exporte une version publiée en fichier (POST : réservé aux administrateurs). */
+  exportVersion(id: string, version: number) {
+    return firstValueFrom(
+      this.http.post(`${this.base}/${id}/versions/${version}/export`, null, {
+        observe: 'response',
+        responseType: 'blob',
+      }),
+    );
+  }
+
+  /** Exporte la dernière version publiée de chaque script demandé dans une archive ZIP. */
+  exportMany(ids: readonly string[]) {
+    return firstValueFrom(
+      this.http.post(
+        `${this.base}/export`,
+        { items: ids.map((id) => ({ id })) },
+        { responseType: 'blob' },
+      ),
+    );
+  }
 }
