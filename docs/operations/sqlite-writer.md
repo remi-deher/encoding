@@ -41,6 +41,8 @@ Non vérifié par la seule implémentation : charge réelle, comparaison avant/a
 
 ## Vérification locale du 2026-10-23
 
+La [sonde de coordination](../testing/coordination-measurements.md) complète le compteur synthétique ci-dessous par des mesures des claims et renouvellements réels avec et sans capture incrémentale concurrente (p95/p99, temps de file, admissions et erreurs). Elle est reproductible sur des fichiers temporaires et ne constitue pas une validation de production.
+
 Une sonde sur deux fichiers SQLite temporaires, même charge pour chaque mode : huit clients concurrents, seize transactions chacun, lecture du compteur puis mise à jour dans la même transaction (128 unités). Un seul passage par mode, sur cet environnement de développement :
 
 | Mode | Durée totale | Compteur final | Attente cumulée de file | Détention cumulée après admission | Refus / expirations / reprises BEGIN |
