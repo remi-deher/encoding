@@ -14,7 +14,7 @@ import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-draw
 import { ConfigurationSectionComponent } from '../../shared/ui/configuration-section.component';
 import { SystemLogViewerComponent } from '../../shared/ui/system-log-viewer/system-log-viewer.component';
 import { UserAccount } from '../../shared/models/auth';
-import { ApiTokenResponse } from '../../shared/models/api-token';
+import { ApiTokenResponse, CreatedApiTokenResponse } from '../../shared/models/api-token';
 import { AccessSummaryComponent } from './tabs/access-summary.component';
 import { ApiTokenTabComponent } from './tabs/api-token-tab.component';
 import { UserManagementTabComponent } from './tabs/user-management-tab.component';
@@ -96,10 +96,13 @@ export function settingsDomain(value: string | null): SettingsMainTab {
             @case ('access') {
               <app-access-summary [users]="users()" [tokens]="tokens()" />
               <app-user-management-tab (usersUpdated)="users.set($event)" />
-              <app-api-token-tab (tokensUpdated)="tokens.set($event)" />
+              <app-api-token-tab
+                (tokensUpdated)="tokens.set($event)"
+                (tokenCreated)="createdToken.set($event)"
+              />
             }
             @case ('ai') {
-              <app-ai-tools-tab /><app-mcp-server-tab />
+              <app-ai-tools-tab /><app-mcp-server-tab [createdToken]="createdToken()" />
             }
             @case ('connections') {
               <app-webhooks-tab /><app-metrics-tab />
@@ -123,9 +126,9 @@ export function settingsDomain(value: string | null): SettingsMainTab {
   styles: `
     .settings-content {
       display: grid;
-      gap: var(--space-6);
-      margin-top: var(--space-6);
-      max-width: 1160px;
+      gap: var(--space-4);
+      margin-top: var(--space-4);
+      max-width: 1440px;
       min-width: 0;
     }
   `,
@@ -140,6 +143,7 @@ export class SettingsPageComponent {
   protected readonly activeMainTab = signal<SettingsMainTab>('interface');
   protected readonly users = signal<readonly UserAccount[]>([]);
   protected readonly tokens = signal<readonly ApiTokenResponse[]>([]);
+  protected readonly createdToken = signal<CreatedApiTokenResponse | null>(null);
   protected readonly descriptions: Record<SettingsMainTab, string> = {
     interface: 'Vos préférences pour cette interface.',
     access: 'Les comptes et les accès des applications à votre cluster.',

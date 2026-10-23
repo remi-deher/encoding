@@ -301,10 +301,28 @@
   </form>
 }
 @if (isAdmin()) {
-  <app-ai-model-catalog />
-  <app-ai-quota-panel [refreshKey]="quotaRevision()" />
-  <app-ai-usage-panel [refreshKey]="quotaRevision()" />
-  <app-ai-session-history />
+  <mat-expansion-panel class="ai-secondary-panel">
+    <mat-expansion-panel-header>
+      <mat-panel-title>Modèles disponibles</mat-panel-title>
+      <mat-panel-description>Choix des modèles autorisés pour le cluster</mat-panel-description>
+    </mat-expansion-panel-header>
+    <ng-template matExpansionPanelContent>
+      <app-ai-model-catalog />
+    </ng-template>
+  </mat-expansion-panel>
+  <mat-expansion-panel class="ai-secondary-panel">
+    <mat-expansion-panel-header>
+      <mat-panel-title>Suivi de l’IA</mat-panel-title>
+      <mat-panel-description>Quotas, consommation et historique des sessions</mat-panel-description>
+    </mat-expansion-panel-header>
+    <ng-template matExpansionPanelContent>
+      <div class="ai-follow-up">
+        <app-ai-quota-panel [refreshKey]="quotaRevision()" />
+        <app-ai-usage-panel [refreshKey]="quotaRevision()" />
+        <app-ai-session-history />
+      </div>
+    </ng-template>
+  </mat-expansion-panel>
 }
 <ng-template #providerEditor>
   <form #providerForm="ngForm" class="provider-editor" (ngSubmit)="saveSettings()">
