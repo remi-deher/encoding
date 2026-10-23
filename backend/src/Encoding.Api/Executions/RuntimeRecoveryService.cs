@@ -34,6 +34,18 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
     public const int MaximumResumes=2;
     private static readonly TimeSpan ResumeGrace=TimeSpan.FromMinutes(2);
 
+    private const string ExpiredWorkPredicate = """
+        (e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()))
+        OR (e.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until IS NOT NULL AND w.lease_until<=clock_timestamp())
+        """;
+
+    private async Task<bool> HasExpiredWorkAsync(CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var command = Sql.Command($"SELECT EXISTS(SELECT 1 FROM executions e JOIN execution_work w ON w.execution_id=e.id WHERE {ExpiredWorkPredicate})", connection);
+        return await command.ScalarBoolAsync(ct);
+    }
+
     /// <summary>
     /// Closes cancelled work. An attempt whose assigned worker lost its lease is resumed at its last durable checkpoint by another
     /// eligible worker (same execution ID, bounded) when every unfinished step is replayable; otherwise it fails and must be retried
@@ -41,17 +53,19 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
     /// </summary>
     public async Task<int> ProcessOnceAsync(CancellationToken ct)
     {
+        // This is only an admission hint: all predicates are rechecked inside the writer transaction.
+        if (!await HasExpiredWorkAsync(ct) && !await RuntimeRepository.HasUnavailableSourcesAsync(dataSource, offlineAfter, ct))
+            return await FailUnavailableTargetsAsync(ct);
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         await RuntimeRepository.FailUnavailableSourcesAsync(c, tx, offlineAfter, ct);
         var expired=new List<(Guid Id,Guid? Worker,int Revision,string State,int Attempt,string Flow,bool HasNonIdempotentStep,bool Uncertain,bool Waiting,int Resumes)>();
-        await using(var cmd=Sql.Command("""
+        await using(var cmd=Sql.Command($"""
           SELECT e.id,e.node_id,e.revision,e.state,e.attempt,e.flow_definition::text,
             EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id AND NOT s.idempotent),
             EXISTS(SELECT 1 FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NULL AND NOT s.idempotent),
             EXISTS(SELECT 1 FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting'),w.resume_count
           FROM executions e JOIN execution_work w ON w.execution_id=e.id
-          WHERE (e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()))
-             OR (e.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until IS NOT NULL AND w.lease_until<=clock_timestamp())
+          WHERE {ExpiredWorkPredicate}
           ORDER BY e.updated_at LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED
           """,c,tx))
         await using(var r=await cmd.ExecuteReaderAsync(ct))
