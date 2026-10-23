@@ -8,6 +8,15 @@ namespace Encoding.Runtime.Tests;
 public sealed class RuntimeQueryPlanTests(ITestOutputHelper output)
 {
     [Fact]
+    public async Task QueueCursorSeeksInOrderWithoutATemporarySort()
+    {
+        await using var database = await CreateAsync();
+        var plan = await PlanAsync(database, "SELECT id FROM executions WHERE (queued_at,id)>('2000-01-01 00:00:00.000000Z',@id) ORDER BY queued_at,id LIMIT 100");
+        Assert.Contains(plan, line => line.Contains("SEARCH executions USING COVERING INDEX ix_executions_queue_order", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan, line => line.Contains("TEMP B-TREE", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task DuplicateLookupSeeksBothLibraryAndMediaKey()
     {
         await using var database = await CreateAsync();
