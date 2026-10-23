@@ -4,6 +4,7 @@ import {
   TemplateRef,
   computed,
   inject,
+  input,
   signal,
   viewChild,
 } from '@angular/core';
@@ -27,6 +28,8 @@ import { McpService } from '../../../shared/services/mcp.service';
 import { PublicUrlService } from '../../../shared/services/public-url.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SearchFieldComponent } from '../../../shared/ui/search-field.component';
+import { ApiTokenResponse, CreatedApiTokenResponse } from '../../../shared/models/api-token';
+import { ApiTokenService } from '../../../shared/services/api-token.service';
 
 type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 
@@ -55,7 +58,11 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
         Configurer un client
       </button>
       <app-setting-group>
-        <app-setting-row label="Adresse de connexion">
+        <app-setting-row
+          label="Adresse de connexion"
+          hint="La vérification protège l’affichage de l’adresse utilisée par les clients MCP."
+          [stacked]="true"
+        >
           <ng-container row-detail>
             @if (addressRevealed()) {
               <code>{{ serverBaseUrl() }}/api/v1/mcp/sse</code>
@@ -64,24 +71,28 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
           @if (addressRevealed()) {
             <button matButton="tonal" type="button" (click)="copyAddress()">Copier</button>
           } @else {
-            <mat-form-field appearance="outline">
-              <mat-label>Mot de passe du compte</mat-label>
-              <input
-                matInput
-                type="password"
-                autocomplete="current-password"
-                [value]="reauthPassword()"
-                (input)="reauthPassword.set($any($event.target).value)"
-              />
-            </mat-form-field>
-            <button
-              matButton="tonal"
-              type="button"
-              [disabled]="reauthBusy()"
-              (click)="revealAddress()"
-            >
-              Vérifier et afficher
-            </button>
+            <div class="reauth-controls">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Mot de passe du compte</mat-label>
+                <input
+                  matInput
+                  type="password"
+                  autocomplete="current-password"
+                  [disabled]="reauthBusy()"
+                  [value]="reauthPassword()"
+                  (input)="reauthPassword.set($any($event.target).value)"
+                  (keydown.enter)="revealAddress()"
+                />
+              </mat-form-field>
+              <button
+                matButton="tonal"
+                type="button"
+                [disabled]="reauthBusy() || !reauthPassword()"
+                (click)="revealAddress()"
+              >
+                {{ reauthBusy() ? 'Vérification…' : 'Vérifier et afficher' }}
+              </button>
+            </div>
           }
         </app-setting-row>
         <app-setting-row
@@ -126,8 +137,8 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
     <ng-template #clientEditor
       ><div class="client-editor">
         <p>
-          Choisissez votre client et renseignez la valeur complète d’un jeton, ou remplacez le
-          marqueur dans l’exemple.
+          Choisissez un jeton de votre compte et le client. La valeur complète d’un jeton est
+          disponible ici uniquement pendant cette session, juste après sa création.
         </p>
         <mat-form-field appearance="outline"
           ><mat-label>Client</mat-label
@@ -140,20 +151,56 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
             ><mat-option value="stdio">Stdio (CLI)</mat-option></mat-select
           ></mat-form-field
         >
-        <mat-form-field appearance="outline"
-          ><mat-label>Jeton d’API complet (facultatif)</mat-label
-          ><input
-            matInput
-            type="password"
-            autocomplete="off"
-            [value]="clientToken()"
-            (input)="clientToken.set($any($event.target).value)"
-          /><mat-hint>Un préfixe ne suffit pas pour s’authentifier.</mat-hint></mat-form-field
-        >
+        <div class="client-token-fields">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Jeton de mon compte</mat-label>
+            <mat-select
+              [value]="selectedApiTokenId()"
+              (selectionChange)="selectApiToken($event.value)"
+            >
+              <mat-option value="">Sélectionner un jeton</mat-option>
+              @for (token of selectableTokens(); track token.id) {
+                <mat-option [value]="token.id">
+                  {{ token.name }} · {{ token.tokenPrefix }}…
+                </mat-option>
+              }
+            </mat-select>
+            <mat-hint>
+              @if (tokenListState() === 'loading') {
+                Chargement des jetons…
+              } @else if (tokenListState() === 'error') {
+                Impossible de charger les jetons.
+              } @else {
+                Les anciens jetons demandent leur valeur complète ci-dessous ; seul un jeton créé
+                pendant cette session est prérempli.
+              }
+            </mat-hint>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Ou coller la valeur complète</mat-label>
+            <input
+              matInput
+              type="password"
+              autocomplete="off"
+              [value]="manualToken()"
+              (input)="manualToken.set($any($event.target).value)"
+            />
+            <mat-hint>Utile pour un jeton créé avant cette session.</mat-hint>
+          </mat-form-field>
+        </div>
+        @if (selectedApiToken(); as token) {
+          <p class="token-availability" role="status">
+            @if (createdToken()?.id === token.id) {
+              La valeur de ce jeton est disponible pour cette configuration.
+            } @else {
+              Sa valeur complète n’est pas conservée. Collez-la si vous l’avez sauvegardée.
+            }
+          </p>
+        }
         <pre><code>{{ configSnippet() }}</code></pre>
         <p>{{ clientInstructions() }}</p>
-        <button matButton="filled" (click)="copyConfigSnippet()">
-          {{ clientToken() ? 'Copier la configuration' : 'Copier l’exemple' }}
+        <button matButton="filled" [disabled]="!configReady()" (click)="copyConfigSnippet()">
+          Copier la configuration
         </button>
       </div></ng-template
     >
@@ -196,6 +243,27 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
       display: grid;
       gap: var(--space-4);
     }
+    .reauth-controls {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto;
+      align-items: center;
+      gap: var(--space-3);
+      width: min(100%, 720px);
+    }
+    .reauth-controls mat-form-field,
+    .client-token-fields mat-form-field {
+      width: 100%;
+      min-width: 0;
+    }
+    .client-token-fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+    .token-availability {
+      margin: calc(-1 * var(--space-2)) 0 0;
+      font-size: var(--font-label);
+    }
     pre {
       margin: 0;
       white-space: pre-wrap;
@@ -215,20 +283,40 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
       font-size: var(--font-label);
       margin-right: var(--space-3);
     }
+    @media (max-width: 720px) {
+      .reauth-controls,
+      .client-token-fields {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
   `,
 })
 export class McpServerTabComponent {
   private readonly mcpService = inject(McpService);
+  private readonly apiTokenService = inject(ApiTokenService);
   private readonly http = inject(HttpClient);
   private readonly notifications = inject(NotificationService);
   private readonly clipboardService = inject(ClipboardService);
   protected readonly addressRevealed = signal(false);
   protected readonly reauthPassword = signal('');
   protected readonly reauthBusy = signal(false);
+  readonly createdToken = input<CreatedApiTokenResponse | null>(null);
+  protected readonly apiTokens = signal<readonly ApiTokenResponse[]>([]);
+  protected readonly selectableTokens = computed(() =>
+    this.apiTokens().filter((token) => {
+      if (!token.isActive) return false;
+      return !token.expiresAt || new Date(token.expiresAt).getTime() > Date.now();
+    }),
+  );
+  protected readonly tokenListState = signal<'loading' | 'error' | 'ready'>('loading');
+  protected readonly selectedApiTokenId = signal('');
+  protected readonly manualToken = signal('');
+  protected readonly selectedApiToken = computed(
+    () => this.apiTokens().find((token) => token.id === this.selectedApiTokenId()) ?? null,
+  );
 
   private readonly editor = inject(SettingsEditor);
   private readonly clientEditor = viewChild.required<TemplateRef<unknown>>('clientEditor');
-  protected readonly clientToken = signal('');
   protected openClient(): void {
     if (!this.addressRevealed()) {
       this.notifications.show('Vérifiez votre mot de passe pour afficher l’adresse MCP.');
@@ -237,7 +325,7 @@ export class McpServerTabComponent {
     void this.editor.open({
       title: 'Configurer un client MCP',
       content: this.clientEditor(),
-      onClosed: () => this.clientToken.set(''),
+      onClosed: () => this.manualToken.set(''),
     });
   }
   protected async copyAddress(): Promise<void> {
@@ -277,8 +365,18 @@ export class McpServerTabComponent {
     );
   });
 
+  private readonly availableCreatedToken = computed(() => {
+    const recent = this.createdToken();
+    return recent?.id === this.selectedApiTokenId() &&
+      this.selectableTokens().some((token) => token.id === recent.id)
+      ? recent
+      : null;
+  });
   protected readonly effectiveToken = computed(
-    () => this.clientToken().trim() || '<JETON_API_COMPLET>',
+    () => this.availableCreatedToken()?.token || this.manualToken().trim() || '<JETON_API_COMPLET>',
+  );
+  protected readonly configReady = computed(
+    () => !!this.manualToken().trim() || !!this.availableCreatedToken(),
   );
 
   private readonly publicUrl = inject(PublicUrlService);
@@ -358,6 +456,24 @@ export class McpServerTabComponent {
 
   constructor() {
     void this.loadTools();
+    void this.loadApiTokens();
+  }
+
+  protected selectApiToken(id: string): void {
+    this.selectedApiTokenId.set(id);
+  }
+
+  private async loadApiTokens(): Promise<void> {
+    try {
+      this.apiTokens.set(await firstValueFrom(this.apiTokenService.list()));
+      this.tokenListState.set('ready');
+      const current = this.createdToken();
+      if (current && this.selectableTokens().some((token) => token.id === current.id)) {
+        this.selectedApiTokenId.set(current.id);
+      }
+    } catch {
+      this.tokenListState.set('error');
+    }
   }
 
   async loadTools(): Promise<void> {
@@ -370,6 +486,7 @@ export class McpServerTabComponent {
   }
 
   protected async copyConfigSnippet(): Promise<void> {
+    if (!this.configReady()) return;
     const ok = await this.clipboardService.copy(this.configSnippet());
     if (ok) {
       this.notifications.show('Configuration copiée dans le presse-papier.');

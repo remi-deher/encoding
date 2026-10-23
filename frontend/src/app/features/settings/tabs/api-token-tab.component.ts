@@ -13,6 +13,7 @@ import { MatButtonModule } from '@angular/material/button';
 import {
   ApiTokenReplicationView,
   ApiTokenResponse,
+  CreatedApiTokenResponse,
   tokenPropagation,
 } from '../../../shared/models/api-token';
 import { formatRelativeTime } from '../../../shared/models/date-format';
@@ -108,6 +109,7 @@ export class ApiTokenTabComponent {
   private readonly tokenEditor = viewChild.required<TemplateRef<unknown>>('tokenEditor');
   private readonly recordForm = viewChild(RecordFormComponent);
   readonly tokensUpdated = output<readonly ApiTokenResponse[]>();
+  readonly tokenCreated = output<CreatedApiTokenResponse>();
   protected readonly tokens = signal<readonly ApiTokenResponse[]>([]);
   protected readonly replication = signal<ApiTokenReplicationView | null>(null);
   protected readonly state = signal<'loading' | 'error' | 'ready'>('loading');
@@ -265,6 +267,7 @@ export class ApiTokenTabComponent {
         }),
       );
       this.secret.set(result.token);
+      this.tokenCreated.emit(result);
       this.notifications.show('Jeton créé. Copiez sa valeur avant de fermer le panneau.');
       await this.refresh();
     } catch {
