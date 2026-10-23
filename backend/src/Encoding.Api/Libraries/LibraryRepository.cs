@@ -114,9 +114,34 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
             return await peerConsensus.ReplicateLibraryAsync(null, id, current.Revision, true, cancellationToken);
         }
 
-        const string sql = "DELETE FROM libraries WHERE id = @id";
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = Sql.Command(sql, connection);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var active = Sql.Command("""
+            SELECT count(*) FROM execution_work w JOIN executions e ON e.id = w.execution_id
+            WHERE w.library_id = @id AND e.state IN ('queued', 'running', 'cancelling', 'deferred')
+            """, connection, transaction))
+        {
+            active.Parameters.AddWithValue("id", id);
+            if (Convert.ToInt64(await active.ExecuteScalarAsync(cancellationToken)) > 0) throw new LibraryInUseException();
+        }
+        var deleted = await DeleteWithHistoryAsync(connection, transaction, id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return deleted;
+    }
+
+    /// <summary>
+    /// Removes a library while keeping its execution history: the executions stay (they carry the library name as
+    /// text) and only their library-bound work and reservations are released, which would otherwise block the delete.
+    /// </summary>
+    internal static async Task<bool> DeleteWithHistoryAsync(DbConnection connection, DbTransaction transaction, Guid id, CancellationToken cancellationToken)
+    {
+        foreach (var sql in new[] { "DELETE FROM media_reservations WHERE library_id = @id", "DELETE FROM execution_work WHERE library_id = @id" })
+        {
+            await using var release = Sql.Command(sql, connection, transaction);
+            release.Parameters.AddWithValue("id", id);
+            await release.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using var command = Sql.Command("DELETE FROM libraries WHERE id = @id", connection, transaction);
         command.Parameters.AddWithValue("id", id);
         return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
     }
@@ -197,3 +222,9 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
     }
 }
 
+
+/// <summary>Raised when a library still has queued or running executions and cannot be deleted yet.</summary>
+public sealed class LibraryInUseException : Exception
+{
+    public LibraryInUseException() : base("Des traitements de cette bibliothèque sont en attente ou en cours.") { }
+}
