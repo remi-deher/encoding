@@ -12,7 +12,6 @@ namespace Encoding.Api.Resources;
 /// </summary>
 public sealed class ResourceBlobFetcher(
     ResourceBlobStore blobs,
-    ClusterIdentityRepository identityRepository,
     ClusterPeerIdentityStore localIdentity,
     ClusterReconciliationRepository peers,
     IConfiguration configuration,
