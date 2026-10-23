@@ -110,7 +110,7 @@ internal static class OperationsScenarios
         var root = Path.Combine(directory, "artifacts");
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Runtime:ArtifactDirectory"] = root }).Build();
         var store = new RuntimeArtifactStore(db, config);
-        var options = new OperationsOptions { ArtifactRetention = new() { Enabled = true, Days = 30, TempFileHours = 24 } };
+        var options = new OperationsOptions { ArtifactRetention = new() { Enabled = true, Days = 30, FailedDays = 0, TempFileHours = 24 } };
         var retention = new ArtifactRetention(db, store, options, NullLogger<ArtifactRetention>.Instance);
 
         var library = Guid.NewGuid();
@@ -126,7 +126,7 @@ internal static class OperationsScenarios
         var freshTemporary = Path.Combine(store.DirectoryFor(recent), "y.tmp");
         File.WriteAllText(freshTemporary, "partial");
 
-        var dry = await new ArtifactRetention(db, store, new() { ArtifactRetention = new() { Enabled = true, Days = 30, DryRun = true } }, NullLogger<ArtifactRetention>.Instance).RunOnceAsync(CancellationToken.None);
+        var dry = await new ArtifactRetention(db, store, new() { ArtifactRetention = new() { Enabled = true, Days = 30, FailedDays = 0, DryRun = true } }, NullLogger<ArtifactRetention>.Instance).RunOnceAsync(CancellationToken.None);
         Check(dry.DryRun && dry.Purged == 1 && dry.BytesFreed == 4 && Directory.Exists(store.DirectoryFor(old)) && File.Exists(staleTemporary), "La simulation compte sans supprimer.");
 
         var result = await retention.RunOnceAsync(CancellationToken.None);

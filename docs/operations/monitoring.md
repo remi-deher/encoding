@@ -93,13 +93,13 @@ Les images activent `Logging__Console__FormatterName=json`. Pour un exécutable 
 
 ## Rétention des artefacts
 
-Activer explicitement, d’abord en simulation :
+La rétention est activée par défaut (3 jours pour les exécutions réussies ou annulées, 7 jours pour les échecs). Elle ne supprime que des artefacts de travail d'exécutions terminées. Pour l'ajuster, ou la tester d'abord en simulation :
 
 ```yaml
-Operations__ArtifactRetention__Enabled: "true"
+Operations__ArtifactRetention__Enabled: "true" # "false" pour désactiver
 Operations__ArtifactRetention__DryRun: "true"   # journalise sans supprimer
-Operations__ArtifactRetention__Days: "30"       # réussies et annulées
-Operations__ArtifactRetention__FailedDays: "0"  # 0 : conserver les échecs
+Operations__ArtifactRetention__Days: "3"        # réussies et annulées
+Operations__ArtifactRetention__FailedDays: "7"  # 0 : conserver les échecs
 Operations__ArtifactRetention__IntervalMinutes: "60"
 Operations__ArtifactRetention__BatchSize: "50"
 Operations__ArtifactRetention__TempFileHours: "24"
@@ -110,3 +110,17 @@ Rechercher dans les journaux « à supprimer (simulation) » et contrôler `enco
 ## Seuils de santé
 
 `Operations__Health__MinFreeDiskBytes` (5 Gio par défaut) et `Operations__Health__BackupLagMinutes` (15) règlent le passage à `degraded`.
+
+## Dossiers de travail des nœuds
+
+Chaque nœud supprime lui-même `executions/<id>` et `transfers/<id>` de son dossier de données (`Node:DataDirectory`) quand l'exécution est terminée, après un délai d'inactivité :
+
+```yaml
+Node__Workspace__CleanupEnabled: "true"           # "false" pour désactiver
+Node__Workspace__CompletedRetentionHours: "1"     # réussies et annulées
+Node__Workspace__FailedRetentionHours: "24"       # échouées
+Node__Workspace__UnknownRetentionHours: "72"      # identifiant inconnu du serveur
+Node__Workspace__CleanupIntervalMinutes: "10"
+```
+
+Une exécution en file, en cours ou en annulation n'est jamais touchée. Les médias des bibliothèques ne sont pas concernés.

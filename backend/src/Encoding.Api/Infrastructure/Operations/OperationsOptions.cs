@@ -35,12 +35,12 @@ public sealed class HealthOptions
 
 public sealed class ArtifactRetentionOptions
 {
-    /// <summary>Désactivé par défaut : aucune suppression sans choix explicite (AGENTS.md).</summary>
-    public bool Enabled { get; init; }
+    /// <summary>Activé par défaut : les artefacts de travail d'exécutions terminées ne doivent pas remplir le disque. Ne touche jamais aux médias.</summary>
+    public bool Enabled { get; init; } = true;
     /// <summary>Jours de conservation après la fin d’une exécution réussie ou annulée.</summary>
-    public int Days { get; init; } = 30;
+    public int Days { get; init; } = 3;
     /// <summary>Jours de conservation après un échec ; 0 conserve indéfiniment les artefacts des exécutions échouées.</summary>
-    public int FailedDays { get; init; }
+    public int FailedDays { get; init; } = 7;
     public int IntervalMinutes { get; init; } = 60;
     public int BatchSize { get; init; } = 50;
     /// <summary>Journalise et compte sans rien supprimer.</summary>

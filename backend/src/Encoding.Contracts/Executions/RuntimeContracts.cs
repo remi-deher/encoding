@@ -54,3 +54,7 @@ public sealed record FinishRuntimeExecution(long Epoch, Guid EventId, int Expect
 public sealed record RuntimePublicationState(bool Published, string? Path, string? Sha256, bool Requested = false);
 public sealed record ReportRuntimeCommand(long Epoch, string NodeId, Guid InvocationId, RuntimeCommandLog Command);
 public sealed record ConfirmRuntimePublication(long Epoch, Guid EventId, int ExpectedRevision, string PublishedPath, string Sha256, SourceReplacementReport? Replacement = null);
+
+/// <summary>Demande l'état courant d'exécutions connues du nœud, pour décider de la suppression de leurs dossiers de travail.</summary>
+public sealed record RuntimeExecutionStatesRequest(IReadOnlyList<Guid> Ids);
+public sealed record RuntimeExecutionState(Guid Id, string State);

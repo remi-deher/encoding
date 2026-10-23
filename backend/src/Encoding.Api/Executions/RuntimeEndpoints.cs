@@ -142,6 +142,8 @@ public static class RuntimeEndpoints
             }
             finally { context.HttpContext.RequestAborted = originalToken; }
         });
+        group.MapPost("/execution-states",async(RuntimeExecutionStatesRequest request,RuntimeRepository runtime,CancellationToken ct)=>
+            request.Ids is null || request.Ids.Count>500?(IResult)Results.BadRequest():Results.Ok(await runtime.StatesAsync(request.Ids.Distinct().ToArray(),ct)));
         group.MapGet("/capacity",async(Guid nodeId,LibraryProcessingRepository repository,CancellationToken ct)=>
             await repository.NodeAsync(nodeId,ct) is {} settings?(IResult)Results.Ok(new Encoding.Contracts.Nodes.RuntimeCapacity(settings.EffectiveMaxConcurrentTasks)):Results.NotFound());
         group.MapPost("/library-scans/claim",async(Guid nodeId,LibraryWorkflowRepository repository,CancellationToken ct)=>
