@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ManagementCatalogTemplateComponent } from './management-catalog-template.component';
 
 @Component({
@@ -20,6 +21,7 @@ class HostComponent {
 }
 
 describe('ManagementCatalogTemplateComponent search layout', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideRouter([])] }));
   function render(layout: HostComponent['layout']) {
     const fixture = TestBed.createComponent(HostComponent);
     fixture.componentInstance.layout = layout;
@@ -65,6 +67,7 @@ describe('ManagementCatalogTemplateComponent search layout', () => {
 class PageDetailHostComponent {}
 
 describe('ManagementCatalogTemplateComponent page detail', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideRouter([])] }));
   it('replaces the list with the detail and its title', () => {
     const fixture = TestBed.createComponent(PageDetailHostComponent);
     fixture.detectChanges();
