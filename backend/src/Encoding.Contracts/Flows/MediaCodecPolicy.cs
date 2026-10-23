@@ -131,11 +131,13 @@ public static class MediaCodecPolicy
     public static string? ResolvePixelFormat(VideoEncoderDescriptor encoder, string? colorDepth, string? sourcePixelFormat)
     {
         var depth = colorDepth?.Trim().ToLowerInvariant() ?? "auto";
-        var is10Bit = depth == "10-bit" || (depth == "auto" && encoder.Codec is "hevc" or "av1");
-        if (depth == "source")
-            is10Bit = sourcePixelFormat?.Contains("10", StringComparison.Ordinal) == true || sourcePixelFormat?.Contains("p010", StringComparison.Ordinal) == true;
-        else if (depth == "8-bit")
-            is10Bit = false;
+        // « auto » et « source » alignent la sortie sur l'entrée : 8 bits en 8 bits, 10 bits (ou plus) en 10 bits.
+        var is10Bit = depth switch
+        {
+            "10-bit" => true,
+            "8-bit" => false,
+            _ => IsHighBitDepth(sourcePixelFormat)
+        };
 
         if (encoder.Acceleration == "vaapi")
             return null;
@@ -149,6 +151,9 @@ public static class MediaCodecPolicy
 
         return "yuv420p";
     }
+
+    private static bool IsHighBitDepth(string? pixelFormat) =>
+        !string.IsNullOrEmpty(pixelFormat) && System.Text.RegularExpressions.Regex.IsMatch(pixelFormat, @"p01[026]|(?<!\d)(10|12|14|16)(?!\d)");
 
     public static void ApplyHdrMetadata(List<string> args, JsonElement? videoStream, string encoderId)
     {

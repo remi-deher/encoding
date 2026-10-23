@@ -217,11 +217,11 @@
             "label": "Profondeur de couleur",
             "type": "select",
             "defaultValue": "auto",
-            "description": "Active le 10 bits pour HEVC/AV1 afin d'éliminer le banding (recommandé).",
+            "description": "Automatique et « Identique à la source » alignent la sortie sur l'entrée : 8 bits en 8 bits, 10 bits en 10 bits. « 10 bits » force le Main 10 pour éliminer le banding.",
             "options": [
               {
                 "value": "auto",
-                "label": "Automatique (10 bits pour HEVC/AV1)"
+                "label": "Automatique (identique à la source)"
               },
               {
                 "value": "10-bit",
