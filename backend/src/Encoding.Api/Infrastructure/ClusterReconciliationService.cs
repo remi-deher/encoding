@@ -105,28 +105,39 @@ public sealed class ClusterReconciliationService(
                 var discoveredUrls = discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key)
                     .Concat(dynamicPeers.Select(Normalize).Where(url => url is not null).Cast<string>());
                 health.SetPeers(configuredUrls, discoveredUrls);
-                foreach (var peerUrl in peerUrls)
-                {
-                    health.BeginAttempt(peerUrl);
-                    try
-                    {
-                        await ReconcilePeerAsync(peerUrl, stoppingToken);
-                        health.Succeed(peerUrl);
-                    }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-                    catch (Exception exception) when (exception is not OperationCanceledException)
-                    {
-                        health.Fail(peerUrl, exception.Message);
-                        logger.LogDebug(exception, "Réconciliation différée avec le pair {PeerUrl}.", peerUrl);
-                    }
-                }
+                await ReconcilePeersAsync(clusterId, peerUrls, stoppingToken);
                 await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
         catch (Exception exception)
         {
+            health.Disable("Le service de réconciliation s’est arrêté après une erreur. Un redémarrage du serveur est nécessaire.");
             logger.LogError(exception, "Le service de réconciliation du cluster s’est arrêté.");
+        }
+    }
+
+    internal async Task ReconcilePeersAsync(Guid currentClusterId, IReadOnlyList<string> peerUrls, CancellationToken stoppingToken)
+    {
+        foreach (var peerUrl in peerUrls)
+        {
+            stoppingToken.ThrowIfCancellationRequested();
+            health.BeginAttempt(peerUrl);
+            try
+            {
+                await ReconcilePeerAsync(currentClusterId, peerUrl, stoppingToken);
+                health.Succeed(peerUrl);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+            catch (Exception exception)
+            {
+                // HttpClient timeouts also derive from OperationCanceledException. Only the
+                // service's own cancellation stops the loop; a slow peer must not stop the mesh.
+                health.Fail(peerUrl, exception is OperationCanceledException
+                    ? "Le délai d’échange avec ce serveur a été dépassé ; nouvel essai au prochain cycle."
+                    : exception.Message);
+                logger.LogDebug(exception, "Réconciliation différée avec le pair {PeerUrl}.", peerUrl);
+            }
         }
     }
 
@@ -143,18 +154,18 @@ public sealed class ClusterReconciliationService(
             .ToArray();
     }
 
-    private async Task ReconcilePeerAsync(string peerUrl, CancellationToken ct)
+    private async Task ReconcilePeerAsync(Guid currentClusterId, string peerUrl, CancellationToken ct)
     {
         var remoteVector = await repository.GetPeerVectorAsync(peerUrl, ct);
         var localVector = await repository.GetVectorAsync(ct);
-        var outgoing = (await repository.GetEventsAfterAsync(clusterId, remoteVector, ClusterReconciliationRepository.MaximumBatchSize, ct)).ToList();
+        var outgoing = (await repository.GetEventsAfterAsync(currentClusterId, remoteVector, ClusterReconciliationRepository.MaximumBatchSize, ct)).ToList();
         var knownPeers = await repository.GetPeerEndpointsAsync(ct);
         byte[] requestBody;
         while (true)
         {
             var request = new ClusterReconciliationExchangeRequest(
                 ClusterReconciliationEndpoints.ProtocolVersion,
-                clusterId,
+                currentClusterId,
                 localVector,
                 outgoing,
                 advertisedApiBaseUrl,
@@ -191,7 +202,7 @@ public sealed class ClusterReconciliationService(
         response.Headers.TryGetValues(ClusterReconciliationSignature.TimeHeader, out var responseTimes);
         response.Headers.TryGetValues(ClusterReconciliationSignature.SignatureHeader, out var responseSignatures);
         if (!Guid.TryParse(responsePeers?.FirstOrDefault(), out var responsePeerId)
-            || await peerAdmissions.GetActivePublicKeyAsync(clusterId, responsePeerId, ct) is not { } responsePublicKey
+            || await peerAdmissions.GetActivePublicKeyAsync(currentClusterId, responsePeerId, ct) is not { } responsePublicKey
             || !ClusterReconciliationSignature.Verify(responsePublicKey, responsePeerId,
                 responseTimes?.FirstOrDefault(),
                 responseSignatures?.FirstOrDefault(),
@@ -200,7 +211,7 @@ public sealed class ClusterReconciliationService(
             throw new InvalidOperationException("La signature de la réponse du pair est invalide.");
         }
         var exchange = JsonSerializer.Deserialize<ClusterReconciliationExchangeResponse>(responseBody, JsonOptions);
-        if (exchange is null || exchange.ProtocolVersion != ClusterReconciliationEndpoints.ProtocolVersion || exchange.ClusterId != clusterId)
+        if (exchange is null || exchange.ProtocolVersion != ClusterReconciliationEndpoints.ProtocolVersion || exchange.ClusterId != currentClusterId)
         {
             throw new InvalidOperationException("Réponse de réconciliation incompatible avec ce cluster.");
         }

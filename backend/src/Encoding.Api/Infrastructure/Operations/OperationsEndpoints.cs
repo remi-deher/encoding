@@ -29,6 +29,7 @@ public static class OperationsEndpoints
             .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag])
             .AddCheck<MigrationsHealthCheck>("migrations")
             .AddCheck<ClusterHealthCheck>("cluster")
+            .AddCheck<ClusterReconciliationHealthCheck>("cluster-reconciliation")
             .AddCheck<FlowBackupHealthCheck>("flow-backups")
             .Add(new HealthCheckRegistration("artifact-storage", _ => new StorageHealthCheck(artifacts, options.Health.MinFreeDiskBytes), null, null))
             .Add(new HealthCheckRegistration("backup-storage", _ => new StorageHealthCheck(backups, options.Health.MinFreeDiskBytes), null, null));
