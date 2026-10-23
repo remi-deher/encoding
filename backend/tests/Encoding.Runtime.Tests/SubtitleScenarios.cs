@@ -67,6 +67,13 @@ internal static class SubtitleScenarios
         var noProfile = SubtitlePlanner.Plan([Text(0, "subrip", "eng", "", Ass(Lines("Hello", 5)))], null, canvas, options with { ApplyProfile = false });
         Check(noProfile.Decisions[0].ReplacementAss is null && noProfile.Decisions[0].Title == "Anglais / SRT / Piste 1", "Without a profile the SRT stays and is named SRT.");
 
+        // « frf » est du français (FileFlows le réécrit en fr-FR) ; le drapeau malentendant suit le titre et survit à la réécriture.
+        var frf = SubtitlePlanner.Plan([Text(0, "subrip", "frf", "", Ass(Lines("Salut", 5))), Text(1, "subrip", "eng", "SDH", Ass(Lines("Hello", 5))), Text(2, "ass", "eng", "", current)], null, canvas, options);
+        Check(frf.Decisions[0].Title == "Français / ASS / Piste 1" && frf.Decisions[0].Language == "fr-FR", "A frf track is French and normalised to fr-FR.");
+        Check(frf.Decisions[1].HearingImpaired && frf.Decisions[1].ReplacementAss is not null && !frf.Decisions[0].HearingImpaired, "A converted SDH track keeps the hearing-impaired flag.");
+        Check(SubtitlePlanner.Plan([Text(0, "ass", "eng", "", current), Text(1, "ass", "fre", "", current)], false, canvas, options).Decisions[1].Default
+            && !SubtitlePlanner.Plan([Text(0, "ass", "eng", "", current), Text(1, "ass", "fre", "", current)], SubtitlePlanner.IsFrench("frf"), canvas, options).Decisions[1].Default, "A frf reference audio counts as French.");
+
         // Doublons : texte et horaires concordants, même langue et mêmes marqueurs ; jamais d'ASS personnalisé.
         var big = Ass(Lines("Même", 40));
         var twins = SubtitlePlanner.Plan([Text(0, "subrip", "fre", "", big), Text(1, "ass", "fre", "", Ass(Lines("Même", 40)))], null, canvas, options);

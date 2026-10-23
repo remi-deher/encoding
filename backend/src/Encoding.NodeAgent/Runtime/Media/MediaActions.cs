@@ -186,7 +186,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
                 var id=subtitleIds[d.Ordinal]; var original=tracks[d.Ordinal];
                 if(d.Title!=original.Title&&d.Title.Length>0) args.AddRange(["--track-name",id+":"+d.Title]);
                 if(d.Language!=original.Language&&d.Language.Length>0) args.AddRange(["--language",id+":"+d.Language]);
-                args.AddRange(["--default-track-flag",id+":"+(d.Default?"1":"0"),"--forced-display-flag",id+":"+(d.Forced?"1":"0")]);
+                args.AddRange(["--default-track-flag",id+":"+(d.Default?"1":"0"),"--forced-display-flag",id+":"+(d.Forced?"1":"0"),"--hearing-impaired-flag",id+":"+(d.HearingImpaired?"1":"0")]);
             }
             args.Add(current);
             var order=new List<string>(); var replacements=new Dictionary<int,int>(); var fileIndex=1;
@@ -196,7 +196,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
                 await File.WriteAllTextAsync(replacement,d.ReplacementAss!,new System.Text.UTF8Encoding(false),ct);
                 if(d.Title.Length>0) args.AddRange(["--track-name","0:"+d.Title]);
                 if(d.Language.Length>0&&d.Language!="und") args.AddRange(["--language","0:"+d.Language]);
-                args.AddRange(["--default-track-flag","0:"+(d.Default?"1":"0"),"--forced-display-flag","0:"+(d.Forced?"1":"0"),replacement]);
+                args.AddRange(["--default-track-flag","0:"+(d.Default?"1":"0"),"--forced-display-flag","0:"+(d.Forced?"1":"0"),"--hearing-impaired-flag","0:"+(d.HearingImpaired?"1":"0"),replacement]);
                 replacements[d.Ordinal]=fileIndex++;
             }
             foreach(var track in allTracks)
@@ -212,6 +212,21 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             return new(file2,[],JsonSerializer.SerializeToElement(lines));
         }
         finally { Directory.Delete(work,true); }
+    }
+
+    private static bool HasProfileAss(JsonElement identification)
+    {
+        if(!identification.TryGetProperty("tracks",out var tracks)) return false;
+        foreach(var track in tracks.EnumerateArray())
+        {
+            if(track.GetProperty("type").GetString()!="subtitles"||!track.TryGetProperty("properties",out var properties)) continue;
+            var codecId=properties.TryGetProperty("codec_id",out var id)?id.GetString()??"":"";
+            if(!codecId.StartsWith("S_TEXT/ASS",StringComparison.Ordinal)&&!codecId.StartsWith("S_TEXT/SSA",StringComparison.Ordinal)) continue;
+            if(!properties.TryGetProperty("codec_private_data",out var hex)||hex.ValueKind!=JsonValueKind.String) continue;
+            try { if(System.Text.Encoding.UTF8.GetString(Convert.FromHexString(hex.GetString()!)).Contains("SubtitleProfileVersion: "+AssProfile.Version,StringComparison.Ordinal)) return true; }
+            catch(FormatException) { }
+        }
+        return false;
     }
 
     /// <summary>Polices (0057) : ajoute en pièces jointes les polices d'un jeu du dossier déclaré par le nœud (<c>ENCODING_FONT_DIR</c>) qui ne sont pas déjà dans le MKV. Jamais de chemin libre.</summary>
@@ -242,6 +257,8 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             if(name!=Path.GetFileName(name)||!extensions.Contains(Path.GetExtension(name).ToLowerInvariant())||!File.Exists(Path.Combine(folder,name)))
                 throw new SubtitleException($"Police « {name} » introuvable dans le jeu « {set} ».");
         using var identification=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct));
+        // Comme FileFlows : les polices du profil ne servent qu'aux pistes ASS au profil courant ; sans elles (aucun sous-titre, bitmaps seuls, ASS personnalisés) le fichier reste intact.
+        if(!HasProfileAss(identification.RootElement)) return new(null,[]);
         var present=identification.RootElement.TryGetProperty("attachments",out var attachments)
             ?attachments.EnumerateArray().Select(a=>(a.GetProperty("file_name").GetString()??"").ToLowerInvariant()).ToHashSet():[];
         var missing=names.Where(name=>!present.Contains(name.ToLowerInvariant())).ToArray();
@@ -429,14 +446,17 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             if(sourceAudio.Length!=outputAudio.Length) issues.Add("Le nombre de pistes audio a changé.");
             for(var i=0;i<Math.Min(sourceAudio.Length,outputAudio.Length);i++)
             {
-                if(Flag(config,"preserveAudioChannels")&&MetadataInt(sourceAudio[i],"channels")!=MetadataInt(outputAudio[i],"channels"))
+                // Au-delà de la limite (6), la règle audio ramène 7.1 à 5.1 (5.0 sans LFE) : c'est le changement attendu, pas une dérive.
+                var reduced=maxChannels>=6&&MetadataInt(sourceAudio[i],"channels") is { } sourceChannels&&sourceChannels>maxChannels;
+                var expectedChannels=reduced?(HasLfe(AudioLayout(sourceAudio[i]))?6:5):MetadataInt(sourceAudio[i],"channels");
+                if(Flag(config,"preserveAudioChannels")&&expectedChannels!=MetadataInt(outputAudio[i],"channels"))
                     issues.Add($"Le nombre de canaux de la piste audio {i+1} a changé.");
                 if(Flag(config,"preserveAudioLayout"))
                 {
                     var sourceLayout=AudioLayout(sourceAudio[i]); var outputLayout=AudioLayout(outputAudio[i]);
                     if(sourceLayout.Length>0&&outputLayout.Length>0)
                     {
-                        if(NormalizeLayout(sourceLayout)!=NormalizeLayout(outputLayout))
+                        if(!reduced&&NormalizeLayout(sourceLayout)!=NormalizeLayout(outputLayout))
                             issues.Add($"La disposition audio de la piste {i+1} a changé ({sourceLayout} → {outputLayout}).");
                         if(HasLfe(sourceLayout)!=HasLfe(outputLayout))
                             issues.Add($"Le canal LFE de la piste audio {i+1} a changé.");
