@@ -672,6 +672,12 @@ public sealed class ClusterEntityReconciliation(
 
     private async Task DeleteRowAsync(DbConnection connection, DbTransaction transaction, EntityTable table, string keyJson, CancellationToken ct)
     {
+        if (table.Name == "libraries")
+        {
+            // The owner already checked for active work; release local work rows that would block the delete.
+            await Encoding.Api.Libraries.LibraryRepository.DeleteWithHistoryAsync(connection, transaction, Guid.Parse(JsonNode.Parse(keyJson)!["id"]!.GetValue<string>()), ct);
+            return;
+        }
         var sql = $"DELETE FROM {table.Name} WHERE {string.Join(" AND ", table.KeyColumns.Select(column => column + " = json_extract(@key, '$." + column + "')"))}";
         await using var command = Sql.Command(sql, connection, transaction);
         command.Parameters.AddWithValue("key", keyJson);

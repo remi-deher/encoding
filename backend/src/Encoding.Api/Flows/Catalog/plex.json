@@ -32,10 +32,10 @@
       },
       {
         "id": "guardReplacement",
-        "label": "Garde avant remplacement de la source",
+        "label": "Garde avant modification ou remplacement de la source",
         "type": "boolean",
         "defaultValue": true,
-        "description": "Avant de remplacer un fichier source (politique de bibliothèque), Encoding interroge Plex : le remplacement attend la fin de la lecture du fichier. Plex injoignable, jeton refusé ou fichier sans correspondance de chemin : la source n’est pas remplacée (le résultat distinct est conservé)."
+        "description": "Avant de remplacer un fichier source (politique de bibliothèque), Encoding interroge Plex toutes les 30 secondes : le remplacement attend la fin de la lecture du fichier. Plex injoignable, jeton refusé ou fichier sans correspondance de chemin : la source n’est pas remplacée (le résultat distinct est conservé). Les blocs « Modifier les pistes sur place » et « Publier le résultat » attendent aussi (avec un dernier contrôle juste avant d’écrire) ; si Plex est injoignable, ils continuent."
       },
       {
         "id": "guardIncludeNextEpisode",
@@ -57,10 +57,10 @@
         "id": "guardMaxWaitMinutes",
         "label": "Garde : attente maximale (minutes)",
         "type": "number",
-        "defaultValue": 30,
+        "defaultValue": 10,
         "min": 1,
         "max": 720,
-        "description": "Au-delà, le remplacement est abandonné pour cette exécution : le résultat distinct est publié et la source reste intacte."
+        "description": "Au-delà, le remplacement est abandonné pour cette exécution : le résultat distinct est publié et la source reste intacte ; un bloc de modification sur place ou de publication sort en erreur."
       }
     ]
   },

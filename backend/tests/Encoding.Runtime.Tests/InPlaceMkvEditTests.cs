@@ -25,8 +25,8 @@ public sealed class InPlaceMkvEditTests : IDisposable
 
     private static InPlaceTrackEdit Edit() => new(1, "fra", "Français / AAC", true, false, "Épisode 1");
 
-    private Task<InPlaceEditResult> ApplyAsync(string sha, InPlaceTrackEdit edit, Func<JsonElement, string?>? verify = null, bool keepBackup = false, Func<bool>? authorized = null) =>
-        new InPlaceMkvEditor(tools).ApplyAsync(root, Locks, execution, "episode.mkv", sha, edit.Arguments, edit.AlreadyApplied, verify ?? edit.Verify, root, keepBackup, authorized ?? (() => true), CancellationToken.None);
+    private Task<InPlaceEditResult> ApplyAsync(string sha, InPlaceTrackEdit edit, Func<JsonElement, string?>? verify = null, bool keepBackup = false, Func<bool>? authorized = null, Func<CancellationToken, Task<string?>>? beforeWrite = null) =>
+        new InPlaceMkvEditor(tools).ApplyAsync(root, Locks, execution, "episode.mkv", sha, edit.Arguments, edit.AlreadyApplied, verify ?? edit.Verify, root, keepBackup, authorized ?? (() => true), CancellationToken.None, beforeWrite);
 
     private async Task<JsonElement> IdentifyAsync() => JsonDocument.Parse(await tools.CheckedAsync("mkvmerge", ["-J", Path.Combine(root, "episode.mkv")], root, CancellationToken.None)).RootElement;
 
@@ -93,6 +93,17 @@ public sealed class InPlaceMkvEditTests : IDisposable
         await Assert.ThrowsAsync<InPlaceEditException>(() => ApplyAsync(sha, Edit(), authorized: () => false));
         Assert.Equal(sha, await SafeMediaPaths.DigestAsync(path, CancellationToken.None));
         Assert.False(File.Exists(Path.Combine(InPlaceMkvEditor.BackupDirectory(root, execution), InPlaceMkvEditor.BackupName)));
+    }
+
+    [MkvToolsFact]
+    public async Task RefusesWhenTheLastCheckBeforeWritingSeesAPlayback()
+    {
+        var (path, sha) = await CreateAsync();
+        var error = await Assert.ThrowsAsync<InPlaceEditException>(() => ApplyAsync(sha, Edit(), beforeWrite: _ => Task.FromResult<string?>("Lecture en cours.")));
+        Assert.Contains("Lecture en cours", error.Message);
+        Assert.Equal(sha, await SafeMediaPaths.DigestAsync(path, CancellationToken.None));
+        Assert.False(File.Exists(Path.Combine(InPlaceMkvEditor.BackupDirectory(root, execution), InPlaceMkvEditor.BackupName)));
+        Assert.Equal("edited", (await ApplyAsync(sha, Edit(), beforeWrite: _ => Task.FromResult<string?>(null))).Status);
     }
 
     [MkvToolsFact]

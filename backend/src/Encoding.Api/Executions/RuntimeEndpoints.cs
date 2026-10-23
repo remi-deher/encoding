@@ -153,8 +153,13 @@ public static class RuntimeEndpoints
             try {return await repository.CompleteScanAsync(id,nodeId,request,ct)?(IResult)Results.NoContent():Results.Conflict();}
             catch(ArgumentException) {return Results.BadRequest();}
         });
-        group.MapPost("/claim",async(Guid nodeId,RuntimeRepository runtime,CancellationToken ct)=>
-            await runtime.ClaimAsync(nodeId,ct) is { } lease ? (IResult)Results.Ok(lease) : Results.NoContent());
+        group.MapPost("/claim",async(Guid nodeId,RuntimeRepository runtime,Encoding.Api.Plugins.PublicationGuardProvider guards,CancellationToken ct)=>
+        {
+            if(await runtime.ClaimAsync(nodeId,ct) is not { } lease) return Results.NoContent();
+            // Les blocs qui écrivent dans le média ou le publient consultent les gardes (Plex) depuis le worker.
+            var guarded=lease.Flow.Nodes.Any(node=>node.Component.ComponentId is "mkv-edit-in-place" or "base-publish-result");
+            return Results.Ok(guarded?lease with { Guards=await guards.ListAsync(ct) }:lease);
+        });
         group.MapPost("/executions/{id:guid}/renew",async(Guid nodeId,Guid id,RuntimeFence request,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.RenewAsync(id,nodeId,request.Epoch,ct) is { } status ? (IResult)Results.Ok(status) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/disk-locks/acquire",async(Guid nodeId,Guid id,DiskLockRequest request,DiskLockRepository locks,CancellationToken ct)=>
