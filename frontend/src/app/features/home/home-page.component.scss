@@ -2,50 +2,16 @@
   display: block;
 }
 .cluster-name {
-  margin: 8px 0 0;
+  margin: 0;
   color: var(--text-muted);
   font-size: var(--font-body);
 }
-.overview-view-bar {
+.overview-tabs-wrapper {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: fit-content;
-  max-width: 100%;
-  margin: 16px 0 24px;
-  padding: 4px;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-pill);
-  background: var(--surface-container-low);
-}
-.overview-view-button {
-  min-height: 40px;
-  padding: 0 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--font-label);
-  font-weight: 650;
-  cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease;
-}
-.overview-view-button:hover {
-  background: var(--surface-container-high);
-  color: var(--text-primary);
-}
-.overview-view-button.is-active {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-}
-.overview-view-button:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: 2px;
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .metrics-grid {
   display: grid;
@@ -433,16 +399,6 @@ time {
   }
 }
 @media (max-width: 480px) {
-  .overview-view-bar {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .overview-view-button {
-    width: 100%;
-    padding-inline: 8px;
-    font-size: 12px;
-  }
   .ai-metrics-grid {
     grid-template-columns: minmax(0, 1fr);
   }

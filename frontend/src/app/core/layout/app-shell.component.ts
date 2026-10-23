@@ -4,7 +4,6 @@ import {
   ExecutionTracking,
   INITIAL_EXECUTION_TRACKING,
 } from '../../shared/services/execution-tracking';
-import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -26,7 +25,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter, map, of, switchMap } from 'rxjs';
 import { PrimaryNavigationComponent } from '../navigation/primary-navigation.component';
 import { AuthService } from '../auth/auth.service';
-import { UserMenuComponent } from '../auth/user-menu.component';
 import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 import { SearchPaletteDialogComponent } from './search-palette-dialog.component';
 import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.component';
@@ -43,7 +41,6 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
     RouterLink,
     RouterOutlet,
     ThemeToggleComponent,
-    UserMenuComponent,
     AiAssistantPageComponent,
     FlowAiAssistantPanelComponent,
   ],
@@ -376,28 +373,6 @@ export class AppShellComponent {
   protected readonly currentUser = this.auth.user;
   // Aucun appel à l’API de gestion sans session.
   private readonly pollingDisabled = computed(() => this.authMode() || !this.auth.user());
-  private readonly overview = inject(ClusterOverview);
-  private readonly clusterState = toSignal(
-    toObservable(this.pollingDisabled).pipe(
-      switchMap((disabled) => (disabled ? of(INITIAL_CLUSTER_OVERVIEW) : this.overview.state$)),
-    ),
-    { initialValue: INITIAL_CLUSTER_OVERVIEW },
-  );
-  protected readonly clusterHealthy = computed(() => {
-    const state = this.clusterState();
-    const nodes = state.snapshot?.nodes ?? [];
-    if (!nodes.length) return true;
-    return nodes.some((n) => n.status === 'online');
-  });
-  protected readonly clusterLabel = computed(() => {
-    const state = this.clusterState();
-    if (state.status === 'loading') return 'Chargement…';
-    if (state.status === 'error') return 'Données indisponibles';
-    if (state.snapshot?.identity.standalone) return 'Nœud autonome';
-    const nodes = state.snapshot?.nodes ?? [];
-    return nodes.filter((n) => n.status === 'online').length + ' / ' + nodes.length + ' en ligne';
-  });
-
   private readonly tracking = inject(ExecutionTracking);
   private readonly executionState = toSignal(
     toObservable(this.pollingDisabled).pipe(
@@ -408,13 +383,6 @@ export class AppShellComponent {
   protected readonly activeExecutionCount = computed(
     () => this.executionState().data?.activeCount ?? 0,
   );
-  protected readonly activeJobsLabel = computed(() => {
-    const state = this.executionState();
-    if (state.status === 'loading') return 'Jobs : …';
-    if (state.status === 'error') return 'Jobs : indisponibles';
-    const count = state.data?.activeCount ?? 0;
-    return `${count} job${count === 1 ? '' : 's'} en cours`;
-  });
 
   protected openSearchPalette(): void {
     if (this.paletteDialogRef) {
@@ -433,7 +401,6 @@ export class AppShellComponent {
       this.paletteDialogRef = null;
     });
   }
-
   protected onNavigationClick(): void {
     if (this.isCompactNavigation()) {
       this.navigationOpened.set(false);

@@ -72,7 +72,11 @@ export function settingsDomain(value: string | null): SettingsMainTab {
       (closed)="editor.drawerClosed()"
     >
       <div drawer-main>
-        <app-page-header title="Paramètres" [description]="descriptions[activeMainTab()]" />
+        <app-page-header
+          title="Paramètres"
+          [description]="descriptions[activeMainTab()]"
+          [showSystemActions]="true"
+        />
         <app-category-tabs
           label="Domaines des paramètres"
           [options]="mainTabs"
