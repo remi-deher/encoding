@@ -80,6 +80,25 @@ internal static class PublicationGuardScenarios
         catch (OperationCanceledException) { cancelled = true; }
         Check(cancelled, "Cancelling during the wait never allows the replacement.");
 
+        // Blocs de flow (modification sur place, publication) : attente, dernier contrôle sans attente, et Plex injoignable n'empêche pas d'écrire.
+        async Task<(PublicationGuardVerdict Verdict, TimeSpan Waited)> StepAsync(IPublicationGuardInvoker invoker, bool wait, int maxWait = 10, RuntimePublicationGuard[]? guards = null)
+        {
+            var clock = new DateTimeOffset(2026, 10, 16, 8, 0, 0, TimeSpan.Zero); var now = clock;
+            var verdict = await PublicationGuardRunner.CheckForStepAsync(Guid.NewGuid(), 1, "Show/e1.mkv", null, guards ?? [Guard(maxWait: maxWait)], wait, invoker,
+                (delay, _) => { now += delay; return Task.CompletedTask; }, () => now, NullLogger.Instance, CancellationToken.None);
+            return (verdict, now - clock);
+        }
+        var stepIdle = await StepAsync(new Scripted(() => "playing", () => "playing", () => "idle"), true);
+        Check(stepIdle.Verdict.Allowed && stepIdle.Waited == PublicationGuardRunner.PollInterval * 2, "A step waits for the playback to end, checking every 30 s.");
+        var stepCapped = await StepAsync(new Scripted(() => "playing"), true, maxWait: 2);
+        Check(!stepCapped.Verdict.Allowed && stepCapped.Verdict.Detail!.Contains("Écriture non effectuée") && stepCapped.Waited <= TimeSpan.FromMinutes(2), "A step refuses when the playback lasts past the maximum wait.");
+        var lastCheck = await StepAsync(new Scripted(() => "playing"), false);
+        Check(!lastCheck.Verdict.Allowed && lastCheck.Waited == TimeSpan.Zero, "The last check before writing never waits: a playback that started refuses at once.");
+        Check((await StepAsync(new Scripted(() => "idle"), false)).Verdict.Allowed, "The last check allows an idle file.");
+        Check((await StepAsync(new Scripted(() => throw new IOException("Plex injoignable.")), true)).Verdict.Allowed, "An unreachable Plex does not prevent a step from writing.");
+        Check((await StepAsync(new Scripted(() => "error"), true)).Verdict.Allowed, "A guard without an opinion (no path mapping) does not prevent a step from writing.");
+        Check((await StepAsync(new NoGuardInvoker(), true, guards: [])).Verdict.Allowed, "Without a configured guard a step writes immediately.");
+
         // Le contrat survit au transport JSON entre serveur et nœud d'accès.
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var roundTrip = JsonSerializer.Deserialize<RuntimeTransfer>(JsonSerializer.Serialize(Transfer(Guard()), json), json)!;

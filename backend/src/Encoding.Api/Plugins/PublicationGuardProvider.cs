@@ -27,7 +27,7 @@ public sealed class PublicationGuardProvider(PluginConfigurationRepository confi
             var configuration = new Dictionary<string, JsonElement>(guard.FixedConfiguration, StringComparer.Ordinal);
             foreach (var (componentField, pluginField) in guard.ConfigurationFields)
                 if (values.TryGetValue(pluginField, out var value)) configuration[componentField] = value;
-            var maxWait = values.TryGetValue(guard.MaxWaitField, out var wait) && wait.ValueKind == JsonValueKind.Number && wait.TryGetInt32(out var minutes) ? minutes : 30;
+            var maxWait = values.TryGetValue(guard.MaxWaitField, out var wait) && wait.ValueKind == JsonValueKind.Number && wait.TryGetInt32(out var minutes) ? minutes : 10;
             result.Add(new(plugin.Id, plugin.Version, component.Id, component.Version, component.ConfigurationSchema.Version, configuration, values,
                 Math.Clamp(maxWait, 1, 720), guard.WaitOutputs, guard.AllowOutputs));
         }
