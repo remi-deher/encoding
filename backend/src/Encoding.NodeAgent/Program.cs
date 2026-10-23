@@ -37,6 +37,7 @@ builder.Services.AddSingleton<MediaScanner>();
 builder.Services.AddSingleton<MediaActions>();
 builder.Services.AddSingleton<RuntimeFlowRunner>();
 builder.Services.AddHostedService<RuntimeTransferService>();
+builder.Services.AddHostedService<WorkspaceCleanupService>();
 builder.Services.AddHostedService<SourceReplacementService>();
 builder.Services.AddHostedService<LibraryDiscoveryService>();
 builder.Services.AddHostedService<RuntimeWorkerService>();

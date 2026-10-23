@@ -15,6 +15,17 @@ namespace Encoding.Api.Executions;
 public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,IPeerAssignmentGate? peerAssignmentGate = null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
+    /// <summary>États des exécutions demandées ; les identifiants inconnus de ce serveur sont absents du résultat.</summary>
+    public async Task<IReadOnlyList<RuntimeExecutionState>> StatesAsync(IReadOnlyCollection<Guid> ids,CancellationToken ct)
+    {
+        if(ids.Count==0) return [];
+        await using var cmd=dataSource.CreateCommand("SELECT id,state FROM executions WHERE id=ANY(@ids)");
+        cmd.Parameters.AddWithValue("ids",ids.ToArray());
+        await using var reader=await cmd.ExecuteReaderAsync(ct);
+        var states=new List<RuntimeExecutionState>();
+        while(await reader.ReadAsync(ct)) states.Add(new(reader.GetGuid(0),reader.GetString(1)));
+        return states;
+    }
     public async Task<bool> AuthenticateAsync(Guid node,string token,CancellationToken ct)
     {
         if(string.IsNullOrWhiteSpace(token) || token.Length>256) return false;
