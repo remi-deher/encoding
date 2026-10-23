@@ -1,176 +1,444 @@
-YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíç}¸N‹Z–‹­¦ëeŠw¬Õ¥µÁ½ÉĞì±½İ‘¥Ñ½ÉÍÍ¥ÍÑ…¹Ğô™É½´€œ¸¸¼¸¸½Í¡…É•½Í•ÉÙ¥•Ì½™±½Üµ•‘¥Ñ½Èµ…ÍÍ¥ÍÑ…¹Ğ¹Í•ÉÙ¥”œì)¥µÁ½ÉĞì±½İ¥ÍÍ¥ÍÑ…¹ÑA…¹•±½µÁ½¹•¹Ğô™É½´€œ¸¸¼¸¸½™•…ÑÕÉ•Ì½™±½İÌ½•‘¥Ñ½È½™±½Üµ…¤µ…ÍÍ¥ÍÑ…¹ĞµÁ…¹•°¹½µÁ½¹•¹Ğœì)¥µÁ½ÉĞì(€á•ÕÑ¥½¹QÉ…­¥¹œ°(€%9%Q%1}aUQ%=9}QI-%9°)ô™É½´€œ¸¸¼¸¸½Í¡…É•½Í•ÉÙ¥•Ì½•á•ÕÑ¥½¸µÑÉ…­¥¹œœì)¥µÁ½ÉĞì(€¡…¹••Ñ•Ñ¥½¹MÑÉ…Ñ•ä°(€½µÁ½¹•¹Ğ°(€±•µ•¹ÑI•˜°(€…™Ñ•É9•áÑI•¹‘•È°(€½µÁÕÑ•°(€•™™•Ğ°(€¥¹©•Ğ°(€Í¥¹…°°(€Ù¥•İ¡¥±°)ô™É½´€…¹Õ±…È½½É”œì)¥µÁ½ÉĞìÑ½M¥¹…°°Ñ½=‰Í•ÉÙ…‰±”ô™É½´€…¹Õ±…È½½É”½Éá©Ìµ¥¹Ñ•É½Àœì)¥µÁ½ÉĞì9…Ù¥…Ñ¥½¹¹°I½ÕÑ•È°I½ÕÑ•É1¥¹¬°I½ÕÑ•É=ÕÑ±•Ğô™É½´€…¹Õ±…È½É½ÕÑ•Èœì)¥µÁ½ÉĞì	É•…­Á½¥¹Ñ=‰Í•ÉÙ•Èô™É½´€…¹Õ±…È½‘¬½±…å½ÕĞœì)¥µÁ½ÉĞì5…Ñ	ÕÑÑ½¹5½‘Õ±”ô™É½´€…¹Õ±…È½µ…Ñ•É¥…°½‰ÕÑÑ½¸œì)¥µÁ½ÉĞì5…Ñ¥…±½œ°5…Ñ¥…±½5½‘Õ±”°5…Ñ¥…±½I•˜ô™É½´€…¹Õ±…È½µ…Ñ•É¥…°½‘¥…±½œœì)¥µÁ½ÉĞì5…ÑM¥‘•¹…Ù5½‘Õ±”ô™É½´€…¹Õ±…È½µ…Ñ•É¥…°½Í¥‘•¹…Øœì)¥µÁ½ÉĞì5…ÑQ½½±Ñ¥Á5½‘Õ±”ô™É½´€…¹Õ±…È½µ…Ñ•É¥…°½Ñ½½±Ñ¥Àœì)¥µÁ½ÉĞì™¥±Ñ•È°µ…À°½˜°Íİ¥Ñ¡5…Àô™É½´€Éá©Ìœì)¥µÁ½ÉĞìAÉ¥µ…Éå9…Ù¥…Ñ¥½¹½µÁ½¹•¹Ğô™É½´€œ¸¸½¹…Ù¥…Ñ¥½¸½ÁÉ¥µ…Éäµ¹…Ù¥…Ñ¥½¸¹½µÁ½¹•¹Ğœì)¥µÁ½ÉĞìÕÑ¡M•ÉÙ¥”ô™É½´€œ¸¸½…ÕÑ ½…ÕÑ ¹Í•ÉÙ¥”œì)¥µÁ½ÉĞìQ¡•µ•Q½±•½µÁ½¹•¹Ğô™É½´€œ¸¸½Ñ¡•µ”½Ñ¡•µ”µÑ½±”¹½µÁ½¹•¹Ğœì)¥µÁ½ÉĞìM•…É¡A…±•ÑÑ•¥…±½½µÁ½¹•¹Ğô™É½´€œ¸½Í•…É µÁ…±•ÑÑ”µ‘¥…±½œ¹½µÁ½¹•¹Ğœì)¥µÁ½ÉĞì¥ÍÍ¥ÍÑ…¹ÑA…•½µÁ½¹•¹Ğô™É½´€œ¸¸¼¸¸½™•…ÑÕÉ•Ì½…¤½…¤µ…ÍÍ¥ÍÑ…¹ĞµÁ…”¹½µÁ½¹•¹Ğœì()½µÁ½¹•¹Ğ¡ì(€Í•±•Ñ½Èè€…ÁÀµÍ¡•±°œ°(€¡…¹••Ñ•Ñ¥½¸è¡…¹••Ñ•Ñ¥½¹MÑÉ…Ñ•ä¹=¹AÕÍ °(€¥µÁ½ÉÑÌèl(€€€5…Ñ	ÕÑÑ½¹5½‘Õ±”°(€€€5…Ñ¥…±½5½‘Õ±”°(€€€5…ÑM¥‘•¹…Ù5½‘Õ±”°(€€€5…ÑQ½½±Ñ¥Á5½‘Õ±”°(€€€AÉ¥µ…Éå9…Ù¥…Ñ¥½¹½µÁ½¹•¹Ğ°(€€€I½ÕÑ•É1¥¹¬°(€€€I½ÕÑ•É=ÕÑ±•Ğ°(€€€Q¡•µ•Q½±•½µÁ½¹•¹Ğ°(€€€¥ÍÍ¥ÍÑ…¹ÑA…•½µÁ½¹•¹Ğ°(€€€±½İ¥ÍÍ¥ÍÑ…¹ÑA…¹•±½µÁ½¹•¹Ğ°(€t°(€Ñ•µÁ±…Ñ•UÉ°è€œ¸½…ÁÀµÍ¡•±°¹½µÁ½¹•¹Ğ¹¡Ñµ°œ°(€¡½ÍĞèì(€€€€œ¡‘½Õµ•¹Ğé­•å‘½İ¸¤œè€½¹±½‰…±M•…É¡M¡½ÉÑÕĞ ‘•Ù•¹Ğ¤œ°(€€€€œ¡İ¥¹‘½ÜéÉ•Í¥é”¤œè€½¹]¥¹‘½İI•Í¥é” ¤œ°(€ô°)ô¤)•áÁ½ÉĞ±…ÍÌÁÁM¡•±±½µÁ½¹•¹Ğì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä™±½İÍÍ¥ÍÑ…¹Ğ€ô¥¹©•Ğ¡±½İ‘¥Ñ½ÉÍÍ¥ÍÑ…¹Ğ¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä•¹•É…±ÍÍ¥ÍÑ…¹Ğ€ôÙ¥•İ¡¥±¡¥ÍÍ¥ÍÑ…¹ÑA…•½µÁ½¹•¹Ğ¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä™±½İ]¥‘•Ğ€ôÙ¥•İ¡¥±ñ±½İ¥ÍÍ¥ÍÑ…¹ÑA…¹•±½µÁ½¹•¹Ğø ™±½İ]¥‘•Ğœ¤ì(€ÁÉ½Ñ•Ñ•…Íå¹Œ…ÁÁ±å±½İAÉ½Á½Í…° (€€€™±½Üè¥µÁ½ÉĞ œ¸¸¼¸¸½Í¡…É•½µ½‘•±Ì½™±½ÜµÙ…±¥‘…Ñ¥½¸œ¤¹±½İ½Õµ•¹Ğ°(€€¤èAÉ½µ¥Í”ñÙ½¥øì(€€€½¹ÍĞİ¥‘•Ğ€ôÑ¡¥Ì¹™±½İ]¥‘•Ğ ¤ì(€€€¥˜€¡…İ…¥ĞÑ¡¥Ì¹™±½İÍÍ¥ÍÑ…¹Ğ¹…ÁÁ±ä¡™±½Ü¤¤ì(€€€€€İ¥‘•Ğü¹…­¹½İ±•‘•AÉ½Á½Í…° ¤ì(€€€€€Ñ¡¥Ì¹±½Í•ÍÍ¥ÍÑ…¹ÑA…¹•° ¤ì(€€€ô(€ô((€ÁÉ¥Ù…Ñ”ÍÑ…Ñ¥ŒÉ•…‘½¹±ä…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉMÑ½É…•-•ä€ô€•¹½‘¥¹œ¹…ÍÍ¥ÍÑ…¹Ğµ±…Õ¹¡•È¹Á½Í¥Ñ¥½¸œì(€ÁÉ¥Ù…Ñ”ÍÑ…Ñ¥ŒÉ•…‘½¹±ä…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉÉ¥€ô€ÈĞì(€ÁÉ¥Ù…Ñ”É•…‘½¹±äÉ½ÕÑ•È€ô¥¹©•Ğ¡I½ÕÑ•È¤ì(€ÁÉ¥Ù…Ñ”É•…‘½¹±ä‘¥…±½œ€ô¥¹©•Ğ¡5…Ñ¥…±½œ¤ì(€ÁÉ¥Ù…Ñ”Á…±•ÑÑ•¥…±½I•˜è5…Ñ¥…±½I•˜ñM•…É¡A…±•ÑÑ•¥…±½½µÁ½¹•¹Ğøğ¹Õ±°€ô¹Õ±°ì((€ÁÉ¥Ù…Ñ”É•…‘½¹±ä¹…Ù¥…Ñ¥½¹¹€ôÑ½M¥¹…° (€€€Ñ¡¥Ì¹É½ÕÑ•È¹•Ù•¹ÑÌ¹Á¥Á” (€€€€€™¥±Ñ•È ¡•Ù•¹Ğ¤è•Ù•¹Ğ¥Ì9…Ù¥…Ñ¥½¹¹€ôø•Ù•¹Ğ¥¹ÍÑ…¹•½˜9…Ù¥…Ñ¥½¹¹¤°(€€€€€µ…À  ¤€ôøÑ¡¥Ì¹•ÑÕÉÉ•¹ÑA…•½¹Ñ•áĞ ¤¤°(€€€€¤°(€€€ì¥¹¥Ñ¥…±Y…±Õ”èÑ¡¥Ì¹•ÑÕÉÉ•¹ÑA…•½¹Ñ•áĞ ¤ô°(€€¤ì((€ÁÉ¥Ù…Ñ”É•…‘½¹±ä½µÁ…Ñ9…Ù¥…Ñ¥½¸€ôÑ½M¥¹…° (€€€¥¹©•Ğ¡	É•…­Á½¥¹Ñ=‰Í•ÉÙ•È¤(€€€€€€¹½‰Í•ÉÙ” œ¡µ…àµİ¥‘Ñ è€ÜØÁÁà¤œ¤(€€€€€€¹Á¥Á”¡µ…À ¡ÍÑ…Ñ”¤€ôøÍÑ…Ñ”¹µ…Ñ¡•Ì¤¤°(€€€ì¥¹¥Ñ¥…±Y…±Õ”è™…±Í”ô°(€€¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä¥Í½µÁ…Ñ9…Ù¥…Ñ¥½¸€ôÑ¡¥Ì¹½µÁ…Ñ9…Ù¥…Ñ¥½¸ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä¹…Ù¥…Ñ¥½¹5½‘”€ô½µÁÕÑ•  ¤€ôø(€€€Ñ¡¥Ì¹¥Í½µÁ…Ñ9…Ù¥…Ñ¥½¸ ¤€ü€½Ù•Èœ€è€Í¥‘”œ°(€€¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä¹…Ù¥…Ñ¥½¹=Á•¹•€ôÍ¥¹…°¡ÑÉÕ”¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä¹…Ù¥…Ñ¥½¹½±±…ÁÍ•€ôÍ¥¹…° (€€€ÑåÁ•½˜±½…±MÑ½É…”€„ôô€Õ¹‘•™¥¹•œ€ü±½…±MÑ½É…”¹•Ñ%Ñ•´ ¹…Ù}½±±…ÁÍ•œ¤€ôôô€ÑÉÕ”œ€è™…±Í”°(€€¤ì((€ÁÉ½Ñ•Ñ•Ñ½±•9…Ù¥…Ñ¥½¹½±±…ÁÍ• ¤èÙ½¥ì(€€€¥˜€¡Ñ¡¥Ì¹¥Í½µÁ…Ñ9…Ù¥…Ñ¥½¸ ¤¤ì(€€€€€Ñ¡¥Ì¹¹…Ù¥…Ñ¥½¹=Á•¹•¹Í•Ğ …Ñ¡¥Ì¹¹…Ù¥…Ñ¥½¹=Á•¹• ¤¤ì(€€€ô•±Í”ì(€€€€€Ñ¡¥Ì¹¹…Ù¥…Ñ¥½¹½±±…ÁÍ•¹ÕÁ‘…Ñ” ¡Ø¤€ôøì(€€€€€€€½¹ÍĞ¹•áĞ€ô€…Øì(€€€€€€€ÑÉäì(€€€€€€€€€±½…±MÑ½É…”¹Í•Ñ%Ñ•´ ¹…Ù}½±±…ÁÍ•œ°MÑÉ¥¹œ¡¹•áĞ¤¤ì(€€€€€€€ô…Ñ ì(€€€€€€€€€€¼¼¥¹½É”(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸¹•áĞì(€€€€€ô¤ì(€€€ô(€ô((€½¹ÍÑÉÕÑ½È ¤ì(€€€…™Ñ•É9•áÑI•¹‘•È  ¤€ôøÑ¡¥Ì¹½¹]¥¹‘½İI•Í¥é” ¤¤ì(€€€•™™•Ğ  ¤€ôøì(€€€€€¥˜€¡Ñ¡¥Ì¹™±½İÍÍ¥ÍÑ…¹Ğ¹Í•ÍÍ¥½¸ ¤¤ì(€€€€€€€Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹Ñ]¥‘•Ñ5½Õ¹Ñ•¹Í•Ğ¡ÑÉÕ”¤ì(€€€€€€€Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹ÑA…¹•±=Á•¸¹Í•Ğ¡ÑÉÕ”¤ì(€€€€€€€Ñ¡¥Ì¹ÕÁ‘…Ñ•ÍÍ¥ÍÑ…¹ÑA…¹•±•½µ•ÑÉä ¤ì(€€€€€ô(€€€ô¤ì(€€€•™™•Ğ  ¤€ôøì(€€€€€½¹ÍĞ½µÁ…Ğ€ôÑ¡¥Ì¹¥Í½µÁ…Ñ9…Ù¥…Ñ¥½¸ ¤ì(€€€€€½¹ÍĞ½¹Ñ•áĞ€ôÑ¡¥Ì¹¹…Ù¥…Ñ¥½¹¹ ¤ì(€€€€€Ñ¡¥Ì¹¹…Ù¥…Ñ¥½¹=Á•¹•¹Í•Ğ …½µÁ…Ğ€˜˜€…½¹Ñ•áĞ¹…ÕÑ¡5½‘”€˜˜€…½¹Ñ•áĞ¹İ½É­ÍÁ…•5½‘”¤ì(€€€ô¤ì(€€€•™™•Ğ  ¤€ôøì(€€€€€¥˜€¡Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹ÑI½ÕÑ•Ñ¥Ù” ¤¤Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹ÑA…¹•±=Á•¸¹Í•Ğ¡™…±Í”¤ì(€€€ô¤ì(€ô((€ÁÉ½Ñ•Ñ•É•…‘½¹±äİ½É­ÍÁ…•5½‘”€ô½µÁÕÑ•  ¤€ôøÑ¡¥Ì¹¹…Ù¥…Ñ¥½¹¹ ¤¹İ½É­ÍÁ…•5½‘”¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä…ÕÑ¡5½‘”€ô½µÁÕÑ•  ¤€ôøÑ¡¥Ì¹¹…Ù¥…Ñ¥½¹¹ ¤¹…ÕÑ¡5½‘”¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä…ÍÍ¥ÍÑ…¹ÑI½ÕÑ•Ñ¥Ù”€ô½µÁÕÑ•  ¤€ôø(€€€Ñ¡¥Ì¹¹…Ù¥…Ñ¥½¹¹ ¤¹ÕÉ°¹ÍÑ…ÉÑÍ]¥Ñ  œ½…¤½…ÍÍ¥ÍÑ…¹Ğœ¤°(€€¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±äÍ¡½İÍÍ¥ÍÑ…¹Ñ	Õ‰‰±”€ô½µÁÕÑ• (€€€€ ¤€ôø	½½±•…¸¡Ñ¡¥Ì¹ÕÉÉ•¹ÑUÍ•È ¤¤€˜˜€…Ñ¡¥Ì¹…ÕÑ¡5½‘” ¤€˜˜€…Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹ÑI½ÕÑ•Ñ¥Ù” ¤°(€€¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä…ÍÍ¥ÍÑ…¹Ñ]¥‘•Ñ5½Õ¹Ñ•€ôÍ¥¹…°¡™…±Í”¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä•¹•É…±ÍÍ¥ÍÑ…¹Ñ5½Õ¹Ñ•€ôÍ¥¹…°¡™…±Í”¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä…ÍÍ¥ÍÑ…¹ÑA…¹•±=Á•¸€ôÍ¥¹…°¡™…±Í”¤ì(€ÁÉ¥Ù…Ñ”É•…‘½¹±ä…ÍÍ¥ÍÑ…¹ÑA…¹•±=Á•¹¥¹œ€ôÍ¥¹…°¡™…±Í”¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä…ÍÍ¥ÍÑ…¹ÑA…¹•±•½µ•ÑÉä€ôÍ¥¹…°ñì(€€€±•™Ğè¹Õµ‰•Èì(€€€Ñ½Àè¹Õµ‰•Èì(€€€½É¥¥¹`è¹Õµ‰•Èì(€€€½É¥¥¹dè¹Õµ‰•Èì(€€€Í…±•`è¹Õµ‰•Èì(€€€Í…±•dè¹Õµ‰•Èì(€ôğ¹Õ±°ø¡¹Õ±°¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉA½Í¥Ñ¥½¸€ôÍ¥¹…°¡Ñ¡¥Ì¹É•…‘ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉA½Í¥Ñ¥½¸ ¤¤ì(€ÁÉ½Ñ•Ñ•É•…‘½¹±ä…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉÉ…¥¹œ€ôÍ¥¹…°¡™…±Í”¤ì(€ÁÉ¥Ù…Ñ”É•…‘½¹±ä…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•È€ôÙ¥•İ¡¥± …ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•Èœ°ì(€€€É•…è±•µ•¹ÑI•˜ñ!Q51	ÕÑÑ½¹±•µ•¹Ğø°(€ô¤ì(€ÁÉ¥Ù…Ñ”É•…‘½¹±ä…ÍÍ¥ÍÑ…¹Ñ±½Í•	ÕÑÑ½¸€ôÙ¥•İ¡¥± …ÍÍ¥ÍÑ…¹Ñ±½Í•	ÕÑÑ½¸œ°ì(€€€É•…è±•µ•¹ÑI•˜ñ!Q51	ÕÑÑ½¹±•µ•¹Ğø°(€ô¤ì(€ÁÉ¥Ù…Ñ”™½ÕÍI•ÑÕÉ¹±•µ•¹Ğè!Q51±•µ•¹Ğğ¹Õ±°€ô¹Õ±°ì(€ÁÉ¥Ù…Ñ”…ÍÍ¥ÍÑ…¹ÑÉ…œèì(€€€É•…‘½¹±äÁ½¥¹Ñ•É%è¹Õµ‰•Èì(€€€É•…‘½¹±äÁ½¥¹Ñ•É`è¹Õµ‰•Èì(€€€É•…‘½¹±äÁ½¥¹Ñ•Édè¹Õµ‰•Èì(€€€É•…‘½¹±ä±•™Ğè¹Õµ‰•Èì(€€€É•…‘½¹±äÑ½Àè¹Õµ‰•Èì(€€€µ½Ù•è‰½½±•…¸ì(€ôğ¹Õ±°€ô¹Õ±°ì(€ÁÉ¥Ù…Ñ”ÍÕÁÁÉ•ÍÍÍÍ¥ÍÑ…¹Ñ±¥¬€ô™…±Í”ì((€ÁÉ½Ñ•Ñ•ÍÑ…ÉÑÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉÉ…œ¡•Ù•¹ĞèA½¥¹Ñ•ÉÙ•¹Ğ¤èÙ½¥ì(€€€¥˜€¡•Ù•¹Ğ¹‰ÕÑÑ½¸€„ôô€Àñğ€…Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•È ¤¤É•ÑÕÉ¸ì(€€€½¹ÍĞÉ•Ğ€ôÑ¡¥Ì¹…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•È ¤„¹¹…Ñ¥Ù•±•µ•¹Ğ¹•Ñ	½Õ¹‘¥¹±¥•¹ÑI•Ğ ¤ì(€€€Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹ÑÉ…œ€ôì(€€€€€Á½¥¹Ñ•É%è•Ù•¹Ğ¹Á½¥¹Ñ•É%°(€€€€€Á½¥¹Ñ•É`è•Ù•¹Ğ¹±¥•¹Ñ`°(€€€€€Á½¥¹Ñ•Édè•Ù•¹Ğ¹±¥•¹Ñd°(€€€€€±•™ĞèÉ•Ğ¹±•™Ğ°(€€€€€Ñ½ÀèÉ•Ğ¹Ñ½À°(€€€€€µ½Ù•è™…±Í”°(€€€ôì(€€€Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•È ¤„¹¹…Ñ¥Ù•±•µ•¹Ğ¹Í•ÑA½¥¹Ñ•É…ÁÑÕÉ”¡•Ù•¹Ğ¹Á½¥¹Ñ•É%¤ì(€ô((€ÁÉ½Ñ•Ñ•µ½Ù•ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•È¡•Ù•¹ĞèA½¥¹Ñ•ÉÙ•¹Ğ¤èÙ½¥ì(€€€½¹ÍĞ‘É…œ€ôÑ¡¥Ì¹…ÍÍ¥ÍÑ…¹ÑÉ…œì(€€€¥˜€ …‘É…œñğ‘É…œ¹Á½¥¹Ñ•É%€„ôô•Ù•¹Ğ¹Á½¥¹Ñ•É%¤É•ÑÕÉ¸ì(€€€½¹ÍĞ‘•±Ñ…`€ô•Ù•¹Ğ¹±¥•¹Ñ`€´‘É…œ¹Á½¥¹Ñ•É`ì(€€€½¹ÍĞ‘•±Ñ…d€ô•Ù•¹Ğ¹±¥•¹Ñd€´‘É…œ¹Á½¥¹Ñ•Édì(€€€¥˜€ …‘É…œ¹µ½Ù•€˜˜5…Ñ ¹¡åÁ½Ğ¡‘•±Ñ…`°‘•±Ñ…d¤€ğ€Ô¤É•ÑÕÉ¸ì(€€€‘É…œ¹µ½Ù•€ôÑÉÕ”ì(€€€Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉÉ…¥¹œ¹Í•Ğ¡ÑÉÕ”¤ì(€€€•Ù•¹Ğ¹ÁÉ•Ù•¹Ñ•™…Õ±Ğ ¤ì(€€€Ñ¡¥Ì¹Í•ÑÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉA½Í¥Ñ¥½¸¡‘É…œ¹±•™Ğ€¬‘•±Ñ…`°‘É…œ¹Ñ½À€¬‘•±Ñ…d°™…±Í”¤ì(€ô((€ÁÉ½Ñ•Ñ•™¥¹¥Í¡ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉÉ…œ¡•Ù•¹ĞèA½¥¹Ñ•ÉÙ•¹Ğ¤èÙ½¥ì(€€€½¹ÍĞ‘É…œ€ôÑ¡¥Ì¹…ÍÍ¥ÍÑ…¹ÑÉ…œì(€€€¥˜€ …‘É…œñğ‘É…œ¹Á½¥¹Ñ•É%€„ôô•Ù•¹Ğ¹Á½¥¹Ñ•É%¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹ÑÉ…œ€ô¹Õ±°ì(€€€Ñ¡¥Ì¹…ÍÍ¥ÍÑ…¹Ñ1…Õ¹¡•ÉÉ…¥¹œ¹Í•Ğ¡™…±Í”¤ì(€€€¥˜€¡‘É…œ¹µ½Ù•¤ì(€€€€ƒ}¸¶‰Ëkºwµç\™]\›ÂˆÛÛœİ™XİH\Ë˜\ÜÚ\İ[][˜Ú\Š
-OË›˜]]™Q[[Y[™Ù]›İ[™[™ĞÛY[™Xİ
+import { FlowEditorAssistant } from '../../shared/services/flow-editor-assistant.service';
+import { FlowAiAssistantPanelComponent } from '../../features/flows/editor/flow-ai-assistant-panel.component';
+import {
+  ExecutionTracking,
+  INITIAL_EXECUTION_TRACKING,
+} from '../../shared/services/execution-tracking';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { toSignal, toObservable } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { filter, map, of, switchMap } from 'rxjs';
+import { PrimaryNavigationComponent } from '../navigation/primary-navigation.component';
+import { AuthService } from '../auth/auth.service';
+import { ThemeToggleComponent } from '../theme/theme-toggle.component';
+import { SearchPaletteDialogComponent } from './search-palette-dialog.component';
+import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.component';
 
-NÂˆYˆ
-\™Xİ
-H™]\›ÂˆÛÛœİİ\H\Ú[ÛÛ\Û™[˜\ÜÚ\İ[][˜Ú\‘ÜšYÂˆÛÛœİ[HHÂˆ\œ›İÓYˆË\İ\Kˆ\œ›İÔšYÚˆÜİ\Kˆ\œ›İÕ\ˆÌ\İ\Kˆ\œ›İÑİÛˆÌİ\KˆVÙ]™[šÙ^WNÂˆYˆ
-Y[JH™]\›Âˆ]™[œ™]™[Y˜][
+@Component({
+  selector: 'app-shell',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    MatButtonModule,
+    MatDialogModule,
+    MatSidenavModule,
+    MatTooltipModule,
+    PrimaryNavigationComponent,
+    RouterLink,
+    RouterOutlet,
+    ThemeToggleComponent,
+    AiAssistantPageComponent,
+    FlowAiAssistantPanelComponent,
+  ],
+  templateUrl: './app-shell.component.html',
+  host: {
+    '(document:keydown)': 'onGlobalSearchShortcut($event)',
+    '(window:resize)': 'onWindowResize()',
+  },
+})
+export class AppShellComponent {
+  protected readonly flowAssistant = inject(FlowEditorAssistant);
+  protected readonly generalAssistant = viewChild(AiAssistantPageComponent);
+  protected readonly flowWidget = viewChild<FlowAiAssistantPanelComponent>('flowWidget');
+  protected async applyFlowProposal(
+    flow: import('../../shared/models/flow-validation').FlowDocument,
+  ): Promise<void> {
+    const widget = this.flowWidget();
+    if (await this.flowAssistant.apply(flow)) {
+      widget?.acknowledgeProposal();
+      this.closeAssistantPanel();
+    }
+  }
 
-NÂˆ\ËœÙ]\ÜÚ\İ[][˜Ú\”ÜÚ][ÛŠ™Xİ›Y
-È[VÌK™XİÜ
-È[VÌWKYJNÂˆB‚ˆ›İXİYÛ•Ú[™İÔ™\Ú^™J
-Nˆ›ÚYÂˆÛÛœİÜÚ][ÛˆH\Ë˜\ÜÚ\İ[][˜Ú\”ÜÚ][ÛŠ
-NÂˆYˆ
-ÜÚ][ÛŠH\ËœÙ]\ÜÚ\İ[][˜Ú\”ÜÚ][ÛŠÜÚ][Û‹›YÜÚ][Û‹ÜYJNÂˆYˆ
-\Ë˜\ÜÚ\İ[[™[Ü[Š
-JH\Ë\]P\ÜÚ\İ[[™[Ù[ÛY]J
-NÂˆB‚ˆš]˜]HÙ]\ÜÚ\İ[][˜Ú\”ÜÚ][ÛŠYˆ[X™\‹Üˆ[X™\‹\œÚ\İˆ›ÛÛX[ŠNˆ›ÚYÂˆÛÛœİ]ÛˆH\Ë˜\ÜÚ\İ[][˜Ú\Š
-OË›˜]]™Q[[Y[ÂˆÛÛœİX\™Ú[ˆHMÂˆÛÛœİX^YHX]›X^
-X\™Ú[‹Ú[™İËš[›™\•ÚYH
-]ÛË›Ù™œÙ]ÚYÏÈMŠHHX\™Ú[ŠNÂˆÛÛœİX^ÜHX]›X^
-X\™Ú[‹Ú[™İËš[›™\’ZYÚH
-]ÛË›Ù™œÙ]ZYÚÏÈMŠHHX\™Ú[ŠNÂˆÛÛœİÜšYH\Ú[ÛÛ\Û™[˜\ÜÚ\İ[][˜Ú\‘ÜšYÂˆÛÛœİÛ˜\H
-˜[YNˆ[X™\‹X^ˆ[X™\ŠHO‚ˆX]›Z[ŠX^X]›X^
-X\™Ú[‹X]œ›İ[™
+  private static readonly assistantLauncherStorageKey = 'encoding.assistant-launcher.position';
+  private static readonly assistantLauncherGrid = 24;
+  private readonly router = inject(Router);
+  private readonly dialog = inject(MatDialog);
+  private paletteDialogRef: MatDialogRef<SearchPaletteDialogComponent> | null = null;
 
-˜[YHHX\™Ú[ŠHÈÜšY
-H
-ˆÜšY
-ÈX\™Ú[ŠJNÂˆ\Ë˜\ÜÚ\İ[][˜Ú\”ÜÚ][Û‹œÙ]
-ÈYˆÛ˜\
-YX^Y
-KÜˆÛ˜\
-ÜX^Ü
-HJNÂˆYˆ
-\œÚ\İ
-H\ËœØ]™P\ÜÚ\İ[][˜Ú\”ÜÚ][ÛŠ
-NÂˆB‚ˆš]˜]HØ]™P\ÜÚ\İ[][˜Ú\”ÜÚ][ÛŠ
-Nˆ›ÚYÂˆHÂˆÛÛœİÜÚ][ÛˆH\Ë˜\ÜÚ\İ[][˜Ú\”ÜÚ][ÛŠ
-NÂˆYˆ
-ÜÚ][ÛŠBˆØØ[İÜ˜YÙKœÙ]][Jˆ\Ú[ÛÛ\Û™[˜\ÜÚ\İ[][˜Ú\”İÜ˜YÙRÙ^Kˆ”ÓÓ‹œİš[™ÚYJÜÚ][ÛŠKˆ
-NÂˆHØ]ÚÂˆËÈÜÚ][Ûˆ\œÚ\İ[˜ÙH\ÈÜ[Û˜[Ú[ˆİÜ˜YÙH\È[˜]˜Z[X›K‚ˆBˆB‚ˆš]˜]H™XY\ÜÚ\İ[][˜Ú\”ÜÚ][ÛŠ
-NˆÈYˆ[X™\ÈÜˆ[X™\ˆH[ÂˆHÂˆÛÛœİ˜[YHHØØ[İÜ˜YÙK™Ù]][J\Ú[ÛÛ\Û™[˜\ÜÚ\İ[][˜Ú\”İÜ˜YÙRÙ^JNÂˆYˆ
-]˜[YJH™]\›ˆ[ÂˆÛÛœİÜÚ][Ûˆ[šÛ›İÛˆH”ÓÓ‹œ\œÙJ˜[YJNÂˆYˆ
-ˆ\[ÙˆÜÚ][ÛˆOOH	ÛØš™Xİ	È	‰‚ˆÜÚ][ÛˆOOH[	‰‚ˆ	ÛY	È[ˆÜÚ][Ûˆ	‰‚ˆ	İÜ	È[ˆÜÚ][Ûˆ	‰‚ˆ\[ÙˆÜÚ][Û‹›YOOH	Û[X™\‰È	‰‚ˆ[X™\‹š\Ñš[š]JÜÚ][Û‹›Y
-H	‰‚ˆ\[ÙˆÜÚ][Û‹ÜOOH	Û[X™\‰È	‰‚ˆ[X™\‹š\Ñš[š]JÜÚ][Û‹Ü
-Bˆ
-Bˆ™]\›ˆÈYˆÜÚ][Û‹›YÜˆÜÚ][Û‹ÜNÂˆHØ]ÚÂˆËÈ˜[˜XÚÈÈHY˜][›İÛK\šYÚÜÚ][Û‹‚ˆBˆ™]\›ˆ[ÂˆB‚ˆ›İXİYÙÙÛP\ÜÚ\İ[[™[
+  private readonly navigationEnd = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map(() => this.getCurrentPageContext()),
+    ),
+    { initialValue: this.getCurrentPageContext() },
+  );
 
-Nˆ›ÚYÂˆYˆ
-\Ë˜\ÜÚ\İ[[™[Ü[š[™Ê
-JH™]\›ÂˆYˆ
-\Ë˜\ÜÚ\İ[[™[Ü[Š
-JHÂˆ\Ë˜ÛÜÙP\ÜÚ\İ[[™[
+  private readonly compactNavigation = toSignal(
+    inject(BreakpointObserver)
+      .observe('(max-width: 760px)')
+      .pipe(map((state) => state.matches)),
+    { initialValue: false },
+  );
+  protected readonly isCompactNavigation = this.compactNavigation;
+  protected readonly navigationMode = computed(() =>
+    this.isCompactNavigation() ? 'over' : 'side',
+  );
+  protected readonly navigationOpened = signal(true);
+  protected readonly navigationCollapsed = signal(
+    typeof localStorage !== 'undefined' ? localStorage.getItem('nav_collapsed') === 'true' : false,
+  );
 
-NÂˆ™]\›ÂˆBˆYˆ
-]\Ë™›İĞ\ÜÚ\İ[œÙ\ÜÚ[ÛŠ
-JH\Ë™Ù[™\˜[\ÜÚ\İ[[İ[YœÙ]
-YJNÂˆ\Ë™›Øİ\Ô™]\›‘[[Y[BˆØİ[Y[˜Xİ]™Q[[Y[[œİ[˜Ù[ÙˆS[[Y[ÈØİ[Y[˜Xİ]™Q[[Y[ˆ[ÂˆYˆ
-\Ëš\ĞÛÛ\Xİ˜]šYØ][ÛŠ
-JH\Ë›˜]šYØ][Û“Ü[™YœÙ]
-˜[ÙJNÂˆ\Ë\]P\ÜÚ\İ[[™[Ù[ÛY]J
-NÂˆYˆ
-]\Ë˜\ÜÚ\İ[ÚYÙ][İ[Y
+  protected toggleNavigationCollapsed(): void {
+    if (this.isCompactNavigation()) {
+      this.navigationOpened.set(!this.navigationOpened());
+    } else {
+      this.navigationCollapsed.update((v) => {
+        const next = !v;
+        try {
+          localStorage.setItem('nav_collapsed', String(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    }
+  }
 
-JHÂˆ\Ë˜\ÜÚ\İ[[™[Ü[š[™ËœÙ]
-YJNÂˆ\Ë˜\ÜÚ\İ[ÚYÙ][İ[YœÙ]
-YJNÂˆ™\]Y\İ[š[X][Û‘œ˜[YJ
+  constructor() {
+    afterNextRender(() => this.onWindowResize());
+    effect(() => {
+      if (this.flowAssistant.session()) {
+        this.assistantWidgetMounted.set(true);
+        this.assistantPanelOpen.set(true);
+        this.updateAssistantPanelGeometry();
+      }
+    });
+    effect(() => {
+      const compact = this.isCompactNavigation();
+      const context = this.navigationEnd();
+      this.navigationOpened.set(!compact && !context.authMode && !context.workspaceMode);
+    });
+    effect(() => {
+      if (this.assistantRouteActive()) this.assistantPanelOpen.set(false);
+    });
+  }
 
-HOˆ™\]Y\İ[š[X][Û‘œ˜[YJ
+  protected readonly workspaceMode = computed(() => this.navigationEnd().workspaceMode);
+  protected readonly authMode = computed(() => this.navigationEnd().authMode);
+  protected readonly assistantRouteActive = computed(() =>
+    this.navigationEnd().url.startsWith('/ai/assistant'),
+  );
+  protected readonly showAssistantBubble = computed(
+    () => Boolean(this.currentUser()) && !this.authMode() && !this.assistantRouteActive(),
+  );
+  protected readonly assistantWidgetMounted = signal(false);
+  protected readonly generalAssistantMounted = signal(false);
+  protected readonly assistantPanelOpen = signal(false);
+  private readonly assistantPanelOpening = signal(false);
+  protected readonly assistantPanelGeometry = signal<{
+    left: number;
+    top: number;
+    originX: number;
+    originY: number;
+    scaleX: number;
+    scaleY: number;
+  } | null>(null);
+  protected readonly assistantLauncherPosition = signal(this.readAssistantLauncherPosition());
+  protected readonly assistantLauncherDragging = signal(false);
+  private readonly assistantLauncher = viewChild('assistantLauncher', {
+    read: ElementRef<HTMLButtonElement>,
+  });
+  private readonly assistantCloseButton = viewChild('assistantCloseButton', {
+    read: ElementRef<HTMLButtonElement>,
+  });
+  private focusReturnElement: HTMLElement | null = null;
+  private assistantDrag: {
+    readonly pointerId: number;
+    readonly pointerX: number;
+    readonly pointerY: number;
+    readonly left: number;
+    readonly top: number;
+    moved: boolean;
+  } | null = null;
+  private suppressAssistantClick = false;
 
-HOˆ\Ë˜Xİ]˜]P\ÜÚ\İ[[™[
+  protected startAssistantLauncherDrag(event: PointerEvent): void {
+    if (event.button !== 0 || !this.assistantLauncher()) return;
+    const rect = this.assistantLauncher()!.nativeElement.getBoundingClientRect();
+    this.assistantDrag = {
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+      moved: false,
+    };
+    this.assistantLauncher()!.nativeElement.setPointerCapture(event.pointerId);
+  }
 
-JJNÂˆ™]\›ÂˆBˆ\Ë˜Xİ]˜]P\ÜÚ\İ[[™[
+  protected moveAssistantLauncher(event: PointerEvent): void {
+    const drag = this.assistantDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - drag.pointerX;
+    const deltaY = event.clientY - drag.pointerY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < 5) return;
+    drag.moved = true;
+    this.assistantLauncherDragging.set(true);
+    event.preventDefault();
+    this.setAssistantLauncherPosition(drag.left + deltaX, drag.top + deltaY, false);
+  }
 
-NÂˆB‚ˆš]˜]HXİ]˜]P\ÜÚ\İ[[™[
+  protected finishAssistantLauncherDrag(event: PointerEvent): void {
+    const drag = this.assistantDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    this.assistantDrag = null;
+    this.assistantLauncherDragging.set(false);
+    if (drag.moved) {
+      this.saveAssistantLauncherPosition();
+      this.suppressAssistantClick = true;
+      setTimeout(() => (this.suppressAssistantClick = false));
+    }
+    const button = this.assistantLauncher()?.nativeElement;
+    if (button?.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+  }
 
-Nˆ›ÚYÂˆ\Ë˜\ÜÚ\İ[[™[Ü[š[™ËœÙ]
-˜[ÙJNÂˆ\Ë˜\ÜÚ\İ[[™[Ü[‹œÙ]
-YJNÂˆÙ][Y[İ]
+  protected onAssistantLauncherClick(event: MouseEvent): void {
+    if (this.suppressAssistantClick) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.suppressAssistantClick = false;
+      return;
+    }
+    if (this.flowAssistant.hasEditor() && !this.assistantPanelOpen()) {
+      if (this.flowAssistant.session()) {
+        this.updateAssistantPanelGeometry();
+        this.assistantPanelOpen.set(true);
+      } else void this.flowAssistant.open();
+      return;
+    }
+    this.toggleAssistantPanel();
+  }
 
+  protected onAssistantLauncherKeydown(event: KeyboardEvent): void {
+    if (!event.altKey || !event.key.startsWith('Arrow')) return;
+    const rect = this.assistantLauncher()?.nativeElement.getBoundingClientRect();
+    if (!rect) return;
+    const step = AppShellComponent.assistantLauncherGrid;
+    const delta = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    this.setAssistantLauncherPosition(rect.left + delta[0], rect.top + delta[1], true);
+  }
 
-HOˆ\Ë˜\ÜÚ\İ[ÛÜÙP]ÛŠ
-OË›˜]]™Q[[Y[™›Øİ\Ê
-JNÂˆB‚ˆš]˜]H\]P\ÜÚ\İ[[™[Ù[ÛY]J
-Nˆ›ÚYÂˆÛÛœİ]ÛˆH\Ë˜\ÜÚ\İ[][˜Ú\Š
-OË›˜]]™Q[[Y[ÂˆYˆ
-X]ÛŠH™]\›Â‚ˆÛÛœİ][˜Ú\ˆH]Û‹™Ù]›İ[™[™ĞÛY[™Xİ
+  protected onWindowResize(): void {
+    const position = this.assistantLauncherPosition();
+    if (position) this.setAssistantLauncherPosition(position.left, position.top, true);
+    if (this.assistantPanelOpen()) this.updateAssistantPanelGeometry();
+  }
 
-NÂˆÛÛœİšY]ÜÜÚYHÚ[™İËš[›™\•ÚYÂˆÛÛœİšY]ÜÜZYÚHÚ[™İËš[›™\’ZYÚÂˆÛÛœİ[™[ÚYHX]›Z[Šˆ\Ë™›İĞ\ÜÚ\İ[œÙ\ÜÚ[ÛŠ
-HÈˆÎˆX]›X^
-KšY]ÜÜÚYHÌŠKˆ
-NÂˆÛÛœİ[™[ZYÚHX]›Z[Šˆ\Ë™›İĞ\ÜÚ\İ[œÙ\ÜÚ[ÛŠ
-HÈˆLŒˆX]›X^
-KšY]ÜÜZYÚHLLŠKˆ
-NÂˆÛÛœİX\™Ú[ˆHMÂˆÛÛœİØ\HMÂˆÛÛœİÛ[\H
-˜[YNˆ[X™\‹Z[ˆ[X™\‹X^ˆ[X™\ŠHOˆX]›Z[ŠX^X]›X^
-Z[‹˜[YJJNÂˆÛÛœİX^YHX]›X^
-X\™Ú[‹šY]ÜÜÚYH[™[ÚYHX\™Ú[ŠNÂˆÛÛœİX^ÜHX]›X^
-X\™Ú[‹šY]ÜÜZYÚH[™[ZYÚHX\™Ú[ŠNÂˆÛÛœİYHÛ[\
-][˜Ú\‹œšYÚH[™[ÚYX\™Ú[‹X^Y
-NÂˆ]ÜH][˜Ú\‹ÜH[™[ZYÚHØ\ÂˆYˆ
-ÜX\™Ú[ŠHÂˆÛÛœİ™[İÈH][˜Ú\‹˜›İÛH
-ÈØ\ÂˆÜH™[İÈHX^ÜÈ™[İÈˆÛ[\
-ÜX\™Ú[‹X^Ü
-NÂˆBˆÛÛœİÜšYÚ[–HÛ[\
-][˜Ú\‹›Y
-È][˜Ú\‹ÚYÈˆHY[™[ÚY
-NÂˆÛÛœİÜšYÚ[–HHÛ[\
-][˜Ú\‹Ü
-È][˜Ú\‹šZYÚÈˆHÜ[™[ZYÚ
-NÂ‚ˆ\Ë˜\ÜÚ\İ[[™[Ù[ÛY]KœÙ]
-ÂˆYˆÜˆÜšYÚ[–ˆÜšYÚ[–KˆØØ[VˆX]›Z[ŠK][˜Ú\‹ÚYÈ[™[ÚY
-KˆØØ[VNˆX]›Z[ŠK][˜Ú\‹šZYÚÈ[™[ZYÚ
-KˆJNÂˆB‚ˆ›İXİYÛÜÙP\ÜÚ\İ[[™[
+  private setAssistantLauncherPosition(left: number, top: number, persist: boolean): void {
+    const button = this.assistantLauncher()?.nativeElement;
+    const margin = 16;
+    const maxLeft = Math.max(margin, window.innerWidth - (button?.offsetWidth ?? 56) - margin);
+    const maxTop = Math.max(margin, window.innerHeight - (button?.offsetHeight ?? 56) - margin);
+    const grid = AppShellComponent.assistantLauncherGrid;
+    const snap = (value: number, max: number) =>
+      Math.min(max, Math.max(margin, Math.round((value - margin) / grid) * grid + margin));
+    this.assistantLauncherPosition.set({ left: snap(left, maxLeft), top: snap(top, maxTop) });
+    if (persist) this.saveAssistantLauncherPosition();
+  }
 
-Nˆ›ÚYÂˆ\Ë˜\ÜÚ\İ[[™[Ü[‹œÙ]
-˜[ÙJNÂˆÙ][Y[İ]
+  private saveAssistantLauncherPosition(): void {
+    try {
+      const position = this.assistantLauncherPosition();
+      if (position)
+        localStorage.setItem(
+          AppShellComponent.assistantLauncherStorageKey,
+          JSON.stringify(position),
+        );
+    } catch {
+      // Position persistence is optional when storage is unavailable.
+    }
+  }
 
+  private readAssistantLauncherPosition(): { left: number; top: number } | null {
+    try {
+      const value = localStorage.getItem(AppShellComponent.assistantLauncherStorageKey);
+      if (!value) return null;
+      const position: unknown = JSON.parse(value);
+      if (
+        typeof position === 'object' &&
+        position !== null &&
+        'left' in position &&
+        'top' in position &&
+        typeof position.left === 'number' &&
+        Number.isFinite(position.left) &&
+        typeof position.top === 'number' &&
+        Number.isFinite(position.top)
+      )
+        return { left: position.left, top: position.top };
+    } catch {
+      // Fall back to the default bottom-right position.
+    }
+    return null;
+  }
 
-HOˆÂˆÛÛœİ\™Ù]H\Ë™›Øİ\Ô™]\›‘[[Y[Ëš\ĞÛÛ›™XİYˆÈ\Ë™›Øİ\Ô™]\›‘[[Y[ˆˆ\Ë˜\ÜÚ\İ[][˜Ú\Š
-OË›˜]]™Q[[Y[Âˆ\™Ù]Ë™›Øİ\Ê
-NÂˆ\Ë™›Øİ\Ô™]\›‘[[Y[H[ÂˆJNÂˆB‚ˆš]˜]H™XYÛ›H]]H[š™Xİ
-]]Ù\šXÙJNÂˆ›İXİY™XYÛ›Hİ\œ™[\Ù\ˆH\Ë˜]]\Ù\ÂˆËÈ]Xİ[ˆ\[0è8 &PTHHÙ\İ[ÛˆØ[œÈÙ\ÜÚ[Û‹‚ˆš]˜]H™XYÛ›HÛ[™Ñ\ØX›YHÛÛ\]Y
+  protected toggleAssistantPanel(): void {
+    if (this.assistantPanelOpening()) return;
+    if (this.assistantPanelOpen()) {
+      this.closeAssistantPanel();
+      return;
+    }
+    if (!this.flowAssistant.session()) this.generalAssistantMounted.set(true);
+    this.focusReturnElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (this.isCompactNavigation()) this.navigationOpened.set(false);
+    this.updateAssistantPanelGeometry();
+    if (!this.assistantWidgetMounted()) {
+      this.assistantPanelOpening.set(true);
+      this.assistantWidgetMounted.set(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => this.activateAssistantPanel()));
+      return;
+    }
+    this.activateAssistantPanel();
+  }
 
+  private activateAssistantPanel(): void {
+    this.assistantPanelOpening.set(false);
+    this.assistantPanelOpen.set(true);
+    setTimeout(() => this.assistantCloseButton()?.nativeElement.focus());
+  }
 
-HOˆ\Ë˜]][ÙJ
-H]\Ë˜]]\Ù\Š
-JNÂˆš]˜]H™XYÛ›H˜XÚÚ[™ÈH[š™Xİ
-^Xİ][Û•˜XÚÚ[™ÊNÂˆš]˜]H™XYÛ›H^Xİ][Û”İ]HHÔÚYÛ˜[
-ˆÓØœÙ\˜X›J\ËœÛ[™Ñ\ØX›Y
-Kœ\JˆİÚ]ÚX\
+  private updateAssistantPanelGeometry(): void {
+    const button = this.assistantLauncher()?.nativeElement;
+    if (!button) return;
 
-\ØX›Y
-HOˆ
-\ØX›YÈÙŠS’UPSÑVPÕUSÓ—ÕPÒÒS‘ÊHˆ\Ë˜XÚÚ[™Ëœİ]I
-JKˆ
-KˆÈ[š]X[˜[YNˆS’UPSÑVPÕUSÓ—ÕPÒÒS‘ÈKˆ
-NÂˆ›İXİY™XYÛ›HXİ]™Q^Xİ][ÛÛİ[HÛÛ\]Y
-ˆ
+    const launcher = button.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const panelWidth = Math.min(
+      this.flowAssistant.session() ? 640 : 380,
+      Math.max(1, viewportWidth - 32),
+    );
+    const panelHeight = Math.min(
+      this.flowAssistant.session() ? 840 : 520,
+      Math.max(1, viewportHeight - 112),
+    );
+    const margin = 16;
+    const gap = 16;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+    const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+    const left = clamp(launcher.right - panelWidth, margin, maxLeft);
+    let top = launcher.top - panelHeight - gap;
+    if (top < margin) {
+      const below = launcher.bottom + gap;
+      top = below <= maxTop ? below : clamp(top, margin, maxTop);
+    }
+    const originX = clamp(launcher.left + launcher.width / 2 - left, 0, panelWidth);
+    const originY = clamp(launcher.top + launcher.height / 2 - top, 0, panelHeight);
 
-HOˆ\Ë™^Xİ][Û”İ]J
-K™]OË˜Xİ]™PÛİ[ÏÈˆ
-NÂ‚ˆ›İXİYÜ[”ÙX\˜Ú[]J
-Nˆ›ÚYÂˆYˆ
-\Ëœ[]QX[ÙÔ™YŠHÂˆ\Ëœ[]QX[ÙÔ™Y‹˜ÛÜÙJ
-NÂˆ™]\›ÂˆBˆ\Ëœ[]QX[ÙÔ™YˆH\Ë™X[ÙË›Ü[ŠÙX\˜Ú[]QX[ÙĞÛÛ\Û™[ÂˆÚYˆ	ÛZ[ŠMŒMÊIËˆX^ÚYˆ	ÍMŒ	ËˆÜÚ][ÛˆÈÜˆ	ÌLš	ÈKˆ[™[Û\ÜÎˆ	ÜÙX\˜Ú\[]KYX[ÙË\[™[	Ëˆ]]Ñ›Øİ\Îˆ	Ùš\œİ]X˜˜X›IËˆ™\İÜ™Q›Øİ\ÎˆYKˆJNÂˆ\Ëœ[]QX[ÙÔ™Y‹˜Y\ÛÜÙY
+    this.assistantPanelGeometry.set({
+      left,
+      top,
+      originX,
+      originY,
+      scaleX: Math.min(1, launcher.width / panelWidth),
+      scaleY: Math.min(1, launcher.height / panelHeight),
+    });
+  }
 
-KœİXœØÜšX™J
+  protected closeAssistantPanel(): void {
+    this.assistantPanelOpen.set(false);
+    setTimeout(() => {
+      const target = this.focusReturnElement?.isConnected
+        ? this.focusReturnElement
+        : this.assistantLauncher()?.nativeElement;
+      target?.focus();
+      this.focusReturnElement = null;
+    });
+  }
 
-HOˆÂˆ\Ëœ[]QX[ÙÔ™YˆH[ÂˆJNÂˆBˆ›İXİYÛ“˜]šYØ][ÛÛXÚÊ
-Nˆ›ÚYÂˆYˆ
-\Ëš\ĞÛÛ\Xİ˜]šYØ][ÛŠ
-JHÂˆ\Ë›˜]šYØ][Û“Ü[™YœÙ]
-˜[ÙJNÂˆBˆB‚ˆ›İXİYÛ‘ÛØ˜[ÙX\˜ÚÚÜİ]
-]™[ˆÙ^X›Ø\™]™[
-Nˆ›ÚYÂˆYˆ
-]™[™Y˜][™]™[Y
-H™]\›ÂˆYˆ
-]™[šÙ^HOOH	Ñ\ØØ\IÈ	‰ˆ\Ë˜\ÜÚ\İ[[™[Ü[Š
-JHÂˆ]™[œ™]™[Y˜][
+  private readonly auth = inject(AuthService);
+  protected readonly currentUser = this.auth.user;
+  // Aucun appel Ã  lâ€™API de gestion sans session.
+  private readonly pollingDisabled = computed(() => this.authMode() || !this.auth.user());
+  private readonly tracking = inject(ExecutionTracking);
+  private readonly executionState = toSignal(
+    toObservable(this.pollingDisabled).pipe(
+      switchMap((disabled) => (disabled ? of(INITIAL_EXECUTION_TRACKING) : this.tracking.state$)),
+    ),
+    { initialValue: INITIAL_EXECUTION_TRACKING },
+  );
+  protected readonly activeExecutionCount = computed(
+    () => this.executionState().data?.activeCount ?? 0,
+  );
 
-NÂˆ\Ë˜ÛÜÙP\ÜÚ\İ[[™[
+  protected openSearchPalette(): void {
+    if (this.paletteDialogRef) {
+      this.paletteDialogRef.close();
+      return;
+    }
+    this.paletteDialogRef = this.dialog.open(SearchPaletteDialogComponent, {
+      width: 'min(560px, 94vw)',
+      maxWidth: '560px',
+      position: { top: '10vh' },
+      panelClass: 'search-palette-dialog-panel',
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
+    });
+    this.paletteDialogRef.afterClosed().subscribe(() => {
+      this.paletteDialogRef = null;
+    });
+  }
+  protected onNavigationClick(): void {
+    if (this.isCompactNavigation()) {
+      this.navigationOpened.set(false);
+    }
+  }
 
-NÂˆ™]\›ÂˆBˆYˆ
-ˆ]™[šÙ^KÓØØ[SİÙ\Ø\ÙJ
-HOOH	ÚÉÈ	‰‚ˆ
-]™[›Y]RÙ^H]™[˜İ›Ù^JH	‰‚ˆ]\Ë˜]][ÙJ
-Bˆ
-HÂˆ]™[œ™]™[Y˜][
+  protected onGlobalSearchShortcut(event: KeyboardEvent): void {
+    if (event.defaultPrevented) return;
+    if (event.key === 'Escape' && this.assistantPanelOpen()) {
+      event.preventDefault();
+      this.closeAssistantPanel();
+      return;
+    }
+    if (
+      event.key.toLocaleLowerCase() === 'k' &&
+      (event.metaKey || event.ctrlKey) &&
+      !this.authMode()
+    ) {
+      event.preventDefault();
+      this.openSearchPalette();
+    }
+  }
 
-NÂˆ\Ë›Ü[”ÙX\˜Ú[]J
-NÂˆBˆB‚ˆš]˜]HÙ]İ\œ™[YÙPÛÛ^
+  private getCurrentPageContext(): {
+    url: string;
+    workspaceMode: boolean;
+    authMode: boolean;
+  } {
+    let route = this.router.routerState.snapshot.root;
 
-NˆÂˆ\›ˆİš[™ÎÂˆÛÜšÜÜXÙS[ÙNˆ›ÛÛX[Âˆ]][ÙNˆ›ÛÛX[ÂˆHÂˆ]›İ]HH\Ëœ›İ]\‹œ›İ]\”İ]KœÛ˜\Úİœ›ÛİÂ‚ˆÚ[H
-›İ]K™š\œİÚ[
-HÂˆ›İ]HH›İ]K™š\œİÚ[ÂˆB‚ˆ™]\›ˆÂˆ\›ˆ\Ëœ›İ]\‹\›ˆÛÜšÜÜXÙS[ÙNˆ›İ]K™]VÉÛ^[İ]	×HOOH	İÛÜšÜÜXÙIËˆ]][ÙNˆ›İ]K™]VÉØ]]YÙI×HOOH[™Yš[™YˆNÂˆBŸB
+    while (route.firstChild) {
+      route = route.firstChild;
+    }
+
+    return {
+      url: this.router.url,
+      workspaceMode: route.data['layout'] === 'workspace',
+      authMode: route.data['authPage'] !== undefined,
+    };
+  }
+}
