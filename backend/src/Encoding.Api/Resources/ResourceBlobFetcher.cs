@@ -82,15 +82,17 @@ public sealed class ResourceBlobFetcher(
         if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable) { File.Delete(partial); return false; }
         if (response.StatusCode != HttpStatusCode.OK && response.StatusCode != HttpStatusCode.PartialContent) return false;
         var append = response.StatusCode == HttpStatusCode.PartialContent && offset > 0;
-        if (!append) offset = 0;
-        if (offset + (response.Content.Headers.ContentLength ?? 0) > expectedBytes) return false;
+        // A peer may ignore Range and return the complete blob with 200. In that case the existing
+        // partial file will be replaced, so only the new response body contributes to the size check.
+        var existingBytes = append ? offset : 0;
+        if (existingBytes + (response.Content.Headers.ContentLength ?? 0) > expectedBytes) return false;
 
         await using (var input = await response.Content.ReadAsStreamAsync(ct))
         await using (var output = new FileStream(partial, append ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous))
         {
             var buffer = new byte[81920];
             int count;
-            long total = offset;
+            long total = existingBytes;
             while ((count = await input.ReadAsync(buffer, ct)) > 0)
             {
                 total += count;
