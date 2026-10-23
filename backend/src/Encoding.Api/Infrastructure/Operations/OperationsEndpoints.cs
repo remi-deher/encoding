@@ -19,6 +19,7 @@ public static class OperationsEndpoints
     {
         var options = OperationsOptions.From(builder.Configuration);
         builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton<ClusterReconciliationHealth>();
         builder.Services.AddSingleton<ClusterMetricsCollector>();
         builder.Services.AddSingleton<ArtifactRetention>();
         builder.Services.AddHostedService<ArtifactRetentionService>();

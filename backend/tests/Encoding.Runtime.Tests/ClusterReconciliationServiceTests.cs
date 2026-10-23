@@ -103,6 +103,35 @@ public sealed class ClusterReconciliationServiceTests
     }
 
     [Fact]
+    public async Task ByteBudgetYieldsBeforeAnExchangeCouldExceedTheTransferLimit()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var value = JsonSerializer.Serialize(new string('x', 900_000));
+        for (var i = 0; i < 80; i++) await fixture.Journal.SetRegisterAsync("large." + i, value, CancellationToken.None);
+        var acknowledged = new Dictionary<Guid, long>();
+        long transferred = 0;
+        var calls = 0;
+        var sent = 0;
+        using var client = new HttpClient(new Handler(async (request, ct) =>
+        {
+            calls++;
+            var body = await request.Content!.ReadAsByteArrayAsync(ct);
+            var exchange = JsonSerializer.Deserialize<ClusterReconciliationExchangeRequest>(body, Fixture.Json)!;
+            sent += exchange.Changes.Count;
+            foreach (var change in exchange.Changes) acknowledged[change.OriginId] = change.Sequence;
+            var response = fixture.Response(acknowledged);
+            transferred += body.Length + (await response.Content.ReadAsByteArrayAsync(ct)).Length;
+            return response;
+        }));
+        using var service = fixture.Service(client, new ManualClock());
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://peer.test/"], CancellationToken.None);
+        Assert.InRange(calls, 1, ClusterReconciliationService.MaximumExchangesPerPeer - 1);
+        Assert.InRange(sent, 1, 79);
+        Assert.True(transferred <= ClusterReconciliationService.MaximumBytesPerPeer);
+        Assert.True(transferred + 2L * ClusterReconciliationSignature.MaximumBodyBytes > ClusterReconciliationService.MaximumBytesPerPeer);
+    }
+
+    [Fact]
     public async Task TimeBudgetYieldsToTheNextPeer()
     {
         await using var fixture = await Fixture.CreateAsync();
@@ -127,10 +156,11 @@ public sealed class ClusterReconciliationServiceTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var attempts = new List<string>();
+        var timeout = true;
         using var client = new HttpClient(new Handler((request, _) =>
         {
             attempts.Add(request.RequestUri!.Host);
-            return request.RequestUri.Host == "slow.test"
+            return request.RequestUri.Host == "slow.test" && timeout
                 ? throw new TaskCanceledException("Simulated HttpClient timeout")
                 : Task.FromResult(fixture.Response());
         }));
@@ -140,8 +170,10 @@ public sealed class ClusterReconciliationServiceTests
         var peers = fixture.Health.GetStatus().Peers;
         Assert.NotNull(peers.Single(peer => peer.Url == "http://slow.test/").LastError);
         Assert.NotNull(peers.Single(peer => peer.Url == "http://healthy.test/").LastSuccessAt);
-        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://healthy.test/"], CancellationToken.None);
+        timeout = false;
+        await service.ReconcilePeersAsync(fixture.ClusterId, ["http://slow.test/"], CancellationToken.None);
         Assert.Equal(3, attempts.Count);
+        Assert.Null(fixture.Health.GetStatus().Peers.Single(peer => peer.Url == "http://slow.test/").LastError);
     }
 
     [Fact]
