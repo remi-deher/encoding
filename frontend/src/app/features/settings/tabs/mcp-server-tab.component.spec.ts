@@ -65,7 +65,7 @@ describe('McpServerTabComponent', () => {
   it('never substitutes a public token prefix for a full secret', async () => {
     const { component } = await setup();
     expect(component['configSnippet']()).toContain('<JETON_API_COMPLET>');
-    component['clientToken'].set('enc_pat_full_private_value');
+    component['manualToken'].set('enc_pat_full_private_value');
     await component['copyConfigSnippet']();
     expect(copy).toHaveBeenCalledWith(expect.stringContaining('Bearer enc_pat_full_private_value'));
   });
@@ -74,8 +74,8 @@ describe('McpServerTabComponent', () => {
     component['addressRevealed'].set(true);
     component['openClient']();
     await fixture.whenStable();
-    component['clientToken'].set('temporary_secret');
+    component['manualToken'].set('temporary_secret');
     await TestBed.inject(SettingsEditor).close();
-    expect(component['clientToken']()).toBe('');
+    expect(component['manualToken']()).toBe('');
   });
 });
