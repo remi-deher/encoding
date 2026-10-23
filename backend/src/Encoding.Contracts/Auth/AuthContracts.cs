@@ -49,7 +49,10 @@ public sealed record CreateApiTokenRequest(
     string Name,
     string? Role = "admin",
     DateTimeOffset? ExpiresAt = null,
-    IReadOnlyList<string>? Scopes = null);
+    IReadOnlyList<string>? Scopes = null,
+    string? CurrentPassword = null);
+
+public sealed record ReauthenticateRequest(string CurrentPassword);
 
 public sealed record CreatedApiTokenResponse(
     Guid Id,

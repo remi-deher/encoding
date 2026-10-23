@@ -2,7 +2,6 @@ import { flowDocumentNodes } from '../../shared/models/flow-document-graph';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { MatButtonModule } from '@angular/material/button';
 import { FlowComponentDrop, FlowPaletteDrop } from '../../shared/ui/flow-palette-drag';
-import { NgTemplateOutlet } from '@angular/common';
 import { toObservable, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { timer, switchMap, catchError, of, from, firstValueFrom } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -33,7 +32,7 @@ import {
   createFlowInputConfigurationSchema,
   getFlowInputComponents,
 } from '../../shared/models/flow-control-components';
-import { canConnectFlowGraph, flowConfigurationFieldError } from '../../shared/models/flow-graph';
+import { canConnectFlowGraph } from '../../shared/models/flow-graph';
 import { NotificationService } from '../../shared/services/notification.service';
 import { FLOW_COMPONENT_CATALOG } from '../../shared/models/flow-component-catalog';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
@@ -43,7 +42,6 @@ import {
   isFlowComponentCompatible,
   getFlowConfigurationSchema,
   FlowComponentConfiguration,
-  FlowComponentConfigurationValue,
   FlowComponentDefinition,
   FlowComponentOutput,
   FlowGraphConnection,
@@ -152,7 +150,6 @@ type ComponentDestination =
     '(window:keydown)': 'onWindowKeyDown($event)',
   },
   imports: [
-    NgTemplateOutlet,
     MatButtonModule,
     DetailDrawerComponent,
     FlowComponentDrop,
@@ -1013,31 +1010,6 @@ export class FlowEditorPageComponent {
     this.componentDestination.set(null);
   }
 
-  protected onInlineConfigurationChanged(event: {
-    readonly nodeId: string;
-    readonly fieldId: string;
-    readonly value: FlowComponentConfigurationValue;
-  }): void {
-    const node = this.nodes().find((candidate) => candidate.id === event.nodeId);
-    const field = getFlowConfigurationSchema(
-      node?.component.configurationSchema,
-      this.flowMediaType(),
-    )?.fields.find((field) => field.id === event.fieldId);
-    if (!node || !field?.inline) return;
-    const error = flowConfigurationFieldError(field, event.value);
-    if (error) {
-      this.notifications.show(error);
-      return;
-    }
-    this.nodes.update((nodes) =>
-      nodes.map((candidate) =>
-        candidate.id === node.id
-          ? { ...candidate, configuration: { ...candidate.configuration, [field.id]: event.value } }
-          : candidate,
-      ),
-    );
-  }
-
   protected onConfigurationRequested(nodeId: string): void {
     this.paletteOpen.set(false);
     this.configuringNodeId.set(nodeId);
@@ -1257,12 +1229,17 @@ export class FlowEditorPageComponent {
         this.notifications.show('Aucune modification à enregistrer.');
         return;
       }
-      const { saved, published, validation } = await this.serverValidation.saveAutomatically(
+      const result = await this.serverValidation.saveAutomatically(
         document,
         expected,
         this.draftRevision(),
         unchanged,
       );
+      if ('noChanges' in result && result.noChanges) {
+        this.notifications.show('Aucune modification à publier.');
+        return;
+      }
+      const { saved, published, validation } = result;
       if (!saved) {
         this.notifications.show(
           'Le brouillon est déjà enregistré. Publication impossible : ' +

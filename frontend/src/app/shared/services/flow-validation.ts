@@ -15,6 +15,7 @@ import {
   FlowValidationResult,
   flowComponentReference,
   FlowComponentPackInstance,
+  flowDocumentKey,
 } from '../models/flow-validation';
 @Injectable({ providedIn: 'root' })
 export class FlowValidation {
@@ -186,6 +187,25 @@ export class FlowValidation {
     expectedDraftRevision: number | undefined,
     unchanged: boolean,
   ) {
+    if (expectedVersion > 0 && expectedDraftRevision !== undefined) {
+      const latest = await firstValueFrom(
+        this.http.get<FlowVersionResponse>(`/api/v1/flows/${definition.id}/edit`),
+      );
+      const latestPublishedVersion = latest.publishedVersion ?? expectedVersion;
+      const published = await firstValueFrom(
+        this.http.get<FlowVersionResponse>(
+          `/api/v1/flows/${definition.id}/versions/${latestPublishedVersion}`,
+        ),
+      );
+      if (flowDocumentKey(published.definition) === flowDocumentKey(definition)) {
+        return {
+          saved: null,
+          published: false,
+          noChanges: true,
+          validation: { isValid: true, issues: [] },
+        };
+      }
+    }
     let validation = await this.validateDocument(definition);
     if (validation.isValid) {
       try {

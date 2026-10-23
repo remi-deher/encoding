@@ -45,7 +45,7 @@ interface TokenRow extends AccessListRow {
   template: `
     <app-configuration-section
       title="Jetons d’API"
-      description="Un accès dédié à chaque application ou script. La valeur complète n’est affichée qu’une fois, à la création."
+      description="Un accès dédié à chaque application ou script. Le mot de passe du compte est requis pour afficher la clé, qui ne sera présentée qu’une fois."
       icon="api"
     >
       <button section-actions matButton="tonal" (click)="openCreate()">Créer un jeton</button>
@@ -120,6 +120,7 @@ export class ApiTokenTabComponent {
     review: false,
     fields: [
       { id: 'name', label: 'Nom du jeton', type: 'text', required: true, maxLength: 64 },
+      { id: 'currentPassword', label: 'Mot de passe du compte', type: 'password', required: true },
       {
         id: 'role',
         label: 'Rôle',
@@ -258,6 +259,7 @@ export class ApiTokenTabComponent {
         this.tokenService.create({
           name: value['name'].trim(),
           role: value['role'] as 'admin' | 'viewer',
+          currentPassword: value['currentPassword'],
           expiresAt,
           scopes: value['role'] === 'admin' && value['mcpAccess'] === 'write' ? ['mcp:write'] : [],
         }),

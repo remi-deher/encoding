@@ -16,8 +16,13 @@ public static class ApiTokenEndpoints
             Results.Ok(await cluster.ApiTokenReplicationAsync(ct)))
             .WithName("ApiTokenReplication").RequireAuthorization(AuthExtensions.AdministratorPolicy);
 
-        group.MapPost("", async (CreateApiTokenRequest request, ApiTokenRepository repository, CancellationToken ct) =>
+        group.MapPost("", async (CreateApiTokenRequest request, HttpContext http, AuthService auth, ApiTokenRepository repository, CancellationToken ct) =>
         {
+            var current = AuthEndpoints.Current(http.User);
+            if (current is null || http.User.FindFirst("auth_type")?.Value == "api_token"
+                || string.IsNullOrEmpty(request.CurrentPassword) || request.CurrentPassword.Length > AuthService.MaximumPasswordLength
+                || !await auth.ReauthenticateAsync(current.Id, request.CurrentPassword, ct))
+                return Results.Json(new { title = "Saisissez le mot de passe de votre compte pour afficher le nouveau jeton." }, statusCode: StatusCodes.Status401Unauthorized);
             if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 128)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Le nom du jeton est obligatoire et limité à 128 caractères."] });
 

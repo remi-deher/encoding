@@ -1,12 +1,15 @@
 using System.Security.Claims;
+using System.Data.Common;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
+using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Libraries;
 using Encoding.Api.Logging;
 using Encoding.Api.Nodes;
 using Encoding.Api.Plugins;
+using Encoding.Api.Resources;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Logging;
@@ -33,6 +36,7 @@ public sealed class McpService(
     NodePresenceOptions presenceOptions,
     ExecutionRepository executions,
     FlowScriptRepository scripts,
+    ResourceRepository resources,
     EncodingProfileRepository profiles,
     FlowTemplateRepository templates,
     FlowComponentPackRepository componentPacks,
@@ -236,7 +240,16 @@ public sealed class McpService(
             "get_script" => await ToolGetScriptAsync(arguments, ct),
             "save_script" => await ToolSaveScriptAsync(arguments, isAdmin, ct),
             "publish_script" => await ToolPublishScriptAsync(arguments, isAdmin, ct),
+            "delete_script" => await ToolDeleteScriptAsync(arguments, isAdmin, ct),
             "validate_script_draft" => ToolValidateScriptDraft(arguments),
+
+            // Ressources partagées
+            "list_resources" => await ToolListResourcesAsync(ct),
+            "get_resource" => await ToolGetResourceAsync(arguments, ct),
+            "create_resource" => await ToolCreateResourceAsync(arguments, isAdmin, ct),
+            "update_resource" => await ToolUpdateResourceAsync(arguments, isAdmin, ct),
+            "add_resource_version" => await ToolAddResourceVersionAsync(arguments, isAdmin, ct),
+            "delete_resource" => await ToolDeleteResourceAsync(arguments, isAdmin, ct),
 
             // Profils d'encodage
             "list_encoding_profiles" => await ToolListEncodingProfilesAsync(ct),
@@ -870,6 +883,84 @@ public sealed class McpService(
         return published is not null
             ? McpCallToolResult.Text(JsonSerializer.Serialize(new { message = $"Script publié en version {published.Version}.", version = published }, JsonOptions))
             : McpCallToolResult.Text("Échec de publication : script introuvable, code vide ou révision conflictuelle.", isError: true);
+    }
+
+    private async Task<McpCallToolResult> ToolDeleteScriptAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La suppression de scripts exige le rôle administrateur.");
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        return await scripts.DeleteAsync(id, ct) ? McpCallToolResult.Text("Script supprimé.") : Invalid("Script introuvable.");
+    }
+
+    private async Task<McpCallToolResult> ToolListResourcesAsync(CancellationToken ct) =>
+        McpCallToolResult.Text(JsonSerializer.Serialize(await resources.ListAsync(ct), JsonOptions));
+
+    private async Task<McpCallToolResult> ToolGetResourceAsync(JsonElement args, CancellationToken ct)
+    {
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        var resource = await resources.GetAsync(id, ct);
+        return resource is null ? Invalid("Ressource introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(resource, JsonOptions));
+    }
+
+    private async Task<McpCallToolResult> ToolCreateResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La création de ressources exige le rôle administrateur.");
+        if (args.GetProperty("name").GetString() is not { } name || string.IsNullOrWhiteSpace(name)
+            || !TryResourceFiles(args, out var files)) return Invalid("Nom ou liste de fichiers invalide.");
+        var description = args.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
+        try
+        {
+            var created = await resources.CreateAsync(Guid.NewGuid(), "font", name, description, files, ct);
+            return McpCallToolResult.Text(JsonSerializer.Serialize(created, JsonOptions));
+        }
+        catch (ResourceException ex) { return Invalid(ex.Message); }
+        catch (DbException ex) when (Sql.IsUniqueViolation(ex)) { return Invalid("Une ressource porte déjà ce nom."); }
+    }
+
+    private async Task<McpCallToolResult> ToolUpdateResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La modification de ressources exige le rôle administrateur.");
+        if (!TryGuid(args, "id", out var id) || args.GetProperty("name").GetString() is not { } name
+            || args.GetProperty("description").GetString() is not { } description) return Invalid("Paramètres de ressource invalides.");
+        try
+        {
+            var updated = await resources.UpdateAsync(id, name, description, ct);
+            return updated is null ? Invalid("Ressource introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(updated, JsonOptions));
+        }
+        catch (DbException ex) when (Sql.IsUniqueViolation(ex)) { return Invalid("Une ressource porte déjà ce nom."); }
+    }
+
+    private async Task<McpCallToolResult> ToolAddResourceVersionAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La création d’une version exige le rôle administrateur.");
+        if (!TryGuid(args, "id", out var id) || !TryResourceFiles(args, out var files)) return Invalid("Identifiant ou liste de fichiers invalide.");
+        try
+        {
+            var version = await resources.AddVersionAsync(id, files, ct);
+            return version is null ? Invalid("Ressource introuvable.") : McpCallToolResult.Text(JsonSerializer.Serialize(version, JsonOptions));
+        }
+        catch (ResourceException ex) { return Invalid(ex.Message); }
+    }
+
+    private async Task<McpCallToolResult> ToolDeleteResourceAsync(JsonElement args, bool isAdmin, CancellationToken ct)
+    {
+        if (!isAdmin) return Denied("La suppression de ressources exige le rôle administrateur.");
+        if (!TryGuid(args, "id", out var id)) return Invalid("Paramètre 'id' (UUID) requis.");
+        var usage = await resources.UsageAsync(id, ct);
+        if (usage.Count > 0) return Invalid("Cette ressource est utilisée par un flow et ne peut pas être supprimée.");
+        return await resources.DeleteAsync(id, ct) ? McpCallToolResult.Text("Ressource supprimée.") : Invalid("Ressource introuvable.");
+    }
+
+    private static bool TryResourceFiles(JsonElement args, out IReadOnlyList<ResourceFileReference> files)
+    {
+        files = [];
+        if (!args.TryGetProperty("files", out var value) || value.ValueKind != JsonValueKind.Array) return false;
+        try
+        {
+            files = JsonSerializer.Deserialize<IReadOnlyList<ResourceFileReference>>(value.GetRawText(), JsonOptions) ?? [];
+            return files.Count > 0;
+        }
+        catch (JsonException) { return false; }
     }
 
     // --- PROFILS D'ENCODAGE ---

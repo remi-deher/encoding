@@ -178,12 +178,10 @@ async function setup(
   await page.goto('/flows');
   await page.getByRole('button', { name: 'Consulter', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: 'Cinéma', exact: true });
-  await expect(drawer.locator('.step-card')).toHaveCount(4);
+  await expect(drawer.locator('.canvas-node')).toHaveCount(4);
   return { drawer, writes };
 }
-test('drawer previews the real graph, folds branches and exposes a read-only canvas', async ({
-  page,
-}, info) => {
+test('drawer previews the real graph on a read-only canvas', async ({ page }, info) => {
   const { drawer, writes } = await setup(page);
   await expect(drawer.getByRole('tab', { name: 'Aperçu', exact: true })).toHaveAttribute(
     'aria-selected',
@@ -192,9 +190,6 @@ test('drawer previews the real graph, folds branches and exposes a read-only can
   await expect(
     drawer.getByRole('button', { name: /Configurer |Actions de |Ajouter une étape/ }),
   ).toHaveCount(0);
-  await drawer.getByRole('button', { name: 'Replier les branches', exact: true }).click();
-  await expect(drawer.getByText(/Chemin replié/).first()).toBeVisible();
-  await drawer.getByRole('button', { name: 'Canvas', exact: true }).click();
   await expect(drawer.locator('.canvas-node')).toHaveCount(4);
   await expect(drawer.locator('.wire')).toHaveCount(4);
   await drawer.getByRole('button', { name: 'Tout afficher', exact: true }).click();
@@ -321,7 +316,6 @@ test('file restoration requires confirmation and keeps the current flow identity
 test('dark theme preview remains readable and navigable', async ({ page }, info) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   const { drawer } = await setup(page);
-  await drawer.getByRole('button', { name: 'Canvas', exact: true }).click();
   await drawer.getByRole('button', { name: 'Tout afficher', exact: true }).click();
   await expect(drawer.locator('.mat-ripple-element')).toHaveCount(0);
   const result = await new AxeBuilder({ page }).include('app-flow-details').analyze();

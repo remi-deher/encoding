@@ -94,7 +94,6 @@ import { MediaType } from '../../../shared/models/media-type';
       </div>
 
       <div class="command-group workbench-actions">
-        <ng-content select="[editor-views]" />
         <button
           mat-icon-button
           type="button"
@@ -186,7 +185,6 @@ import { MediaType } from '../../../shared/models/media-type';
             <app-icon name="link" />
             {{ showConnections() ? 'Masquer les liaisons' : 'Afficher les liaisons' }}
           </button>
-          <ng-content select="[editor-options]" />
           @if (canRestoreAiProposal()) {
             <button mat-menu-item (click)="restoreAiProposalRequested.emit()">
               <app-icon name="undo" /> Annuler la proposition IA

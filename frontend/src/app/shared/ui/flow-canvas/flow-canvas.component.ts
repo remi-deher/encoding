@@ -81,6 +81,7 @@ export class FlowCanvasComponent {
   }
   readonly nodes = input.required<readonly FlowGraphNode[]>();
   readonly connections = input.required<readonly FlowGraphConnection[]>();
+  readonly showConnections = input(true);
   readonly selectedNodeId = input<string | null>(null);
   readonly selectNode = output<string>();
   readonly configure = output<string>();
@@ -89,10 +90,12 @@ export class FlowCanvasComponent {
   readonly remove = output<string>();
   readonly duplicate = output<string>();
   readonly askAi = output<string>();
+  readonly paletteRequested = output<void>();
   readonly insert = output<{ sourceNodeId: string; output: FlowComponentOutput }>();
   readonly positionChanged = output<{ nodeId: string; position: FlowGraphPosition }>();
   readonly positionsChanged = output<ReadonlyMap<string, FlowGraphPosition>>();
-  readonly guided = output<string>();
+  readonly packToggle = output<string>();
+  readonly expandedPacks = input<readonly { readonly id: string; readonly label: string }[]>([]);
   readonly positions = input<ReadonlyMap<string, FlowGraphPosition>>(new Map());
   private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
   private readonly cards = viewChildren<ElementRef<HTMLElement>>('canvasCard');
@@ -310,9 +313,8 @@ export class FlowCanvasComponent {
     );
   }
   protected edit(node: FlowGraphNode): void {
-    if (this.readOnly()) return;
-    if (node.component.kind === 'pack') this.guided.emit(node.id);
-    else this.configure.emit(node.id);
+    if (node.component.kind === 'pack') this.packToggle.emit(node.id);
+    else if (!this.readOnly()) this.configure.emit(node.id);
   }
   protected position(node: FlowGraphNode): FlowGraphPosition {
     return (
@@ -491,7 +493,9 @@ export class FlowCanvasComponent {
               label: 'Dupliquer',
               disabled: node.component.kind === 'input' || node.component.kind === 'pack',
             },
-            { id: 'guided', label: 'Afficher dans Guidé' },
+            ...(node.component.kind === 'pack'
+              ? [{ id: 'expand-pack', label: 'Déplier les composants' }]
+              : []),
             { id: 'ai', label: 'Demander à l’IA' },
             { id: 'remove', label: 'Supprimer', disabled: node.component.kind === 'input' },
           ]
@@ -502,6 +506,7 @@ export class FlowCanvasComponent {
               { id: 'ai-edge', label: 'Expliquer cette liaison avec l’IA' },
             ]
           : [
+              { id: 'palette', label: 'Ajouter une étape' },
               { id: 'fit', label: 'Tout afficher' },
               { id: 'zoom', label: 'Zoom à 100 %' },
             ],
@@ -520,7 +525,7 @@ export class FlowCanvasComponent {
     if (id === 'configure' && node) this.configure.emit(node.id);
     if (id === 'duplicate' && node) this.duplicate.emit(node.id);
     if (id === 'remove' && node) this.remove.emit(node.id);
-    if (id === 'guided' && node) this.guided.emit(node.id);
+    if (id === 'expand-pack' && node) this.packToggle.emit(node.id);
     if (id === 'ai' && node) this.askAi.emit(node.id);
     if (id === 'ai-edge' && edge) this.askAi.emit(edge.sourceNodeId);
     if (id === 'disconnect' && edge) this.disconnect.emit(edge.id);
@@ -531,5 +536,6 @@ export class FlowCanvasComponent {
     }
     if (id === 'fit') this.fit();
     if (id === 'zoom') this.scale.set(1);
+    if (id === 'palette') this.paletteRequested.emit();
   }
 }

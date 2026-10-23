@@ -60,6 +60,17 @@ public static class ResourceEndpoints
             catch (ResourceException exception) { return Results.UnprocessableEntity(new { title = exception.Message }); }
         }).WithName("AddResourceVersion");
 
+        resources.MapPut("/{id:guid}", async (Guid id, UpdateResourceRequest request, ResourceRepository repository, CancellationToken ct) =>
+        {
+            var errors = new Dictionary<string, string[]>();
+            if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 128) errors["name"] = ["Le nom contient entre 1 et 128 caractères."];
+            if (request.Description is null || request.Description.Trim().Length > 1000) errors["description"] = ["La description contient 1000 caractères au plus."];
+            if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            try { return await repository.UpdateAsync(id, request.Name, request.Description ?? "", ct) is { } updated ? Results.Ok(updated) : Results.NotFound(); }
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
+            { return Results.Conflict(new { title = "Une ressource porte déjà ce nom." }); }
+        }).WithName("UpdateResource");
+
         // Lecture d'un fichier par un pair admis (reprise par Range). Pas de corps : la signature couvre la méthode, le chemin
         // et l'horodatage ; l'octet est adressé par son empreinte, que le demandeur revérifie à l'arrivée.
         app.MapGet(ResourceBlobFetcher.RoutePrefix + "{digest}", async (string digest, HttpContext http, ClusterIdentityRepository identityRepository,

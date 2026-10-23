@@ -247,11 +247,16 @@ internal static class ApiImprovementsScenarios
             }
 
             // C. Gestion des tokens API : création, listage et révocation
+            Check(await admin.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Jeton sans confirmation", "admin"))
+                  == HttpStatusCode.Unauthorized, "A user must reauthenticate with a password before creating an API token.");
+            Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Agent IA Autonome", "admin"), csrf: false)
+                  == HttpStatusCode.Unauthorized, "An API token cannot create another token without user reauthentication.");
+
             Guid customTokenId;
             string customPlaintextToken;
-            using (var createTokenResp = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Agent IA Autonome", "admin"), csrf: false))
+            using (var createTokenResp = await admin.SendAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Agent IA Autonome", "admin", CurrentPassword: AdminPassword)))
             {
-                Check(createTokenResp.StatusCode == HttpStatusCode.Created, "AI client creates custom API token without CSRF header.");
+                Check(createTokenResp.StatusCode == HttpStatusCode.Created, "An authenticated user creates a custom API token after password reauthentication.");
                 var tokenDoc = await createTokenResp.Content.ReadFromJsonAsync<CreatedApiTokenResponse>(Json);
                 customTokenId = tokenDoc!.Id;
                 customPlaintextToken = tokenDoc.Token;
@@ -435,16 +440,16 @@ internal static class ApiImprovementsScenarios
             }
             Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/business-operations/execute", new { name = "create_library", arguments = new { name = "Interdite" } }, csrf: false)
                   == HttpStatusCode.Forbidden, "Business operations apply the same token scopes.");
-            Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Role inconnu", "operator"), csrf: false)
+            Check(await admin.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Role inconnu", "operator", CurrentPassword: AdminPassword))
                   == HttpStatusCode.BadRequest, "An unknown token role is rejected instead of becoming admin.");
-            Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Portee inconnue", "admin", null, ["root"]), csrf: false)
+            Check(await admin.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Portee inconnue", "admin", null, ["root"], AdminPassword))
                   == HttpStatusCode.BadRequest, "An unknown token scope is rejected.");
-            Check(await aiClient.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Lecture avec ecriture", "viewer", null, ["mcp:write"]), csrf: false)
+            Check(await admin.StatusAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Lecture avec ecriture", "viewer", null, ["mcp:write"], AdminPassword))
                   == HttpStatusCode.BadRequest, "A viewer token cannot carry a write scope.");
             string scopedPlaintext;
-            using (var scopedCreate = await aiClient.SendAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Agent flows", "admin", null, ["flows:write"]), csrf: false))
+            using (var scopedCreate = await admin.SendAsync(HttpMethod.Post, "/api/v1/tokens", new CreateApiTokenRequest("Agent flows", "admin", null, ["flows:write"], AdminPassword)))
             {
-                Check(scopedCreate.StatusCode == HttpStatusCode.Created, "A scoped token is created.");
+                Check(scopedCreate.StatusCode == HttpStatusCode.Created, "An authenticated user creates a scoped API token after password reauthentication.");
                 var scopedDoc = await scopedCreate.Content.ReadFromJsonAsync<CreatedApiTokenResponse>(Json);
                 Check(scopedDoc!.Scopes is ["flows:write"], "The created token reports its scopes.");
                 scopedPlaintext = scopedDoc.Token;
