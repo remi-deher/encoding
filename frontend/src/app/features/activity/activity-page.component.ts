@@ -11,11 +11,24 @@ import {
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { SearchFieldComponent } from '../../shared/ui/search-field.component';
 import { MatTabsModule } from '@angular/material/tabs';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { Observable, catchError, firstValueFrom, of, switchMap, timer } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  exhaustMap,
+  firstValueFrom,
+  of,
+  switchMap,
+  timeout,
+  timer,
+} from 'rxjs';
+import { AuthService } from '../../core/auth/auth.service';
+import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
 import { AiAssistantActivity } from '../../shared/models/ai-tools';
 import { formatFullDateTime } from '../../shared/models/date-format';
@@ -45,6 +58,7 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import {
   ACTIVITY_GROUPS,
+  ACTIVITY_STATES,
   ActivityGroup,
   ActivityItem,
   ActivityKind,
@@ -83,6 +97,9 @@ const AI_REFRESH_MS = 15000;
     IconComponent,
     MatButtonModule,
     MatCheckboxModule,
+    MatChipsModule,
+    MatProgressBarModule,
+    SummaryTilesComponent,
     SearchFieldComponent,
     MatTabsModule,
     PageHeaderComponent,
@@ -93,6 +110,7 @@ const AI_REFRESH_MS = 15000;
   styleUrl: './activity-page.component.scss',
 })
 export class ActivityPageComponent {
+  protected readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly tracking = inject(ExecutionTracking);
   private readonly detailPolling = inject(ExecutionDetailPolling);
@@ -103,14 +121,12 @@ export class ActivityPageComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly groups = ACTIVITY_GROUPS;
-  protected readonly trackingState = toSignal(this.tracking.state$, {
-    initialValue: INITIAL_EXECUTION_TRACKING,
-  });
   private readonly aiRefresh = signal(0);
   protected readonly aiState = signal<{
     readonly items: readonly AiAssistantActivity[];
     readonly error: boolean;
-  }>({ items: [], error: false });
+    readonly loaded: boolean;
+  }>({ items: [], error: false, loaded: false });
 
   protected readonly kindFilter = signal<KindFilter>(
     this.route.snapshot.queryParamMap.get('type') === 'ai' ? 'ai' : 'all',
@@ -119,25 +135,55 @@ export class ActivityPageComponent {
     VIEW_TO_GROUP[this.route.snapshot.queryParamMap.get('view') ?? ''] ?? 'all',
   );
   protected readonly search = signal('');
-  protected readonly filtersOpen = signal(false);
-  protected readonly activeFilters = computed(() => {
-    const filters: { id: string; label: string; clear: () => void }[] = [];
-    const kind = this.kindFilter();
-    if (kind !== 'all') {
-      filters.push({
-        id: 'kind',
-        label: kind === 'ai' ? 'Assistant IA' : 'Traitements',
-        clear: () => this.setKind('all'),
-      });
-    }
-    const group = this.groupFilter();
-    if (group !== 'all') {
-      const label = ACTIVITY_GROUPS.find((item) => item.id === group)?.label ?? group;
-      filters.push({ id: 'group', label, clear: () => this.setGroup('all') });
-    }
-    return filters;
+  protected readonly pageOffset = signal(0);
+  protected readonly pageNumber = computed(() => this.pageOffset() / DONE_PAGE_SIZE + 1);
+  protected readonly trackingState = toSignal(
+    toObservable(
+      computed(() => ({
+        states:
+          this.kindFilter() === 'ai'
+            ? []
+            : this.groupFilter() === 'all'
+              ? Object.values(ACTIVITY_STATES).flat()
+              : ACTIVITY_STATES[this.groupFilter() as ActivityGroup],
+        offset: this.pageOffset(),
+      })),
+    ).pipe(
+      switchMap(({ states, offset }) =>
+        this.tracking.observeStates(states, DONE_PAGE_SIZE, offset),
+      ),
+    ),
+    {
+      initialValue: INITIAL_EXECUTION_TRACKING,
+    },
+  );
+  private readonly openedItem = signal<ActivityItem | null>(null);
+  protected readonly summary = computed<readonly SummaryTile[]>(() => {
+    const data = this.trackingState().data;
+    return [
+      {
+        label: 'En cours',
+        value: data ? String(data.activeCount) : '—',
+        detail: 'Traitements actifs sur le cluster',
+      },
+      {
+        label: 'À traiter',
+        value: data ? String(data.queuedCount) : '—',
+        detail: 'Fichiers dans la file',
+      },
+      {
+        label: 'Réussis',
+        value: data ? String(data.succeededCount) : '—',
+        detail: 'Traitements terminés avec succès',
+      },
+      {
+        label: 'Échecs',
+        value: data ? String(data.failedCount) : '—',
+        detail: 'Traitements à examiner',
+        tone: data?.failedCount ? 'attention' : 'default',
+      },
+    ];
   });
-  protected readonly doneLimit = signal(DONE_PAGE_SIZE);
   protected readonly busy = signal(false);
   protected readonly selectedKey = signal<string | null>(
     this.route.snapshot.queryParamMap.get('request')
@@ -172,7 +218,13 @@ export class ActivityPageComponent {
       (item) =>
         (kind === 'all' || item.kind === kind) &&
         (!query ||
-          [item.title, item.subtitle, item.stateLabel, item.execution?.library]
+          [
+            item.title,
+            item.subtitle,
+            item.stateLabel,
+            item.execution?.library,
+            item.execution?.media,
+          ]
             .filter(Boolean)
             .some((value) => String(value).toLocaleLowerCase('fr').includes(query))),
     );
@@ -190,15 +242,22 @@ export class ActivityPageComponent {
       counts.all++;
       counts[item.group]++;
     }
+    const data = this.trackingState().data;
+    if (data && this.kindFilter() !== 'ai' && !this.search().trim()) {
+      const executionCounts = {
+        active: data.activeCount,
+        queue: data.queuedCount,
+        errors: data.failedCount,
+        cancelled: data.cancelledCount,
+        done: data.succeededCount + (data.deferredCount ?? 0),
+      };
+      for (const group of ACTIVITY_GROUPS)
+        counts[group.id] =
+          executionCounts[group.id] +
+          this.scoped().filter((item) => item.kind === 'ai' && item.group === group.id).length;
+      counts.all = ACTIVITY_GROUPS.reduce((total, group) => total + counts[group.id], 0);
+    }
     return counts;
-  });
-  protected readonly kindCounts = computed(() => {
-    const items = this.allItems();
-    return {
-      all: items.length,
-      execution: items.filter((item) => item.kind === 'execution').length,
-      ai: items.filter((item) => item.kind === 'ai').length,
-    };
   });
   protected readonly sections = computed(() => {
     const filter = this.groupFilter();
@@ -210,29 +269,43 @@ export class ActivityPageComponent {
           .sort((a, b) =>
             group.id === 'queue' ? a.sortTime - b.sortTime : b.sortTime - a.sortTime,
           );
-        const items = group.id === 'done' ? all.slice(0, this.doneLimit()) : all;
-        return { ...group, items, total: all.length };
+        const items = all;
+        const more =
+          this.kindFilter() !== 'ai' &&
+          (this.trackingState().moreStates ?? []).some((state) =>
+            ACTIVITY_STATES[group.id].includes(state),
+          );
+        return { ...group, items, total: this.counts()[group.id], more };
       })
-      .filter((section) => section.total > 0);
+      .filter((section) => section.items.length > 0);
   });
   protected readonly countText = computed(() => {
+    if (this.kindFilter() === 'ai')
+      return this.aiState().loaded
+        ? `${this.aiState().items.length} demande(s) chargée(s)`
+        : 'Chargement de l’assistant…';
     const data = this.trackingState().data;
     return data
-      ? `${data.queuedCount} à traiter · ${data.activeCount} en cours · ${data.failedCount} erreurs`
+      ? `${data.queuedCount} à traiter · ${data.activeCount} en cours · ${data.failedCount} ${data.failedCount === 1 ? 'erreur' : 'erreurs'}`
       : 'Données indisponibles';
   });
   protected readonly feedback = computed(() => {
     const state = this.trackingState();
-    if (state.status === 'loading') return 'Chargement de l’activité…';
-    if (state.status === 'error')
+    if (this.kindFilter() !== 'ai' && state.status === 'loading')
+      return 'Chargement de l’activité…';
+    if (this.kindFilter() !== 'ai' && state.status === 'error')
       return 'Actualisation impossible. Les dernières données reçues peuvent être obsolètes.';
-    if (this.aiState().error)
+    if (this.aiState().error && this.kindFilter() !== 'execution')
       return 'Les demandes de l’assistant sont momentanément indisponibles.';
+    if (this.kindFilter() === 'ai' && !this.aiState().loaded)
+      return 'Chargement des demandes de l’assistant…';
     return '';
   });
 
   protected readonly selected = computed(
-    () => this.allItems().find((item) => item.key === this.selectedKey()) ?? null,
+    () =>
+      this.allItems().find((item) => item.key === this.selectedKey()) ??
+      (this.openedItem()?.key === this.selectedKey() ? this.openedItem() : null),
   );
   protected readonly selectedExecution = computed(() => this.selected()?.execution ?? null);
   protected readonly selectedAi = computed(() => this.selected()?.ai ?? null);
@@ -396,42 +469,60 @@ export class ActivityPageComponent {
   });
 
   constructor() {
-    toObservable(this.aiRefresh)
+    toObservable(
+      computed(() => ({
+        refresh: this.aiRefresh(),
+        enabled: this.auth.isAdmin() && this.kindFilter() !== 'execution',
+      })),
+    )
       .pipe(
-        switchMap(() =>
-          timer(0, AI_REFRESH_MS).pipe(
-            switchMap(() => this.aiTools.listAssistantActivity().pipe(catchError(() => of(null)))),
-          ),
+        switchMap(({ enabled }) =>
+          enabled
+            ? timer(0, AI_REFRESH_MS).pipe(
+                exhaustMap(() =>
+                  this.aiTools.listAssistantActivity().pipe(
+                    timeout(20000),
+                    catchError(() => of(null)),
+                  ),
+                ),
+              )
+            : of([]),
         ),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((items) =>
         this.aiState.update((state) =>
-          items ? { items, error: false } : { items: state.items, error: true },
+          items ? { items, error: false, loaded: true } : { ...state, error: true },
         ),
       );
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      this.setGroup(VIEW_TO_GROUP[params.get('view') ?? ''] ?? 'all');
+      this.setKind(params.get('type') === 'ai' ? 'ai' : 'all');
+    });
   }
 
   protected setKind(kind: KindFilter): void {
-    this.kindFilter.set(kind);
-    this.doneLimit.set(DONE_PAGE_SIZE);
+    this.kindFilter.set(kind === 'ai' && !this.auth.isAdmin() ? 'execution' : kind);
+    this.pageOffset.set(0);
   }
   protected setGroup(group: GroupFilter): void {
     this.groupFilter.set(group);
-    this.doneLimit.set(DONE_PAGE_SIZE);
+    this.pageOffset.set(0);
   }
-  protected clearFilters(): void {
-    this.setKind('all');
-    this.setGroup('all');
+  protected nextPage(group: ActivityGroup): void {
+    const offset = this.groupFilter() === group ? this.pageOffset() : 0;
+    this.groupFilter.set(group);
+    this.pageOffset.set(offset + DONE_PAGE_SIZE);
   }
-  protected showMoreDone(): void {
-    this.doneLimit.update((limit) => limit + DONE_PAGE_SIZE);
+  protected previousPage(): void {
+    this.pageOffset.update((offset) => Math.max(0, offset - DONE_PAGE_SIZE));
   }
   protected refresh(): void {
     this.tracking.refresh();
     this.aiRefresh.update((value) => value + 1);
   }
   protected open(item: ActivityItem): void {
+    this.openedItem.set(item);
     this.selectedDetailTab.set(0);
     this.selectedKey.set(item.key);
   }

@@ -3,6 +3,8 @@ import { inject, Injectable } from '@angular/core';
 import {
   catchError,
   exhaustMap,
+  forkJoin,
+  filter,
   map,
   merge,
   Observable,
@@ -18,11 +20,13 @@ import {
   ExecutionEventResponse,
   ExecutionPipelineStep,
   ExecutionFilterQuery,
+  ExecutionState,
 } from '../models/execution';
 
 export interface ExecutionTrackingState {
   readonly status: 'loading' | 'ready' | 'error';
   readonly data: ExecutionOverviewResponse | null;
+  readonly moreStates?: readonly ExecutionState[];
 }
 export const INITIAL_EXECUTION_TRACKING: ExecutionTrackingState = { status: 'loading', data: null };
 
@@ -30,6 +34,7 @@ export const INITIAL_EXECUTION_TRACKING: ExecutionTrackingState = { status: 'loa
 export class ExecutionTracking {
   private readonly http = inject(HttpClient);
   private readonly refreshRequested = new Subject<void>();
+  private lastSseUpdate = 0;
   private readonly sseUpdates$ = new Observable<ExecutionTrackingState>((subscriber) => {
     if (typeof EventSource === 'undefined') {
       subscriber.complete();
@@ -41,26 +46,28 @@ export class ExecutionTracking {
       source.addEventListener('overview', (event: MessageEvent<string>) => {
         try {
           const data = JSON.parse(event.data) as ExecutionOverviewResponse;
+          if (!Array.isArray(data.executions)) return;
+          this.lastSseUpdate = Date.now();
           subscriber.next({ status: 'ready', data });
         } catch {
           // Ignore malformed event payloads; polling remains active as fallback.
         }
       });
-      source.onerror = () => {
-        source?.close();
-        source = null;
-      };
+      // EventSource reconnects automatically; HTTP polling takes over while the stream is stale.
     } catch {
       source?.close();
+      this.lastSseUpdate = 0;
       source = null;
     }
     return () => {
       source?.close();
+      this.lastSseUpdate = 0;
     };
   });
 
   readonly state$ = merge(
     merge(timer(0, 5000), this.refreshRequested).pipe(
+      filter(() => Date.now() - this.lastSseUpdate > 15000),
       exhaustMap(() =>
         this.overview().pipe(
           timeout(8000),
@@ -71,11 +78,17 @@ export class ExecutionTracking {
     ),
     this.sseUpdates$,
   ).pipe(
-    scan(
-      (previous: ExecutionTrackingState, next: ExecutionTrackingState) =>
-        next.status === 'error' ? { ...next, data: previous.data } : next,
-      INITIAL_EXECUTION_TRACKING,
-    ),
+    scan((previous: ExecutionTrackingState, next: ExecutionTrackingState) => {
+      if (next.status === 'error')
+        return Date.now() - this.lastSseUpdate < 15000
+          ? previous
+          : { ...next, data: previous.data };
+      return previous.data &&
+        next.data &&
+        Date.parse(previous.data.observedAt) > Date.parse(next.data.observedAt)
+        ? previous
+        : next;
+    }, INITIAL_EXECUTION_TRACKING),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
 
@@ -87,7 +100,61 @@ export class ExecutionTracking {
     if (query?.since) params = params.set('since', query.since);
     if (query?.limit !== undefined) params = params.set('limit', String(query.limit));
     if (query?.offset !== undefined) params = params.set('offset', String(query.offset));
-    return this.http.get<ExecutionOverviewResponse>('/api/v1/executions', { params });
+    return this.http.get<ExecutionOverviewResponse>('/api/v1/executions', { params }).pipe(
+      map((data) => {
+        if (!Array.isArray(data.executions))
+          throw new Error('Réponse de suivi des traitements invalide.');
+        return data;
+      }),
+    );
+  }
+
+  /** Fetch each requested state independently so a large queue cannot hide history or active work. */
+  observeStates(
+    states: readonly ExecutionState[],
+    limit = 25,
+    offset = 0,
+  ): Observable<ExecutionTrackingState> {
+    if (!states.length) return of({ status: 'ready', data: null, moreStates: [] });
+    const known = new Map<ExecutionState, ExecutionOverviewResponse>();
+    return merge(timer(0, 10000), this.refreshRequested).pipe(
+      exhaustMap(() =>
+        forkJoin(
+          states.map((state) =>
+            this.overview({ state, limit, offset }).pipe(
+              timeout(20000),
+              map((data) => ({ state, data })),
+              catchError(() => of({ state, data: null })),
+            ),
+          ),
+        ),
+      ),
+      map((results): ExecutionTrackingState => {
+        for (const result of results) if (result.data) known.set(result.state, result.data);
+        const pages = states.flatMap((state) => (known.has(state) ? [known.get(state)!] : []));
+        return {
+          status: results.every((result) => result.data) ? 'ready' : 'error',
+          moreStates: states.filter((state) => {
+            const page = known.get(state);
+            return (
+              page && (page.totalCount ?? page.executions.length) > offset + page.executions.length
+            );
+          }),
+          data: pages.length
+            ? {
+                ...pages[0],
+                executions: pages.flatMap((page) => page.executions),
+                totalCount: pages.reduce(
+                  (total, page) => total + (page.totalCount ?? page.executions.length),
+                  0,
+                ),
+                limit,
+                offset,
+              }
+            : null,
+        };
+      }),
+    );
   }
 
   events(id: string, options?: { readonly afterRevision?: number; readonly limit?: number }) {

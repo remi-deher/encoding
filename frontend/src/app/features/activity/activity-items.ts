@@ -1,11 +1,22 @@
 import { AiAssistantActivity } from '../../shared/models/ai-tools';
-import { EXECUTION_STATE_LABELS, ExecutionResponse } from '../../shared/models/execution';
+import {
+  EXECUTION_STATE_LABELS,
+  ExecutionResponse,
+  ExecutionState,
+} from '../../shared/models/execution';
 import { formatFileSize } from '../../shared/models/file-size';
 import { formatRelativeTime } from '../../shared/models/date-format';
 
 export type ActivityKind = 'execution' | 'ai';
 export type ActivityGroup = 'active' | 'queue' | 'errors' | 'cancelled' | 'done';
 export type ActivityTone = 'accent' | 'neutral' | 'danger' | 'success' | 'warning';
+export const ACTIVITY_STATES: Readonly<Record<ActivityGroup, readonly ExecutionState[]>> = {
+  active: ['running', 'cancelling'],
+  queue: ['queued'],
+  errors: ['failed'],
+  cancelled: ['cancelled'],
+  done: ['succeeded', 'deferred'],
+};
 
 export const ACTIVITY_GROUPS: readonly {
   readonly id: ActivityGroup;
@@ -118,6 +129,7 @@ export function executionItem(execution: ExecutionResponse): ActivityItem {
         ? (execution.startedAt ?? execution.queuedAt)
         : (execution.finishedAt ?? execution.updatedAt);
   const subtitle = [
+    execution.library,
     `${execution.flow} · v${execution.flowVersion}`,
     execution.node,
     group === 'done' || group === 'queue' ? null : execution.detail,
@@ -128,7 +140,7 @@ export function executionItem(execution: ExecutionResponse): ActivityItem {
     key: 'execution:' + execution.id,
     kind: 'execution',
     group,
-    title: execution.media,
+    title: execution.media.split(/[\\/]/).pop() || execution.media,
     subtitle,
     stateLabel: EXECUTION_STATE_LABELS[execution.state],
     tone: executionTone(execution.state),

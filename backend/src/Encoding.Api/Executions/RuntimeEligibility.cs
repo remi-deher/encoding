@@ -41,6 +41,7 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
 
     public bool CanRun(FlowDefinition flow,IReadOnlyList<NodeToolCapability> capabilities,Guid workerId,string? nextNodeId=null,bool resumed=false,RuntimeContext? context=null,NodeIdentityResponse? identity=null,NodeInventory? inventory=null)
     {
+        if(context?.DirectSource is not null && !capabilities.Any(capability=>capability.ToolId==RuntimeSourceObservation.Capability)) return false;
         if(!validator.Validate(flow).IsValid) return false;
         var entry=nextNodeId??(resumed?null:flow.Nodes.Single(node=>registry.Resolve(node.Component)?.Kind=="input").Id);
         // « Bibliothèque sur ce nœud » avec « et encodeur du profil » : un worker sans encodeur utilisable répond « non » (voir le runner),

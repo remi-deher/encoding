@@ -372,10 +372,26 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 sourceSha=r.IsDBNull(0)?null:r.GetString(0); expires=r.GetFieldValue<DateTimeOffset>(1);
                 if(!r.IsDBNull(2)) checkpoint=JsonSerializer.Deserialize<RuntimeCheckpoint>(r.GetString(2),Json);
             }
-            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe));
+            var directRead=source==worker && root is not null && sourceSha is null && item.Probe is null
+                && capabilities.Any(capability=>capability.ToolId==RuntimeSourceObservation.Capability);
+            await using(var prepare=Sql.Command("UPDATE execution_work SET source_preparation_requested=@requested WHERE execution_id=@id",c,tx))
+            {
+                prepare.Parameters.AddWithValue("id",item.Id); prepare.Parameters.AddWithValue("requested",!directRead);
+                await prepare.ExecuteNonQueryAsync(ct);
+            }
+            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead));
         }
         return new(null, candidates.Count == CandidatePageSize
             ? new(candidates[^1].QueuedAt, candidates[^1].Id) : null);
+    }
+
+    public async Task<bool> PrepareSourceAsync(Guid id,Guid worker,long epoch,CancellationToken ct)
+    {
+        await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
+        if(!await FenceAsync(id,worker,epoch,c,tx,ct)) return false;
+        await using var command=Sql.Command("UPDATE execution_work SET source_preparation_requested=true WHERE execution_id=@id",c,tx);
+        command.Parameters.AddWithValue("id",id); await command.ExecuteNonQueryAsync(ct);
+        await tx.CommitAsync(ct); return true;
     }
 
     internal static async Task<bool> FenceAsync(Guid id,Guid actor,long epoch,DbConnection c,DbTransaction tx,CancellationToken ct,bool source=false)
@@ -443,7 +459,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         if(cp is null || string.IsNullOrWhiteSpace(cp.NodeId) || cp.InvocationId==Guid.Empty
             || cp.Context is null || cp.Context.Variables is null || cp.Context.Plan is null
             || cp.Context.VideoEncodings is { Count: > 64 }
-            || !RuntimeArtifactStore.ValidDigest(cp.Context.CurrentSha256)
+            || !(RuntimeArtifactStore.ValidDigest(cp.Context.CurrentSha256) || cp.Context.CurrentSha256=="" && cp.Context.DirectSource is { IsValid:true })
             || cp.Context.Extension is null || !System.Text.RegularExpressions.Regex.IsMatch(cp.Context.Extension,"^\\.[a-zA-Z0-9]{1,10}$")
             || commands.Count>64 || commands.Any(command=>!ValidCommandLog(command))
             || commands.Select(command=>command.Id).Distinct().Count()!=commands.Count) return false;
@@ -472,7 +488,17 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         await using(var cmd=Sql.Command("SELECT flow_definition::text FROM executions WHERE id=@id AND state='running'",c,tx))
         { cmd.Parameters.AddWithValue("id",id); if(await cmd.ExecuteScalarAsync(ct) is not string json) return false; flow=JsonSerializer.Deserialize<FlowDefinition>(json,Json)!; }
         if(!await ValidVideoEncodingsAsync(flow,id,worker,cp.NodeId,cp.Context.VideoEncodings,c,tx,ct)) return false;
-        await using(var artifact=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx))
+        if(cp.Context.DirectSource is not null)
+        {
+            var inspected=flow.Nodes.SingleOrDefault(node=>node.Id==cp.NodeId);
+            if(cp.Context.CurrentSha256!="" || cp.Handoff is not null || cp.Wait is not null || cp.Context.Plan.Count>0
+                || inspected is null || !(DirectMediaInspection.Allows(inspected.Component.PluginId,inspected.Component.ComponentId,FlowOperationConfiguration.Resolve(inspected.Component.ComponentId,inspected.Configuration),cp.Context.Plan.Count)
+                    || DirectMediaInspection.AllowsMetadataOnly(components.Resolve(inspected.Component)))) return false;
+            await using var direct=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work WHERE execution_id=@id AND worker_node_id=@worker AND source_node_id=@worker AND NOT source_preparation_requested AND source_sha IS NULL)",c,tx);
+            direct.Parameters.AddWithValue("id",id); direct.Parameters.AddWithValue("worker",worker);
+            if(!await direct.ScalarBoolAsync(ct)) return false;
+        }
+        else await using(var artifact=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_artifacts WHERE execution_id=@id AND sha256=@sha)",c,tx))
         {
             artifact.Parameters.AddWithValue("id",id); artifact.Parameters.AddWithValue("sha",cp.Context.CurrentSha256);
             if(!(await artifact.ScalarBoolAsync(ct))) return false;

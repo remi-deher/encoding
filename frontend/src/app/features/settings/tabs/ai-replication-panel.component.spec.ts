@@ -65,7 +65,9 @@ describe('AiReplicationPanelComponent', () => {
   });
 
   it('formate la date au format jj/mm hh:mm', () => {
-    expect(formatSyncedAt('2026-10-21T22:12:10.1234567Z')).toMatch(/^21\/10 \d\d:\d\d$/);
+    // The display is local: construct the expected calendar day in the test's timezone.
+    expect(formatSyncedAt(new Date(2026, 9, 21, 12, 12, 10).toISOString())).toBe('21/10 12:12');
+    expect(formatSyncedAt('2026-10-21T22:12:10.1234567Z')).toMatch(/^\d\d\/\d\d \d\d:\d\d$/);
     expect(formatSyncedAt(null)).toBeNull();
     expect(formatSyncedAt('x')).toBeNull();
   });

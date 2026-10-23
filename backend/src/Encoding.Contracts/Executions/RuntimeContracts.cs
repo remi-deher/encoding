@@ -7,7 +7,7 @@ public sealed record EnqueueMediaRequest(Guid Id, Guid LibraryId, string MediaPa
 public sealed record RuntimeLease(Guid ExecutionId, int Attempt, int Revision, long Epoch, DateTimeOffset ExpiresAt,
     Guid SourceNodeId, string? SourceRoot, string MediaPath, string? SourceSha256, FlowDefinition Flow, RuntimeCheckpoint? Checkpoint, string EntryNodeId,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null,
-    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null);
+    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false);
 public sealed record RuntimeFence(long Epoch);
 public sealed record RuntimeAiSubtitleItem(string Id, string Text);
 public sealed record RuntimeAiSubtitleTranslationRequest(long Epoch, Guid InvocationId, string FlowNodeId,
@@ -22,14 +22,21 @@ public sealed record RuntimeLeaseStatus(bool CancelRequested, int Revision, Date
 public sealed record RuntimeSourceState(string? SourceSha256, IReadOnlyDictionary<string,string>? Inputs = null);
 public sealed record RuntimeTransfer(Guid ExecutionId, long Epoch, string Root, string MediaPath, string? SourceSha256,
     string? ResultSha256, string? ResultExtension, bool Publish, IReadOnlyList<string>? InputPaths = null, string MediaType = "video", bool CanWrite = true, int? ReplacementGraceHours = null,
-    Guid? LibraryId = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null);
+    Guid? LibraryId = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, RuntimeSourceObservation? Observation = null);
 /// <summary>Garde de publication à consulter avant un remplacement de source (architecture 0059) : composant de plugin à invoquer sur le nœud d'accès.</summary>
 public sealed record RuntimePublicationGuard(string PluginId, string PluginVersion, string ComponentId, string ComponentVersion, int ConfigurationSchemaVersion,
     IReadOnlyDictionary<string,JsonElement> Configuration, IReadOnlyDictionary<string,JsonElement> PluginConfiguration, int MaxWaitMinutes,
     IReadOnlyList<string> WaitOutputs, IReadOnlyList<string> AllowOutputs);
 public sealed record RuntimeContext(string CurrentSha256, string Extension, IReadOnlyDictionary<string,JsonElement> Variables,
     JsonElement? BeforeMetadata, JsonElement? CurrentMetadata, IReadOnlyList<RuntimePlanStep> Plan,
-    IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings = null);
+    IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings = null, RuntimeSourceObservation? DirectSource = null);
+/// <summary>Size and modification time observed before direct inspection; never a content checksum.</summary>
+public sealed record RuntimeSourceObservation(long Bytes, long LastWriteUtcTicks)
+{
+    public const string Capability = "runtime/direct-read-v1";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsValid => Bytes > 0 && LastWriteUtcTicks > 0 && LastWriteUtcTicks <= DateTime.MaxValue.Ticks;
+}
 public sealed record ResolvedVideoEncoding(string FlowNodeId, Guid WorkerId, string Codec, string EncoderId,
     string FfmpegVersion, string Acceleration, string QualityMode, string QualityOption, decimal Quality,
     string PresetId, string? PresetOption, string? PresetValue,

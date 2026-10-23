@@ -38,25 +38,49 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         try
         {
             string? sourceSha=lease.SourceSha256;
-            while(sourceSha is null)
+            var directRead=lease.DirectRead && lease.SourceNodeId==client.NodeId && lease.SourceRoot is not null;
+            while(sourceSha is null && !directRead)
             {
                 var source=await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}",job.Token);
                 sourceSha=source.SourceSha256; if(sourceSha is null) await Task.Delay(TimeSpan.FromSeconds(2),job.Token);
             }
             var extension=Path.GetExtension(lease.MediaPath); if(string.IsNullOrWhiteSpace(extension)) extension=".mkv";
-            var original=Path.Combine(directory,"source"+extension);
-            RuntimeContext context=lease.Checkpoint?.Context??new(sourceSha,extension,new Dictionary<string,JsonElement>(),null,null,[]);
+            var original=directRead?SafeMediaPaths.Resolve(lease.SourceRoot!,lease.MediaPath):Path.Combine(directory,"source"+extension);
+            var observed=directRead?MediaFileStamp.Read(original):null;
+            RuntimeContext context=lease.Checkpoint?.Context??new(sourceSha??"",extension,new Dictionary<string,JsonElement>(),null,null,[],
+                DirectSource:observed is null?null:new(observed.Bytes,observed.LastWriteUtcTicks));
+            if(context.DirectSource is {} prior)
+            {
+                if(directRead) new MediaFileStamp(prior.Bytes,prior.LastWriteUtcTicks).Verify(original);
+                else context=context with { CurrentSha256=sourceSha!,DirectSource=null };
+            }
             var variables=new Dictionary<string,JsonElement>(context.Variables);
             var next=lease.Checkpoint?.NextNodeId;
             if(lease.Checkpoint is null) next=lease.EntryNodeId;
             var terminal=lease.Checkpoint?.TerminalResult; var lastOutput=lease.Checkpoint?.OutputId;
-            var current=Path.Combine(directory,"current"+context.Extension);
+            var current=directRead?original:Path.Combine(directory,"current"+context.Extension);
             var materialized=false;
+            MediaFileStamp? currentStamp=null;
 
             async Task EnsureFilesAsync()
             {
                 if(materialized) return;
-                await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha,original,job.Token);
+                if(directRead)
+                {
+                    observed!.Verify(original);
+                    await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source/prepare",new RuntimeFence(lease.Epoch),job.Token);
+                    while(sourceSha is null)
+                    {
+                        sourceSha=(await client.GetAsync<RuntimeSourceState>($"executions/{lease.ExecutionId:D}/source?epoch={lease.Epoch}",job.Token)).SourceSha256;
+                        if(sourceSha is null) await Task.Delay(TimeSpan.FromMilliseconds(250),job.Token);
+                    }
+                    observed.Verify(original);
+                    directRead=false;
+                    original=Path.Combine(directory,"source"+extension);
+                    current=Path.Combine(directory,"current"+context.Extension);
+                    context=context with { CurrentSha256=sourceSha,DirectSource=null };
+                }
+                await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha!,original,job.Token);
                 await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
                 foreach(var variable in variables.Where(pair=>pair.Key.StartsWith("artifact.",StringComparison.Ordinal)))
                 {
@@ -66,17 +90,19 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sha,SafeMediaPaths.Resolve(artifactDirectory,Path.GetFileName(name)),job.Token);
                 }
                 materialized=true;
+                currentStamp=MediaFileStamp.Read(current);
             }
 
             async Task EnsureScanAsync()
             {
-                await EnsureFilesAsync();
+                if(directRead) observed!.Verify(original);
+                else await EnsureFilesAsync();
                 if(context.BeforeMetadata is null)
                 {
-                    if(await SafeMediaPaths.DigestAsync(original,job.Token)!=sourceSha) throw new IOException("La copie de référence a été altérée.");
                     context=context with { BeforeMetadata=await scanner.ScanAsync(original,job.Token) };
                 }
-                if(context.CurrentMetadata is null) context=context with { CurrentMetadata=await scanner.ScanAsync(current,job.Token) };
+                if(context.CurrentMetadata is null) context=context with { CurrentMetadata=current==original?context.BeforeMetadata:await scanner.ScanAsync(current,job.Token) };
+                if(directRead) observed!.Verify(original);
             }
             async Task<string> ExtraAsync(string path)
             {
@@ -107,8 +133,10 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             string? decodedSha=null;
             async Task EnsureDecodedAsync()
             {
-                if(decodedSha==context.CurrentSha256) return;
                 await EnsureFilesAsync();
+                if(await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256)
+                    throw new IOException("Le résultat a changé depuis sa validation ; publication refusée.");
+                if(decodedSha==context.CurrentSha256) return;
                 await scanner.DecodeAsync(current,lease.Flow.MediaType,job.Token);
                 decodedSha=context.CurrentSha256;
             }
@@ -131,6 +159,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     var sha=await SafeMediaPaths.DigestAsync(candidate,job.Token);
                     await client.PutAsync(lease.ExecutionId,lease.Epoch,candidate,sha,false,job.Token);
                     current=candidate; context=context with { CurrentSha256=sha,Extension=Path.GetExtension(candidate),CurrentMetadata=metadata };
+                    currentStamp=MediaFileStamp.Read(current);
                 }
             }
             while(next is not null)
@@ -140,7 +169,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 if(started.Completed is { } completed)
                 {
                     context=completed.Context; variables=new(context.Variables); next=completed.NextNodeId; terminal=completed.TerminalResult; lastOutput=completed.OutputId;
-                    current=Path.Combine(directory,"current"+context.Extension); materialized=false; continue;
+                    current=directRead?original:Path.Combine(directory,"current"+context.Extension); materialized=false; continue;
                 }
                 using var commandStep=commandCapture.BeginStep(node.Id,started.InvocationId);
                 string? output="success"; terminal=null;
@@ -148,6 +177,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 try
                 {
                     var id=node.Component.ComponentId; var c=FlowOperationConfiguration.Resolve(id,node.Configuration);
+                    // External metadata-only plugins receive no path to the direct source.
+                    if(directRead && !DirectMediaInspection.Allows(node.Component.PluginId,id,c,context.Plan.Count))
+                    {
+                        var launch=plugins.Installed.SingleOrDefault(plugin=>plugin.Id==node.Component.PluginId && plugin.Version==node.Component.PluginVersion);
+                        var descriptor=launch is null?null:(await plugins.DescribeAsync(launch,job.Token)).Components.SingleOrDefault(component=>component.Id==id && component.Version==node.Component.ComponentVersion);
+                        if(!DirectMediaInspection.AllowsMetadataOnly(descriptor)) await EnsureFilesAsync();
+                    }
                     if(id.StartsWith("base-input-",StringComparison.Ordinal)) { if(id!="base-input-file") await EnsureScanAsync(); }
                     else if(id=="base-variable")
                     {
@@ -187,7 +223,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         var tree=ConditionTree.Parse(c["rules"],lease.Flow.MediaType);
                         if(ConditionTree.RequiresMetadata(tree) && (context.CurrentMetadata is null || context.BeforeMetadata is null)) await EnsureScanAsync();
                         output=ConditionTree.Evaluate(tree,new(context with { Variables=variables },lease.SourceNodeId,client.NodeId,
-                            lease.LibraryId,lease.MediaPath,sourceSha))?"yes":"no";
+                            lease.LibraryId,lease.MediaPath,sourceSha??""))?"yes":"no";
                     }
                     else if(node.Component.PluginId=="conditions" && MediaConditionEvaluator.IsMediaCondition(node.Component.ComponentId))
                     {
@@ -270,7 +306,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     {
                         await EnsureScanAsync();
                         var invocation=new FlowStepInvocation(1,started.InvocationId,lease.ExecutionId,lease.Attempt,client.NodeId,lease.Epoch,node.Id,node.Component,c,
-                            new(sourceSha,Path.GetFileName(current),context.BeforeMetadata,context.CurrentMetadata,variables,lease.MediaPath,lease.LibraryId),DateTimeOffset.UtcNow.AddHours(6),
+                            new(sourceSha,directRead?null:Path.GetFileName(current),context.BeforeMetadata,context.CurrentMetadata,variables,lease.MediaPath,lease.LibraryId),DateTimeOffset.UtcNow.AddHours(6),
                             lease.PluginConfigurations?.GetValueOrDefault(node.Component.PluginId));
                         var response=await plugins.ExecuteAsync(invocation,directory,job.Token);
                         output=response.OutputId; terminal=response.TerminalResult?.ToString().ToLowerInvariant();
@@ -556,7 +592,9 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             if(MediaActions.Flag(c,"refreshMetadata")) context=context with { CurrentMetadata=await scanner.ScanAsync(current,job.Token) };
                         }
                     }
-                    if(materialized && await SafeMediaPaths.DigestAsync(current,job.Token)!=context.CurrentSha256) {
+                    // Planning can inspect metadata first. Materialize only after it finds real work.
+                    if(directRead && context.Plan.Count>0) await EnsureFilesAsync();
+                    if(materialized && currentStamp!=MediaFileStamp.Read(current)) {
                         await EnsureScanAsync(); await ApplyOutcomeAsync(new(current,[]),node.Id);
                     }
                 }
@@ -631,12 +669,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 await RenewAsync(job.Token); lastOutput=output;
             }
             await EnsureScanAsync(); context=context with { Variables=variables };
+            if(directRead) observed!.Verify(original);
             var failed=terminal=="failed" || terminal is null && lastOutput=="error";
             if(context.Plan.Count>0 && !failed) throw new IOException("Le flow se termine avec un plan non exécuté.");
 
             // Après une publication par bloc (ADR 0003), la référence est le fichier publié : la fin du flow ne republie pas.
             var publishedSha=variables.TryGetValue("runtime.published",out var publication) && publication.TryGetProperty("sha256",out var publishedDigest)?publishedDigest.GetString():null;
-            var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=(publishedSha??sourceSha);
+            var changed=!failed && terminal is not("unchanged" or "deferred") && context.CurrentSha256!=(publishedSha??sourceSha??"");
             if(changed && publishedSha is not null) throw new IOException("Le média a été modifié après sa publication ; ce résultat ne peut pas être publié une seconde fois.");
             if(changed && variables.ContainsKey("runtime.inPlaceEdited")) throw new IOException("La source a été modifiée sur place ; un résultat publié ensuite ne correspondrait plus à sa version d’origine.");
             if(changed) await EnsureDecodedAsync();

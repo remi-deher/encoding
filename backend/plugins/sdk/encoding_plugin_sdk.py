@@ -52,15 +52,16 @@ class ContractError(Exception):
 class Outcome:
     """Résultat d'un composant : exactement une sortie déclarée ou un résultat terminal."""
 
-    def __init__(self, output_id=None, terminal=None, detail="", variables=None):
+    def __init__(self, output_id=None, terminal=None, detail="", variables=None, candidate=None):
         self.output_id = output_id
         self.terminal = terminal
         self.detail = detail
         self.variables = variables or {}
+        self.candidate = candidate
 
     @staticmethod
-    def output(output_id, detail="", variables=None):
-        return Outcome(output_id=output_id, detail=detail, variables=variables)
+    def output(output_id, detail="", variables=None, candidate=None):
+        return Outcome(output_id=output_id, detail=detail, variables=variables, candidate=candidate)
 
     @staticmethod
     def finish(terminal, detail=""):
@@ -80,6 +81,9 @@ class Context:
         self.media_path = context.get("mediaPath")
         self.library_id = context.get("libraryId")
         self.variables = context.get("variables") or {}
+        self.current_file = context.get("currentArtifactId")
+        self.before_metadata = context.get("beforeMetadata")
+        self.current_metadata = context.get("currentMetadata")
 
     @staticmethod
     def _text(values, key):
@@ -246,7 +250,7 @@ class Plugin:
             "outputId": outcome.output_id,
             "terminalResult": outcome.terminal,
             "variableChanges": outcome.variables,
-            "candidateArtifactId": None,
+            "candidateArtifactId": outcome.candidate,
             "detail": outcome.detail,
         }
 
@@ -438,6 +442,8 @@ def validate_manifest(manifest):
             problems.append("Composant « %s » : configurationSchema.version 1 attendu." % cid)
         check_fields("Composant « %s »" % cid, component_schema.get("fields", []), _COMPONENT_FIELD_TYPES)
         timeout = component.get("timeoutSeconds")
+        if component.get("mediaEffect") not in (None, "readOnly", "producesOutput", "modifiesCurrent"):
+            problems.append("Composant « %s » : mediaEffect inconnu." % cid)
         if timeout is not None and not (isinstance(timeout, int) and 1 <= timeout <= 21600):
             problems.append("Composant « %s » : timeoutSeconds entre 1 et 21600." % cid)
     return problems
