@@ -5,7 +5,8 @@ using System.Text;
 namespace Encoding.NodeAgent.Runtime;
 
 public sealed record ToolResult(int ExitCode, string Output, string Error = "");
-public sealed class MediaToolException(string tool, int exitCode) : Exception($"L’outil {tool} a échoué (code {exitCode}).");
+public sealed class MediaToolException(string tool, int exitCode, string? detail = null)
+    : Exception($"L’outil {tool} a échoué (code {exitCode})." + (string.IsNullOrWhiteSpace(detail) ? "" : " " + detail));
 
 public sealed class ProcessToolRunner
 {

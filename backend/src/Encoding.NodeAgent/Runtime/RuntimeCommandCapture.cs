@@ -65,7 +65,7 @@ public sealed class RuntimeCommandCapture : IDisposable
         if (step is null || Current.Value != step.Capture) return;
         var command = FormatCommand(executable, arguments);
         var log = new RuntimeCommandLog(Guid.NewGuid(), command,
-            protocolOutput ? string.Empty : Redact(standardOutput), protocolOutput ? string.Empty : Redact(standardError), exitCode,
+            protocolOutput ? string.Empty : Redact(standardOutput), Redact(standardError), exitCode,
             startedAt, finishedAt, truncated);
         lock (step.Capture.sync) step.Capture.records.Add(new(step.NodeId, step.InvocationId, log));
     }
@@ -106,7 +106,7 @@ public sealed class RuntimeCommandCapture : IDisposable
             .Replace("\r", "\\r", StringComparison.Ordinal)
             .Replace("\n", "\\n", StringComparison.Ordinal) + "\"";
 
-    private static string Redact(string value)
+    public static string Redact(string value)
     {
         var result = AuthorizationHeader.Replace(value, "$1[masqué]");
         result = SecretAssignment.Replace(result, "$1$2[masqué]");
