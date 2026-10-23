@@ -1,6 +1,7 @@
 using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
 using Encoding.Contracts.Flows;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace Encoding.Api.Flows;
 
@@ -63,6 +64,73 @@ public static class FlowScriptEndpoints
         scripts.MapGet("/{id:guid}/versions/{version:int}", async (Guid id, int version, FlowScriptRepository repository, CancellationToken ct) =>
             version < 1 ? Results.BadRequest() : await repository.GetVersionAsync(id, version, ct) is { } published ? Results.Ok(published) : Results.NotFound())
             .WithName("GetFlowScriptVersion");
+
+        // Import / export : mêmes règles d'écriture que le reste des scripts (admin seulement, donc POST, y compris pour l'export).
+        // Rien n'est exécuté ; un nom déjà pris crée une nouvelle révision de brouillon et ne touche jamais une version publiée.
+        scripts.MapPost("/import", async (HttpRequest request, string name, FlowScriptRepository repository, CancellationToken ct) =>
+        {
+            if (request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit)
+                limit.MaxRequestBodySize = FlowScriptFiles.MaxBytes + 1024;
+            if (request.ContentLength > FlowScriptFiles.MaxBytes) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            var language = FlowScriptFiles.LanguageOf(name);
+            if (language is null) return Results.UnprocessableEntity(new { title = "Seuls les fichiers .py (Python) et .js (JavaScript) sont acceptés." });
+            using var buffer = new MemoryStream();
+            var chunk = new byte[16384];
+            int read;
+            while ((read = await request.Body.ReadAsync(chunk, ct)) > 0)
+            {
+                if (buffer.Length + read > FlowScriptFiles.MaxBytes) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+                buffer.Write(chunk, 0, read);
+            }
+            string code;
+            try { code = new System.Text.UTF8Encoding(false, true).GetString(buffer.ToArray()).TrimStart('\uFEFF'); }
+            catch (System.Text.DecoderFallbackException) { return Results.UnprocessableEntity(new { title = "Le fichier n'est pas un texte UTF-8 valide." }); }
+            if (string.IsNullOrWhiteSpace(code)) return Results.UnprocessableEntity(new { title = "Le fichier est vide." });
+            var scriptName = FlowScriptFiles.NameOf(name);
+            try
+            {
+                var existing = (await repository.ListAsync(ct)).FirstOrDefault(item => string.Equals(item.DraftName, scriptName, StringComparison.OrdinalIgnoreCase));
+                if (existing is not null)
+                {
+                    var draft = new FlowScriptDraft(existing.DraftName, language, existing.DraftDescription, code);
+                    var saved = await repository.SaveDraftAsync(existing.Id, new(existing.DraftRevision, draft), ct);
+                    return saved is null
+                        ? Results.Conflict(new { title = "Le brouillon a été modifié ailleurs. Relancez l'import." })
+                        : Results.Ok(new { created = false, script = saved });
+                }
+                var created = await repository.CreateAsync(Guid.NewGuid(), new(scriptName, language, "Importé depuis " + Path.GetFileName(name), code), ct);
+                return Results.Created($"/api/v1/scripts/{created!.Script.Id:D}", new { created = true, script = created });
+            }
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
+            {
+                return Results.Conflict(new { title = "Un script porte déjà ce nom." });
+            }
+        }).WithName("ImportFlowScript");
+        scripts.MapPost("/{id:guid}/versions/{version:int}/export", async (Guid id, int version, FlowScriptRepository repository, CancellationToken ct) =>
+            version < 1 ? Results.BadRequest() : await repository.GetVersionAsync(id, version, ct) is { } item
+                ? Results.File(System.Text.Encoding.UTF8.GetBytes(item.Code), "text/plain; charset=utf-8", FlowScriptFiles.FileName(item.Name, item.Language))
+                : Results.NotFound()).WithName("ExportFlowScriptVersion");
+        scripts.MapPost("/export", async (ExportFlowScriptsRequest request, FlowScriptRepository repository, CancellationToken ct) =>
+        {
+            if (request.Items is not { Count: > 0 and <= 200 }) return Results.BadRequest(new { title = "Choisissez entre 1 et 200 scripts." });
+            using var output = new MemoryStream();
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var archive = new System.IO.Compression.ZipArchive(output, System.IO.Compression.ZipArchiveMode.Create, true))
+                foreach (var item in request.Items)
+                {
+                    var script = await repository.GetAsync(item.Id, ct);
+                    if (script is null) return Results.NotFound(new { title = "Script introuvable." });
+                    var version = item.Version ?? script.Script.PublishedVersion;
+                    var published = version < 1 ? null : await repository.GetVersionAsync(item.Id, version, ct);
+                    if (published is null) return Results.UnprocessableEntity(new { title = $"« {script.Script.DraftName} » n'a pas de version {(item.Version?.ToString() ?? "publiée")}." });
+                    var entryName = FlowScriptFiles.FileName(published.Name, published.Language);
+                    for (var n = 2; !used.Add(entryName); n++) entryName = FlowScriptFiles.FileName($"{published.Name} ({n})", published.Language);
+                    var entry = archive.CreateEntry(entryName);
+                    await using var stream = entry.Open();
+                    await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(published.Code), ct);
+                }
+            return Results.File(output.ToArray(), "application/zip", "scripts.zip");
+        }).WithName("ExportFlowScripts");
     }
 
     private static Dictionary<string, string[]> Validate(FlowScriptDraft? draft, bool allowEmptyCode)
@@ -76,5 +144,28 @@ public static class FlowScriptEndpoints
         if (draft.Code is null || draft.Code.Length > 200000 || (!allowEmptyCode && string.IsNullOrWhiteSpace(draft.Code)))
             errors["code"] = ["Le code est obligatoire à la publication et limité à 200 000 caractères."];
         return errors;
+    }
+}
+
+public sealed record ExportFlowScriptItem(Guid Id, int? Version);
+public sealed record ExportFlowScriptsRequest(IReadOnlyList<ExportFlowScriptItem>? Items);
+
+/// <summary>Règles de fichier des scripts importés et exportés : extension .py ou .js, UTF-8, 1 Mo au plus.</summary>
+public static class FlowScriptFiles
+{
+    public const int MaxBytes = 1024 * 1024;
+
+    public static string? LanguageOf(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch { ".py" => "python", ".js" => "javascript", _ => null };
+
+    public static string NameOf(string fileName)
+    {
+        var stem = Path.GetFileNameWithoutExtension(Path.GetFileName(fileName)).Trim();
+        return stem.Length > 128 ? stem[..128] : stem.Length == 0 ? "script" : stem;
+    }
+
+    public static string FileName(string name, string language)
+    {
+        var safe = string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) || c is '/' or '\\' ? '_' : c)).Trim();
+        return (safe.Length == 0 ? "script" : safe) + (language == "python" ? ".py" : ".js");
     }
 }

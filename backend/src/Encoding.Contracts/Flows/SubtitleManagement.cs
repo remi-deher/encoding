@@ -25,7 +25,7 @@ public sealed record SubtitleTrack(int Ordinal, string Codec, string Language, s
     string? AssText, bool EmptyConfirmed = false);
 
 /// <summary>Décision pour une piste. <see cref="ReplacementAss"/> n'est renseigné que si le contenu change (SRT converti, ASS mis à niveau) ; sinon la piste d'origine est recopiée telle quelle.</summary>
-public sealed record SubtitleDecision(int Ordinal, bool Drop, string? ReplacementAss, string Title, bool Default, bool Forced, string Language, string Note);
+public sealed record SubtitleDecision(int Ordinal, bool Drop, string? ReplacementAss, string Title, bool Default, bool Forced, string Language, string Note, bool HearingImpaired = false);
 
 public sealed record SubtitlePlan(IReadOnlyList<SubtitleDecision> Decisions, IReadOnlyList<string> Notes, bool Changed);
 
@@ -142,12 +142,12 @@ public static class SubtitlePlanner
     private static readonly Regex FullTitle = new(@"(^|[^a-z])(full|complete|complet(?:e|es|s)?|vostfr|dialogues?)([^a-z]|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Dictionary<string, string> Labels = new()
     {
-        ["fr"] = "Français", ["fra"] = "Français", ["fre"] = "Français", ["french"] = "Français", ["francais"] = "Français",
+        ["fr"] = "Français", ["fra"] = "Français", ["fre"] = "Français", ["frf"] = "Français", ["french"] = "Français", ["francais"] = "Français",
         ["en"] = "Anglais", ["eng"] = "Anglais", ["english"] = "Anglais", ["ja"] = "Japonais", ["jpn"] = "Japonais", ["japanese"] = "Japonais",
         ["de"] = "Allemand", ["deu"] = "Allemand", ["ger"] = "Allemand", ["es"] = "Espagnol", ["spa"] = "Espagnol", ["it"] = "Italien", ["ita"] = "Italien",
         ["ko"] = "Coréen", ["kor"] = "Coréen", ["zh"] = "Chinois", ["zho"] = "Chinois", ["chi"] = "Chinois", ["pt"] = "Portugais", ["por"] = "Portugais"
     };
-    private static readonly Dictionary<string, string> LangKeys = new() { ["fr"] = "fre", ["fra"] = "fre", ["en"] = "eng", ["ja"] = "jpn", ["de"] = "deu", ["ger"] = "deu" };
+    private static readonly Dictionary<string, string> LangKeys = new() { ["fr"] = "fre", ["fra"] = "fre", ["frf"] = "fre", ["en"] = "eng", ["ja"] = "jpn", ["de"] = "deu", ["ger"] = "deu" };
     private static readonly Dictionary<string, string> BitmapLabels = new() { ["hdmv_pgs_subtitle"] = "PGS", ["dvd_subtitle"] = "VobSub", ["dvb_subtitle"] = "DVB" };
 
     public static bool IsText(string codec) => TextCodecs.Contains(codec.ToLowerInvariant());
@@ -162,7 +162,7 @@ public static class SubtitlePlanner
     public static bool IsFrench(string? value)
     {
         var code = Norm(value).Replace('_', '-').Split('-')[0];
-        return code is "fr" or "fra" or "fre" or "french" or "francais";
+        return code is "fr" or "fra" or "fre" or "frf" or "french" or "francais";
     }
 
     private static string LangKey(string? value)
@@ -372,10 +372,12 @@ public static class SubtitlePlanner
             var language = options.Operation is null && track.Language.Equals("frf", StringComparison.OrdinalIgnoreCase) ? "fr-FR" : track.Language;
             if (options.Operation is not (null or "subtitles-detect-forced")) state.IsForced = track.Forced;
             var note = state.Dropped ? "retirée" : state.Kind;
+            // Le drapeau « malentendant » suit le titre comme l'indicateur Matroska : une piste réécrite ne le perd jamais.
+            var hearing = options.Operation is null ? Sdh(track) : track.HearingImpaired;
             var different = state.Dropped || state.Replacement is not null || state.IsForced != track.Forced || state.IsDefault != track.Default || title != track.Title
-                || language != track.Language;
+                || language != track.Language || hearing != track.HearingImpaired;
             changed |= different;
-            decisions.Add(new(track.Ordinal, state.Dropped, state.Replacement, title, state.IsDefault, state.IsForced, language, note));
+            decisions.Add(new(track.Ordinal, state.Dropped, state.Replacement, title, state.IsDefault, state.IsForced, language, note, hearing));
         }
         return new(decisions, notes, changed);
     }

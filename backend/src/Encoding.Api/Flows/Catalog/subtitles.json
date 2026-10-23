@@ -242,7 +242,7 @@
       "id": "subtitles-add-fonts",
       "version": "1.0.0",
       "name": "Polices",
-      "description": "Ajoute en pièces jointes les polices d’un jeu déclaré sur le nœud (dossier ENCODING_FONT_DIR, un sous-dossier par jeu) qui ne sont pas déjà dans le MKV. Jamais de chemin libre ; une police introuvable fait suivre la sortie « Erreur » sans toucher au fichier.",
+      "description": "Ajoute en pièces jointes les polices d’un jeu déclaré sur le nœud (dossier ENCODING_FONT_DIR, un sous-dossier par jeu) qui ne sont pas déjà dans le MKV, seulement quand il contient une piste ASS au profil courant (sans sous-titres texte, rien n’est ajouté). Jamais de chemin libre ; une police introuvable fait suivre la sortie « Erreur » sans toucher au fichier.",
       "kind": "action",
       "mediaType": "video",
       "supportedFlowMediaTypes": [
