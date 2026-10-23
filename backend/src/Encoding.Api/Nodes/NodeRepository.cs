@@ -241,7 +241,16 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
     {
         using var priority = Encoding.Api.Infrastructure.Data.Sqlite.SqliteWriter.Prioritize();
         var tokenHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
-        const string sql = """
+        const string unchanged = """
+            UPDATE cluster_nodes SET last_seen_at = clock_timestamp()
+            WHERE id=@id AND deleted_at IS NULL AND node_token_hash=@node_token_hash
+              AND name=@name AND roles=@roles AND max_concurrent_tasks=@max_concurrent_tasks
+              AND capabilities=@capabilities AND inventory IS NOT DISTINCT FROM @inventory
+              AND (desired_roles IS NULL OR NOT (desired_roles <@ @roles AND @roles <@ desired_roles))
+            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, true AS is_online,
+                inventory, display_name, labels, desired_roles, protocol_version, session_nonce, incompatible_reason
+            """;
+        const string changed = """
             UPDATE cluster_nodes SET
                 name = @name,
                 roles = @roles,
@@ -251,17 +260,29 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
                 desired_roles = CASE WHEN desired_roles <@ @roles AND @roles <@ desired_roles THEN NULL ELSE desired_roles END,
                 last_seen_at = clock_timestamp()
             WHERE id = @id AND deleted_at IS NULL AND node_token_hash = @node_token_hash
-            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, true AS is_online, inventory, display_name, labels, desired_roles
+            RETURNING id, name, roles, max_concurrent_tasks, capabilities, last_seen_at, true AS is_online, inventory, display_name, labels, desired_roles,
+                protocol_version, session_nonce, incompatible_reason
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = Sql.Command(sql, connection);
-        AddNodeParameters(command, nodeId, request);
-        command.Parameters.AddWithValue("node_token_hash", SqlKind.Bytes, tokenHash);
-        NodeResponse? node;
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-            node = await reader.ReadAsync(cancellationToken) ? ReadResponse(reader, true) : null;
+        async Task<(NodeResponse? Node, bool TrackSession)> UpdateAsync(string sql)
+        {
+            await using var command = Sql.Command(sql, connection);
+            AddNodeParameters(command, nodeId, request);
+            command.Parameters.AddWithValue("node_token_hash", SqlKind.Bytes, tokenHash);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) return (null, false);
+            int? protocol = reader.IsDBNull(11) ? null : reader.GetInt32(11);
+            var nonce = reader.IsDBNull(12) ? null : reader.GetString(12);
+            var reason = reader.IsDBNull(13) ? null : reader.GetString(13);
+            var track = protocol != request.ProtocolVersion || reason != ClusterProtocol.IncompatibilityReason(request.ProtocolVersion)
+                || request.SessionNonce is not null && nonce != request.SessionNonce;
+            return (ReadResponse(reader, true), track);
+        }
+        var result = await UpdateAsync(unchanged);
+        if (result.Node is null) result = await UpdateAsync(changed);
+        var node = result.Node;
         if (node is null) return null;
-        await TrackSessionAsync(connection, nodeId, request, cancellationToken);
+        if (result.TrackSession) await TrackSessionAsync(connection, nodeId, request, cancellationToken);
         return (await WithLifecycleAsync([node], cancellationToken))[0];
     }
 

@@ -1,6 +1,6 @@
 ---
 domain: cluster
-updated: 2026-10-21
+updated: 2026-10-23
 legacy_adr: [0001, 0002, 0017, 0034, 0036, 0037, 0038, 0039, 0040, 0041, 0044, 0045, 0046, 0047, 0048, 0050, 0051, 0052, 0053, 0066]
 code:
   - backend/src/Encoding.Api/Nodes/
@@ -69,3 +69,7 @@ Deux onglets : **Ce nœud** (fonctions, identité, capacités, fiche `app-resour
 
 ## Documents opérationnels
 `docs/operations/release.md`, `docs/operations/backup-restore.md`, `backend/README.md`, `backend/docker-compose.yml`.
+
+## Présence et métadonnées
+- Un heartbeat dont nom, rôles, capacité, outils et inventaire sont identiques ne modifie que `last_seen_at`. Toute modification ou confirmation des rôles demandés emprunte la mise à jour complète, toujours authentifiée par le hash du jeton et refusée après suppression du nœud. Aucun cache de métadonnées ne remplace la base.
+- Le protocole et le nonce de session ne sont réécrits que s’ils changent ; la détection des identités concurrentes, la quarantaine et les raisons d’incompatibilité sont conservées. Le contrat de heartbeat et le protocole réseau ne changent pas.
