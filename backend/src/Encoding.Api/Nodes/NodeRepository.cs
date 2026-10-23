@@ -239,6 +239,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
 
     public async Task<NodeResponse?> RecordHeartbeatAsync(Guid nodeId, string token, NodeHeartbeatRequest request, CancellationToken cancellationToken)
     {
+        using var priority = Encoding.Api.Infrastructure.Data.Sqlite.SqliteWriter.Prioritize();
         var tokenHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
         const string sql = """
             UPDATE cluster_nodes SET

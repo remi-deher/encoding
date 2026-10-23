@@ -365,6 +365,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
 
     public async Task<RuntimeLeaseStatus?> RenewAsync(Guid id,Guid worker,long epoch,CancellationToken ct)
     {
+        using var priority = Encoding.Api.Infrastructure.Data.Sqlite.SqliteWriter.Prioritize();
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await FenceAsync(id,worker,epoch,c,tx,ct)) return null;
         await using var update=Sql.Command("""
