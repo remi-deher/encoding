@@ -12,6 +12,7 @@ export function projectFlowPacks(
   nodes: readonly FlowGraphNode[],
   connections: readonly FlowGraphConnection[],
   instances: readonly FlowComponentPackInstance[],
+  expanded: ReadonlySet<string> = new Set(),
 ): FlowPackProjection {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const instanceByChildId = new Map<string, FlowComponentPackInstance>();
@@ -26,10 +27,11 @@ export function projectFlowPacks(
     instancesByVisualId.set(visualId(instance), instance);
     for (const id of instance.nodeIds) instanceByChildId.set(id, instance);
   }
+  const collapsed = valid.filter((instance) => !expanded.has(instance.id));
   const packByChildId = new Map(
-    valid.flatMap((instance) => instance.nodeIds.map((id) => [id, instance] as const)),
+    collapsed.flatMap((instance) => instance.nodeIds.map((id) => [id, instance] as const)),
   );
-  const packNodes = valid.map((instance): FlowGraphNode => {
+  const packNodes = collapsed.map((instance): FlowGraphNode => {
     const root = byId.get(instance.inputNodeId)!;
     return {
       id: visualId(instance),

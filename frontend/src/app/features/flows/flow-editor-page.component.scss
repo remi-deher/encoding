@@ -117,19 +117,9 @@
   flex: 1;
   min-height: 0;
 }
-.editor-views {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
 .workbench-body {
   height: 100%;
 }
 
 @media (max-width: 768px) {
-  .editor-views {
-    flex: 1 0 calc(100% - 112px);
-    max-width: calc(100% - 112px);
-    overflow-x: auto;
-  }
 }

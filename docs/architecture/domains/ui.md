@@ -8,7 +8,7 @@ code:
   - frontend/src/app/shared/models/
   - frontend/src/app/features/
   - docs/design/
-tags: [angular, material, thème, jetons, tableau, cartes, tiroir, éditeur de flow, guidé, canvas, page nœuds]
+tags: [angular, material, thème, jetons, tableau, cartes, tiroir, éditeur de flow, canvas, page nœuds]
 ---
 
 # Interface (Angular, Material 3)
@@ -21,7 +21,7 @@ Règles obligatoires : [UI_RULES.md](../../../UI_RULES.md). Ce fichier consigne 
 - Les modèles et niveaux de raisonnement IA, les presets d'encodeurs et les catalogues métier **viennent du backend**, pas du frontend. Distinguer composants de flow, composants UI et nœuds de cluster dans le code.
 
 ## Éditeur de flow
-- Un seul graphe métier, deux vues du composant `FlowGraphEditor` qui émettent les mêmes commandes : **Guidé** (séquences verticales, branches repliables, suites communes, renvois explicites pour les raccordements non structurables, jamais de conversion silencieuse) et **Canvas** (placement libre, panoramique, zoom Ctrl+molette, minicarte, disposition verticale explicite et annulable). Les positions Canvas sont des préférences **locales au navigateur** (par flow), jamais dans la définition.
+- Un seul graphe métier, une vue **Canvas** dans `FlowGraphEditor` : placement libre, panoramique, zoom Ctrl+molette, minicarte et disposition verticale explicite et annulable. Les packs peuvent être dépliés dans le Canvas pour modifier leurs composants internes, puis repliés depuis sa barre d’outils. Les positions Canvas sont des préférences **locales au navigateur** (par flow), jamais dans la définition.
 - Blocs compacts : type et plugin visibles, synthèse de trois paramètres scalaires `inline` au plus, jamais de script ni de secret dans le résumé ; entrées en haut, sorties nommées en bas ; la validation de connexions est centralisée (`flow-graph.ts`). Palette en glisser-déposer CDK ; clic et clavier toujours disponibles ; menu contextuel (clic droit, Maj+F10, appui long 550 ms).
 - Configuration : formulaire de schéma commun avec `importance` (basic/advanced), `inline`, `section`, visibilité conditionnelle (masquer garde la valeur), champs de référence qui conservent une référence inconnue, divulgation progressive dans l'éditeur seulement.
 - Assistant IA contextuel unique et testeur de flow : voir [ai.md](ai.md) et [flows.md](flows.md). Annuler/Rétablir porte sur le graphe, pas sur le runtime.

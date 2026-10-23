@@ -35,12 +35,8 @@
       } @else if (previewState() === 'error') {
         <p role="alert">Aperçu indisponible. Réessayez depuis Versions ou rechargez le panneau.</p>
       } @else if (document(); as flow) {
-        <div class="preview-toolbar">
-          <ng-container [ngTemplateOutlet]="graph.toolbar() ?? null" />
-        </div>
         <div class="graph-preview">
           <app-flow-graph-editor
-            #graph
             [readOnly]="true"
             [nodes]="nodes()"
             [connections]="flow.connections"

@@ -11,6 +11,15 @@
       <button mat-button (click)="undoLayout()">Annuler la disposition</button>
     }
   }
+  @for (pack of expandedPacks(); track pack.id) {
+    <button
+      mat-button
+      (click)="packToggle.emit(pack.id)"
+      [attr.aria-label]="'Replier le pack ' + pack.label"
+    >
+      Replier « {{ pack.label }} »
+    </button>
+  }
   @if (pending(); as selection) {
     <span role="status"
       >{{ selection.output.label }} <app-icon name="forward" /> choisissez une entrée</span
@@ -49,29 +58,31 @@
         [attr.height]="size().height"
         aria-hidden="true"
       >
-        @for (edge of connections(); track edge.id) {
-          <path
-            class="wire"
-            [class.highlighted]="
-              selectedNodeId() === edge.sourceNodeId || selectedNodeId() === edge.targetNodeId
-            "
-            [class.muted]="
-              selectedNodeId() &&
-              selectedNodeId() !== edge.sourceNodeId &&
-              selectedNodeId() !== edge.targetNodeId
-            "
-            [attr.d]="path(edge)"
-          />
-          <path
-            class="wire-hit"
-            [attr.d]="path(edge)"
-            appContextActions
-            (contextActions)="!readOnly() && menu($event, undefined, edge)"
-            (click)="
-              !readOnly() &&
-                menu({ x: $event.clientX, y: $event.clientY, origin: viewport }, undefined, edge)
-            "
-          />
+        @if (showConnections()) {
+          @for (edge of connections(); track edge.id) {
+            <path
+              class="wire"
+              [class.highlighted]="
+                selectedNodeId() === edge.sourceNodeId || selectedNodeId() === edge.targetNodeId
+              "
+              [class.muted]="
+                selectedNodeId() &&
+                selectedNodeId() !== edge.sourceNodeId &&
+                selectedNodeId() !== edge.targetNodeId
+              "
+              [attr.d]="path(edge)"
+            />
+            <path
+              class="wire-hit"
+              [attr.d]="path(edge)"
+              appContextActions
+              (contextActions)="!readOnly() && menu($event, undefined, edge)"
+              (click)="
+                !readOnly() &&
+                  menu({ x: $event.clientX, y: $event.clientY, origin: viewport }, undefined, edge)
+              "
+            />
+          }
         }
         @if (pointer()) {
           <path class="ghost" [attr.d]="ghost()" />
