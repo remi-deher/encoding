@@ -61,8 +61,16 @@ public static class LibraryEndpoints
             Guid libraryId,
             LibraryRepository repository,
             CancellationToken cancellationToken) =>
-            await repository.DeleteAsync(libraryId, cancellationToken) ? Results.NoContent() : ApiProblem.NotFound())
-            .WithName("DeleteLibrary");
+        {
+            try
+            {
+                return await repository.DeleteAsync(libraryId, cancellationToken) ? Results.NoContent() : ApiProblem.NotFound();
+            }
+            catch (LibraryInUseException)
+            {
+                return ApiProblem.Conflict("Des traitements de cette bibliothèque sont en attente ou en cours. Désactivez-la, annulez-les, puis réessayez.");
+            }
+        }).WithName("DeleteLibrary");
 
         libraries.MapGet("/{libraryId:guid}/node-access", async (
             Guid libraryId,
