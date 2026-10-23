@@ -69,6 +69,43 @@ internal static class AuthScenarios
         }
         finally { File.Delete(settingsFile); }
         Console.WriteLine("PASS: trusted proxy matching and settings persistence.");
+        SetupNodeUnit();
+    }
+
+    private static void SetupNodeUnit()
+    {
+        var addresses = LocalNetworkAddresses.Select([
+            ("eth0", System.Net.IPAddress.Parse("192.168.1.20")),
+            ("eth0", System.Net.IPAddress.Parse("192.168.1.20")),
+            ("lo", System.Net.IPAddress.Loopback),
+            ("eth1", System.Net.IPAddress.Parse("169.254.10.2")),
+            ("docker0", System.Net.IPAddress.Parse("172.17.0.1")),
+            ("br-3f2a", System.Net.IPAddress.Parse("172.18.0.1")),
+            ("eth0", System.Net.IPAddress.Parse("fe80::1")),
+            ("wlan0", System.Net.IPAddress.Parse("10.0.0.5")),
+        ]);
+        Check(addresses.Select(item => item.Interface + "=" + item.Address).SequenceEqual(["eth0=192.168.1.20", "wlan0=10.0.0.5"]),
+            "Only distinct IPv4 addresses of real interfaces are shown: " + string.Join(",", addresses.Select(item => item.Address)));
+        var urls = Encoding.Api.Nodes.SetupNodeProbe.Urls("https://encoding.example.com/", "http://encoding:8080/", "http://127.0.0.1:5080/", "https://ENCODING.example.com", "http://192.168.1.20:8080/", null, "pas une url");
+        Check(urls.SequenceEqual(["https://encoding.example.com", "http://192.168.1.20:8080"]),
+            "Only network-reachable configured URLs are shown, without Docker service names nor loopback: " + string.Join(",", urls));
+        const string agent = """
+            {"nodeId":"2b1c","name":"encoding-node","displayName":"Salon","roles":["server","worker"],"pairingKey":"SECRET-KEY","verificationCode":"123456",
+             "clusterId":"7d0f","clusterName":"Maison","isEnrolled":true,
+             "inventory":{"operatingSystem":"Ubuntu 24.04","architecture":"X64","processorCount":8,"memoryMb":16384,"processorModel":"Intel Core i5","gpus":[{"name":"Intel UHD Graphics 630","vendor":"Intel","driver":"i915","device":"card0"}],"fontSets":["noto"]},
+             "capabilities":[{"toolId":"ffmpeg","version":"7.1","mediaTypes":["video"],"accelerationTypes":["cpu","qsv"],"encoders":["hevc_qsv"],"encoderChecks":[{"encoderId":"hevc_qsv","status":"usable"}],"manifestFingerprint":"abc"}]}
+            """;
+        var sheet = Encoding.Api.Nodes.SetupNodeProbe.ProjectAgentStatus(agent, addresses, urls);
+        var serialized = JsonSerializer.Serialize(sheet, Json);
+        Check(sheet.AgentAvailable && sheet.DisplayName == "Salon" && sheet.Inventory?.ProcessorModel == "Intel Core i5" && sheet.Inventory.Gpus?.Single().Name == "Intel UHD Graphics 630",
+            "The setup sheet keeps the hardware read by the local agent.");
+        Check(sheet.Tools?.Single() is { ToolId: "ffmpeg" } tool && tool.AccelerationTypes.Contains("qsv") && tool.EncoderChecks.Single().Status == "usable",
+            "The setup sheet keeps what is needed to show hardware acceleration.");
+        Check(!serialized.Contains("SECRET-KEY") && !serialized.Contains("123456") && !serialized.Contains("7d0f") && !serialized.Contains("Maison")
+            && !serialized.Contains("noto") && !serialized.Contains("abc") && !serialized.Contains("7.1"),
+            "The setup sheet is an allow-list: no pairing secret, cluster identity, fonts, tool versions nor fingerprints.");
+        Check(!Encoding.Api.Nodes.SetupNodeProbe.ProjectAgentStatus("not json", [], []).AgentAvailable, "An unreadable agent answer means unknown hardware.");
+        Console.WriteLine("PASS: setup node sheet allow-list, network addresses and configured URLs.");
     }
 
     private static async Task SecurityHeadersAsync(WebApplicationFactory<ApiAssembly> factory)
@@ -197,6 +234,17 @@ internal static class AuthScenarios
         foreach (var url in new[] { "/api/v1/tools/ai/quotas", "/api/v1/tools/ai/sessions", "/api/v1/libraries", "/api/v1/flows", "/api/v1/nodes", "/api/v1/executions", "/api/v1/plugins/base/configuration", "/api/v1/users", "/api/v1/nodes/enrollment-requests", "/api/v1/node/mode", "/api/v1/local-node/status" })
             Check(await anonymous.StatusAsync(get, url) == HttpStatusCode.Unauthorized, "Anonymous reads of " + url + " are refused.");
         Check(await anonymous.StatusAsync(post, "/api/v1/libraries", new { name = "x" }) == HttpStatusCode.Unauthorized, "Anonymous writes are refused.");
+        // Fiche du nœud pour l'assistant : lisible sans compte tant qu'aucun admin n'existe, sans aucun secret.
+        using (var setupNode = await anonymous.SendAsync(get, "/api/v1/auth/setup/node"))
+        {
+            Check(setupNode.StatusCode == HttpStatusCode.OK, "The setup wizard reads the local node sheet before any account exists.");
+            var text = await setupNode.Content.ReadAsStringAsync();
+            var body = JsonSerializer.Deserialize<SetupNodeResponse>(text, Json)!;
+            Check(!body.AgentAvailable && body.Inventory is null && body.Tools is null,
+                "Without a reachable local agent, hardware is reported unknown rather than absent.");
+            Check(!text.Contains("pairingKey") && !text.Contains("verificationCode") && !text.Contains("clusterId"),
+                "The setup node sheet never carries pairing secrets nor cluster identifiers.");
+        }
 
         // Initialisation du premier administrateur.
         Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("root", "court"), csrf: false) == HttpStatusCode.BadRequest, "Setup enforces the password policy when credentials are provided.");
@@ -207,6 +255,7 @@ internal static class AuthScenarios
             Check((await setup.Content.ReadFromJsonAsync<CurrentUserResponse>(Json))!.Role == UserRole.Admin, "The first account is an administrator.");
         }
         Check(await anonymous.StatusAsync(post, "/api/v1/auth/setup", new SetupRequest("autre", AdminPassword), csrf: false) == HttpStatusCode.Conflict, "Setup cannot run twice.");
+        Check(await anonymous.StatusAsync(get, "/api/v1/auth/setup/node") == HttpStatusCode.NotFound, "The setup node sheet closes once an administrator exists.");
         using (var savedAi = await admin.SendAsync(HttpMethod.Put, "/api/v1/tools/ai/settings", new Encoding.Contracts.Tools.AiSettingsUpdateRequest(OpenAiApiKey: "private-ai-http-test-key")))
         {
             Check(savedAi.IsSuccessStatusCode, "An administrator can configure AI on a fresh standalone server.");
@@ -516,6 +565,7 @@ internal static class AuthScenarios
         {
             "GET {*path:nonfile}",
             "GET /api/v1/auth/status",
+            "GET /api/v1/auth/setup/node",
             "GET /api/v1/cluster",
             "GET /api/v1/cluster/reconciliation/local-identity",
             "GET /api/v1/cluster/resources/blobs/{digest}",
