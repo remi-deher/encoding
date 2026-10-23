@@ -1,450 +1,62 @@
-@if (flowActionOpen()) {
-  @defer (when flowActionOpen()) {
-    <app-detail-drawer
-      [opened]="true"
-      size="standard"
-      [modal]="true"
-      title="CrÃ©er un flow"
-      description="Choisissez un nom, un mÃ©dia et un point de dÃ©part avant dâ€™ouvrir lâ€™Ã©diteur."
-      icon="+"
-      eyebrow="Nouveau"
-      [step]="flowStep()"
-      [content]="flowFormTemplate()"
-      [footerActions]="flowFooterTemplate()"
-      (closed)="closeFlowCreation()"
-    >
-      <div drawer-main>
-        <ng-container [ngTemplateOutlet]="homeContentTemplate()" />
-      </div>
-    </app-detail-drawer>
-  } @placeholder {
-    <ng-container [ngTemplateOutlet]="homeContentTemplate()" />
-  }
-} @else {
-  <ng-container [ngTemplateOutlet]="homeContentTemplate()" />
-}
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíç}N‹Z–‹­¦ëeŠw¬Õ¥˜€¡™±½ÝÑ¥½¹=Á•¸ ¤¤ì(€‘•™•È€¡Ý¡•¸™±½ÝÑ¥½¹=Á•¸ ¤¤ì(€€€€ñ…ÁÀµ‘•Ñ…¥°µ‘É…Ý•È(€€€€€m½Á•¹•‘tô‰ÑÉÕ”ˆ(€€€€€Í¥é”ô‰ÍÑ…¹‘…Éˆ(€€€€€mµ½‘…±tô‰ÑÉÕ”ˆ(€€€€€Ñ¥Ñ±”ô‰Ë¥•ÈÕ¸™±½Üˆ(€€€€€‘•ÍÉ¥ÁÑ¥½¸ô‰¡½¥Í¥ÍÍ•èÕ¸¹½´°Õ¸·¥‘¥„•ÐÕ¸Á½¥¹Ð‘”“¥Á…ÉÐ…Ù…¹Ð“Še½ÕÙÉ¥È³Šg¥‘¥Ñ•ÕÈ¸ˆ(€€€€€¥½¸ôˆ¬ˆ(€€€€€•å•‰É½Üô‰9½ÕÙ•…Ôˆ(€€€€€mÍÑ•Átô‰™±½ÝMÑ•À ¤ˆ(€€€€€m½¹Ñ•¹Ñtô‰™±½Ý½ÉµQ•µÁ±…Ñ” ¤ˆ(€€€€€m™½½Ñ•ÉÑ¥½¹Ítô‰™±½Ý½½Ñ•ÉQ•µÁ±…Ñ” ¤ˆ(€€€€€€¡±½Í•¤ô‰±½Í•±½ÝÉ•…Ñ¥½¸ ¤ˆ(€€€€ø(€€€€€€ñ‘¥Ø‘É…Ý•Èµµ…¥¸ø(€€€€€€€€ñ¹œµ½¹Ñ…¥¹•Èm¹Q•µÁ±…Ñ•=ÕÑ±•Ñtô‰¡½µ•½¹Ñ•¹ÑQ•µÁ±…Ñ” ¤ˆ€¼ø(€€€€€€ð½‘¥Øø(€€€€ð½…ÁÀµ‘•Ñ…¥°µ‘É…Ý•Èø(€ôÁ±…•¡½±‘•Èì(€€€€ñ¹œµ½¹Ñ…¥¹•Èm¹Q•µÁ±…Ñ•=ÕÑ±•Ñtô‰¡½µ•½¹Ñ•¹ÑQ•µÁ±…Ñ” ¤ˆ€¼ø(€ô)ô•±Í”ì(€€ñ¹œµ½¹Ñ…¥¹•Èm¹Q•µÁ±…Ñ•=ÕÑ±•Ñtô‰¡½µ•½¹Ñ•¹ÑQ•µÁ±…Ñ” ¤ˆ€¼ø)ô((ñ¹œµÑ•µÁ±…Ñ”€¡½µ•½¹Ñ•¹Ðø(€€ñ…ÁÀµÁ…”µ¡•…‘•È(€€€Ñ¥Ñ±”ô‰YÕ”“Še•¹Í•µ‰±”ˆ(€€€m…Ñ¥½¹Ítô‰Á…•Ñ¥½¹ÍQ•µÁ±…Ñ” ¤ˆ(€€€mÍ¡½ÝMåÍÑ•µÑ¥½¹Ítô‰ÑÉÕ”ˆ(€€ø(€€€€ñÍÁ…¸Á…”µµ•Ñ…‘…Ñ„±…ÍÌô‰±ÕÍÑ•Èµ¹…µ”ˆùíì±ÕÍÑ•É9…µ” ¤õôð½ÍÁ…¸ø(€€ð½…ÁÀµÁ…”µ¡•…‘•Èø((€€ñ‘¥Ø±…ÍÌô‰½Ù•ÉÙ¥•ÜµÑ…‰ÌµÝÉ…ÁÁ•Èˆø(€€€€ñ…ÁÀµ…Ñ•½ÉäµÑ…‰Ì(€€€€€±…‰•°ô‰YÕ•Ì“Še•¹Í•µ‰±”ˆ(€€€€€m½ÁÑ¥½¹Ítô‰½Ù•ÉÙ¥•ÝQ…‰Ìˆ(€€€€€mÍ•±•Ñ•‘tô‰½Ù•ÉÙ¥•ÝY¥•Ü ¤ˆ(€€€€€€¡Í•±•Ñ•‘¡…¹”¤ô‰½¹=Ù•ÉÙ¥•ÝY¥•Ý¡…¹• ‘•Ù•¹Ð¤ˆ(€€€€¼ø(€€ð½‘¥Øø((€¥˜€¡ÍÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€±½…‘¥¹œœ¤ì(€€€€ñÀÉ½±”ô‰ÍÑ…ÑÕÌˆù¡…É•µ•¹Ð‘•Ì‘½¹»¥•ÏŠ˜ð½Àø(€ô•±Í”¥˜€¡ÍÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€•ÉÉ½Èœ¤ì(€€€€ñÀÉ½±”ô‰…±•ÉÐˆø(€€€€€%µÁ½ÍÍ¥‰±”“Še…ÑÕ…±¥Í•È±•Ì‘½¹»¥•Ì¸(€€€€€¥˜€¡½‰Í•ÉÙ•‘Ð ¤¤ì(€€€€€€€1•Ì‘•É¹§¡É•ÌÙ…±•ÕÉÌÉ—Õ•ÌÍ½¹Ð½¹Í•ÉÛ¥•Ì€ì•±±•ÌÁ•ÕÙ•¹Ðƒ©ÑÉ”½‰Í½³¡Ñ•Ì¸(€€€€€ô(€€€€ð½Àø(€ô((€¥˜€¡½Ù•ÉÙ¥•ÝY¥•Ü ¤€„ôô€…¤œ¤ì(€€€¥˜€¡½Ù•ÉÙ¥•ÝY¥•Ü ¤€ôôô€•¹•É…°œ¤ì(€€€€€€ñÍ•Ñ¥½¸(€€€€€€€±…ÍÌô‰µ•ÑÉ¥ÌµÉ¥ˆ(€€€€€€€m…ÑÑÈ¹…É¥„µ±…‰•±tô‰ÍÑ…¹‘…±½¹” ¤€ü€%¹‘¥…Ñ•ÕÉÌ‘””»MÕœ€è€%¹‘¥…Ñ•ÕÉÌ‘Ô±ÕÍÑ•Èœˆ(€€€€€€ø(€€€€€€€™½È€¡µ•ÑÉ¥Œ½˜µ•ÑÉ¥Ì ¤ìÑÉ…¬µ•ÑÉ¥Œ¹±…‰•°¤ì(€€€€€€€€€€ñ„(€€€€€€€€€€€±…ÍÌô‰µ•ÑÉ¥Œˆ(€€€€€€€€€€€m±…ÍÌ¹™•…ÑÕÉ•‘tôˆ‘™¥ÉÍÐˆ(€€€€€€€€€€€m±…ÍÌ¹¥ÌµÍÑ…±•tôˆ(€€€€€€€€€€€€€µ•ÑÉ¥Œ¹Ù¥•Ü€ôôô¹Õ±°(€€€€€€€€€€€€€€€€üÍÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€•ÉÉ½Èœ(€€€€€€€€€€€€€€€€è•á•ÕÑ¥½¹MÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€•ÉÉ½Èœ(€€€€€€€€€€€€ˆ(€€€€€€€€€€€mÉ½ÕÑ•É1¥¹­tô‰µ•ÑÉ¥Œ¹Ù¥•Ü€ôôô¹Õ±°€ü€œ½±¥‰É…É¥•Ìœ€è€œ½…Ñ¥Ù¥Ñäœˆ(€€€€€€€€€€€mÅÕ•ÉåA…É…µÍtô‰µ•ÑÉ¥Œ¹Ù¥•Ü€üìÙ¥•Üèµ•ÑÉ¥Œ¹Ù¥•Üô€èíôˆ(€€€€€€€€€€ø(€€€€€€€€€€€€ñÍÁ…¸ùíìµ•ÑÉ¥Œ¹±…‰•°õôð½ÍÁ…¸(€€€€€€€€€€€€øñÍÑÉ½¹œùíìµ•ÑÉ¥Œ¹Ù…±Õ”õôð½ÍÑÉ½¹œ(€€€€€€€€€€€€øñÍµ…±°ùíìµ•ÑÉ¥Œ¹‘•Ñ…¥°õôð½Íµ…±°ø(€€€€€€€€€€ð½„ø(€€€€€€€ô(€€€€€€ð½Í•Ñ¥½¸ø(€€€ô((€€€€ñ‘¥Ø±…ÍÌô‰½Ù•ÉÙ¥•ÜµÉ¥ˆm±…ÍÌ¹¥ÌµÍ¥¹±”µÙ¥•Ýtô‰½Ù•ÉÙ¥•ÝY¥•Ü ¤€„ôô€•¹•É…°œˆø(€€€€€¥˜€¡½Ù•ÉÙ¥•ÝY¥•Ü ¤€„ôô€¥¹™É…ÍÑÉÕÑÕÉ”œ¤ì(€€€€€€€€ñÍ•Ñ¥½¸±…ÍÌô‰Ñ…Í­ÌµÁ…¹•°ˆ…É¥„µ±…‰•±±•‘‰äô‰…Ñ¥Ù”µÑ…Í­Ìµ¡•…‘¥¹œˆø(€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰Á…¹•°µ¡•…‘¥¹œˆø(€€€€€€€€€€€€ñ‘¥Øø(€€€€€€€€€€€€€€ñ È¥ô‰…Ñ¥Ù”µÑ…Í­Ìµ¡•…‘¥¹œˆø(€€€€€€€€€€€€€€€QÉ…¥Ñ•µ•¹ÑÌ•¸½ÕÉÌ(€€€€€€€€€€€€€€€€ñÍÁ…¸±…ÍÌô‰½Õ¹Ðˆùíì½Õ¹Ð¡•á•ÕÑ¥½¹MÑ…Ñ” ¤¹‘…Ñ„ü¹…Ñ¥Ù•½Õ¹Ð¤õôð½ÍÁ…¸ø(€€€€€€€€€€€€€€ð½ Èø(€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€€€ñ„±…ÍÌô‰ÍÕ‰Ñ±”µ±¥¹¬ˆÉ½ÕÑ•É1¥¹¬ôˆ½…Ñ¥Ù¥Ñäˆ(€€€€€€€€€€€€€€ùQ½ÕÑ•Ì±•ÌÓ‰¡•Ì€ñÍÁ…¸…É¥„µ¡¥‘‘•¸ô‰ÑÉÕ”ˆøñ…ÁÀµ¥½¸¹…µ”ô‰™½ÉÝ…Éˆ€¼øð½ÍÁ…¸(€€€€€€€€€€€€øð½„ø(€€€€€€€€€€ð½‘¥Øø((€€€€€€€€€¥˜€¡•á•ÕÑ¥½¹MÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€±½…‘¥¹œœñð¡½µ•á•ÕÑ¥½¹MÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€±½…‘¥¹œœ¤ì(€€€€€€€€€€€€ñÀÉ½±”ô‰ÍÑ…ÑÕÌˆù¡…É•µ•¹Ð‘•Ì•ã¥ÕÑ¥½¹ÏŠ˜ð½Àø(€€€€€€€€€ô(€€€€€€€€€¥˜€¡•á•ÕÑ¥½¹MÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€•ÉÉ½Èœñð¡½µ•á•ÕÑ¥½¹MÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€•ÉÉ½Èœ¤ì(€€€€€€€€€€€€ñÀÉ½±”ô‰…±•ÉÐˆø(€€€€€€€€€€€€€1”ÍÕ¥Ù¤»Še„Á…ÌÁÔƒ©ÑÉ”…ÑÕ…±¥Ï¤¸1•Ì‘•É¹§¡É•ÌÙ…±•ÕÉÌÉ—Õ•ÌÁ•ÕÙ•¹Ðƒ©ÑÉ”(€€€€€€€€€€€€€½‰Í½³¡Ñ•Ì¸(€€€€€€€€€€€€ð½Àø(€€€€€€€€€ô(€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰•á•ÕÑ¥½¸µ…Éµ±¥ÍÐˆø(€€€€€€€€€€€™½È€¡Ñ…Í¬½˜…Ñ¥Ù•AÉ•Ù¥•Ü ¤ìÑÉ…¬Ñ…Í¬¹¥¤ì(€€€€€€€€€€€€€€ñ…ÁÀµ½Ù•ÉÙ¥•Üµ•á•ÕÑ¥½¸m•á•ÕÑ¥½¹tô‰Ñ…Í¬ˆ€¼ø(€€€€€€€€€€€ô•µÁÑäì(€€€€€€€€€€€€€¥˜€¡¡½µ•á•ÕÑ¥½¹MÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€É•…‘äœ¤ì(€€€€€€€€€€€€€€€€ñÀ±…ÍÌô‰•µÁÑäµÁ…¹•°µµ•ÍÍ…”ˆùÕÕ¹”•ã¥ÕÑ¥½¸•¸½ÕÉÌ¸ð½Àø(€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€¥˜€¡É•µ…¥¹¥¹Ñ¥Ù” ¤€ø€À¤ì(€€€€€€€€€€€€ñ„±…ÍÌô‰É•µ…¥¹¥¹œµ±¥¹¬ˆÉ½ÕÑ•É1¥¹¬ôˆ½…Ñ¥Ù¥ÑäˆmÅÕ•ÉåA…É…µÍtô‰ìÙ¥•Üè€…Ñ¥Ù”œôˆ(€€€€€€€€€€€€€€ùíìÉ•µ…¥¹¥¹Ñ¥Ù” ¤õô(€€€€€€€€€€€€€íìÉ•µ…¥¹¥¹Ñ¥Ù” ¤€ôôô€Ä€ü€…ÕÑÉ”ÑÉ…¥Ñ•µ•¹Ðœ€è€…ÕÑÉ•ÌÑÉ…¥Ñ•µ•¹ÑÌœõô•¸½ÕÉÌ(€€€€€€€€€€€€€€ñ…ÁÀµ¥½¸¹…µ”ô‰½ÕÑÝ…Éˆ(€€€€€€€€€€€€¼øð½„ø(€€€€€€€€€ô(€€€€€€€€ð½Í•Ñ¥½¸ø(€€€€€ô((€€€€€¥˜€¡½Ù•ÉÙ¥•ÝY¥•Ü ¤€„ôô€…Ñ¥Ù¥Ñäœ¤ì(€€€€€€€€ñÍ•Ñ¥½¸±…ÍÌô‰¹½‘•ÌµÁ…¹•°ˆ…É¥„µ±…‰•±±•‘‰äô‰¹½‘•Ìµ¡•…‘¥¹œˆø(€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰Á…¹•°µ¡•…‘¥¹œˆø(€€€€€€€€€€€€ñ‘¥Øø(€€€€€€€€€€€€€€ñ È¥ô‰¹½‘•Ìµ¡•…‘¥¹œˆùíìÍÑ…¹‘…±½¹” ¤€ü€”»MÕœ€è€;MÕ‘Ì‘Ô±ÕÍÑ•Èœõôð½ Èø(€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€€€ñ„±…ÍÌô‰ÍÕ‰Ñ±”µ±¥¹¬ˆÉ½ÕÑ•É1¥¹¬ôˆ½¹½‘•Ìˆ(€€€€€€€€€€€€€€ùíìÍÑ…¹‘…±½¹” ¤€ü€¥É•È”»MÕœ€è€Y½¥È±•Ì»MÕ‘Ìœõô(€€€€€€€€€€€€€€ñÍÁ…¸…É¥„µ¡¥‘‘•¸ô‰ÑÉÕ”ˆøñ…ÁÀµ¥½¸¹…µ”ô‰™½ÉÝ…Éˆ€¼øð½ÍÁ…¸(€€€€€€€€€€€€øð½„ø(€€€€€€€€€€ð½‘¥Øø((€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰¹½‘”µ±¥ÍÐˆø(€€€€€€€€€€€™½È€¡¹½‘”½˜¹½‘•Ì ¤ìÑÉ…¬¹½‘”¹¥¤ì(€€€€€€€€€€€€€€ñ…ÉÑ¥±”(€€€€€€€€€€€€€€€±…ÍÌô‰¹½‘”µÉ½Üˆ(€€€€€€€€€€€€€€€m±…ÍÌ¹¥ÌµÍÑ…±•tô‰¹½‘”¹ÍÑ…ÑÕÌ€ôôô€½™™±¥¹”œñðÍÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€•ÉÉ½Èœˆ(€€€€€€€€€€€€€€ø(€€€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰¹½‘”µ¡•…‘¥¹œˆø(€€€€€€€€€€€€€€€€€€ñ Ìùíì™½Éµ…Ñ9½‘•1…‰•°¡¹½‘”¹¹…µ”°¹½‘”¹‘¥ÍÁ±…å9…µ”¤õôð½ Ìø(€€€€€€€€€€€€€€€€€€ñ…ÁÀµÍÑ…ÑÕÌµ‰…‘”m±…‰•±tô‰±¥™•å±•1…‰•°¡¹½‘”¤ˆmÑ½¹•tô‰±¥™•å±•Q½¹”¡¹½‘”¤ˆ€¼ø(€€€€€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€€€€€€€ñÀ±…ÍÌô‰¹½‘”µ¡…É‘Ý…É”ˆø(€€€€€€€€€€€€€€€€€íìÉ½±•1…‰•°¡¹½‘”¹É½±•Ì¤õô(€€€€€€€€€€€€€€€€€¥˜€¡¹½‘”¹¥¹Ù•¹Ñ½Éäü¹ÁÉ½•ÍÍ½É5½‘•°ì…ÌÁÉ½•ÍÍ½È¤ì(€€€€€€€€€€€€€€€€€€€ƒ
+ÜíìÁÉ½•ÍÍ½Èõô(€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€ð½Àø(€€€€€€€€€€€€€€€¥˜€¡¹½‘”¹¥¹Ù•¹Ñ½Éäü¹ÁÕÌü¹±•¹Ñ ¤ì(€€€€€€€€€€€€€€€€€€ñÀ±…ÍÌô‰¹½‘”µ¡…É‘Ý…É”ˆø(€€€€€€€€€€€€€€€€€€€™½È€¡ÁÔ½˜¹½‘”¹¥¹Ù•¹Ñ½Éäü¹ÁÕÌìÑÉ…¬€‘¥¹‘•à¤ì(€€€€€€€€€€€€€€€€€€€€€íìÁÔ¹¹…µ”õõíì€‘±…ÍÐ€ü€œœ€è€œƒ
+Ü€œõô(€€€€€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€€€ð½Àø(€€€€€€€€€€€€€€€ô(€€€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰¹½‘”µ™…ÑÌˆø(€€€€€€€€€€€€€€€€€€ñÍÁ…¸(€€€€€€€€€€€€€€€€€€€€ù½¹ÕÉÉ•¹”½¹™¥ÕË¥”(€€€€€€€€€€€€€€€€€€€€ñÍÑÉ½¹œùíì½Õ¹Ð¡¹½‘”¹µ…á½¹ÕÉÉ•¹ÑQ…Í­Ì¤õôð½ÍÑÉ½¹œøð½ÍÁ…¸(€€€€€€€€€€€€€€€€€€øñÍÁ…¸(€€€€€€€€€€€€€€€€€€€€ù•É¹¥•ÈÍ¥¹…°(€€€€€€€€€€€€€€€€€€€€ñÍÑÉ½¹œùíì¹½‘”¹±…ÍÑM••¹Ðð‘…Ñ”è€‘½54! éµ´œõôð½ÍÑÉ½¹œøð½ÍÁ…¸(€€€€€€€€€€€€€€€€€€ø(€€€€€€€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€€€€€€ð½…ÉÑ¥±”ø(€€€€€€€€€€€ô•µÁÑäì(€€€€€€€€€€€€€¥˜€¡ÍÑ…Ñ” ¤¹ÍÑ…ÑÕÌ€ôôô€É•…‘äœ¤ì(€€€€€€€€€€€€€€€€ñÀ±…ÍÌô‰•µÁÑäµÁ…¹•°µµ•ÍÍ…”ˆø(€€€€€€€€€€€€€€€€€íì(€€€€€€€€€€€€€€€€€€€ÍÑ…¹‘…±½¹” ¤(€€€€€€€€€€€€€€€€€€€€€€ü€ÕÕ¹”¥¹™½Éµ…Ñ¥½¸ÍÕÈ”»MÕ¸œ(€€€€€€€€€€€€€€€€€€€€€€è€ÕÕ¸»MÕ•¹É•¥ÍÑË¤‘…¹Ì±”±ÕÍÑ•È¸œ(€€€€€€€€€€€€€€€€€õô(€€€€€€€€€€€€€€€€ð½Àø(€€€€€€€€€€€€€ô(€€€€€€€€€€€ô(€€€€€€€€€€ð½‘¥Øø(€€€€€€€€€¥˜€¡™…¥±•‘½Õ¹Ð ¤€ø€À¤ì(€€€€€€€€€€€€ñ…Í¥‘”±…ÍÌô‰…ÑÑ•¹Ñ¥½¸ˆø(€€€€€€€€€€€€€€ñÍÑÉ½¹œ(€€€€€€€€€€€€€€€€ùíì™…¥±•‘½Õ¹Ð ¤õôíì™…¥±•‘½Õ¹Ð ¤€ôôô€Ä€ü€Ó‰¡”œ€è€Ó‰¡•Ìœõôƒ€(€€€€€€€€€€€€€€€•á…µ¥¹•Èð½ÍÑÉ½¹œ(€€€€€€€€€€€€€€ø(€€€€€€€€€€€€€€ñÀù½¹ÍÕ±Ñ•è±•Ì•ÉÉ•ÕÉÌ…Ù…¹Ð‘”É•±…¹•È±•ÌÑÉ…¥Ñ•µ•¹ÑÌ¸ð½Àø(€€€€€€€€€€€€€€ñ„É½ÕÑ•É1¥¹¬ôˆ½…Ñ¥Ù¥ÑäˆmÅÕ•ÉåA…É…µÍtô‰ìÙ¥•Üè€•ÉÉ½ÉÌœôˆ(€€€€€€€€€€€€€€€€ùá…µ¥¹•È±•Ìƒ¥¡•Ì€ñ…ÁÀµ¥½¸¹…µ”ô‰½ÕÑÝ…Éˆ(€€€€€€€€€€€€€€¼øð½„ø(€€€€€€€€€€€€ð½…Í¥‘”ø(€€€€€€€€€ô(€€€€€€€€€¥˜€¡‘•™•ÉÉ•‘½Õ¹Ð ¤ì…Ì½Õ¹Ð¤ì(€€€€€€€€€€€€ñÀ±…ÍÌô‰‘•™•ÉÉ•µ¹½Ñ”ˆø(€€€€€€€€€€€€€íì½Õ¹Ðõôíì½Õ¹Ð€ôôô€Ä€ü€•ã¥ÕÑ¥½¸œ€è€•ã¥ÕÑ¥½¹Ìœõô•¸…ÑÑ•¹Ñ”‘”É•ÁÉ¥Í”¸(€€€€€€€€€€€€ð½Àø(€€€€€€€€€ô(€€€€€€€€€¥˜€¡¡•…±Ñ  ¤ì…Ì¡•…±Ñ ¤ì(€€€€€€€€€€€¥˜€¡¡•…±Ñ ¹¥ÍÍÕ•Ì¹±•¹Ñ €ø€À¤ì(€€€€€€€€€€€€€€ñ‘¥Ø±…ÍÌô‰¡•…±Ñ µ‰‡}¶‰žËkºwµçH\XÛHÛ\ÜÏHœX›XØ][Ûˆ‚ˆÜ[ˆÛ\ÜÏHœX›XØ][Û‹ZXÛÛˆˆ\šXKZY[HYH¸§$ÏÜÜ[‚ˆ]‚ˆÏžÞÈ^XÝ][Û‹›YYXH_OÚÏ‚ˆžÞÈ^XÝ][Û‹›Xœ˜\žH_H0­ÈÞÈ^XÝ][Û‹™›ÝÈ_OÜ‚ˆÙ]‚ˆÜ[ˆÛ\ÜÏHœX›XØ][Û‹\Ý]H”°ê]\ÜÚOÜÜ[‚ˆ[YHØ]‹™]][YWOH™^XÝ][Û‹™š[š\ÚY]ÏÈ^XÝ][Û‹\]Y]žÞÂˆ^XÝ][Û‹™š[š\ÚY]ÏÈ^XÝ][Û‹\]Y]]Nˆ	ÙÓSH›[IÂˆ_OÝ[YO‚ˆØ\XÛO‚ˆH[\HÂˆYˆ
+ÛYQ^XÝ][Û”Ý]J
+KœÝ]\ÈOOH	Ü™XYIÊHÂˆÛ\ÜÏH™[\K\[™[[Y\ÜØYÙH]XÝ[ˆ˜Z][Y[\›Z[°êKÜ‚ˆBˆBˆÙ]‚ˆÜÙXÝ[Û‚ˆB‚ˆYˆ
+Ý™\šY]ÕšY]Ê
+HOOH	ØXÝ]š]IÈ	‰ˆX]š^ÛÛ[[œÊ
+K›[™Ý	‰ˆX]š^›ÝÜÊ
+K›[™Ý
+HÂˆÙXÝ[ÛˆÛ\ÜÏHœÝ\™˜XÙK\[™[X]š^\[™[ˆ\šXK[X™[YžOH›X]š^ZXY[™È‚ˆ]ˆÛ\ÜÏHœ[™[ZXY[™È‚ˆ]‚ˆˆYH›X]š^ZXY[™ÈXØðêÈ]^šX›[Ý0ê]Y\ÏÚ‚ˆ‚ˆÞÂˆÝ[™[Û™J
+BˆÈ	ÐÛÛ[Y[ÙH±dÝY]Z[Ú\]YHšX›[Ý0ê]YK‰Âˆˆ	ÐÛÛ[Y[Ú\]YH±dÝY]Z[Ú\]YHšX›[Ý0ê]YK‰Âˆ_BˆÜ‚ˆÙ]‚ˆHÛ\ÜÏHœÝXK[[šÈˆ›Ý]\“[šÏH‹ÛXœ˜\šY\È‚ˆšX›[Ý0ê]Y\ÈÜ[ˆ\šXKZY[HYH\ZXÛÛˆ˜[YOH™›ÜØ\™ˆÏÜÜ[‚ˆØO‚ˆÙ]‚ˆ\[X]š^]X›BˆØØ\[Û—OH‚ˆÝ[™[Û™J
+BˆÈ	ÐXØðêÈHÙH±dÝY0èÚ\]YHšX›[Ý0ê]YIÂˆˆ	ÐXØðêÈHÚ\]YH±dÝY0èÚ\]YHšX›[Ý0ê]YIÂˆ‚ˆÛÜ›™\“X™[H“±dÝY‚ˆÜ›ÝÜ×OH›X]š^›ÝÜÊ
+H‚ˆØÛÛ[[œ×OH›X]š^ÛÛ[[œÊ
+H‚ˆØÙ[×OH›X]š^Ù[Ê
+H‚ˆÏ‚ˆÜÙXÝ[Û‚ˆBˆÙ]‚ˆH[ÙHÂˆÙXÝ[ÛˆÛ\ÜÏH˜ZK[Ý™\šY]Èˆ\šXK[X™[YžOH˜ZK[Ý™\šY]ËZXY[™È‚ˆXY\ˆÛ\ÜÏH˜ZK[Ý™\šY]ËZXY[™È‚ˆ]‚ˆÛ\ÜÏH™^YXœ›ÝÈ•YH8 &Y[œÙ[X›OÜ‚ˆˆYH˜ZK[Ý™\šY]ËZXY[™È’[[YÙ[˜ÙH\YšXÚY[OÚ‚ˆ°â]]\È›Ý\›š\ÜÙ]\œË[X[™\È°êXÙ[\È]ÛÛ™\œØ][ÛœÈH8 &X\ÜÚ\Ý[Ü‚ˆÙ]‚ˆ]ˆÛ\ÜÏH˜ZK[Ý™\šY]ËXXÝ[ÛœÈ‚ˆHÛ\ÜÏH˜ZK\š[X\žK[[šÈˆ›Ý]\“[šÏH‹ØZKØ\ÜÚ\Ý[‚ˆ“Ý]œš\ˆ8 &X\ÜÚ\Ý[Ü[ˆ\šXKZY[HYH\ZXÛÛˆ˜[YOH›Ý]Ø\™ˆÏÜÜ[‚ˆØO‚ˆÙ]‚ˆÚXY\‚‚ˆYˆ
+ZSÝ™\šY]ÓØY[™Ê
+JHÂˆÛ\ÜÏH˜ZKY™YY˜XÚÈˆ›ÛOHœÝ]\ÈÚ\™Ù[Y[\ÈÛ›°êY\ÈPx )Ü‚ˆH[ÙHYˆ
+ZSÝ™\šY]Ô\X[
 
-<ng-template #homeContent>
-  <p class="cluster-name">{{ clusterName() }}</p>
-  <app-page-header title="Vue dâ€™ensemble" [actions]="pageActionsTemplate()" />
+JHÂˆÛ\ÜÏH˜ZKY™YY˜XÚÈˆ›ÛOHœÝ]\È‚ˆÙ\Z[™\ÈÛ›°êY\ÈPH™HÛÛ\È\ÜÛšX›\ÈÝ\ˆH[ÛY[‚ˆÜ‚ˆB‚ˆ]ˆÛ\ÜÏH˜ZK[Y]šXÜËYÜšYˆ\šXK[X™[H’[™XØ]]\œÈPH‚ˆ\XÛHÛ\ÜÏH›Y]šXÈZK[Y]šXÈ‚ˆÜ[‘›Ý\›š\ÜÙ]\œÈ\ÜÛšX›\ÏÜÜ[‚ˆÝ›Û™ÏžÞÈÛÝ[
+ZT›ÝšY\ÛÝ[
 
-  <div class="overview-view-bar" role="group" aria-label="Vues dâ€™ensemble">
-    <button
-      type="button"
-      class="overview-view-button"
-      [class.is-active]="overviewView() === 'general'"
-      [attr.aria-pressed]="overviewView() === 'general'"
-      (click)="overviewView.set('general')"
-    >
-      <span aria-hidden="true">â–¦</span> GÃ©nÃ©ral
-    </button>
-    <button
-      type="button"
-      class="overview-view-button"
-      [class.is-active]="overviewView() === 'ai'"
-      [attr.aria-pressed]="overviewView() === 'ai'"
-      (click)="overviewView.set('ai')"
-    >
-      <span aria-hidden="true">âœ¦</span> IA
-    </button>
-    <button
-      type="button"
-      class="overview-view-button"
-      [class.is-active]="overviewView() === 'activity'"
-      [attr.aria-pressed]="overviewView() === 'activity'"
-      (click)="overviewView.set('activity')"
-    >
-      <span aria-hidden="true">â—·</span> ActivitÃ©
-    </button>
-    <button
-      type="button"
-      class="overview-view-button"
-      [class.is-active]="overviewView() === 'infrastructure'"
-      [attr.aria-pressed]="overviewView() === 'infrastructure'"
-      (click)="overviewView.set('infrastructure')"
-    >
-      <span aria-hidden="true">â–¤</span> Infrastructure
-    </button>
-  </div>
+JH_OÜÝ›Û™Ï‚ˆÛX[ˆžÞÈZSÜ[ÛœÊ
+OË›[Ù[ÏË›[™ÝÏÈ_H[Ù0ê\È0­ÂˆÞÈZT›ÝšY\“˜[Y\Ê
+H	Ð]XÝ[ˆ\ÜÛšX›IÈ_OÜÛX[ˆ‚ˆØ\XÛO‚ˆ\XÛHÛ\ÜÏH›Y]šXÈZK[Y]šXÈ‚ˆÜ[“[Ù0êH\ˆ0êY˜]]ÜÜ[‚ˆÝ›Û™ÈÛ\ÜÏH˜ZKYY˜][[[Ù[žÞÈZQY˜][[Ù[
 
-  @if (state().status === 'loading') {
-    <p role="status">Chargement des donnÃ©esâ€¦</p>
-  } @else if (state().status === 'error') {
-    <p role="alert">
-      Impossible dâ€™actualiser les donnÃ©es.
-      @if (observedAt()) {
-        Les derniÃ¨res valeurs reÃ§ues sont conservÃ©es ; elles peuvent Ãªtre obsolÃ¨tes.
-      }
-    </p>
-  }
+H_OÜÝ›Û™Ï‚ˆÛX[žÞÈZQY˜][›ÝšY\Š
+H_OÜÛX[‚ˆØ\XÛO‚ˆ\XÛHÛ\ÜÏH›Y]šXÈZK[Y]šXÈ‚ˆÜ[‘[X[™\È[ˆÛÝ\œÏÜÜ[‚ˆÝ›Û™ÏžÞÈÛÝ[
+ZT[›š[™ÐÛÝ[
 
-  @if (overviewView() !== 'ai') {
-    @if (overviewView() === 'general') {
-      <section
-        class="metrics-grid"
-        [attr.aria-label]="standalone() ? 'Indicateurs de ce nÅ“ud' : 'Indicateurs du cluster'"
-      >
-        @for (metric of metrics(); track metric.label) {
-          <a
-            class="metric"
-            [class.featured]="$first"
-            [class.is-stale]="
-              metric.view === null
-                ? state().status === 'error'
-                : executionState().status === 'error'
-            "
-            [routerLink]="metric.view === null ? '/libraries' : '/activity'"
-            [queryParams]="metric.view ? { view: metric.view } : {}"
-          >
-            <span>{{ metric.label }}</span
-            ><strong>{{ metric.value }}</strong
-            ><small>{{ metric.detail }}</small>
-          </a>
-        }
-      </section>
-    }
+JH_OÜÝ›Û™Ï‚ˆÛX[‘[X[™\È[˜ÛÜ™HXÝ]™\ÏÜÛX[‚ˆØ\XÛO‚ˆ\XÛHÛ\ÜÏH›Y]šXÈZK[Y]šXÈˆØÛ\ÜËš\Ë]Ø\›š[™×OH˜ZQ˜Z[YÛÝ[
 
-    <div class="overview-grid" [class.is-single-view]="overviewView() !== 'general'">
-      @if (overviewView() !== 'infrastructure') {
-        <section class="tasks-panel" aria-labelledby="active-tasks-heading">
-          <div class="panel-heading">
-            <div>
-              <h2 id="active-tasks-heading">
-                Traitements en cours
-                <span class="count">{{ count(executionState().data?.activeCount) }}</span>
-              </h2>
-            </div>
-            <a class="subtle-link" routerLink="/activity"
-              >Toutes les tÃ¢ches <span aria-hidden="true"><app-icon name="forward" /></span
-            ></a>
-          </div>
+Hˆ‚ˆÜ[‘[X[™\È[ˆ0êXÚXÏÜÜ[‚ˆÝ›Û™ÏžÞÈÛÝ[
+ZQ˜Z[YÛÝ[
 
-          @if (executionState().status === 'loading' || homeExecutionState().status === 'loading') {
-            <p role="status">Chargement des exÃ©cutionsâ€¦</p>
-          }
-          @if (executionState().status === 'error' || homeExecutionState().status === 'error') {
-            <p role="alert">
-              Le suivi nâ€™a pas pu Ãªtre actualisÃ©. Les derniÃ¨res valeurs reÃ§ues peuvent Ãªtre
-              obsolÃ¨tes.
-            </p>
-          }
-          <div class="execution-card-list">
-            @for (task of activePreview(); track task.id) {
-              <app-overview-execution [execution]="task" />
-            } @empty {
-              @if (homeExecutionState().status === 'ready') {
-                <p class="empty-panel-message">Aucune exÃ©cution en cours.</p>
-              }
-            }
-          </div>
-          @if (remainingActive() > 0) {
-            <a class="remaining-link" routerLink="/activity" [queryParams]="{ view: 'active' }"
-              >{{ remainingActive() }}
-              {{ remainingActive() === 1 ? 'autre traitement' : 'autres traitements' }} en cours
-              <app-icon name="outward"
-            /></a>
-          }
-        </section>
-      }
+JH_OÜÝ›Û™Ï‚ˆÛX[‘[œÈ8 &XXÝ]š]0êHÛÛœÙ\°êYOÜÛX[‚ˆØ\XÛO‚ˆÙ]‚‚ˆ\XZK\›ÝšY\‹[Ý™\šY]ÈÏ‚‚ˆ]ˆÛ\ÜÏH˜ZK[Ý™\šY]ËYÜšY‚ˆÙXÝ[ÛˆÛ\ÜÏH˜ZK[Ý™\šY]Ë\[™[Ý\™˜XÙK\[™[ˆ\šXK[X™[YžOH˜ZKXXÝ]š]KZXY[™È‚ˆ]ˆÛ\ÜÏHœ[™[ZXY[™È‚ˆˆYH˜ZKXXÝ]š]KZXY[™ÈXÝ]š]0êH°êXÙ[OÚ‚ˆHÛ\ÜÏHœÝXK[[šÈˆ›Ý]\“[šÏH‹ØXÝ]š]HˆÜ]Y\žT\˜[\×OHžÈ\Nˆ	ØZIÈH‚ˆ•Ý]H8 &XXÝ]š]0êHÜ[ˆ\šXKZY[HYH\ZXÛÛˆ˜[YOH™›ÜØ\™ˆÏÜÜ[‚ˆØO‚ˆÙ]‚ˆ[Û\ÜÏH˜ZK[Ý™\šY]Ë[\Ý‚ˆ›Üˆ
+XÝ]š]HÙˆ™XÙ[ZPXÝ]š]J
+NÈ˜XÚÈXÝ]š]Kœ™\]Y\ÝY
+HÂˆO‚ˆÜ[‚ˆÛ\ÜÏH˜ZK\Ý]\ËYÝ‚ˆØÛ\ÜËš\Ë\[›š[™×OH˜XÝ]š]KœÝ]\ÈOOH	Ü[›š[™ÉÈ‚ˆØÛ\ÜËš\ËY˜Z[YOH˜XÝ]š]KœÝ]\ÈOOH	Ù˜Z[Y	È‚ˆ\šXKZY[HYH‚ˆÜÜ[‚ˆ]‚ˆÝ›Û™ÂˆžÞÈ›ÝšY\“X™[
+XÝ]š]Kœ›ÝšY\ŠH_H0­ÂˆÞÈXÝ]š]TÝ]\ÓX™[
+XÝ]š]KœÝ]\ÊH_OÜÝ›Û™Âˆ‚ˆÛX[žÞÈXÝ]š]Kœ›ÙÜ™\ÜÑ]Z[XÝ]š]K›Ü\˜][Ûˆ	Ð\ÜÚ\Ý[	È_OÜÛX[‚ˆÙ]‚ˆ[YHØ]‹™]][YWOH˜XÝ]š]K\]Y]žÞÂˆXÝ]š]K\]Y]]Nˆ	ÙÓSH›[IÂˆ_OÝ[YO‚ˆÛO‚ˆH[\HÂˆHÛ\ÜÏH˜ZKY[\K\›ÝÈ]XÝ[™HXÝ]š]0êHPH°êXÙ[KÛO‚ˆBˆÝ[‚ˆÜÙXÝ[Û‚‚ˆÙXÝ[ÛˆÛ\ÜÏH˜ZK[Ý™\šY]Ë\[™[Ý\™˜XÙK\[™[ˆ\šXK[X™[YžOH˜ZKXÛÛ™\œØ][ÛœËZXY[™È‚ˆ]ˆÛ\ÜÏHœ[™[ZXY[™È‚ˆˆYH˜ZKXÛÛ™\œØ][ÛœËZXY[™ÈÛÛ™\œØ][ÛœÈ°êXÙ[\ÏÚ‚ˆHÛ\ÜÏHœÝXK[[šÈˆ›Ý]\“[šÏH‹ØZKØ\ÜÚ\Ý[‚ˆ“Ý]œš\ˆHÚ]Ü[ˆ\šXKZY[HYH\ZXÛÛˆ˜[YOH™›ÜØ\™ˆÏÜÜ[‚ˆØO‚ˆÙ]‚ˆ[Û\ÜÏH˜ZK[Ý™\šY]Ë[\Ý‚ˆ›Üˆ
+ÛÛ™\œØ][ÛˆÙˆ™XÙ[ZPÛÛ™\œØ][ÛœÊ
+NÈ˜XÚÈÛÛ™\œØ][Û‹šY
+HÂˆO‚ˆÜ[ˆÛ\ÜÏH˜ZKXÛÛ™\œØ][Û‹ZXÛÛˆˆ\šXKZY[HYH¸§)ÜÜ[‚ˆ]‚ˆÝ›Û™ÏžÞÈÛÛ™\œØ][Û‹]H_OÜÝ›Û™Ï‚ˆÛX[ˆžÞÈ›ÝšY\“X™[
+ÛÛ™\œØ][Û‹œ›ÝšY\ŠH_H0­ÂˆÞÈÛÛ™\œØ][Û‹œÛÝ\˜ÙK›X™[_OÜÛX[ˆ‚ˆÙ]‚ˆ[YHØ]‹™]][YWOH˜ÛÛ™\œØ][Û‹\]Y]žÞÂˆÛÛ™\œØ][Û‹\]Y]]Nˆ	ÙÓSH›[IÂˆ_OÝ[YO‚ˆÛO‚ˆH[\HÂˆHÛ\ÜÏH˜ZKY[\K\›ÝÈ]XÝ[™HÛÛ™\œØ][Ûˆ[œ™YÚ\Ý°êYKÛO‚ˆBˆÝ[‚ˆÜÙXÝ[Û‚ˆÙ]‚ˆÜÙXÝ[Û‚ˆBÛ™Ë][\]O‚‚™Ë][\]HÜYÙPXÝ[ÛœÏ‚ˆ]ÛˆX]]ÛH›Ý][™Yˆ\OH˜]Ûˆˆ
+ÛXÚÊOHœ™Yœ™\Ú
 
-      @if (overviewView() !== 'activity') {
-        <section class="nodes-panel" aria-labelledby="nodes-heading">
-          <div class="panel-heading">
-            <div>
-              <h2 id="nodes-heading">{{ standalone() ? 'Ce nÅ“ud' : 'NÅ“uds du cluster' }}</h2>
-            </div>
-            <a class="subtle-link" routerLink="/nodes"
-              >{{ standalone() ? 'GÃ©rer ce nÅ“ud' : 'Voir les nÅ“uds' }}
-              <span aria-hidden="true"><app-icon name="forward" /></span
-            ></a>
-          </div>
-
-          <div class="node-list">
-            @for (node of nodes(); track node.id) {
-              <article
-                class="node-row"
-                [class.is-stale]="node.status === 'offline' || state().status === 'error'"
-              >
-                <div class="node-heading">
-                  <h3>{{ formatNodeLabel(node.name, node.displayName) }}</h3>
-                  <app-status-badge [label]="lifecycleLabel(node)" [tone]="lifecycleTone(node)" />
-                </div>
-                <p class="node-hardware">
-                  {{ roleLabel(node.roles) }}
-                  @if (node.inventory?.processorModel; as processor) {
-                    Â· {{ processor }}
-                  }
-                </p>
-                @if (node.inventory?.gpus?.length) {
-                  <p class="node-hardware">
-                    @for (gpu of node.inventory?.gpus; track $index) {
-                      {{ gpu.name }}{{ $last ? '' : ' Â· ' }}
-                    }
-                  </p>
-                }
-                <div class="node-facts">
-                  <span
-                    >Concurrence configurÃ©e
-                    <strong>{{ count(node.maxConcurrentTasks) }}</strong></span
-                  ><span
-                    >Dernier signal
-                    <strong>{{ node.lastSeenAt | date: 'dd/MM HH:mm' }}</strong></span
-                  >
-                </div>
-              </article>
-            } @empty {
-              @if (state().status === 'ready') {
-                <p class="empty-panel-message">
-                  {{
-                    standalone()
-                      ? 'Aucune information sur ce nÅ“ud.'
-                      : 'Aucun nÅ“ud enregistrÃ© dans le cluster.'
-                  }}
-                </p>
-              }
-            }
-          </div>
-          @if (failedCount() > 0) {
-            <aside class="attention">
-              <strong
-                >{{ failedCount() }} {{ failedCount() === 1 ? 'tÃ¢che' : 'tÃ¢ches' }} Ã 
-                examiner</strong
-              >
-              <p>Consultez les erreurs avant de relancer les traitements.</p>
-              <a routerLink="/activity" [queryParams]="{ view: 'errors' }"
-                >Examiner les Ã©checs <app-icon name="outward"
-              /></a>
-            </aside>
-          }
-          @if (deferredCount(); as count) {
-            <p class="deferred-note">
-              {{ count }} {{ count === 1 ? 'exÃ©cution' : 'exÃ©cutions' }} en attente de reprise.
-            </p>
-          }
-          @if (health(); as health) {
-            @if (health.issues.length > 0) {
-              <div class="health-banner-section">
-                <app-health-banner
-                  [title]="health.title"
-                  [tone]="health.tone"
-                  [issues]="health.issues"
-                />
-              </div>
-            }
-          }
-        </section>
-      }
-    </div>
-
-    <div class="overview-bottom-grid">
-      @if (overviewView() !== 'infrastructure') {
-        <section class="activity-panel" aria-labelledby="activity-heading">
-          <div class="panel-heading">
-            <div>
-              <h2 id="activity-heading">Derniers traitements terminÃ©s</h2>
-            </div>
-            <a class="subtle-link" routerLink="/activity" [queryParams]="{ view: 'history' }"
-              >Historique <span aria-hidden="true"><app-icon name="forward" /></span
-            ></a>
-          </div>
-          @if (homeExecutionState().status === 'error') {
-            <p role="alert">
-              Les derniers traitements terminÃ©s nâ€™ont pas pu Ãªtre actualisÃ©s. Les valeurs conservÃ©es
-              peuvent Ãªtre obsolÃ¨tes.
-            </p>
-          }
-          <div class="execution-card-list">
-            @for (execution of publications(); track execution.id) {
-              <article class="publication">
-                <span class="publication-icon" aria-hidden="true">âœ“</span>
-                <div>
-                  <h3>{{ execution.media }}</h3>
-                  <p>{{ execution.library }} Â· {{ execution.flow }}</p>
-                </div>
-                <span class="publication-state">RÃ©ussi</span
-                ><time [attr.datetime]="execution.finishedAt ?? execution.updatedAt">{{
-                  execution.finishedAt ?? execution.updatedAt | date: 'dd/MM HH:mm'
-                }}</time>
-              </article>
-            } @empty {
-              @if (homeExecutionState().status === 'ready') {
-                <p class="empty-panel-message">Aucun traitement terminÃ©.</p>
-              }
-            }
-          </div>
-        </section>
-      }
-
-      @if (overviewView() !== 'activity' && matrixColumns().length && matrixRows().length) {
-        <section class="surface-panel matrix-panel" aria-labelledby="matrix-heading">
-          <div class="panel-heading">
-            <div>
-              <h2 id="matrix-heading">AccÃ¨s aux bibliothÃ¨ques</h2>
-              <p>
-                {{
-                  standalone()
-                    ? 'Comment ce nÅ“ud atteint chaque bibliothÃ¨que.'
-                    : 'Comment chaque nÅ“ud atteint chaque bibliothÃ¨que.'
-                }}
-              </p>
-            </div>
-            <a class="subtle-link" routerLink="/libraries"
-              >BibliothÃ¨ques <span aria-hidden="true"><app-icon name="forward" /></span
-            ></a>
-          </div>
-          <app-matrix-table
-            [caption]="
-              standalone()
-                ? 'AccÃ¨s de ce nÅ“ud Ã  chaque bibliothÃ¨que'
-                : 'AccÃ¨s de chaque nÅ“ud Ã  chaque bibliothÃ¨que'
-            "
-            cornerLabel="NÅ“ud"
-            [rows]="matrixRows()"
-            [columns]="matrixColumns()"
-            [cells]="matrixCells()"
-          />
-        </section>
-      }
-    </div>
-  } @else {
-    <section class="ai-overview" aria-labelledby="ai-overview-heading">
-      <header class="ai-overview-heading">
-        <div>
-          <p class="eyebrow">Vue dâ€™ensemble</p>
-          <h2 id="ai-overview-heading">Intelligence artificielle</h2>
-          <p>Ã‰tat des fournisseurs, demandes rÃ©centes et conversations de lâ€™assistant.</p>
-        </div>
-        <div class="ai-overview-actions">
-          <a class="ai-primary-link" routerLink="/ai/assistant"
-            >Ouvrir lâ€™assistant <span aria-hidden="true"><app-icon name="outward" /></span
-          ></a>
-        </div>
-      </header>
-
-      @if (aiOverviewLoading()) {
-        <p class="ai-feedback" role="status">Chargement des donnÃ©es IAâ€¦</p>
-      } @else if (aiOverviewPartial()) {
-        <p class="ai-feedback" role="status">
-          Certaines donnÃ©es IA ne sont pas disponibles pour le moment.
-        </p>
-      }
-
-      <div class="ai-metrics-grid" aria-label="Indicateurs IA">
-        <article class="metric ai-metric">
-          <span>Fournisseurs disponibles</span>
-          <strong>{{ count(aiProviderCount()) }}</strong>
-          <small
-            >{{ aiOptions()?.models?.length ?? 0 }} modÃ¨les Â·
-            {{ aiProviderNames() || 'Aucun disponible' }}</small
-          >
-        </article>
-        <article class="metric ai-metric">
-          <span>ModÃ¨le par dÃ©faut</span>
-          <strong class="ai-default-model">{{ aiDefaultModel() }}</strong>
-          <small>{{ aiDefaultProvider() }}</small>
-        </article>
-        <article class="metric ai-metric">
-          <span>Demandes en cours</span>
-          <strong>{{ count(aiRunningCount()) }}</strong>
-          <small>Demandes encore actives</small>
-        </article>
-        <article class="metric ai-metric" [class.has-warning]="aiFailedCount() > 0">
-          <span>Demandes en Ã©chec</span>
-          <strong>{{ count(aiFailedCount()) }}</strong>
-          <small>Dans lâ€™activitÃ© conservÃ©e</small>
-        </article>
-      </div>
-
-      <app-ai-provider-overview />
-
-      <div class="ai-overview-grid">
-        <section class="ai-overview-panel surface-panel" aria-labelledby="ai-activity-heading">
-          <div class="panel-heading">
-            <h2 id="ai-activity-heading">ActivitÃ© rÃ©cente</h2>
-            <a class="subtle-link" routerLink="/activity" [queryParams]="{ type: 'ai' }"
-              >Toute lâ€™activitÃ© <span aria-hidden="true"><app-icon name="forward" /></span
-            ></a>
-          </div>
-          <ul class="ai-overview-list">
-            @for (activity of recentAiActivity(); track activity.requestId) {
-              <li>
-                <span
-                  class="ai-status-dot"
-                  [class.is-running]="activity.status === 'running'"
-                  [class.is-failed]="activity.status === 'failed'"
-                  aria-hidden="true"
-                ></span>
-                <div>
-                  <strong
-                    >{{ providerLabel(activity.provider) }} Â·
-                    {{ activityStatusLabel(activity.status) }}</strong
-                  >
-                  <small>{{ activity.progressDetail || activity.operation || 'Assistant' }}</small>
-                </div>
-                <time [attr.datetime]="activity.updatedAt">{{
-                  activity.updatedAt | date: 'dd/MM HH:mm'
-                }}</time>
-              </li>
-            } @empty {
-              <li class="ai-empty-row">Aucune activitÃ© IA rÃ©cente.</li>
-            }
-          </ul>
-        </section>
-
-        <section class="ai-overview-panel surface-panel" aria-labelledby="ai-conversations-heading">
-          <div class="panel-heading">
-            <h2 id="ai-conversations-heading">Conversations rÃ©centes</h2>
-            <a class="subtle-link" routerLink="/ai/assistant"
-              >Ouvrir le chat <span aria-hidden="true"><app-icon name="forward" /></span
-            ></a>
-          </div>
-          <ul class="ai-overview-list">
-            @for (conversation of recentAiConversations(); track conversation.id) {
-              <li>
-                <span class="ai-conversation-icon" aria-hidden="true">âœ¦</span>
-                <div>
-                  <strong>{{ conversation.title }}</strong>
-                  <small
-                    >{{ providerLabel(conversation.provider) }} Â·
-                    {{ conversation.source.label }}</small
-                  >
-                </div>
-                <time [attr.datetime]="conversation.updatedAt">{{
-                  conversation.updatedAt | date: 'dd/MM HH:mm'
-                }}</time>
-              </li>
-            } @empty {
-              <li class="ai-empty-row">Aucune conversation enregistrÃ©e.</li>
-            }
-          </ul>
-        </section>
-      </div>
-    </section>
-  }
-</ng-template>
-
-<ng-template #pageActions>
-  <button matButton="outlined" type="button" (click)="refresh()">Actualiser</button>
-  <button matButton="filled" type="button" (click)="openFlowCreation()">CrÃ©er un flow</button>
-</ng-template>
-
-<ng-template #flowForm>
-  @defer (when flowCreationForm()) {
-    @if (flowCreationForm(); as form) {
-      <app-record-form
-        [data]="form"
-        [embedded]="true"
-        (submitted)="startFlow($event)"
-        (cancelled)="closeFlowCreation()"
-      />
-    }
-  } @placeholder {
-    <p role="status">PrÃ©paration du formulaireâ€¦</p>
-  }
-</ng-template>
-
-<ng-template #flowFooter>
-  @if (flowRecordForm(); as form) {
-    <app-record-form-actions [form]="form" />
-  }
-</ng-template>
+HXÝX[\Ù\Ø]Û‚ˆ]ÛˆX]]ÛH™š[Yˆ\OH˜]Ûˆˆ
+ÛXÚÊOH›Ü[‘›ÝÐÜ™X][ÛŠ
+HÜ°êY\ˆ[ˆ›ÝÏØ]Û‚Û™Ë][\]O‚‚™Ë][\]HÙ›ÝÑ›Ü›O‚ˆY™\ˆ
+Ú[ˆ›ÝÐÜ™X][Û‘›Ü›J
+JHÂˆYˆ
+›ÝÐÜ™X][Û‘›Ü›J
+NÈ\È›Ü›JHÂˆ\\™XÛÜ™Y›Ü›BˆÙ]WOH™›Ü›H‚ˆÙ[X™YYOHYH‚ˆ
+ÝX›Z]Y
+OHœÝ\›ÝÊ	]™[
+H‚ˆ
+Ø[˜Ù[Y
+OH˜ÛÜÙQ›ÝÐÜ™X][ÛŠ
+H‚ˆÏ‚ˆBˆHXÙZÛ\ˆÂˆ›ÛOHœÝ]\È”°ê\\˜][ÛˆH›Ü›][Z\™x )Ü‚ˆBÛ™Ë][\]O‚‚™Ë][\]HÙ›ÝÑ›ÛÝ\‚ˆYˆ
+›ÝÔ™XÛÜ™›Ü›J
+NÈ\È›Ü›JHÂˆ\\™XÛÜ™Y›Ü›KXXÝ[ÛœÈÙ›Ü›WOH™›Ü›HˆÏ‚ˆBÛ™Ë][\]O‚

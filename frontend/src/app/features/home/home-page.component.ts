@@ -37,6 +37,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
+import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { RecordFormActionsComponent } from '../../shared/ui/record-form-actions.component';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
@@ -66,6 +67,7 @@ type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
     MatrixTableComponent,
     NgTemplateOutlet,
     PageHeaderComponent,
+    CategoryTabsComponent,
     RecordFormComponent,
     RecordFormActionsComponent,
     RouterLink,
@@ -78,9 +80,23 @@ export class HomePageComponent {
   private readonly router = inject(Router);
   protected readonly flowActionOpen = signal(false);
   private readonly overviewParams = toSignal(inject(ActivatedRoute).queryParamMap);
-  protected readonly overviewView = linkedSignal<OverviewView>(() =>
-    this.overviewParams()?.get('view') === 'ai' ? 'ai' : 'general',
-  );
+  protected readonly overviewTabs: readonly CategoryTabOption[] = [
+    { value: 'general', label: 'Général' },
+    { value: 'ai', label: 'IA' },
+    { value: 'activity', label: 'Activité' },
+    { value: 'infrastructure', label: 'Infrastructure' },
+  ];
+  protected readonly overviewView = linkedSignal<OverviewView>(() => {
+    const value = this.overviewParams()?.get('view');
+    return this.overviewTabs.some((tab) => tab.value === value)
+      ? (value as OverviewView)
+      : 'general';
+  });
+  protected onOverviewViewChanged(value: string): void {
+    if (this.overviewTabs.some((tab) => tab.value === value)) {
+      this.overviewView.set(value as OverviewView);
+    }
+  }
   protected readonly flowCreationForm = signal<
     import('../../shared/ui/record-form.component').RecordFormData | null
   >(null);

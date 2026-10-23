@@ -62,7 +62,7 @@ describe('AppShellComponent', () => {
     });
   });
 
-  it('renders W3C skip-link, topbar context pills, and .application-sidebar landmark', () => {
+  it('renders the skip-link and application sidebar without a global search bar', () => {
     const fixture = TestBed.createComponent(AppShellComponent);
     fixture.detectChanges();
 
@@ -78,8 +78,8 @@ describe('AppShellComponent', () => {
     const mainContent = host.querySelector('main#main-content');
     expect(mainContent).toBeTruthy();
 
-    expect(host.textContent).toContain('2 / 2 en ligne');
-    expect(host.textContent).toContain('3 jobs en cours');
+    expect(host.querySelector('.topbar-search-pill')).toBeNull();
+    expect(host.querySelector('.topbar-cluster-pill')).toBeNull();
   });
 
   it('toggles navigation rail collapse state and persists it to localStorage', () => {
