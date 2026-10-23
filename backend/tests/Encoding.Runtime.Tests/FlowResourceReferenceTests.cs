@@ -69,6 +69,40 @@ public sealed class FlowResourceReferenceTests
     }
 
     [Fact]
+    public void ACatalogResourceReplacesTheLocalFontSetRequirementAndNeedsTheNewPluginVersion()
+    {
+        var (registry, _, eligibility) = Harness.Services();
+        var reference = new ResourceReference(Guid.NewGuid(), 2).ToString();
+        var fonts = registry.FindReference("subtitles-add-fonts")!;
+        var values = new Dictionary<string, JsonElement> { ["resource"] = JsonSerializer.SerializeToElement(reference) };
+        Assert.Equal("1.3.0", registry.MinimumRuntime(fonts, values)!.Value.Version);
+        Assert.Null(registry.MinimumRuntime(fonts, new Dictionary<string, JsonElement> { ["resource"] = JsonSerializer.SerializeToElement("") }));
+
+        var flow = new FlowDefinition(1, Guid.NewGuid(), 1, "Fonts", "video", [
+            new("input", null, registry.FindReference("base-input-file")!, new Dictionary<string, JsonElement>()),
+            new("fonts", null, fonts, values)
+        ], [new("next", "input", "success", "fonts")]);
+        Encoding.Contracts.Nodes.NodeToolCapability[] Caps(string subtitlesVersion) => [
+            new("plugin/base", "1.7.0", ["general"], []), new("plugin/subtitles", subtitlesVersion, ["video"], []),
+            new("mkvtoolnix", "90.0", ["video"], []), new("ffprobe", "7.0", ["video"], [])];
+        var worker = Guid.NewGuid();
+        // Aucun jeu local n'est exigé, mais un worker dont le plugin ignore les ressources ne peut pas prendre le segment.
+        Assert.True(eligibility.CanRun(flow, Caps("1.3.0"), worker, inventory: new("test", "x64", 1, 1, FontSets: [])));
+        Assert.False(eligibility.CanRun(flow, Caps("1.2.0"), worker, inventory: new("test", "x64", 1, 1, FontSets: [])));
+    }
+
+    [Fact]
+    public void AResourceReferenceIsAnIdentifierAndAPositiveVersion()
+    {
+        var id = Guid.NewGuid();
+        Assert.True(ResourceReference.TryParse($"{id}:3", out var parsed));
+        Assert.Equal(new ResourceReference(id, 3), parsed);
+        Assert.Equal($"{id:D}:3", parsed.ToString());
+        foreach (var bad in new[] { "", $"{id}", $"{id}:0", $"{id}:-1", $"{id}:1:2", "nope:1", $"{Guid.Empty}:1", $"{id}:x" })
+            Assert.False(ResourceReference.TryParse(bad, out _), bad);
+    }
+
+    [Fact]
     public void FontInventoryIsBoundedAndContainsNamesRatherThanPaths()
     {
         var directory = Path.Combine(Path.GetTempPath(), "encoding-font-inventory-" + Guid.NewGuid().ToString("N"));

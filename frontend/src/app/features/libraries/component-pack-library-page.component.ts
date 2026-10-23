@@ -102,6 +102,7 @@ export class ComponentPackLibraryPageComponent {
     { value: 'templates', label: 'Modèles de flow' },
     { value: 'packs', label: 'Packs de composants' },
     { value: 'encoding', label: 'Profils d’encodage' },
+    { value: 'resources', label: 'Ressources' },
   ];
   protected readonly catalogState = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly catalogMessage = signal('Chargement des packs…');
@@ -260,6 +261,7 @@ export class ComponentPackLibraryPageComponent {
     if (section === 'scripts') void this.router.navigateByUrl('/libraries/scripts');
     if (section === 'templates') void this.router.navigateByUrl('/libraries/templates');
     if (section === 'encoding') void this.router.navigateByUrl('/libraries/encoding-profiles');
+    if (section === 'resources') void this.router.navigateByUrl('/libraries/resources');
   }
 
   protected openPack(row: DataTableRow): void {

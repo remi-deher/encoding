@@ -105,7 +105,13 @@ internal static class SubtitlesMediaTests
                     catch (SubtitleException) { }
                 try { await actions.AddFontsAsync(new Dictionary<string, JsonElement> { ["fontSet"] = JsonSerializer.SerializeToElement("Crunchyroll"), ["fonts"] = JsonSerializer.SerializeToElement("../A.ttf") }, outcome.Primary!, directory, "fonts5", CancellationToken.None); Check(false, "A font path is refused."); }
                 catch (SubtitleException) { }
-                Console.WriteLine("PASS: fonts attached from the node font set (only missing ones, no free path).");
+                // Ressource du catalogue : dossier déjà téléchargé par le runner, toutes ses polices sont ajoutées et le jeu local est ignoré.
+                var resourceFolder = P("resource"); Directory.CreateDirectory(resourceFolder);
+                await File.WriteAllBytesAsync(Path.Combine(resourceFolder, "C.ttf"), new byte[2048]);
+                var fromResource = await actions.AddFontsAsync(new Dictionary<string, JsonElement> { ["fontSet"] = JsonSerializer.SerializeToElement("Absent") }, outcome.Primary!, directory, "fonts6", CancellationToken.None, resourceFolder);
+                using var fromResourceInfo = JsonDocument.Parse(await tools.CheckedAsync("mkvmerge", ["-J", fromResource.Primary!], directory, CancellationToken.None));
+                Check(fromResourceInfo.RootElement.GetProperty("attachments").EnumerateArray().Select(a => a.GetProperty("file_name").GetString()).SequenceEqual(["C.ttf"]), "A catalog resource attaches its own fonts.");
+                Console.WriteLine("PASS: fonts attached from the node font set (only missing ones, no free path) and from a catalog resource.");
             }
             finally { Environment.SetEnvironmentVariable("ENCODING_FONT_DIR", previous); }
         }

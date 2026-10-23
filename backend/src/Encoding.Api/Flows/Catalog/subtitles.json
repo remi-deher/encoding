@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "id": "subtitles",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "name": "Sous-titres",
   "supportedHostContractVersions": [
     1
@@ -55,7 +55,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "producesFiles": true
     },
@@ -232,7 +233,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "producesFiles": false
     },
@@ -277,11 +279,22 @@
             "editor": "font-set"
           },
           {
+            "id": "resource",
+            "label": "Ressource de polices",
+            "type": "text",
+            "defaultValue": "",
+            "description": "Ressource du catalogue du cluster, au format « identifiant:version ». Le nœud récupère les polices automatiquement et toutes sont ajoutées : le jeu et la liste ci-dessous sont alors ignorés. Vide : utiliser le jeu de polices du nœud.",
+            "requiresPluginVersion": "1.3.0",
+            "importance": "basic",
+            "section": "Paramètres",
+            "editor": "resource"
+          },
+          {
             "id": "fonts",
             "label": "Polices",
             "type": "text",
             "defaultValue": "TrebuchetMSBold.ttf, TrebuchetMSBoldItalic.ttf, ArialBold.ttf",
-            "description": "Noms de fichiers séparés par des virgules. Vide : toutes les polices (.ttf, .otf, .ttc) du jeu.",
+            "description": "Noms de fichiers séparés par des virgules. Vide : toutes les polices (.ttf, .otf, .ttc) du jeu. Ignoré quand une ressource est choisie.",
             "importance": "basic",
             "section": "Paramètres"
           }
@@ -298,7 +311,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "producesFiles": false
     },
@@ -396,7 +410,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "producesFiles": false
     },
@@ -497,7 +512,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "producesFiles": false
     },
@@ -619,7 +635,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
       "producesFiles": false
@@ -742,7 +759,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
       "producesFiles": false
@@ -793,7 +811,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
       "producesFiles": false
@@ -844,7 +863,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
       "producesFiles": false
@@ -909,7 +929,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
       "producesFiles": false
@@ -965,7 +986,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
       "producesFiles": false
@@ -1011,7 +1033,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
       "producesFiles": false
