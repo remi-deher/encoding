@@ -102,20 +102,39 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
 
     public static string NormalizePath(string? path)=>Encoding.Contracts.Libraries.MediaPathRules.Normalize(path);
 
+    /// <summary>
+    /// Un nœud source n'est déclaré perdu pour une exécution en file qu'après ce délai, même si la présence est plus courte :
+    /// un heartbeat retardé (verrou SQLite, redémarrage) ne doit pas faire échouer des centaines d'exécutions saines.
+    /// </summary>
+    internal static readonly TimeSpan SourceOfflineGrace = TimeSpan.FromMinutes(5);
+
+    private const string UnavailableSourcesSql = """
+        SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id
+        WHERE e.state IN ('queued','running') AND NOT EXISTS(
+          SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
+          WHERE a.library_id=w.library_id AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
+            AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
+            AND (w.handoff_selector IS NULL OR w.source_node_id IS NULL OR a.node_id=w.source_node_id OR w.handoff_selector->>'mode'='resume' OR w.handoff_selector->>'resumed' IN (1,'true')))
+        LIMIT 100
+        """;
+
+    /// <summary>Lecture seule (transaction différée) : évite de prendre le verrou d'écriture quand aucune source n'est perdue.</summary>
+    internal static async Task<bool> HasUnavailableSourcesAsync(DbDataSource dataSource, TimeSpan offlineAfter, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(System.Data.IsolationLevel.Snapshot, ct);
+        await using var command = Sql.Command(UnavailableSourcesSql + " ", connection, tx);
+        command.Parameters.AddWithValue("offline", offlineAfter > SourceOfflineGrace ? offlineAfter : SourceOfflineGrace);
+        await using var rows = await command.ExecuteReaderAsync(ct);
+        return await rows.ReadAsync(ct);
+    }
+
     internal static async Task<int> FailUnavailableSourcesAsync(DbConnection connection, DbTransaction tx, TimeSpan offlineAfter, CancellationToken ct)
     {
         var failures = new List<(Guid Id, Guid? Worker, int Revision)>();
-        await using (var command = Sql.Command("""
-            SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id
-            WHERE e.state IN ('queued','running') AND NOT EXISTS(
-              SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
-              WHERE a.library_id=w.library_id AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
-                AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
-                AND (w.handoff_selector IS NULL OR w.source_node_id IS NULL OR a.node_id=w.source_node_id OR w.handoff_selector->>'mode'='resume' OR w.handoff_selector->>'resumed' IN (1,'true')))
-            LIMIT 100 FOR UPDATE OF e,w SKIP LOCKED
-            """, connection, tx))
+        await using (var command = Sql.Command(UnavailableSourcesSql + " FOR UPDATE OF e,w SKIP LOCKED", connection, tx))
         {
-            command.Parameters.AddWithValue("offline", offlineAfter);
+            command.Parameters.AddWithValue("offline", offlineAfter > SourceOfflineGrace ? offlineAfter : SourceOfflineGrace);
             await using var rows = await command.ExecuteReaderAsync(ct);
             while (await rows.ReadAsync(ct)) failures.Add((rows.GetGuid(0), rows.IsDBNull(1) ? null : rows.GetGuid(1), rows.GetInt32(2)));
         }
@@ -134,9 +153,10 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         if (peerAssignmentGate is not null && assignmentLease is null) return null;
         if (assignmentLease is not null) ct = assignmentLease.Token;
         // Persist failures independently, so an inaccessible task cannot delay another eligible task.
-        await using (var recovery = await dataSource.OpenConnectionAsync(ct))
-        await using (var recoveryTransaction = await recovery.BeginTransactionAsync(ct))
+        if (await HasUnavailableSourcesAsync(dataSource, presence.OfflineAfter, ct))
         {
+            await using var recovery = await dataSource.OpenConnectionAsync(ct);
+            await using var recoveryTransaction = await recovery.BeginTransactionAsync(ct);
             if (await FailUnavailableSourcesAsync(recovery, recoveryTransaction, presence.OfflineAfter, ct) > 0)
                 await recoveryTransaction.CommitAsync(ct);
         }
