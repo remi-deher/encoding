@@ -715,6 +715,14 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
         catch(HttpRequestException exception) { logger.LogInformation("Résultat de sonde non confirmé ({Status}) ; le bail expirera.",exception.StatusCode); }
     }
 
+    /// <summary>Dernière ligne non vide de la sortie d'erreur d'un script (secrets masqués, 300 caractères au plus), pour que l'échec dise pourquoi.</summary>
+    private static string LastErrorLine(string error)
+    {
+        var line=error.Split('\n').Select(item=>item.Trim()).LastOrDefault(item=>item.Length>0&&!item.StartsWith("[tools]",StringComparison.Ordinal))??"";
+        line=RuntimeCommandCapture.Redact(line);
+        return line.Length>300?line[..300]+"…":line;
+    }
+
     private static bool IsFfmpegPlan(string id)=>FlowMediaValues.IsFfmpegPlan(id);
     private async Task<JsonElement> ScriptAsync(string id,IReadOnlyDictionary<string,JsonElement> config,object context,string directory,CancellationToken ct)
     {
@@ -732,7 +740,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             var executable=ProcessToolRunner.Find(python?"python3":"node")??throw new IOException("Interpréteur indisponible.");
             var result=await tools.RunAsync(executable,[file],directory,TimeSpan.FromSeconds(id=="base-condition"?30:int.Parse(MediaActions.Number(config,"timeoutSeconds",60))),ct,JsonSerializer.Serialize(context),1048576,true);
             if(result.ExitCode==79) throw new IOException("Isolation du processus indisponible.");
-            if(result.ExitCode!=0) throw new MediaToolException(python?"python":"javascript",result.ExitCode);
+            if(result.ExitCode!=0) throw new MediaToolException(python?"python":"javascript",result.ExitCode,LastErrorLine(result.Error));
             using var document=JsonDocument.Parse(result.Output); return document.RootElement.Clone();
         }
         finally { File.Delete(file); }
