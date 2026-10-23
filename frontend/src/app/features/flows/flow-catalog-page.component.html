@@ -51,6 +51,34 @@
   </div>
 
   <div catalogue-table class="flow-groups">
+    @if (selectedFlowRows().length) {
+      <div class="flow-selection" role="toolbar" aria-label="Actions sur les flows sélectionnés">
+        <span aria-live="polite">{{ selectedFlowRows().length }} flow(s) sélectionné(s)</span>
+        @if (auth.isAdmin() && selectedDraftCount()) {
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="selectingFlows()"
+            (click)="publishSelected()"
+          >
+            Publier {{ selectedDraftCount() }} brouillon(s)
+          </button>
+        }
+        @if (auth.isAdmin()) {
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="selectingFlows()"
+            (click)="deleteSelected()"
+          >
+            Supprimer la sélection
+          </button>
+        }
+        <button matButton="text" type="button" (click)="clearFlowSelection()">
+          Tout désélectionner
+        </button>
+      </div>
+    }
     @for (group of groups(); track group.value) {
       <section class="flow-group" [attr.aria-label]="group.label">
         <header class="flow-group-head">
@@ -65,6 +93,13 @@
         <ul class="flow-list">
           @for (row of group.rows; track row.id) {
             <li class="flow-row">
+              @if (auth.isAdmin()) {
+                <mat-checkbox
+                  [checked]="selectedFlowIds().has(row.id)"
+                  [aria-label]="'Sélectionner le flow ' + row.name"
+                  (change)="toggleFlowSelection(row.id, $event.checked)"
+                />
+              }
               <button type="button" class="flow-main" (click)="onFlowOpen(row)">
                 <span class="flow-name">{{ row.name }}</span>
                 <span class="flow-meta">{{ row.steps }}</span>

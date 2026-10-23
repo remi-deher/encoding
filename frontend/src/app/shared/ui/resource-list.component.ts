@@ -1,5 +1,14 @@
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSlideToggleChange, MatSlideToggleModule } from '@angular/material/slide-toggle';
@@ -12,6 +21,7 @@ import type {
   DataTableActionEvent,
   DataTableRow,
   DataTableRowAction,
+  DataTableSelectionAction,
 } from './data-table.component';
 import { IconComponent, IconName } from './icon.component';
 
@@ -44,12 +54,41 @@ export interface ResourceListToggleEvent {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-resource-list',
-  imports: [IconComponent, MatButtonModule, MatMenuModule, MatSlideToggleModule],
+  imports: [IconComponent, MatButtonModule, MatCheckboxModule, MatMenuModule, MatSlideToggleModule],
   template: `
     @if (items().length) {
+      @if (selectable() && selectedItems().length) {
+        <div class="resource-selection" role="toolbar" aria-label="Actions sur la sélection">
+          <span aria-live="polite">{{ selectedItems().length }} sélectionné(s)</span>
+          @for (action of selectionActions(); track action.id) {
+            <button
+              matButton="outlined"
+              type="button"
+              (click)="
+                selectionAction.emit({
+                  actionId: action.id,
+                  rows: selectedItems().map((item) => ({ id: item.id, name: item.name })),
+                })
+              "
+            >
+              {{ action.label }}
+            </button>
+          }
+          <button matButton="text" type="button" (click)="clearSelection()">
+            Tout désélectionner
+          </button>
+        </div>
+      }
       <ul class="resource-list">
         @for (item of items(); track item.id) {
           <li class="resource-item">
+            @if (selectable()) {
+              <mat-checkbox
+                [checked]="selectedIds().has(item.id)"
+                [aria-label]="'Sélectionner ' + item.name"
+                (change)="toggleSelection(item.id, $event.checked)"
+              />
+            }
             <span class="resource-icon"><app-icon [name]="icon()" /></span>
             <div class="resource-title">
               <h3>{{ item.name }}</h3>
@@ -117,10 +156,29 @@ export class ResourceListComponent {
   readonly icon = input<IconName>('pack');
   readonly openLabel = input('Ouvrir');
   readonly emptyMessage = input('Aucun résultat.');
+  readonly selectable = input(false);
+  readonly selectionActions = input<readonly DataTableSelectionAction[]>([]);
+  readonly selectedIds = signal<ReadonlySet<string>>(new Set());
+  readonly selectedItems = computed(() =>
+    this.items().filter((item) => this.selectedIds().has(item.id)),
+  );
 
   readonly open = output<string>();
   readonly action = output<DataTableActionEvent>();
   readonly toggleChange = output<ResourceListToggleEvent>();
+  readonly selectionAction = output<{ actionId: string; rows: readonly DataTableRow[] }>();
+
+  protected toggleSelection(id: string, checked: boolean): void {
+    this.selectedIds.update((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+  protected clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
 
   protected requestToggle(item: ResourceListItem, event: MatSlideToggleChange): void {
     const checked = event.checked;

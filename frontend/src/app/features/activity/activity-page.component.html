@@ -94,12 +94,43 @@
   @if (feedback()) {
     <p class="activity-feedback" role="status">{{ feedback() }}</p>
   }
+  @if (selectedActionItems().length) {
+    <div
+      class="activity-selection"
+      role="toolbar"
+      aria-label="Actions sur les exécutions sélectionnées"
+    >
+      <span aria-live="polite">{{ selectedActionItems().length }} sélectionnée(s)</span>
+      @if (selectedCancelableItems().length) {
+        <button matButton="outlined" type="button" [disabled]="busy()" (click)="runBulk('cancel')">
+          Annuler {{ selectedCancelableItems().length }}
+        </button>
+      }
+      @if (selectedRetryItems().length) {
+        <button matButton="outlined" type="button" [disabled]="busy()" (click)="runBulk('retry')">
+          Relancer {{ selectedRetryItems().length }}
+        </button>
+      }
+      <button matButton="text" type="button" (click)="clearActionSelection()">
+        Tout désélectionner
+      </button>
+    </div>
+  }
 
   @for (section of sections(); track section.id) {
     <h2 class="section-title">{{ section.section }} · {{ section.total }}</h2>
     <ul class="item-stack">
       @for (item of section.items; track item.key) {
         <li class="item-row" [class.is-selected]="selected()?.key === item.key">
+          @if (item.execution) {
+            <mat-checkbox
+              class="item-select"
+              [checked]="selectedActionIds().has(item.execution.id)"
+              [disabled]="!canRetryItem(item) && !canCancelItem(item)"
+              [aria-label]="'Sélectionner ' + item.title"
+              (change)="toggleActionSelection(item, $event.checked)"
+            />
+          }
           <button type="button" class="item-main" (click)="open(item)">
             <span class="item-icon" [class.is-ai]="item.kind === 'ai'" aria-hidden="true">
               @if (item.kind === 'ai') {

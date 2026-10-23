@@ -19,6 +19,7 @@ import {
 } from '@angular/core';
 
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
 
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
@@ -92,6 +93,7 @@ import {
 import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeline-logs.component';
 import { ExecutionCardComponent } from '../../shared/ui/execution-card.component';
 import { ExecutionResponse } from '../../shared/models/execution';
+import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 
 interface LibraryRecord extends DataTableRow {
   readonly id: string;
@@ -201,6 +203,7 @@ export class LibraryCatalogPageComponent {
   });
 
   private readonly notifications = inject(NotificationService);
+  private readonly dialog = inject(MatDialog);
 
   private readonly libraries = signal<readonly LibraryRecord[]>([]);
   protected readonly searchQuery = signal('');
@@ -526,6 +529,25 @@ export class LibraryCatalogPageComponent {
         variant: 'danger',
       }),
     },
+  ];
+  protected readonly librarySelectionActions = [
+    {
+      id: 'activate',
+      label: 'Activer',
+      visibleWhen: (rows: readonly DataTableRow[]) =>
+        rows.some(
+          (row) => !this.libraries().find((item) => item.id === String(row['id']))?.isActive,
+        ),
+    },
+    {
+      id: 'deactivate',
+      label: 'Désactiver',
+      visibleWhen: (rows: readonly DataTableRow[]) =>
+        rows.some(
+          (row) => this.libraries().find((item) => item.id === String(row['id']))?.isActive,
+        ),
+    },
+    { id: 'delete', label: 'Supprimer', visibleWhen: () => true },
   ];
 
   protected readonly accessRowActions: readonly DataTableRowAction[] = [
@@ -1198,6 +1220,62 @@ export class LibraryCatalogPageComponent {
     const library = this.libraries().find((item) => item.id === event.id);
 
     if (library) this.setLibraryActive(library, event.checked);
+  }
+
+  protected async onLibrarySelection(event: DataTableSelectionActionEvent): Promise<void> {
+    const selected = event.rows
+      .map((row) => this.libraries().find((library) => library.id === String(row['id'])))
+      .filter((library): library is LibraryRecord => !!library);
+    if (!selected.length) return;
+    const targets =
+      event.actionId === 'activate'
+        ? selected.filter((item) => !item.isActive)
+        : event.actionId === 'deactivate'
+          ? selected.filter((item) => item.isActive)
+          : selected;
+    if (!targets.length) return;
+    const action = event.actionId;
+    const confirmed = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          data:
+            action === 'delete'
+              ? {
+                  title: `Supprimer ${targets.length} bibliothèque(s) ?`,
+                  message: `Les définitions et accès par nœud de ${targets.map((item) => `« ${item.name} »`).join(', ')} seront supprimés. Les fichiers média ne seront pas touchés.`,
+                  confirmLabel: 'Supprimer',
+                  variant: 'danger',
+                }
+              : {
+                  title: `${action === 'activate' ? 'Activer' : 'Désactiver'} ${targets.length} bibliothèque(s) ?`,
+                  message: targets.map((item) => `« ${item.name} »`).join(', '),
+                  confirmLabel: action === 'activate' ? 'Activer' : 'Désactiver',
+                },
+        })
+        .afterClosed(),
+    );
+    if (!confirmed) return;
+    const results = await Promise.allSettled(
+      targets.map(async (library) => {
+        if (action === 'delete') {
+          await firstValueFrom(this.http.delete<void>(`/api/v1/libraries/${library.id}`));
+          this.libraries.update((items) => items.filter((item) => item.id !== library.id));
+          if (this.selectedLibrary()?.id === library.id) this.selectedLibrary.set(null);
+        } else {
+          const isActive = action === 'activate';
+          const updated = await firstValueFrom(
+            this.http.put<LibraryResponse>(`/api/v1/libraries/${library.id}/activation`, {
+              isActive,
+            }),
+          );
+          this.replaceLibraryRecord(this.toRecord(updated));
+        }
+      }),
+    );
+    const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+    this.notifications.show(
+      `${succeeded}/${targets.length} bibliothèque(s) ${action === 'delete' ? 'supprimée(s)' : action === 'activate' ? 'activée(s)' : 'désactivée(s)'}.`,
+    );
   }
 
   protected updateLibrary(value: Record<string, string>): void {

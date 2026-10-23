@@ -10,11 +10,12 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog } from '@angular/material/dialog';
 import { SearchFieldComponent } from '../../shared/ui/search-field.component';
 import { MatTabsModule } from '@angular/material/tabs';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { Observable, catchError, of, switchMap, timer } from 'rxjs';
+import { Observable, catchError, firstValueFrom, of, switchMap, timer } from 'rxjs';
 import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
 import { AiAssistantActivity } from '../../shared/models/ai-tools';
 import { formatFullDateTime } from '../../shared/models/date-format';
@@ -81,6 +82,7 @@ const AI_REFRESH_MS = 15000;
     ExecutionPipelineLogsComponent,
     IconComponent,
     MatButtonModule,
+    MatCheckboxModule,
     SearchFieldComponent,
     MatTabsModule,
     PageHeaderComponent,
@@ -143,6 +145,20 @@ export class ActivityPageComponent {
       : null,
   );
   protected readonly selectedDetailTab = signal(0);
+  protected readonly selectedActionIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly selectedActionItems = computed(() =>
+    this.allItems().filter(
+      (item) => item.execution && this.selectedActionIds().has(item.execution.id),
+    ),
+  );
+  protected readonly selectedRetryItems = computed(() =>
+    this.selectedActionItems().filter((item) => item.execution?.state === 'failed'),
+  );
+  protected readonly selectedCancelableItems = computed(() =>
+    this.selectedActionItems().filter((item) =>
+      ['queued', 'running'].includes(item.execution?.state ?? ''),
+    ),
+  );
 
   protected readonly allItems = computed<readonly ActivityItem[]>(() => [
     ...(this.trackingState().data?.executions ?? []).map(executionItem),
@@ -435,6 +451,65 @@ export class ActivityPageComponent {
 
   protected canRetryItem(item: ActivityItem): boolean {
     return item.execution?.state === 'failed';
+  }
+  protected canCancelItem(item: ActivityItem): boolean {
+    return item.execution?.state === 'queued' || item.execution?.state === 'running';
+  }
+  protected toggleActionSelection(item: ActivityItem, checked: boolean): void {
+    const id = item.execution?.id;
+    if (!id) return;
+    this.selectedActionIds.update((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+  protected clearActionSelection(): void {
+    this.selectedActionIds.set(new Set());
+  }
+  protected async runBulk(action: 'cancel' | 'retry'): Promise<void> {
+    if (this.busy()) return;
+    const targets =
+      action === 'cancel' ? this.selectedCancelableItems() : this.selectedRetryItems();
+    if (!targets.length) return;
+    const accepted = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          data:
+            action === 'cancel'
+              ? {
+                  title: `Annuler ${targets.length} exécution(s) ?`,
+                  message:
+                    'Une demande sera envoyée pour les exécutions encore en attente ou en cours.',
+                  confirmLabel: 'Annuler les exécutions',
+                  variant: 'danger',
+                }
+              : {
+                  title: `Relancer ${targets.length} exécution(s) ?`,
+                  message:
+                    'Une nouvelle tentative sera ajoutée à la file pour chaque exécution sélectionnée en échec.',
+                  confirmLabel: 'Relancer',
+                },
+        })
+        .afterClosed(),
+    );
+    if (!accepted) return;
+    this.busy.set(true);
+    const results = await Promise.allSettled(
+      targets.map(async (item) => {
+        const id = item.execution!.id;
+        if (action === 'cancel') await firstValueFrom(this.tracking.cancel(id));
+        else await firstValueFrom(this.tracking.retry(id));
+      }),
+    );
+    this.busy.set(false);
+    this.selectedActionIds.set(new Set());
+    this.tracking.refresh();
+    const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+    this.done(
+      `${succeeded}/${targets.length} exécution(s) ${action === 'cancel' ? 'annulée(s)' : 'relancée(s)'}.`,
+    );
   }
   protected cancelSelected(): void {
     const e = this.selectedExecution();
