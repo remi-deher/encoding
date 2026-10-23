@@ -13,6 +13,7 @@ namespace Encoding.Api.Infrastructure.Data.Sqlite;
 /// Source de données SQLite utilisée par chaque serveur (architecture 0043).
 /// Les connexions traduisent le SQL partagé à l'exécution et ouvrent leurs transactions en écriture immédiate,
 /// ce qui remplace les verrous de lignes et les verrous consultatifs (un seul écrivain à la fois).
+/// Une lecture cohérente demande <see cref="IsolationLevel.Snapshot"/> : la transaction est alors différée et ne prend pas le verrou d'écriture.
 /// </summary>
 public sealed class SqliteDataSource : DbDataSource
 {
@@ -67,7 +68,7 @@ public sealed class SqliteConnectionWrapper(SqliteConnection inner) : DbConnecti
     }
 
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) =>
-        new SqliteTransactionWrapper(this, Inner.BeginTransaction(deferred: false));
+        new SqliteTransactionWrapper(this, Inner.BeginTransaction(deferred: isolationLevel == IsolationLevel.Snapshot));
 
     protected override DbCommand CreateDbCommand() => new SqliteCommandWrapper { WrappedConnection = this };
 
