@@ -66,10 +66,20 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
           } @else {
             <mat-form-field appearance="outline">
               <mat-label>Mot de passe du compte</mat-label>
-              <input matInput type="password" autocomplete="current-password"
-                [value]="reauthPassword()" (input)="reauthPassword.set($any($event.target).value)" />
+              <input
+                matInput
+                type="password"
+                autocomplete="current-password"
+                [value]="reauthPassword()"
+                (input)="reauthPassword.set($any($event.target).value)"
+              />
             </mat-form-field>
-            <button matButton="tonal" type="button" [disabled]="reauthBusy()" (click)="revealAddress()">
+            <button
+              matButton="tonal"
+              type="button"
+              [disabled]="reauthBusy()"
+              (click)="revealAddress()"
+            >
               Vérifier et afficher
             </button>
           }
@@ -241,9 +251,11 @@ export class McpServerTabComponent {
   protected async revealAddress(): Promise<void> {
     this.reauthBusy.set(true);
     try {
-      await firstValueFrom(this.http.post<void>('/api/v1/auth/reauthenticate', {
-        currentPassword: this.reauthPassword(),
-      }));
+      await firstValueFrom(
+        this.http.post<void>('/api/v1/auth/reauthenticate', {
+          currentPassword: this.reauthPassword(),
+        }),
+      );
       this.addressRevealed.set(true);
       this.reauthPassword.set('');
     } catch {

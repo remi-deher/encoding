@@ -66,7 +66,7 @@ public static class ResourceEndpoints
             if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 128) errors["name"] = ["Le nom contient entre 1 et 128 caractères."];
             if (request.Description is null || request.Description.Trim().Length > 1000) errors["description"] = ["La description contient 1000 caractères au plus."];
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
-            try { return await repository.UpdateAsync(id, request.Name, request.Description, ct) is { } updated ? Results.Ok(updated) : Results.NotFound(); }
+            try { return await repository.UpdateAsync(id, request.Name, request.Description ?? "", ct) is { } updated ? Results.Ok(updated) : Results.NotFound(); }
             catch (DbException exception) when (Sql.IsUniqueViolation(exception))
             { return Results.Conflict(new { title = "Une ressource porte déjà ce nom." }); }
         }).WithName("UpdateResource");
