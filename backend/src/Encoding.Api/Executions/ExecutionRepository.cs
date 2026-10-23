@@ -39,7 +39,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         var limit = Math.Clamp(query.Limit <= 0 ? 200 : query.Limit, 1, 500);
         var offset = Math.Max(0, query.Offset);
         await using var c = await dataSource.OpenConnectionAsync(ct);
-        await using var tx = await c.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct);
+        await using var tx = await c.BeginTransactionAsync(System.Data.IsolationLevel.Snapshot, ct);
         var counts = new Dictionary<string, int>();
         await using (var cmd = Sql.Command("SELECT state,count(*)::integer FROM executions GROUP BY state", c, tx))
         await using (var r = await cmd.ExecuteReaderAsync(ct)) { while (await r.ReadAsync(ct)) counts[r.GetString(0)] = r.GetInt32(1); }
