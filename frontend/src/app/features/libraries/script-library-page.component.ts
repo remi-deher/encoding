@@ -19,6 +19,7 @@ import {
   CatalogEmptyState,
   ManagementCatalogTemplateComponent,
 } from '../../shared/templates/management-catalog-template.component';
+import { FileDownload } from '../../shared/services/file-download';
 import { NotificationService } from '../../shared/services/notification.service';
 import { FlowScripts } from '../../shared/services/flow-scripts';
 import {
@@ -69,6 +70,22 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
       (actionClosed)="requestClose()"
     >
       <ng-template #pageActions>
+        <input
+          #scriptFile
+          type="file"
+          accept=".py,.js"
+          multiple
+          hidden
+          (change)="importFiles(scriptFile)"
+        />
+        <button matButton="outlined" type="button" [disabled]="busy()" (click)="scriptFile.click()">
+          Importer
+        </button>
+        @if (publishedIds().length > 0) {
+          <button matButton="outlined" type="button" [disabled]="busy()" (click)="exportAll()">
+            Tout exporter
+          </button>
+        }
         @if (summaries().length > 0) {
           <button matButton="filled" type="button" (click)="newScript()">Nouveau script</button>
         }
@@ -160,6 +177,14 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
                     >
                       Restaurer dans le brouillon
                     </button>
+                    <button
+                      matButton="outlined"
+                      type="button"
+                      [disabled]="busy()"
+                      (click)="exportVersion(published)"
+                    >
+                      Exporter en fichier
+                    </button>
                   } @else {
                     <p role="status">Chargement du code…</p>
                   }
@@ -239,6 +264,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
 export class ScriptLibraryPageComponent {
   private readonly api = inject(FlowScripts);
   private readonly router = inject(Router);
+  private readonly download = inject(FileDownload);
   private readonly notifications = inject(NotificationService);
   private readonly route = inject(ActivatedRoute);
   protected readonly routeData = toSignal(this.route.data, {
@@ -323,6 +349,11 @@ export class ScriptLibraryPageComponent {
   protected readonly versions = computed(() =>
     [...(this.details()?.script.versions ?? [])].sort((a, b) => b.version - a.version),
   );
+  protected readonly publishedIds = computed(() =>
+    this.summaries()
+      .filter((script) => script.publishedVersion > 0)
+      .map((script) => script.id),
+  );
   private readonly versionCodes = signal<Readonly<Record<number, FlowScriptVersion>>>({});
   private readonly dialog = inject(MatDialog);
   protected readonly filteredScripts = computed(() => {
@@ -389,6 +420,57 @@ export class ScriptLibraryPageComponent {
     this.message.set(
       `Code de la v${version.version} placé dans le brouillon ; enregistrez pour le conserver.`,
     );
+  }
+
+  /** Importe les fichiers choisis comme brouillons ; rien n'est exécuté ni publié. */
+  protected async importFiles(input: HTMLInputElement): Promise<void> {
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (!files.length || this.busy()) return;
+    this.busy.set(true);
+    const created: string[] = [];
+    const updated: string[] = [];
+    try {
+      for (const file of files) {
+        try {
+          const result = await this.api.importFile(file);
+          (result.created ? created : updated).push(file.name);
+        } catch (error) {
+          this.showError(error, `Import de ${file.name} impossible.`);
+        }
+      }
+      await this.loadList();
+      if (created.length || updated.length) {
+        const parts = [
+          created.length ? `${created.length} brouillon(s) créé(s)` : '',
+          updated.length ? `${updated.length} brouillon(s) mis à jour` : '',
+        ].filter(Boolean);
+        this.notifications.show(`${parts.join(', ')}. Publiez une version pour les utiliser.`);
+      }
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected async exportVersion(version: FlowScriptVersion): Promise<void> {
+    try {
+      const response = await this.api.exportVersion(version.scriptId, version.version);
+      if (response.body)
+        this.download.save(
+          response.body,
+          `${version.name}${version.language === 'python' ? '.py' : '.js'}`,
+        );
+    } catch (error) {
+      this.showError(error, 'Export impossible.');
+    }
+  }
+
+  protected async exportAll(): Promise<void> {
+    try {
+      this.download.save(await this.api.exportMany(this.publishedIds()), 'scripts.zip');
+    } catch (error) {
+      this.showError(error, 'Export impossible.');
+    }
   }
 
   /** Ferme l'éditeur ; demande confirmation si des modifications ne sont pas enregistrées. */
