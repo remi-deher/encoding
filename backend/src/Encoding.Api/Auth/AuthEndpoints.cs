@@ -69,6 +69,17 @@ public static class AuthEndpoints
 
         auth.MapGet("/me", (HttpContext http) => Results.Ok(Current(http.User))).WithName("GetCurrentUser");
 
+        auth.MapPost("/reauthenticate", async (ReauthenticateRequest request, HttpContext http, AuthService service, CancellationToken ct) =>
+        {
+            var current = Current(http.User);
+            if (current is null || http.User.FindFirst("auth_type")?.Value == "api_token")
+                return Results.Json(new { title = "Une session utilisateur est requise." }, statusCode: StatusCodes.Status401Unauthorized);
+            if (string.IsNullOrEmpty(request.CurrentPassword) || request.CurrentPassword.Length > AuthService.MaximumPasswordLength
+                || !await service.ReauthenticateAsync(current.Id, request.CurrentPassword, ct))
+                return Results.Json(new { title = "Le mot de passe est incorrect ou le compte est temporairement verrouillé." }, statusCode: StatusCodes.Status401Unauthorized);
+            return Results.NoContent();
+        }).WithName("ReauthenticateCurrentUser");
+
         auth.MapPut("/password", async (ChangePasswordRequest request, HttpContext http, AuthService service, CancellationToken ct) =>
         {
             var errors = AuthService.ValidatePassword("newPassword", request.NewPassword);
@@ -128,7 +139,7 @@ public static class AuthEndpoints
         }).WithName("DeleteUser");
     }
 
-    private static CurrentUserResponse? Current(ClaimsPrincipal principal) =>
+    internal static CurrentUserResponse? Current(ClaimsPrincipal principal) =>
         principal.Identity?.IsAuthenticated == true
             ? new CurrentUserResponse(
                 Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!),

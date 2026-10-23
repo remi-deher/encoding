@@ -1,6 +1,6 @@
 ---
 domain: flows
-updated: 2026-10-21
+updated: 2026-10-23
 legacy_adr: [0003, 0004, 0006, 0007, 0011, 0012, 0013, 0014, 0015, 0022, 0023, 0024, 0025, 0026, 0027, 0060-api, 0079, 0080, 0081]
 code:
   - backend/src/Encoding.Contracts/Flows/
@@ -46,10 +46,11 @@ L'exécution d'un flow (baux, workers, publication) est dans [runtime.md](runtim
 - Testeur (`POST /api/v1/flows/simulate`, 1 Mio, 422/400) sans effet externe : parcourt une branche, **résultats supposés explicites** pour tout bloc externe (conversion, script, plugin, relais, attente), s'arrête en `waiting` au premier manquant, distingue hypothèse et décision. `POST /api/v1/flows/inspect-metadata` : MediaInfo sur une copie temporaire privée (512 Mio, 2 lectures simultanées, 2 min, 1 Mio de sortie ; 400/429/503). Profils/résultats restent dans la session de l'éditeur.
 
 ## Ressources réutilisables (toutes réconciliées entre serveurs)
-- **Scripts** (section Librairies) : JS ou Python, brouillon à révision + versions immuables ; le flow **copie** le code et garde `scriptId@version` en provenance ; l'API ne les exécute pas.
+- **Scripts** (section Librairies) : JS ou Python, brouillon à révision + versions immuables ; le flow **copie** le code et garde `scriptId@version` en provenance ; l'API ne les exécute pas. L'API REST et le MCP permettent aussi de supprimer une définition et ses versions ; les copies déjà intégrées aux flows restent indépendantes.
 - **Modèles** : copies nommées, lecture seule, d'une version publiée (jamais d'un brouillon) ; créer un flow depuis un modèle = nouvel identifiant, version initiale.
 - **Packs de composants** : fragment d'une version publiée (entrée = premier composant relié à `success`, sorties = sorties non utilisées en interne) ; inséré **aplati** dans le graphe avec métadonnées d'instance ; le runtime ne lit jamais la bibliothèque de packs.
 - **Profils d'encodage** : un profil = une cible de qualité par encodeur (catalogue `VideoEncoderCatalog`), brouillon + versions immuables, profil intégré « Équilibré » en lecture seule ; le flow embarque l'instantané. Mode automatique : filtre par codec puis premier encodeur *vérifié utilisable* par priorité (NVENC, QSV, VAAPI, CPU). Les nombres de qualité ne sont pas comparables entre encodeurs.
+- **Ressources** : l'API REST et le MCP listent, consultent, créent, renomment, versionnent et suppriment les ressources. Les outils MCP qui créent une ressource ou une version reçoivent des empreintes de fichiers déjà téléversés via l'API REST. Une ressource référencée par un flow ne peut pas être supprimée.
 
 ## Invariants
 1. Le backend valide tout document de flow ; l'UI ne fait que guider.

@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
@@ -55,8 +56,23 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
       </button>
       <app-setting-group>
         <app-setting-row label="Adresse de connexion">
-          <code row-detail>{{ serverBaseUrl() }}/api/v1/mcp/sse</code>
-          <button matButton="tonal" type="button" (click)="copyAddress()">Copier</button>
+          <ng-container row-detail>
+            @if (addressRevealed()) {
+              <code>{{ serverBaseUrl() }}/api/v1/mcp/sse</code>
+            }
+          </ng-container>
+          @if (addressRevealed()) {
+            <button matButton="tonal" type="button" (click)="copyAddress()">Copier</button>
+          } @else {
+            <mat-form-field appearance="outline">
+              <mat-label>Mot de passe du compte</mat-label>
+              <input matInput type="password" autocomplete="current-password"
+                [value]="reauthPassword()" (input)="reauthPassword.set($any($event.target).value)" />
+            </mat-form-field>
+            <button matButton="tonal" type="button" [disabled]="reauthBusy()" (click)="revealAddress()">
+              Vérifier et afficher
+            </button>
+          }
         </app-setting-row>
         <app-setting-row
           label="Authentification"
@@ -193,13 +209,21 @@ type ClientPlatform = 'claude' | 'cursor' | 'antigravity' | 'stdio';
 })
 export class McpServerTabComponent {
   private readonly mcpService = inject(McpService);
+  private readonly http = inject(HttpClient);
   private readonly notifications = inject(NotificationService);
   private readonly clipboardService = inject(ClipboardService);
+  protected readonly addressRevealed = signal(false);
+  protected readonly reauthPassword = signal('');
+  protected readonly reauthBusy = signal(false);
 
   private readonly editor = inject(SettingsEditor);
   private readonly clientEditor = viewChild.required<TemplateRef<unknown>>('clientEditor');
   protected readonly clientToken = signal('');
   protected openClient(): void {
+    if (!this.addressRevealed()) {
+      this.notifications.show('Vérifiez votre mot de passe pour afficher l’adresse MCP.');
+      return;
+    }
     void this.editor.open({
       title: 'Configurer un client MCP',
       content: this.clientEditor(),
@@ -212,6 +236,21 @@ export class McpServerTabComponent {
         ? 'Adresse copiée.'
         : 'Impossible de copier l’adresse.',
     );
+  }
+
+  protected async revealAddress(): Promise<void> {
+    this.reauthBusy.set(true);
+    try {
+      await firstValueFrom(this.http.post<void>('/api/v1/auth/reauthenticate', {
+        currentPassword: this.reauthPassword(),
+      }));
+      this.addressRevealed.set(true);
+      this.reauthPassword.set('');
+    } catch {
+      this.notifications.show('Mot de passe incorrect : adresse MCP non affichée.');
+    } finally {
+      this.reauthBusy.set(false);
+    }
   }
 
   protected readonly selectedClient = signal<ClientPlatform>('claude');

@@ -246,8 +246,24 @@ public static class BusinessOperationCatalog
                 required = new[] { "id", "expectedRevision" }
             }
         ),
+        new("delete_script", "Supprime un script partagé et ses versions publiées. Les flows conservent leur copie du code.",
+            new { type = "object", properties = new { id = new { type = "string", format = "uuid" } }, required = new[] { "id" } }),
         new("validate_script_draft", "Valide les champs et limites d’un brouillon JavaScript ou Python avant son enregistrement ou sa publication.",
             new { type = "object", properties = new { name = new { type = "string" }, language = new { type = "string", @enum = new[] { "javascript", "python" } }, description = new { type = "string" }, code = new { type = "string" } }, required = new[] { "name", "language", "description", "code" } }),
+
+        // --- 3b. RESSOURCES PARTAGÉES ---
+        new("list_resources", "Liste les ressources partagées et leur dernière version.",
+            new { type = "object", properties = new { }, required = Array.Empty<string>() }),
+        new("get_resource", "Consulte une ressource partagée, ses versions et les fichiers référencés.",
+            new { type = "object", properties = new { id = new { type = "string", format = "uuid" } }, required = new[] { "id" } }),
+        new("create_resource", "Crée une ressource à partir de fichiers déjà téléversés dans le magasin du serveur.",
+            new { type = "object", additionalProperties = false, properties = new { name = new { type = "string", minLength = 1, maxLength = 128 }, description = new { type = "string", maxLength = 1000 }, files = new { type = "array", minItems = 1, items = new { type = "object", additionalProperties = false, properties = new { name = new { type = "string" }, sha256 = new { type = "string" } }, required = new[] { "name", "sha256" } } } }, required = new[] { "name", "files" } }),
+        new("update_resource", "Modifie le nom et la description d’une ressource sans changer ses versions.",
+            new { type = "object", additionalProperties = false, properties = new { id = new { type = "string", format = "uuid" }, name = new { type = "string", minLength = 1, maxLength = 128 }, description = new { type = "string", maxLength = 1000 } }, required = new[] { "id", "name", "description" } }),
+        new("add_resource_version", "Ajoute une version immuable à une ressource à partir de fichiers déjà téléversés.",
+            new { type = "object", additionalProperties = false, properties = new { id = new { type = "string", format = "uuid" }, files = new { type = "array", minItems = 1, items = new { type = "object", additionalProperties = false, properties = new { name = new { type = "string" }, sha256 = new { type = "string" } }, required = new[] { "name", "sha256" } } } }, required = new[] { "id", "files" } }),
+        new("delete_resource", "Supprime une ressource si aucun flow ne la référence.",
+            new { type = "object", properties = new { id = new { type = "string", format = "uuid" } }, required = new[] { "id" } }),
 
         // --- 4. PROFILS D'ENCODAGE ---
         new(
@@ -497,7 +513,8 @@ public static class BusinessOperationCatalog
         "create_component_pack_from_flow", "save_plugin_configuration", "save_flow_plugin_configuration", "configure_library_node_access",
         "save_library_processing", "set_library_activation", "assign_library_flow", "request_library_discovery",
         "create_library", "update_library", "delete_library", "save_node_group", "delete_node_group",
-        "save_node_identity", "set_node_draining", "save_node_processing", "cancel_execution", "retry_execution", "resume_execution"
+        "save_node_identity", "set_node_draining", "save_node_processing", "cancel_execution", "retry_execution", "resume_execution",
+        "delete_script", "create_resource", "update_resource", "add_resource_version", "delete_resource"
     };
 
     private static readonly HashSet<string> AssistantActions = new(StringComparer.Ordinal)
@@ -702,7 +719,8 @@ public static class BusinessOperationCatalog
         "list_nodes" or "list_node_groups" or "get_node_group" or "save_node_group" or "delete_node_group" or "get_node_activity" or "get_node_identity" or "save_node_identity" or "set_node_draining" or "get_node_processing" or "save_node_processing" => "nodes-and-groups",
         "list_executions" or "get_execution" or "get_execution_events" or "get_execution_pipeline" or "cancel_execution" or "retry_execution" or "resume_execution" or "get_system_logs" => "executions-and-logs",
         "get_flow_schema" or "list_flows" or "get_flow" or "create_flow" or "clone_flow" or "delete_flow" => "flows-and-components",
-        "list_scripts" or "get_script" or "save_script" or "publish_script" or "validate_script_draft" => "scripts",
+        "list_scripts" or "get_script" or "save_script" or "publish_script" or "delete_script" or "validate_script_draft" => "scripts",
+        "list_resources" or "get_resource" or "create_resource" or "update_resource" or "add_resource_version" or "delete_resource" => "scripts",
         "list_encoding_profiles" or "get_encoding_profile" or "save_encoding_profile" or "publish_encoding_profile" => "encoding-profiles",
         "list_templates" or "get_template" or "create_template_from_flow" => "flow-templates",
         "list_component_packs" or "get_component_pack" or "create_component_pack_from_flow" => "component-packs",

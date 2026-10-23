@@ -16,6 +16,7 @@ export interface CreateApiTokenRequest {
   readonly role: 'admin' | 'viewer';
   readonly expiresAt?: string | null;
   readonly scopes?: readonly string[];
+  readonly currentPassword: string;
 }
 
 export interface CreatedApiTokenResponse {

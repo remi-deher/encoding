@@ -68,6 +68,27 @@ public sealed class FlowScriptRepository(DbDataSource dataSource)
         return await reader.ReadAsync(ct) ? ReadVersion(reader) : null;
     }
 
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        await using (var lockScript = Sql.Command("SELECT id FROM flow_scripts WHERE id=@id FOR UPDATE", connection, transaction))
+        {
+            lockScript.Parameters.AddWithValue("id", id);
+            if (await lockScript.ExecuteScalarAsync(ct) is null) return false;
+        }
+        await using (var versions = Sql.Command("DELETE FROM flow_script_versions WHERE script_id=@id", connection, transaction))
+        {
+            versions.Parameters.AddWithValue("id", id);
+            await versions.ExecuteNonQueryAsync(ct);
+        }
+        await using var script = Sql.Command("DELETE FROM flow_scripts WHERE id=@id", connection, transaction);
+        script.Parameters.AddWithValue("id", id);
+        var deleted = await script.ExecuteNonQueryAsync(ct) > 0;
+        await transaction.CommitAsync(ct);
+        return deleted;
+    }
+
     public async Task<FlowScriptDetails?> CreateAsync(Guid id, FlowScriptDraft draft, CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("""
