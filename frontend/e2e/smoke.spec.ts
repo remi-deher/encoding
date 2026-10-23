@@ -29,8 +29,11 @@ test('the overview loads on desktop and mobile without console errors', async ({
 });
 
 test('the primary navigation reaches the activity page', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/activity');
   await expect(page.getByRole('heading', { name: /Activité/ }).first()).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test('the search command palette opens with Ctrl+K and navigates to encoding profiles', async ({

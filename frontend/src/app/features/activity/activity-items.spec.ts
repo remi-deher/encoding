@@ -33,6 +33,15 @@ const ai = (status: AiAssistantActivity['status']): AiAssistantActivity => ({
 });
 
 describe('activity items', () => {
+  it('shows the file name with library context and keeps the complete path in execution details', () => {
+    const item = executionItem({
+      ...execution('succeeded'),
+      media: 'Séries/Saison 01/Épisode.mkv',
+    });
+    expect(item.title).toBe('Épisode.mkv');
+    expect(item.subtitle).toContain('Films');
+    expect(item.execution?.media).toBe('Séries/Saison 01/Épisode.mkv');
+  });
   it('groups executions by state', () => {
     expect(executionGroup('queued')).toBe('queue');
     expect(executionGroup('cancelling')).toBe('active');

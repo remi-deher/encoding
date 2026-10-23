@@ -536,6 +536,8 @@ internal static class AuthScenarios
         var runtime = anonymous.Where(item => item.Contains("/api/v1/runtime/nodes/{nodeId:guid}")).ToArray();
         var rest = anonymous.Except(runtime).ToArray();
         Check(runtime.Length > 10, "The runtime group is self-authenticated by node token.");
+        Check(runtime.Contains("POST /api/v1/runtime/nodes/{nodeId:guid}/executions/{id:guid}/source/prepare"),
+            "Deferred source preparation belongs to the group authenticated by node credentials and fenced by lease epoch.");
         Check(rest.SequenceEqual(expected.Order()), "Only these routes may skip user authentication; update the list deliberately:\n" + string.Join("\n", rest));
         Console.WriteLine("PASS: the anonymous route catalogue matches the reviewed list.");
         return Task.CompletedTask;

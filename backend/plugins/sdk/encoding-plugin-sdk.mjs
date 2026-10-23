@@ -28,10 +28,10 @@ export class InfrastructureError extends Error {}
 export class ContractError extends Error {}
 
 export class Outcome {
-  constructor(outputId = null, terminal = null, detail = "", variables = {}) {
-    Object.assign(this, { outputId, terminal, detail, variables });
+  constructor(outputId = null, terminal = null, detail = "", variables = {}, candidate = null) {
+    Object.assign(this, { outputId, terminal, detail, variables, candidate });
   }
-  static output(outputId, detail = "", variables = {}) { return new Outcome(outputId, null, detail, variables); }
+  static output(outputId, detail = "", variables = {}, candidate = null) { return new Outcome(outputId, null, detail, variables, candidate); }
   static finish(terminal, detail = "") {
     if (!TERMINAL_RESULTS.includes(terminal)) throw new RangeError(`Résultat terminal inconnu : ${terminal}`);
     return new Outcome(null, terminal, detail);
@@ -50,6 +50,9 @@ export class Context {
     this.mediaPath = context.mediaPath ?? null;
     this.libraryId = context.libraryId ?? null;
     this.variables = context.variables ?? {};
+    this.currentFile = context.currentArtifactId ?? null;
+    this.beforeMetadata = context.beforeMetadata ?? null;
+    this.currentMetadata = context.currentMetadata ?? null;
   }
   text(key) { return text(this.config, key); }
   number(key) { return number(this.config, key); }
@@ -94,7 +97,7 @@ export class Plugin {
     return {
       contractVersion: CONTRACT_VERSION, invocationId: invocation.invocationId, leaseEpoch: invocation.leaseEpoch,
       outputId: outcome.outputId, terminalResult: outcome.terminal, variableChanges: outcome.variables,
-      candidateArtifactId: null, detail: outcome.detail,
+      candidateArtifactId: outcome.candidate, detail: outcome.detail,
     };
   }
 
@@ -213,6 +216,7 @@ export function validateManifest(manifest) {
     if (component.configurationSchema?.version !== 1) problems.push(`Composant « ${id} » : configurationSchema.version 1 attendu.`);
     checkFields(`Composant « ${id} »`, component.configurationSchema?.fields, COMPONENT_FIELD_TYPES);
     const timeout = component.timeoutSeconds;
+    if (component.mediaEffect != null && !['readOnly', 'producesOutput', 'modifiesCurrent'].includes(component.mediaEffect)) problems.push(`Composant « ${id} » : mediaEffect inconnu.`);
     if (timeout != null && !(Number.isInteger(timeout) && timeout >= 1 && timeout <= 21600)) problems.push(`Composant « ${id} » : timeoutSeconds entre 1 et 21600.`);
   }
   return problems;

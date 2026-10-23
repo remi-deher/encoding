@@ -8,6 +8,21 @@ public sealed class RuntimeScenarioTests(RuntimeFixture database)
     private Harness.Fixture Scenarios => database.Scenarios ?? throw new InvalidOperationException("The SQLite fixture is not initialized.");
 
     [DatabaseFact]
+    public Task DirectInspectionDefersTransfersAndFencesPreparation() => Scenarios.DirectInspectionDefersTransfersAndFencesPreparationAsync();
+
+    [DatabaseFact]
+    public Task DirectInspectionCannotCheckpointAMutatingBlock() => Scenarios.DirectInspectionCannotCheckpointAMutatingBlockAsync();
+
+    [MediaToolsFact]
+    public Task DirectInspectionFinishesWithoutCopyOrHash() => Scenarios.DirectInspectionFinishesWithoutCopyOrHashAsync();
+
+    [DatabaseFact]
+    public Task ChangedDirectSourceFailsBeforeAnyPreparation() => Scenarios.ChangedDirectSourceFailsBeforeAnyPreparationAsync();
+
+    [DatabaseFact]
+    public Task DirectInspectionPreparesBeforeHandoff() => Scenarios.DirectInspectionPreparesBeforeHandoffAsync();
+
+    [DatabaseFact]
     public Task FlowDetailsPreviewAndRestoreKeepImmutableHistoryAndLibraryAssignments() => Scenarios.FlowDetailsHistoryAsync();
 
     [DatabaseFact]

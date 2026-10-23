@@ -69,6 +69,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
             using var mediaLock=transfer.CanWrite?SafeMediaPaths.Lock(original,Path.Combine(options.DataDirectory,"media-locks")):null;
             if(!transfer.Publish)
             {
+                if(transfer.Observation is {} observed) new MediaFileStamp(observed.Bytes,observed.LastWriteUtcTicks).Verify(original);
                 async Task UploadAsync(string relative,bool main)
                 {
                     var path=SafeMediaPaths.Resolve(transfer.Root,relative);
@@ -80,6 +81,7 @@ public sealed class RuntimeTransferService(NodeAgentOptions options,WorkerIdenti
                         { await source.CopyToAsync(copy,ct); await copy.FlushAsync(ct); copy.Flush(true); }
                         var sha=await SafeMediaPaths.DigestAsync(temporary,ct);
                         if(await SafeMediaPaths.DigestAsync(path,ct)!=sha) throw new IOException("La source a changé pendant sa copie.");
+                        if(main && transfer.Observation is {} expected) new MediaFileStamp(expected.Bytes,expected.LastWriteUtcTicks).Verify(path);
                         await client.PutAsync(transfer.ExecutionId,transfer.Epoch,temporary,sha,main,ct,main?null:relative);
                     }
                     finally { if(File.Exists(temporary)) File.Delete(temporary); }

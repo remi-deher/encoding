@@ -62,6 +62,23 @@ if __name__ == "__main__":
 
 ## Protocole (contrat 1)
 
+### Déclarer les effets sur le média
+
+Chaque composant peut ajouter `"mediaEffect": "readOnly"`, `"producesOutput"` ou `"modifiesCurrent"` à son descripteur :
+
+| Valeur | Contrat du composant | Contrôles du moteur |
+| --- | --- | --- |
+| `readOnly` | Ne modifie pas le fichier courant, ne retourne aucun candidat | Vérification légère taille/dernière modification si un fichier est fourni |
+| `producesOutput` | Préserve le fichier courant, retourne un nouveau fichier si nécessaire | Vérification légère de l'entrée, scan et SHA-256 du candidat |
+| `modifiesCurrent` | Peut modifier la copie de travail courante | Fichier courant traité comme candidat même si taille/date identiques |
+| Absent | Plugin historique | Détection taille/date, ou candidat explicite |
+
+Un composant `readOnly` avec `requiresMedia: false` et `producesFiles: false` peut travailler directement sur les métadonnées : `ctx.current_file` / `ctx.currentFile` est alors absent (`None` / `null`). Les métadonnées sont dans `ctx.current_metadata` / `ctx.currentMetadata` et `ctx.before_metadata` / `ctx.beforeMetadata`. Le plugin n'obtient aucun accès au montage média. S'il a besoin des octets, déclarer `requiresMedia: true` : l'hôte prépare une copie de travail isolée.
+
+Pour produire un fichier, utiliser `Outcome.output("success", candidate="result.mkv")` en Python ou `Outcome.output("success", "terminé", {}, "result.mkv")` en JavaScript. Le candidat est relatif à l'espace de travail ; le moteur vérifie le chemin, scanne le fichier, contrôle sa durée et le stocke. Un composant `producesOutput` sans travail peut retourner une sortie `unchanged` sans candidat. Pour une mutation sur place de la copie, déclarer `modifiesCurrent` ; un script de flow retourne explicitement `{"candidate": context["currentFile"]}` après écriture.
+
+Taille/date sont une détection rapide, pas une preuve cryptographique : une modification qui conserve ces deux valeurs doit être déclarée. La date de création n'est pas utilisée. Les contrôles SHA-256 des transferts et de publication restent imposés par le moteur ; aucune déclaration ne les désactive. Ces effets ne changent pas les règles d'idempotence ou de reprise ni l'interdiction de modifier la bibliothèque depuis un plugin. Incrémenter la version d'un plugin qui ajoute ces déclarations ; elles entrent dans l'empreinte de contrat vérifiée à l'attribution, pour exclure un ancien worker qui les ignorerait.
+
 ```json
 {"type":"describe","contractVersion":1}
 → le manifeste (PluginManifest)

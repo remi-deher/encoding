@@ -45,7 +45,9 @@ public sealed record FlowComponentDescriptor(
     IReadOnlyList<string>? CompatiblePluginVersions = null,
     string? MinimumRuntimePluginVersion = null,
     bool ProducesFiles = false,
-    int? TimeoutSeconds = null);
+    int? TimeoutSeconds = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? MediaEffect = null);
 
 public sealed record FlowOutputDescriptor(string Id, string Label, string Description);
 
@@ -115,6 +117,8 @@ public static class PluginManifestFingerprint
         {
             builder.Append("component:").Append(component.Id).Append('@').Append(component.Version)
                 .Append(" schema=").Append(component.ConfigurationSchema.Version).Append(" kind=").Append(component.Kind).Append('\n');
+            // Keep legacy fingerprints unchanged; explicit effects require a worker that understands them.
+            if(component.MediaEffect is not null) builder.Append("  mediaEffect:").Append(component.MediaEffect).Append('\n');
             foreach (var output in component.Outputs.OrderBy(output => output.Id, StringComparer.Ordinal)) builder.Append("  out:").Append(output.Id).Append('\n');
             foreach (var field in component.ConfigurationSchema.Fields.OrderBy(field => field.Id, StringComparer.Ordinal))
                 builder.Append("  field:").Append(field.Id).Append(':').Append(field.Type).Append('\n');

@@ -1,93 +1,68 @@
 <app-page-header
   title="Activité"
-  description="Traitements des flows et demandes de l’assistant IA, au même endroit."
+  description="Suivez les traitements en cours et retrouvez leur historique."
   [showSystemActions]="true"
 >
   <span page-metadata class="activity-count-pill">{{ countText() }}</span>
   <button page-actions matButton="outlined" type="button" (click)="refresh()">Actualiser</button>
 </app-page-header>
 
+@if (kindFilter() !== 'ai') {
+  <app-summary-tiles
+    class="activity-summary"
+    density="compact"
+    label="Traitements du cluster"
+    [tiles]="summary()"
+  />
+}
+
 <section class="activity-panel" aria-label="Activité">
   <div class="activity-toolbar">
-    <app-search-field
-      class="activity-search"
-      variant="bar"
-      label="Média, flow, bibliothèque, demande…"
-      [value]="search()"
-      (valueChange)="search.set($event)"
-      [filterCount]="activeFilters().length"
-      [(filtersOpen)]="filtersOpen"
-    >
-      <div search-filters class="filter-sections">
-        <p class="filter-title">Type</p>
-        <div class="chip-row" role="group" aria-label="Type d’activité">
-          <button
-            type="button"
-            class="chip"
-            [class.is-on]="kindFilter() === 'all'"
-            [attr.aria-pressed]="kindFilter() === 'all'"
-            (click)="setKind('all')"
-          >
-            Tout <b>{{ kindCounts().all }}</b>
-          </button>
-          <button
-            type="button"
-            class="chip"
-            [class.is-on]="kindFilter() === 'execution'"
-            [attr.aria-pressed]="kindFilter() === 'execution'"
-            (click)="setKind('execution')"
-          >
-            Traitements <b>{{ kindCounts().execution }}</b>
-          </button>
-          <button
-            type="button"
-            class="chip"
-            [class.is-on]="kindFilter() === 'ai'"
-            [attr.aria-pressed]="kindFilter() === 'ai'"
-            (click)="setKind('ai')"
-          >
-            Assistant IA <b>{{ kindCounts().ai }}</b>
-          </button>
-        </div>
-        <p class="filter-title">État</p>
-        <div class="chip-row" role="group" aria-label="État">
-          <button
-            type="button"
-            class="chip"
-            [class.is-on]="groupFilter() === 'all'"
-            [attr.aria-pressed]="groupFilter() === 'all'"
-            (click)="setGroup('all')"
-          >
-            Tous les états <b>{{ counts().all }}</b>
-          </button>
-          @for (group of groups; track group.id) {
-            <button
-              type="button"
-              class="chip"
-              [class.is-on]="groupFilter() === group.id"
-              [class.is-error]="group.id === 'errors' && counts().errors > 0"
-              [attr.aria-pressed]="groupFilter() === group.id"
-              (click)="setGroup(group.id)"
-            >
-              {{ group.label }} <b>{{ counts()[group.id] }}</b>
-            </button>
-          }
-        </div>
+    <div class="activity-heading">
+      <div>
+        <h2>Journal des activités</h2>
+        <p>Traitements, résultats et demandes de l’assistant.</p>
       </div>
-    </app-search-field>
-    @if (activeFilters().length > 0) {
-      <div class="chip-row active-filters" role="group" aria-label="Filtres actifs">
-        @for (filter of activeFilters(); track filter.id) {
-          <button
-            type="button"
-            class="chip is-on"
-            [attr.aria-label]="'Retirer le filtre ' + filter.label"
-            (click)="filter.clear()"
-          >
-            {{ filter.label }} <span aria-hidden="true">✕</span>
-          </button>
-        }
-        <button type="button" class="chip" (click)="clearFilters()">Tout effacer</button>
+      <app-search-field
+        class="activity-search"
+        variant="bar"
+        label="Rechercher dans les activités chargées"
+        [value]="search()"
+        (valueChange)="search.set($event)"
+      />
+    </div>
+    <mat-chip-listbox
+      aria-label="Type d’activité"
+      [value]="kindFilter()"
+      (change)="setKind($event.value ?? 'all')"
+    >
+      <mat-chip-option value="all">Tout</mat-chip-option>
+      <mat-chip-option value="execution">Traitements</mat-chip-option>
+      @if (auth.isAdmin()) {
+        <mat-chip-option value="ai">Assistant IA</mat-chip-option>
+      }
+    </mat-chip-listbox>
+    <mat-chip-listbox
+      aria-label="État des activités"
+      [value]="groupFilter()"
+      (change)="setGroup($event.value ?? 'all')"
+    >
+      <mat-chip-option value="all">Tous les états</mat-chip-option>
+      @for (group of groups; track group.id) {
+        <mat-chip-option [value]="group.id"
+          >{{ group.label }} ·
+          {{
+            (kindFilter() === 'ai' ? aiState().loaded : trackingState().data !== null)
+              ? counts()[group.id]
+              : '—'
+          }}</mat-chip-option
+        >
+      }
+    </mat-chip-listbox>
+    @if (pageOffset() > 0) {
+      <div class="activity-pagination" aria-label="Pagination des activités">
+        <button matButton="text" type="button" (click)="previousPage()">Page précédente</button>
+        <span>Page {{ pageNumber() }}</span>
       </div>
     }
   </div>
@@ -119,11 +94,13 @@
   }
 
   @for (section of sections(); track section.id) {
-    <h2 class="section-title">{{ section.section }} · {{ section.total }}</h2>
+    <h3 class="section-title">
+      {{ section.section }} <span>{{ section.total }}</span>
+    </h3>
     <ul class="item-stack">
       @for (item of section.items; track item.key) {
         <li class="item-row" [class.is-selected]="selected()?.key === item.key">
-          @if (item.execution) {
+          @if (item.execution && (canRetryItem(item) || canCancelItem(item))) {
             <mat-checkbox
               class="item-select"
               [checked]="selectedActionIds().has(item.execution.id)"
@@ -144,23 +121,18 @@
               <span class="item-title">{{ item.title }}</span>
               <span class="item-subtitle">{{ item.subtitle || '—' }}</span>
               @if (item.progress !== null) {
-                <span
-                  class="item-progress"
-                  role="progressbar"
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  [attr.aria-valuenow]="item.progress"
-                >
-                  <i [style.width.%]="item.progress"></i>
-                </span>
+                <mat-progress-bar
+                  mode="determinate"
+                  [value]="item.progress"
+                  [attr.aria-label]="'Progression de ' + item.title"
+                />
               }
             </span>
             <span class="item-meta">
-              <app-status-badge
-                [label]="item.progress !== null ? item.progress + ' %' : item.stateLabel"
-                [tone]="item.tone"
-              />
-              <span class="item-time">{{ item.time }}</span>
+              <app-status-badge [label]="item.stateLabel" [tone]="item.tone" />
+              <span class="item-time"
+                >{{ item.progress !== null ? item.progress + ' % · ' : '' }}{{ item.time }}</span
+              >
             </span>
           </button>
           @if (canRetryItem(item)) {
@@ -177,15 +149,33 @@
         </li>
       }
     </ul>
-    @if (section.id === 'done' && section.total > section.items.length) {
-      <button matButton="text" type="button" class="more-button" (click)="showMoreDone()">
-        Afficher plus ({{ section.total - section.items.length }} restants)
+    @if (section.more && !search().trim()) {
+      <button matButton="text" type="button" class="more-button" (click)="nextPage(section.id)">
+        Voir la suite : {{ section.label.toLocaleLowerCase('fr') }}
       </button>
     }
   } @empty {
     <div class="empty-state">
-      <h2>Aucune activité</h2>
-      <p>Aucun élément ne correspond à ces filtres.</p>
+      @if (
+        (kindFilter() === 'ai' || trackingState().status === 'ready') &&
+        (kindFilter() === 'execution' || (aiState().loaded && !aiState().error))
+      ) {
+        <h3>Aucune activité</h3>
+        <p>Aucun élément ne correspond à ces filtres.</p>
+      } @else {
+        <h3>
+          {{
+            trackingState().status === 'loading' ||
+            (kindFilter() !== 'execution' &&
+              auth.isAdmin() &&
+              !aiState().loaded &&
+              !aiState().error)
+              ? 'Chargement du journal'
+              : 'Données indisponibles'
+          }}
+        </h3>
+        <p>Le journal sera actualisé automatiquement. Vous pouvez aussi réessayer.</p>
+      }
     </div>
   }
 </section>

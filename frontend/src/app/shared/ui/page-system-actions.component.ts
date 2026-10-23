@@ -1,4 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { OverlayModule, ConnectedPosition } from '@angular/cdk/overlay';
+import { A11yModule } from '@angular/cdk/a11y';
+import { MatButtonModule } from '@angular/material/button';
+import { ActiveJobsPanelComponent } from './active-jobs-panel/active-jobs-panel.component';
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -12,7 +16,16 @@ import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../services/execu
 @Component({
   selector: 'app-page-system-actions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatTooltipModule, RouterLink, ThemeToggleComponent, UserMenuComponent],
+  imports: [
+    MatTooltipModule,
+    RouterLink,
+    ThemeToggleComponent,
+    UserMenuComponent,
+    OverlayModule,
+    A11yModule,
+    MatButtonModule,
+    ActiveJobsPanelComponent,
+  ],
   template: `
     <div class="page-system-actions" aria-label="État et préférences du système">
       <a
@@ -26,16 +39,37 @@ import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../services/execu
         <span class="cluster-dot" [class.is-offline]="!clusterHealthy()" aria-hidden="true"></span>
         <span class="cluster-label">{{ clusterLabel() }}</span>
       </a>
-      <a
+      <button
+        matButton="text"
+        type="button"
         class="system-pill tasks-pill"
-        routerLink="/activity"
-        [queryParams]="{ view: 'active' }"
+        cdkOverlayOrigin
+        #jobsOrigin="cdkOverlayOrigin"
+        aria-haspopup="dialog"
+        [attr.aria-expanded]="jobsOpen()"
+        (click)="jobsOpen.update(toggle)"
         [attr.aria-label]="activeJobsLabel()"
         [matTooltip]="activeJobsLabel()"
+        [matTooltipDisabled]="jobsOpen()"
       >
         <span class="tasks-dot" aria-hidden="true"></span>
-        <span>{{ activeJobsLabel() }}</span>
-      </a>
+        <span class="tasks-label">{{ activeJobsLabel() }}</span>
+      </button>
+      <ng-template
+        cdkConnectedOverlay
+        [cdkConnectedOverlayOrigin]="jobsOrigin"
+        [cdkConnectedOverlayOpen]="jobsOpen()"
+        [cdkConnectedOverlayHasBackdrop]="true"
+        cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
+        [cdkConnectedOverlayPositions]="jobsPositions"
+        [cdkConnectedOverlayViewportMargin]="16"
+        (backdropClick)="jobsOpen.set(false)"
+        (overlayKeydown)="closeJobsOnEscape($event)"
+      >
+        <div role="dialog" aria-label="Jobs en cours" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
+          <app-active-jobs-panel [state]="activeJobsState()" (closed)="jobsOpen.set(false)" />
+        </div>
+      </ng-template>
       <app-theme-toggle />
       <app-user-menu class="page-user-menu" [collapsed]="true" />
     </div>
@@ -108,7 +142,7 @@ import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../services/execu
     }
     @media (max-width: 1100px) and (min-width: 761px) {
       .cluster-label,
-      .tasks-pill > span:last-child {
+      .tasks-pill .tasks-label {
         display: none;
       }
     }
@@ -145,6 +179,18 @@ import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../services/execu
   `,
 })
 export class PageSystemActionsComponent {
+  protected readonly jobsOpen = signal(false);
+  protected readonly toggle = (value: boolean) => !value;
+  protected readonly jobsPositions: ConnectedPosition[] = [
+    { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 8 },
+    { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -8 },
+  ];
+  protected closeJobsOnEscape(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.jobsOpen.set(false);
+    }
+  }
   private readonly auth = inject(AuthService);
   private readonly disabled = computed(() => !this.auth.user());
   private readonly overview = inject(ClusterOverview);
@@ -169,6 +215,16 @@ export class PageSystemActionsComponent {
     );
   });
   private readonly executionTracking = inject(ExecutionTracking);
+  protected readonly activeJobsState = toSignal(
+    toObservable(computed(() => this.jobsOpen() && !this.disabled())).pipe(
+      switchMap((opened) =>
+        opened
+          ? this.executionTracking.observeStates(['running', 'cancelling'])
+          : of(INITIAL_EXECUTION_TRACKING),
+      ),
+    ),
+    { initialValue: INITIAL_EXECUTION_TRACKING },
+  );
   private readonly executionState = toSignal(
     toObservable(this.disabled).pipe(
       switchMap((disabled) =>

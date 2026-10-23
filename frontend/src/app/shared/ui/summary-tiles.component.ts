@@ -14,7 +14,11 @@ export interface SummaryTile {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MetricCardComponent],
   template: `
-    <section class="summary-tiles" [attr.aria-label]="label()">
+    <section
+      class="summary-tiles"
+      [class.summary-tiles_compact]="density() === 'compact'"
+      [attr.aria-label]="label()"
+    >
       @for (tile of tiles(); track tile.label) {
         <app-metric-card
           [label]="tile.label"
@@ -31,9 +35,13 @@ export interface SummaryTile {
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
       gap: var(--space-4);
     }
+    .summary-tiles_compact {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+    }
   `,
 })
 export class SummaryTilesComponent {
+  readonly density = input<'comfortable' | 'compact'>('comfortable');
   readonly label = input('Synthèse');
   readonly tiles = input.required<readonly SummaryTile[]>();
 }

@@ -371,7 +371,7 @@ internal static partial class Harness
             Check(await groups.DeleteAsync(unused.Id, CancellationToken.None) == "deleted", "An unused group is deleted.");
             Check(await groups.DeleteAsync(unused.Id, CancellationToken.None) == "missing", "Deleting a missing group reports it.");
         }
-        private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null)
+        private async Task<(Guid Id,RuntimeLease Lease,RuntimeContext Context)> EnqueueAsync(FlowDefinition flow,byte[]? content=null,bool directRead=false)
         {
             // Scenarios share one schema and xUnit does not fix their order: executions another scenario left queued must not be claimed here.
             await using(var leftovers=db.CreateCommand("UPDATE executions SET state='cancelled' WHERE state='queued'")) await leftovers.ExecuteNonQueryAsync();
@@ -389,12 +389,33 @@ internal static partial class Harness
             command.Parameters.AddWithValue("library",library); command.Parameters.AddWithValue("name",library.ToString());
             command.Parameters.AddWithValue("root",directory); command.Parameters.AddWithValue("a",a); command.Parameters.AddWithValue("b",b); command.Parameters.AddWithValue("c",c);
             await command.ExecuteNonQueryAsync();
+            if(directRead)
+            {
+                await using var capable=db.CreateCommand("UPDATE cluster_nodes SET capabilities=@caps WHERE id=@id");
+                capable.Parameters.AddWithValue("id",a);
+                capable.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(Capabilities(true)
+                    .Select(capability=>capability.ToolId=="ffmpeg"?capability with { Encoders=[..capability.Encoders??[],"ac3"] }:capability)
+                    .Append(new NodeToolCapability(RuntimeSourceObservation.Capability,"1.0.0",["general"],[])),Json));
+                await capable.ExecuteNonQueryAsync();
+            }
             Check(validator.Validate(flow).IsValid,JsonSerializer.Serialize(validator.Validate(flow),Json));
             Check(await runtime.EnqueueAsync(new(id,library,"source.mkv",flow.Id,flow.Version),flow,CancellationToken.None),"Enqueue fixture.");
             var lease=await runtime.ClaimAsync(a,CancellationToken.None)??throw new InvalidOperationException("The initial worker must claim.");
+            if(directRead)
+            {
+                // Only this lease exercises the new capability; do not leak it into unrelated shared-fixture scenarios.
+                await using var reset=db.CreateCommand("UPDATE cluster_nodes SET capabilities=@caps WHERE id=@id");
+                reset.Parameters.AddWithValue("id",a); reset.Parameters.AddWithValue("caps",SqlKind.Json,JsonSerializer.Serialize(Capabilities(true),Json));
+                await reset.ExecuteNonQueryAsync();
+            }
             Check(lease.ExecutionId==id,"The expected execution was claimed.");
             content??=System.Text.Encoding.UTF8.GetBytes("fixture-original-media");
             var digest=Convert.ToHexStringLower(SHA256.HashData(content));
+            if(directRead)
+            {
+                await File.WriteAllBytesAsync(Path.Combine(directory,"source.mkv"),content);
+                return(id,lease,new("",".mkv",new Dictionary<string,JsonElement>(),null,null,[],DirectSource:new(content.Length,File.GetLastWriteTimeUtc(Path.Combine(directory,"source.mkv")).Ticks)));
+            }
             Check(await artifacts.PutAsync(id,a,lease.Epoch,digest,new MemoryStream(content),true,CancellationToken.None),"Register original source.");
             return(id,lease,new(digest,".mkv",new Dictionary<string,JsonElement>(),null,null,[]));
         }
