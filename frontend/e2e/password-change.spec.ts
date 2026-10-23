@@ -16,7 +16,10 @@ async function openDialog(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: /Compte de admin/ }).click();
   await page.getByRole('menuitem', { name: 'Changer le mot de passe' }).click();
-  return page.getByRole('dialog', { name: 'Changer le mot de passe' });
+  const dialog = page.getByRole('dialog', { name: 'Changer le mot de passe' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true })).toBeVisible();
+  return dialog;
 }
 
 test('changes the password with the three fields and closes the dialog', async ({ page }) => {
@@ -118,7 +121,11 @@ test('shows the server explanation when there is no account session', async ({ p
   await dialog.getByLabel('Mot de passe actuel', { exact: true }).fill(current);
   await dialog.getByLabel('Nouveau mot de passe', { exact: true }).fill(next);
   await dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true }).fill(next);
-  await dialog.getByRole('button', { name: 'Changer le mot de passe' }).click();
+  const [response] = await Promise.all([
+    page.waitForResponse('**/api/v1/auth/password'),
+    dialog.getByRole('button', { name: 'Changer le mot de passe' }).click(),
+  ]);
+  expect(response.status()).toBe(401);
   await expect(dialog.getByRole('alert')).toContainText('Aucune session de compte');
 });
 

@@ -73,6 +73,40 @@ test('the first-run setup studio completes standalone onboarding and passes WCAG
       }),
     }),
   );
+  await page.route('**/api/v1/auth/setup/node', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        name: 'srv-salon',
+        displayName: 'Serveur Salon',
+        agentAvailable: true,
+        inventory: {
+          processorCount: 16,
+          memoryMb: 32768,
+          operatingSystem: 'Linux',
+          architecture: 'x64',
+          processorModel: 'AMD Ryzen 7 5800X',
+          gpus: [{ name: 'NVIDIA GeForce RTX 3080', device: 'gpu0' }],
+        },
+        tools: [
+          {
+            toolId: 'ffmpeg',
+            accelerationTypes: ['nvenc'],
+            encoderChecks: [
+              {
+                encoderId: 'h264_nvenc',
+                status: 'usable',
+                diagnostic: 'ok',
+              },
+            ],
+          },
+        ],
+        addresses: [{ interface: 'eth0', address: '192.168.1.50' }],
+        urls: ['http://192.168.1.50:5000'],
+      }),
+    }),
+  );
   await page.route('**/api/v1/local-node/status', (route) =>
     route.fulfill({
       status: 200,
