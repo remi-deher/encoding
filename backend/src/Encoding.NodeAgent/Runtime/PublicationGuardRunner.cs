@@ -50,8 +50,29 @@ public sealed class PublicationGuardRunner(IPublicationGuardInvoker invoker, ILo
     public Task<PublicationGuardVerdict> CheckAsync(RuntimeTransfer transfer, CancellationToken ct) =>
         EvaluateAsync(transfer, invoker, (delay, token) => Task.Delay(delay, token), () => DateTimeOffset.UtcNow, logger, ct);
 
-    public static async Task<PublicationGuardVerdict> EvaluateAsync(RuntimeTransfer transfer, IPublicationGuardInvoker invoker,
+    /// <summary>
+    /// Garde appelée depuis un flow (modification sur place, publication). Attend la fin de la lecture comme <see cref="CheckAsync"/>, mais une garde
+    /// indisponible (Plex éteint ou injoignable) n'empêche pas l'écriture : seule une lecture encore en cours après l'attente maximale refuse.
+    /// <paramref name="wait"/> à faux : un seul contrôle, sans attente (dernier contrôle avant d'écrire).
+    /// </summary>
+    public Task<PublicationGuardVerdict> CheckForStepAsync(Guid executionId, long epoch, string mediaPath, Guid? libraryId,
+        IReadOnlyList<RuntimePublicationGuard>? guards, bool wait, CancellationToken ct) =>
+        CheckForStepAsync(executionId, epoch, mediaPath, libraryId, guards, wait, invoker, (delay, token) => Task.Delay(delay, token), () => DateTimeOffset.UtcNow, logger, ct);
+
+    public static async Task<PublicationGuardVerdict> CheckForStepAsync(Guid executionId, long epoch, string mediaPath, Guid? libraryId,
+        IReadOnlyList<RuntimePublicationGuard>? guards, bool wait, IPublicationGuardInvoker invoker,
         Func<TimeSpan, CancellationToken, Task> delay, Func<DateTimeOffset> clock, ILogger logger, CancellationToken ct)
+    {
+        if (guards is not { Count: > 0 }) return PublicationGuardVerdict.Allow;
+        // Sans attente, un doute d'attente (« playing ») refuse aussitôt : le plafond d'attente est ramené à zéro.
+        var effective = wait ? guards : guards.Select(guard => guard with { MaxWaitMinutes = 0 }).ToArray();
+        var subject = new RuntimeTransfer(executionId, epoch, string.Empty, mediaPath, null, null, null, false, LibraryId: libraryId, Guards: effective);
+        var verdict = await EvaluateAsync(subject, invoker, delay, clock, logger, ct, proceedWhenUnavailable: true);
+        return verdict.Allowed ? verdict : verdict with { Detail = verdict.Detail?.Replace("Remplacement non effectué", "Écriture non effectuée") };
+    }
+
+    public static async Task<PublicationGuardVerdict> EvaluateAsync(RuntimeTransfer transfer, IPublicationGuardInvoker invoker,
+        Func<TimeSpan, CancellationToken, Task> delay, Func<DateTimeOffset> clock, ILogger logger, CancellationToken ct, bool proceedWhenUnavailable = false)
     {
         if (transfer.Guards is not { Count: > 0 } guards) return PublicationGuardVerdict.Allow;
         var started = clock();
@@ -66,10 +87,16 @@ public sealed class PublicationGuardRunner(IPublicationGuardInvoker invoker, ILo
                 catch (Exception exception)
                 {
                     logger.LogWarning("Garde {Plugin} indisponible pour {ExecutionId} : {Type}.", guard.PluginId, transfer.ExecutionId, exception.GetType().Name);
+                    if (proceedWhenUnavailable) continue;
                     return new(false, $"Remplacement non effectué : la garde du plugin {guard.PluginId} est indisponible.");
                 }
                 if (guard.AllowOutputs.Contains(output)) continue;
                 if (guard.WaitOutputs.Contains(output)) { waiting.Add(guard); continue; }
+                if (proceedWhenUnavailable)
+                {
+                    logger.LogWarning("Garde {Plugin} sans avis pour {ExecutionId} (sortie « {Output} ») : l'écriture continue.", guard.PluginId, transfer.ExecutionId, output);
+                    continue;
+                }
                 return new(false, $"Remplacement non effectué : la garde du plugin {guard.PluginId} a refusé (sortie « {output} »).");
             }
             if (waiting.Count == 0) return PublicationGuardVerdict.Allow;

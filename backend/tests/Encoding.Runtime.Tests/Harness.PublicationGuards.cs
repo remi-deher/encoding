@@ -17,15 +17,15 @@ internal static partial class Harness
             var guard = (await provider.ListAsync(CancellationToken.None)).Single();
             Check(guard.PluginId == "plex" && guard.PluginVersion == "1.1.0" && guard.ComponentId == "plex-check-playback" && guard.ComponentVersion == "1.0.0",
                 "A configured Plex guards replacements by default.");
-            Check(guard.Configuration["scope"].GetString() == "file" && guard.Configuration["includeNextEpisode"].GetBoolean() && guard.Configuration["nextEpisodeMarginMinutes"].GetInt32() == 15 && guard.MaxWaitMinutes == 30,
-                "The schema defaults apply: file scope, next episode, 15 min margin, 30 min maximum wait.");
+            Check(guard.Configuration["scope"].GetString() == "file" && guard.Configuration["includeNextEpisode"].GetBoolean() && guard.Configuration["nextEpisodeMarginMinutes"].GetInt32() == 15 && guard.MaxWaitMinutes == 10,
+                "The schema defaults apply: file scope, next episode, 15 min margin, 10 min maximum wait.");
             Check(guard.PluginConfiguration["apiKey"].GetString() == "jeton-plex-secret" && guard.WaitOutputs.SequenceEqual(["playing"]) && guard.AllowOutputs.SequenceEqual(["idle"]),
                 "The access node receives the effective plugin values and the output mapping.");
 
             await configurations.SaveGlobalAsync(plex, new(saved!.Revision, new Dictionary<string, JsonElement>
-                { ["guardIncludeNextEpisode"] = J(false), ["guardNextEpisodeMarginMinutes"] = J(5), ["guardMaxWaitMinutes"] = J(10) }), CancellationToken.None);
+                { ["guardIncludeNextEpisode"] = J(false), ["guardNextEpisodeMarginMinutes"] = J(5), ["guardMaxWaitMinutes"] = J(20) }), CancellationToken.None);
             var tuned = (await provider.ListAsync(CancellationToken.None)).Single();
-            Check(!tuned.Configuration["includeNextEpisode"].GetBoolean() && tuned.Configuration["nextEpisodeMarginMinutes"].GetInt32() == 5 && tuned.MaxWaitMinutes == 10, "Saved guard settings are used.");
+            Check(!tuned.Configuration["includeNextEpisode"].GetBoolean() && tuned.Configuration["nextEpisodeMarginMinutes"].GetInt32() == 5 && tuned.MaxWaitMinutes == 20, "Saved guard settings are used.");
 
             var tunedRevision = (await configurations.GetGlobalAsync(plex, CancellationToken.None)).Revision;
             await configurations.SaveGlobalAsync(plex, new(tunedRevision, new Dictionary<string, JsonElement> { ["guardReplacement"] = J(false) }), CancellationToken.None);

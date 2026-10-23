@@ -6,7 +6,7 @@ using Encoding.NodeAgent.Runtime.Media;
 
 namespace Encoding.NodeAgent.Runtime;
 
-public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scanner,MediaActions actions,ProcessToolRunner tools,PluginProcessHost plugins,Encoding.NodeAgent.Services.IToolCapabilityProbe capabilities,ILogger<RuntimeFlowRunner> logger)
+public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scanner,MediaActions actions,ProcessToolRunner tools,PluginProcessHost plugins,PublicationGuardRunner guards,Encoding.NodeAgent.Services.IToolCapabilityProbe capabilities,ILogger<RuntimeFlowRunner> logger)
 {
     public async Task RunAsync(RuntimeLease lease,RuntimeClient client,CancellationToken stoppingToken)
     {
@@ -286,6 +286,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         else
                         {
                             await EnsureDecodedAsync();
+                            var playback=await guards.CheckForStepAsync(lease.ExecutionId,lease.Epoch,lease.MediaPath,lease.LibraryId,lease.Guards,true,job.Token);
+                            if(!playback.Allowed) throw new PublishResultException(playback.Detail??"Lecture en cours ; le résultat n'a pas été publié.");
                             // Rejouable après une reprise (ADR 0004) : une publication déjà demandée ou faite pour ce même résultat est adoptée, jamais refaite.
                             var already=await client.PublicationStateAsync(lease.ExecutionId,lease.Epoch,job.Token);
                             if(already.Requested && already.Sha256!=context.CurrentSha256) throw new PublishResultException("Un autre résultat a déjà été publié pour cette exécution.");
@@ -308,8 +310,12 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(context.Plan.Count>0 || context.CurrentSha256!=sourceSha || variables.ContainsKey("runtime.inPlaceEdited"))
                             throw new InPlaceEditException("La modification sur place doit précéder tout autre bloc qui modifie le média, et ne peut être utilisée qu'une fois par flow.");
                         var edit=InPlaceTrackEdit.From(c);
+                        // Lecture en cours (Plex) : attendre sa fin ; la garde est ensuite revérifiée juste avant l'écriture.
+                        var playbackWait=await guards.CheckForStepAsync(lease.ExecutionId,lease.Epoch,lease.MediaPath,lease.LibraryId,lease.Guards,true,job.Token);
+                        if(!playbackWait.Allowed) throw new InPlaceEditException(playbackWait.Detail??"Lecture en cours ; la source n'a pas été modifiée.");
                         var result=await new InPlaceMkvEditor(tools).ApplyAsync(lease.SourceRoot,Path.Combine(options.DataDirectory,"media-locks"),lease.ExecutionId,lease.MediaPath,sourceSha,
-                            edit.Arguments,edit.AlreadyApplied,edit.Verify,directory,MediaActions.Flag(c,"keepBackup"),()=>!job.IsCancellationRequested,job.Token);
+                            edit.Arguments,edit.AlreadyApplied,edit.Verify,directory,MediaActions.Flag(c,"keepBackup"),()=>!job.IsCancellationRequested,job.Token,
+                            async token=>(await guards.CheckForStepAsync(lease.ExecutionId,lease.Epoch,lease.MediaPath,lease.LibraryId,lease.Guards,false,token)) is { Allowed:false } last?last.Detail??"Lecture en cours.":null);
                         logger.LogInformation("Modification sur place {Node} : {Detail}",node.Id,result.Detail);
                         if(result.Status=="unchanged") output="unchanged";
                         else variables["runtime.inPlaceEdited"]=JsonSerializer.SerializeToElement(result.NewSha256);

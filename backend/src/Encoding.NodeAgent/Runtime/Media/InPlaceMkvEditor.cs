@@ -61,9 +61,10 @@ public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
 
     /// <param name="editArguments">Arguments mkvpropedit placés après le fichier (<c>--edit … --set …</c>), construits depuis <c>mkvmerge -J</c> avant modification.</param>
     /// <param name="expectedChange">Rejoue sur la sortie de <c>mkvmerge -J</c> après modification ; retourne un message si la propriété attendue est absente.</param>
+    /// <param name="beforeWrite">Dernier contrôle après la sauvegarde et avant l'écriture ; retourne un message pour refuser, null pour continuer.</param>
     /// <param name="alreadyApplied">Évalué sur la sortie de <c>mkvmerge -J</c> avant modification ; vrai si rien ne doit changer.</param>
     public async Task<InPlaceEditResult> ApplyAsync(string root,string lockDirectory,Guid executionId,string mediaPath,string expectedSha,Func<JsonElement,IReadOnlyList<string>> editArguments,
-        Func<JsonElement,bool> alreadyApplied,Func<JsonElement,string?> expectedChange,string workDirectory,bool keepBackup,Func<bool> stillAuthorized,CancellationToken ct)
+        Func<JsonElement,bool> alreadyApplied,Func<JsonElement,string?> expectedChange,string workDirectory,bool keepBackup,Func<bool> stillAuthorized,CancellationToken ct,Func<CancellationToken,Task<string?>>? beforeWrite=null)
     {
         var original=SafeMediaPaths.Resolve(root,mediaPath);
         if(!string.Equals(Path.GetExtension(original),".mkv",StringComparison.OrdinalIgnoreCase)) throw new InPlaceEditException("Seuls les fichiers MKV peuvent être modifiés sur place.");
@@ -86,6 +87,8 @@ public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
             File.Copy(original,backup,true);
             if(await SafeMediaPaths.DigestAsync(backup,ct)!=expectedSha) { File.Delete(backup); throw new InPlaceEditException("La sauvegarde de la source est invalide ; la source n'a pas été modifiée."); }
             if(!stillAuthorized()) { File.Delete(backup); throw new InPlaceEditException("Le bail n'est plus valide ; la source n'a pas été modifiée."); }
+            // Dernier contrôle juste avant d'écrire : la sauvegarde peut durer, une lecture a pu démarrer entre-temps.
+            if(beforeWrite is not null && await beforeWrite(ct) is { } refusal) { File.Delete(backup); throw new InPlaceEditException(refusal+" La source n'a pas été modifiée."); }
             await WriteIntentAsync(directory,"started",expectedSha,size,ct);
             string? failure=null;
             try
