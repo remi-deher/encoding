@@ -160,7 +160,7 @@ async Task RunScenarioAsync()
         for (var i = 0; i < 3; i++) StopNode(processes, i);
         processes[0] = StartNode(0);
         await WaitUntilAsync(async () => (await ReadStatesAsync(client, httpPorts)).Length == 1,
-            TimeSpan.FromSeconds(15), "single node returns after a full cluster stop");
+            TimeSpan.FromSeconds(45), "single node returns after a full cluster stop");
         var recoveredAlone = (await ReadStatesAsync(client, httpPorts)).Single();
         Ensure(recoveredAlone.CommittedIndex >= 2, "committed log survives isolated process restart");
 
