@@ -47,6 +47,9 @@ public static class ConditionTree
     public static IReadOnlyList<ConditionFieldDefinition> Fields { get; } = [
         new("video.codec", "Codec de la première piste vidéo", "text", TextOperators, ["video", "image"], true, true,
             Options: [new("hevc", "H.265 / HEVC"), new("h264", "H.264"), new("av1", "AV1"), new("vp9", "VP9")]),
+        new("video.count", "Nombre de pistes vidéo (hors images attachées)", "number", NumberOperators, ["video"], true, true),
+        new("video.bitDepth", "Profondeur de couleur de la première piste vidéo", "number", NumberOperators, ["video"], true, true, Unit: "bits"),
+        new("video.hdr", "La vidéo est HDR ou Dolby Vision", "boolean", BoolOperators, ["video"], true, true),
         new("video.width", "Largeur vidéo / image", "number", NumberOperators, ["video", "image"], true, true, Unit: "px"),
         new("video.height", "Hauteur vidéo / image", "number", NumberOperators, ["video", "image"], true, true, Unit: "px"),
         new("file.duration", "Durée du média", "number", NumberOperators, ["video", "music"], true, true, Unit: "s"),
@@ -219,8 +222,11 @@ public static class ConditionTree
         }
         if (!json.TryGetProperty("streams", out var streams) || streams.ValueKind != JsonValueKind.Array) return null;
         var type = rule.Field.StartsWith("video.", StringComparison.Ordinal) ? "video" : rule.Field.StartsWith("audio.", StringComparison.Ordinal) ? "audio" : "subtitle";
-        var tracks = streams.EnumerateArray().Where(track => track.ValueKind == JsonValueKind.Object && track.TryGetProperty("codec_type", out var codecType) && codecType.GetString() == type).ToArray();
+        var tracks = streams.EnumerateArray().Where(track => track.ValueKind == JsonValueKind.Object && track.TryGetProperty("codec_type", out var codecType) && codecType.GetString() == type
+            && !(type == "video" && track.TryGetProperty("disposition", out var disposition) && disposition.ValueKind == JsonValueKind.Object && disposition.TryGetProperty("attached_pic", out var cover) && cover.ValueKind == JsonValueKind.Number && cover.GetInt32() != 0)).ToArray();
         var property = rule.Field.Split('.')[1];
+        if (rule.Field == "video.bitDepth") return tracks.Length == 0 ? null : Element(MediaConditionEvaluator.DetectBitDepth(tracks[0]));
+        if (rule.Field == "video.hdr") return tracks.Length == 0 ? null : Element(MediaConditionEvaluator.DetectHdrFormat(tracks[0]) != MediaConditionEvaluator.HdrFormat.Sdr);
         if (property == "present") return Element(tracks.Length > 0);
         if (property == "count") return Element(tracks.Length);
         if (property is "languages" or "codecs")

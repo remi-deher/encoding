@@ -34,6 +34,11 @@ internal static class ConditionScenarios
         Check(ConditionTree.Evaluate(Rule("variable.boolean","eq",true,"enabled"),data),"Boolean variables stay typed.");
         Check(ConditionTree.Evaluate(Rule("source.nodeId","eq",source.ToString()),data) && ConditionTree.Evaluate(Rule("library.id","eq",library.ToString()),data),"Origin criteria use stable execution context.");
         Check(ConditionTree.Evaluate(Rule("processing.modified","eq",true),data),"Modified state uses current and source digests.");
+        var hdrAfter=J(new { streams=new object[]{new{codec_type="video",codec_name="h264",pix_fmt="yuv420p10le",color_transfer="smpte2084"},new{codec_type="video",codec_name="mjpeg",disposition=new{attached_pic=1}},new{codec_type="video",codec_name="h264",pix_fmt="yuv420p"}}, format=new{size="1",duration="1"} });
+        var copyData=data with { Runtime=runtime with { CurrentMetadata=hdrAfter } };
+        Check(ConditionTree.Evaluate(Rule("video.count","eq",2),copyData),"Attached pictures are not video tracks.");
+        Check(ConditionTree.Evaluate(Rule("video.bitDepth","gte",10),copyData) && !ConditionTree.Evaluate(Rule("video.bitDepth","gte",10),data),"The colour depth of the first video track is readable.");
+        Check(ConditionTree.Evaluate(Rule("video.hdr","eq",true),copyData) && !ConditionTree.Evaluate(Rule("video.hdr","eq",true),data),"HDR is detected from the transfer characteristics.");
         Check(!ConditionTree.RequiresMetadata(new ConditionGroup("all",[Rule("variable.number","gte",42,"score"),Rule("source.nodeId","eq",source.ToString())])),"Variable and origin rules do not need a scan.");
         Check(ConditionTree.Evaluate(Rule("variable.text","missing",variable:"absent"),data),"Missing values can be tested explicitly.");
         Check(!ConditionTree.Evaluate(new ConditionGroup("all",[Rule("variable.text","exists",variable:"absent"),Rule("variable.text","eq","x","absent")]),data),"AND short-circuits an explicit presence guard.");
