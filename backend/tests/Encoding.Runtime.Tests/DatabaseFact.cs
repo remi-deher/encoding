@@ -29,7 +29,7 @@ public sealed class MkvToolsFactAttribute : FactAttribute
     }
 }
 
-/// <summary>One SQLite file shared by database scenarios, run sequentially in this collection.</summary>
+/// <summary>One SQLite file shared by database scenarios, isolated from concurrent test collections.</summary>
 public sealed class RuntimeFixture : IAsyncLifetime
 {
     public static string? ConnectionString => TestDatabase.ConfiguredConnection;
@@ -48,7 +48,7 @@ public sealed class RuntimeFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition(Name)]
+[CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class RuntimeCollection : ICollectionFixture<RuntimeFixture>
 {
     public const string Name = "sqlite";
