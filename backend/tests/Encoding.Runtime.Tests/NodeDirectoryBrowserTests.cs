@@ -32,8 +32,14 @@ public sealed class NodeDirectoryBrowserTests
         await using (var insert = database.Db.CreateCommand())
         {
             insert.CommandText = "INSERT INTO cluster_nodes(id,name,roles,max_concurrent_tasks,last_seen_at) VALUES(@id,'worker','worker',1,@seen)";
-            insert.Parameters.AddWithValue("id", nodeId);
-            insert.Parameters.AddWithValue("seen", DateTimeOffset.UtcNow);
+            var id = insert.CreateParameter();
+            id.ParameterName = "@id";
+            id.Value = nodeId;
+            insert.Parameters.Add(id);
+            var seen = insert.CreateParameter();
+            seen.ParameterName = "@seen";
+            seen.Value = DateTimeOffset.UtcNow;
+            insert.Parameters.Add(seen);
             await insert.ExecuteNonQueryAsync();
         }
 
@@ -67,10 +73,11 @@ public sealed class NodeDirectoryBrowserTests
             var result = NodeDirectoryBrowserService.Browse(root, CancellationToken.None);
 
             Assert.Null(result.Error);
-            Assert.Equal(200, result.Entries.Count);
+            var entries = Assert.IsAssignableFrom<IReadOnlyList<NodeDirectoryBrowserEntry>>(result.Entries);
+            Assert.Equal(200, entries.Count);
             Assert.True(result.HasMore);
-            Assert.DoesNotContain(result.Entries, entry => entry.Name.StartsWith(".encoding", StringComparison.Ordinal));
-            Assert.DoesNotContain(result.Entries, entry => entry.Name == "movie.mkv");
+            Assert.DoesNotContain(entries, entry => entry.Name.StartsWith(".encoding", StringComparison.Ordinal));
+            Assert.DoesNotContain(entries, entry => entry.Name == "movie.mkv");
         }
         finally { Directory.Delete(root, recursive: true); }
     }
