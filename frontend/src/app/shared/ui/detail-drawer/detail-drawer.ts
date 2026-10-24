@@ -49,6 +49,7 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
           <div class="drawer-grab" aria-hidden="true"></div>
           <header
             class="drawer-header"
+            [class.drawer-header_compact]="headerDensity() === 'compact'"
             [class.drawer-header_info]="variant() === 'info'"
             [class.drawer-header_danger]="variant() === 'danger'"
             [class.drawer-header_success]="variant() === 'success'"
@@ -182,6 +183,23 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
     .drawer-header_success {
       --drawer-tone: var(--success-soft);
       --drawer-tone-ink: var(--success);
+    }
+
+    .drawer-header_compact {
+      min-height: 52px;
+      padding: var(--space-2) var(--space-4);
+      gap: var(--space-3);
+    }
+
+    .drawer-header_compact .drawer-heading h2 {
+      font-size: var(--font-title);
+      line-height: 1.2;
+    }
+
+    .drawer-header_compact .drawer-heading p {
+      margin-top: 2px;
+      font-size: var(--font-label);
+      line-height: 1.25;
     }
 
     .drawer-icon {
@@ -329,6 +347,11 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
         gap: var(--space-3);
       }
 
+      .drawer-header_compact {
+        min-height: 48px;
+        padding: var(--space-2) var(--space-4);
+      }
+
       .drawer-header-controls {
         align-self: flex-start;
       }
@@ -352,6 +375,7 @@ export class DetailDrawerComponent {
   readonly fill = input(false);
   readonly mode = input<'side' | 'over'>('over');
   readonly size = input<'standard' | 'wide'>('wide');
+  readonly headerDensity = input<'standard' | 'compact'>('standard');
   /** Avec un voile, un clic extérieur ferme le tiroir si celui-ci est dismissible. */
   readonly modal = input(false);
   /** Désactiver Escape et la fermeture par voile pendant une saisie à protéger. */
