@@ -1,6 +1,6 @@
 ---
 domain: plugins
-updated: 2026-10-23
+updated: 2026-10-24
 legacy_adr: [0005, 0011, 0019, 0020, 0021, 0024, 0032, 0054, 0055, 0056, 0057, 0058, 0059, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0070, 0075, 0076, 0079]
 code:
   - backend/src/Encoding.Api/Flows/Catalog/*.json
@@ -53,3 +53,6 @@ Le **catalogue de composants fait foi dans le code**, pas dans une doc : lire `b
 2. Descriptor disponible ≠ plugin exécutable sur un worker.
 3. Jamais de secret ni de chemin local dans les sorties, journaux ou exports.
 4. Le flow historique reste valide quand un plugin évolue.
+
+## Analyse pendant la composition vidéo
+Depuis `video` 1.3.0, la composition FFmpeg réutilise une seule analyse de son entrée pour sélection, resize et politique vidéo ; un échec d'analyse vidéo bloque au lieu d'être ignoré. Les composants gardent `compatiblePluginVersions` pour 1.2.0 et les versions précédemment acceptées. Les nouveaux flows attendent un worker annonçant le contrat installé ; aucune migration des flows historiques.

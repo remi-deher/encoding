@@ -26,6 +26,7 @@ export const FLOW_CREATION_FORM: RecordFormData = {
       required: true,
       filterOptionsByFieldId: 'mediaType',
       options: [
+        { value: 'guided', label: 'Assistant vidéo — création guidée', mediaTypes: ['video'] },
         { value: 'blank', label: 'Flow vierge' },
         { value: 'flow-video-library', label: 'Films — H.265', mediaTypes: ['video'] },
         { value: 'flow-video-series', label: 'Séries — H.265', mediaTypes: ['video'] },
@@ -53,5 +54,5 @@ export const FLOW_CREATION_FORM: RecordFormData = {
       fieldIds: ['starter'],
     },
   ],
-  initialValues: { mediaType: 'video', starter: 'blank' },
+  initialValues: { mediaType: 'video', starter: 'guided' },
 };

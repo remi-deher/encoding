@@ -74,3 +74,6 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 ## Accès de stockage du répartiteur
 - Migration additive 0048 : index couvrants des baux actifs par worker et bibliothèque, et index partiel du dernier checkpoint terminé. Les mêmes prédicats, plafonds, époques et ordres d’attribution sont conservés. Plans observés et coût d’entretien des index : [sqlite-runtime-query-plans.md](../../testing/sqlite-runtime-query-plans.md).
 - Migration additive 0050 : recherche des doublons actifs par `(library_id, media_key)` dans `execution_work` (table locale), avec `execution_id` couvrant la jointure. L'index évite le parcours de tous les travaux de la bibliothèque et n'est pas modifié par les renouvellements de baux.
+
+## Composition FFmpeg
+Les blocs en mode plan préparent des opérations ; l'exécuteur regroupe les opérations FFmpeg consécutives dans une seule commande. Les autres outils restent des frontières explicites. Sélection de pistes, resize et politique vidéo partagent une analyse de l'entrée pendant la composition de cette commande ; un échec de cette analyse bloque le traitement. Aucun cache n'est réutilisé pour valider un candidat ou publier. Commandes, erreurs et étapes restent dans le suivi commun ; aucun pourcentage FFmpeg n'est ajouté. Voir la [revue des flows](../flow-review-2026-10-24.md).

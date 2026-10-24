@@ -584,11 +584,15 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
 
     public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true,IReadOnlySet<int>? forceCpuFallbackSteps=null)
     {
+        // This input is immutable while the command is composed. Share one mandatory
+        // inspection across selection, resize and video policy; output validation is separate.
+        JsonElement? inputMetadata = null;
+        async Task<JsonElement> InspectAsync() => inputMetadata ??= await scanner.ScanAsync(current, ct);
         if (plan.Any(step => step.Configuration.ContainsKey("trackSelection")))
-            plan = MediaTrackSelection.Expand(plan, await scanner.ScanAsync(current, ct));
+            plan = MediaTrackSelection.Expand(plan, await InspectAsync());
         if (plan.Any(step => step.ComponentId is "base-resize-video" or "video-resize"))
         {
-            var metadata = await scanner.ScanAsync(current, ct);
+            var metadata = await InspectAsync();
             var video = metadata.GetProperty("streams").EnumerateArray().FirstOrDefault(stream => MediaTrackSelection.Text(stream, "codec_type") == "video");
             var width = video.ValueKind == JsonValueKind.Object ? MediaTrackSelection.Number(video, "width") : 0;
             var height = video.ValueKind == JsonValueKind.Object ? MediaTrackSelection.Number(video, "height") : 0;
@@ -615,8 +619,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
                     var codec=Text(c,"videoCodec","hevc");
                     var ffmpeg=(await capabilities.DiscoverAsync(ct)).FirstOrDefault(capability=>capability.ToolId=="ffmpeg")
                         ??throw new MediaToolException("FFmpeg",1);
-                    JsonElement? currentMetadata=null;
-                    try { currentMetadata=await scanner.ScanAsync(current,ct); } catch { }
+                    JsonElement? currentMetadata=await InspectAsync();
                     JsonElement? vStream=null; int sourceWidth=0, sourceHeight=0; string? sourcePixFmt=null;
                     if(currentMetadata is { ValueKind: JsonValueKind.Object } metaObj && metaObj.TryGetProperty("streams",out var streamList) && streamList.ValueKind==JsonValueKind.Array)
                     {
