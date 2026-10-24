@@ -1,10 +1,17 @@
 import { IconComponent } from '../../shared/ui/icon.component';
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient } from '@angular/common/http';
 import { catchError, exhaustMap, of, timeout, timer } from 'rxjs';
 import { SetupNodeSheet } from '../../shared/models/local-node';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -94,10 +101,29 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
 
             <div class="hardware-tiles">
               <div class="hardware-tile hardware-tile--wide">
-                <span class="tile-label">Adresse IP / Réseau</span>
-                <span class="tile-value tile-value--mono">{{ networkAddressInfo() }}</span>
-                @if (networkUrlHint(); as urlHint) {
-                  <span class="tile-hint">{{ urlHint }}</span>
+                <span class="tile-label">Accès au nœud</span>
+                @for (url of networkAccessUrls(); track url) {
+                  <span class="tile-value tile-value--mono">{{ url }}</span>
+                }
+                <span class="tile-hint">{{ networkAccessSource() }}</span>
+              </div>
+              <div class="hardware-tile hardware-tile--wide">
+                <span class="tile-label">Adresses des interfaces</span>
+                @if (setupSheet()?.addresses?.length) {
+                  <ul class="network-addresses" aria-label="Adresses des interfaces">
+                    @for (
+                      item of setupSheet()!.addresses;
+                      track item.interface + '/' + item.address
+                    ) {
+                      <li class="tile-value tile-value--mono">
+                        {{ item.address }} ({{ item.interface }})
+                      </li>
+                    }
+                  </ul>
+                } @else {
+                  <span class="tile-value">{{
+                    setupSheet() ? 'Aucune adresse détectée' : 'Détection en cours…'
+                  }}</span>
                 }
               </div>
               <div class="hardware-tile">
@@ -559,7 +585,17 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       display: block;
       min-height: 100%;
       padding: var(--space-4);
+      background: var(--page-background);
+    }
+    :host-context([data-theme='dark']) {
       background: radial-gradient(ellipse at 50% 0, var(--accent-soft), transparent 65%);
+    }
+    .network-addresses {
+      display: grid;
+      gap: var(--space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
     }
     .setup-progress {
       border-radius: var(--radius-pill);
@@ -934,6 +970,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
   `,
 })
 export class SetupWizardPageComponent {
+  private readonly document = inject(DOCUMENT);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly notifications = inject(NotificationService);
@@ -1006,7 +1043,9 @@ export class SetupWizardPageComponent {
   protected readonly defaultNodeName = computed(() => {
     const status = this.localController.status();
     const sheet = this.setupSheet();
-    return status?.displayName || sheet?.displayName || status?.name || sheet?.name || 'Mon Serveur';
+    return (
+      status?.displayName || sheet?.displayName || status?.name || sheet?.name || 'Mon Serveur'
+    );
   });
 
   protected readonly effectiveNodeName = computed(() => {
@@ -1026,33 +1065,16 @@ export class SetupWizardPageComponent {
     return `${host} · ${inv.operatingSystem} (${inv.architecture})`;
   });
 
-  protected readonly networkAddressInfo = computed(() => {
-    const sheet = this.setupSheet();
-    const addresses = sheet?.addresses ?? [];
-    if (addresses.length > 0) {
-      return addresses
-        .map((item) => (item.interface ? `${item.address} (${item.interface})` : item.address))
-        .join(' · ');
-    }
-    const urls = sheet?.urls ?? [];
-    if (urls.length > 0) {
-      return urls.join(' · ');
-    }
-    if (!sheet && !this.localController.status()) {
-      return 'Détection en cours…';
-    }
-    return 'Locale uniquement';
+  // The browser retains the Docker host and published port, unlike the container's
+  // interfaces or default gateway. Configured public/advertised URLs take precedence.
+  protected readonly networkAccessUrls = computed(() => {
+    const urls = this.setupSheet()?.urls ?? [];
+    return urls.length ? urls : [this.document.location.origin];
   });
 
-  protected readonly networkUrlHint = computed(() => {
-    const sheet = this.setupSheet();
-    const addresses = sheet?.addresses ?? [];
-    const urls = sheet?.urls ?? [];
-    if (addresses.length > 0 && urls.length > 0) {
-      return `URL annoncée : ${urls.join(' · ')}`;
-    }
-    return null;
-  });
+  protected readonly networkAccessSource = computed(() =>
+    this.setupSheet()?.urls?.length ? 'Adresse annoncée' : 'Adresse utilisée par ce navigateur',
+  );
 
   protected readonly defaultClusterName = computed(() => {
     return 'Cluster ' + this.effectiveNodeName();

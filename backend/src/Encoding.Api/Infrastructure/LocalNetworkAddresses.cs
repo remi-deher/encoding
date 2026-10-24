@@ -6,23 +6,17 @@ using Encoding.Contracts.Auth;
 namespace Encoding.Api.Infrastructure;
 
 /// <summary>
-/// Adresses IPv4 des interfaces actives vues par ce processus, pour aider à repérer le nœud sur le réseau.
+/// Adresses IPv4 et IPv6 de toutes les interfaces vues par ce processus.
 /// Dans un conteneur en réseau « bridge », ce sont les adresses du conteneur, pas celle de l'hôte : l'information est
 /// observée, jamais présentée comme l'adresse de joignabilité du nœud (celle-ci reste l'URL publique ou annoncée).
 /// </summary>
 public static class LocalNetworkAddresses
 {
-    public const int MaximumAddresses = 16;
-
-    /// <summary>Ponts virtuels côté hôte (Docker, libvirt) : jamais l'adresse par laquelle le réseau local joint le nœud.</summary>
-    private static readonly string[] VirtualBridgePrefixes = ["docker", "br-", "veth", "virbr", "cni", "flannel", "cali", "lxcbr"];
-
     public static IReadOnlyList<SetupNodeAddress> Current()
     {
         try
         {
             var candidates = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(nic => nic.OperationalStatus == OperationalStatus.Up && nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
                 .SelectMany(nic => nic.GetIPProperties().UnicastAddresses.Select(unicast => (nic.Name, unicast.Address)));
             return Select(candidates);
         }
@@ -33,26 +27,14 @@ public static class LocalNetworkAddresses
         }
     }
 
-    /// <summary>Filtre déterministe : IPv4 unicast hors boucle locale, lien local et ponts virtuels ; dédoublonné et borné.</summary>
+    /// <summary>Adresses assignées, dédoublonnées par interface et IP ; inclut boucle locale, lien local et interfaces virtuelles.</summary>
     public static IReadOnlyList<SetupNodeAddress> Select(IEnumerable<(string Interface, IPAddress Address)> candidates) =>
         candidates
-            .Where(item => item.Address.AddressFamily == AddressFamily.InterNetwork
-                && !IPAddress.IsLoopback(item.Address)
-                && !IsLinkLocal(item.Address)
-                && !IsVirtualBridge(item.Interface))
-            .DistinctBy(item => item.Address)
+            .Where(item => item.Address.AddressFamily is AddressFamily.InterNetwork or AddressFamily.InterNetworkV6)
+            .DistinctBy(item => (item.Interface, item.Address))
             .OrderBy(item => item.Interface, StringComparer.Ordinal)
+            .ThenBy(item => item.Address.AddressFamily)
             .ThenBy(item => item.Address.ToString(), StringComparer.Ordinal)
-            .Take(MaximumAddresses)
             .Select(item => new SetupNodeAddress(item.Interface, item.Address.ToString()))
             .ToArray();
-
-    private static bool IsLinkLocal(IPAddress address)
-    {
-        var bytes = address.GetAddressBytes();
-        return bytes[0] == 169 && bytes[1] == 254;
-    }
-
-    private static bool IsVirtualBridge(string name) =>
-        VirtualBridgePrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 }
