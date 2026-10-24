@@ -163,6 +163,18 @@ export class FlowValidation {
     };
   }
 
+  generateGuided(request: {
+    id: string;
+    name: string;
+    codec: string;
+    encoder: string;
+    quality: string;
+    audio: string;
+    retryWithCpu: boolean;
+  }) {
+    return firstValueFrom(this.http.post<FlowDocument>('/api/v1/flows/guided', request));
+  }
+
   saveDraft(definition: FlowDocument, expectedRevision: number) {
     return firstValueFrom(
       this.http.put<FlowVersionResponse>('/api/v1/flows/' + definition.id + '/draft', {

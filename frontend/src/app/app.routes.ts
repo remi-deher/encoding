@@ -201,6 +201,15 @@ const applicationRoutes: Routes = [
     },
   },
   {
+    path: 'flows/guided',
+    canDeactivate: [unsavedChangesGuard],
+    loadComponent: () =>
+      import('./features/flows/flow-guided-page.component').then(
+        (module) => module.FlowGuidedPageComponent,
+      ),
+    data: { title: 'Créer un flow guidé' },
+  },
+  {
     path: 'flows/new',
     canDeactivate: [unsavedChangesGuard],
     loadComponent: () =>

@@ -623,7 +623,7 @@ export class FlowCatalogPageComponent {
   }
 
   protected startFlow(values: Record<string, string>): void {
-    void this.router.navigate(['/flows/new'], {
+    void this.router.navigate([values['starter'] === 'guided' ? '/flows/guided' : '/flows/new'], {
       queryParams: {
         name: values['name'],
         mediaType: values['mediaType'],

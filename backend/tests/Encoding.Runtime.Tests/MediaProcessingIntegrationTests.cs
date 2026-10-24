@@ -38,7 +38,14 @@ public sealed class MediaProcessingIntegrationTests
                 new("audio-transcode", Config(new { trackSelection = new[] { new { languages = "fra" } }, audioCodec = "ac3", bitrateKbps = 256, channels = "source" })),
                 new("video-resize", Config(new { width = 64, height = 36, onlyIfLarger = true }))
             ];
-            var converted = await actions.FfmpegPlanAsync(plan, source, directory, "convert", Guid.NewGuid(), CancellationToken.None);
+            using var compositionCapture = RuntimeCommandCapture.Begin();
+            var compositionInvocation = Guid.NewGuid();
+            MediaActionOutcome converted;
+            using (compositionCapture.BeginStep("composed-conversion", compositionInvocation))
+                converted = await actions.FfmpegPlanAsync(plan, source, directory, "convert", Guid.NewGuid(), CancellationToken.None);
+            var commands = compositionCapture.ForStep("composed-conversion", compositionInvocation);
+            Assert.Single(commands, command => command.Command.Contains("ffprobe"));
+            Assert.Single(commands, command => command.Command.Contains("ffmpeg"));
             Assert.NotNull(converted.Primary);
             var metadata = await scanner.ScanAsync(converted.Primary, CancellationToken.None);
             var audio = metadata.GetProperty("streams").EnumerateArray().Where(stream => stream.GetProperty("codec_type").GetString() == "audio").ToArray();
