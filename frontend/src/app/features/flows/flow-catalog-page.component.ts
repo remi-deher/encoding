@@ -11,7 +11,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { map, catchError, of, timer, switchMap, merge, Subject } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -87,7 +94,7 @@ export class FlowCatalogPageComponent {
     initialValue: this.route.snapshot.data,
   });
 
-  private readonly actionDefinition = signal<RecordFormData | null>(null);
+  protected readonly actionDefinition = signal<RecordFormData | null>(null);
   protected readonly actionForm = computed(() => this.actionDefinition() ?? this.flowCreationForm);
   private readonly templateSource = signal<{
     readonly id: string;
@@ -517,6 +524,7 @@ export class FlowCatalogPageComponent {
   }
   protected readonly actionOpen = signal(false);
   protected readonly flowCreationForm = FLOW_CREATION_FORM;
+  protected readonly creationRecordForm = viewChild(RecordFormComponent);
   protected readonly selectedFlow = signal<FlowRecord | null>(null);
   protected readonly detailTitle = computed(
     () =>
@@ -624,5 +632,50 @@ export class FlowCatalogPageComponent {
       info: { flowEditorDirection: 'forward' },
     });
     this.actionOpen.set(false);
+  }
+
+  protected readonly creationStep = computed(() => this.creationRecordForm()?.stepIndex() ?? 0);
+
+  protected readonly creationStepCount = computed(
+    () => this.creationRecordForm()?.stepCount() ?? 3,
+  );
+
+  protected readonly creationProgress = computed(() => ({
+    current: this.creationStep() + 1,
+    total: this.creationStepCount(),
+  }));
+
+  protected readonly creationStepLabel = computed(
+    () => this.creationRecordForm()?.primaryLabel() ?? 'Continuer',
+  );
+
+  protected readonly creationSecondaryLabel = computed(
+    () => this.creationRecordForm()?.secondaryLabel() ?? 'Annuler',
+  );
+
+  protected creationPrimary(): void {
+    this.creationRecordForm()?.primary();
+  }
+
+  protected creationSecondary(): void {
+    this.creationRecordForm()?.secondary();
+  }
+
+  protected async importCreationFile(file: File): Promise<void> {
+    this.importing.set(true);
+    try {
+      const result = await this.api.import(file);
+      this.notifications.show(`${result.imported} flow(s) importé(s).`);
+      this.actionOpen.set(false);
+      this.refreshCatalog.next();
+    } catch (error) {
+      this.notifications.show(
+        error instanceof HttpErrorResponse
+          ? (error.error?.title ?? 'Import impossible.')
+          : 'Import impossible.',
+      );
+    } finally {
+      this.importing.set(false);
+    }
   }
 }

@@ -4,6 +4,7 @@
   [actionOpen]="actionOpen()"
   [actionTitle]="actionForm().title"
   [actionDescription]="actionForm().description"
+  [actionStep]="actionOpen() ? creationProgress() : null"
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
@@ -200,12 +201,44 @@
     }
   </ng-template>
 
+  <ng-template #actionFooterActions>
+    @if (!actionDefinition()) {
+      <button matButton="text" type="button" (click)="creationSecondary()">
+        {{ creationSecondaryLabel() }}
+      </button>
+      <button matButton="filled" type="button" (click)="creationPrimary()">
+        {{ creationStepLabel() }}
+      </button>
+    }
+  </ng-template>
+
   <ng-template #actionContent>
-    <app-record-form
-      [data]="actionForm()"
-      (submitted)="submitAction($event)"
-      (cancelled)="closeFlowCreation()"
-    />
+    @if (actionDefinition()) {
+      <app-record-form
+        [data]="actionForm()"
+        (submitted)="submitAction($event)"
+        (cancelled)="closeFlowCreation()"
+      />
+    } @else {
+      <app-record-form
+        [embedded]="true"
+        [data]="flowCreationForm"
+        (submitted)="startFlow($event)"
+        (cancelled)="closeFlowCreation()"
+      />
+      @if (creationStep() === 1) {
+        <section class="flow-creation-choice" aria-label="Importer un flow">
+          <h3>Ou importer un flow existant</h3>
+          <p>Importez un fichier JSON ou ZIP pour l’ajouter à votre bibliothèque de flows.</p>
+          <app-file-import
+            label="Importer un flow"
+            accept=".json,.zip"
+            [busy]="importing()"
+            (selected)="importCreationFile($event)"
+          />
+        </section>
+      }
+    }
     @if (sourcePreviewStatus() === 'loading') {
       <p role="status">Chargement de la version source…</p>
     } @else if (sourcePreviewStatus() === 'error') {
