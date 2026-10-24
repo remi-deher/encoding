@@ -18,7 +18,9 @@ async function openDialog(page: Page) {
   await page.getByRole('menuitem', { name: 'Changer le mot de passe' }).click();
   const dialog = page.getByRole('dialog', { name: 'Changer le mot de passe' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true })).toBeVisible();
+  // Material moves focus after the opening animation. Visibility alone allows fill()
+  // to race that focus transfer and send confirmation text to the first input on mobile.
+  await expect(dialog.getByLabel('Mot de passe actuel', { exact: true })).toBeFocused();
   return dialog;
 }
 
@@ -121,6 +123,11 @@ test('shows the server explanation when there is no account session', async ({ p
   await dialog.getByLabel('Mot de passe actuel', { exact: true }).fill(current);
   await dialog.getByLabel('Nouveau mot de passe', { exact: true }).fill(next);
   await dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true }).fill(next);
+  await expect(dialog.getByLabel('Mot de passe actuel', { exact: true })).toHaveValue(current);
+  await expect(dialog.getByLabel('Nouveau mot de passe', { exact: true })).toHaveValue(next);
+  await expect(dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true })).toHaveValue(
+    next,
+  );
   const [response] = await Promise.all([
     page.waitForResponse('**/api/v1/auth/password'),
     dialog.getByRole('button', { name: 'Changer le mot de passe' }).click(),
@@ -156,6 +163,7 @@ test('an administrator resets another account with the same dialog', async ({ pa
   await page.getByRole('button', { name: 'Changer le mot de passe de lecteur' }).click();
   const dialog = page.getByRole('dialog', { name: 'Réinitialiser le mot de passe' });
   await expect(dialog.getByLabel('Mot de passe actuel', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByLabel('Nouveau mot de passe', { exact: true })).toBeFocused();
   await dialog.getByLabel('Nouveau mot de passe', { exact: true }).fill('court');
   await dialog.getByLabel('Confirmer le nouveau mot de passe', { exact: true }).fill('court');
   await dialog.getByRole('button', { name: 'Réinitialiser' }).click();
