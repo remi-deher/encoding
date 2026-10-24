@@ -36,6 +36,7 @@ export interface CatalogEmptyState {
     <app-detail-drawer
       [opened]="actionOpen() || (detailOpen() && detailLayout() === 'drawer')"
       [size]="drawerSize()"
+      [headerDensity]="drawerHeaderDensity()"
       [modal]="drawerModal()"
       [title]="actionOpen() ? actionTitle() : detailTitle()"
       [description]="actionOpen() ? actionDescription() : detailDescription()"
@@ -199,6 +200,8 @@ export class ManagementCatalogTemplateComponent {
   readonly actionStep = input<{ readonly current: number; readonly total: number } | null>(null);
   /** Largeur du tiroir : `standard` (560 px) pour une fiche, `wide` pour un éditeur. */
   readonly drawerSize = input<'standard' | 'wide'>('wide');
+  /** Densité de l'en-tête des fiches ; reste normale pour les formulaires d'action. */
+  readonly drawerHeaderDensity = input<'standard' | 'compact'>('standard');
   /** Voile derrière le tiroir ; un clic dessus le ferme. */
   readonly drawerModal = input(true);
   readonly detailClosed = output<void>();

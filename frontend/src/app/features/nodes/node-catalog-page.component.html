@@ -34,6 +34,9 @@
   [catalogState]="pageState()"
   [catalogMessage]="catalogMessage()"
   [drawerSize]="pageTab() === 'groups' && groupFormOpen() ? 'wide' : 'standard'"
+  [drawerHeaderDensity]="
+    selectedNode() && !actionOpen() && local.flow() === null ? 'compact' : 'standard'
+  "
   [drawerModal]="true"
   (detailClosed)="pageTab() === 'groups' ? closeGroupDetail() : onDetailClosed()"
   (actionClosed)="pageTab() === 'groups' ? closeGroupForm() : closeCreateNode()"

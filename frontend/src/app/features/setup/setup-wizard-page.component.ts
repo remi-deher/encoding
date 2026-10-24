@@ -42,7 +42,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
         />
       }
 
-      @if (errorMessage()) {
+      @if (errorMessage() || localController.error()) {
         <div role="alert" class="setup-error">
           <svg
             viewBox="0 0 24 24"
@@ -56,7 +56,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
             <circle cx="12" cy="12" r="10" />
             <path d="M12 8v4m0 4h.01" stroke-linecap="round" />
           </svg>
-          <span>{{ errorMessage() }}</span>
+          <span>{{ errorMessage() || localController.error() }}</span>
         </div>
       }
 
@@ -173,84 +173,98 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
             <div class="section-heading">
               <span class="step-pill" aria-hidden="true">1</span>
               <div>
-                <h2 id="step-admin-heading">Créer l’administrateur</h2>
+                <h2 id="step-admin-heading">
+                  {{ accountCreated() ? 'Administrateur créé' : 'Créer l’administrateur' }}
+                </h2>
                 <p>
                   Ce compte protège l’accès au cluster. Vous pourrez en ajouter d’autres ensuite.
                 </p>
               </div>
             </div>
 
-            <div class="form-group">
-              <label for="admin-username-input" class="field-label">Nom d’utilisateur</label>
-              <input
-                id="admin-username-input"
-                type="text"
-                class="text-input"
-                [class.invalid]="adminErrors().username"
-                [ngModel]="adminUsername()"
-                (ngModelChange)="adminUsername.set($event)"
-                maxlength="64"
-                autocomplete="username"
-                [attr.aria-invalid]="adminErrors().username ? 'true' : null"
-                aria-describedby="admin-username-error"
-              />
-              @if (adminErrors().username) {
-                <span id="admin-username-error" class="field-error">{{
-                  adminErrors().username
-                }}</span>
-              }
-            </div>
-
-            <div class="form-group">
-              <label for="admin-password-input" class="field-label">Mot de passe</label>
-              <div class="input-with-button">
+            @if (accountCreated()) {
+              <p>
+                Connecté avec le compte <strong>{{ adminUsername() }}</strong
+                >.
+              </p>
+            } @else {
+              <div class="form-group">
+                <label for="admin-username-input" class="field-label">Nom d’utilisateur</label>
                 <input
-                  id="admin-password-input"
+                  id="admin-username-input"
+                  [disabled]="busy() || accountCreated()"
+                  type="text"
                   class="text-input"
-                  [class.invalid]="adminErrors().password"
-                  [type]="passwordVisible() ? 'text' : 'password'"
-                  [ngModel]="adminPassword()"
-                  (ngModelChange)="adminPassword.set($event)"
-                  autocomplete="new-password"
-                  [attr.aria-invalid]="adminErrors().password ? 'true' : null"
-                  aria-describedby="admin-password-hint"
+                  [class.invalid]="adminErrors().username"
+                  [ngModel]="adminUsername()"
+                  (ngModelChange)="adminUsername.set($event)"
+                  maxlength="64"
+                  autocomplete="username"
+                  [attr.aria-invalid]="adminErrors().username ? 'true' : null"
+                  aria-describedby="admin-username-error"
                 />
-                <button
-                  matButton="outlined"
-                  type="button"
-                  [attr.aria-pressed]="passwordVisible()"
-                  (click)="passwordVisible.set(!passwordVisible())"
-                >
-                  {{ passwordVisible() ? 'Masquer' : 'Afficher' }}
-                </button>
+                @if (adminErrors().username) {
+                  <span id="admin-username-error" class="field-error">{{
+                    adminErrors().username
+                  }}</span>
+                }
               </div>
-              <span
-                id="admin-password-hint"
-                [class]="adminErrors().password ? 'field-error' : 'field-hint'"
-              >
-                {{ adminErrors().password || minimumPasswordLength + ' caractères minimum.' }}
-              </span>
-            </div>
 
-            <div class="form-group">
-              <label for="admin-confirm-input" class="field-label">Confirmer le mot de passe</label>
-              <input
-                id="admin-confirm-input"
-                class="text-input"
-                [class.invalid]="adminErrors().confirm"
-                [type]="passwordVisible() ? 'text' : 'password'"
-                [ngModel]="adminConfirm()"
-                (ngModelChange)="adminConfirm.set($event)"
-                autocomplete="new-password"
-                [attr.aria-invalid]="adminErrors().confirm ? 'true' : null"
-                aria-describedby="admin-confirm-error"
-              />
-              @if (adminErrors().confirm) {
-                <span id="admin-confirm-error" class="field-error">{{
-                  adminErrors().confirm
-                }}</span>
-              }
-            </div>
+              <div class="form-group">
+                <label for="admin-password-input" class="field-label">Mot de passe</label>
+                <div class="input-with-button">
+                  <input
+                    id="admin-password-input"
+                    [disabled]="busy() || accountCreated()"
+                    class="text-input"
+                    [class.invalid]="adminErrors().password"
+                    [type]="passwordVisible() ? 'text' : 'password'"
+                    [ngModel]="adminPassword()"
+                    (ngModelChange)="adminPassword.set($event)"
+                    autocomplete="new-password"
+                    [attr.aria-invalid]="adminErrors().password ? 'true' : null"
+                    aria-describedby="admin-password-hint"
+                  />
+                  <button
+                    matButton="outlined"
+                    type="button"
+                    [attr.aria-pressed]="passwordVisible()"
+                    (click)="passwordVisible.set(!passwordVisible())"
+                  >
+                    {{ passwordVisible() ? 'Masquer' : 'Afficher' }}
+                  </button>
+                </div>
+                <span
+                  id="admin-password-hint"
+                  [class]="adminErrors().password ? 'field-error' : 'field-hint'"
+                >
+                  {{ adminErrors().password || minimumPasswordLength + ' caractères minimum.' }}
+                </span>
+              </div>
+
+              <div class="form-group">
+                <label for="admin-confirm-input" class="field-label"
+                  >Confirmer le mot de passe</label
+                >
+                <input
+                  id="admin-confirm-input"
+                  [disabled]="busy() || accountCreated()"
+                  class="text-input"
+                  [class.invalid]="adminErrors().confirm"
+                  [type]="passwordVisible() ? 'text' : 'password'"
+                  [ngModel]="adminConfirm()"
+                  (ngModelChange)="adminConfirm.set($event)"
+                  autocomplete="new-password"
+                  [attr.aria-invalid]="adminErrors().confirm ? 'true' : null"
+                  aria-describedby="admin-confirm-error"
+                />
+                @if (adminErrors().confirm) {
+                  <span id="admin-confirm-error" class="field-error">{{
+                    adminErrors().confirm
+                  }}</span>
+                }
+              </div>
+            }
           </section>
 
           <!-- Section 2 : Identité -->
@@ -267,6 +281,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
               <label for="node-name-input" class="field-label">Nom de ce nœud</label>
               <input
                 id="node-name-input"
+                [disabled]="busy() || accountCreated()"
                 type="text"
                 class="text-input"
                 [placeholder]="defaultNodeName()"
@@ -281,6 +296,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                   <button
                     type="button"
                     class="suggestion-chip"
+                    [disabled]="busy() || accountCreated()"
                     [class.active]="nodeName() === suggestion"
                     (click)="nodeName.set(suggestion)"
                   >
@@ -306,6 +322,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
               <button
                 type="button"
                 class="mode-card"
+                [disabled]="busy() || accountCreated()"
                 [class.selected]="selectedMode() === 'standalone'"
                 (click)="selectMode('standalone')"
                 role="radio"
@@ -339,6 +356,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
               <button
                 type="button"
                 class="mode-card"
+                [disabled]="busy() || accountCreated()"
                 [class.selected]="selectedMode() === 'createCluster'"
                 (click)="selectMode('createCluster')"
                 role="radio"
@@ -373,6 +391,7 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
               <button
                 type="button"
                 class="mode-card"
+                [disabled]="busy() || accountCreated()"
                 [class.selected]="selectedMode() === 'joinCluster'"
                 (click)="selectMode('joinCluster')"
                 role="radio"
@@ -424,7 +443,8 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     [disabled]="busy()"
                     (click)="submitStandalone()"
                   >
-                    Accéder au tableau de bord <app-icon name="forward" />
+                    Accéder au tableau de bord
+                    <app-icon name="forward" matButtonIcon iconPositionEnd />
                   </button>
                 </div>
               </div>
@@ -469,6 +489,27 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
             }
 
             @if (selectedMode() === 'joinCluster') {
+              @if (!accountCreated()) {
+                <p>
+                  Créez le compte administrateur de cette machine pour rechercher un cluster et
+                  envoyer une demande. La jonction devra ensuite être approuvée sur le cluster
+                  d’accueil.
+                </p>
+                <div class="workbench-actions">
+                  <button
+                    matButton="filled"
+                    type="button"
+                    [disabled]="busy()"
+                    (click)="prepareClusterJoin()"
+                  >
+                    Créer le compte et continuer
+                  </button>
+                </div>
+              } @else {
+                <p role="status">
+                  Compte administrateur local créé. Vous pouvez rejoindre un cluster.
+                </p>
+              }
               <div class="section-heading">
                 <span class="step-pill" aria-hidden="true">4</span>
                 <div>
@@ -493,6 +534,12 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                         <button
                           matButton="outlined"
                           type="button"
+                          [disabled]="
+                            !accountCreated() ||
+                            busy() ||
+                            localController.pending() ||
+                            joinApproved()
+                          "
                           (click)="selectClusterAddress(cluster.apiBaseUrl)"
                         >
                           Sélectionner
@@ -510,6 +557,9 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 <div class="input-with-button">
                   <input
                     id="cluster-address-input"
+                    [disabled]="
+                      !accountCreated() || busy() || localController.pending() || joinApproved()
+                    "
                     type="url"
                     class="text-input"
                     placeholder="http://192.168.1.50:8090"
@@ -519,7 +569,13 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                   <button
                     matButton="outlined"
                     type="button"
-                    [disabled]="!clusterAddress() || busy()"
+                    [disabled]="
+                      !accountCreated() ||
+                      !clusterAddress() ||
+                      busy() ||
+                      localController.pending() ||
+                      joinApproved()
+                    "
                     (click)="verifyClusterAddress()"
                   >
                     Vérifier
@@ -536,7 +592,9 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                   <h4>{{ target.name }}</h4>
                   <p class="target-url">{{ target.apiBaseUrl }} ({{ target.id }})</p>
 
-                  @if (pairingCode(); as code) {
+                  @if (joinApproved()) {
+                    <p role="status">Ce nœud a rejoint {{ target.name }}.</p>
+                  } @else if (pairingCode(); as code) {
                     <div class="hero-code-box">
                       <span class="code-label">Code de confirmation à comparer</span>
                       <div class="hero-digits">{{ code }}</div>
@@ -545,11 +603,15 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                         ce code depuis sa page Nœuds.
                       </p>
                     </div>
+                  } @else if (localController.pending()) {
+                    <p role="status">
+                      Demande envoyée. En attente de confirmation du cluster d’accueil.
+                    </p>
                   } @else {
                     <button
                       matButton="outlined"
                       type="button"
-                      [disabled]="busy()"
+                      [disabled]="busy() || !localController.canJoin()"
                       (click)="requestClusterJoin()"
                     >
                       Envoyer la demande de rattachement
@@ -562,10 +624,13 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                 <button
                   matButton="filled"
                   type="button"
-                  [disabled]="busy()"
+                  [disabled]="
+                    busy() || !accountCreated() || (!localController.pending() && !joinApproved())
+                  "
                   (click)="submitJoinFinish()"
                 >
-                  Terminer et ouvrir l’application <app-icon name="forward" />
+                  {{ joinApproved() ? 'Ouvrir l’application' : 'Suivre la demande dans Nœuds' }}
+                  <app-icon name="forward" matButtonIcon iconPositionEnd />
                 </button>
               </div>
             }
@@ -883,12 +948,15 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       border-color: var(--accent);
     }
     .mode-card-top,
-    .contextual-summary,
     .cluster-card {
       width: 100%;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: var(--space-3);
+    }
+    .contextual-summary {
+      display: grid;
       gap: var(--space-3);
     }
     .mode-icon {
@@ -926,6 +994,11 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
     }
     .input-with-button .text-input {
       flex: 1;
+    }
+    .workbench-actions button {
+      height: auto;
+      min-height: var(--mat-button-filled-container-height, 40px);
+      padding-block: var(--space-2);
     }
     .cluster-card,
     .target-confirmed-box {
@@ -992,6 +1065,8 @@ export class SetupWizardPageComponent {
   protected readonly adminConfirm = signal('');
   protected readonly passwordVisible = signal(false);
   protected readonly adminSubmitted = signal(false);
+  protected readonly accountCreated = signal(false);
+  protected readonly joinApproved = computed(() => this.localController.joinIndex() === 3);
   protected readonly minimumPasswordLength = MINIMUM_PASSWORD_LENGTH;
 
   constructor() {
@@ -999,10 +1074,12 @@ export class SetupWizardPageComponent {
       timer(0, 5_000)
         .pipe(
           exhaustMap(() =>
-            this.http!.get<SetupNodeSheet>('/api/v1/auth/setup/node').pipe(
-              timeout(8_000),
-              catchError(() => of(null)),
-            ),
+            this.accountCreated()
+              ? of(null)
+              : this.http!.get<SetupNodeSheet>('/api/v1/auth/setup/node').pipe(
+                  timeout(8_000),
+                  catchError(() => of(null)),
+                ),
           ),
           takeUntilDestroyed(this.destroyRef),
         )
@@ -1015,6 +1092,7 @@ export class SetupWizardPageComponent {
   }
   /** Mêmes règles que le serveur ; les erreurs apparaissent après saisie ou première validation. */
   protected readonly adminErrors = computed(() => {
+    if (this.accountCreated()) return { username: '', password: '', confirm: '' };
     const username = this.adminUsername().trim();
     const password = this.adminPassword();
     const confirm = this.adminConfirm();
@@ -1160,6 +1238,7 @@ export class SetupWizardPageComponent {
   );
 
   protected selectMode(mode: SetupOperationMode): void {
+    if (this.busy() || this.accountCreated()) return;
     this.errorMessage.set('');
     this.selectedMode.set(mode);
   }
@@ -1179,6 +1258,13 @@ export class SetupWizardPageComponent {
   }
 
   protected async verifyClusterAddress(): Promise<void> {
+    if (
+      !this.accountCreated() ||
+      this.busy() ||
+      this.localController.pending() ||
+      this.joinApproved()
+    )
+      return;
     const addr = this.clusterAddress().trim();
     if (!addr) return;
     this.errorMessage.set('');
@@ -1198,6 +1284,7 @@ export class SetupWizardPageComponent {
   }
 
   protected async requestClusterJoin(): Promise<void> {
+    if (!this.accountCreated() || this.busy() || !this.localController.canJoin()) return;
     this.errorMessage.set('');
     this.busy.set(true);
     try {
@@ -1228,18 +1315,35 @@ export class SetupWizardPageComponent {
     });
   }
 
-  protected async submitJoinFinish(): Promise<void> {
-    await this.completeSetup({
-      nodeDisplayName: this.effectiveNodeName(),
-      mode: 'joinCluster',
-    });
+  protected async prepareClusterJoin(): Promise<void> {
+    await this.completeSetup(
+      {
+        nodeDisplayName: this.effectiveNodeName(),
+        mode: 'joinCluster',
+      },
+      false,
+    );
   }
 
-  private async completeSetup(payload: {
-    nodeDisplayName: string;
-    mode: SetupOperationMode;
-    clusterName?: string;
-  }): Promise<void> {
+  protected async submitJoinFinish(): Promise<void> {
+    if (
+      this.busy() ||
+      !this.accountCreated() ||
+      (!this.localController.pending() && !this.joinApproved())
+    )
+      return;
+    await this.router.navigate([this.joinApproved() ? '/' : '/nodes']);
+  }
+
+  private async completeSetup(
+    payload: {
+      nodeDisplayName: string;
+      mode: SetupOperationMode;
+      clusterName?: string;
+    },
+    openApplication = true,
+  ): Promise<void> {
+    if (this.busy() || this.accountCreated()) return;
     this.errorMessage.set('');
     this.adminSubmitted.set(true);
     const errors = this.adminErrors();
@@ -1254,8 +1358,15 @@ export class SetupWizardPageComponent {
         username: this.adminUsername().trim(),
         password: this.adminPassword(),
       });
-      this.notifications.show('Initialisation terminée avec succès !');
-      await this.router.navigate(['/']);
+      this.accountCreated.set(true);
+      this.adminPassword.set('');
+      this.adminConfirm.set('');
+      if (openApplication) {
+        this.notifications.show('Initialisation terminée avec succès !');
+        await this.router.navigate(['/']);
+      } else {
+        this.localController.refresh();
+      }
     } catch (error) {
       this.errorMessage.set(
         AuthService.errorMessage(error, 'L’initialisation a échoué. Veuillez réessayer.'),
