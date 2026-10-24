@@ -18,10 +18,12 @@ describe('SetupWizardPageComponent', () => {
   let setupFn: ReturnType<typeof vi.fn>;
   let navigateFn: ReturnType<typeof vi.fn>;
   let statusSignal: ReturnType<typeof signal<LocalNodeStatus | null>>;
+  let pendingSignal: ReturnType<typeof signal<boolean>>;
 
   beforeEach(() => {
     setupFn = vi.fn().mockResolvedValue(undefined);
     navigateFn = vi.fn().mockResolvedValue(true);
+    pendingSignal = signal(false);
     statusSignal = signal<LocalNodeStatus | null>({
       nodeId: 'node-1',
       name: 'srv-transcode',
@@ -85,7 +87,11 @@ describe('SetupWizardPageComponent', () => {
               target: signal(null),
               pairing: signal(null),
               busy: signal(false),
+              canJoin: signal(true),
+              pending: pendingSignal,
+              joinIndex: signal(0),
               error: signal(''),
+              refresh: vi.fn(),
               verifyAddress: vi.fn(),
               sendRequest: vi.fn(),
             },
@@ -269,7 +275,7 @@ describe('SetupWizardPageComponent', () => {
     expect(navigateFn).toHaveBeenCalledWith(['/']);
   });
 
-  it('passes custom nodeName when requesting cluster join and finishing setup', async () => {
+  it('creates the administrator before joining and does not submit setup again when finishing', async () => {
     const fixture = TestBed.createComponent(SetupWizardPageComponent);
     fixture.detectChanges();
     const component = fixture.componentInstance;
@@ -278,17 +284,65 @@ describe('SetupWizardPageComponent', () => {
     component['nodeName'].set('Worker Garage');
     component['selectedMode'].set('joinCluster');
     await component['requestClusterJoin']();
-
-    expect(localController.sendRequest).toHaveBeenCalledWith('Worker Garage');
+    expect(localController.sendRequest).not.toHaveBeenCalled();
 
     fillAdmin(component);
-    await component['submitJoinFinish']();
+    await component['prepareClusterJoin']();
     expect(setupFn).toHaveBeenCalledWith({
       nodeDisplayName: 'Worker Garage',
       mode: 'joinCluster',
       username: 'admin',
       password: VALID_PASSWORD,
     });
+    expect(navigateFn).not.toHaveBeenCalled();
+    expect(localController.refresh).toHaveBeenCalled();
+    expect(component['adminPassword']()).toBe('');
+    expect(component['adminErrors']()).toEqual({ username: '', password: '', confirm: '' });
+
+    await component['requestClusterJoin']();
+    expect(localController.sendRequest).toHaveBeenCalledWith('Worker Garage');
+    await component['submitJoinFinish']();
+    expect(navigateFn).not.toHaveBeenCalled();
+    localController.joinIndex.set(3);
+    await component['submitJoinFinish']();
+    expect(navigateFn).toHaveBeenCalledWith(['/']);
+    expect(setupFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps protected operations disabled when account validation or creation fails', async () => {
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    const component = fixture.componentInstance;
+    const local = fixture.debugElement.injector.get(LocalNodeController);
+    component['selectedMode'].set('joinCluster');
+    component['clusterAddress'].set('http://192.168.1.50:8090');
+    await component['verifyClusterAddress']();
+    await component['prepareClusterJoin']();
+    expect(local.verifyAddress).not.toHaveBeenCalled();
+    expect(setupFn).not.toHaveBeenCalled();
+    fillAdmin(component);
+    setupFn.mockRejectedValueOnce(new Error('unavailable'));
+    await component['prepareClusterJoin']();
+    expect(component['accountCreated']()).toBe(false);
+    expect(component['errorMessage']()).toContain('L’initialisation a échoué');
+    expect(component['adminPassword']()).toBe(VALID_PASSWORD);
+    await component['prepareClusterJoin']();
+    await component['verifyClusterAddress']();
+    expect(local.verifyAddress).toHaveBeenCalledWith({ address: 'http://192.168.1.50:8090' });
+  });
+
+  it('opens the existing request in Nodes without claiming approval or recreating the account', async () => {
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    const component = fixture.componentInstance;
+    const local = fixture.debugElement.injector.get(LocalNodeController);
+    fillAdmin(component);
+    component['selectedMode'].set('joinCluster');
+    await component['prepareClusterJoin']();
+    component['selectMode']('createCluster');
+    expect(component['selectedMode']()).toBe('joinCluster');
+    pendingSignal.set(true);
+    await component['submitJoinFinish']();
+    expect(navigateFn).toHaveBeenCalledWith(['/nodes']);
+    expect(setupFn).toHaveBeenCalledTimes(1);
   });
 
   it('refuses to finish without a valid administrator account', async () => {

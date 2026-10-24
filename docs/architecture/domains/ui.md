@@ -42,6 +42,8 @@ Route `/activity` (anciennes `/tasks` et `/ai/activity` redirigées, filtres `?v
 ## Autres pages
 Premier démarrage (`/setup`) : fond clair uni, halo conservé en thème sombre. La fiche locale liste toutes les adresses IPv4/IPv6 avec leur interface, y compris boucle locale et interfaces virtuelles. L'« Accès au nœud » est distinct : URL publique/annoncée configurée, sinon origine du navigateur (hôte et port publié conservés en Docker bridge). Aucune adresse de passerelle n'est présentée comme IP LAN de l'hôte Docker.
 
+Jonction depuis le premier démarrage : bouton explicite « Créer le compte et continuer » avant la recherche ou la vérification d’un cluster. Les informations du compte et le mode sont ensuite confirmés ; la vérification, l’envoi et les nouvelles tentatives restent dans l’assistant avec la même session. Le code se compare sur le cluster d’accueil. L’ouverture de l’application suit l’approbation ; une demande encore en attente propose « Suivre la demande dans Nœuds ».
+
 Console de logs système (filtres de sévérité, recherche, pause, auto-scroll intelligent, export) ; scripts (liste en cartes, éditeur en tiroir, restauration dans le brouillon) ; IA & fournisseurs ; Plugins (configuration globale, Store).
 
 ## Limites connues
