@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Contracts.Nodes;
