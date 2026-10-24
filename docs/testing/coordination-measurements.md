@@ -39,3 +39,37 @@ Sur ce petit scénario local, la capture concurrente ajoute du travail à la fil
 ## Compléter sur un environnement représentatif
 
 Relever par intervalle `encoding_sqlite_writer_*` (attente, détention, refus, expirations), les latences des routes claim/renew, le retard des vecteurs de réplication et l'occupation des volumes. Garder les mêmes données, accès et concurrence entre essais. Les compteurs cumulés donnent des moyennes par intervalle, pas des p95/p99 ; ceux-ci doivent provenir des observations individuelles ou du collecteur HTTP. Une validation multi-hôtes ou de production reste distincte de ces résultats synthétiques.
+
+## Extension à 7 000 travaux
+
+```sh
+ENCODING_TEST_LARGE_COORDINATION_MEASUREMENTS=1 dotnet test \
+  backend/tests/Encoding.Runtime.Tests --configuration Release \
+  --filter FullyQualifiedName~MeasuresSevenThousand \
+  --logger 'console;verbosity=detailed'
+```
+
+Ce scénario est indépendant de la variable d'activation de la petite sonde. Exécuter les mesures seules, sans autre benchmark ou compilation sur la machine. Chaque cas prépare 7 000 exécutions via le véritable `EnqueueAsync`, ouvre les accès de bibliothèque pour deux workers, puis termine la capture initiale. Le temps de préparation (`setup_ms`) est séparé de la charge mesurée.
+
+Huit clients effectuent 16 claims chacun, répartis sur les deux workers (128 claims, 512 renouvellements). Un lecteur concurrent effectue 64 lectures d'overview, pages de 50 avec offsets différents, puis lit à la demande l'état et au plus 50 événements d'une exécution de chaque page. La variante avec capture conserve les 16 modifications/captures de la sonde initiale. Les mesures `overview` et `detail_and_events` couvrent les méthodes de dépôt utilisées par les routes, sans transport HTTP. L'effectif des tâches et la borne de pagination sont contrôlés, ainsi que l'absence de doubles claims, refus et expirations.
+
+**Portée : un serveur SQLite local, deux workers synthétiques.** Ce n'est pas une validation à deux serveurs, ni un historique de milliers de tâches terminées ou une reproduction du coût Angular/SSE. Les claims d'un même worker sont volontairement concurrents pour mesurer une rafale de coordination ; le sondage périodique réel n'est pas simulé. La charge est finie et aucun outil média ne s'exécute. Aucun seuil de latence ni ajustement des capacités/délais de l'écrivain n'est introduit.
+
+Le scénario représentatif sur deux serveurs, avec réplication, HTTP et activité disque, reste non vérifié. Il doit mesurer séparément les routes d'état et d'historique, la publication des changements et les détails à la demande avant de choisir les correctifs de contention.
+
+### Observation locale du 2026-10-25
+
+SDK .NET 10.0.402, Release, limites de l'écrivain inchangées. Un passage isolé par variante, sans compilation ni autre benchmark concurrent. La préparation des 7 000 travaux et de leur capture initiale prend environ 27,2 s ; elle est exclue des latences suivantes.
+
+| Mesure | Sans capture concurrente | Avec capture concurrente |
+| --- | ---: | ---: |
+| Charge mesurée | 9 547,318 ms | 9 658,938 ms |
+| Claim p95 / p99 | 433,932 / 735,675 ms | 477,613 / 518,890 ms |
+| Renouvellement p95 / p99 | 117,521 / 140,834 ms | 114,069 / 129,232 ms |
+| Overview paginé p95 / p99 | 140,827 / 168,508 ms | 150,782 / 168,878 ms |
+| État + événements ciblés p95 / p99 | 75,452 / 81,697 ms | 71,192 / 78,573 ms |
+| Refus / expirations écrivain | 0 / 0 | 0 / 0 |
+
+Les 128 claims sont distincts et les 512 renouvellements réussissent dans chaque variante. Aucune détention de l'écrivain ne dépasse 1 s. Les huit captures au repos ne font aucune admission d'écriture. [Observations JSON](coordination-large-measurements-2026-10-25.json).
+
+Ce résultat fournit une base avant correction, sans démontrer de gain : la taille de la file, la concurrence et les lectures diffèrent de la petite sonde. Deux passages ne caractérisent pas les queues de latence de production. Le p99 des 64 lectures correspond au maximum. Les temps HTTP, la réplication entre serveurs, les tâches terminées avec historique volumineux et l'activité disque restent à mesurer. Le fait de ne pas reproduire de refus sur cet hôte ne réfute pas la contention observée en production.

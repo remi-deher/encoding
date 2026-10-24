@@ -49,3 +49,9 @@ Landlock en conteneur de production ; GPU réel (QSV, VAAPI, NVENC) ; Plex/Jelly
 
 ## Reprise après perte du worker (ADR 0004)
 Livrée : reprise au dernier checkpoint, bornée à 2, blocs rejouables. Reste à décider : attendre le retour du nœud d'accès (au lieu d'échouer) quand le traitement continue ailleurs ; reprendre le verrou de disque libéré ; checkpoint intermédiaire à l'intérieur d'un encodage long (aujourd'hui, le bloc est refait depuis son début).
+
+
+## Cluster sans quorum : cadrage du 2026-10-25
+- Proposition D1–D6 et audit : [revue](../design/cluster-without-quorum-review.md). Le retrait de Raft n'est pas encore implémenté ; le point 2 reste ouvert jusqu'à sa livraison.
+- Décision de Rémi : à deux nœuds, reprendre la file d'un serveur exige sa **neutralisation explicite**, y compris son autorité de publication ; sinon il conserve sa file. Une expiration estimée côté pair et une époque inconnue du serveur isolé ne constituent pas un fencing. L'extension de reprise inter-serveurs reste non livrée.
+- Priorité D6 : la [sonde de coordination](../testing/coordination-measurements.md) couvre aussi 7 000 tâches et deux workers sur un serveur. La charge représentative sur **deux serveurs**, les latences HTTP état/historique et l'activité disque restent non vérifiées ; ne pas présenter cette sonde locale comme leur validation.
