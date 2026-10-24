@@ -44,7 +44,8 @@ public sealed class McpService(
     PluginConnectionTester pluginTester,
     SystemLogRingBuffer ringBuffer,
     SystemLogRepository systemLogs,
-    ILogger<McpService> logger)
+    ILogger<McpService> logger,
+    Encoding.Api.Updates.ReleaseService releases)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -225,6 +226,8 @@ public sealed class McpService(
             "cancel_execution" => await ToolCancelExecutionAsync(arguments, isAdmin, ct),
             "retry_execution" => await ToolRetryExecutionAsync(arguments, isAdmin, ct),
             "resume_execution" => await ToolResumeExecutionAsync(arguments, isAdmin, ct),
+            "get_version" => McpCallToolResult.Text(JsonSerializer.Serialize(new { version = releases.Installed.Version, commit = releases.Installed.Commit }, JsonOptions)),
+            "get_updates" => McpCallToolResult.Text(JsonSerializer.Serialize(await releases.GetUpdatesAsync(ct), JsonOptions)),
             "get_system_logs" => await ToolGetSystemLogsAsync(arguments, ct),
 
             // Flows

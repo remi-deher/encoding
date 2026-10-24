@@ -46,6 +46,9 @@ Jonction depuis le premier démarrage : bouton explicite « Créer le compte et 
 
 Console de logs système (filtres de sévérité, recherche, pause, auto-scroll intelligent, export) ; scripts (liste en cartes, éditeur en tiroir, restauration dans le brouillon) ; IA & fournisseurs ; Plugins (configuration globale, Store).
 
+## Mise à jour
+La page `/updates`, présente dans la navigation Administration et accessible aux deux rôles, affiche la version installée, les notes embarquées et celles de la dernière release publique si elle est joignable. Les états « à jour », « nouvelle version disponible », développement et vérification indisponible sont distincts ; le texte des notes est interpolé comme texte, sans interprétation HTML. La vérification peut être relancée et conserve les données affichées en cas d’erreur. Le cache serveur dure 10 minutes. L’installation se fait par mise à jour de l’image Docker.
+
 ## Limites connues
 - Thème sombre non vérifié visuellement partout (éditeur de flow, blocs de plugins) ; Nodes redesign non vérifié en navigateur réel (mobile, E2E complets).
 - La fermeture d'un tiroir de script par la croix n'est pas interceptée.

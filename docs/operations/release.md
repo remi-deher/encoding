@@ -45,3 +45,39 @@ SQLite est le seul fournisseur de données. Le fichier est `/var/lib/encoding-no
 ## Gérer ce nœud depuis la page Nœuds
 
 Sur un nœud qui héberge le serveur, tout se gère depuis la page **Nœuds → Ce nœud et son cluster** : mode, adresse d'un cluster (`http://<serveur>:8080`, utile quand la découverte DNS-SD ne traverse pas le réseau), clé de jumelage, rejoindre, quitter. Le serveur relaie ces actions vers l'agent du même conteneur (`LocalAgent__BaseUrl`, par défaut `http://127.0.0.1:8081/`) derrière la session administrateur et avec le secret local créé par le lanceur. L'agent écoute uniquement en boucle locale, exige le secret pour toutes ses routes de gestion et n'utilise plus `Origin` ni CORS : retirer les anciens ports 8081 publiés et le réglage `WorkerUi__Origins` lors de la mise à jour. La gestion par navigateur d'un nœud nécessite la fonction serveur locale ; un nœud worker seul se pilote depuis son cluster, ou via le canal interne authentifié. Hors image unique, le serveur et l'agent du même hôte doivent partager explicitement le fichier `Node__LocalEnrollmentSecretFile`.
+
+## Notes de version et recherche de mises à jour
+
+La release génère `backend/src/Encoding.Api/release-manifest.json` avant le build Docker.
+Ce fichier est copié dans la sortie publiée de l’API : il contient la version `X.Y.Z`, le
+commit, le dépôt GitHub et les notes de chaque tag stable accessible depuis le commit
+publié. Les notes sont les titres des commits hors commits de fusion, regroupés entre
+deux tags ; elles ne sont pas une synthèse éditoriale. Les anciennes versions restent
+consultables sans réseau. Une construction locale utilise `0.0.0-dev` sans vérification distante.
+
+Après publication de l’image et du tag, la CI crée la release GitHub `vX.Y.Z`, avec les
+notes courantes et le manifeste en pièce jointe. Ce manifeste est aussi la source de
+la recherche de mises à jour :
+`https://github.com/<owner>/<repo>/releases/latest/download/release-manifest.json`.
+Le dépôt et ses pièces jointes doivent être lisibles publiquement pour cette recherche ;
+aucun jeton GitHub n’est embarqué dans l’image. Un dépôt privé, un accès réseau bloqué,
+une release manquante ou un manifeste invalide donnent un état `unavailable`, jamais
+un faux état « à jour ». Les requêtes sont bornées à 10 secondes et 2 Mio, avec cache
+local de 10 minutes (y compris les erreurs). Le bouton de vérification relit ce cache.
+
+La section **Mise à jour** (`/updates`, session viewer ou admin) affiche la version
+installée du serveur local, la disponibilité d’une version stable plus récente et
+les différentes notes. L’installation reste une mise à jour de l’image Docker par
+l’opérateur ; cette section ne modifie pas les conteneurs ni les médias.
+
+Contrats accessibles avec session ou jeton API Bearer :
+
+- `GET /api/v1/system/version` → `{ "version": "X.Y.Z", "commit": "<sha>" }` ; lecture locale sans appel réseau.
+- `GET /api/v1/system/updates` → `installedVersion`, `latestVersion`, `updateAvailable`, `status`, `checkedAt`, `releases`.
+- Outils MCP `get_version` et `get_updates` (arguments `{}`), en lecture seule sans portée d’écriture.
+
+`updateAvailable` vaut `null` quand aucune comparaison fiable n’est possible.
+`status` vaut `development`, `unconfigured`, `unavailable`, `current` ou `available`.
+Ces données décrivent l’installation du processus serveur qui exécute la requête,
+pas une version commune réconciliée du cluster ; dans le mode Raft optionnel, le
+routage habituel des POST MCP vers le leader reste applicable.

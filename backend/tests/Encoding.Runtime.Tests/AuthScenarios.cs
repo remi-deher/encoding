@@ -238,7 +238,7 @@ internal static class AuthScenarios
         }
         Check(await anonymous.StatusAsync(get, "/health/live") == HttpStatusCode.OK, "Liveness stays public.");
         Check(await anonymous.StatusAsync(get, "/api/v1/cluster") == HttpStatusCode.OK, "Cluster identity stays public for worker discovery.");
-        foreach (var url in new[] { "/api/v1/tools/ai/quotas", "/api/v1/tools/ai/sessions", "/api/v1/libraries", "/api/v1/flows", "/api/v1/nodes", "/api/v1/executions", "/api/v1/plugins/base/configuration", "/api/v1/users", "/api/v1/nodes/enrollment-requests", "/api/v1/node/mode", "/api/v1/local-node/status" })
+        foreach (var url in new[] { "/api/v1/system/version", "/api/v1/system/updates", "/api/v1/tools/ai/quotas", "/api/v1/tools/ai/sessions", "/api/v1/libraries", "/api/v1/flows", "/api/v1/nodes", "/api/v1/executions", "/api/v1/plugins/base/configuration", "/api/v1/users", "/api/v1/nodes/enrollment-requests", "/api/v1/node/mode", "/api/v1/local-node/status" })
             Check(await anonymous.StatusAsync(get, url) == HttpStatusCode.Unauthorized, "Anonymous reads of " + url + " are refused.");
         Check(await anonymous.StatusAsync(post, "/api/v1/libraries", new { name = "x" }) == HttpStatusCode.Unauthorized, "Anonymous writes are refused.");
         // Fiche du nœud pour l'assistant : lisible sans compte tant qu'aucun admin n'existe, sans aucun secret.
@@ -289,6 +289,13 @@ internal static class AuthScenarios
         Check(await admin.StatusAsync(post, "/api/v1/users", new CreateUserRequest("lecteur", "lecteur-mot-de-passe", UserRole.Viewer)) == HttpStatusCode.Created, "Administrators create users.");
         Check(await admin.StatusAsync(post, "/api/v1/users", new CreateUserRequest("LECTEUR", "lecteur-mot-de-passe", UserRole.Viewer)) == HttpStatusCode.Conflict, "User names are unique regardless of case.");
         Check(await viewer.LoginAsync("Lecteur", "lecteur-mot-de-passe") == HttpStatusCode.OK, "Login ignores the case of the user name.");
+        using (var version = await viewer.SendAsync(get, "/api/v1/system/version"))
+        {
+            Check(version.StatusCode == HttpStatusCode.OK, "A viewer can read the installed version.");
+            var body = await version.Content.ReadFromJsonAsync<JsonElement>();
+            Check(body.GetProperty("version").GetString() == "0.0.0-dev", "Local builds expose their actual development version.");
+        }
+        Check(await viewer.StatusAsync(get, "/api/v1/system/updates") == HttpStatusCode.OK, "A viewer can read release notes.");
         Check(await viewer.StatusAsync(get, "/api/v1/libraries") == HttpStatusCode.OK, "A viewer reads.");
         Check(await viewer.StatusAsync(post, "/api/v1/libraries", new { name = "interdit" }) == HttpStatusCode.Forbidden, "A viewer cannot create.");
         Check(await viewer.StatusAsync(delete, "/api/v1/libraries/" + Guid.NewGuid()) == HttpStatusCode.Forbidden, "A viewer cannot delete.");

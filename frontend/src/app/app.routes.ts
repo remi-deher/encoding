@@ -284,6 +284,18 @@ const applicationRoutes: Routes = [
     },
   },
   {
+    path: 'updates',
+    loadComponent: () =>
+      import('./features/updates/updates-page.component').then(
+        (module) => module.UpdatesPageComponent,
+      ),
+    data: {
+      title: 'Mise à jour',
+      navigation: { group: 'Administration', label: 'Mise à jour', glyph: '↻', order: 2 },
+      description: 'Version installée, nouvelles versions et notes de version.',
+    },
+  },
+  {
     path: 'settings',
     runGuardsAndResolvers: 'paramsOrQueryParamsChange',
     canDeactivate: [unsavedChangesGuard],
