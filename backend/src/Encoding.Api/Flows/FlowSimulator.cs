@@ -86,6 +86,15 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                         c.TryGetValue("trackId", out var track) ? track.GetInt32() : 0);
                     detail = "Métadonnées du profil courant copiées dans la variable de résultat.";
                 }
+                else if (node.Component.PluginId == "base" && id == FfmpegBuilderPolicy.Start)
+                {
+                    if(FfmpegBuilderPolicy.Active(variables) || context.Plan.Count>0)
+                        throw new ArgumentException("Une préparation non exécutée ne peut pas être écrasée.");
+                    variables[FfmpegBuilderPolicy.StateKey]=JsonSerializer.SerializeToElement(node.Id);
+                    variables["plan.tool"]=JsonSerializer.SerializeToElement("ffmpeg");
+                    variables["plan.preserveUnchangedTracks"]=JsonSerializer.SerializeToElement(Flag("preserveUnchangedTracks",true));
+                    detail="Builder FFmpeg ouvert ; métadonnées courantes inchangées jusqu’à l’exécution.";
+                }
                 else if (node.Component.PluginId == "base" && id == "base-prepare-processing")
                 {
                     context = context with { Plan = [] };
@@ -98,15 +107,16 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                     output = null; terminal = id == "base-defer-processing" ? "deferred" : Text("result", "unchanged"); detail = $"Fin déclarée : {terminal}.";
                     if (id == "base-defer-processing") variables["runtime.deferMinutes"] = c.TryGetValue("delayMinutes", out var delay) ? delay : JsonSerializer.SerializeToElement(2);
                 }
-                else if (node.Component.PluginId == "base" && id == "base-execute-processing" && context.Plan.Count == 0 && !Flag("forceProcessing"))
-                { output = "skipped"; detail = "Aucun traitement planifié : étape ignorée."; }
+                else if (node.Component.PluginId == "base" && (id == "base-execute-processing" && !Flag("forceProcessing") || id == FfmpegBuilderPolicy.Execute) && context.Plan.Count == 0)
+                { output = "skipped"; detail = "Aucun traitement planifié : étape ignorée."; if(id==FfmpegBuilderPolicy.Execute) FfmpegBuilderPolicy.Close(variables); }
                 else if (node.Component.PluginId == "nodes" && id == RuntimeRetryPolicy.ComponentId)
                 { output = "success"; detail = "Règle de relance bornée activée pour les pertes de worker."; }
                 else if (node.Component.PluginId == "nodes" && id == "nodes-require-direct-access")
                 { output = "success"; detail = "Contrainte d’accès direct à la bibliothèque prise en compte pour l’attribution du segment."; }
-                else if ((node.Component.PluginId is "base" or "video" or "audio" or "subtitles") && Text("processingMode", "direct") == "plan")
+                else if (FfmpegBuilderPolicy.Active(variables) && FfmpegBuilderPolicy.IsSetting(id)
+                    || (node.Component.PluginId is "base" or "video" or "audio" or "subtitles") && Text("processingMode", "direct") == "plan")
                 {
-                    if (variables.TryGetValue("plan.tool", out var selected) && (FlowMediaValues.IsFfmpegPlan(id) != (selected.GetString() == "ffmpeg")))
+                    if (variables.TryGetValue("plan.tool", out var selected) && (FfmpegBuilderPolicy.IsSetting(id) != (selected.GetString() == "ffmpeg")))
                     { output = "error"; detail = "Outil du plan incompatible avec cette action."; }
                     else { context = context with { Plan = [.. context.Plan, new(id, c)] }; detail = "Traitement ajouté au plan ; aucune transformation simulée à ce stade."; }
                 }
@@ -114,6 +124,8 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                 {
                     if (request.Assumptions?.GetValueOrDefault(node.Id) is not { } result)
                         return new("waiting", "Choisissez explicitement le résultat de cette étape pour poursuivre. Sa capacité réelle d’exécution n’est pas vérifiée.", steps, node.Id);
+                    if(id==FfmpegBuilderPolicy.Execute && result.OutputId=="success" && result.Metadata is null)
+                        return new("waiting","Renseignez les métadonnées de la sortie FFmpeg pour évaluer les blocs suivants sans réutiliser celles de l’entrée.",steps,node.Id);
                     assumed = true; output = result.OutputId;
                     detail = "Résultat fourni par le scénario ; aucune action réelle exécutée.";
                     if (node.Component.PluginId == "nodes" && id == "nodes-run-on-node" && output == "success")
@@ -124,10 +136,13 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                             throw new ArgumentException("Le worker courant du profil ne correspond pas à la contrainte de ce bloc. Modifiez le profil ou le résultat du relais précédent.");
                         if (hasOtherFilter) detail += " L’appartenance au groupe et les étiquettes ne sont pas vérifiées par la simulation.";
                     }
-                    if (result.Variables is not null) foreach (var pair in result.Variables) variables[pair.Key] = pair.Value;
-                    if (result.Metadata is { } metadata) context = context with { CurrentMetadata = metadata };
-                    if (result.Modified) context = context with { CurrentSha256 = "simulated-" + node.Id };
-                    if (!string.IsNullOrWhiteSpace(result.Extension)) context = context with { Extension = "." + result.Extension.TrimStart('.') };
+                    if(id!=FfmpegBuilderPolicy.Execute || output=="success")
+                    {
+                        if (result.Variables is not null) foreach (var pair in result.Variables) variables[pair.Key] = pair.Value;
+                        if (result.Metadata is { } metadata) context = context with { CurrentMetadata = metadata };
+                        if (result.Modified) context = context with { CurrentSha256 = "simulated-" + node.Id };
+                        if (!string.IsNullOrWhiteSpace(result.Extension)) context = context with { Extension = "." + result.Extension.TrimStart('.') };
+                    }
                     if (RuntimeHandoffPolicy.IsHandoff(node) && output == "success")
                     {
                         if (result.WorkerNodeId is not { } target || target == worker)
@@ -139,7 +154,8 @@ public sealed class FlowSimulator(FlowComponentRegistry registry, FlowDefinition
                         worker = target;
                         detail += context.CurrentSha256 == "source" ? " Relais des données et délégation de la source." : " Relais avec transfert du fichier transformé.";
                     }
-                    if (id == "base-execute-processing" && output == "success") context = context with { Plan = [] };
+                    if (id == "base-execute-processing" && output == "success" || id == FfmpegBuilderPolicy.Execute)
+                    { context = context with { Plan = [] }; if(id==FfmpegBuilderPolicy.Execute) FfmpegBuilderPolicy.Close(variables); }
                 }
             }
             catch (ConditionEvaluationException exception) { output = "error"; detail = exception.Message; }

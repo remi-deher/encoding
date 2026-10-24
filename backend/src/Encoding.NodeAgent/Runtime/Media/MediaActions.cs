@@ -18,7 +18,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
     private static int[] Ids(string value)=>string.IsNullOrWhiteSpace(value)?[]:value.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Select(value=>int.TryParse(value,out var id)&&id>=0?id:throw new IOException("Identifiant de piste invalide.")).Distinct().ToArray();
     private static string Output(string directory,string node,string extension)=>Path.Combine(directory,"out-"+Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(node)))[..16]+extension);
 
-    public async Task<MediaActionOutcome> ExecuteAsync(string id,IReadOnlyDictionary<string,JsonElement> config,string current,string directory,string node,Func<string,Task<string>> extra,Guid workerId,CancellationToken ct)
+    public async Task<MediaActionOutcome> ExecuteAsync(string id,IReadOnlyDictionary<string,JsonElement> config,string current,string directory,string node,Func<string,Task<string>> extra,Guid workerId,CancellationToken ct,JsonElement? knownMetadata=null)
     {
         if(id.StartsWith("base-probe-",StringComparison.Ordinal) || id.StartsWith("probe-",StringComparison.Ordinal))
         {
@@ -37,7 +37,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             return new(null,[],value);
         }
         if(id is "base-transcode-video" or "video-transcode" or "base-transcode-audio" or "audio-transcode" or "base-normalize-audio" or "audio-normalize" or "base-resize-video" or "video-resize" or "base-remux-media" or "video-remux-media" or "base-auto-crop" or "video-auto-crop" or "base-deinterlace-video" or "video-deinterlace")
-            return await FfmpegPlanAsync([new(id,config,node)],current,directory,node,workerId,ct);
+            return await FfmpegPlanAsync([new(id,config,node)],current,directory,node,workerId,ct,knownMetadata:knownMetadata);
         if(id is "base-verify-decoding" or "video-verify-decoding")
         {
             var args=new List<string> { "-nostdin","-v","error","-xerror","-i",current };
@@ -101,14 +101,14 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
     }
 
     /// <summary>Nomenclature des pistes (0056). Mode « snapshot » : retourne les titres d'origine sans toucher au fichier. Mode « apply » : mkvpropedit sur une copie de travail ; aucun fichier n'est produit quand rien ne change ou que le conteneur n'est pas Matroska.</summary>
-    public async Task<MediaActionOutcome> TrackNamesAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,JsonElement? origin,string current,string directory,string node,CancellationToken ct)
+    public async Task<MediaActionOutcome> TrackNamesAsync(IReadOnlyDictionary<string,JsonElement> c,JsonElement probe,JsonElement? origin,string current,string directory,string node,CancellationToken ct,bool editWorkingCopy=false)
     {
         if(Path.GetExtension(current)!=".mkv") return new(null,[]);
         using var identification=JsonDocument.Parse(await tools.CheckedAsync("mkvmerge",["-J",current],directory,ct));
         if(Text(c,"mode","apply")=="snapshot") return new(null,[],TrackNaming.Snapshot(identification.RootElement).Clone());
         var edits=TrackNaming.Plan(identification.RootElement,probe,origin,TrackNameOptions.From(c));
         if(edits.Count==0) return new(null,[]);
-        var file=Output(directory,node,".mkv"); File.Copy(current,file,true); var args=new List<string> { file };
+        var file=editWorkingCopy?MutableAssemblyFile(current,directory):Output(directory,node,".mkv"); if(!editWorkingCopy) File.Copy(current,file,true); var args=new List<string> { file };
         foreach(var edit in edits)
         {
             args.AddRange(["--edit","track:="+edit.Uid,"--set","name="+edit.Name]);
@@ -230,7 +230,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
     }
 
     /// <summary>Polices (0057) : ajoute en pièces jointes les polices d'un jeu du dossier déclaré par le nœud (<c>ENCODING_FONT_DIR</c>) qui ne sont pas déjà dans le MKV. Jamais de chemin libre.</summary>
-    public async Task<MediaActionOutcome> AddFontsAsync(IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,CancellationToken ct,string? resourceFolder=null)
+    public async Task<MediaActionOutcome> AddFontsAsync(IReadOnlyDictionary<string,JsonElement> c,string current,string directory,string node,CancellationToken ct,string? resourceFolder=null,bool editWorkingCopy=false)
     {
         if(Path.GetExtension(current)!=".mkv") return new(null,[]);
         var extensions = new[] { ".ttf", ".otf", ".ttc" };
@@ -263,10 +263,11 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             ?attachments.EnumerateArray().Select(a=>(a.GetProperty("file_name").GetString()??"").ToLowerInvariant()).ToHashSet():[];
         var missing=names.Where(name=>!present.Contains(name.ToLowerInvariant())).ToArray();
         if(missing.Length==0) return new(null,[]);
-        var file=Output(directory,node,".mkv"); var args=new List<string> { "-o",file };
-        foreach(var name in missing) args.AddRange(["--attach-file",Path.Combine(folder,name)]);
-        args.Add(current);
-        await tools.CheckedAsync("mkvmerge",args,directory,ct);
+        var file=editWorkingCopy?MutableAssemblyFile(current,directory):Output(directory,node,".mkv");
+        var args=new List<string>(editWorkingCopy?[file]:["-o",file]);
+        foreach(var name in missing) args.AddRange([editWorkingCopy?"--add-attachment":"--attach-file",Path.Combine(folder,name)]);
+        if(!editWorkingCopy) args.Add(current);
+        await tools.CheckedAsync(editWorkingCopy?"mkvpropedit":"mkvmerge",args,directory,ct);
         return new(file,[],JsonSerializer.SerializeToElement(missing));
     }
 
@@ -384,7 +385,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
         return new(file,[],JsonSerializer.SerializeToElement(new { removed=true,removedTracks=toRemove.ToArray() }));
     }
 
-    public async Task<JsonElement> ValidateOutputAsync(string current,string original,JsonElement before,JsonElement after,IReadOnlyDictionary<string,JsonElement> config,string directory,CancellationToken ct)
+    public async Task<JsonElement> ValidateOutputAsync(string current,string original,JsonElement before,JsonElement after,IReadOnlyDictionary<string,JsonElement> config,string directory,CancellationToken ct,Func<Task>? verifyDecoding=null)
     {
         var issues=new List<string>();
         var sourceStreams=Streams(before).Where(stream=>!IsAttachedPicture(stream)).ToArray();
@@ -529,7 +530,10 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
         }
 
         if(Flag(config,"verifyDecoding"))
-            await tools.CheckedAsync("ffmpeg",["-nostdin","-v","error","-xerror","-i",current,"-map","0:v?","-map","0:a?","-f","null","-"],directory,ct);
+        {
+            if(verifyDecoding is not null) await verifyDecoding();
+            else await scanner.DecodeAsync(current,"video",ct);
+        }
 
         return JsonSerializer.SerializeToElement(new { valid=issues.Count==0,issues });
     }
@@ -582,11 +586,11 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
         finally { if(File.Exists(file)) File.Delete(file); }
     }
 
-    public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true,IReadOnlySet<int>? forceCpuFallbackSteps=null)
+    public async Task<MediaActionOutcome> FfmpegPlanAsync(IReadOnlyList<RuntimePlanStep> plan,string current,string directory,string node,Guid workerId,CancellationToken ct,bool preserve=true,IReadOnlySet<int>? forceCpuFallbackSteps=null,JsonElement? knownMetadata=null)
     {
         // This input is immutable while the command is composed. Share one mandatory
         // inspection across selection, resize and video policy; output validation is separate.
-        JsonElement? inputMetadata = null;
+        JsonElement? inputMetadata = knownMetadata;
         async Task<JsonElement> InspectAsync() => inputMetadata ??= await scanner.ScanAsync(current, ct);
         if (plan.Any(step => step.Configuration.ContainsKey("trackSelection")))
             plan = MediaTrackSelection.Expand(plan, await InspectAsync());
@@ -736,7 +740,7 @@ public sealed partial class MediaActions(ProcessToolRunner tools,MediaScanner sc
             ct.ThrowIfCancellationRequested();
             if(File.Exists(output)) File.Delete(output);
             logger?.LogWarning("Échec d’un encodage matériel dans {Node} ; nouvel essai avec les encodeurs CPU compatibles.",node);
-            return await FfmpegPlanAsync(plan,current,directory,node,workerId,ct,preserve,hardwareFallbackSteps);
+            return await FfmpegPlanAsync(plan,current,directory,node,workerId,ct,preserve,hardwareFallbackSteps,inputMetadata);
         }
         return new(output,[],null,resolutions);
     }

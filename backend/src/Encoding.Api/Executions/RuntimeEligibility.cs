@@ -73,7 +73,8 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
                 || (node.Component.PluginId is "video" or "audio" or "subtitles" or "mkv" or "images" or "probe" && c.ToolId == "plugin/base" && IsAtLeast(c.Version, "1.6.0")));
 
             if (!matches) return false;
-            if (componentId is "base-add-fonts" or "subtitles-add-fonts")
+            if (componentId is "base-add-fonts" or "subtitles-add-fonts"
+                || componentId=="base-assemble-media" && node.Configuration.TryGetValue("addFonts",out var addFonts) && addFonts.ValueKind==JsonValueKind.True)
             {
                 // Une ressource du catalogue est récupérée par le worker lui-même : aucun jeu de polices local n'est exigé.
                 var fromResource = node.Configuration.TryGetValue("resource", out var resource) && resource.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(resource.GetString());
