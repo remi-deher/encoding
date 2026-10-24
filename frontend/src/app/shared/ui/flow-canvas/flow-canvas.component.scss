@@ -307,6 +307,11 @@ path {
   font-size: var(--font-label);
   cursor: pointer;
 }
+// A pending connection must reach ports beneath this navigation overlay.
+.minimap:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
 .minimap svg {
   display: block;
   width: 100%;

@@ -205,7 +205,12 @@
     </div>
   </div>
 </div>
-<button class="minimap" aria-label="Naviguer dans la minicarte" (click)="miniNavigate($event)">
+<button
+  [disabled]="pending() !== null"
+  class="minimap"
+  aria-label="Naviguer dans la minicarte"
+  (click)="miniNavigate($event)"
+>
   <span>Vue d’ensemble</span>
   <svg [attr.viewBox]="miniViewBox()" preserveAspectRatio="none" aria-hidden="true">
     @for (node of nodes(); track node.id) {

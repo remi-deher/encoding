@@ -115,6 +115,7 @@ test('canvas connections can be removed, dragged and observed', async ({ page })
     clientX: a!.x + 14,
     clientY: a!.y + 14,
   });
+  await expect(page.getByRole('button', { name: 'Naviguer dans la minicarte' })).toBeDisabled();
   await target.scrollIntoViewIfNeeded();
   const b = await target.boundingBox();
   await page.mouse.move(b!.x + 14, b!.y + 14);
@@ -123,6 +124,7 @@ test('canvas connections can be removed, dragged and observed', async ({ page })
   await expect(
     page.getByRole('button', { name: 'Liaison success vers Fin', exact: true }),
   ).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Naviguer dans la minicarte' })).toBeEnabled();
   await expect(page.locator('.canvas-node')).toHaveCount(5);
 });
 test('AI uses the widget and only applies a reviewed proposal', async ({ page }) => {
