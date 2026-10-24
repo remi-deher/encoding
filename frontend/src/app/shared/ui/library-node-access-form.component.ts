@@ -1,9 +1,22 @@
-import { ChangeDetectionStrategy, Component, OnInit, input, output, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  OnInit,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, FormRecord, ReactiveFormsModule } from '@angular/forms';
+import { firstValueFrom, Subscription, filter, switchMap, take, timeout, timer } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { NodeGroupResponse } from '../models/cluster';
 import { LibraryNodeAccessMode, LibraryNodeAccessResponse } from './library-node-access-types';
@@ -24,6 +37,20 @@ export interface LibraryNodeAccessValue {
   readonly transferSourceNodeId: string | null;
 }
 
+interface NodeDirectoryBrowserEntry {
+  readonly name: string;
+  readonly path: string;
+}
+
+interface NodeDirectoryBrowserResponse {
+  readonly id: string;
+  readonly path: string;
+  readonly state: 'queued' | 'claimed' | 'completed' | 'failed';
+  readonly entries: readonly NodeDirectoryBrowserEntry[];
+  readonly hasMore: boolean;
+  readonly error: string | null;
+}
+
 interface NodeAccessControls {
   mode: FormControl<LibraryNodeAccessMode>;
   isEnabled: FormControl<boolean>;
@@ -41,6 +68,7 @@ interface NodeAccessControls {
     MatCheckboxModule,
     MatFormFieldModule,
     MatInputModule,
+    MatProgressSpinnerModule,
     MatSelectModule,
     ReactiveFormsModule,
   ],
@@ -187,6 +215,115 @@ interface NodeAccessControls {
                         nœud.</mat-hint
                       >
                     </mat-form-field>
+                    <button
+                      matButton="outlined"
+                      type="button"
+                      [disabled]="busy() || browserLoading()"
+                      (click)="openDirectoryBrowser(node.id, controls.controls.localPath.value)"
+                    >
+                      Parcourir les dossiers sur {{ node.name }}
+                    </button>
+                    <p class="mode-help">
+                      Les dossiers affichés sont ceux visibles par le service Encoding sur ce nœud.
+                    </p>
+                    @if (browserNodeId() === node.id) {
+                      <section
+                        class="directory-browser"
+                        [attr.aria-label]="'Dossiers sur ' + node.name"
+                      >
+                        <header class="directory-browser-header">
+                          <div class="directory-browser-location">
+                            <strong>{{ browserPath() || 'Racine du nœud' }}</strong>
+                            <span>{{ node.name }}</span>
+                          </div>
+                          <div class="directory-browser-actions">
+                            @if (browserPath()) {
+                              <button
+                                matButton="text"
+                                type="button"
+                                [disabled]="browserLoading()"
+                                (click)="browseDirectory(node.id, '')"
+                              >
+                                Racine du nœud
+                              </button>
+                            }
+                            @if (hasParentDirectory()) {
+                              <button
+                                matButton="text"
+                                type="button"
+                                [disabled]="browserLoading()"
+                                (click)="browseDirectory(node.id, parentDirectoryPath())"
+                              >
+                                Dossier parent
+                              </button>
+                            }
+                            @if (browserPath()) {
+                              <button
+                                matButton="outlined"
+                                type="button"
+                                [disabled]="browserLoading()"
+                                (click)="chooseBrowserPath(node.id)"
+                              >
+                                Utiliser ce dossier
+                              </button>
+                            }
+                            <button
+                              matButton="text"
+                              type="button"
+                              (click)="closeDirectoryBrowser()"
+                            >
+                              Fermer
+                            </button>
+                          </div>
+                        </header>
+                        @if (browserLoading()) {
+                          <div class="directory-browser-status" role="status">
+                            <mat-spinner diameter="22" />
+                            <span>Lecture des dossiers sur {{ node.name }}…</span>
+                          </div>
+                        } @else if (browserError()) {
+                          <p class="directory-browser-error" role="alert">{{ browserError() }}</p>
+                          <button
+                            matButton="outlined"
+                            type="button"
+                            (click)="browseDirectory(node.id, browserPath())"
+                          >
+                            Réessayer
+                          </button>
+                        } @else if (!browserEntries().length) {
+                          <p class="directory-browser-empty">
+                            Aucun sous-dossier accessible dans cet emplacement.
+                          </p>
+                        } @else {
+                          <div
+                            class="directory-browser-list"
+                            role="list"
+                            aria-label="Sous-dossiers"
+                          >
+                            @for (entry of browserEntries(); track entry.path) {
+                              <div role="listitem">
+                                <button
+                                  class="directory-browser-entry"
+                                  type="button"
+                                  (click)="browseDirectory(node.id, entry.path)"
+                                >
+                                  <span class="directory-browser-folder" aria-hidden="true"
+                                    >📁</span
+                                  >
+                                  <span>{{ entry.name }}</span>
+                                  <span class="directory-browser-open">Ouvrir</span>
+                                </button>
+                              </div>
+                            }
+                          </div>
+                          @if (browserHasMore()) {
+                            <p class="directory-browser-note">
+                              Affichage limité aux 200 premiers dossiers.
+                            </p>
+                          }
+                        }
+                      </section>
+                    }
                     <div class="permissions" aria-label="Droits de l’accès direct">
                       <mat-checkbox formControlName="canRead"
                         >Lire les fichiers source</mat-checkbox
@@ -358,6 +495,89 @@ interface NodeAccessControls {
       flex-wrap: wrap;
       gap: 16px;
     }
+    .directory-browser {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: var(--surface-muted);
+      min-width: 0;
+    }
+    .directory-browser-header,
+    .directory-browser-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .directory-browser-location {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+    .directory-browser-location strong {
+      overflow-wrap: anywhere;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+    .directory-browser-location span,
+    .directory-browser-note {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .directory-browser-list {
+      display: grid;
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .directory-browser-entry {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 0;
+      border-bottom: 1px solid var(--border-subtle);
+      background: transparent;
+      color: var(--text-primary);
+      text-align: left;
+      cursor: pointer;
+    }
+    .directory-browser-list > [role='listitem']:last-child .directory-browser-entry {
+      border-bottom: 0;
+    }
+    .directory-browser-entry:hover {
+      background: var(--surface-container-high);
+    }
+    .directory-browser-entry > span:nth-child(2) {
+      overflow-wrap: anywhere;
+    }
+    .directory-browser-open {
+      color: var(--accent);
+      font-size: 12px;
+    }
+    .directory-browser-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-secondary);
+    }
+    .directory-browser-error {
+      margin: 0;
+      color: var(--color-error, #b3261e);
+    }
+    .directory-browser-empty {
+      margin: 0;
+      color: var(--text-secondary);
+    }
+    .directory-browser-note {
+      margin: 0;
+    }
     .mode-help {
       margin: 0;
       color: var(--text-secondary);
@@ -431,6 +651,10 @@ interface NodeAccessControls {
   `,
 })
 export class LibraryNodeAccessFormComponent implements OnInit {
+  private readonly http = inject(HttpClient);
+  private readonly destroyRef = inject(DestroyRef);
+  private browserPoll: Subscription | null = null;
+  private browserGeneration = 0;
   readonly libraryName = input.required<string>();
   readonly setupMode = input(false);
   readonly nodes = input.required<readonly LibraryNodeAccessOption[]>();
@@ -445,7 +669,110 @@ export class LibraryNodeAccessFormComponent implements OnInit {
   protected readonly selectionMode = signal<'automatic' | 'nodes' | 'groups'>('automatic');
   protected readonly selectedNodeIds = signal<readonly string[]>([]);
   protected readonly selectedGroupIds = signal<readonly string[]>([]);
+  protected readonly browserNodeId = signal<string | null>(null);
+  protected readonly browserPath = signal('');
+  protected readonly browserEntries = signal<readonly NodeDirectoryBrowserEntry[]>([]);
+  protected readonly browserHasMore = signal(false);
+  protected readonly browserLoading = signal(false);
+  protected readonly browserError = signal<string | null>(null);
   private readonly currentAccesses = new Map<string, LibraryNodeAccessResponse>();
+
+  protected async openDirectoryBrowser(nodeId: string, path: string): Promise<void> {
+    this.browserNodeId.set(nodeId);
+    this.browserPath.set(path.trim());
+    await this.browseDirectory(nodeId, path.trim());
+  }
+
+  protected async browseDirectory(nodeId: string, path: string): Promise<void> {
+    this.browserPoll?.unsubscribe();
+    const generation = ++this.browserGeneration;
+    this.browserNodeId.set(nodeId);
+    this.browserPath.set(path);
+    this.browserEntries.set([]);
+    this.browserHasMore.set(false);
+    this.browserError.set(null);
+    this.browserLoading.set(true);
+    try {
+      const request = await firstValueFrom(
+        this.http.post<{ id: string }>(
+          `/api/v1/nodes/${encodeURIComponent(nodeId)}/directory-browse`,
+          { path: path || null },
+        ),
+      );
+      if (generation !== this.browserGeneration) return;
+      this.browserPoll = timer(0, 400)
+        .pipe(
+          switchMap(() =>
+            this.http.get<NodeDirectoryBrowserResponse>(
+              `/api/v1/nodes/${encodeURIComponent(nodeId)}/directory-browse/${encodeURIComponent(request.id)}`,
+            ),
+          ),
+          filter((result) => result.state === 'completed' || result.state === 'failed'),
+          take(1),
+          timeout({ first: 30_000 }),
+          takeUntilDestroyed(this.destroyRef),
+        )
+        .subscribe({
+          next: (result) => {
+            if (generation !== this.browserGeneration) return;
+            this.browserPath.set(result.path);
+            this.browserEntries.set(result.entries);
+            this.browserHasMore.set(result.hasMore);
+            this.browserError.set(
+              result.state === 'failed' ? (result.error ?? 'Impossible de lire ce dossier.') : null,
+            );
+            this.browserLoading.set(false);
+          },
+          error: () => {
+            if (generation !== this.browserGeneration) return;
+            this.browserError.set(
+              'Le nœud ne répond pas. Vérifiez qu’il est en ligne, puis réessayez.',
+            );
+            this.browserLoading.set(false);
+          },
+        });
+    } catch {
+      if (generation !== this.browserGeneration) return;
+      this.browserError.set('La demande d’exploration n’a pas pu être envoyée au nœud.');
+      this.browserLoading.set(false);
+    }
+  }
+
+  protected parentDirectoryPath(): string {
+    const current = this.browserPath();
+    const separator = current.includes('\\') ? '\\' : '/';
+    const trimmed = current.replace(/[\\/]+$/, '');
+    const index = trimmed.lastIndexOf(separator);
+    return index <= 0
+      ? separator === '\\' && /^[A-Za-z]:$/.test(trimmed)
+        ? `${trimmed}\\`
+        : separator
+      : separator === '\\' && index === 2 && /^[A-Za-z]:/.test(trimmed)
+        ? `${trimmed.slice(0, 2)}\\`
+        : trimmed.slice(0, index);
+  }
+
+  protected hasParentDirectory(): boolean {
+    if (!this.browserPath()) return false;
+    const parent = this.parentDirectoryPath();
+    return parent !== this.browserPath();
+  }
+
+  protected chooseBrowserPath(nodeId: string): void {
+    const controls = this.form.controls[nodeId]?.controls;
+    if (!controls || !this.browserPath()) return;
+    controls.localPath.setValue(this.browserPath());
+    this.closeDirectoryBrowser();
+  }
+
+  protected closeDirectoryBrowser(): void {
+    this.browserGeneration++;
+    this.browserPoll?.unsubscribe();
+    this.browserPoll = null;
+    this.browserNodeId.set(null);
+    this.browserLoading.set(false);
+    this.browserError.set(null);
+  }
   protected canSave(): boolean {
     const selectedNodes = this.selectedNodes();
     return (

@@ -207,6 +207,7 @@ export interface AccessListActionEvent<T extends AccessListRow = AccessListRow> 
       margin: 0;
       padding: var(--space-4);
       color: var(--text-secondary);
+      text-align: center;
     }
     @media (max-width: 720px) {
       .access-row {

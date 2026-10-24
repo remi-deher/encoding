@@ -50,3 +50,8 @@ Console de logs système (filtres de sévérité, recherche, pause, auto-scroll 
 - Thème sombre non vérifié visuellement partout (éditeur de flow, blocs de plugins) ; Nodes redesign non vérifié en navigateur réel (mobile, E2E complets).
 - La fermeture d'un tiroir de script par la croix n'est pas interceptée.
 - Le rôle lecture masque Paramètres et l'enrôlement direct ; les autres boutons d'écriture répondent par un refus.
+
+## Assistant de création de flow
+Le mode « Assistant vidéo » de la création ouvre `/flows/guided` avec le formulaire déclaratif commun et une protection contre la perte de saisie. Général, vidéo, pistes, résultat puis récapitulatif : la génération backend est validée avant l'enregistrement d'un brouillon et l'ouverture de l'éditeur. Une erreur conserve les choix. Les modèles et la création avancée restent accessibles.
+
+Les formulaires guidés communs utilisent un stepper vertical sur écran étroit hors tiroir ; les tiroirs conservent leur avancement dans le bandeau et leur pied d’actions.

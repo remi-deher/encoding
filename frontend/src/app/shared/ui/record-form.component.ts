@@ -5,10 +5,13 @@ import {
   OnChanges,
   SimpleChanges,
   input,
+  inject,
   output,
   signal,
   viewChild,
 } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatStepper, MatStepperModule } from '@angular/material/stepper';
@@ -71,6 +74,7 @@ type RecordFormControls = Record<string, FormControl<string>>;
         <mat-stepper
           #stepper
           linear
+          [orientation]="narrowViewport().matches && !embedded() ? 'vertical' : 'horizontal'"
           aria-label="Étapes du formulaire"
           [class.stepper-compact]="embedded()"
           (selectedIndexChange)="stepIndex.set($event)"
@@ -326,6 +330,12 @@ type RecordFormControls = Record<string, FormControl<string>>;
   `,
 })
 export class RecordFormComponent implements OnChanges {
+  protected readonly narrowViewport = toSignal(
+    inject(BreakpointObserver).observe('(max-width: 699px)'),
+    {
+      initialValue: { matches: false, breakpoints: {} },
+    },
+  );
   readonly data = input.required<RecordFormData>();
   readonly busy = input(false);
   readonly useStepper = input(true);

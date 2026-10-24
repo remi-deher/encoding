@@ -40,6 +40,7 @@ builder.Services.AddHostedService<RuntimeTransferService>();
 builder.Services.AddHostedService<WorkspaceCleanupService>();
 builder.Services.AddHostedService<SourceReplacementService>();
 builder.Services.AddHostedService<LibraryDiscoveryService>();
+builder.Services.AddHostedService<NodeDirectoryBrowserService>();
 builder.Services.AddHostedService<RuntimeWorkerService>();
 builder.Services.AddHostedService<ResourcePrefetchWorker>();
 builder.Services.AddSingleton<IToolCapabilityProbe, ToolCapabilityProbe>();

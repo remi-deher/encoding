@@ -1,6 +1,6 @@
 ---
 domain: runtime
-updated: 2026-10-23
+updated: 2026-10-24
 legacy_adr: [0005, 0009, 0015, 0016, 0018, 0020, 0021, 0028, 0030, 0033, 0054, 0058, 0059, 0064, 0066, 0075]
 code:
   - backend/src/Encoding.Api/Executions/
@@ -43,6 +43,7 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 
 ## Découverte et surveillance des bibliothèques
 - Demande de découverte durable et idempotente, prise par un nœud en **accès direct en lecture** (ou un serveur sans capacité de traitement), bail 60 s/15 s vérifié à la remise ; ignore les liens symboliques et dossiers `.encoding*` ; filtre les extensions selon le flow ; limite 10 000 fichiers (dépassement = échec, jamais d'inventaire tronqué) ; un succès remplace l'inventaire de façon atomique.
+- L’explorateur de chemins de la configuration d’accès passe lui aussi par une demande répliquée au nœud cible. L’agent renvoie les seuls sous-dossiers (maximum 200 par niveau), ignore les liens symboliques et les dossiers `.encoding*`, et ne transfère aucun contenu de fichier. Les demandes expirent après deux minutes.
 - Surveillance : sondage périodique (60 s par défaut, 15 à 86 400 s), fichier stable ≥ 30 s, réception unique par fichier/version/taille/date ; un échec ou une annulation **ne boucle pas** (relance explicite). Pas d'événement système de fichiers : un changement qui conserve taille et date n'est pas vu ; copier sous un nom temporaire puis renommer.
 
 ## Outils, bac à sable, scripts
@@ -73,3 +74,6 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 ## Accès de stockage du répartiteur
 - Migration additive 0048 : index couvrants des baux actifs par worker et bibliothèque, et index partiel du dernier checkpoint terminé. Les mêmes prédicats, plafonds, époques et ordres d’attribution sont conservés. Plans observés et coût d’entretien des index : [sqlite-runtime-query-plans.md](../../testing/sqlite-runtime-query-plans.md).
 - Migration additive 0050 : recherche des doublons actifs par `(library_id, media_key)` dans `execution_work` (table locale), avec `execution_id` couvrant la jointure. L'index évite le parcours de tous les travaux de la bibliothèque et n'est pas modifié par les renouvellements de baux.
+
+## Composition FFmpeg
+Les blocs en mode plan préparent des opérations ; l'exécuteur regroupe les opérations FFmpeg consécutives dans une seule commande. Les autres outils restent des frontières explicites. Sélection de pistes, resize et politique vidéo partagent une analyse de l'entrée pendant la composition de cette commande ; un échec de cette analyse bloque le traitement. Aucun cache n'est réutilisé pour valider un candidat ou publier. Commandes, erreurs et étapes restent dans le suivi commun ; aucun pourcentage FFmpeg n'est ajouté. Voir la [revue des flows](../flow-review-2026-10-24.md).

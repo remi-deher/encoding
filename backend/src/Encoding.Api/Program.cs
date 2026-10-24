@@ -55,6 +55,7 @@ builder.Services.AddSingleton<System.Data.Common.DbDataSource>(services => peerC
     ? new PeerDataSource(services.GetRequiredService<PeerDatabaseCoordinator>()) : localDatabase);
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
+builder.Services.AddSingleton<NodeDirectoryBrowserRepository>();
 builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
 builder.Services.AddSingleton<FirstLinkRepository>();

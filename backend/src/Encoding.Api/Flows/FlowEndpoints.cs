@@ -11,6 +11,17 @@ public static class FlowEndpoints
     public static void MapFlowEndpoints(this WebApplication app)
     {
         var flows = app.MapGroup("/api/v1/flows").WithTags("Flows");
+        flows.MapPost("/guided", (GuidedFlowRequest request, FlowComponentRegistry registry, FlowDefinitionValidator validator) =>
+        {
+            try
+            {
+                var definition = GuidedFlowBuilder.Build(request, registry);
+                var validation = validator.Validate(definition);
+                return validation.IsValid ? (IResult)Results.Ok(definition) : Results.UnprocessableEntity(validation);
+            }
+            catch (ArgumentException exception) { return ApiProblem.BadRequest(exception.Message); }
+        }).WithName("GenerateGuidedFlow");
+
         flows.MapGet("/{id:guid}/edit", async (Guid id, FlowRepository repository, CancellationToken ct) =>
         {
             if (await repository.DraftAsync(id, ct) is { } draft) return (IResult)Results.Ok(draft);
