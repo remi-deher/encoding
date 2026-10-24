@@ -6,7 +6,6 @@ using Xunit;
 
 namespace Encoding.Runtime.Tests;
 
- [Collection(RuntimeCollection.Name)]
 public sealed class NodeDirectoryBrowserTests
 {
     [Fact]
