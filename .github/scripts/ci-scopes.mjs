@@ -5,19 +5,15 @@ export const scopes = [
   {
     workflow: 'backend',
     checks: ['backend-compile', 'backend-runtime-tests', 'backend-launcher-tests', 'backend-plugin-tests', 'backend-prototype-tests', 'backend-static-checks', 'ai-cli-native'],
-    paths: ['backend/**', '!backend/tests/monitoring/**', '.github/workflows/backend.yml', '.github/actions/apt-install/**', '.github/scripts/apt-install.sh'],
+    paths: ['backend/**', '.github/workflows/backend.yml', '.github/actions/apt-install/**', '.github/scripts/apt-install.sh'],
   },
   {
     workflow: 'frontend', checks: ['frontend-fast', 'frontend-e2e'],
     paths: ['frontend/**', '.github/workflows/frontend.yml'],
   },
   {
-    workflow: 'monitoring', checks: ['peer-alerts'],
-    paths: ['docs/operations/peer-cluster-alerts.yml', 'backend/tests/monitoring/**', '.github/workflows/monitoring.yml'],
-  },
-  {
     workflow: 'image', checks: ['image'],
-    paths: ['backend/**', '!backend/tests/monitoring/**', 'frontend/**', '.dockerignore', '.github/workflows/image.yml'],
+    paths: ['backend/**', 'frontend/**', '.dockerignore', '.github/workflows/image.yml'],
   },
   {
     workflow: 'release-scripts', checks: ['release-scripts'],

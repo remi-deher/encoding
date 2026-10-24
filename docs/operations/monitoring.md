@@ -13,7 +13,6 @@ Voir [0029](../architecture/domains/auth-ops.md) pour les décisions.
 
 Contrôles de `/health/details` : `database`, `migrations`, `cluster`, `flow-backups`, `artifact-storage`, `backup-storage`.
 
-Le mode pair ajoute `peer-cluster-quorum` et `peer-projection`. Le contrôle de quorum décrit le bail local : seul le leader peut le confirmer ; un follower peut servir ses lectures et relayer les mutations avec une projection prête. La sonde prête ne promet pas une lecture linéarisable pendant une partition.
 
 ## Prometheus
 
@@ -70,22 +69,9 @@ Alertes suggérées :
   expr: increase(encoding_artifact_retention_errors_total[1h]) > 0
 ```
 
-## Supervision des pairs
+## Supervision du maillage
 
-Charger [peer-cluster-alerts.yml](peer-cluster-alerts.yml) dans `rule_files` de Prometheus et adapter les seuils. Scraper chaque API avec le jeton métriques ; ajouter une alerte `up == 0` pour chaque cible. Les labels `cluster` et `peer` identifient les pairs ; `remote_peer` identifie les observations distantes.
-
-| Métrique | Usage |
-| --- | --- |
-| `encoding_peer_is_leader`, `encoding_peer_has_quorum` | Leader local et bail majoritaire valide ; ne pas exiger un bail sur chaque follower. |
-| `encoding_peer_members`, `encoding_peer_committed_index` | Nombre de votes et progression du journal engagé. |
-| `encoding_peer_uncommitted_entries` | Entrées reçues mais non engagées ; l’absence de progression n’alerte que s’il reste du travail. |
-| `encoding_peer_projection_revision`, `encoding_peer_projection_ready` | Révision métier et état de la projection locale. |
-| `encoding_peer_remote_projection_revision`, `encoding_peer_remote_revision_lag` | Rattrapage des pairs et détection d’une révision figée. |
-| `encoding_peer_remote_observation_age_seconds` | Pair distant inaccessible ou incompatible. |
-| `encoding_peer_storage_available_bytes` | Espace libre du volume local ; seuil proposé : 5 Gio. |
-| `encoding_peer_certificate_remaining_seconds` | Anticiper la rotation avec chevauchement de confiance. |
-
-La perte de quorum se calcule avec `max by (cluster)` du bail, car un seul leader le possède. Conserver aussi les alertes d’absence de cibles : une série absente ne vaut pas zéro. Les vues métier peuvent différer pendant le rattrapage ; ne pas additionner leurs compteurs.
+Suivre le statut de réconciliation et les métriques SQLite de chaque serveur. La disponibilité locale ne dépend pas de la présence d’un pair. Les anciennes métriques et alertes de consensus sont retirées.
 
 ## Journaux
 

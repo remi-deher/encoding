@@ -2,15 +2,11 @@ using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using Encoding.Api.Nodes;
-using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Infrastructure.Operations;
 
 /// <summary>Construit la page <c>/metrics</c> : état du cluster dans SQLite et mesures du processus local.</summary>
-public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenceOptions presence, IHostEnvironment environment,
-    PeerConsensusService? peers = null, PeerDatabaseCoordinator? database = null,
-    PeerIdentityStore? identity = null, PeerObservations? observations = null, PeerClusterOptions? peerOptions = null,
-    PeerTrustStore? trust = null)
+public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenceOptions presence, IHostEnvironment environment)
 {
     private static readonly string[] ExecutionStates = ["queued", "running", "cancelling", "succeeded", "failed", "cancelled", "deferred"];
     private static readonly string[] BackupStatuses = ["pending", "ready", "failed"];
@@ -28,14 +24,12 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
         WriteRetention(writer);
         WriteHttp(writer);
         WriteSqliteWriter(writer);
-        WritePeers(writer);
         return writer.ToString();
     }
 
     private void WriteSqliteWriter(PrometheusWriter writer)
     {
-        var source = dataSource is PeerDataSource peer ? peer.Inner : dataSource;
-        if (source is not Data.Sqlite.SqliteDataSource sqlite) return;
+        if (dataSource is not Data.Sqlite.SqliteDataSource sqlite) return;
         var state = sqlite.Writer.Snapshot();
         writer.Gauge("encoding_sqlite_writer_enabled", "1 si la file locale d’écriture est activée.", sqlite.Writer.Options.Enabled ? 1 : 0);
         writer.Gauge("encoding_sqlite_writer_critical_only", "1 si seules les écritures critiques utilisent la file.", sqlite.Writer.Options.CriticalOnly ? 1 : 0);
@@ -49,30 +43,6 @@ public sealed class ClusterMetricsCollector(DbDataSource dataSource, NodePresenc
         writer.Counter("encoding_sqlite_writer_long_holds_total", "Détentions au-delà du seuil configuré.", state.LongHolds);
         writer.Counter("encoding_sqlite_writer_wait_seconds_total", "Temps cumulé d’attente des écritures admises.", state.WaitSeconds);
         writer.Counter("encoding_sqlite_writer_hold_seconds_total", "Temps cumulé de détention de l’écrivain.", state.HoldSeconds);
-    }
-
-    private void WritePeers(PrometheusWriter writer)
-    {
-        if (peers is null || database is null || identity is null) return;
-        var status = peers.GetStatus();
-        (string, string)[] labels = [("cluster", identity.Identity.ClusterId.ToString("D")), ("peer", identity.Identity.PeerId.ToString("D"))];
-        writer.Gauge("encoding_peer_is_leader", "1 si ce pair est le leader courant.", status.IsLeader ? 1 : 0, labels);
-        writer.Gauge("encoding_peer_has_quorum", "1 si ce pair possède un bail Raft valide.", status.HasQuorum ? 1 : 0, labels);
-        writer.Gauge("encoding_peer_members", "Nombre de membres votants.", status.Members.Count, labels);
-        writer.Gauge("encoding_peer_committed_index", "Dernier index engagé localement.", status.LastCommittedEntryIndex, labels);
-        writer.Gauge("encoding_peer_uncommitted_entries", "Écart entre journal reçu et engagé.", Math.Max(0, status.LastEntryIndex - status.LastCommittedEntryIndex), labels);
-        writer.Gauge("encoding_peer_projection_revision", "Révision SQL répliquée appliquée.", database.Image?.Revision ?? 0, labels);
-        writer.Gauge("encoding_peer_projection_ready", "1 si la projection SQL peut être utilisée.", database.Image is not null && !database.NeedsRepair ? 1 : 0, labels);
-        writer.Gauge("encoding_peer_certificate_remaining_seconds", "Durée restante du certificat local.", (identity.Identity.Certificate.NotAfter.ToUniversalTime() - DateTime.UtcNow).TotalSeconds, labels);
-        if (peerOptions is not null)
-            writer.Gauge("encoding_peer_storage_available_bytes", "Espace disponible sur le volume du pair.", new DriveInfo(Path.GetFullPath(peerOptions.DataDirectory)).AvailableFreeSpace, labels);
-        foreach (var remote in (observations?.List() ?? []).Where(remote => trust?.Find(remote.PeerId) is not null))
-        {
-            var remoteLabels = labels.Append(("remote_peer", remote.PeerId.ToString("D"))).ToArray();
-            writer.Gauge("encoding_peer_remote_projection_revision", "Dernière révision observée du pair distant.", remote.Revision, remoteLabels);
-            writer.Gauge("encoding_peer_remote_revision_lag", "Retard du pair distant par rapport à la révision locale.", Math.Max(0, (database.Image?.Revision ?? 0) - remote.Revision), remoteLabels);
-            writer.Gauge("encoding_peer_remote_observation_age_seconds", "Âge de la dernière observation de protocole.", (DateTimeOffset.UtcNow - remote.ObservedAtUtc).TotalSeconds, remoteLabels);
-        }
     }
 
     private async Task WriteClusterAsync(PrometheusWriter writer, CancellationToken ct)

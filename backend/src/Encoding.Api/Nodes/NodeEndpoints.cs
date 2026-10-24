@@ -1,5 +1,4 @@
 using Encoding.Api.Auth;
-using Encoding.Api.Infrastructure.PeerCluster;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Nodes;
 using Encoding.Api.Infrastructure;
@@ -190,8 +189,8 @@ public static class NodeEndpoints
             };
         }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("LeaveCluster");
 
-        nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, PeerPresenceRegistry peerPresence, CancellationToken cancellationToken) =>
-            Results.Ok(peerPresence.MergeNodes(await repository.ListAsync(options.OfflineAfter, cancellationToken), options.OfflineAfter, replicatedCatalog: true)))
+        nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, CancellationToken cancellationToken) =>
+            Results.Ok(await repository.ListAsync(options.OfflineAfter, cancellationToken)))
             .WithName("ListNodes");
 
         nodes.MapPut("/{nodeId:guid}/mode", async (Guid nodeId, ChangeNodeModeRequest request, NodeRepository repository, NodePresenceOptions options, CancellationToken ct) =>

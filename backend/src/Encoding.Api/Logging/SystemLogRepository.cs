@@ -1,21 +1,12 @@
 using System.Data.Common;
 using Encoding.Api.Infrastructure.Data;
-using Encoding.Api.Infrastructure.PeerCluster;
 using Encoding.Contracts.Logging;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Encoding.Api.Logging;
 
 public sealed class SystemLogRepository
 {
     private readonly DbDataSource _dataSource;
-
-    [ActivatorUtilitiesConstructor]
-    public SystemLogRepository(PeerLocalDatabase localDb)
-    {
-        ArgumentNullException.ThrowIfNull(localDb);
-        _dataSource = localDb.Source;
-    }
 
     public SystemLogRepository(DbDataSource dataSource)
     {

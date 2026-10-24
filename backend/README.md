@@ -2,7 +2,7 @@
 
 Socle API ASP.NET Core sur .NET 10, avec SQLite local par serveur. Les serveurs d'un cluster réconcilient progressivement leurs données via le maillage décrit dans [`0049`](../docs/architecture/domains/replication-storage.md). L’API et l’agent échangent les contrats versionnés du projet `Encoding.Contracts`.
 
-Le mode optionnel **pair à pair** conserve une base SQLite indépendante par serveur et réplique l’état métier avec Raft. Configuration, jointure, sauvegarde/restauration, rotation et contraintes de version : [guide d’exploitation](../docs/operations/peer-cluster-preview.md).
+Le maillage signé sans quorum est le seul modèle de réplication ; chaque serveur garde sa base SQLite locale.
 
 ## Développement local
 

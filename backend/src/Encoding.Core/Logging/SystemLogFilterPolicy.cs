@@ -46,11 +46,10 @@ public static class SystemLogFilterPolicy
             return false;
         }
 
-        // Télémétrie et transport de consensus Raft en niveau Trace/Debug
+        // Télémétrie du maillage en niveau Trace/Debug
         if (level <= LogLevel.Debug && (
             category.Contains("ClusterMesh", StringComparison.OrdinalIgnoreCase) ||
-            category.Contains("ClusterConsensus", StringComparison.OrdinalIgnoreCase) ||
-            category.Contains("Raft", StringComparison.OrdinalIgnoreCase)))
+            category.Contains("ClusterMeshTransport", StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }

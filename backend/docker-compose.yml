@@ -15,14 +15,6 @@ services:
       Cluster__DiscoveryPort: 8080
       Cluster__Reconciliation__AdvertisedApiBaseUrl: ${CLUSTER_RECONCILIATION_ADVERTISED_API_BASE_URL:-}
       Cluster__Reconciliation__Peers__0: ${CLUSTER_RECONCILIATION_PEER_0:-}
-      PeerCluster__Enabled: ${PEER_CLUSTER_ENABLED:-false}
-      PeerCluster__ClusterId: ${PEER_CLUSTER_ID:-}
-      PeerCluster__Bootstrap: ${PEER_CLUSTER_BOOTSTRAP:-false}
-      PeerCluster__PublicEndpoint: ${PEER_CLUSTER_PUBLIC_ENDPOINT:-}
-      PeerCluster__IdentityPassword: ${PEER_CLUSTER_IDENTITY_PASSWORD:-}
-      PeerCluster__SharedDataKey: ${PEER_CLUSTER_SHARED_DATA_KEY:-}
-      PeerCluster__ListenPort: 8443
-      PeerCluster__DataDirectory: /var/lib/encoding-node/peer-cluster
       Cluster__AdvertisedApiBaseUrl: ${CLUSTER_ADVERTISED_API_BASE_URL:-http://encoding:8080/}
       Node__Name: ${NODE_NAME:-encoding-dev-node}
       Node__Roles: ${NODE_ROLES:-server,worker}
@@ -60,7 +52,6 @@ services:
     ports:
       - "${CLUSTER_API_BIND_ADDRESS:-127.0.0.1}:5080:8080"
       - "127.0.0.1:4201:8080"
-      - "${PEER_CLUSTER_BIND:-127.0.0.1:8443}:8443"
     volumes:
       - encoding-flow-backups:/var/lib/encoding/flow-backups
       - encoding-runtime-artifacts:/var/lib/encoding/runtime-artifacts

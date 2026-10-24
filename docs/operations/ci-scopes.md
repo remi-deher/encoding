@@ -4,10 +4,9 @@ Les workflows utilisent les mêmes filtres sur les PR et les push vers dev/main 
 
 | Workflow | Fichiers concernés |
 | --- | --- |
-| Backend | backend, hors tests Prometheus, et son workflow |
+| Backend | backend et son workflow |
 | Frontend | frontend et son workflow |
-| Image | backend hors tests Prometheus, frontend, .dockerignore et son workflow |
-| Monitoring | règles peer-cluster-alerts, tests Prometheus et son workflow |
+| Image | backend, frontend, .dockerignore et son workflow |
 | Release scripts | scripts GitHub et workflows release*.yml |
 | Promotion CI | toutes les PR vers main, sans filtre de chemins |
 

@@ -1,12 +1,11 @@
 using Encoding.Api.Infrastructure.Data;
 using System.Data.Common;
 using Encoding.Contracts.Libraries;
-using Encoding.Api.Infrastructure.PeerCluster;
 using System.Text.Json;
 
 namespace Encoding.Api.Libraries;
 
-public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusService? peerConsensus = null)
+public sealed class LibraryRepository(DbDataSource dataSource)
 {
     public async Task<IReadOnlyList<LibraryResponse>> ListAsync(CancellationToken cancellationToken)
     {
@@ -34,15 +33,6 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
 
     public async Task<LibraryResponse?> CreateAsync(CreateLibraryRequest request, CancellationToken cancellationToken)
     {
-        if (peerConsensus is { DatabaseTransactionsEnabled: false })
-        {
-            var name = request.Name.Trim();
-            var id = Guid.NewGuid();
-            var state = new PeerLibraryState(id, name, DateTimeOffset.UtcNow, true);
-            return await peerConsensus.ReplicateLibraryAsync(state, id, 0, false, cancellationToken)
-                ? await GetAsync(id, cancellationToken) : null;
-        }
-
         const string sql = """
             INSERT INTO libraries (name) VALUES (@name)
             ON CONFLICT (name) DO NOTHING
@@ -57,17 +47,6 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
 
     public async Task<LibraryResponse?> UpdateAsync(Guid id, UpdateLibraryRequest request, CancellationToken cancellationToken)
     {
-        if (peerConsensus is { DatabaseTransactionsEnabled: false })
-        {
-            var current = peerConsensus.GetLibraryDocument(id);
-            if (current is null || current.Deleted) return null;
-            var library = current.Value.Deserialize<PeerLibraryState>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            if (library is null) return null;
-            var updated = library with { Name = request.Name.Trim() };
-            return await peerConsensus.ReplicateLibraryAsync(updated, id, current.Revision, false, cancellationToken)
-                ? await GetAsync(id, cancellationToken) : null;
-        }
-
         const string sql = """
             UPDATE libraries SET name = @name
             WHERE id = @id
@@ -85,17 +64,6 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
 
     public async Task<LibraryResponse?> SetActiveAsync(Guid id, bool isActive, CancellationToken cancellationToken)
     {
-        if (peerConsensus is { DatabaseTransactionsEnabled: false })
-        {
-            var current = peerConsensus.GetLibraryDocument(id);
-            if (current is null || current.Deleted) return null;
-            var library = current.Value.Deserialize<PeerLibraryState>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            if (library is null) return null;
-            var updated = library with { IsActive = isActive };
-            return await peerConsensus.ReplicateLibraryAsync(updated, id, current.Revision, false, cancellationToken)
-                ? await GetAsync(id, cancellationToken) : null;
-        }
-
         const string sql = "UPDATE libraries SET is_active = @active WHERE id = @id";
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = Sql.Command(sql, connection);
@@ -107,13 +75,6 @@ public sealed class LibraryRepository(DbDataSource dataSource, PeerConsensusServ
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        if (peerConsensus is { DatabaseTransactionsEnabled: false })
-        {
-            var current = peerConsensus.GetLibraryDocument(id);
-            if (current is null || current.Deleted) return false;
-            return await peerConsensus.ReplicateLibraryAsync(null, id, current.Revision, true, cancellationToken);
-        }
-
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using (var active = Sql.Command("""

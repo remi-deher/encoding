@@ -6,8 +6,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace Encoding.Api.Plugins;
 
-public sealed class PluginConfigurationRepository(DbDataSource dataSource, IDataProtectionProvider protection,
-    Encoding.Api.Infrastructure.PeerCluster.PeerSecretProtection? sharedProtection = null)
+public sealed class PluginConfigurationRepository(DbDataSource dataSource, IDataProtectionProvider protection)
 {
     private readonly IDataProtector protector = protection.CreateProtector("Encoding.PluginConfiguration.v1");
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -288,8 +287,8 @@ public sealed class PluginConfigurationRepository(DbDataSource dataSource, IData
             values.Keys.Where(secretIds.Contains).ToArray());
     }
 
-    private byte[] ProtectData(byte[] data) => sharedProtection?.Protect(data) ?? protector.Protect(data);
-    private byte[] UnprotectData(byte[] data) => sharedProtection?.Unprotect(data) ?? protector.Unprotect(data);
+    private byte[] ProtectData(byte[] data) => protector.Protect(data);
+    private byte[] UnprotectData(byte[] data) => protector.Unprotect(data);
     private byte[] Protect(IReadOnlyDictionary<string, JsonElement> values) => ProtectData(JsonSerializer.SerializeToUtf8Bytes(values, Json));
     internal byte[] ProtectSnapshot(IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>> values)
         => ProtectData(JsonSerializer.SerializeToUtf8Bytes(values, Json));

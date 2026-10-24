@@ -9,8 +9,7 @@ using Encoding.Contracts.Nodes;
 namespace Encoding.Api.Executions;
 
 public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<RuntimeRecoveryService> logger,
-    NodeGroupRepository? nodeGroups = null, RuntimeEligibility? eligibility = null, NodePresenceOptions? presence = null,
-    Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null) : BackgroundService
+    NodeGroupRepository? nodeGroups = null, RuntimeEligibility? eligibility = null, NodePresenceOptions? presence = null) : BackgroundService
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private readonly TimeSpan offlineAfter=presence?.OfflineAfter??TimeSpan.FromSeconds(30);
@@ -20,8 +19,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         {
             try
             {
-                using var lease = assignment?.AcquireLease(ct);
-                if (assignment is not null && lease is null) { await Task.Delay(TimeSpan.FromSeconds(1), ct); continue; }
+
                 await ProcessOnceAsync(ct);
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }

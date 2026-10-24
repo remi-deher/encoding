@@ -8,7 +8,7 @@ namespace Encoding.Api.Plugins;
 /// reçu du réseau n’est exécuté sans être retrouvé dans la bibliothèque.
 /// </summary>
 public sealed class IntegrationTriggerService(IntegrationTriggerRepository requests, LibraryWorkflowRepository workflow,
-    ILogger<IntegrationTriggerService> logger, Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null) : BackgroundService
+    ILogger<IntegrationTriggerService> logger) : BackgroundService
 {
     private static readonly TimeSpan Poll = TimeSpan.FromSeconds(5);
 
@@ -18,8 +18,8 @@ public sealed class IntegrationTriggerService(IntegrationTriggerRepository reque
         {
             try
             {
-                using var lease = assignment?.AcquireLease(ct);
-                if (assignment is null || lease is not null) await ProcessAsync(lease?.Token ?? ct);
+
+                await ProcessAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception exception) { logger.LogError(exception, "Traitement des déclencheurs d’intégration momentanément indisponible."); }
