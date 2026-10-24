@@ -1,6 +1,6 @@
 ---
 domain: runtime
-updated: 2026-10-23
+updated: 2026-10-24
 legacy_adr: [0005, 0009, 0015, 0016, 0018, 0020, 0021, 0028, 0030, 0033, 0054, 0058, 0059, 0064, 0066, 0075]
 code:
   - backend/src/Encoding.Api/Executions/
@@ -43,6 +43,7 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 
 ## Découverte et surveillance des bibliothèques
 - Demande de découverte durable et idempotente, prise par un nœud en **accès direct en lecture** (ou un serveur sans capacité de traitement), bail 60 s/15 s vérifié à la remise ; ignore les liens symboliques et dossiers `.encoding*` ; filtre les extensions selon le flow ; limite 10 000 fichiers (dépassement = échec, jamais d'inventaire tronqué) ; un succès remplace l'inventaire de façon atomique.
+- L’explorateur de chemins de la configuration d’accès passe lui aussi par une demande répliquée au nœud cible. L’agent renvoie les seuls sous-dossiers (maximum 200 par niveau), ignore les liens symboliques et les dossiers `.encoding*`, et ne transfère aucun contenu de fichier. Les demandes expirent après deux minutes.
 - Surveillance : sondage périodique (60 s par défaut, 15 à 86 400 s), fichier stable ≥ 30 s, réception unique par fichier/version/taille/date ; un échec ou une annulation **ne boucle pas** (relance explicite). Pas d'événement système de fichiers : un changement qui conserve taille et date n'est pas vu ; copier sous un nom temporaire puis renommer.
 
 ## Outils, bac à sable, scripts
