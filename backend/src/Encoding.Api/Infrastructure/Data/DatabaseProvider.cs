@@ -11,6 +11,9 @@ public static class DatabaseProvider
 
     public static DbDataSource CreateRuntime(IConfiguration configuration)
     {
+        // Fail closed instead of silently running a former consensus projection independently.
+        if (configuration.GetValue("PeerCluster:Enabled", false))
+            throw new InvalidOperationException("Le mode de consensus retiré ne peut plus démarrer. Sauvegardez les données et retirez l’ancienne configuration après avoir préparé la transition vers le maillage local.");
         var provider = configuration["Database:Provider"]?.Trim();
         var connection = configuration.GetConnectionString("Cluster") ?? "Data Source=./data/cluster.db";
         if (provider is not null && !string.Equals(provider, SqliteName, StringComparison.OrdinalIgnoreCase))
@@ -21,9 +24,6 @@ public static class DatabaseProvider
             throw new InvalidOperationException("La connexion doit être une chaîne SQLite valide, par exemple Data Source=./data/cluster.db.", exception);
         }
         var writer = configuration.GetSection("Database:Writer").Get<SqliteWriterOptions>() ?? new();
-        // Raft retains its existing coordinator/capture path until it has its own integration tests.
-        // In particular it must not wait for a projection while holding a second local writer gate.
-        if (configuration.GetValue("PeerCluster:Enabled", false)) writer = writer with { Enabled = false };
         return new SqliteDataSource(connection, writer);
     }
 }

@@ -1,5 +1,4 @@
 using Encoding.Api.Infrastructure.Data;
-using Encoding.Api.Infrastructure.PeerCluster;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Net.Http.Json;
@@ -266,7 +265,6 @@ internal static partial class Harness
             builder.Services.AddSingleton(_ => new Encoding.Api.Resources.ResourceBlobStore(config));
             builder.Services.AddSingleton(provider => new Encoding.Api.Resources.ResourceRepository(db, provider.GetRequiredService<Encoding.Api.Resources.ResourceBlobStore>()));
             builder.Services.AddSingleton<Encoding.Api.Resources.ResourceBlobFetcher>(_ => throw new NotSupportedException("Récupération par un pair non utilisée dans ce scénario."));
-            builder.Services.AddSingleton(PeerClusterOptions.From(new ConfigurationBuilder().Build(), directory));
             app=builder.Build();
             app.Use(async (context,next) =>
             {

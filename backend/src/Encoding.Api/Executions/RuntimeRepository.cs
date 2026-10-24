@@ -8,11 +8,10 @@ using Encoding.Api.Plugins;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Nodes;
-using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,IPeerAssignmentGate? peerAssignmentGate = null)
+public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     /// <summary>États des exécutions demandées ; les identifiants inconnus de ce serveur sont absents du résultat.</summary>
@@ -160,9 +159,6 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
 
     public async Task<RuntimeLease?> ClaimAsync(Guid worker,CancellationToken ct)
     {
-        using var assignmentLease = peerAssignmentGate?.AcquireLease(ct);
-        if (peerAssignmentGate is not null && assignmentLease is null) return null;
-        if (assignmentLease is not null) ct = assignmentLease.Token;
         // Persist failures independently, so an inaccessible task cannot delay another eligible task.
         if (await HasUnavailableSourcesAsync(dataSource, presence.OfflineAfter, ct))
         {
@@ -334,7 +330,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 }
                 if(returnsToSelf) continue;
             }
-            var epoch=peerAssignmentGate?.NextFencingEpoch(item.Epoch) ?? item.Epoch+1;
+            var epoch=checked(item.Epoch+1);
             await using(var reserve=Sql.Command("""
               INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until)
               VALUES(@library,@key,@id,@epoch,clock_timestamp()+interval '60 seconds')

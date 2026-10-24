@@ -11,8 +11,7 @@ public sealed record RetentionResult(int Candidates, int Purged, long BytesFreed
 /// Les lignes d’historique et empreintes restent dans la base locale ; seule la marque <c>artifacts_purged_at</c> est ajoutée.
 /// Les fichiers publiés dans les bibliothèques ne sont jamais concernés.
 /// </summary>
-public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactStore store, OperationsOptions options, ILogger<ArtifactRetention> logger,
-    Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null)
+public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactStore store, OperationsOptions options, ILogger<ArtifactRetention> logger)
 {
     private const string CandidateSql = """
         SELECT e.id
@@ -31,9 +30,7 @@ public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactSt
 
     public async Task<RetentionResult> RunOnceAsync(CancellationToken cancellationToken)
     {
-        using var lease = assignment?.AcquireLease(cancellationToken);
-        if (assignment is not null && lease is null) return new(0, 0, 0, 0, options.ArtifactRetention.DryRun);
-        cancellationToken = lease?.Token ?? cancellationToken;
+
         var settings = options.ArtifactRetention;
         var ids = new List<Guid>();
         int purged = 0; long freed = 0;

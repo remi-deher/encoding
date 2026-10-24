@@ -4,7 +4,6 @@ on:
     branches: [dev, main]
     paths:
       - "backend/**"
-      - "!backend/tests/monitoring/**"
       - ".github/workflows/backend.yml"
       - ".github/actions/apt-install/**"
       - ".github/scripts/apt-install.sh"
@@ -12,7 +11,6 @@ on:
     branches: [dev, main]
     paths:
       - "backend/**"
-      - "!backend/tests/monitoring/**"
       - ".github/workflows/backend.yml"
       - ".github/actions/apt-install/**"
       - ".github/scripts/apt-install.sh"
@@ -184,7 +182,6 @@ jobs:
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
       - run: dotnet run --project backend/tools/ClusterMeshPrototype --configuration Release -- test
-      - run: dotnet run --project backend/tools/ClusterConsensusPrototype --configuration Release -- test
   ai-cli-native:
     runs-on: ubuntu-latest
     timeout-minutes: 20

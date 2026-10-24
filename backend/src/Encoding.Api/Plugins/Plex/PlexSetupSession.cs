@@ -1,15 +1,14 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using Encoding.Api.Infrastructure.PeerCluster;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Encoding.Api.Plugins.Plex;
 
 /// <summary>
 /// Session opaque de l'assistant Plex (0008) : jeton du compte plex.tv chiffré et daté, renvoyé au navigateur à la place
-/// du jeton. Chiffrée avec la clé partagée du cluster quand elle existe, donc valable sur tout serveur ; 15 minutes au plus.
+/// du jeton. Chiffrée avec Data Protection local ; 15 minutes au plus.
 /// </summary>
-public sealed class PlexSetupSession(IDataProtectionProvider protection, PeerSecretProtection? sharedProtection = null, TimeProvider? clock = null)
+public sealed class PlexSetupSession(IDataProtectionProvider protection, TimeProvider? clock = null)
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(15);
     private const string Kind = "plex-setup-session";
@@ -20,7 +19,7 @@ public sealed class PlexSetupSession(IDataProtectionProvider protection, PeerSec
     public string Protect(string accountToken, string clientIdentifier)
     {
         var payload = JsonSerializer.SerializeToUtf8Bytes(new Payload(Kind, accountToken, clientIdentifier, time.GetUtcNow().Add(Lifetime)));
-        var encrypted = sharedProtection?.Protect(payload) ?? protector.Protect(payload);
+        var encrypted = protector.Protect(payload);
         return Convert.ToBase64String(encrypted).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
@@ -32,7 +31,7 @@ public sealed class PlexSetupSession(IDataProtectionProvider protection, PeerSec
             var base64 = session.Replace('-', '+').Replace('_', '/');
             base64 = base64.PadRight(base64.Length + (4 - base64.Length % 4) % 4, '=');
             var encrypted = Convert.FromBase64String(base64);
-            var plain = sharedProtection is not null ? sharedProtection.Unprotect(encrypted) : protector.Unprotect(encrypted);
+            var plain = protector.Unprotect(encrypted);
             var payload = JsonSerializer.Deserialize<Payload>(plain);
             if (payload is null || payload.Kind != Kind || string.IsNullOrEmpty(payload.Token)
                 || string.IsNullOrEmpty(payload.ClientIdentifier) || payload.ExpiresAt <= time.GetUtcNow())

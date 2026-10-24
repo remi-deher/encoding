@@ -135,9 +135,9 @@ public sealed class SystemLogFilterPolicyTests
     }
 
     [Fact]
-    public void Drops_Raft_Consensus_Trace_And_Debug_Logs()
+    public void Drops_Mesh_Trace_And_Debug_Logs()
     {
-        var category = "DotNext.Net.Cluster.Consensus.Raft.RaftCluster";
+        var category = "Encoding.ClusterMesh.Transport";
         var message = "Heartbeat packet exchanged with peer";
 
         Assert.False(SystemLogFilterPolicy.ShouldCapture(category, LogLevel.Debug, message));
@@ -150,11 +150,11 @@ public sealed class SystemLogFilterPolicyTests
     {
         var kestrelCategory = "Microsoft.AspNetCore.Hosting.Diagnostics";
         var healthCategory = "Microsoft.AspNetCore.Diagnostics.HealthChecks";
-        var raftCategory = "DotNext.Net.Cluster.Consensus.Raft";
+        var meshCategory = "Encoding.ClusterMesh";
 
         Assert.True(SystemLogFilterPolicy.ShouldCapture(kestrelCategory, LogLevel.Warning, "Connection reset"));
         Assert.True(SystemLogFilterPolicy.ShouldCapture(healthCategory, LogLevel.Error, "Health check failed: Disk full"));
-        Assert.True(SystemLogFilterPolicy.ShouldCapture(raftCategory, LogLevel.Critical, "Consensus partition split"));
+        Assert.True(SystemLogFilterPolicy.ShouldCapture(meshCategory, LogLevel.Critical, "Mesh exchange failed"));
     }
 }
 

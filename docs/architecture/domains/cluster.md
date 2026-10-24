@@ -75,3 +75,6 @@ Deux onglets : **Ce nœud** (fonctions, identité, capacités, fiche `app-resour
 ## Présence et métadonnées
 - Un heartbeat dont nom, rôles, capacité, outils et inventaire sont identiques ne modifie que `last_seen_at`. Toute modification ou confirmation des rôles demandés emprunte la mise à jour complète, toujours authentifiée par le hash du jeton et refusée après suppression du nœud. Aucun cache de métadonnées ne remplace la base.
 - Le protocole et le nonce de session ne sont réécrits que s’ils changent ; la détection des identités concurrentes, la quarantaine et les raisons d’incompatibilité sont conservées. Le contrat de heartbeat et le protocole réseau ne changent pas.
+
+## Modèle unique sans quorum (2026-10-25)
+Le mode optionnel de consensus et son transport dédié sont retirés : chaque serveur utilise sa base locale et le maillage signé. Le travail local ne dépend d'aucun quorum. Voir ADR [0013](../adr/0013-retrait-mode-raft.md). Cela n'ajoute pas de reprise de file inter-serveurs : celle-ci exige le protocole de propriété et la neutralisation explicite de l'ancien propriétaire, encore non livrés.

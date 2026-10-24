@@ -4,7 +4,7 @@
 
 L'image embarque Codex CLI `0.163.0` et Claude Code `2.1.302`. Les arguments de construction `CODEX_CLI_VERSION` et `CLAUDE_CODE_VERSION` permettent une mise à jour explicite. L'installation utilise les paquets officiels npm ; aucun binaire tiers n'est versionné dans le dépôt.
 
-Conserver le volume `Node:DataDirectory`, notamment les clés Data Protection et `credentials/ai-tools`. Ne pas monter le même profil de credentials en écriture sur plusieurs serveurs : la réplication entre nœuds s’en charge. Tous les serveurs doivent être approuvés dans le même cluster et joignables par les adresses du maillage. Les horloges doivent être synchronisées. Le [maillage de réconciliation](../architecture/domains/replication-storage.md) est le chemin vérifié ; le mode optionnel `PeerCluster` Raft n'est pas couvert par les scénarios IA distribués de cette branche.
+Conserver le volume `Node:DataDirectory`, notamment les clés Data Protection et `credentials/ai-tools`. Ne pas monter le même profil de credentials en écriture sur plusieurs serveurs : la réplication entre nœuds s’en charge. Tous les serveurs doivent être approuvés dans le même cluster et joignables par les adresses du maillage. Les horloges doivent être synchronisées. Le [maillage de réconciliation](../architecture/domains/replication-storage.md) est le chemin vérifié.
 
 Ouvrir **Paramètres → Intégrations → IA & fournisseurs** sur le serveur qui doit héberger une connexion :
 

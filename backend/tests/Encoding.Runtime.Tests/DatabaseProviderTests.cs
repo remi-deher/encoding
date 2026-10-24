@@ -18,6 +18,14 @@ public sealed class DatabaseProviderTests
     }
 
     [Fact]
+    public void RemovedConsensusModeFailsBeforeOpeningTheDatabase()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>
+        { ["PeerCluster:Enabled"] = "true" }).Build();
+        Assert.Contains("retiré", Assert.Throws<InvalidOperationException>(() => DatabaseProvider.CreateRuntime(configuration)).Message);
+    }
+
+    [Fact]
     public void SqliteIsTheDefaultWhenNoConnectionStringIsConfigured()
     {
         using var source = DatabaseProvider.CreateRuntime(Config(null, null));

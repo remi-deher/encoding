@@ -1,5 +1,4 @@
 using Encoding.Api.Infrastructure.Data;
-using Encoding.Api.Infrastructure.PeerCluster;
 using System.Data.Common;
 using System.Text.Json;
 
@@ -11,7 +10,7 @@ namespace Encoding.Api.Infrastructure;
 /// </summary>
 public sealed record ClusterIdentity(Guid Id, string Name, bool Standalone);
 
-public sealed class ClusterIdentityRepository(DbDataSource dataSource, PeerClusterOptions? peerOptions = null, PeerConsensusService? peerConsensus = null)
+public sealed class ClusterIdentityRepository(DbDataSource dataSource)
 {
     public const int MaximumNameLength = 128;
 
@@ -27,13 +26,6 @@ public sealed class ClusterIdentityRepository(DbDataSource dataSource, PeerClust
         var id = reader.GetGuid(0);
         var name = reader.GetString(1);
         var standalone = !established && nodes <= 1;
-        if (peerOptions is { Enabled: true, ClusterId: { } peerClusterId })
-        {
-            id = peerClusterId;
-            standalone = false;
-            if (peerConsensus?.Get("cluster/name") is { ValueKind: JsonValueKind.String } replicatedName)
-                name = replicatedName.GetString() ?? name;
-        }
         return new ClusterIdentity(id, name, standalone);
     }
 

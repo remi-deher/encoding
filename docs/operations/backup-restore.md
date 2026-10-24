@@ -2,7 +2,7 @@
 
 ## Mode pair à pair
 
-Un cluster `PeerCluster` se sauvegarde avec les commandes `backup-peer` / `restore-peer` du [guide des pairs](peer-cluster-preview.md#sauvegarde-à-froid-et-restauration). Conserver un ensemble coordonné des bases SQLite locales, identités, clés et journaux Raft, ainsi que les secrets séparés.
+Le serveur utilise exclusivement SQLite local et le maillage signé. Avant la mise à jour d’une ancienne installation utilisant le mode de consensus retiré, sauvegarder à froid ses bases, identités, clés et journaux. Ne pas démarrer ses projections indépendamment : aucune conversion automatique vers le maillage n’est prise en charge.
 
 ## Ce qui doit être sauvegardé
 

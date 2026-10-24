@@ -1,15 +1,14 @@
 ---
 domain: replication-storage
-updated: 2026-10-23
+updated: 2026-10-25
 legacy_adr: [0001, 0004, 0014, 0029, 0043, 0049, 0060-peer, 0061-peer]
 code:
   - backend/src/Encoding.Api/Infrastructure/Data/
   - backend/src/Encoding.Api/Infrastructure/ClusterReconciliation*.cs
   - backend/src/Encoding.Api/Infrastructure/ClusterEntityReconciliation.cs
-  - backend/src/Encoding.Api/Infrastructure/PeerCluster/
   - backend/src/Encoding.Api/Infrastructure/DatabaseMigrator.cs
   - backend/migrations/sqlite/
-tags: [sqlite, migrations, maillage, réconciliation, lww, raft, sauvegarde, tombstone, clé de données]
+tags: [sqlite, migrations, maillage, réconciliation, lww, sauvegarde, tombstone, clé de données]
 ---
 
 # Stockage et réplication
@@ -30,7 +29,7 @@ tags: [sqlite, migrations, maillage, réconciliation, lww, raft, sauvegarde, tom
 - `IsolationLevel.Snapshot` ouvre une transaction différée avec `query_only=ON`, réinitialisé à sa clôture : aucune admission d’écriture et aucune promotion en écriture. Les lectures SELECT simples hors transaction contournent aussi la file ; les lots/CTE suivent conservativement l’admission, sans ouvrir de transaction d’écriture implicite.
 - La capture et l’application des événements du maillage utilisent les mêmes connexions et transactions : pas de changement de schéma, de journal, d’ordre logique, de déduplication ou de protocole. Baux, réservations et claims restent locaux et atomiques.
 - Métriques `encoding_sqlite_writer_*` sur `/metrics` : files, admission active, refus, expirations, tentatives, temps cumulé d’attente/détention et détentions longues ; avertissement Trace après détention supérieure à 1 s. Saturation, expiration et erreurs SQLite 5/6 deviennent HTTP 503 avec code `sqlite_write_unavailable` et `Retry-After: 1`, sans SQL dans la réponse.
-- Déploiement par étapes : `Database:Writer:Enabled=false` mesure les unités sans les sérialiser ; `true` active la file dans l’adaptateur commun, d’abord pour les chemins critiques avec `CriticalOnly=true`, puis pour tous les domaines avec `CriticalOnly=false` (défaut final). La phase critique seule conserve des écritures ordinaires directes et ne revendique pas encore l’exclusivité globale. Les migrations et copies de base utilisent aussi cette admission. Exceptions d’infrastructure : initialisation des PRAGMA de connexion, garde `query_only`, commandes brutes de capture Raft dans `PeerDatabaseSchema`. Le mode Raft désactive explicitement la file et conserve son coordinateur existant ; son intégration à cette file reste non livrée. Ne pas ajouter d’accès SQLite brut hors de ces exceptions.
+- Déploiement par étapes : `Database:Writer:Enabled=false` mesure les unités sans les sérialiser ; `true` active la file dans l’adaptateur commun, d’abord pour les chemins critiques avec `CriticalOnly=true`, puis pour tous les domaines avec `CriticalOnly=false` (défaut final). La phase critique seule conserve des écritures ordinaires directes et ne revendique pas encore l’exclusivité globale. Les migrations et copies de base utilisent aussi cette admission. Exceptions d’infrastructure : initialisation des PRAGMA de connexion et garde `query_only`. Le serveur n’a qu’une source SQLite locale et un écrivain commun. Ne pas ajouter d’accès SQLite brut hors de ces exceptions.
 - Les délais bornent l’attente avant admission, pas une transaction déjà engagée. Une annulation en attente retire la demande ; après admission, l’appelant conserve la responsabilité de terminer ou d’annuler sa transaction et la file ne la rejoue jamais. Les transactions longues restent à réduire à partir des mesures. Exploitation et limites : [sqlite-writer.md](../../operations/sqlite-writer.md). Aucune validation sous charge de production ni entre versions mixtes n’est revendiquée.
 
 ### Réplication par défaut : maillage de réconciliation (écriture opportuniste, convergence éventuelle)
@@ -43,9 +42,8 @@ tags: [sqlite, migrations, maillage, réconciliation, lww, raft, sauvegarde, tom
 - **Local, jamais répliqué** : baux et réservations, `execution_work`, attentes actives, scans en cours, files de déclenchement, sessions utilisateur, opérations de remplacement en cours, verrous de disque, `system_logs`, paquets du Store de plugins, fichiers binaires (**octets des ressources de flow** : magasin adressé par empreinte `Resources:Directory`, par serveur ; médias, artefacts, sauvegardes JSON régénérées par chaque serveur).
 - Conséquence centrale : **aucune exclusion de travail entre bases indépendantes n'est revendiquée**. Une exécution reste attribuée au serveur qui l'a créée ; la reprise après perte est une relance explicite ([runtime.md](runtime.md)).
 
-### Mode pair à pair optionnel (Raft) : prévisualisation
-- `PeerCluster__Enabled=true` (défaut `false`) active un mode distinct : trois serveurs votants, journal Raft (DotNext), transactions SQL répliquées par capture de lignes (`PeerDataSource`), baux avec terme Raft, certificats approuvés, port pair séparé. Même version requise sur tous les pairs (pas de N/N-1), image d'import limitée à 64 Mio. Procédures : `docs/operations/peer-cluster-preview.md`, `peer-cluster-production-todo.md`, règles d'alerte `peer-cluster-alerts.yml`.
-- **Contradiction à trancher** : ce mode et le maillage LWW ont des garanties opposées (quorum et exclusion forte vs convergence éventuelle sans quorum). Le principe affiché du produit est « sans quorum ». Voir [open-questions.md](../open-questions.md). Ne pas étendre le mode Raft avant décision.
+### Modèle unique sans quorum
+Le maillage LWW est l'unique modèle de réplication (ADR [0013](../adr/0013-retrait-mode-raft.md)). Le coordinateur de consensus, les transactions SQL répliquées, leurs commandes CLI et leur transport dédié sont retirés. L'ancien indicateur d'activation à `true` provoque un refus explicite avant ouverture de la base ; aucune projection n'est convertie ou adoptée automatiquement. Le journal du maillage, ses signatures, les clés AES-GCM, la déduplication et la capture incrémentale sont inchangés.
 
 ### Sondages de sauvegarde
 - La présence d’un travail de sauvegarde dû est consultée sans transaction d’écriture ; le travail est relu sous transaction avant traitement. Un sondage vide ne prend donc pas le verrou SQLite. La publication atomique et les délais de reprise restent inchangés.
@@ -75,7 +73,7 @@ tags: [sqlite, migrations, maillage, réconciliation, lww, raft, sauvegarde, tom
 - Maillage : un changement qui conserve taille et date n'est pas concerné ici (voir sondage de surveillance dans [runtime.md](runtime.md)) ; deux créations isolées de même nom attendent la résolution de la collision.
 
 ## Capture incrémentale (ADR [0010](../adr/0010-capture-incrementale-locale.md))
-- Migration 0049 : `cluster_sync_capture_tables` (révision source/acquittée) et `cluster_sync_dirty_entities` (dernière révision de chaque clé) sont **locales, jamais réconciliées ni incluses dans les images Raft**. Des triggers INSERT/UPDATE/DELETE suivent les colonnes réconciliées, dans la transaction de l’écriture ; un rollback annule également les marqueurs. Une mise à jour sans changement de valeur ne les active pas.
+- Migration 0049 : `cluster_sync_capture_tables` (révision source/acquittée) et `cluster_sync_dirty_entities` (dernière révision de chaque clé) sont **locales, jamais réconciliées**. Des triggers INSERT/UPDATE/DELETE suivent les colonnes réconciliées, dans la transaction de l’écriture ; un rollback annule également les marqueurs. Une mise à jour sans changement de valeur ne les active pas.
 - Révisions, clés et lignes sont lues dans un Snapshot cohérent. Premier passage ou invalidation = lecture complète de la table ; ensuite, recherche par clés dans les index primaires. Une table stable ne relit aucune ligne métier. Les suppressions restent détectées lorsque la dernière ligne disparaît ; les curseurs temporels conservés pour compatibilité ne filtrent plus cette capture.
 - Après traitement, l’acquittement et le nettoyage portent seulement sur les révisions observées. Les nouvelles mutations d’une même clé restent en attente. Les lots déjà validés avant interruption sont dédupliqués par les empreintes au passage suivant. Les révisions sont remises à zéro logique lors de l’adoption d’un autre cluster.
 - Les clés des reçus gardent le chemin média portable, normalisé comme les états existants, y compris Unicode. Les mutations d’inventaire invalident le marqueur `scan-inventory/<scanId>` et la capture dépendante des scans/reçus. Les tables locales d’exécution, sessions et baux ne deviennent pas réconciliées.

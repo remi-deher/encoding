@@ -11,6 +11,7 @@ public sealed class RuntimeWorkerService(NodeAgentOptions options,WorkerIdentity
         var tasks=new List<Task>();
         try
         {
+            await WorkerPolling.DelayAsync(0,ct);
             while(!ct.IsCancellationRequested)
             {
                 tasks.RemoveAll(task=>task.IsCompleted);
@@ -22,7 +23,7 @@ public sealed class RuntimeWorkerService(NodeAgentOptions options,WorkerIdentity
                         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(20));
                         using var client=new RuntimeClient(identity);
                         var capacity=await client.GetAsync<RuntimeCapacity>("capacity",timeout.Token);
-                        if(tasks.Count>=capacity.MaxConcurrentTasks) {await Task.Delay(TimeSpan.FromSeconds(2),ct);continue;}
+                        if(tasks.Count>=capacity.MaxConcurrentTasks) {await WorkerPolling.DelayAsync(2000,ct);continue;}
                         var lease=await client.PostAsync<RuntimeLease>("claim",new { },timeout.Token);
                         if(lease is not null)
                         {
@@ -36,7 +37,7 @@ public sealed class RuntimeWorkerService(NodeAgentOptions options,WorkerIdentity
                 }
                 catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
                 catch(Exception exception) { logger.LogWarning("Attribution worker momentanément indisponible : {Type}.",exception.GetType().Name); }
-                await Task.Delay(TimeSpan.FromSeconds(2),ct);
+                await WorkerPolling.DelayAsync(2000,ct);
             }
         }
         catch(OperationCanceledException) when(ct.IsCancellationRequested) { }

@@ -14,7 +14,7 @@ L’[ADR 0009](../architecture/adr/0009-ecrivain-sqlite-unique-par-noeud.md) est
 | `LongTransaction` | `00:00:01` | Seuil de détention longue, comptée et signalée par Trace à la libération. |
 | `BeginRetries` | `2` | Nouvelles tentatives de BEGIN sur SQLite BUSY/LOCKED ; plage 0–10. |
 
-Les capacités et délais doivent être strictement positifs. Une configuration invalide bloque le démarrage. Dans Docker, utiliser par exemple `Database__Writer__WaitTimeout=00:00:05`. Le mode Raft force `Enabled=false` et garde son coordinateur historique.
+Les capacités et délais doivent être strictement positifs. Une configuration invalide bloque le démarrage. Dans Docker, utiliser par exemple `Database__Writer__WaitTimeout=00:00:05`.
 
 `CriticalOnly=true` est une phase de migration : les écritures ordinaires peuvent encore concurrencer les urgentes dans SQLite. Seul `Enabled=true` avec `CriticalOnly=false` établit l’écrivain unique pour toutes les écritures applicatives.
 
@@ -35,9 +35,9 @@ Une file pleine ou expirée, ainsi qu’une erreur SQLite BUSY/LOCKED remontant 
 
 Les lectures `Snapshot` sont différées et protégées par `query_only`, sans passage par la file. Les SELECT simples hors transaction passent directement ; les CTE, commentaires initiaux et lots sont admis conservativement, sans transaction implicite supplémentaire. Les écritures avec lecteur de résultat gardent leur admission jusqu’à fermeture du lecteur ou de sa connexion. Annuler une attente la retire ; annuler le jeton d’un appelant déjà admis ne libère pas sa place à son insu. L’appelant reste responsable de clôturer sa transaction.
 
-Exceptions d’infrastructure autorisées : initialisation des PRAGMA de connexion, activation/réinitialisation de `query_only`, capture SQL brute de `PeerDatabaseSchema` (mode Raft, file désactivée). Les migrations, copies et sauvegardes via l’adaptateur suivent ses transactions. Une autre instance de `SqliteDataSource` possède sa propre file : ne pas en créer une seconde pour la base du serveur. Aucun fichier SQLite ne doit être partagé entre nœuds.
+Exceptions d’infrastructure autorisées : initialisation des PRAGMA de connexion, activation/réinitialisation de `query_only`. Les migrations, copies et sauvegardes via l’adaptateur suivent ses transactions. Une autre instance de `SqliteDataSource` possède sa propre file : ne pas en créer une seconde pour la base du serveur. Aucun fichier SQLite ne doit être partagé entre nœuds.
 
-Non vérifié par la seule implémentation : charge réelle, comparaison avant/après en production, scénarios Docker multi-hôtes, compatibilité entre images de versions différentes et intégration de Raft à la file locale. Aucun média réel n’est nécessaire aux tests de concurrence.
+Non vérifié par la seule implémentation : charge réelle, comparaison avant/après en production, scénarios Docker multi-hôtes, compatibilité entre images de versions différentes. Aucun média réel n’est nécessaire aux tests de concurrence.
 
 ## Vérification locale du 2026-10-23
 

@@ -19,7 +19,7 @@ Le principe sûr à deux serveurs est la continuité du travail déjà possédé
 7. **Plan borné.** Un événement contenant toute une découverte peut dépasser la limite des échanges (16 Mio). Définir un plafond par plan ou des fragments avec manifeste et activation complète. Réévaluer l'éligibilité au claim ; rendre visibles les affectations devenues impossibles.
 8. **Époques.** L'époque locale du bail worker et la génération de propriété inter-serveurs ont des responsabilités distinctes. Les messages et checkpoints doivent porter l'identité de la tâche, le propriétaire, la génération et l'identifiant idempotent de transfert. Un compteur concurrent fusionné en LWW ne constitue pas un fencing global.
 
-## Audit de D1
+## Audit de D1 avant retrait
 
 Le retrait dépasse le dossier `Infrastructure/PeerCluster/` :
 
@@ -65,3 +65,9 @@ Le scénario de 7 000 tâches sur deux serveurs avec échanges HTTP, stockage et
 6. **D5 : reprise manuelle.** Neutralisation explicite de l'ancien propriétaire, décision de Rémi du 25 octobre 2026, puis grâce et époque journalisée. Distinguer perte du worker et perte du serveur propriétaire. Tester retour de l'ancien propriétaire après achèvement ailleurs avant toute automatisation ; témoin/majorité futurs restent un module distinct.
 
 Le numéro du prochain ADR doit être réservé après consultation du registre et des PR ouvertes au moment d'implémenter. Cette revue ne modifie aucun contrat d'exécution ni invariant en production.
+
+## Avancement de l’implémentation
+
+- D6 : sonde 7 000 tâches livrée avec résultats isolés ; sondage des claims runtime et de découverte désynchronisé au démarrage et entre tours (jitter borné de 0 à 500 ms, délai minimal conservé). Aucun agrandissement de file ni délai d’admission. La pagination serveur était déjà bornée ; pas de changement aveugle du protocole SSE. Mesures HTTP et deux serveurs représentatifs encore non vérifiées.
+- D1–D2 : retrait du coordinateur SQL, de ses gardes, de ses sources de données, du transport, de la dépendance, du prototype et de leurs tests/alertes ; source SQLite locale et écrivain uniques. ADR [0013](../architecture/adr/0013-retrait-mode-raft.md). L’ancien indicateur à `true` est refusé ; seuls ce diagnostic, son test et les documents historiques mentionnent encore la configuration retirée.
+- D4, D3, complément D4 et D5 : étapes suivantes ; la reprise, le transfert de propriété et l’attente des opérations destructrices ne sont pas présentés comme implémentés par ce nettoyage.

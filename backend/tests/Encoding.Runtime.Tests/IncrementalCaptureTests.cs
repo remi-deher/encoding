@@ -124,7 +124,7 @@ public sealed class IncrementalCaptureTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task EveryDeclaredTableHasInsertUpdateDeleteTrackingAndLocalBookkeepingIsExcludedFromRaft()
+    public async Task EveryDeclaredTableHasInsertUpdateDeleteTrackingAndLocalBookkeepingIsLocal()
     {
         await using var fixture = await Fixture.CreateAsync(0);
         foreach (var table in ClusterEntityReconciliation.CaptureTableNames)
@@ -144,8 +144,6 @@ public sealed class IncrementalCaptureTests(ITestOutputHelper output)
             foreach (var column in ClusterEntityReconciliation.CaptureTableColumns[table])
                 Assert.Contains("OLD." + column + " IS NOT NEW." + column, definition, StringComparison.Ordinal);
         }
-        Assert.Contains("cluster_sync_capture_tables", PeerDatabaseSchema.LocalTables);
-        Assert.Contains("cluster_sync_dirty_entities", PeerDatabaseSchema.LocalTables);
     }
 
     [Fact]
