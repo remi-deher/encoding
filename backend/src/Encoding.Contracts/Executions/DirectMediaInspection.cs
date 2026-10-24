@@ -1,3 +1,4 @@
+using Encoding.Contracts.Flows;
 using Encoding.Contracts.Flows.Conditions;
 using Encoding.Contracts.Plugins;
 using System.Text.Json;
@@ -10,7 +11,14 @@ public static class DirectMediaInspection
     public static bool AllowsMetadataOnly(FlowComponentDescriptor? component) =>
         component is { MediaEffect:MediaEffects.ReadOnly,RequiresMedia:false,ProducesFiles:false };
 
-    public static bool Allows(string plugin, string component, IReadOnlyDictionary<string,JsonElement>? configuration = null, int pendingPlanSteps = 0) => plugin switch
+    public static bool Allows(string plugin, string component, IReadOnlyDictionary<string,JsonElement>? configuration = null, int pendingPlanSteps = 0, bool builderActive = false) => (builderActive && plugin is "base" or "video" or "audio" && FfmpegBuilderPolicy.IsSetting(component))
+        || plugin=="base" && component==FfmpegBuilderPolicy.Start
+        || plugin=="base" && component==FfmpegBuilderPolicy.Execute && pendingPlanSteps==0
+        || plugin is "base" or "probe" && (component.StartsWith("base-probe-",StringComparison.Ordinal)
+            || component is "probe-media" or "probe-tracks" or "probe-video" or "probe-audio" or "probe-hdr")
+        || plugin is "base" or "subtitles" && (component is "base-track-names" or "subtitles-track-names" or "subtitles-snapshot-track-titles")
+            && configuration?.TryGetValue("mode",out var namingMode)==true && namingMode.ValueKind==JsonValueKind.String && namingMode.GetString()=="snapshot"
+        || plugin switch
     {
         "conditions" => component=="conditions-match" || MediaConditionEvaluator.IsMediaCondition(component),
         "base" => component is "base-input-file" or "base-input-video" or "base-input-audio" or "base-input-music"

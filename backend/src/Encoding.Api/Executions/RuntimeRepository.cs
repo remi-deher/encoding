@@ -492,7 +492,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         {
             var inspected=flow.Nodes.SingleOrDefault(node=>node.Id==cp.NodeId);
             if(cp.Context.CurrentSha256!="" || cp.Handoff is not null || cp.Wait is not null || cp.Context.Plan.Count>0
-                || inspected is null || !(DirectMediaInspection.Allows(inspected.Component.PluginId,inspected.Component.ComponentId,FlowOperationConfiguration.Resolve(inspected.Component.ComponentId,inspected.Configuration),cp.Context.Plan.Count)
+                || inspected is null || !(DirectMediaInspection.Allows(inspected.Component.PluginId,inspected.Component.ComponentId,FlowOperationConfiguration.Resolve(inspected.Component.ComponentId,inspected.Configuration),cp.Context.Plan.Count,FfmpegBuilderPolicy.Active(cp.Context.Variables))
                     || DirectMediaInspection.AllowsMetadataOnly(components.Resolve(inspected.Component)))) return false;
             await using var direct=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work WHERE execution_id=@id AND worker_node_id=@worker AND source_node_id=@worker AND NOT source_preparation_requested AND source_sha IS NULL)",c,tx);
             direct.Parameters.AddWithValue("id",id); direct.Parameters.AddWithValue("worker",worker);
@@ -605,7 +605,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         {
             Guid? executionWorker;
             var currentNode=flow.Nodes.SingleOrDefault(item=>item.Id==currentNodeId);
-            if(resolution.FlowNodeId==currentNodeId || currentNode?.Component.PluginId=="base" && currentNode.Component.ComponentId=="base-execute-processing") executionWorker=worker;
+            if(resolution.FlowNodeId==currentNodeId || currentNode?.Component.PluginId=="base" && currentNode.Component.ComponentId is "base-execute-processing" or FfmpegBuilderPolicy.Execute) executionWorker=worker;
             else
             {
                 await using var owner=Sql.Command("SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND node_id=@node AND completed_at IS NOT NULL",c,tx);

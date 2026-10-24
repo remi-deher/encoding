@@ -81,7 +81,9 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     context=context with { CurrentSha256=sourceSha,DirectSource=null };
                 }
                 await client.DownloadAsync(lease.ExecutionId,lease.Epoch,sourceSha!,original,job.Token);
-                await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
+                if(context.CurrentSha256==sourceSha)
+                    await SafeMediaPaths.CopyVerifiedAsync(original,current,sourceSha!,job.Token);
+                else await client.DownloadAsync(lease.ExecutionId,lease.Epoch,context.CurrentSha256,current,job.Token);
                 foreach(var variable in variables.Where(pair=>pair.Key.StartsWith("artifact.",StringComparison.Ordinal)))
                 {
                     var sha=variable.Value.GetProperty("sha256").GetString()!;
@@ -101,7 +103,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 {
                     context=context with { BeforeMetadata=await scanner.ScanAsync(original,job.Token) };
                 }
-                if(context.CurrentMetadata is null) context=context with { CurrentMetadata=current==original?context.BeforeMetadata:await scanner.ScanAsync(current,job.Token) };
+                if(context.CurrentMetadata is null) context=context with { CurrentMetadata=current==original || context.CurrentSha256==sourceSha?context.BeforeMetadata:await scanner.ScanAsync(current,job.Token) };
                 if(directRead) observed!.Verify(original);
             }
             async Task<string> ExtraAsync(string path)
@@ -142,8 +144,6 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
             }
             async Task ApplyOutcomeAsync(MediaActionOutcome outcome,string node)
             {
-                if(outcome.VideoEncodings is { Count: > 0 })
-                    context=context with { VideoEncodings=[..(context.VideoEncodings??[]),..outcome.VideoEncodings] };
                 var artifactIndex = 0;
                 foreach(var additional in outcome.Additional)
                 {
@@ -161,6 +161,8 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     current=candidate; context=context with { CurrentSha256=sha,Extension=Path.GetExtension(candidate),CurrentMetadata=metadata };
                     currentStamp=MediaFileStamp.Read(current);
                 }
+                if(outcome.VideoEncodings is { Count: > 0 })
+                    context=context with { VideoEncodings=[..(context.VideoEncodings??[]),..outcome.VideoEncodings] };
             }
             while(next is not null)
             {
@@ -177,8 +179,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                 try
                 {
                     var id=node.Component.ComponentId; var c=FlowOperationConfiguration.Resolve(id,node.Configuration);
+                    if(FfmpegBuilderPolicy.Active(variables) && id!=FfmpegBuilderPolicy.Execute
+                        && !FfmpegBuilderPolicy.CanPass(node.Component.PluginId,id))
+                        throw new IOException("Fermez la préparation FFmpeg avant cette opération autonome.");
                     // External metadata-only plugins receive no path to the direct source.
-                    if(directRead && !DirectMediaInspection.Allows(node.Component.PluginId,id,c,context.Plan.Count))
+                    if(directRead && !DirectMediaInspection.Allows(node.Component.PluginId,id,c,context.Plan.Count,FfmpegBuilderPolicy.Active(variables)))
                     {
                         var launch=plugins.Installed.SingleOrDefault(plugin=>plugin.Id==node.Component.PluginId && plugin.Version==node.Component.PluginVersion);
                         var descriptor=launch is null?null:(await plugins.DescribeAsync(launch,job.Token)).Components.SingleOrDefault(component=>component.Id==id && component.Version==node.Component.ComponentVersion);
@@ -188,6 +193,44 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                     else if(id=="base-variable")
                     {
                         variables[MediaActions.Text(c,"name")]=FlowVariableValue.Parse(MediaActions.Text(c,"value"));
+                    }
+                    else if(id==FfmpegBuilderPolicy.Start)
+                    {
+                        if(FfmpegBuilderPolicy.Active(variables) || context.Plan.Count>0)
+                            throw new IOException("Une préparation non exécutée ne peut pas être écrasée.");
+                        await EnsureScanAsync();
+                        variables[FfmpegBuilderPolicy.StateKey]=JsonSerializer.SerializeToElement(node.Id);
+                        variables["plan.tool"]=JsonSerializer.SerializeToElement("ffmpeg");
+                        variables["plan.preserveUnchangedTracks"]=JsonSerializer.SerializeToElement(MediaActions.Flag(c,"preserveUnchangedTracks",true));
+                    }
+                    else if(id==FfmpegBuilderPolicy.Execute)
+                    {
+                        if(!FfmpegBuilderPolicy.Active(variables)) throw new IOException("Aucun builder FFmpeg ouvert.");
+                        await EnsureScanAsync();
+                        var inputContext=context;
+                        var input=current;
+                        try
+                        {
+                            if(context.Plan.Count==0) output="skipped";
+                            else
+                            {
+                                if(context.Plan.Any(step=>!IsFfmpegPlan(step.ComponentId)))
+                                    throw new IOException("Le builder contient une opération incompatible avec FFmpeg.");
+                                var outcome=await actions.FfmpegPlanAsync(context.Plan,current,directory,node.Id,client.NodeId,job.Token,
+                                    !variables.TryGetValue("plan.preserveUnchangedTracks",out var preserve)||preserve.GetBoolean(),knownMetadata:context.CurrentMetadata);
+                                if(outcome.Primary is null) output="skipped";
+                                await ApplyOutcomeAsync(outcome,node.Id);
+                            }
+                        }
+                        catch(Exception exception) when(exception is MediaToolException or IOException)
+                        {
+                            context=inputContext; current=input; currentStamp=materialized?MediaFileStamp.Read(current):null;
+                            output="error";
+                            logger.LogWarning("Échec du builder {Node}, entrée validée conservée : {Detail}",node.Id,exception.Message);
+                            if(FlowPath.NextNodeId(lease.Flow,node.Id,"error") is null) throw;
+                        }
+                        context=context with { Plan=[] };
+                        FfmpegBuilderPolicy.Close(variables);
                     }
                     else if(id=="base-prepare-processing")
                     {
@@ -230,10 +273,16 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(context.CurrentMetadata is null) await EnsureScanAsync();
                         output=MediaConditionEvaluator.Evaluate(node.Component.ComponentId,c,context.CurrentMetadata);
                     }
+                    else if(node.Component.PluginId is "base" or "probe" && id!="probe-validate-output"
+                        && (id.StartsWith("base-probe-",StringComparison.Ordinal)||id.StartsWith("probe-",StringComparison.Ordinal) && !id.StartsWith("probe-inspect-",StringComparison.Ordinal) && id!="probe-export-report"))
+                    {
+                        await EnsureScanAsync();
+                        variables[MediaActions.Text(c,"resultVariable","result")]=FlowMediaValues.Probe(id,context.CurrentMetadata!.Value,int.Parse(MediaActions.Number(c,"trackId")));
+                    }
                     else if(node.Component.PluginId=="probe" && id=="probe-validate-output")
                     {
                         await EnsureScanAsync();
-                        var report=await actions.ValidateOutputAsync(current,original,context.BeforeMetadata!.Value,context.CurrentMetadata!.Value,c,directory,job.Token);
+                        var report=await actions.ValidateOutputAsync(current,original,context.BeforeMetadata!.Value,context.CurrentMetadata!.Value,c,directory,job.Token,EnsureDecodedAsync);
                         output=report.GetProperty("valid").GetBoolean()?"valid":"invalid";
                         variables["validation."+node.Id]=report;
                         var issues=report.GetProperty("issues").EnumerateArray().Select(issue=>issue.GetString()).Where(issue=>!string.IsNullOrWhiteSpace(issue)).ToArray();
@@ -379,11 +428,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
-                    else if(id is "base-add-fonts" or "subtitles-add-fonts")
+                    else if(id is "base-add-fonts" or "subtitles-add-fonts" or "base-assemble-media")
                     {
                         await EnsureScanAsync();
                         string? resourceFolder=null;
-                        if(MediaActions.Text(c,"resource") is { Length: >0 } resourceText)
+                        if((id!="base-assemble-media" || MediaActions.Flag(c,"addFonts")) && MediaActions.Text(c,"resource") is { Length: >0 } resourceText)
                         {
                             if(!Encoding.Contracts.Flows.ResourceReference.TryParse(resourceText,out var resourceReference)) throw new SubtitleException("Référence de ressource de polices invalide.");
                             try
@@ -394,11 +443,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             }
                             catch(Exception exception) when (exception is HttpRequestException or IOException) { throw new SubtitleException("Ressource de polices indisponible : "+exception.Message); }
                         }
-                        var outcome=await actions.AddFontsAsync(c,current,directory,node.Id,job.Token,resourceFolder);
+                        var outcome=id=="base-assemble-media"
+                            ? await actions.AssembleAsync(c,context.CurrentMetadata!.Value,variables.TryGetValue("tracks.origin",out var origin)?origin:null,current,directory,node.Id,job.Token,resourceFolder)
+                            : await actions.AddFontsAsync(c,current,directory,node.Id,job.Token,resourceFolder);
                         if(outcome.Primary is null) output="unchanged";
                         else
                         {
-                            if(outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach(var font in added.EnumerateArray()) logger.LogInformation("Police ajoutée : {Font}",font.GetString());
+                            if(outcome.Value is { ValueKind: JsonValueKind.Array } added) foreach(var note in added.EnumerateArray()) logger.LogInformation("Assemblage média : {Note}",note.GetString());
                             await ApplyOutcomeAsync(outcome with { Value=null },node.Id);
                         }
                     }
@@ -409,13 +460,13 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         foreach(var decision in audioPlan.Decisions) logger.LogInformation("Audio piste {Track} : {Note}",decision.AudioIndex,decision.Note);
                         var steps=audioPlan.Steps(node.Id,rules);
                         if(steps.Count==0) output="unchanged";
-                        else if(MediaActions.Text(c,"processingMode","plan")=="plan")
+                        else if(FfmpegBuilderPolicy.Active(variables) || MediaActions.Text(c,"processingMode","plan")=="plan")
                         {
                             if(variables.TryGetValue("plan.tool",out var selected) && selected.GetString()!="ffmpeg")
                                 throw new MediaToolException("outil du plan incompatible avec cette action",1);
                             context=context with { Plan=[..context.Plan,..steps] };
                         }
-                        else await ApplyOutcomeAsync(await actions.FfmpegPlanAsync(steps,current,directory,node.Id,client.NodeId,job.Token),node.Id);
+                        else await ApplyOutcomeAsync(await actions.FfmpegPlanAsync(steps,current,directory,node.Id,client.NodeId,job.Token,knownMetadata:context.CurrentMetadata),node.Id);
                     }
                     else if(id is "base-auto-crop" or "video-auto-crop")
                     {
@@ -454,7 +505,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             variables["video.crop.y"]=JsonSerializer.SerializeToElement(crop.Y);
                             variables["video.crop.filter"]=JsonSerializer.SerializeToElement(crop.ToFilter());
 
-                            if(MediaActions.Text(c,"processingMode","plan")=="plan")
+                            if(FfmpegBuilderPolicy.Active(variables) || MediaActions.Text(c,"processingMode","plan")=="plan")
                             {
                                 if(variables.TryGetValue("plan.tool",out var selected) && selected.GetString()!="ffmpeg")
                                     throw new MediaToolException("outil du plan incompatible avec cette action",1);
@@ -464,7 +515,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             else
                             {
                                 var stepCfg=new Dictionary<string,JsonElement>(c) { ["cropFilter"]=JsonSerializer.SerializeToElement(crop.ToFilter()) };
-                                await ApplyOutcomeAsync(await actions.FfmpegPlanAsync([new(id,stepCfg,node.Id)],current,directory,node.Id,client.NodeId,job.Token),node.Id);
+                                await ApplyOutcomeAsync(await actions.FfmpegPlanAsync([new(id,stepCfg,node.Id)],current,directory,node.Id,client.NodeId,job.Token,knownMetadata:context.CurrentMetadata),node.Id);
                             }
                         }
                         else output="no-crop";
@@ -482,7 +533,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             output="deinterlaced";
                             variables["video.deinterlace"]=JsonSerializer.SerializeToElement(algo);
 
-                            if(MediaActions.Text(c,"processingMode","plan")=="plan")
+                            if(FfmpegBuilderPolicy.Active(variables) || MediaActions.Text(c,"processingMode","plan")=="plan")
                             {
                                 if(variables.TryGetValue("plan.tool",out var selected) && selected.GetString()!="ffmpeg")
                                     throw new MediaToolException("outil du plan incompatible avec cette action",1);
@@ -490,7 +541,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             }
                             else
                             {
-                                await ApplyOutcomeAsync(await actions.FfmpegPlanAsync([new(id,c,node.Id)],current,directory,node.Id,client.NodeId,job.Token),node.Id);
+                                await ApplyOutcomeAsync(await actions.FfmpegPlanAsync([new(id,c,node.Id)],current,directory,node.Id,client.NodeId,job.Token,knownMetadata:context.CurrentMetadata),node.Id);
                             }
                         }
                         else output="progressive";
@@ -559,7 +610,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                                 if(IsFfmpegPlan(plan[index].ComponentId))
                                 {
                                     var batch=new List<RuntimePlanStep>(); while(index<plan.Count && IsFfmpegPlan(plan[index].ComponentId)) batch.Add(plan[index++]);
-                                    var outcome=await actions.FfmpegPlanAsync(batch,current,directory,node.Id+index,client.NodeId,job.Token,!variables.TryGetValue("plan.preserveUnchangedTracks",out var preserve)||preserve.GetBoolean());
+                                    var outcome=await actions.FfmpegPlanAsync(batch,current,directory,node.Id+index,client.NodeId,job.Token,!variables.TryGetValue("plan.preserveUnchangedTracks",out var preserve)||preserve.GetBoolean(),knownMetadata:context.CurrentMetadata);
                                     await ApplyOutcomeAsync(outcome,node.Id);
                                 }
                                 else { var step=plan[index++]; await ApplyOutcomeAsync(await actions.ExecuteAsync(step.ComponentId,step.Configuration,current,directory,node.Id+index,ExtraAsync,client.NodeId,job.Token),node.Id); }
@@ -578,7 +629,7 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                             if (video.ValueKind == JsonValueKind.Object && !VideoResizePolicy.ShouldResize(c, MediaTrackSelection.Number(video,"width"), MediaTrackSelection.Number(video,"height"))) requested = [];
                         }
                         if (requested.Count == 0) output = "unchanged";
-                        else if(MediaActions.Text(c,"processingMode","direct")=="plan")
+                        else if(FfmpegBuilderPolicy.IsPlanned(id,c,variables))
                         {
                             if(variables.TryGetValue("plan.tool",out var selected) && (IsFfmpegPlan(id)!=(selected.GetString()=="ffmpeg")))
                                 throw new MediaToolException("outil du plan incompatible avec cette action",1);
@@ -586,10 +637,10 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         }
                         else
                         {
-                            var outcome=await actions.ExecuteAsync(id,c,current,directory,node.Id,ExtraAsync,client.NodeId,job.Token);
+                            var outcome=await actions.ExecuteAsync(id,c,current,directory,node.Id,ExtraAsync,client.NodeId,job.Token,context.CurrentMetadata);
                             if(outcome.Value is { } value) variables[MediaActions.Text(c,"resultVariable","result")]=value;
                             await ApplyOutcomeAsync(outcome,node.Id);
-                            if(MediaActions.Flag(c,"refreshMetadata")) context=context with { CurrentMetadata=await scanner.ScanAsync(current,job.Token) };
+                            if(outcome.Primary is null && MediaActions.Flag(c,"refreshMetadata")) context=context with { CurrentMetadata=await scanner.ScanAsync(current,job.Token) };
                         }
                     }
                     // Planning can inspect metadata first. Materialize only after it finds real work.

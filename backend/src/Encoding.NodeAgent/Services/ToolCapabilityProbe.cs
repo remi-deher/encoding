@@ -33,7 +33,7 @@ public sealed class ToolCapabilityProbe(
             Directory.CreateDirectory(options.DataDirectory);
             var list = new List<NodeToolCapability>
             {
-                new("plugin/base", "1.8.0", ["general"], ["cpu"]),
+                new("plugin/base", "1.9.0", ["general"], ["cpu"]),
                 new(FlowArtifactReference.Capability, "1.0.0", ["general"], []),
                 new(Encoding.Contracts.Executions.RuntimeSourceObservation.Capability, "1.0.0", ["general"], []),
                 new("plugin/video", "1.2.0", ["general"], []),

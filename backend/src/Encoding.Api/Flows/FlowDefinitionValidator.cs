@@ -11,7 +11,7 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
     public FlowValidationResult ValidateDraft(FlowDefinition flow)
     {
         var result=Validate(flow,true);
-        var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown","node.constraint.conflict","wait.invalid","wait.block.invalid"};
+        var allowed=new HashSet<string>(StringComparer.Ordinal){"node.unreachable","component.unavailable","graph.entry.count","connection.node.unknown","connection.output.unknown","node.constraint.conflict","wait.invalid","wait.block.invalid","builder.scope.invalid","builder.scope.unclosed"};
         var issues=result.Issues.Where(issue=>!allowed.Contains(issue.Code)
             && !(issue.Code=="field.invalid" && (issue.Message=="Ce paramètre est obligatoire."
                 || issue.Path.EndsWith("/targetNodeId",StringComparison.Ordinal)
@@ -174,6 +174,7 @@ public sealed class FlowDefinitionValidator(FlowComponentRegistry registry)
             while (pending.TryPop(out var id)) if (seen.Add(id)) foreach (var target in outgoing[id]) pending.Push(target);
             foreach (var id in ids) if (!seen.Contains(id)) Issue("node.unreachable", "/nodes", $"Bloc non relié à l’entrée : {id}.");
         }
+        if (entries.Length == 1 && count == ids.Count) issues.AddRange(FfmpegBuilderValidation.Validate(flow, entries[0]));
         foreach (var consumer in flow.Nodes.Where(node => node is not null && node.Configuration is not null))
         {
             if (!consumer.Configuration.TryGetValue("sourceFile", out var file) || file.ValueKind != JsonValueKind.String

@@ -43,7 +43,7 @@
             "label": "Mode de traitement",
             "type": "select",
             "defaultValue": "plan",
-            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "options": [
               {
                 "value": "plan",
@@ -265,7 +265,7 @@
             "label": "Mode de traitement",
             "type": "select",
             "defaultValue": "plan",
-            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "options": [
               {
                 "value": "plan",
@@ -595,7 +595,7 @@
                 "label": "Opération autonome"
               }
             ],
-            "description": "Ajouter les conversions au plan, puis utiliser Exécuter le traitement ; ou les réaliser immédiatement.",
+            "description": "Ajouter les conversions au plan, puis utiliser Exécuter le traitement ; ou les réaliser immédiatement. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "importance": "advanced",
             "section": "Exécution"
           },
@@ -1142,7 +1142,7 @@
                 "label": "Opération autonome"
               }
             ],
-            "description": "Ajouter les conversions au plan, puis utiliser Exécuter le traitement ; ou les réaliser immédiatement.",
+            "description": "Ajouter les conversions au plan, puis utiliser Exécuter le traitement ; ou les réaliser immédiatement. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "importance": "advanced",
             "section": "Exécution"
           },

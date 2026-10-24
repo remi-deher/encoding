@@ -142,7 +142,9 @@ internal static partial class Harness
     }
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
-        new("plugin/base", "1.8.0", ["general"], []),
+        new("plugin/base", "1.9.0", ["general"], []),
+        new("plugin/probe", "1.0.0", ["general"], []),
+        new("mkvtoolnix", "92.0", ["video"], []),
         new("plugin/video", "1.1.0", ["general"], []),
         new("plugin/audio", "1.0.0", ["general"], []),
         new("plugin/subtitles", "1.0.0", ["general"], []),
@@ -268,6 +270,8 @@ internal static partial class Harness
             app=builder.Build();
             app.Use(async (context,next) =>
             {
+                if(context.Request.Method=="GET" && context.Request.Path.Value?.Contains("/dav/",StringComparison.Ordinal)==true)
+                    Interlocked.Increment(ref artifactDownloads);
                 if(context.Request.Path.Value?.EndsWith("/steps/complete",StringComparison.Ordinal)==true
                     && Interlocked.Exchange(ref rejectNextCheckpoint,0)==1)
                 {
@@ -722,19 +726,19 @@ internal static partial class Harness
             var received=await runtime.ClaimAsync(b,CancellationToken.None);Check(received?.ExecutionId==id,"The condition branch hands off the same execution.");
             Check(await executions.CancelAsync(id,CancellationToken.None),"Cancel condition fixture.");await ExpireAsync(id);await RecoverCancellationAsync(id);
         }
-        public async Task MediaRelayAsync(bool planned,bool replace=false)
+        public async Task MediaRelayAsync(bool planned,bool replace=false,bool strictBuilder=false)
         {
             var tools=new ProcessToolRunner();var scanner=new MediaScanner(tools);
             var source=Path.Combine(directory,"source.mkv");
             await tools.CheckedAsync("ffmpeg",["-y","-nostdin","-v","error","-f","lavfi","-i","testsrc2=size=64x64:rate=5","-t","1","-c:v","libx264",source],directory,CancellationToken.None);
             var flow=Chain([Node(registry,"entry","base-input-file"),
-                .. planned?new[]{Node(registry,"prepare","base-prepare-processing")}:Array.Empty<FlowNodeDefinition>(),
+                .. planned?new[]{Node(registry,"prepare",strictBuilder?FfmpegBuilderPolicy.Start:"base-prepare-processing")}:Array.Empty<FlowNodeDefinition>(),
                 Node(registry,"encode","base-transcode-video",new(){["processingMode"]=J(planned?"plan":"direct"),["videoCodec"]=J("hevc"),["preset"]=J("fast")}),
                 Node(registry,"convert","base-remux-media",new(){["container"]=J("mp4"),["processingMode"]=J(planned?"plan":"direct")}),
                 .. planned?Array.Empty<FlowNodeDefinition>():new[]{Node(registry,"condition","conditions-match",new(){["rules"]=ConditionTree.Serialize(new ConditionGroup("all",[
                     new ConditionRule("video.codec","eq",J("hevc")),new ConditionRule("video.codec","eq",J("h264"),Scope:"source")]))})},
                 Node(registry,"relay","nodes-handoff",new(){["mode"]=J("node"),["targetNodeId"]=J(b)}),
-                .. planned?new[]{Node(registry,"execute","base-execute-processing")}:Array.Empty<FlowNodeDefinition>(),
+                .. planned?new[]{Node(registry,"execute",strictBuilder?FfmpegBuilderPolicy.Execute:"base-execute-processing")}:Array.Empty<FlowNodeDefinition>(),
                 Node(registry,"end","base-complete-flow",new(){["result"]=J("success")})]);
             if(!planned) flow=flow with { Connections=flow.Connections.Select(edge=>edge.SourceNodeId=="condition"?edge with { SourceOutputId="yes" }:edge).ToArray() };
             var(id,lease,context)=await EnqueueAsync(flow,await File.ReadAllBytesAsync(source));
