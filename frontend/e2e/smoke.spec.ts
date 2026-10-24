@@ -184,7 +184,31 @@ test('the first-run setup studio completes standalone onboarding and passes WCAG
 
   await page.getByLabel('Mot de passe', { exact: true }).fill('un-mot-de-passe-long');
   await page.getByLabel('Confirmer le mot de passe', { exact: true }).fill('un-mot-de-passe-long');
-  await page.getByRole('button', { name: /Accéder au tableau de bord/ }).click();
+  const dashboardButton = page.getByRole('button', { name: /Accéder au tableau de bord/ });
+  const viewport = page.viewportSize()!;
+  for (const width of [viewport.width, 320]) {
+    await page.setViewportSize({ ...viewport, width });
+    await expect(dashboardButton).toBeVisible();
+    await expect(async () => {
+      const fits = await dashboardButton.evaluate((button) => {
+        const bounds = button.getBoundingClientRect();
+        const label = button.querySelector('.mdc-button__label')!.getBoundingClientRect();
+        const icon = button.querySelector('app-icon')!.getBoundingClientRect();
+        return (
+          [label, icon].every(
+            (rect) =>
+              rect.top >= bounds.top &&
+              rect.bottom <= bounds.bottom &&
+              rect.left >= bounds.left &&
+              rect.right <= bounds.right,
+          ) && document.documentElement.scrollWidth <= window.innerWidth
+        );
+      });
+      expect(fits).toBe(true);
+    }).toPass();
+  }
+  await page.setViewportSize(viewport);
+  await dashboardButton.click();
   await expect(page).toHaveURL(/\/$/);
   expect(setupPayload).toMatchObject({
     nodeDisplayName: 'Serveur Salon',
