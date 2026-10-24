@@ -12,6 +12,20 @@ public static class NodeEndpoints
     public static void MapNodeEndpoints(this WebApplication app)
     {
         var nodes = app.MapGroup("/api/v1/nodes").WithTags("Nodes");
+        nodes.MapPost("/{nodeId:guid}/directory-browse", async (
+            Guid nodeId, NodeDirectoryBrowserRequest request, NodeDirectoryBrowserRepository browser, CancellationToken ct) =>
+        {
+            if (await browser.CreateAsync(nodeId, request.Path, ct) is not { } id) return Results.NotFound();
+            return Results.Accepted($"/api/v1/nodes/{nodeId:D}/directory-browse/{id:D}", new { id });
+        }).RequireAuthorization(AuthExtensions.AdministratorPolicy)
+          .RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy)
+          .WithName("RequestNodeDirectoryBrowse");
+        nodes.MapGet("/{nodeId:guid}/directory-browse/{requestId:guid}", async (
+            Guid nodeId, Guid requestId, NodeDirectoryBrowserRepository browser, CancellationToken ct) =>
+        {
+            var result = await browser.GetAsync(requestId, nodeId, ct);
+            return result is null ? Results.NotFound() : Results.Ok(result);
+        }).RequireAuthorization(AuthExtensions.AdministratorPolicy).WithName("GetNodeDirectoryBrowse");
         nodes.MapPost("/enroll", async (
             NodeEnrollmentRequest request,
             NodeRepository repository,
