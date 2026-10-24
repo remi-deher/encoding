@@ -151,7 +151,7 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
       --drawer-tone: var(--accent-soft);
       --drawer-tone-ink: var(--accent-strong);
       height: 100%;
-      min-height: 100%;
+      min-height: 0;
       max-height: 100%;
       display: flex;
       flex-direction: column;
@@ -283,8 +283,8 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
       min-height: 0;
       padding: var(--space-5);
       flex: 1 1 auto;
-      overflow: auto;
       overscroll-behavior: contain;
+      overflow: auto;
     }
 
     .drawer-footer:empty {
@@ -292,6 +292,9 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
     }
 
     .drawer-footer {
+      flex: 0 0 auto;
+      position: sticky;
+      bottom: 0;
       padding: var(--space-3) var(--space-5);
       display: flex;
       align-items: center;

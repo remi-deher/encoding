@@ -2,8 +2,7 @@ import type { RecordFormData } from '../ui/record-form.component';
 
 export const FLOW_CREATION_FORM: RecordFormData = {
   title: 'Créer un flow',
-  description:
-    'Choisissez un nom, un média et un point de départ. Vous pourrez ensuite ajuster chaque composant dans l’éditeur.',
+  description: 'Nommez votre flow, choisissez son type et son mode de création.',
   submitLabel: 'Continuer dans l’éditeur',
   reviewTitle: 'Vérifier le nouveau flow',
   fields: [
@@ -22,12 +21,12 @@ export const FLOW_CREATION_FORM: RecordFormData = {
     },
     {
       id: 'starter',
-      label: 'Point de départ',
+      label: 'Modèle ou flow vierge',
       type: 'select',
       required: true,
       filterOptionsByFieldId: 'mediaType',
       options: [
-        { value: 'blank', label: 'Flow vide' },
+        { value: 'blank', label: 'Flow vierge' },
         { value: 'flow-video-library', label: 'Films — H.265', mediaTypes: ['video'] },
         { value: 'flow-video-series', label: 'Séries — H.265', mediaTypes: ['video'] },
         {
@@ -45,4 +44,14 @@ export const FLOW_CREATION_FORM: RecordFormData = {
       ],
     },
   ],
+  steps: [
+    { id: 'information', label: 'Informations', fieldIds: ['name', 'mediaType'] },
+    {
+      id: 'creation',
+      label: 'Démarrage',
+      description: 'Choisissez comment commencer votre flow.',
+      fieldIds: ['starter'],
+    },
+  ],
+  initialValues: { mediaType: 'video', starter: 'blank' },
 };
