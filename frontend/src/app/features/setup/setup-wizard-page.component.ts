@@ -424,7 +424,8 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
                     [disabled]="busy()"
                     (click)="submitStandalone()"
                   >
-                    Accéder au tableau de bord <app-icon name="forward" />
+                    Accéder au tableau de bord
+                    <app-icon name="forward" matButtonIcon iconPositionEnd />
                   </button>
                 </div>
               </div>
@@ -883,12 +884,15 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       border-color: var(--accent);
     }
     .mode-card-top,
-    .contextual-summary,
     .cluster-card {
       width: 100%;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: var(--space-3);
+    }
+    .contextual-summary {
+      display: grid;
       gap: var(--space-3);
     }
     .mode-icon {
@@ -926,6 +930,11 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
     }
     .input-with-button .text-input {
       flex: 1;
+    }
+    .workbench-actions button {
+      height: auto;
+      min-height: var(--mat-button-filled-container-height, 40px);
+      padding-block: var(--space-2);
     }
     .cluster-card,
     .target-confirmed-box {
