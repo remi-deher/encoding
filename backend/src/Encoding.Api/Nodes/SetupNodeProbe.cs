@@ -9,7 +9,7 @@ namespace Encoding.Api.Nodes;
 /// <summary>
 /// Fiche du nœud local pour l'assistant de premier démarrage (aucune session n'existe encore).
 /// Ne lit que l'état non sensible de l'agent local par liste blanche : nom, matériel, accélérations ; puis ajoute
-/// les adresses IPv4 vues par ce processus et les URL configurées. Jamais de clé de jumelage, de code ni de cluster.
+/// les adresses IPv4/IPv6 de ses interfaces et les URL configurées. Jamais de clé de jumelage, de code ni de cluster.
 /// </summary>
 public static class SetupNodeProbe
 {

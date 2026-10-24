@@ -121,7 +121,9 @@ describe('SetupWizardPageComponent', () => {
         processorCount: 8,
         memoryMb: 16384,
         processorModel: 'Intel Core i5-12400',
-        gpus: [{ name: 'Intel UHD Graphics 730', vendor: 'Intel', driver: 'i915', device: 'card0' }],
+        gpus: [
+          { name: 'Intel UHD Graphics 730', vendor: 'Intel', driver: 'i915', device: 'card0' },
+        ],
       },
       tools: [
         {
@@ -130,7 +132,12 @@ describe('SetupWizardPageComponent', () => {
           encoderChecks: [{ encoderId: 'hevc_qsv', status: 'usable' }],
         },
       ],
-      addresses: [{ interface: 'eth0', address: '192.168.1.42' }],
+      addresses: [
+        { interface: 'eth0', address: '172.16.2.2' },
+        { interface: 'eth0', address: 'fd00::42' },
+        { interface: 'lo', address: '127.0.0.1' },
+        { interface: 'docker0', address: '172.17.0.1' },
+      ],
       urls: ['https://transcodage.deher.net'],
     });
     fixture.detectChanges();
@@ -138,12 +145,58 @@ describe('SetupWizardPageComponent', () => {
 
     expect(el.textContent).toContain('Nœud Salon');
     expect(el.textContent).toContain('encoding-host · Ubuntu 24.04 LTS (X64)');
-    expect(el.textContent).toContain('192.168.1.42 (eth0)');
-    expect(el.textContent).toContain('URL annoncée : https://transcodage.deher.net');
+    const addresses = Array.from(el.querySelectorAll('.network-addresses li')).map((item) =>
+      item.textContent?.trim(),
+    );
+    expect(addresses).toEqual([
+      '172.16.2.2 (eth0)',
+      'fd00::42 (eth0)',
+      '127.0.0.1 (lo)',
+      '172.17.0.1 (docker0)',
+    ]);
+    expect(fixture.componentInstance['networkAccessUrls']()).toEqual([
+      'https://transcodage.deher.net',
+    ]);
+    expect(el.textContent).toContain('Adresse annoncée');
     expect(el.textContent).toContain('Intel Core i5-12400 (8 cœurs)');
     expect(el.textContent).toContain('16 Go');
     expect(el.textContent).toContain('Intel UHD Graphics 730');
     expect(el.textContent).toContain('QSV');
+  });
+
+  it('keeps the browser host and published port as access fallback in bridge mode', () => {
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    fixture.componentInstance['setupSheet'].set({
+      name: 'container',
+      displayName: null,
+      agentAvailable: false,
+      inventory: null,
+      tools: null,
+      addresses: [{ interface: 'eth0', address: '172.16.2.2' }],
+      urls: [],
+    });
+    fixture.detectChanges();
+    expect(fixture.componentInstance['networkAccessUrls']()).toEqual([window.location.origin]);
+    expect(fixture.nativeElement.textContent).toContain('172.16.2.2 (eth0)');
+    expect(fixture.nativeElement.textContent).toContain('Adresse utilisée par ce navigateur');
+  });
+
+  it('shows browser access even when no interface address can be detected', () => {
+    statusSignal.set(null);
+    const fixture = TestBed.createComponent(SetupWizardPageComponent);
+    fixture.componentInstance['setupSheet'].set({
+      name: null,
+      displayName: null,
+      agentAvailable: false,
+      inventory: null,
+      tools: null,
+      addresses: [],
+      urls: [],
+    });
+    fixture.detectChanges();
+    expect(fixture.componentInstance['networkAccessUrls']()).toEqual([window.location.origin]);
+    expect(fixture.nativeElement.textContent).toContain('Aucune adresse détectée');
+    expect(fixture.nativeElement.textContent).not.toContain('Locale uniquement');
   });
 
   it('renders the contextual panel dynamically when switching operation modes', () => {

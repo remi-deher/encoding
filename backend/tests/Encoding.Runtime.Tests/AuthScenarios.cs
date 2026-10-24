@@ -82,10 +82,17 @@ internal static class AuthScenarios
             ("docker0", System.Net.IPAddress.Parse("172.17.0.1")),
             ("br-3f2a", System.Net.IPAddress.Parse("172.18.0.1")),
             ("eth0", System.Net.IPAddress.Parse("fe80::1")),
+            ("eth1", System.Net.IPAddress.Parse("192.168.1.20")),
+            ("lo", System.Net.IPAddress.IPv6Loopback),
+            ("veth0", System.Net.IPAddress.Parse("fe80::2%7")),
             ("wlan0", System.Net.IPAddress.Parse("10.0.0.5")),
         ]);
-        Check(addresses.Select(item => item.Interface + "=" + item.Address).SequenceEqual(["eth0=192.168.1.20", "wlan0=10.0.0.5"]),
-            "Only distinct IPv4 addresses of real interfaces are shown: " + string.Join(",", addresses.Select(item => item.Address)));
+        Check(addresses.Select(item => item.Interface + "=" + item.Address).SequenceEqual([
+            "br-3f2a=172.18.0.1", "docker0=172.17.0.1", "eth0=192.168.1.20", "eth0=fe80::1",
+            "eth1=169.254.10.2", "eth1=192.168.1.20", "lo=127.0.0.1", "lo=::1", "veth0=fe80::2%7", "wlan0=10.0.0.5"]),
+            "All assigned IPv4/IPv6 addresses retain their interface, including loopback, virtual and scoped addresses; only identical pairs are deduplicated.");
+        var manyAddresses = Enumerable.Range(1, 40).Select(index => ("eth0", System.Net.IPAddress.Parse("10.1.0." + index)));
+        Check(LocalNetworkAddresses.Select(manyAddresses).Count == 40, "A host with many assigned addresses is not truncated to sixteen entries.");
         var urls = Encoding.Api.Nodes.SetupNodeProbe.Urls("https://encoding.example.com/", "http://encoding:8080/", "http://127.0.0.1:5080/", "https://ENCODING.example.com", "http://192.168.1.20:8080/", null, "pas une url");
         Check(urls.SequenceEqual(["https://encoding.example.com", "http://192.168.1.20:8080"]),
             "Only network-reachable configured URLs are shown, without Docker service names nor loopback: " + string.Join(",", urls));
