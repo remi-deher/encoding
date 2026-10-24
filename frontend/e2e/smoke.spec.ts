@@ -102,8 +102,12 @@ test('the first-run setup studio completes standalone onboarding and passes WCAG
             ],
           },
         ],
-        addresses: [{ interface: 'eth0', address: '192.168.1.50' }],
-        urls: ['http://192.168.1.50:5000'],
+        addresses: [
+          { interface: 'eth0', address: '172.16.2.2' },
+          { interface: 'eth0', address: 'fd00::50' },
+          { interface: 'lo', address: '127.0.0.1' },
+        ],
+        urls: ['http://192.168.1.50:8090'],
       }),
     }),
   );
@@ -164,6 +168,10 @@ test('the first-run setup studio completes standalone onboarding and passes WCAG
   await expect(page.getByRole('heading', { name: /Bienvenue sur Encoding/ })).toBeVisible();
   await expect(page.getByText('AMD Ryzen 7 5800X')).toBeVisible();
   await expect(page.getByText('NVIDIA GeForce RTX 3080')).toBeVisible();
+  await expect(page.getByText('http://192.168.1.50:8090', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('list', { name: 'Adresses des interfaces' }).getByRole('listitem'),
+  ).toHaveCount(3);
 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
@@ -184,6 +192,55 @@ test('the first-run setup studio completes standalone onboarding and passes WCAG
     username: 'admin',
     password: 'un-mot-de-passe-long',
   });
+});
+
+test('setup lists all interfaces and keeps browser access with a published port in both themes', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/auth/status', (route) =>
+    route.fulfill({ json: { setupRequired: true, user: null } }),
+  );
+  await page.route('**/api/v1/local-node/status', (route) => route.fulfill({ status: 401 }));
+  const addresses = [
+    { interface: 'eth0', address: '172.16.2.2' },
+    { interface: 'eth0', address: '2001:db8:abcd:1234:5678:9abc:def0:1234' },
+    { interface: 'eth1', address: '172.16.2.2' },
+    { interface: 'lo', address: '::1' },
+    { interface: 'docker0', address: '172.17.0.1' },
+  ];
+  await page.route('**/api/v1/auth/setup/node', (route) =>
+    route.fulfill({
+      json: {
+        name: 'container',
+        displayName: null,
+        agentAvailable: false,
+        inventory: null,
+        tools: null,
+        addresses,
+        urls: [],
+      },
+    }),
+  );
+  for (const theme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto('/setup');
+    await expect(page.getByRole('heading', { name: 'Bienvenue sur Encoding' })).toBeVisible();
+    const interfaces = page.getByRole('list', { name: 'Adresses des interfaces' });
+    await expect(interfaces.getByRole('listitem')).toHaveCount(addresses.length);
+    for (const item of addresses) {
+      await expect(
+        interfaces.getByText(`${item.address} (${item.interface})`, { exact: true }),
+      ).toBeVisible();
+    }
+    await expect(page.getByText(new URL(page.url()).origin, { exact: true })).toBeVisible();
+    await expect(page.getByText('Adresse utilisée par ce navigateur')).toBeVisible();
+    const setup = page.locator('app-setup-wizard-page');
+    if (theme === 'light') await expect(setup).toHaveCSS('background-image', 'none');
+    else await expect(setup).not.toHaveCSS('background-image', 'none');
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  }
 });
 
 test('the overview has no serious accessibility violation', async ({ page }) => {

@@ -36,7 +36,7 @@ public sealed record SetupNodeTool(
     IReadOnlyList<string> AccelerationTypes,
     IReadOnlyList<Encoding.Contracts.Nodes.NodeEncoderCapability> EncoderChecks);
 
-/// <summary>Adresse IP d'une interface active vue par le processus du nœud (dans un conteneur : son réseau à lui).</summary>
+/// <summary>Adresse IPv4/IPv6 assignée à une interface vue par le processus du nœud (dans un conteneur : son réseau à lui).</summary>
 public sealed record SetupNodeAddress(string Interface, string Address);
 
 public sealed record LoginRequest(string Username, string Password);

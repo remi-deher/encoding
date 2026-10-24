@@ -1,6 +1,6 @@
 ---
 domain: ui
-updated: 2026-10-23
+updated: 2026-10-24
 legacy_adr: [0008, 0010, 0011, 0035, 0044, 0046, 0047, 0048, 0050, 0052, 0053, 0073, 0077, 0078, 0079, 0080, 0081]
 code:
   - frontend/src/styles.scss
@@ -40,6 +40,8 @@ Route `/activity` (anciennes `/tasks` et `/ai/activity` redirigées, filtres `?v
 - Suivi partagé : EventSource conserve sa reconnexion native, le sondage HTTP de secours intervient après 15 s sans événement ; une réponse HTTP ancienne ou en erreur ne remplace pas un événement récent. Les listes paginées sont sondées sans requêtes qui se chevauchent, avec délai maximal de 20 s et conservation des données connues. L'activité IA n'est demandée qu'aux administrateurs et hors filtre « Traitements » ; ses sondages ne s'annulent plus mutuellement. Le filtre « Assistant IA » ne charge pas les listes d'exécutions. Les véritables indisponibilités sont signalées sans vider le journal ni annoncer un historique vide.
 
 ## Autres pages
+Premier démarrage (`/setup`) : fond clair uni, halo conservé en thème sombre. La fiche locale liste toutes les adresses IPv4/IPv6 avec leur interface, y compris boucle locale et interfaces virtuelles. L'« Accès au nœud » est distinct : URL publique/annoncée configurée, sinon origine du navigateur (hôte et port publié conservés en Docker bridge). Aucune adresse de passerelle n'est présentée comme IP LAN de l'hôte Docker.
+
 Console de logs système (filtres de sévérité, recherche, pause, auto-scroll intelligent, export) ; scripts (liste en cartes, éditeur en tiroir, restauration dans le brouillon) ; IA & fournisseurs ; Plugins (configuration globale, Store).
 
 ## Limites connues
