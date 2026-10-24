@@ -19,6 +19,7 @@
     <ProjectReference Include="..\Encoding.Core\Encoding.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Update="release-manifest.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="Flows\Catalog\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="Flows\Legacy\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\migrations\sqlite\*.sql" Link="migrations\sqlite\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

@@ -21,6 +21,10 @@ public static class BusinessOperationCatalog
 {
     public static readonly IReadOnlyList<McpToolDefinition> ToolDefinitions =
     [
+        new("get_version", "Consulte la version installée et le commit du nœud serveur interrogé.",
+            new { type = "object", properties = new { }, required = Array.Empty<string>() }),
+        new("get_updates", "Consulte les notes de version et la disponibilité d’une mise à jour pour ce nœud.",
+            new { type = "object", properties = new { }, required = Array.Empty<string>() }),
         // --- 1. BIBLIOTHÈQUES & SANTÉ DU CLUSTER ---
         new(
             "get_libraries_overview",
@@ -715,6 +719,7 @@ public static class BusinessOperationCatalog
 
     private static string DomainFor(string name) => name switch
     {
+        "get_version" or "get_updates" => "updates",
         "get_libraries_overview" or "list_libraries" or "create_library" or "update_library" or "delete_library" or "get_library_node_access" or "get_library_workflow" or "get_library_processing" or "configure_library_node_access" or "save_library_processing" or "set_library_activation" or "assign_library_flow" or "request_library_discovery" => "libraries",
         "list_nodes" or "list_node_groups" or "get_node_group" or "save_node_group" or "delete_node_group" or "get_node_activity" or "get_node_identity" or "save_node_identity" or "set_node_draining" or "get_node_processing" or "save_node_processing" => "nodes-and-groups",
         "list_executions" or "get_execution" or "get_execution_events" or "get_execution_pipeline" or "cancel_execution" or "retry_execution" or "resume_execution" or "get_system_logs" => "executions-and-logs",

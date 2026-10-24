@@ -1,6 +1,6 @@
 ---
 domain: auth-ops
-updated: 2026-10-23
+updated: 2026-10-24
 legacy_adr: [0002, 0009, 0029, 0031, 0044, 0060-api, 0061-mcp, 0065, 0073]
 code:
   - backend/src/Encoding.Api/Auth/
@@ -28,6 +28,11 @@ tags: [authentification, rôles, session, csrf, jeton, mcp, openapi, santé, mé
 - **MCP et `/api/v1/business-operations/execute` : lecture par défaut.** Un jeton API, même admin, ne lit que tant qu'il ne porte pas la portée d'écriture du domaine : `mcp:write` (tout), `libraries:write`, `nodes:write`, `flows:write` (flows, scripts, profils, modèles, packs), `executions:control` (cancel/retry/resume), `plugins:write`. Un jeton viewer ne peut pas en porter. La table `api_tokens.scopes` (migration 0043) est réconciliée ; les jetons existants n'ont aucune portée, donc le jeton cluster par défaut ne peut plus écrire via le MCP tant qu'un jeton scopé n'est pas créé. Les routes REST hors MCP gardent le contrôle par rôle. Les sessions de l'interface ne sont pas concernées. La portée et la nature « jeton » traversent le maillage en mode pairs (`PeerForwardedUser`), sinon un jeton scopé serait promu administrateur par le transfert vers le leader.
 - **Audit des écritures MCP** : chaque `tools/call` d'écriture (réussi, en échec ou refusé pour portée manquante) est journalisé au niveau Warning avec l'acteur, l'outil et les *noms* des arguments, jamais leurs valeurs. Il passe donc par la persistance locale bornée des journaux système (5 000 lignes / 7 jours, non réconciliée) : c'est une trace d'exploitation, pas un journal d'audit infalsifiable.
 - Suppression de flow via MCP/IA : sans `detachLibraries` (donc refusée si affecté).
+
+## Versions et mises à jour
+- Manifeste de release local embarqué par la CI, sans stockage en base ni réconciliation. `GET /api/v1/system/version` expose version/commit sans réseau ; `GET /api/v1/system/updates` expose les notes et la disponibilité d’une nouvelle version. Les deux routes gardent l’authentification par défaut (session ou Bearer, viewer/admin).
+- MCP `get_version` et `get_updates` : mêmes données, opérations de lecture. Le processus exécutant la requête fait autorité pour sa propre version ; le routage MCP du mode Raft reste inchangé.
+- Recherche du manifeste de la dernière release GitHub publique : timeout 10 s, taille 2 Mio, cache local 10 min. Réseau indisponible/manifeste invalide : état inconnu (`updateAvailable: null`), notes embarquées conservées. Pas d’installation automatique. Détails et schéma : [release](../../operations/release.md).
 
 ## Santé, métriques, journaux
 - `/health/live` (sans dépendance), `/health/ready` (base locale ; critère de retrait d'un répartiteur), `/health/details` (base, migrations, workers en ligne, baux expirés > 2 min, file de sauvegardes, écriture et espace libre des volumes). `/metrics` Prometheus par serveur (état de cluster lu localement, peut diverger pendant la convergence ; `Operations:Metrics:Token` ou `Enabled=false`). **`/metrics` et `/health/details` sont sans authentification utilisateur par défaut : limiter au réseau d'exploitation.** Métriques de processus et de rétention locales, remises à zéro au redémarrage ; l'agent worker n'expose pas ses propres métriques.

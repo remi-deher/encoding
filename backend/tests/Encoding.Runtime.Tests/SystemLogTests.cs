@@ -365,6 +365,7 @@ public sealed class SystemLogMcpTests
         services.AddSingleton(ringBuffer);
         services.AddSingleton(repo);
         services.AddLogging();
+        services.AddSingleton<Encoding.Api.Updates.ReleaseService>();
         services.AddSingleton<McpService>();
 
         var sp = services.BuildServiceProvider();
@@ -379,6 +380,18 @@ public sealed class SystemLogMcpTests
         Assert.NotNull(listResult);
         var listJson = JsonSerializer.Serialize(listResult);
         Assert.Contains("get_system_logs", listJson);
+        Assert.Contains("get_version", listJson);
+        Assert.Contains("get_updates", listJson);
+        foreach (var tool in new[] { "get_version", "get_updates" })
+        {
+            var versionResult = await mcp.HandleMessageAsync(
+                new McpJsonRpcRequest("2.0", "tools/call", JsonSerializer.SerializeToElement(10),
+                    JsonSerializer.SerializeToElement(new { name = tool, arguments = new { } })),
+                new System.Security.Claims.ClaimsPrincipal(), CancellationToken.None);
+            var result = Assert.IsType<McpCallToolResult>(versionResult?.Result);
+            Assert.False(result.IsError);
+            Assert.Contains("0.0.0-dev", result.Content[0].Text);
+        }
 
         // 2. tools/call get_system_logs returns the log
         var callRequest = new McpJsonRpcRequest(

@@ -76,6 +76,13 @@ builder.Services.AddClusterAuthentication(builder.Configuration);
 builder.Services.AddSingleton<NetworkSettingsService>();
 builder.Services.AddSingleton<ApiTokenRepository>();
 builder.Services.AddSingleton<McpSessionManager>();
+builder.Services.AddSingleton<Encoding.Api.Updates.ReleaseService>();
+builder.Services.AddHttpClient("release-updates", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Encoding-UpdateChecker/1.0");
+});
 builder.Services.AddSingleton<ExecutionStreamBroadcaster>();
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
@@ -283,6 +290,10 @@ app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();
 app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
+app.MapGet("/api/v1/system/version", (Encoding.Api.Updates.ReleaseService releases) =>
+    Results.Ok(new { version = releases.Installed.Version, commit = releases.Installed.Commit }));
+app.MapGet("/api/v1/system/updates", (Encoding.Api.Updates.ReleaseService releases, CancellationToken ct) =>
+    releases.GetUpdatesAsync(ct));
 app.MapMcpEndpoints();
 app.MapBusinessOperationEndpoints();
 app.MapAiToolEndpoints();
