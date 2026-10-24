@@ -11,6 +11,22 @@ export interface FlowCanvasNodeSize {
   readonly height: number;
 }
 
+/** Keep the first frame compact until ResizeObserver supplies the actual intrinsic width. */
+export function estimateFlowCanvasNodeSize(node: FlowGraphNode): FlowCanvasNodeSize {
+  const textWidth = Math.max(
+    (node.name || node.component?.name || '').length * 8,
+    (node.component?.pluginName || '').length * 7,
+  );
+  return {
+    width: Math.max(
+      200,
+      Math.min(336, textWidth + 108),
+      (node.component?.outputs.length ?? 0) * 40 + 16,
+    ),
+    height: 64,
+  };
+}
+
 /** A projection only: never changes the graph, including detached nodes and convergences. */
 export function layoutFlowCanvas(
   nodes: readonly FlowGraphNode[],
@@ -41,16 +57,10 @@ export function layoutFlowCanvas(
     rows.set(rank, [...(rows.get(rank) ?? []), id]);
   }
   const size = (id: string) =>
-    sizes.get(id) ?? {
-      width: Math.max(
-        340,
-        (nodes.find((node) => node.id === id)?.component?.outputs.length ?? 0) * 104 + 24,
-      ),
-      height: 240,
-    };
+    sizes.get(id) ?? estimateFlowCanvasNodeSize(nodes.find((node) => node.id === id)!);
   const rowWidth = (ids: readonly string[]) =>
     ids.reduce((total, id) => total + size(id).width + 64, -64);
-  const width = Math.max(340, ...[...rows.values()].map(rowWidth));
+  const width = Math.max(200, ...[...rows.values()].map(rowWidth));
   let y = 64;
   for (const [, ids] of [...rows].sort(([a], [b]) => a - b)) {
     let x = 64 + (width - rowWidth(ids)) / 2;

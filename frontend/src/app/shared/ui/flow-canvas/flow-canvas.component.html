@@ -108,7 +108,8 @@
           tabindex="0"
           (click)="selectNode.emit(node.id)"
           (dblclick)="edit(node)"
-          (keydown.enter)="$event.target === $event.currentTarget && edit(node)"
+          (keydown.enter)="configureWithKeyboard($event, node)"
+          [attr.aria-label]="node.name || node.component.name"
         >
           @if (node.component.kind !== 'input') {
             <button
@@ -116,69 +117,89 @@
               data-port="input"
               [attr.data-canvas-input]="node.id"
               [class.valid]="canFinish(node)"
+              [matTooltip]="'Entrée de ' + (node.name || node.component.name)"
               (click)="$event.stopPropagation(); finish(node.id)"
               [attr.aria-label]="'Relier à ' + (node.name || node.component.name)"
               [disabled]="readOnly()"
             ></button>
           }
-          <header>
-            <button cdkDragHandle class="drag" aria-label="Déplacer l’étape" title="Déplacer">
-              ⠿</button
-            ><span class="canvas-plugin"
-              >{{ kindLabels[node.component.kind] }} · {{ node.component.pluginName }}</span
-            ><button
+          <div class="canvas-heading">
+            <button
+              type="button"
+              class="canvas-icon drag"
+              [disabled]="readOnly()"
+              cdkDragHandle
+              aria-label="Déplacer l’étape"
+              [matTooltip]="'Déplacer : ' + (node.name || node.component.name)"
+            >
+              <app-icon [name]="colors(node.component).icon" />
+            </button>
+            <div class="canvas-text">
+              <button
+                [matTooltip]="nodeTooltip(node)"
+                class="canvas-title"
+                (click)="$event.stopPropagation(); edit(node)"
+              >
+                {{ node.name || node.component.name }}
+              </button>
+              <span class="canvas-plugin"
+                >{{ node.component.pluginName }} · {{ kindLabels[node.component.kind] }}</span
+              >
+            </div>
+            <app-flow-simulation-status
+              [compact]="true"
+              [node]="node"
+              [result]="simulationResult()"
+              (detailsRequested)="simulationDetailsRequested.emit()"
+            />
+            <button
               class="more"
               (click)="menuButton($event, node)"
               [attr.aria-label]="'Actions de ' + (node.name || node.component.name)"
+              [matTooltip]="'Actions de ' + (node.name || node.component.name)"
             >
-              ⋯
-            </button>
-          </header>
-          <div class="canvas-heading">
-            <button class="canvas-title" (click)="$event.stopPropagation(); edit(node)">
-              {{ node.name || node.component.name }}
-            </button>
-            <button
-              mat-icon-button
-              (click)="$event.stopPropagation(); edit(node)"
-              [attr.aria-label]="'Configurer ' + (node.name || node.component.name)"
-            >
-              <app-icon name="settings" />
+              <app-icon name="more" />
             </button>
           </div>
-          @if (summary(node)) {
-            <p class="canvas-config-summary">{{ summary(node) }}</p>
+          @if (node.component.outputs.length) {
+            <div class="canvas-outputs">
+              @for (port of node.component.outputs; track port.id; let index = $index) {
+                @let presentation = outputPresentation(port);
+                <div class="output-row" [attr.data-tone]="presentation.tone">
+                  <button
+                    class="port output"
+                    [disabled]="readOnly()"
+                    [attr.data-port]="'output:' + port.id"
+                    [matTooltip]="port.label + (port.description ? ' · ' + port.description : '')"
+                    (pointerdown)="begin(node, port, $event)"
+                    (click)="$event.stopPropagation()"
+                    (keydown.enter)="$event.preventDefault(); begin(node, port)"
+                    (keydown.space)="$event.preventDefault(); begin(node, port)"
+                    [attr.aria-label]="'Créer une liaison depuis ' + port.label"
+                  >
+                    @if (presentation.icon; as icon) {
+                      <app-icon [name]="icon" />
+                    } @else {
+                      <span aria-hidden="true">{{ index + 1 }}</span>
+                    }
+                  </button>
+                  @if (!readOnly()) {
+                    <button
+                      class="output-add"
+                      (click)="
+                        $event.stopPropagation();
+                        insert.emit({ sourceNodeId: node.id, output: port })
+                      "
+                      [matTooltip]="'Ajouter sur la sortie ' + port.label"
+                      [attr.aria-label]="'Ajouter sur la sortie ' + port.label"
+                    >
+                      <app-icon name="add" />
+                    </button>
+                  }
+                </div>
+              }
+            </div>
           }
-          <app-flow-simulation-status
-            [node]="node"
-            [result]="simulationResult()"
-            (detailsRequested)="simulationDetailsRequested.emit()"
-          />
-          <div class="canvas-outputs" [style.--output-count]="node.component.outputs.length">
-            @for (port of node.component.outputs; track port.id) {
-              <div class="output-row">
-                <button
-                  mat-button
-                  [disabled]="readOnly()"
-                  (click)="
-                    $event.stopPropagation(); insert.emit({ sourceNodeId: node.id, output: port })
-                  "
-                  [attr.aria-label]="'Ajouter sur la sortie ' + port.label"
-                >
-                  {{ port.label }} {{ readOnly() ? '' : '＋' }}</button
-                ><button
-                  class="port output"
-                  [disabled]="readOnly()"
-                  [attr.data-port]="'output:' + port.id"
-                  (pointerdown)="begin(node, port, $event)"
-                  (click)="$event.stopPropagation()"
-                  (keydown.enter)="begin(node, port)"
-                  (keydown.space)="$event.preventDefault(); begin(node, port)"
-                  [attr.aria-label]="'Créer une liaison depuis ' + port.label"
-                ></button>
-              </div>
-            }
-          </div>
         </article>
       }
     </div>

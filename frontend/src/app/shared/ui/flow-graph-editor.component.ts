@@ -20,7 +20,7 @@ import {
 } from '../models/flow-component';
 import { FlowComponentPackInstance } from '../models/flow-validation';
 import { projectFlowPacks } from '../models/flow-pack-projection';
-import { layoutFlowCanvas } from '../models/flow-canvas';
+import { layoutFlowCanvas, estimateFlowCanvasNodeSize } from '../models/flow-canvas';
 import { SimulationResult } from '../models/flow-simulation';
 
 @Component({
@@ -175,17 +175,21 @@ export class FlowGraphEditorComponent {
     for (const node of nodes) {
       if (positions.has(node.id)) continue;
       let position = layout.positions.get(node.id)!;
+      const size = estimateFlowCanvasNodeSize(node);
       while (
         nodes.some((other) => {
           const occupied = positions.get(other.id);
+          const otherSize = estimateFlowCanvasNodeSize(other);
           return (
             occupied &&
-            Math.abs(occupied.x - position.x) < 330 &&
-            Math.abs(occupied.y - position.y) < 220
+            position.x < occupied.x + otherSize.width + 24 &&
+            position.x + size.width + 24 > occupied.x &&
+            position.y < occupied.y + otherSize.height + 32 &&
+            position.y + size.height + 32 > occupied.y
           );
         })
       )
-        position = { x: position.x, y: position.y + 240 };
+        position = { x: position.x, y: position.y + size.height + 88 };
       positions.set(node.id, position);
       changed = true;
     }
