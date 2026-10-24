@@ -115,6 +115,7 @@ test('canvas connections can be removed, dragged and observed', async ({ page })
     clientX: a!.x + 14,
     clientY: a!.y + 14,
   });
+  await expect(page.getByRole('button', { name: 'Naviguer dans la minicarte' })).toBeDisabled();
   await target.scrollIntoViewIfNeeded();
   const b = await target.boundingBox();
   await page.mouse.move(b!.x + 14, b!.y + 14);
@@ -123,6 +124,7 @@ test('canvas connections can be removed, dragged and observed', async ({ page })
   await expect(
     page.getByRole('button', { name: 'Liaison success vers Fin', exact: true }),
   ).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Naviguer dans la minicarte' })).toBeEnabled();
   await expect(page.locator('.canvas-node')).toHaveCount(5);
 });
 test('AI uses the widget and only applies a reviewed proposal', async ({ page }) => {
@@ -507,7 +509,9 @@ test('inspector preserves optional advanced settings while editing a common sett
   );
   await page.reload();
   const card = page.locator('.canvas-node[data-node-id="Action A"]');
-  await expect(card).toContainText('Qualité : 20');
+  await card.locator('.drag').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.mat-mdc-tooltip-surface')).toContainText('Qualité : 20');
   await card.locator('.canvas-title').click();
   const inspector = page.getByRole('complementary', { name: 'Action A', exact: true });
   await inspector.getByLabel('Qualité', { exact: true }).fill('22');
@@ -515,7 +519,9 @@ test('inspector preserves optional advanced settings while editing a common sett
   await inspector.getByText('Réglages avancés · 1', { exact: true }).click();
   await expect(inspector.getByLabel('Option avancée', { exact: true })).toHaveValue('Conserver');
   await inspector.getByRole('button', { name: 'Appliquer les réglages', exact: true }).click();
-  await expect(card).toContainText('Qualité : 22');
+  await card.locator('.drag').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.mat-mdc-tooltip-surface')).toContainText('Qualité : 22');
 });
 
 test('canvas wires follow dragging before release and selection highlights connections', async ({
@@ -804,4 +810,119 @@ test('structured audio rules remain editable and preserved on desktop and mobile
     await page.locator('body').evaluate((element) => element.clientWidth),
   );
   await page.screenshot({ path: info.outputPath('structured-audio-rules.png') });
+});
+
+test('compact adaptive cards expose semantic ports and keep measured wires aligned in both themes', async ({
+  page,
+}, info) => {
+  await setup(page);
+  const longTitle = 'Actualiser la bibliothèque multimédia après validation';
+  const ids = ['success', 'yes', 'no', 'error', 'next', 'skipped', 'waiting', 'custom'];
+  await page.route('**/api/v1/flows/components', (r) =>
+    r.fulfill({
+      json: [
+        {
+          id: 'base',
+          version: '1.0.0',
+          name: 'Base',
+          components: components.map((c) =>
+            c.id === 'action'
+              ? {
+                  ...c,
+                  outputs: ids.map((id) => ({ id, label: id, description: 'Chemin ' + id })),
+                }
+              : c,
+          ),
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/v1/flows/11111111-1111-4111-8111-111111111111/edit', (r) =>
+    r.fulfill({
+      json: {
+        definition: {
+          ...flow,
+          nodes: flow.nodes.map((n) => (n.id === 'Action A' ? { ...n, name: longTitle } : n)),
+        },
+        publishedVersion: 1,
+        backupStatus: 'ready',
+      },
+    }),
+  );
+  await page.reload();
+  const action = page.locator('.canvas-node[data-node-id="Action A"]');
+  await expect(action.locator('.output')).toHaveCount(8);
+  await expect.poll(() => action.evaluate((n) => (n as HTMLElement).offsetHeight)).toBe(64);
+  const entryWidth = await page
+    .locator('.canvas-node[data-node-id="Entrée"]')
+    .evaluate((n) => (n as HTMLElement).offsetWidth);
+  const actionWidth = await action.evaluate((n) => (n as HTMLElement).offsetWidth);
+  expect(actionWidth).toBeGreaterThan(entryWidth);
+  expect(actionWidth).toBeLessThanOrEqual(336);
+  const icon = (id: string) => action.locator(`[data-port="output:${id}"] app-icon`);
+  await expect(icon('yes')).toHaveCount(1);
+  await expect(icon('no')).toHaveCount(1);
+  await expect(icon('error')).toHaveCount(1);
+  expect(await icon('no').locator('path').getAttribute('d')).not.toBe(
+    await icon('error').locator('path').getAttribute('d'),
+  );
+  await expect(action.locator('[data-port="output:custom"]')).toHaveText('8');
+  await action.locator('.drag').focus();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.mat-mdc-tooltip-surface')).toContainText(longTitle);
+  await page.keyboard.press('Escape');
+  const yes = action.locator('[data-port="output:yes"]');
+  await yes.focus();
+  await expect(
+    action.getByRole('button', { name: 'Ajouter sur la sortie yes', exact: true }),
+  ).toBeVisible();
+  const portsDoNotOverlap = await action.locator('.output').evaluateAll((ns) => {
+    const rects = ns.map((n) => n.getBoundingClientRect());
+    return rects.every((r, i) =>
+      rects.every((s, j) => i === j || r.right <= s.left || s.right <= r.left),
+    );
+  });
+  expect(portsDoNotOverlap).toBe(true);
+  // Start and end of an actual routed link must remain at the measured port centers.
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate((mode) => {
+      document.documentElement.dataset['theme'] = mode;
+    }, theme);
+    await page.getByRole('button', { name: 'Disposition automatique', exact: true }).click();
+    await expect
+      .poll(async () =>
+        page.evaluate(() => {
+          const wire = document.querySelector<SVGPathElement>('.wire')!;
+          const surface = document.querySelector('.canvas-surface')!.getBoundingClientRect();
+          const source = document
+            .querySelector('[data-node-id="Entrée"] [data-port="output:success"]')!
+            .getBoundingClientRect();
+          const target = document
+            .querySelector('[data-node-id="Décision"] [data-port="input"]')!
+            .getBoundingClientRect();
+          const scale =
+            document.querySelector<HTMLElement>('.canvas-surface')!.offsetWidth / surface.width;
+          const start = wire.getPointAtLength(0),
+            end = wire.getPointAtLength(wire.getTotalLength());
+          return Math.max(
+            Math.abs(start.x - (source.x + source.width / 2 - surface.x) * scale),
+            Math.abs(start.y - (source.y + source.height / 2 - surface.y) * scale),
+            Math.abs(end.x - (target.x + target.width / 2 - surface.x) * scale),
+            Math.abs(end.y - (target.y + target.height / 2 - surface.y) * scale),
+          );
+        }),
+      )
+      .toBeLessThan(1);
+    const violations = (
+      await new AxeBuilder({ page })
+        .include('app-flow-canvas')
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze()
+    ).violations;
+    expect(violations).toEqual([]);
+    await page.screenshot({ path: info.outputPath(`adaptive-cards-${theme}.png`) });
+  }
+  await action.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('complementary', { name: longTitle, exact: true })).toBeVisible();
 });

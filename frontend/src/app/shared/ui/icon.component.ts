@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 const ICONS = {
+  condition: 'm12 3 9 9-9 9-9-9ZM12 8v5m0 3h.01',
+  warning: 'm12 3 10 18H2ZM12 9v4m0 4h.01',
+  clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2',
+  skip: 'M4 5v6h6M4 11a8 8 0 1 1 3 7',
   upload: 'M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6',
   copy: 'M9 9h12v12H9ZM15 5V3H3v12h2',
   refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-2l2 3M4 16l2 3a7 7 0 0 0 12-2',
