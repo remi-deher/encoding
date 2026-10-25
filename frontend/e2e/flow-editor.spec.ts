@@ -548,6 +548,10 @@ test('canvas wires follow dragging before release and selection highlights conne
   const wire = page.locator('.wire').first();
   const before = await wire.getAttribute('d');
   const handle = entry.getByRole('button', { name: 'Déplacer l’étape' });
+  const beforePosition = await entry.evaluate((node) => ({
+    left: (node as HTMLElement).style.left,
+    top: (node as HTMLElement).style.top,
+  }));
   const rect = (await handle.boundingBox())!;
   await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
   await page.mouse.down();
@@ -557,6 +561,44 @@ test('canvas wires follow dragging before release and selection highlights conne
   const during = await wire.getAttribute('d');
   await page.mouse.up();
   await expect(wire).toHaveAttribute('d', during!);
+  await expect
+    .poll(() =>
+      entry.evaluate((node) => ({
+        left: (node as HTMLElement).style.left,
+        top: (node as HTMLElement).style.top,
+      })),
+    )
+    .not.toEqual(beforePosition);
+  const movedPosition = await entry.evaluate((node) => ({
+    left: (node as HTMLElement).style.left,
+    top: (node as HTMLElement).style.top,
+  }));
+  await page.reload();
+  await expect(page.locator('.canvas-node')).toHaveCount(5);
+  await expect
+    .poll(() =>
+      page
+        .locator('.canvas-node')
+        .first()
+        .evaluate((node) => ({
+          left: (node as HTMLElement).style.left,
+          top: (node as HTMLElement).style.top,
+        })),
+    )
+    .toEqual(movedPosition);
+});
+
+test('adding a block on an output opens the palette for that branch', async ({ page }) => {
+  await setup(page);
+  const action = page.locator('.canvas-node[data-node-id="Action A"]');
+  await action.locator('[data-port="output:success"]').focus();
+  await action.getByRole('button', { name: 'Ajouter sur la sortie Suite', exact: true }).click();
+  await expect(page.locator('.insertion-banner')).toContainText(
+    'Insertion sur la sortie « Suite » de Action A',
+  );
+  await expect(
+    page.getByRole('complementary', { name: 'Palette des composants du flow' }),
+  ).toBeVisible();
 });
 
 test('canvas workspace fills the available width and separates blocks from its toolbar', async ({
