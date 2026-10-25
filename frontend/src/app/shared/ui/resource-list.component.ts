@@ -34,6 +34,7 @@ export interface ResourceListTag {
 export interface ResourceListItem {
   readonly id: string;
   readonly name: string;
+  readonly icon?: IconName;
   readonly subtitle?: string;
   readonly tags: readonly ResourceListTag[];
   readonly toggle?: {
@@ -81,7 +82,7 @@ export interface ResourceListToggleEvent {
       }
       <ul class="resource-list">
         @for (item of items(); track item.id) {
-          <li class="resource-item">
+          <li class="resource-item" [class.resource-item_selectable]="selectable()">
             @if (selectable()) {
               <mat-checkbox
                 [checked]="selectedIds().has(item.id)"
@@ -89,7 +90,7 @@ export interface ResourceListToggleEvent {
                 (change)="toggleSelection(item.id, $event.checked)"
               />
             }
-            <span class="resource-icon"><app-icon [name]="icon()" /></span>
+            <span class="resource-icon"><app-icon [name]="item.icon ?? icon()" /></span>
             <div class="resource-title">
               <h3>{{ item.name }}</h3>
               @if (item.subtitle) {
