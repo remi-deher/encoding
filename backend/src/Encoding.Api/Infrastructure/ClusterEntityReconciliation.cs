@@ -63,7 +63,7 @@ public sealed partial class ClusterEntityReconciliation(
         new("encoding_profile_versions", ["profile_id", "version", "name", "description", "targets", "created_at"], ["profile_id", "version"], ["targets"], immutable: true),
         new("flow_resources", ["id", "kind", "name", "description", "created_at", "updated_at"], ["id"]),
         new("flow_resource_versions", ["resource_id", "version", "files", "total_bytes", "created_at"], ["resource_id", "version"], ["files"], immutable: true),
-        new("flow_templates", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "definition", "created_at"], ["id"], ["definition"]),
+        new("flow_templates", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "definition", "created_at", "configuration", "revision"], ["id"], ["definition", "configuration"]),
         new("flow_component_packs", ["id", "name", "description", "source_flow_id", "source_version", "source_flow_name", "media_type", "input_node_id", "definition", "outputs", "created_at"], ["id"], ["definition", "outputs"]),
         new("library_flow_assignments", ["library_id", "flow_id", "flow_version", "revision"], ["library_id"]),
         new("library_node_accesses", ["library_id", "node_id", "mode", "local_path", "can_read", "can_write", "transfer_source_node_id", "updated_at", "is_enabled"], ["library_id", "node_id"]),

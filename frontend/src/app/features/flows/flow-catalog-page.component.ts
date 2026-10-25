@@ -42,6 +42,7 @@ import { createFlowCreationForm, FLOW_CREATION_FORM } from '../../shared/models/
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
 import { FlowTemplates } from '../../shared/services/flow-templates';
+import { isTemplateConfigurableField } from '../../shared/models/flow-templates';
 import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import { FlowPreviewComponent } from '../../shared/ui/flow-preview/flow-preview';
 import { firstValueFrom } from 'rxjs';
@@ -108,6 +109,23 @@ export class FlowCatalogPageComponent {
   protected readonly sourcePreview = signal<FlowDocument | null>(null);
   protected readonly sourcePreviewComponents = signal<readonly FlowComponentDefinition[]>([]);
   protected readonly sourcePreviewStatus = signal<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  protected readonly templateSetupSelection = signal<Readonly<Record<string, readonly string[]>>>(
+    {},
+  );
+  protected readonly templateConfigurableFields = computed(() => {
+    const definition = this.sourcePreview();
+    const components = this.sourcePreviewComponents();
+    if (!definition) return [];
+    return definition.nodes.flatMap((node) => {
+      const component = components.find(
+        (item) =>
+          item.id === node.component.componentId && item.pluginId === node.component.pluginId,
+      );
+      const fields =
+        component?.configurationSchema?.fields.filter(isTemplateConfigurableField) ?? [];
+      return fields.length ? [{ node, component: component!, fields }] : [];
+    });
+  });
   private previewRequestId = 0;
 
   private async loadSourcePreview(id: string, version: number): Promise<void> {
@@ -170,13 +188,25 @@ export class FlowCatalogPageComponent {
     const templateSource = this.templateSource();
     if (templateSource) {
       try {
+        if (this.sourcePreviewStatus() !== 'ready') {
+          this.notifications.show(
+            'Attendez le chargement du flow source avant de créer le modèle.',
+          );
+          return;
+        }
         await this.templates.createFromFlow({
           sourceFlowId: templateSource.id,
           sourceVersion: templateSource.version,
           name: values['name'],
           description: values['description'] ?? '',
+          configuration: {
+            nodes: Object.entries(this.templateSetupSelection())
+              .filter(([, fieldIds]) => fieldIds.length > 0)
+              .map(([nodeId, fieldIds]) => ({ nodeId, fieldIds })),
+          },
         });
         this.templateSource.set(null);
+        this.templateSetupSelection.set({});
         this.actionDefinition.set(null);
         this.clearSourcePreview();
         this.actionOpen.set(false);
@@ -283,6 +313,7 @@ export class FlowCatalogPageComponent {
     if (event.actionId === 'template') {
       const version = Number(event.row['publishedVersion']);
       this.templateSource.set({ id: String(event.row['id']), version });
+      this.templateSetupSelection.set({});
       this.packSource.set(null);
       void this.loadSourcePreview(String(event.row['id']), version);
       this.actionDefinition.set({
@@ -326,6 +357,19 @@ export class FlowCatalogPageComponent {
       this.notifications.show('Export impossible.');
     }
   }
+
+  protected templateFieldSelected(nodeId: string, fieldId: string): boolean {
+    return this.templateSetupSelection()[nodeId]?.includes(fieldId) ?? false;
+  }
+
+  protected toggleTemplateField(nodeId: string, fieldId: string, selected: boolean): void {
+    const selection = this.templateSetupSelection();
+    const fieldIds = new Set(selection[nodeId] ?? []);
+    if (selected) fieldIds.add(fieldId);
+    else fieldIds.delete(fieldId);
+    this.templateSetupSelection.set({ ...selection, [nodeId]: [...fieldIds] });
+  }
+
   protected async onSelectionAction(event: DataTableSelectionActionEvent): Promise<void> {
     try {
       this.downloads.save(
@@ -634,12 +678,19 @@ export class FlowCatalogPageComponent {
   protected startFlow(values: Record<string, string>): void {
     const starter = values['starter'] ?? 'blank';
     const templateId = starter.startsWith('template:') ? starter.slice('template:'.length) : null;
+    if (templateId) {
+      void this.router.navigate(['/libraries/templates'], {
+        queryParams: { template: templateId, configure: true, name: values['name'] },
+        info: { flowEditorDirection: 'forward' },
+      });
+      this.actionOpen.set(false);
+      return;
+    }
     void this.router.navigate([starter === 'guided' ? '/flows/guided' : '/flows/new'], {
       queryParams: {
         name: values['name'],
         mediaType: values['mediaType'],
-        starter: templateId ? 'template' : starter,
-        ...(templateId ? { templateId } : {}),
+        starter,
       },
       info: { flowEditorDirection: 'forward' },
     });
