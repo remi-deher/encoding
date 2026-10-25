@@ -282,15 +282,49 @@ public sealed partial class FlowRepository(DbDataSource dataSource)
         return await SaveDraftAsync(new SaveFlowDraftRequest(0, cloned), ct);
     }
 
-    public async Task<FlowDraftResponse?> CreateFromTemplateAsync(Guid templateId, string? newName, FlowTemplateRepository templates, CancellationToken ct)
+    public async Task<FlowDraftResponse?> CreateFromTemplateAsync(
+        Guid templateId,
+        CreateFlowFromTemplateRequest request,
+        FlowTemplateRepository templates,
+        FlowDefinitionValidator validator,
+        CancellationToken ct)
     {
         var template = await templates.GetAsync(templateId, ct);
         if (template is null) return null;
+        if (request.TemplateRevision is { } requestedRevision && requestedRevision != template.Template.Revision)
+            throw new FlowTemplateRevisionConflictException();
 
         var newId = Guid.NewGuid();
-        var name = string.IsNullOrWhiteSpace(newName) ? template.Template.Name : newName.Trim();
-        var definition = template.Definition with { Id = newId, Version = 1, Name = name };
-        return await SaveDraftAsync(new SaveFlowDraftRequest(0, definition), ct);
+        var name = string.IsNullOrWhiteSpace(request.Name) ? template.Template.Name : request.Name.Trim();
+        var definition = ApplyTemplateConfiguration(template, request.Configuration) with { Id = newId, Version = 1, Name = name };
+        var validation = validator.Validate(definition);
+        if (!validation.IsValid)
+            throw new FlowTemplateSetupValidationException(validation.Issues);
+        var portableDefinition = templates.RemoveLocalConfiguration(definition);
+        return await SaveDraftAsync(new SaveFlowDraftRequest(0, portableDefinition), ct);
+    }
+
+    private static FlowDefinition ApplyTemplateConfiguration(
+        FlowTemplateDetails template,
+        IReadOnlyList<FlowTemplateNodeValues>? overrides)
+    {
+        if (overrides is null || overrides.Count == 0) return template.Definition;
+        var policy = template.Configuration.Nodes.ToDictionary(node => node.NodeId, node => node.FieldIds, StringComparer.Ordinal);
+        var seenNodes = new HashSet<string>(StringComparer.Ordinal);
+        var nodes = template.Definition.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
+        foreach (var update in overrides)
+        {
+            if (update is null || string.IsNullOrWhiteSpace(update.NodeId) || update.Values is null)
+                throw new FlowTemplateSetupConfigurationException("La configuration de bloc envoyée est invalide.");
+            if (!seenNodes.Add(update.NodeId) || !policy.TryGetValue(update.NodeId, out var allowedFields))
+                throw new FlowTemplateSetupConfigurationException($"Le bloc « {update.NodeId} » n’est pas configurable dans ce modèle.");
+            if (!nodes.TryGetValue(update.NodeId, out var node))
+                throw new FlowTemplateSetupConfigurationException($"Le bloc « {update.NodeId} » n’existe plus dans ce modèle.");
+            if (update.Values.Keys.Any(field => !allowedFields.Contains(field, StringComparer.Ordinal)))
+                throw new FlowTemplateSetupConfigurationException($"Un paramètre du bloc « {update.NodeId} » n’est pas configurable dans ce modèle.");
+            nodes[update.NodeId] = node with { Configuration = node.Configuration.Concat(update.Values).GroupBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.Ordinal) };
+        }
+        return template.Definition with { Nodes = template.Definition.Nodes.Select(node => nodes[node.Id]).ToArray() };
     }
 }
 
@@ -299,5 +333,15 @@ public enum FlowDeleteResult
     Deleted,
     NotFound,
     Conflict
+}
+
+public sealed class FlowTemplateRevisionConflictException : Exception { }
+
+public sealed class FlowTemplateSetupConfigurationException(string message) : Exception(message) { }
+
+public sealed class FlowTemplateSetupValidationException(IReadOnlyList<FlowValidationIssue> issues)
+    : Exception("La configuration du flow n’est pas valide.")
+{
+    public IReadOnlyList<FlowValidationIssue> Issues { get; } = issues;
 }
 

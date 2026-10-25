@@ -131,12 +131,19 @@ export class HomePageComponent {
   protected startFlow(values: Record<string, string>): void {
     const starter = values['starter'] ?? 'blank';
     const templateId = starter.startsWith('template:') ? starter.slice('template:'.length) : null;
+    if (templateId) {
+      void this.router.navigate(['/libraries/templates'], {
+        queryParams: { template: templateId, configure: true, name: values['name'] },
+        info: { flowEditorDirection: 'forward' },
+      });
+      this.flowActionOpen.set(false);
+      return;
+    }
     void this.router.navigate([starter === 'guided' ? '/flows/guided' : '/flows/new'], {
       queryParams: {
         name: values['name'],
         mediaType: values['mediaType'],
-        starter: templateId ? 'template' : starter,
-        ...(templateId ? { templateId } : {}),
+        starter,
       },
       info: { flowEditorDirection: 'forward' },
     });
