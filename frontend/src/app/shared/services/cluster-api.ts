@@ -24,6 +24,25 @@ export interface ClusterReconciliationHealthStatus {
   readonly peers: readonly ClusterReconciliationPeerHealth[];
 }
 
+export interface ClusterTaskStatus {
+  readonly localPeerId?: string;
+  readonly neutralized?: boolean;
+  readonly catchingUp?: boolean;
+  readonly pendingCheckpointPreparations?: number;
+  readonly pendingCheckpointCaches?: number;
+  readonly isolated: boolean;
+  readonly waitingSourceWrites: number;
+  readonly pendingTransfers: number;
+  readonly observations: readonly {
+    readonly observerPeerId: string;
+    readonly subjectPeerId: string;
+    readonly sequence: number;
+    readonly observedAt: string;
+    readonly expiresAt: string;
+    readonly reachable: boolean;
+  }[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ClusterApi {
   private readonly http = inject(HttpClient);
@@ -33,6 +52,9 @@ export class ClusterApi {
   }
   listNodes() {
     return this.http.get<readonly NodeResponse[]>('/api/v1/nodes');
+  }
+  taskStatus() {
+    return this.http.get<ClusterTaskStatus>('/api/v1/cluster/tasks/status');
   }
   reconciliationStatus() {
     return this.http.get<ClusterReconciliationHealthStatus>(

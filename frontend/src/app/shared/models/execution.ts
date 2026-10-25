@@ -1,6 +1,12 @@
 export type ExecutionState =
   'queued' | 'running' | 'cancelling' | 'succeeded' | 'failed' | 'cancelled' | 'deferred';
 export interface ExecutionResponse {
+  readonly ownership?: {
+    readonly executionId: string;
+    readonly ownerPeerId: string;
+    readonly epoch: number;
+    readonly state: string;
+  } | null;
   readonly id: string;
   readonly media: string;
   readonly library: string;
@@ -120,4 +126,23 @@ export interface ExecutionActivityResponse {
   readonly state: ExecutionState;
   readonly detail: string;
   readonly createdAt: string;
+}
+
+export function executionStateLabel(execution: ExecutionResponse): string {
+  switch (execution.ownership?.state) {
+    case 'quarantined':
+      return 'En quarantaine';
+    case 'frozen':
+      return ['queued', 'running', 'cancelling'].includes(execution.state)
+        ? 'Transfert en préparation'
+        : EXECUTION_STATE_LABELS[execution.state];
+    case 'received':
+      return 'Réception inactive';
+    case 'transferred':
+      return ['queued', 'running', 'cancelling'].includes(execution.state)
+        ? 'Cédée à un autre serveur'
+        : EXECUTION_STATE_LABELS[execution.state];
+    default:
+      return EXECUTION_STATE_LABELS[execution.state];
+  }
 }

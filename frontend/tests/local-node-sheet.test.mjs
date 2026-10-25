@@ -219,3 +219,40 @@ test('formatNodeLabel falls back gracefully when either name is missing', () => 
   assert.equal(formatNodeLabel('', 'TRUENAS'), 'TRUENAS');
   assert.equal(formatNodeLabel('', ''), 'Nœud inconnu');
 });
+
+test('isolated task owner preserves computation and shows deferred source writes', () => {
+  const banner = reconciliationBannerPresentation(null, 2, true, {
+    isolated: true,
+    waitingSourceWrites: 3,
+    pendingTransfers: 0,
+    observations: [],
+  });
+  assert.match(banner.title, /isolé/);
+  assert.match(banner.description, /3 opération/);
+  assert.match(banner.description, /ne peut pas être repris automatiquement/);
+  assert.equal(banner.isAlert, true);
+});
+
+test('a received transfer is shown as inactive until activation', () => {
+  const banner = reconciliationBannerPresentation(null, 2, true, {
+    isolated: false,
+    waitingSourceWrites: 0,
+    pendingTransfers: 1,
+    observations: [],
+  });
+  assert.match(banner.description, /réception inactive/);
+  assert.match(banner.description, /avant son activation/);
+});
+
+test('a neutralized local server does not appear ready to resume', () => {
+  const banner = reconciliationBannerPresentation(null, 2, true, {
+    isolated: false,
+    neutralized: true,
+    waitingSourceWrites: 0,
+    pendingTransfers: 0,
+    observations: [],
+  });
+  assert.match(banner.title, /neutralisé/);
+  assert.match(banner.description, /réadmis/);
+  assert.equal(banner.isAlert, true);
+});

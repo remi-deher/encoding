@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
-import { ExecutionResponse, EXECUTION_STATE_LABELS } from '../../../shared/models/execution';
+import { ExecutionResponse, executionStateLabel } from '../../../shared/models/execution';
 import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component';
 
 @Component({
@@ -18,13 +18,15 @@ import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component'
           <p>{{ execution().library }} · {{ execution().flow }} · v{{ execution().flowVersion }}</p>
         </div>
         <app-status-badge
-          [label]="labels[execution().state]"
+          [label]="stateLabel(execution())"
           [tone]="
-            execution().state === 'succeeded'
-              ? 'success'
-              : execution().state === 'failed'
-                ? 'danger'
-                : 'neutral'
+            execution().ownership?.state === 'quarantined'
+              ? 'warning'
+              : execution().state === 'succeeded'
+                ? 'success'
+                : execution().state === 'failed'
+                  ? 'danger'
+                  : 'neutral'
           "
         />
       </header>
@@ -130,5 +132,5 @@ import { StatusBadgeComponent } from '../../../shared/ui/status-badge.component'
 })
 export class OverviewExecutionComponent {
   readonly execution = input.required<ExecutionResponse>();
-  protected readonly labels = EXECUTION_STATE_LABELS;
+  protected readonly stateLabel = executionStateLabel;
 }

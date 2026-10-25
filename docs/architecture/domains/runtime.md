@@ -17,7 +17,7 @@ Un worker exécute une **version publiée précise** d'un flow, de bout en bout,
 
 ## Registre des exécutions
 - États : `queued`, `running`, `cancelling`, `succeeded`, `failed`, `cancelled`. Une transition et son événement sont écrits dans la même transaction ; rapports idempotents (identifiant d'événement + révision attendue) ; transitions terminales figées. Annulation en cours = demande confirmée après arrêt des processus. Une relance conserve l'échec et crée une tentative liée (une seule relance concurrente).
-- L'historique durable est réconcilié entre serveurs ; les tâches et baux actifs restent locaux au serveur qui les a créés ([replication-storage.md](replication-storage.md)). `GET /api/v1/executions` (≤ 200, actives d'abord), `…/{id}/events`, `…/{id}/pipeline` (étapes, commandes, sorties tronquées à 32 Ko, secrets masqués ; stdout/stderr des scripts et plugins exclus).
+- L'historique durable est réconcilié entre serveurs ; les tâches et baux actifs restent locaux au serveur propriétaire ([replication-storage.md](replication-storage.md)). `GET /api/v1/executions` (≤ 200, actives d'abord), `…/{id}/events`, `…/{id}/pipeline` (étapes, commandes, sorties tronquées à 32 Ko, secrets masqués ; stdout/stderr des scripts et plugins exclus).
 - Création uniquement depuis une bibliothèque (version de flow attribuée), jamais avec une définition arbitraire.
 
 ## Sondages sans travail
@@ -105,4 +105,13 @@ La création d'un travail et son plan signé sont atomiques. L'initiateur en res
 
 `GET /api/v1/executions/{id}/ownership` expose le serveur propriétaire, l’époque et l’état depuis la projection locale ; route de lecture authentifiée, accessible au rôle viewer.
 
-Cette fondation ne livre pas encore le déplacement inter-serveurs, les chaînes, la déduplication par média ou la reprise manuelle. Aucun pair injoignable ne peut être repris automatiquement. Voir [ADR 0015](../adr/0015-attribution-journalisee-des-taches.md).
+Cette fondation est complétée par [ADR 0016](../adr/0016-transferts-et-reprise-manuelle.md) : déplacements, chaînes inter-serveurs, déduplication et reprise manuelle après neutralisation. Aucun pair simplement injoignable ne peut être repris automatiquement.
+
+## Transferts inter-serveurs et reprise manuelle (ADR 0016)
+`nodes-handoff` 1.8.0 propose `mode=server` et `targetServerPeerId` : gel source, réception inactive des artefacts/checkpoint, accusé signé, puis activation journalisée d'époque supérieure. Même exécution et mêmes métadonnées originales ; les conditions suivantes voient le fichier courant réel. Sans accusé, la source se dégèle ; une activation émise ne s'annule jamais et se rattrape par le journal. Trois réceptions de relais refusées donnent un échec visible. Un checkpoint avec effet incertain, attente ou publication en cours est refusé.
+
+Les checkpoints initiaux sont préparés en arrière-plan par lots ; les réglages sont figés et les secrets chiffrés par la clé du cluster, puis reprotégés sur la cible. Le claim et la clôture d'étape actualisent les checkpoints durables compatibles. Le cache de fichiers des pairs est asynchrone : métadonnées disponibles ne veut pas dire fichier disponible. Toute reprise exige les blobs complets vérifiés. Les transferts et copies n'occupent pas l'écrivain SQLite.
+
+L'API admin propose déplacement, neutralisation attestée, reprise et réadmission ; voir [procédure](../../operations/cluster-task-recovery.md). À deux serveurs, la grâce de 135 s ne commence qu'après l'attestation d'arrêt de l'installation et de ses workers. Les flows à effet non rejouable et les états terminaux connus sont refusés. Le serveur revenu rattrape ses preuves et ne peut pas reprendre les tâches cédées. À trois serveurs, calculs et transferts restent disponibles ; reprise/neutralisation exigent la future décision majoritaire ou un témoin dédié et sont refusées dans cette version.
+
+Les observations relayées (provenance/séquence/TTL 45 s) ne sont jamais des preuves de fencing. Les créations concurrentes d'un même média convergent vers le plus ancien, puis l'identifiant du propriétaire ; les résultats perdants sont conservés en quarantaine. La rétention ne purge pas ces résultats ou les transferts en cours.

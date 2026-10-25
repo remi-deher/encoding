@@ -95,3 +95,10 @@ Migration 0054 : `runtime_source_write_waits` et `pending_source_writes` sont **
 
 ### Propriété initiale des tâches (0055)
 Les registres immuables signés `tasks/v1/events/<id>` sont **réconciliés** par le protocole existant. `task_server_identity`, `task_ownership`, `task_ownership_events` et `task_ownership_inbox` sont des **projections et coordinations locales**, non capturées comme entités LWW. Les preuves sont conservées et vérifiées à la projection ; rejouer un plan n'active aucun travail distant. Voir [ADR 0015](../adr/0015-attribution-journalisee-des-taches.md).
+
+### Coordination de tâches (0056)
+Les registres signés `tasks/v2/<événement>` sont **réconciliés** par le journal inchangé : checkpoints chiffrés, activations, abandons, observations, attestations de neutralisation/réadmission et reprises. L'auteur est vérifié indépendamment du relais. Les changements de propriétaire ne sont pas un registre LWW arbitraire : ils vérifient auteur, preuve précédente et époque.
+
+Sont **locales** : `task_coordination_inbox`, `task_coordination_rejections`, `task_transfers`, `task_transfer_aborts`, `task_checkpoints`, `task_neutralizations`, `task_peer_observations`, `task_observation_sequence`, `task_quarantines`, `task_checkpoint_dirty`, `task_checkpoint_cached`. Les blobs sont des fichiers durables SHA-256, jamais du SQLite partagé. Les réglages des checkpoints réutilisent l'AES-GCM commun du maillage avec un domaine propre, sans modifier le format de chiffrement des entités existantes. Une histoire distante n'écrase pas un travail local possédé.
+
+Les refus de reprise faute de fichiers/checkpoint sont normaux et visibles. Le cache des pairs occupe de l'espace durable ; la rétention locale ne purge pas automatiquement les caches sans `execution_work` local. Voir [ADR 0016](../adr/0016-transferts-et-reprise-manuelle.md).

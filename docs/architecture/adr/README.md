@@ -31,3 +31,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0013](0013-retrait-mode-raft.md) | Retrait du mode de consensus SQL | implemented | replication-storage |
 | [0014](0014-attente-des-ecritures-source.md) | Attente durable des écritures sur les sources en cluster | implemented | runtime |
 | [0015](0015-attribution-journalisee-des-taches.md) | Attribution initiale journalisée des tâches | implemented | runtime |
+| [0016](0016-transferts-et-reprise-manuelle.md) | Transferts inter-serveurs et reprise manuelle sans quorum | implemented | runtime |

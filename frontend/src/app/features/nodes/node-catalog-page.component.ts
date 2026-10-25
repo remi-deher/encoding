@@ -22,7 +22,11 @@ import {
   NODE_LIFECYCLE_TONES,
 } from '../../shared/models/cluster-health';
 import { firstValueFrom } from 'rxjs';
-import { ClusterApi, ClusterReconciliationHealthStatus } from '../../shared/services/cluster-api';
+import {
+  ClusterApi,
+  ClusterReconciliationHealthStatus,
+  ClusterTaskStatus,
+} from '../../shared/services/cluster-api';
 import { EnrollmentWindow, FirstLinkAcceptance } from '../../shared/models/auth';
 import {
   formatNodeLabel,
@@ -241,6 +245,7 @@ export class NodeCatalogPageComponent {
   });
   private readonly nodes = signal<readonly NodeResponse[]>([]);
   protected readonly reconciliationStatus = signal<ClusterReconciliationHealthStatus | null>(null);
+  protected readonly taskStatus = signal<ClusterTaskStatus | null>(null);
   private readonly pendingEnrollments = signal<readonly PendingNodeEnrollmentResponse[]>([]);
   private readonly allLibraries = signal<readonly LibraryResponse[]>([]);
   private readonly nodeAccessByLibrary = signal<
@@ -489,6 +494,7 @@ export class NodeCatalogPageComponent {
       this.reconciliationStatus(),
       serversCount,
       this.loadState() === 'ready',
+      this.taskStatus(),
     );
   });
   protected readonly detailTitle = computed(() => {
@@ -1490,6 +1496,7 @@ export class NodeCatalogPageComponent {
           forkJoin({
             nodes: this.clusterApi.listNodes(),
             reconciliation: this.clusterApi.reconciliationStatus().pipe(catchError(() => of(null))),
+            tasks: this.clusterApi.taskStatus().pipe(catchError(() => of(null))),
             pending: this.http.get<readonly PendingNodeEnrollmentResponse[]>(
               '/api/v1/nodes/enrollment-requests',
             ),
@@ -1505,13 +1512,14 @@ export class NodeCatalogPageComponent {
         ),
         takeUntilDestroyed(),
       )
-      .subscribe(({ nodes, reconciliation, pending, activity }) => {
+      .subscribe(({ nodes, reconciliation, tasks, pending, activity }) => {
         if (activity) {
           this.activeTasks.set(activity);
           this.activityLoaded.set(true);
         }
         this.nodes.set(nodes);
         this.reconciliationStatus.set(reconciliation);
+        this.taskStatus.set(tasks);
         this.pendingEnrollments.set(pending);
         this.loadState.set('ready');
       });

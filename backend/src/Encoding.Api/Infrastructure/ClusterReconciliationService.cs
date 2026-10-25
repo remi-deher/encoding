@@ -25,6 +25,8 @@ public sealed class ClusterReconciliationService(
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly ConcurrentDictionary<string, Guid> discoveredPeers = new(StringComparer.OrdinalIgnoreCase);
     private MdnsBrowser? browser;
+    private volatile bool backlog;
+    internal TimeSpan NextCycleDelay=>backlog?TimeSpan.FromMilliseconds(300+Random.Shared.Next(200)):TimeSpan.FromSeconds(15);
     private Guid clusterId;
     private string? advertisedApiBaseUrl;
     private string? ownInstanceName;
@@ -111,8 +113,9 @@ public sealed class ClusterReconciliationService(
                 var discoveredUrls = discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key)
                     .Concat(dynamicPeers.Select(Normalize).Where(url => url is not null).Cast<string>());
                 health.SetPeers(configuredUrls, discoveredUrls);
+                backlog=false;
                 await ReconcilePeersAsync(clusterId, peerUrls, stoppingToken);
-                await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+                await Task.Delay(NextCycleDelay, stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
@@ -138,6 +141,7 @@ public sealed class ClusterReconciliationService(
                     stoppingToken.ThrowIfCancellationRequested();
                     var progress = await ReconcilePeerAsync(currentClusterId, peerUrl, stoppingToken);
                     transferred += progress.Bytes;
+                    if(progress.HasMore && progress.MadeProgress) backlog=true;
                     if (!progress.HasMore || !progress.MadeProgress
                         || clock.GetElapsedTime(started) >= CatchUpBudget
                         || transferred + 2L * ClusterReconciliationSignature.MaximumBodyBytes > MaximumBytesPerPeer) break;

@@ -58,6 +58,8 @@ public sealed class RuntimeEligibility(FlowComponentRegistry registry, FlowDefin
         });
         foreach(var node in segment.Concat(planned))
         {
+            if(RuntimeHandoffPolicy.IsHandoff(node) && node.Configuration.TryGetValue("mode",out var handoffMode) && handoffMode.GetString()=="server"
+                && !capabilities.Any(c=>c.ToolId=="plugin/nodes" && Version.TryParse(c.Version,out var version) && version>=new Version(1,8,0))) return false;
             var pluginId = node.Component.PluginId;
             var componentId = node.Component.ComponentId;
             var isAliased = FlowComponentRegistry.TryGetLegacyAlias(componentId, out var legacyTarget);

@@ -456,6 +456,13 @@ internal static class AuthScenarios
         Check(await anonymous.StatusAsync(post, "/api/v1/nodes/enroll", reborn, csrf: false, localSecret: LocalSecret) == HttpStatusCode.OK, "The same node re-enrolls under a fresh identity.");
         Check(await anonymous.StatusAsync(put, $"/api/v1/nodes/{Guid.NewGuid()}/heartbeat", localBeat, csrf: false, nodeToken: NodeToken()) == HttpStatusCode.Unauthorized, "An unknown identity is still a plain 401.");
 
+        Check(await anonymous.StatusAsync(post,"/api/v1/cluster/tasks/coordinate",new {},csrf:false)==HttpStatusCode.Unauthorized,"Task coordination requires an admitted identity and signed request.");
+        foreach(var action in new[]{"/api/v1/cluster/tasks/"+Guid.NewGuid()+"/move","/api/v1/cluster/tasks/"+Guid.NewGuid()+"/recover","/api/v1/cluster/tasks/peers/"+Guid.NewGuid()+"/neutralize","/api/v1/cluster/tasks/peers/"+Guid.NewGuid()+"/readmit"})
+        {
+            Check(await anonymous.StatusAsync(post,action,new {},csrf:false)==HttpStatusCode.Unauthorized,"Task ownership writes require authentication.");
+            Check(await viewer.StatusAsync(post,action,new {})==HttpStatusCode.Forbidden,"Viewers cannot change task ownership or neutralize a server.");
+        }
+        Check(await viewer.StatusAsync(get,"/api/v1/cluster/tasks/status")==HttpStatusCode.OK,"Viewers can inspect task coordination status.");
         Check(await anonymous.StatusAsync(post,"/api/v1/cluster/tasks/status",new {},csrf:false)==HttpStatusCode.Unauthorized,"Task-peer status requires an admitted identity and a signed request.");
         // Les workers gardent leur propre authentification, sans session.
         var token = first.NodeToken;
@@ -498,18 +505,9 @@ internal static class AuthScenarios
         Check(await admin.StatusAsync(put, $"/api/v1/nodes/{Guid.NewGuid()}/mode", new ChangeNodeModeRequest(true, true)) == HttpStatusCode.NotFound, "An unknown node is reported.");
         async Task<NodeResponse?> Beat() => await (await anonymous.SendAsync(put, $"/api/v1/nodes/{first.Id}/heartbeat", heartbeat, csrf: false, nodeToken: token)).Content.ReadFromJsonAsync<NodeResponse>(Json);
         Check((await Beat())?.DesiredRoles is null, "Without a request, the heartbeat carries no desired mode.");
-        var current = first.Roles.Contains(NodeRole.Server);
-        var otherServer = !current;
-        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(!current, true)) == HttpStatusCode.Accepted, "An administrator requests a mode for a node.");
-        var delivered = (await Beat())?.DesiredRoles;
-        Check(delivered is not null && delivered.Contains(NodeRole.Worker) && delivered.Contains(NodeRole.Server) == otherServer, "The heartbeat answer delivers the desired mode.");
-        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(current, first.Roles.Contains(NodeRole.Worker))) == HttpStatusCode.Accepted, "Asking for the current mode cancels the request.");
-        Check((await Beat())?.DesiredRoles is null, "A cancelled request is not delivered.");
-        var applied = new NodeHeartbeatRequest(first.Name, new[] { NodeRole.Worker, NodeRole.Server }, 1, first.Capabilities);
-        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(true, true)) == HttpStatusCode.Accepted, "A request for both functions is accepted.");
-        using (var ack = await anonymous.SendAsync(put, $"/api/v1/nodes/{first.Id}/heartbeat", applied, csrf: false, nodeToken: token))
-            Check((await ack.Content.ReadFromJsonAsync<NodeResponse>(Json))?.DesiredRoles is null, "Reporting the requested roles clears the request.");
-        Check(await admin.StatusAsync(put, mode, new ChangeNodeModeRequest(false, true)) == HttpStatusCode.Conflict, "The last online server cannot lose its server function.");
+        Check(await admin.StatusAsync(put,mode,new ChangeNodeModeRequest(true,true))==HttpStatusCode.Conflict,"The bootstrapped peer is unreachable: topology changes are refused during isolation.");
+        Check((await Beat())?.DesiredRoles is null,"A refused topology change is never delivered by a heartbeat.");
+        await StandaloneModeAsync();
 
         // Départ volontaire d'un cluster (0039) : authentifié par le jeton du nœud lui-même, jamais par celui d'un autre.
         var leaving = requests[1].Node;
@@ -523,7 +521,7 @@ internal static class AuthScenarios
         Check(after.All(node => node.Id != leaving.Id), "A node that left no longer appears in the cluster.");
 
         // Cycle de vie des nœuds et compatibilité (0041).
-        NodeHeartbeatRequest Signal(int? protocol, string? nonce) => new(first.Name, applied.Roles, 1, first.Capabilities, null, protocol, nonce);
+        NodeHeartbeatRequest Signal(int? protocol, string? nonce) => new(first.Name, first.Roles, 1, first.Capabilities, null, protocol, nonce);
         async Task<NodeResponse?> SendBeat(NodeHeartbeatRequest request) =>
             await (await anonymous.SendAsync(put, $"/api/v1/nodes/{first.Id}/heartbeat", request, csrf: false, nodeToken: token)).Content.ReadFromJsonAsync<NodeResponse>(Json);
         async Task<NodeResponse> Listed() => (await (await admin.SendAsync(get, "/api/v1/nodes")).Content.ReadFromJsonAsync<List<NodeResponse>>(Json))!.Single(node => node.Id == first.Id);
@@ -572,6 +570,31 @@ internal static class AuthScenarios
         Console.WriteLine("PASS: enrollment window, capped pairing requests, admin-only approval and node-token isolation.");
     }
 
+    private static async Task StandaloneModeAsync()
+    {
+        await using var database=await TestDatabase.CreateSqliteAsync("auth-standalone-mode");
+        var directory=Path.Combine(Path.GetTempPath(),"standalone-mode-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
+        try
+        {
+            await using var factory=CreateFactory(database,directory,new(){["Auth:AnonymousRequestsPerMinute"]="1000"});
+            var admin=new Client(factory.CreateClient());var anonymous=new Client(factory.CreateClient());
+            using(var setup=await admin.SendAsync(HttpMethod.Post,"/api/v1/auth/setup",new SetupRequest("root",AdminPassword),csrf:false)) {Check(setup.StatusCode==HttpStatusCode.Created,"Standalone mode fixture setup succeeds.");admin.Cookie=ReadCookie(setup);}
+            var node=NewNode(Guid.NewGuid(),NodeToken());
+            Check(await admin.StatusAsync(HttpMethod.Put,"/api/v1/nodes/enrollment-window",new OpenEnrollmentWindowRequest(5))==HttpStatusCode.OK,"Standalone enrollment opens.");
+            Check(await anonymous.StatusAsync(HttpMethod.Post,"/api/v1/nodes/enroll",node,csrf:false)==HttpStatusCode.OK,"Standalone worker enrolls.");
+            var mode=$"/api/v1/nodes/{node.Id}/mode";
+            async Task<NodeResponse?> Beat(NodeRole[]? roles=null)=>(await (await anonymous.SendAsync(HttpMethod.Put,$"/api/v1/nodes/{node.Id}/heartbeat",new NodeHeartbeatRequest(node.Name,roles??node.Roles,1,node.Capabilities),csrf:false,nodeToken:node.NodeToken)).Content.ReadFromJsonAsync<NodeResponse>(Json));
+            Check(await admin.StatusAsync(HttpMethod.Put,mode,new ChangeNodeModeRequest(true,true))==HttpStatusCode.Accepted,"A standalone administrator requests both functions.");
+            Check((await Beat())?.DesiredRoles?.Contains(NodeRole.Server)==true,"Heartbeat delivers the desired roles.");
+            Check(await admin.StatusAsync(HttpMethod.Put,mode,new ChangeNodeModeRequest(false,true))==HttpStatusCode.Accepted,"Requesting current roles cancels a pending change.");
+            Check((await Beat())?.DesiredRoles is null,"Cancelled roles are not delivered.");
+            Check(await admin.StatusAsync(HttpMethod.Put,mode,new ChangeNodeModeRequest(true,true))==HttpStatusCode.Accepted,"Both functions can be requested again.");
+            Check((await Beat([NodeRole.Worker,NodeRole.Server]))?.DesiredRoles is null,"Applied roles acknowledge the request.");
+            Check(await admin.StatusAsync(HttpMethod.Put,mode,new ChangeNodeModeRequest(false,true))==HttpStatusCode.Conflict,"The last server cannot lose its server role.");
+        }
+        finally {if(Directory.Exists(directory)) Directory.Delete(directory,true);}
+    }
+
     private static Task EndpointCatalogueAsync(WebApplicationFactory<ApiAssembly> factory)
     {
         var endpoints = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToArray();
@@ -593,6 +616,7 @@ internal static class AuthScenarios
             "POST /api/v1/cluster/join",
             "POST /api/v1/cluster/reconciliation/exchange",
             "POST /api/v1/cluster/tasks/status",
+            "POST /api/v1/cluster/tasks/coordinate",
             "POST /api/v1/cluster/ai/exchange",
             "POST /api/v1/integrations/{pluginId}/webhook",
             "POST /api/v1/nodes/enroll",

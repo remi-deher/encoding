@@ -1,6 +1,6 @@
 import { AiAssistantActivity } from '../../shared/models/ai-tools';
 import {
-  EXECUTION_STATE_LABELS,
+  executionStateLabel,
   ExecutionResponse,
   ExecutionState,
 } from '../../shared/models/execution';
@@ -142,8 +142,8 @@ export function executionItem(execution: ExecutionResponse): ActivityItem {
     group,
     title: execution.media.split(/[\\/]/).pop() || execution.media,
     subtitle,
-    stateLabel: EXECUTION_STATE_LABELS[execution.state],
-    tone: executionTone(execution.state),
+    stateLabel: executionStateLabel(execution),
+    tone: execution.ownership?.state === 'quarantined' ? 'warning' : executionTone(execution.state),
     progress: execution.state === 'running' ? execution.progress : null,
     time: formatRelativeTime(instant),
     sortTime: time(instant),

@@ -8,6 +8,11 @@ namespace Encoding.Core.Nodes;
 /// <summary>État du mode du nœud tel que l’exposent le serveur et le worker ; <c>Managed</c> est faux hors image unique.</summary>
 public sealed record NodeModeStatus(bool Managed, bool Server, bool Worker);
 
+public interface INodeModeTransitionGuard
+{
+    Task<string?> ValidateAsync(NodeMode requested,CancellationToken ct);
+}
+
 public static class NodeModeEndpoints
 {
     public const string ControlUrlSetting = "Launcher:ControlUrl";
@@ -43,6 +48,8 @@ public static class NodeModeEndpoints
                 return Results.Conflict(new { title = "Ce nœud n’est pas géré par l’image unique : son mode se règle par la variable Node__Roles." });
             try { NodeMode.Validate(requested); }
             catch (InvalidOperationException exception) { return Results.BadRequest(new { title = exception.Message }); }
+            if(services.GetService<INodeModeTransitionGuard>() is {} guard && await guard.ValidateAsync(requested,cancellationToken) is {} reason)
+                return Results.Conflict(new {title=reason});
             try
             {
                 var applied = await client.SetAsync(requested, cancellationToken);

@@ -34,6 +34,32 @@ public sealed class RuntimeArtifactStore(DbDataSource dataSource,IConfiguration 
         if(!ValidDigest(digest)) throw new ArgumentException("Empreinte SHA-256 invalide.");
         return Path.Combine(root,id.ToString("D"),digest);
     }
+    internal async Task<bool> IsCachedAsync(Guid id,string digest,long bytes,CancellationToken ct)
+    {
+        var path=PathFor(id,digest);if(!File.Exists(path)||new FileInfo(path).Length!=bytes) return false;
+        await using var file=File.OpenRead(path);return Convert.ToHexStringLower(await SHA256.HashDataAsync(file,ct))==digest;
+    }
+    /// <summary>Stores a peer checkpoint blob without granting any task lease or publication permission.</summary>
+    internal async Task CacheAsync(Guid id,string digest,long expectedBytes,Stream input,CancellationToken ct)
+    {
+        if(!ValidDigest(digest)||expectedBytes<=0||expectedBytes>configuration.GetValue<long>("Runtime:MaxArtifactBytes",1024L*1024*1024*1024)) throw new InvalidDataException("Artefact invalide.");
+        var target=PathFor(id,digest);Directory.CreateDirectory(DirectoryFor(id));var temporary=target+"."+Guid.NewGuid().ToString("N")+".tmp";
+        try
+        {
+            long length=0;using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            await using(var output=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
+            {
+                var buffer=new byte[81920];int count;
+                while((count=await input.ReadAsync(buffer,ct))>0) {length+=count;if(length>expectedBytes) throw new InvalidDataException("Artefact trop long.");hash.AppendData(buffer,0,count);await output.WriteAsync(buffer.AsMemory(0,count),ct);}
+                await output.FlushAsync(ct);output.Flush(true);
+            }
+            if(length!=expectedBytes||Convert.ToHexStringLower(hash.GetHashAndReset())!=digest) throw new InvalidDataException("Artefact incomplet ou corrompu.");
+            if(!File.Exists(target)) {try {Encoding.Core.AtomicFilePublication.Publish(temporary,target);} catch(IOException) when(File.Exists(target)) {}}
+            await using(var existing=File.OpenRead(target)) if(Convert.ToHexStringLower(await SHA256.HashDataAsync(existing,ct))!=digest) throw new InvalidDataException("Cache durable corrompu.");
+            Encoding.Core.AtomicFilePublication.Confirm(target);
+        }
+        finally {if(File.Exists(temporary)) File.Delete(temporary);}
+    }
     public async Task<bool> AuthorizeAsync(Guid id,Guid actor,long epoch,CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
