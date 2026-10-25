@@ -157,7 +157,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
             w.previous_worker_node_id,w.library_id,w.source_node_id,
             (SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),e.updated_at
           FROM executions e JOIN execution_work w ON w.execution_id=e.id
-          WHERE {TaskOwnershipRepository.ActiveSql("e.id")} AND w.worker_node_id IS NULL AND w.handoff_selector IS NOT NULL AND w.available_at<=clock_timestamp()
+          WHERE {TaskOwnershipRepository.ActiveSql("e.id")} AND w.worker_node_id IS NULL AND w.handoff_selector IS NOT NULL AND w.handoff_selector->>'mode'<>'server' AND w.available_at<=clock_timestamp()
             AND ((e.state='running' AND w.handoff_pending) OR (e.state='queued' AND e.retry_of IS NOT NULL))
           ORDER BY e.updated_at LIMIT 100
           """,c))

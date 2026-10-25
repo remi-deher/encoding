@@ -19,6 +19,8 @@ public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactSt
         JOIN execution_work w ON w.execution_id = e.id
         WHERE w.artifacts_purged_at IS NULL
           AND e.finished_at IS NOT NULL
+          AND NOT EXISTS(SELECT 1 FROM task_quarantines q WHERE q.execution_id=e.id)
+          AND NOT EXISTS(SELECT 1 FROM task_transfers t WHERE t.execution_id=e.id AND t.state IN ('proposed','received'))
           AND NOT EXISTS(SELECT 1 FROM pending_source_writes p WHERE p.execution_id=e.id AND p.state IN ('waiting','claimed'))
           AND ((e.state IN ('succeeded','cancelled') AND e.finished_at < clock_timestamp() - make_interval(days => @days))
             OR (e.state = 'failed' AND @failedDays > 0 AND e.finished_at < clock_timestamp() - make_interval(days => @failedDays)))

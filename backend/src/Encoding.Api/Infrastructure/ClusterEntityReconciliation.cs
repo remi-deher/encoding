@@ -645,12 +645,7 @@ public sealed partial class ClusterEntityReconciliation(
         {
             if (!row.TryGetPropertyValue(column, out var value) || value is null || IsEncrypted(value)) continue;
             var raw = System.Text.Encoding.UTF8.GetBytes(value.ToJsonString(JsonOptions));
-            var nonce = RandomNumberGenerator.GetBytes(12);
-            var ciphertext = new byte[raw.Length];
-            var tag = new byte[16];
-            using var aes = new AesGcm(DeriveKey(dataKeyStore.GetRequired(clusterId)), tag.Length);
-            aes.Encrypt(nonce, raw, ciphertext, tag, System.Text.Encoding.UTF8.GetBytes(table + "." + column));
-            row[column] = new JsonObject { ["encrypted"] = Convert.ToBase64String([.. nonce, .. tag, .. ciphertext]) };
+            row[column] = new JsonObject { ["encrypted"] = ClusterPayloadProtection.Protect(dataKeyStore.GetRequired(clusterId),raw,table+"."+column) };
         }
     }
 
@@ -661,12 +656,7 @@ public sealed partial class ClusterEntityReconciliation(
             foreach (var column in SensitiveColumns(table))
             {
                 if (!row.TryGetPropertyValue(column, out var value) || value is null || !IsEncrypted(value)) continue;
-                var packed = Convert.FromBase64String(value["encrypted"]!.GetValue<string>());
-                if (packed.Length < 28) return false;
-                var plaintext = new byte[packed.Length - 28];
-                using var aes = new AesGcm(DeriveKey(dataKeyStore.GetRequired(clusterId)), 16);
-                aes.Decrypt(packed.AsSpan(0, 12), packed.AsSpan(28), packed.AsSpan(12, 16), plaintext, System.Text.Encoding.UTF8.GetBytes(table + "." + column));
-                row[column] = JsonNode.Parse(plaintext);
+                row[column] = JsonNode.Parse(ClusterPayloadProtection.Unprotect(dataKeyStore.GetRequired(clusterId),value["encrypted"]!.GetValue<string>(),table+"."+column));
             }
             return true;
         }
@@ -677,11 +667,29 @@ public sealed partial class ClusterEntityReconciliation(
     }
 
     private static bool IsEncrypted(JsonNode node) => node is JsonObject obj && obj.Count == 1 && obj.ContainsKey("encrypted");
-    private static byte[] DeriveKey(ReadOnlySpan<byte> clusterDataKey) =>
-        HMACSHA256.HashData(clusterDataKey, System.Text.Encoding.UTF8.GetBytes("Encoding.ClusterReconciliation.Data.v2"));
 
     private async Task UpsertRowAsync(DbConnection connection, DbTransaction transaction, EntityTable table, JsonObject row, CancellationToken ct)
     {
+        if(table.Name is "executions" or "execution_steps" or "execution_events")
+        {
+            var id=row[table.Name=="executions"?"id":"execution_id"]?.GetValue<string>();
+            if(id is not null)
+            {
+                await using var owned=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN task_ownership o ON o.execution_id=w.execution_id JOIN task_server_identity s ON s.peer_id=o.owner_peer_id WHERE w.execution_id=@id AND o.state IN ('active','frozen'))",connection,transaction);
+                owned.Parameters.AddWithValue("id",Guid.Parse(id));
+                if(await owned.ScalarBoolAsync(ct))
+                {
+                    // Late replicated audit for an already imported completed invocation is immutable.
+                    // It may fill missing command logs, never replace current checkpoints or runtime state.
+                    if(table.Name=="execution_steps" && row["completed_at"] is not null && row["checkpoint"] is not null && row["command_logs"] is not null)
+                    {
+                        await using var audit=Sql.Command("UPDATE execution_steps SET command_logs=@logs WHERE execution_id=@id AND node_id=@node AND invocation_id=@invocation AND completed_at IS NOT NULL AND checkpoint=@checkpoint AND length(command_logs)<length(@logs)",connection,transaction);
+                        audit.Parameters.AddWithValue("id",Guid.Parse(id));audit.Parameters.AddWithValue("node",row["node_id"]!.GetValue<string>());audit.Parameters.AddWithValue("invocation",Guid.Parse(row["invocation_id"]!.GetValue<string>()));audit.Parameters.AddWithValue("checkpoint",SqlKind.Json,row["checkpoint"]!.ToJsonString(JsonOptions));audit.Parameters.AddWithValue("logs",SqlKind.Json,row["command_logs"]!.ToJsonString(JsonOptions));await audit.ExecuteNonQueryAsync(ct);
+                    }
+                    return;
+                }
+            }
+        }
         var localRow = PrepareRowForLocalStorage(table, row);
         var expressions = table.Columns.Select(column => table.BinaryColumns.Contains(column, StringComparer.Ordinal) ? "@binary_" + column : "json_extract(@row, '$." + column + "')").ToArray();
         var updates = table.Columns.Where(column => !table.KeyColumns.Contains(column, StringComparer.Ordinal) && !table.PreserveColumnsOnUpdate.Contains(column, StringComparer.Ordinal)).Select(column => column == "last_seen_at" && table.Name == "cluster_nodes"

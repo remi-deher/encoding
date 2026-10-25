@@ -13,7 +13,7 @@ import { GuidedStep } from '../ui/guided-setup.component';
 import { DiscoveredCluster, LocalNodePairing, LocalNodeStatus } from './local-node';
 import { NodeModeStatus } from './node-mode';
 import { NodeResponse } from './cluster';
-import { ClusterReconciliationHealthStatus } from '../services/cluster-api';
+import { ClusterReconciliationHealthStatus, ClusterTaskStatus } from '../services/cluster-api';
 
 export const NODE_MANAGEMENT_TABS = [
   { value: 'node', label: 'Ce nœud' },
@@ -553,7 +553,54 @@ export function reconciliationBannerPresentation(
   status: ClusterReconciliationHealthStatus | null,
   serversCount: number,
   isReady: boolean = true,
+  tasks?: ClusterTaskStatus | null,
 ): ReconciliationBannerPresentation {
+  const relayed =
+    tasks?.observations.filter((observation) => observation.observerPeerId !== tasks.localPeerId)
+      .length ?? 0;
+  const hints = relayed
+    ? ` ${relayed} observation(s) de présence relayée(s), utilisées comme indices uniquement.`
+    : '';
+  if (tasks?.neutralized) {
+    return {
+      title: 'Serveur neutralisé — reprise suspendue',
+      description:
+        'Ce serveur doit rattraper son journal puis être réadmis par un administrateur. Les tâches cédées restent à leur nouveau propriétaire.',
+      isAlert: true,
+    };
+  }
+  if (tasks?.isolated) {
+    return {
+      title: 'Serveur isolé — travail possédé conservé',
+      description: `Les calculs et publications sans écrasement continuent après le rattrapage initial. Les transferts et modifications des sources attendent la réconciliation. ${tasks.waitingSourceWrites} opération(s) source en attente. Un pair injoignable ne peut pas être repris automatiquement.${hints}`,
+      isAlert: true,
+    };
+  }
+  if (tasks?.catchingUp) {
+    return {
+      title: 'Rattrapage du journal en cours',
+      description:
+        'Les transferts et modifications des sources attendent la réconciliation complète. Au redémarrage, les anciennes tâches restent suspendues pendant ce rattrapage.',
+      isAlert: false,
+    };
+  }
+  if (tasks && (tasks.waitingSourceWrites || tasks.pendingTransfers)) {
+    return {
+      title: 'Coordination des traitements en cours',
+      description: `${tasks.waitingSourceWrites} opération(s) source en attente ; ${tasks.pendingTransfers} transfert(s) en préparation ou réception inactive. Une réception ne permet pas d’exécuter la tâche avant son activation.${hints}`,
+      isAlert: true,
+    };
+  }
+  if (
+    tasks &&
+    (tasks.pendingCheckpointPreparations ?? 0) + (tasks.pendingCheckpointCaches ?? 0) > 0
+  ) {
+    return {
+      title: 'Préparation de la reprise des traitements',
+      description: `${tasks.pendingCheckpointPreparations ?? 0} checkpoint(s) à préparer ; ${tasks.pendingCheckpointCaches ?? 0} jeu(x) de fichiers à mettre en cache. Une reprise reste refusée tant que ses fichiers vérifiés sont absents.${hints}`,
+      isAlert: false,
+    };
+  }
   if (!status) {
     return {
       title: 'État de synchronisation indisponible',
@@ -604,7 +651,7 @@ export function reconciliationBannerPresentation(
   }
   return {
     title: `Synchronisation active avec ${peers.length} serveur(s)`,
-    description: `Dernier échange réussi : ${new Date(Math.max(...peers.map((peer) => Date.parse(peer.lastSuccessAt!)))).toLocaleString()}.`,
+    description: `Dernier échange réussi : ${new Date(Math.max(...peers.map((peer) => Date.parse(peer.lastSuccessAt!)))).toLocaleString()}.${hints}`,
     isAlert: false,
   };
 }

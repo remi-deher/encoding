@@ -140,7 +140,7 @@ internal static partial class Harness
             "An agent announcing nodes 1.6.0 does not receive a flow that uses the profile choice.");
     }
 
-    private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
+    internal static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
         new("plugin/base", "1.9.0", ["general"], []),
         new("runtime/source-write-guard-v1", "1.0.0", ["general"], []),
         new("plugin/probe", "1.0.0", ["general"], []),
@@ -148,13 +148,13 @@ internal static partial class Harness
         new("plugin/video", "1.1.0", ["general"], []),
         new("plugin/audio", "1.0.0", ["general"], []),
         new("plugin/subtitles", "1.0.0", ["general"], []),
-        new("plugin/nodes", "1.7.0", ["general"], []),
+        new("plugin/nodes", "1.8.0", ["general"], []),
         new("plugin/conditions", "1.2.0", ["general"], []),
         new("plugin/plex", "1.1.0", ["general"], ["process"]),
         new("ffprobe", "7.0", ["video"], []),
         .. encode ? new NodeToolCapability[] { new("ffmpeg", "7.0", ["video"], ["cpu"], ["libx264", "libx265", "aac"]) } : []];
 
-    private static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)
+    internal static FlowNodeDefinition Node(FlowComponentRegistry registry, string id, string componentId, Dictionary<string, JsonElement>? values = null)
     {
         var reference = registry.FindReference(componentId) ?? throw new InvalidOperationException($"Composant {componentId} introuvable.");
         var plugin = registry.Plugins.Single(plugin => plugin.Id == reference.PluginId);
@@ -163,7 +163,7 @@ internal static partial class Harness
         foreach (var pair in values ?? []) configuration[pair.Key] = pair.Value;
         return new(id, null, new(plugin.Id, plugin.Version, component.Id, component.Version, component.ConfigurationSchema.Version), configuration);
     }
-    private static FlowDefinition Chain(params FlowNodeDefinition[] nodes) => new(1, Guid.NewGuid(), 1, "Relay fixture", "video", nodes,
+    internal static FlowDefinition Chain(params FlowNodeDefinition[] nodes) => new(1, Guid.NewGuid(), 1, "Relay fixture", "video", nodes,
         nodes.Zip(nodes.Skip(1), (source, target) => new FlowConnectionDefinition(source.Id + "-" + target.Id, source.Id, "success", target.Id)).ToArray());
 
     private sealed class FixedProbe(params string[] usable) : IToolCapabilityProbe

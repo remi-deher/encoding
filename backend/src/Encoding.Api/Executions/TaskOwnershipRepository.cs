@@ -7,14 +7,15 @@ using Encoding.Contracts.Executions;
 namespace Encoding.Api.Executions;
 
 /// <summary>Creation authority is signed by its initiating server, independently of the mesh relay identity.</summary>
-public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityStore identity,ClusterReconciliationHealth? health=null)
+public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityStore identity,ClusterReconciliationHealth? health=null,TaskCheckpointRepository? checkpoints=null,TaskCoordinationProjection? coordination=null)
 {
+    internal bool IsLocalPeer(Guid peer)=>peer==identity.PeerId;
     internal const string Prefix="tasks/v1/events/";
     internal const int MaximumAssignments=128;
     internal static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
 
     // Shared fence for every local lease and source-write path. Legacy test repositories have no bound server identity.
-    internal static string ActiveSql(string execution)=>$"(NOT EXISTS(SELECT 1 FROM task_server_identity) OR EXISTS(SELECT 1 FROM task_ownership own JOIN task_server_identity srv ON srv.peer_id=own.owner_peer_id WHERE own.execution_id={execution} AND own.state='active' AND own.cluster_id=(SELECT id FROM cluster_identity WHERE singleton=true) AND srv.ready=1))";
+    internal static string ActiveSql(string execution,bool control=false)=>$"(NOT EXISTS(SELECT 1 FROM task_server_identity) OR EXISTS(SELECT 1 FROM task_ownership own JOIN task_server_identity srv ON srv.peer_id=own.owner_peer_id WHERE own.execution_id={execution} AND own.state IN ({(control?"'active','frozen','quarantined'":"'active'")}) AND own.cluster_id=(SELECT id FROM cluster_identity WHERE singleton=true) AND srv.ready=1 AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped WHERE stopped.peer_id=srv.peer_id AND stopped.released_at IS NULL)))";
     public async Task InitializeAsync(CancellationToken ct)
     {
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);await BindIdentityAsync(c,tx,ct);
@@ -23,16 +24,18 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
     internal async Task<bool> PrepareClaimsAsync(CancellationToken ct)
     {
         await ProjectAsync(ct);
-        await using(var hint=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=1) AND NOT EXISTS(SELECT 1 FROM task_ownership_inbox) AND NOT EXISTS(SELECT 1 FROM cluster_sync_pending_projections) AND NOT EXISTS(SELECT 1 FROM execution_work w WHERE NOT EXISTS(SELECT 1 FROM task_ownership o WHERE o.execution_id=w.execution_id))"))
+        if(coordination is not null) await coordination.ProjectAsync(ct);
+        await using(var hint=db.CreateCommand("SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=1) AND NOT EXISTS(SELECT 1 FROM task_ownership_inbox) AND NOT EXISTS(SELECT 1 FROM task_coordination_inbox) AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped JOIN task_server_identity s ON stopped.peer_id=s.peer_id WHERE stopped.released_at IS NULL) AND NOT EXISTS(SELECT 1 FROM cluster_sync_pending_projections) AND NOT EXISTS(SELECT 1 FROM execution_work w WHERE NOT EXISTS(SELECT 1 FROM task_ownership o WHERE o.execution_id=w.execution_id))"))
             if(await hint.ScalarBoolAsync(ct)) return true;
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);await BindIdentityAsync(c,tx,ct);
-        await using(var pending=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership_inbox) OR EXISTS(SELECT 1 FROM cluster_sync_pending_projections)",c,tx)) if(await pending.ScalarBoolAsync(ct)) return false;
+        await using(var stopped=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_neutralizations WHERE peer_id=@local AND released_at IS NULL)",c,tx)) {stopped.Parameters.AddWithValue("local",identity.PeerId);if(await stopped.ScalarBoolAsync(ct)) return false;}
+        await using(var pending=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership_inbox) OR EXISTS(SELECT 1 FROM task_coordination_inbox) OR EXISTS(SELECT 1 FROM cluster_sync_pending_projections)",c,tx)) if(await pending.ScalarBoolAsync(ct)) return false;
         await using(var ready=Sql.Command("SELECT ready FROM task_server_identity",c,tx))
         {
             if(!await ready.ScalarBoolAsync(ct))
             {
                 var peers=new List<Guid>();
-                await using(var read=Sql.Command("SELECT a.peer_id FROM cluster_peer_admissions a JOIN cluster_identity i ON i.id=a.cluster_id LEFT JOIN cluster_nodes n ON n.id=a.node_id WHERE a.revoked_at IS NULL AND a.peer_id<>@local AND (a.node_id IS NULL OR n.deleted_at IS NULL AND 'server'=ANY(n.roles))",c,tx))
+                await using(var read=Sql.Command("SELECT a.peer_id FROM cluster_peer_admissions a JOIN cluster_identity i ON i.id=a.cluster_id LEFT JOIN cluster_nodes n ON n.id=a.node_id WHERE a.revoked_at IS NULL AND a.peer_id<>@local AND NOT EXISTS(SELECT 1 FROM task_neutralizations stopped WHERE stopped.peer_id=a.peer_id AND stopped.released_at IS NULL) AND (a.node_id IS NULL OR n.deleted_at IS NULL AND 'server'=ANY(n.roles))",c,tx))
                 {
                     read.Parameters.AddWithValue("local",identity.PeerId);await using var r=await read.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct)) peers.Add(r.GetGuid(0));
                 }
@@ -78,6 +81,7 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
             var key=Prefix+plan.EventId.ToString("N");
             await ClusterReconciliationRepository.SetRegisterInTransactionAsync(key,body,c,tx,ct);
             await ApplyPlanAsync(key,body,c,tx,ct);
+            if(checkpoints is not null) await checkpoints.MarkDirtyAsync(assignments.Select(a=>a.ExecutionId).ToArray(),c,tx,ct);
         }
     }
     private async Task BindIdentityAsync(DbConnection c,DbTransaction tx,CancellationToken ct)
@@ -95,6 +99,7 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
         await using(var read=Sql.Command("SELECT register_key,body FROM task_ownership_inbox ORDER BY origin_id,sequence LIMIT 32",c,tx))
         await using(var r=await read.ExecuteReaderAsync(ct)) while(await r.ReadAsync(ct)) pending.Add((r.GetString(0),r.GetString(1)));
         foreach(var item in pending) await ApplyPlanAsync(item.Key,item.Body,c,tx,ct);
+        if(coordination is not null) await TaskCoordinationProjection.DeduplicateAsync(c,tx,ct);
         await tx.CommitAsync(ct);return pending.Count;
     }
     private async Task ApplyPlanAsync(string key,string body,DbConnection c,DbTransaction tx,CancellationToken ct)
@@ -156,6 +161,8 @@ public sealed class TaskOwnershipRepository(DbDataSource db,ClusterPeerIdentityS
         }
         await using var remove=Sql.Command("DELETE FROM task_ownership_inbox WHERE register_key=@key AND body=@body",c,tx);remove.Parameters.AddWithValue("key",key);remove.Parameters.AddWithValue("body",body);await remove.ExecuteNonQueryAsync(ct);
     }
+    internal async Task SaveCheckpointAsync(Guid id,DbConnection c,DbTransaction tx,CancellationToken ct)
+    {if(checkpoints is not null) await checkpoints.SaveAsync(id,c,tx,ct);}
     public async Task<TaskOwnershipStatus?> GetAsync(Guid id,CancellationToken ct)
     {
         await using var cmd=db.CreateCommand("SELECT owner_peer_id,epoch,state FROM task_ownership WHERE execution_id=@id");cmd.Parameters.AddWithValue("id",id);await using var r=await cmd.ExecuteReaderAsync(ct);

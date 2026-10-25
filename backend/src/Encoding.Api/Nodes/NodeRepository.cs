@@ -1,5 +1,6 @@
 using Encoding.Api.Infrastructure.Data;
 using Encoding.Api.Infrastructure;
+using Encoding.Api.Executions;
 using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -10,7 +11,7 @@ namespace Encoding.Api.Nodes;
 
 public enum PairingRequestResult { Created, Conflict, TooMany }
 
-public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmissionRepository? peerAdmissions = null)
+public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmissionRepository? peerAdmissions = null,ClusterSourceWriteBarrier? coordination=null,TaskOwnershipRepository? ownership=null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -421,14 +422,23 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
         return await command.ExecuteNonQueryAsync(ct) > 0;
     }
 
-    public enum ModeRequestResult { Accepted, NotFound, LastServer }
+    private async Task<bool> CanCoordinateAsync(CancellationToken ct)
+    {
+        if(coordination is null || !await coordination.IsClusteredAsync(ct)) return true;
+        if(!await coordination.VerifyAsync(ct)) return false;
+        if(ownership is not null) await ownership.PrepareClaimsAsync(ct);
+        return await coordination.CheckAsync(ct) is null;
+    }
+    public enum ModeRequestResult { Accepted, NotFound, LastServer, CoordinationUnavailable }
 
     /// <summary>
     /// Enregistre le mode voulu d'un nœud ; le nœud l'applique à son prochain signal de présence. Refuse de retirer la fonction
     /// serveur du dernier nœud serveur en ligne (les transactions SQLite sérialisent les changements de mode).
     /// </summary>
-    public async Task<ModeRequestResult> RequestModeAsync(Guid nodeId, bool server, bool worker, TimeSpan offlineAfter, CancellationToken ct)
+    public async Task<ModeRequestResult> RequestModeAsync(Guid nodeId, bool server, bool worker, TimeSpan offlineAfter, CancellationToken ct,bool persist=true)
     {
+        await using(var exists=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL)")) {exists.Parameters.AddWithValue("id",nodeId);if(!await exists.ScalarBoolAsync(ct)) return ModeRequestResult.NotFound;}
+        if(!await CanCoordinateAsync(ct)) return ModeRequestResult.CoordinationUnavailable;
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(ct);
         string[] roles;
@@ -441,6 +451,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
 
         if (roles.Contains("server") && !server)
         {
+            await using(var queue=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id WHERE o.state IN ('active','frozen','received') AND e.state IN ('queued','running','cancelling'))",c,tx)) if(await queue.ScalarBoolAsync(ct)) return ModeRequestResult.CoordinationUnavailable;
             await using var others = Sql.Command("""
                 SELECT count(*) FROM cluster_nodes
                 WHERE id <> @id AND deleted_at IS NULL AND 'server' = ANY(roles) AND 'server' = ANY(COALESCE(desired_roles, roles))
@@ -450,6 +461,7 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
             others.Parameters.AddWithValue("offline_after", offlineAfter);
             if ((long)(await others.ExecuteScalarAsync(ct))! == 0) return ModeRequestResult.LastServer;
         }
+        if(!persist) return ModeRequestResult.Accepted;
         var desired = new[] { server ? "server" : null, worker ? "worker" : null }.Where(role => role is not null).ToArray();
         await using (var update = Sql.Command("""
             UPDATE cluster_nodes SET desired_roles = CASE WHEN @desired <@ roles AND roles <@ @desired THEN NULL ELSE @desired END
@@ -475,15 +487,21 @@ public sealed class NodeRepository(DbDataSource dataSource, ClusterPeerAdmission
 
     public async Task<string> DeleteAsync(Guid id,CancellationToken ct)
     {
+        bool server;
+        await using(var read=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))")) {read.Parameters.AddWithValue("id",id);server=await read.ScalarBoolAsync(ct);}
+        if(server && !await CanCoordinateAsync(ct)) return "coordination";
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         await using var node=Sql.Command("SELECT id FROM cluster_nodes WHERE id=@id AND deleted_at IS NULL FOR UPDATE",c,tx);
         node.Parameters.AddWithValue("id",id); if(await node.ExecuteScalarAsync(ct) is null) return "missing";
+        if(!server) {await using var changed=Sql.Command("SELECT EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))",c,tx);changed.Parameters.AddWithValue("id",id);if(await changed.ScalarBoolAsync(ct)) return "coordination";}
         await using var active=Sql.Command("""
           SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id
             WHERE (w.worker_node_id=@id OR w.source_node_id=@id) AND (w.lease_until>clock_timestamp() OR w.handoff_pending) AND e.state IN ('running','cancelling'))
           OR EXISTS(SELECT 1 FROM library_scans WHERE node_id=@id AND state='running' AND lease_until>clock_timestamp())
           """,c,tx);
         active.Parameters.AddWithValue("id",id); if((await active.ScalarBoolAsync(ct))) return "busy";
+        await using(var queues=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_ownership o JOIN executions e ON e.id=o.execution_id WHERE o.state IN ('active','frozen','received') AND e.state IN ('queued','running','cancelling')) AND EXISTS(SELECT 1 FROM cluster_nodes WHERE id=@id AND 'server'=ANY(roles))",c,tx))
+        {queues.Parameters.AddWithValue("id",id);if(await queues.ScalarBoolAsync(ct)) return "busy";}
         if (peerAdmissions is not null) await peerAdmissions.RevokeNodeAdmissionAsync(c, tx, id, ct);
         await using var remove=Sql.Command("""
           UPDATE cluster_nodes SET deleted_at=clock_timestamp(),node_token_hash=NULL WHERE id=@id;

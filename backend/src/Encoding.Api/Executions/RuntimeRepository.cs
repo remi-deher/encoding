@@ -212,6 +212,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
           FROM execution_work w JOIN executions e ON e.id=w.execution_id JOIN libraries l ON l.id=w.library_id
           WHERE (e.state='queued' OR e.state='running' AND w.worker_node_id IS NULL)
           AND {TaskOwnershipRepository.ActiveSql("e.id")}
+          AND COALESCE(w.handoff_selector->>'mode','')<>'server'
           AND l.is_active AND w.available_at<=clock_timestamp()
           AND w.lease_until IS NULL
           {cursorPredicate}
@@ -339,6 +340,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                         await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return new(null);
                     }
                     if(destination.Mode=="node" && destination.TargetNodeId==worker) returnsToSelf=true;
+                    if(destination.Mode=="server" && !capabilities.Any(c=>c.ToolId=="plugin/nodes" && Version.TryParse(c.Version,out var v) && v>=new Version(1,8,0))) returnsToSelf=true;
                 }
                 if(returnsToSelf) continue;
             }
@@ -392,6 +394,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 prepare.Parameters.AddWithValue("id",item.Id); prepare.Parameters.AddWithValue("requested",!directRead);
                 await prepare.ExecuteNonQueryAsync(ct);
             }
+            if(ownership is not null) await ownership.SaveCheckpointAsync(item.Id,c,tx,ct);
             await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead,SourceWriteGuardsSupported:sourceWrites is not null));
         }
         return new(null, candidates.Count == CandidatePageSize
@@ -583,6 +586,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             var snapshot=await settings.ExecuteScalarAsync(ct) as byte[];
             try { handoff=RuntimeHandoffPolicy.Resolve(node,snapshot is null?null:pluginConfigurations.ReadSnapshot(snapshot).GetValueOrDefault("nodes")); }
             catch(ArgumentException) { return false; }
+            if(handoff.Mode=="server" && (ownership is null || ownership.IsLocalPeer(handoff.TargetNodeId!.Value))) return false;
             if(cp.Handoff!=handoff || cp.NextNodeId is null || handoff.Mode=="node" && handoff.TargetNodeId==worker) return false;
         }
         else if(cp.Handoff is not null) return false;
@@ -639,6 +643,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             await yield.ExecuteNonQueryAsync(ct);
         }
         if(wait is not null) await ExecutionWaitRepository.BeginAsync(id,node.Id,wait,request.Epoch,c,tx,ct);
+        if(ownership is not null) await ownership.SaveCheckpointAsync(id,c,tx,ct);
         await tx.CommitAsync(ct); return true;
     }
 

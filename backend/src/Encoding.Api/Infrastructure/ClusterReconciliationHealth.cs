@@ -27,6 +27,7 @@ public sealed class ClusterReconciliationHealth(TimeProvider? timeProvider=null)
     private string? discoveryError;
 
     private readonly Dictionary<Guid,(string Url,long At)> caughtUp = new();
+    private readonly Dictionary<Guid,(string Url,long At)> authenticated=new();
     private readonly Dictionary<Guid,long> sourceWriteSupport=new();
     internal void ConfirmSourceWriteSupport(Guid peer,bool supported)
     {
@@ -40,16 +41,19 @@ public sealed class ClusterReconciliationHealth(TimeProvider? timeProvider=null)
     {
         lock(gate)
         {
-            foreach(var other in caughtUp.Where(item=>item.Key!=peer && string.Equals(item.Value.Url,url,StringComparison.OrdinalIgnoreCase)).Select(item=>item.Key).ToArray())
-            {caughtUp.Remove(other);sourceWriteSupport.Remove(other);}
+            foreach(var other in authenticated.Where(item=>item.Key!=peer && string.Equals(item.Value.Url,url,StringComparison.OrdinalIgnoreCase)).Select(item=>item.Key).ToArray())
+            {caughtUp.Remove(other);authenticated.Remove(other);sourceWriteSupport.Remove(other);}
+            authenticated[peer]=(url,clock.GetTimestamp());
             if(complete) caughtUp[peer]=(url,clock.GetTimestamp());
             else caughtUp.Remove(peer);
         }
     }
     internal string? AuthenticatedEndpoint(Guid peer)
     {
-        lock(gate) return caughtUp.TryGetValue(peer,out var state)?state.Url:null;
+        lock(gate) return authenticated.TryGetValue(peer,out var state)?state.Url:null;
     }
+    internal bool HasFreshAuthenticated(Guid peer,TimeSpan maximumAge)
+    {lock(gate) return enabled && authenticated.TryGetValue(peer,out var state) && clock.GetElapsedTime(state.At)<=maximumAge;}
     internal bool HasFreshCatchUp(Guid peer,TimeSpan maximumAge)
     {
         lock(gate) return enabled && caughtUp.TryGetValue(peer,out var state)
@@ -62,6 +66,7 @@ public sealed class ClusterReconciliationHealth(TimeProvider? timeProvider=null)
         {
             enabled = false;
             caughtUp.Clear();
+            authenticated.Clear();
             sourceWriteSupport.Clear();
             disabledReason = reason;
         }
@@ -129,7 +134,7 @@ public sealed class ClusterReconciliationHealth(TimeProvider? timeProvider=null)
             var peer = GetOrAdd(url);
             peer.LastAttemptAt = DateTimeOffset.UtcNow;
             peer.LastError = error;
-            foreach(var id in caughtUp.Where(item=>string.Equals(item.Value.Url,url,StringComparison.OrdinalIgnoreCase)).Select(item=>item.Key).ToArray()) {caughtUp.Remove(id);sourceWriteSupport.Remove(id);}
+            foreach(var id in authenticated.Where(item=>string.Equals(item.Value.Url,url,StringComparison.OrdinalIgnoreCase)).Select(item=>item.Key).ToArray()) {caughtUp.Remove(id);authenticated.Remove(id);sourceWriteSupport.Remove(id);}
         }
     }
 

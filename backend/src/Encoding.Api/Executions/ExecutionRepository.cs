@@ -7,19 +7,19 @@ using System.Text.Json;
 namespace Encoding.Api.Executions;
 
 /// <summary>Persistent lifecycle journal. Does not assign work or publish media.</summary>
-public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRegistry? components = null, ExecutionStreamBroadcaster? broadcaster = null,TaskOwnershipRepository? ownership=null)
+public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRegistry? components = null, ExecutionStreamBroadcaster? broadcaster = null,TaskOwnershipRepository? ownership=null,ClusterTaskCoordinator? coordinator=null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private const string Columns = """
  e.id,e.media,e.library_name,e.flow_name,e.flow_version,e.state,e.node_id,n.name,
  e.progress,e.detail,e.attempt,e.revision,e.queued_at,e.started_at,e.finished_at,e.updated_at,w.before_metadata::text,w.after_metadata::text,w.published_path
- ,(SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),w.library_id
+ ,(SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),COALESCE(w.library_id,o.library_id),o.owner_peer_id,o.epoch,o.state
  """;
     private static ExecutionResponse Read(DbDataReader r) => new(
     r.GetGuid(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4), r.GetString(5),
     r.IsDBNull(6) ? null : r.GetGuid(6), r.IsDBNull(7) ? null : r.GetString(7), r.IsDBNull(8) ? null : r.GetDecimal(8),
     r.GetString(9), r.GetInt32(10), r.GetInt32(11), r.GetFieldValue<DateTimeOffset>(12),
-    r.IsDBNull(13) ? null : r.GetFieldValue<DateTimeOffset>(13), r.IsDBNull(14) ? null : r.GetFieldValue<DateTimeOffset>(14), r.GetFieldValue<DateTimeOffset>(15),ReadMetadata(r,16),ReadMetadata(r,17),r.IsDBNull(18)?null:r.GetString(18),ReadVideoEncodings(r,19),r.IsDBNull(20)?null:r.GetGuid(20));
+    r.IsDBNull(13) ? null : r.GetFieldValue<DateTimeOffset>(13), r.IsDBNull(14) ? null : r.GetFieldValue<DateTimeOffset>(14), r.GetFieldValue<DateTimeOffset>(15),ReadMetadata(r,16),ReadMetadata(r,17),r.IsDBNull(18)?null:r.GetString(18),ReadVideoEncodings(r,19),r.IsDBNull(20)?null:r.GetGuid(20),r.IsDBNull(21)?null:new TaskOwnershipStatus(r.GetGuid(0),r.GetGuid(21),r.GetInt64(22),r.GetString(23)));
     private static System.Text.Json.JsonElement? ReadMetadata(DbDataReader reader,int index) => reader.IsDBNull(index)?null:System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(reader.GetString(index));
     private static IReadOnlyList<ResolvedVideoEncoding> ReadVideoEncodings(DbDataReader reader,int index)
     {
@@ -57,7 +57,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
                 cmd.Parameters.AddWithValue("since", since);
         }
         if (!string.IsNullOrWhiteSpace(query.State)) predicates.Add("e.state=@state");
-        if (query.LibraryId is not null) predicates.Add("w.library_id=@libraryId");
+        if (query.LibraryId is not null) predicates.Add("COALESCE(w.library_id,o.library_id)=@libraryId");
         if (query.NodeId is not null) predicates.Add("e.node_id=@nodeId");
         if (query.Since is not null) predicates.Add("e.updated_at>=@since");
         var whereSql = predicates.Count > 0 ? " WHERE " + string.Join(" AND ", predicates) : string.Empty;
@@ -69,13 +69,13 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         }
         else
         {
-            await using var countCmd = Sql.Command($"SELECT count(*)::integer FROM executions e LEFT JOIN execution_work w ON w.execution_id=e.id{whereSql}", c, tx);
+            await using var countCmd = Sql.Command($"SELECT count(*)::integer FROM executions e LEFT JOIN execution_work w ON w.execution_id=e.id LEFT JOIN task_ownership o ON o.execution_id=e.id{whereSql}", c, tx);
             BindFilters(countCmd);
             totalCount = await countCmd.ScalarInt32Async(ct) ?? 0;
         }
 
         var list = new List<ExecutionResponse>();
-        await using (var cmd = Sql.Command($"SELECT {Columns} FROM executions e LEFT JOIN cluster_nodes n ON n.id=e.node_id LEFT JOIN execution_work w ON w.execution_id=e.id{whereSql} ORDER BY CASE WHEN e.state IN ('queued','running','cancelling') THEN 0 ELSE 1 END,e.updated_at DESC,e.id LIMIT @limit OFFSET @offset", c, tx))
+        await using (var cmd = Sql.Command($"SELECT {Columns} FROM executions e LEFT JOIN cluster_nodes n ON n.id=e.node_id LEFT JOIN execution_work w ON w.execution_id=e.id LEFT JOIN task_ownership o ON o.execution_id=e.id{whereSql} ORDER BY CASE WHEN e.state IN ('queued','running','cancelling') THEN 0 ELSE 1 END,e.updated_at DESC,e.id LIMIT @limit OFFSET @offset", c, tx))
         {
             BindFilters(cmd);
             cmd.Parameters.AddWithValue("limit", limit);
@@ -95,7 +95,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     public async Task<ExecutionResponse?> GetAsync(Guid id, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
-        await using var cmd = Sql.Command($"SELECT {Columns} FROM executions e LEFT JOIN cluster_nodes n ON n.id=e.node_id LEFT JOIN execution_work w ON w.execution_id=e.id WHERE e.id=@id", c);
+        await using var cmd = Sql.Command($"SELECT {Columns} FROM executions e LEFT JOIN cluster_nodes n ON n.id=e.node_id LEFT JOIN execution_work w ON w.execution_id=e.id LEFT JOIN task_ownership o ON o.execution_id=e.id WHERE e.id=@id", c);
         cmd.Parameters.AddWithValue("id", id); await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Read(r) : null;
     }
@@ -172,13 +172,16 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     }
     public async Task<bool> CancelAsync(Guid id, CancellationToken ct, int? expectedRevision = null)
     {
+        if(coordinator is not null && ownership is not null && await ownership.GetAsync(id,ct) is {} owner && !ownership.IsLocalPeer(owner.OwnerPeerId))
+            return (await coordinator.ControlAsync(owner.OwnerPeerId,"cancel",id,expectedRevision,ct)).Success;
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
-        await using var cmd = Sql.Command("""
+        await using var cmd = Sql.Command($"""
    UPDATE executions SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancelling' END,
    detail=CASE WHEN state='queued' THEN 'Annulée avant démarrage.' ELSE 'Annulation demandée ; attente de confirmation du worker.' END,
    finished_at=CASE WHEN state='queued' THEN clock_timestamp() ELSE NULL END,
    updated_at=clock_timestamp(),revision=revision+1 WHERE id=@id AND state IN ('queued','running')
    AND (@expectedRevision IS NULL OR revision=@expectedRevision)
+   AND ({TaskOwnershipRepository.ActiveSql("@id",control:true)} OR (NOT EXISTS(SELECT 1 FROM task_ownership WHERE execution_id=@id) AND NOT EXISTS(SELECT 1 FROM execution_work WHERE execution_id=@id)))
    RETURNING revision,state,detail
    """, c, tx); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("expectedRevision", (object?)expectedRevision ?? DBNull.Value);
         int revision; string state, detail;
@@ -189,6 +192,8 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     }
     public async Task<Guid?> RetryAsync(Guid id, CancellationToken ct)
     {
+        if(coordinator is not null && ownership is not null && await ownership.GetAsync(id,ct) is {} owner && !ownership.IsLocalPeer(owner.OwnerPeerId))
+        {var result=await coordinator.ControlAsync(owner.OwnerPeerId,"retry",id,null,ct);return result.Success&&Guid.TryParse(result.Payload,out var remoteCreated)?remoteCreated:null;}
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
         var created=await RetryInTransactionAsync(id,null,null,"Nouvelle tentative demandée.",c,tx,ct,ownership);
         if(created is null) return null;
@@ -200,6 +205,8 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     /// <summary>Creates a fresh attempt from the original source for a cancelled execution.</summary>
     public async Task<Guid?> ResumeAsync(Guid id, CancellationToken ct)
     {
+        if(coordinator is not null && ownership is not null && await ownership.GetAsync(id,ct) is {} owner && !ownership.IsLocalPeer(owner.OwnerPeerId))
+        {var result=await coordinator.ControlAsync(owner.OwnerPeerId,"resume",id,null,ct);return result.Success&&Guid.TryParse(result.Payload,out var remoteCreated)?remoteCreated:null;}
         await using var c = await dataSource.OpenConnectionAsync(ct);
         await using var tx = await c.BeginTransactionAsync(ct);
         var next = Guid.NewGuid();
