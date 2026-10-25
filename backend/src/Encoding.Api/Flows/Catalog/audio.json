@@ -227,7 +227,8 @@
       "compatiblePluginVersions": [
         "1.0.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "audio"
     },
     {
       "id": "audio-normalize",
@@ -468,7 +469,8 @@
       "compatiblePluginVersions": [
         "1.0.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "audio"
     },
     {
       "id": "audio-extract",
@@ -548,7 +550,8 @@
       "compatiblePluginVersions": [
         "1.0.0"
       ],
-      "producesFiles": true
+      "producesFiles": true,
+      "category": "audio"
     },
     {
       "id": "audio-rules",
@@ -650,7 +653,8 @@
       "compatiblePluginVersions": [
         "1.0.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "audio"
     },
     {
       "id": "audio-add-track",
@@ -747,7 +751,8 @@
       "compatiblePluginVersions": [
         "1.0.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "audio"
     },
     {
       "id": "audio-filter-languages",
@@ -845,7 +850,8 @@
       "compatiblePluginVersions": [
         "1.0.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "media-rules"
     },
     {
       "id": "audio-remove-commentary",
@@ -921,7 +927,8 @@
       "compatiblePluginVersions": [
         "1.0.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "audio"
     },
     {
       "id": "audio-convert-by-rules",
@@ -1188,7 +1195,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "audio"
     }
   ]
 }

@@ -58,7 +58,8 @@
       "compatiblePluginVersions": [
         "1.0.0",
         "1.1.0"
-      ]
+      ],
+      "category": "conditions"
     },
     {
       "id": "conditions-video-codec",
@@ -143,7 +144,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "category": "media-rules"
     },
     {
       "id": "conditions-audio-codec",
@@ -267,7 +269,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "category": "media-rules"
     },
     {
       "id": "conditions-video-resolution",
@@ -358,7 +361,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "category": "media-rules"
     },
     {
       "id": "conditions-audio-channels",
@@ -468,7 +472,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "category": "media-rules"
     },
     {
       "id": "conditions-audio-language",
@@ -592,7 +597,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.1.0"
-      ]
+      ],
+      "category": "media-rules"
     },
     {
       "id": "conditions-video-hdr",
@@ -675,7 +681,8 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "category": "media-rules"
     },
     {
       "id": "conditions-video-bitdepth",
@@ -746,7 +753,8 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": false,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "category": "media-rules"
     }
   ]
 }

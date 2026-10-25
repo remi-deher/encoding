@@ -1,6 +1,6 @@
 ---
 domain: ui
-updated: 2026-10-24
+updated: 2026-10-25
 legacy_adr: [0008, 0010, 0011, 0035, 0044, 0046, 0047, 0048, 0050, 0052, 0053, 0073, 0077, 0078, 0079, 0080, 0081]
 code:
   - frontend/src/styles.scss
@@ -26,6 +26,7 @@ Règles obligatoires : [UI_RULES.md](../../../UI_RULES.md). Ce fichier consigne 
 - Entrée centrée en haut ; sorties en bas avec cibles de 32 px. Icônes uniquement pour les identifiants/libellés exacts reconnus (oui/succès, non, erreur, suite, ignoré, attente, médias), numéro pour les sorties inconnues ; « non » en ambre distinct d’une erreur technique en rouge. Libellé et description accessibles par ARIA/infobulle ; ajout `＋` au survol/focus du port (ou sélection tactile), bouton dédié et menu de liaison. La palette et la validation restent pilotées par le catalogue et `flow-graph.ts` : les icônes ne modifient jamais le sens d’exécution.
 - Les mesures réelles (`ResizeObserver`) pilotent ancres SVG, obstacles, minicarte, centrage et placement automatique ; les estimations initiales restent compactes. Palette et poignée d’icône en glisser-déposer CDK ; Entrée ou double-clic pour configurer, Tab pour les ports ; minicarte inactive pendant la création d’une liaison pour ne pas intercepter un port situé dessous ; menu contextuel conservé (clic droit, Maj+F10, appui long 550 ms).
 - Configuration : formulaire de schéma commun avec `importance` (basic/advanced), `inline`, `section`, visibilité conditionnelle (masquer garde la valeur), champs de référence qui conservent une référence inconnue, divulgation progressive dans l'éditeur seulement.
+- Palette de composants : catégories fonctionnelles déclarées par `FlowComponentDescriptor.category` ; le serveur valide l'identifiant, l'éditeur fournit le libellé, une catégorie inconnue est rejetée et une catégorie absente (plugin tiers historique) apparaît sous « Utilitaires ». Les catégories ne dépendent ni du type de média ni du nom du plugin ; recherche globale et filtre par plugin restent indépendants.
 - Assistant IA contextuel unique et testeur de flow : voir [ai.md](ai.md) et [flows.md](flows.md). Annuler/Rétablir porte sur le graphe, pas sur le runtime.
 - Fiche du catalogue : aperçu lecture seule (même rendu, clé de placement distincte), versions, utilisation, validation, sauvegardes ; suppression avec tableau des bibliothèques détachées.
 
