@@ -521,7 +521,9 @@ test('inspector preserves optional advanced settings while editing a common sett
   const card = page.locator('.canvas-node[data-node-id="Action A"]');
   await card.locator('.drag').focus();
   await page.keyboard.press('Tab');
-  await expect(page.locator('.mat-mdc-tooltip-surface')).toContainText('Qualité : 20');
+  await expect(
+    page.locator('.mat-mdc-tooltip-surface').filter({ hasText: 'Action A · Qualité : 20' }),
+  ).toBeVisible();
   await card.locator('.canvas-title').click();
   const inspector = page.getByRole('complementary', { name: 'Action A', exact: true });
   await inspector.getByLabel('Qualité', { exact: true }).fill('22');
@@ -531,7 +533,9 @@ test('inspector preserves optional advanced settings while editing a common sett
   await inspector.getByRole('button', { name: 'Appliquer les réglages', exact: true }).click();
   await card.locator('.drag').focus();
   await page.keyboard.press('Tab');
-  await expect(page.locator('.mat-mdc-tooltip-surface')).toContainText('Qualité : 22');
+  await expect(
+    page.locator('.mat-mdc-tooltip-surface').filter({ hasText: 'Action A · Qualité : 22' }),
+  ).toBeVisible();
 });
 
 test('canvas wires follow dragging before release and selection highlights connections', async ({
