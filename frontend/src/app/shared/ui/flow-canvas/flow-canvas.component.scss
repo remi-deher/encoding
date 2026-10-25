@@ -91,6 +91,11 @@ path {
 .canvas-node:hover {
   background: var(--surface-container);
 }
+.canvas-node.dragging {
+  z-index: 4;
+  cursor: grabbing;
+  box-shadow: var(--elevation-3);
+}
 .canvas-node.selected {
   outline: 2px solid var(--accent);
   outline-offset: var(--space-1);
@@ -120,6 +125,8 @@ path {
   color: var(--node-color);
   cursor: grab;
   touch-action: none;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 .canvas-text {
   min-width: 0;
@@ -294,18 +301,43 @@ path {
 }
 
 .minimap {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: crosshair;
+  touch-action: none;
+}
+.minimap-panel {
   position: absolute;
-  bottom: 16px;
+  z-index: 100;
   right: 16px;
-  width: 150px;
-  padding: 10px;
+  bottom: 84px;
+  width: 220px;
+  padding: 8px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--surface-container-high);
   color: var(--text-secondary);
-  font: inherit;
   font-size: var(--font-label);
-  cursor: pointer;
+  box-shadow: var(--elevation-2);
+}
+.minimap-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+}
+.minimap-tools button {
+  min-width: 32px;
+  padding-inline: 6px;
+  color: var(--text-primary);
+}
+.minimap-tools span {
+  min-width: 42px;
+  text-align: center;
 }
 // A pending connection must reach ports beneath this navigation overlay.
 .minimap:disabled {
@@ -316,7 +348,7 @@ path {
   display: block;
   width: 100%;
   height: 90px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 .minimap rect {
   fill: var(--text-secondary);
@@ -331,8 +363,11 @@ path {
   stroke-width: 8;
 }
 @media (max-width: 700px) {
-  .minimap {
-    width: 110px;
+  .minimap-panel {
+    width: 188px;
+    right: auto;
+    left: 8px;
+    bottom: max(84px, calc(env(safe-area-inset-bottom) + 76px));
   }
   .minimap svg {
     height: 60px;

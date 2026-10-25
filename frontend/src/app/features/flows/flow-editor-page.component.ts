@@ -177,6 +177,7 @@ export class FlowEditorPageComponent {
   protected readonly paletteOpen = signal(false);
   protected readonly palettePinned = signal(false);
   protected readonly trayOpen = signal(false);
+  protected readonly autoLayoutRequest = signal(0);
   protected readonly trayTab = signal<'simulation' | 'diagnostics'>('simulation');
   protected readonly validationIssues = signal<readonly FlowValidationIssue[]>([]);
   protected readonly validationSuccess = signal<boolean | null>(null);
@@ -624,8 +625,14 @@ export class FlowEditorPageComponent {
       });
       this.addComponent(event.component);
     } else {
+      const previousCount = this.nodes().length;
       this.addComponent(event.component, event.position ?? { x: 0, y: 0 });
+      if (this.nodes().length > previousCount && !this.palettePinned()) this.paletteOpen.set(false);
     }
+  }
+
+  protected requestAutoLayout(): void {
+    this.autoLayoutRequest.update((request) => request + 1);
   }
 
   protected async onPaletteComponentSelected(component: FlowComponentDefinition): Promise<void> {

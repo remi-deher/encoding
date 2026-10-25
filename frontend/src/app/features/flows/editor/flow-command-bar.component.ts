@@ -122,9 +122,9 @@ import { MediaType } from '../../../shared/models/media-type';
           (click)="togglePalette.emit()"
           [attr.aria-pressed]="paletteOpen()"
           aria-label="Basculer la palette de blocs"
-          matTooltip="Ajouter une étape (Ctrl+B)"
+          matTooltip="Afficher la fenêtre des composants (Ctrl+B)"
         >
-          <app-icon name="add" /> Ajouter<span class="add-suffix"> une étape</span>
+          <app-icon name="add" /> Composants
         </button>
         <button
           matButton="tonal"
@@ -155,6 +155,9 @@ import { MediaType } from '../../../shared/models/media-type';
           <app-icon name="more" />
         </button>
         <mat-menu #moreMenu="matMenu">
+          <button mat-menu-item (click)="autoLayoutRequested.emit()">
+            <app-icon name="sort" /> Disposition automatique
+          </button>
           <button
             mat-menu-item
             [disabled]="disabled() || validating()"
@@ -399,6 +402,7 @@ export class FlowCommandBarComponent {
   readonly togglePalette = output<void>();
   readonly toggleTray = output<void>();
   readonly toggleConnections = output<void>();
+  readonly autoLayoutRequested = output<void>();
 
   protected readonly isEditingTitle = signal(false);
 
