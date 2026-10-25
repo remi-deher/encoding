@@ -141,6 +141,8 @@ builder.Services.AddHttpClient("MetadataSources", client => client.Timeout = Tim
 builder.Services.AddSingleton<AiMetadataEnrichmentService>();
 builder.Services.AddSingleton<RuntimeEligibility>();
 builder.Services.AddSingleton<ClusterSourceWriteBarrier>();
+builder.Services.AddSingleton<TaskOwnershipRepository>();
+builder.Services.AddHostedService<TaskOwnershipService>();
 builder.Services.AddSingleton<PendingSourceWriteRepository>();
 builder.Services.AddSingleton<RuntimeRepository>();
 builder.Services.AddSingleton<DiskLockRepository>();
@@ -180,6 +182,7 @@ var app = builder.Build();
 // Fail startup if the bundled installed catalog is invalid or missing.
 app.Services.GetRequiredService<FlowComponentRegistry>();
 await DatabaseMigrator.ApplyAsync(localDatabase, app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
+await app.Services.GetRequiredService<TaskOwnershipRepository>().InitializeAsync(app.Lifetime.ApplicationStopping);
 app.UseRequestObservability();
 app.UseTrustedProxies();
 app.UseSecurityHeaders();
@@ -221,6 +224,7 @@ app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();
 app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
+app.MapTaskOwnershipEndpoints();
 app.MapGet("/api/v1/system/version", (Encoding.Api.Updates.ReleaseService releases) =>
     Results.Ok(new { version = releases.Installed.Version, commit = releases.Installed.Commit }));
 app.MapGet("/api/v1/system/updates", (Encoding.Api.Updates.ReleaseService releases, CancellationToken ct) =>

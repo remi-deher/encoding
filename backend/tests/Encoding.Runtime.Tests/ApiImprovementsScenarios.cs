@@ -184,6 +184,10 @@ internal static class ApiImprovementsScenarios
                 var resumedId = (await resumeResp.Content.ReadFromJsonAsync<JsonElement>(Json)).GetProperty("id").GetGuid();
                 Check(resumedId != exec2 && await execRepo.GetAsync(resumedId, CancellationToken.None) is { State: "queued", Attempt: 2 },
                     "Resume responds with a linked queued attempt.");
+                using var ownerResponse=await admin.SendAsync(HttpMethod.Get,$"/api/v1/executions/{resumedId}/ownership");
+                Check(ownerResponse.StatusCode==HttpStatusCode.OK,"Resumed work has an observable owner immediately after creation.");
+                var owner=(await ownerResponse.Content.ReadFromJsonAsync<TaskOwnershipStatus>(Json))!;
+                Check(owner.ExecutionId==resumedId && owner.OwnerPeerId!=Guid.Empty && owner.Epoch==1 && owner.State=="active","A resumed execution has one initial active ownership epoch.");
             }
             Console.WriteLine("PASS: executions and events pagination and filtering.");
 

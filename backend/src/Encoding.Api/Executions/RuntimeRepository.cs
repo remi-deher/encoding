@@ -11,7 +11,7 @@ using Encoding.Contracts.Nodes;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null)
+public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     /// <summary>États des exécutions demandées ; les identifiants inconnus de ce serveur sont absents du résultat.</summary>
@@ -90,6 +90,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await EnqueueInTransactionAsync(request,flow,c,tx,ct)) return false;
+        if(ownership is not null) await ownership.CreateAsync([request.Id],c,tx,ct);
         await tx.CommitAsync(ct); return true;
     }
 
@@ -118,9 +119,9 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     /// </summary>
     internal static readonly TimeSpan SourceOfflineGrace = TimeSpan.FromMinutes(5);
 
-    private const string UnavailableSourcesSql = """
+    private static readonly string UnavailableSourcesSql = $"""
         SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id
-        WHERE e.state IN ('queued','running') AND NOT EXISTS(
+        WHERE e.state IN ('queued','running') AND {TaskOwnershipRepository.ActiveSql("e.id")} AND NOT EXISTS(
           SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
           WHERE a.library_id=w.library_id AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
             AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
@@ -159,6 +160,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
 
     public async Task<RuntimeLease?> ClaimAsync(Guid worker,CancellationToken ct)
     {
+        if(ownership is not null && !await ownership.PrepareClaimsAsync(ct)) return null;
         // Persist failures independently, so an inaccessible task cannot delay another eligible task.
         if (await HasUnavailableSourcesAsync(dataSource, presence.OfflineAfter, ct))
         {
@@ -209,6 +211,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             CASE WHEN w.wait_probe_due THEN (SELECT x.spec::text FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting') END,e.queued_at
           FROM execution_work w JOIN executions e ON e.id=w.execution_id JOIN libraries l ON l.id=w.library_id
           WHERE (e.state='queued' OR e.state='running' AND w.worker_node_id IS NULL)
+          AND {TaskOwnershipRepository.ActiveSql("e.id")}
           AND l.is_active AND w.available_at<=clock_timestamp()
           AND w.lease_until IS NULL
           {cursorPredicate}
@@ -406,10 +409,11 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
 
     internal static async Task<bool> FenceAsync(Guid id,Guid actor,long epoch,DbConnection c,DbTransaction tx,CancellationToken ct,bool source=false)
     {
-        await using var command=Sql.Command("""
+        await using var command=Sql.Command($"""
           SELECT w.execution_id FROM execution_work w JOIN executions e ON e.id=w.execution_id
           JOIN media_reservations m ON m.execution_id=w.execution_id AND m.lease_epoch=w.lease_epoch
           WHERE w.execution_id=@id AND w.lease_epoch=@epoch AND w.lease_until>clock_timestamp() AND m.lease_until>clock_timestamp()
+          AND {TaskOwnershipRepository.ActiveSql("e.id")}
           AND (CASE WHEN @source THEN w.source_node_id ELSE w.worker_node_id END)=@actor AND e.state IN ('running','cancelling')
           FOR UPDATE OF e,w,m
           """,c,tx);

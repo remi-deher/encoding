@@ -92,3 +92,6 @@ Le maillage LWW est l'unique modèle de réplication (ADR [0013](../adr/0013-ret
 
 ## Attentes d'écriture sur la source
 Migration 0054 : `runtime_source_write_waits` et `pending_source_writes` sont **locales, jamais réconciliées**, comme `execution_work` et les réservations. Elles conservent le checkpoint à reprendre ou le résultat déjà publié pendant une attente du cluster. Les métadonnées d'historique restent réconciliées par les règles existantes. Voir [runtime](runtime.md) et ADR [0014](../adr/0014-attente-des-ecritures-source.md).
+
+### Propriété initiale des tâches (0055)
+Les registres immuables signés `tasks/v1/events/<id>` sont **réconciliés** par le protocole existant. `task_server_identity`, `task_ownership`, `task_ownership_events` et `task_ownership_inbox` sont des **projections et coordinations locales**, non capturées comme entités LWW. Les preuves sont conservées et vérifiées à la projection ; rejouer un plan n'active aucun travail distant. Voir [ADR 0015](../adr/0015-attribution-journalisee-des-taches.md).

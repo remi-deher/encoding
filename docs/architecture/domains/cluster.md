@@ -78,3 +78,6 @@ Deux onglets : **Ce nœud** (fonctions, identité, capacités, fiche `app-resour
 
 ## Modèle unique sans quorum (2026-10-25)
 Le mode optionnel de consensus et son transport dédié sont retirés : chaque serveur utilise sa base locale et le maillage signé. Le travail local ne dépend d'aucun quorum. Voir ADR [0013](../adr/0013-retrait-mode-raft.md). Cela n'ajoute pas de reprise de file inter-serveurs : celle-ci exige le protocole de propriété et la neutralisation explicite de l'ancien propriétaire, encore non livrés.
+
+### Attribution initiale et redémarrage (ADR 0015)
+Chaque nouveau travail local possède désormais un plan signé, créé dans la même transaction que la mise en file. Le serveur initiateur est propriétaire initial ; les workers sont choisis selon les règles existantes. Après redémarrage, les claims attendent le rattrapage authentifié et la projection du journal. Une file déjà ouverte continue son travail possédé pendant une partition. Cette étape ne fournit pas encore de transfert ou de reprise de la file d'un autre serveur ; l'époque exposée par `GET /api/v1/executions/{id}/ownership` vaut 1 pour les créations initiales.
