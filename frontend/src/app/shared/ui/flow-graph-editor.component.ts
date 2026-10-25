@@ -35,6 +35,7 @@ export class FlowGraphEditorComponent {
   readonly componentDropped = output<FlowPaletteDrop>();
   readonly simulationResult = input<SimulationResult | null>(null);
   readonly simulationDetailsRequested = output<void>();
+  readonly autoLayoutRequest = input(0);
   readonly readOnly = input(false);
   readonly layoutKey = input('flow');
   readonly duplicateRequested = output<string>();

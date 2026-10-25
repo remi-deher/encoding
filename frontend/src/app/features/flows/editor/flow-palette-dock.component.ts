@@ -200,11 +200,42 @@ import { MediaType } from '../../../shared/models/media-type';
         </div>
       }
     </aside>
+    @if (paletteDrag.component(); as preview) {
+      <div
+        class="palette-drag-preview"
+        [style.--component-accent]="colors(preview).color"
+        [style.left.px]="paletteDrag.pointer().x + 16"
+        [style.top.px]="paletteDrag.pointer().y + 16"
+        aria-hidden="true"
+      >
+        <span class="component-kind">{{ kindLabel(preview.kind) }}</span>
+        <span class="component-title">{{ preview.name }}</span>
+        <span class="component-plugin">{{ preview.pluginName }}</span>
+      </div>
+    }
   `,
   styles: `
     :host {
       display: block;
       height: 100%;
+    }
+    .palette-drag-preview {
+      position: fixed;
+      z-index: 100;
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      width: 260px;
+      min-height: 38px;
+      padding: 5px 8px;
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm);
+      background: var(--surface-container-highest);
+      box-shadow: var(--elevation-3);
+      opacity: 0.96;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
     }
     .palette-dock {
       width: 320px;
