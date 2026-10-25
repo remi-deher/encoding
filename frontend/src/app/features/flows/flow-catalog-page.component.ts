@@ -95,7 +95,9 @@ export class FlowCatalogPageComponent {
   });
 
   protected readonly actionDefinition = signal<RecordFormData | null>(null);
-  protected readonly actionForm = computed(() => this.actionDefinition() ?? this.flowCreationForm());
+  protected readonly actionForm = computed(
+    () => this.actionDefinition() ?? this.flowCreationForm(),
+  );
   private readonly templateSource = signal<{
     readonly id: string;
     readonly version: number;
