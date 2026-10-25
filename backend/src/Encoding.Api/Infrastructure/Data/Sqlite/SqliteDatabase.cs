@@ -17,6 +17,9 @@ namespace Encoding.Api.Infrastructure.Data.Sqlite;
 /// </summary>
 public sealed class SqliteDataSource : DbDataSource
 {
+    private readonly SemaphoreSlim journalModeGate = new(1, 1);
+    private int journalModeConfigured;
+
     public SqliteDataSource(string connectionString, SqliteWriterOptions? writerOptions = null)
     {
         ConnectionString = connectionString;
@@ -30,13 +33,65 @@ public sealed class SqliteDataSource : DbDataSource
     public override string ConnectionString { get; }
     public SqliteWriter Writer { get; }
 
-    protected override DbConnection CreateDbConnection() => new SqliteConnectionWrapper(new SqliteConnection(ConnectionString), Writer);
+    protected override DbConnection CreateDbConnection() => new SqliteConnectionWrapper(new SqliteConnection(ConnectionString), this);
+
+    internal void EnsureJournalMode(SqliteConnection connection)
+    {
+        if (Volatile.Read(ref journalModeConfigured) != 0) return;
+        journalModeGate.Wait();
+        try
+        {
+            if (journalModeConfigured != 0) return;
+            SetJournalMode(connection);
+            Volatile.Write(ref journalModeConfigured, 1);
+        }
+        finally { journalModeGate.Release(); }
+    }
+
+    internal async Task EnsureJournalModeAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        if (Volatile.Read(ref journalModeConfigured) != 0) return;
+        await journalModeGate.WaitAsync(ct);
+        try
+        {
+            if (journalModeConfigured != 0) return;
+            await SetJournalModeAsync(connection, ct);
+            Volatile.Write(ref journalModeConfigured, 1);
+        }
+        finally { journalModeGate.Release(); }
+    }
+
+    private static void SetJournalMode(SqliteConnection connection)
+    {
+        var timeout = connection.DefaultTimeout;
+        connection.DefaultTimeout = 30;
+        try
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA busy_timeout = 30000; PRAGMA journal_mode = WAL;";
+            command.ExecuteNonQuery();
+        }
+        finally { connection.DefaultTimeout = timeout; }
+    }
+
+    private static async Task SetJournalModeAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        var timeout = connection.DefaultTimeout;
+        connection.DefaultTimeout = 30;
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA busy_timeout = 30000; PRAGMA journal_mode = WAL;";
+            await command.ExecuteNonQueryAsync(ct);
+        }
+        finally { connection.DefaultTimeout = timeout; }
+    }
 }
 
-public sealed class SqliteConnectionWrapper(SqliteConnection inner, SqliteWriter writer) : DbConnection
+public sealed class SqliteConnectionWrapper(SqliteConnection inner, SqliteDataSource dataSource) : DbConnection
 {
     internal SqliteConnection Inner { get; } = inner;
-    internal SqliteWriter Writer { get; } = writer;
+    internal SqliteWriter Writer => dataSource.Writer;
     internal SqliteTransactionWrapper? Transaction { get; set; }
     internal HashSet<DbDataReader> Readers { get; } = [];
 
@@ -64,6 +119,7 @@ public sealed class SqliteConnectionWrapper(SqliteConnection inner, SqliteWriter
     {
         Inner.Open();
         if (Writer.Options.Enabled) Inner.DefaultTimeout = 1;
+        dataSource.EnsureJournalMode(Inner);
         Initialize();
     }
 
@@ -71,13 +127,14 @@ public sealed class SqliteConnectionWrapper(SqliteConnection inner, SqliteWriter
     {
         await Inner.OpenAsync(cancellationToken);
         if (Writer.Options.Enabled) Inner.DefaultTimeout = 1;
+        await dataSource.EnsureJournalModeAsync(Inner, cancellationToken);
         await using var command = Inner.CreateCommand();
         command.CommandText = ConnectionPragmas;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     // Infrastructure exception: connection initialization must precede transactions.
-    private string ConnectionPragmas => $"PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = {(Writer.Options.Enabled ? 1000 : 30000)}; PRAGMA synchronous = NORMAL; PRAGMA query_only = OFF;";
+    private string ConnectionPragmas => $"PRAGMA busy_timeout = {(Writer.Options.Enabled ? 1000 : 30000)}; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL; PRAGMA query_only = OFF;";
 
     private void Initialize()
     {

@@ -59,6 +59,6 @@ Toute route de gestion exige une session ou un jeton API Bearer ; rôles `admin`
 ## Consignes de travail
 
 - Avant une décision structurante, consulter ce fichier, la fiche du domaine et les instructions plus proches des fichiers concernés.
-- Les PR ciblent `dev` ; `dev` est promue vers `main`. Une PR ne s'arrête pas aux tests unitaires : vérifier compatibilité de cluster, scénarios d'échec, effets sur les modules existants.
+- Les changements sont poussés directement sur `dev`, sans lancer la CI. La CI de validation s'exécute sur la PR de promotion `dev` vers `main` (et ses mises à jour) ; `main` n'est fusionnée qu'après réussite du contrôle `promotion-ci`, qui vérifie le commit exact et les domaines non modifiés. Vérifier compatibilité de cluster, scénarios d'échec et effets sur les modules existants.
 - Décision structurante : ADR court dans `docs/architecture/adr/`. Changement de comportement : mettre à jour la fiche du domaine dans la même PR.
 - Distinguer clairement vérifié, échoué et non exécuté ; ne jamais présenter une implémentation comme validée en conditions réelles sans l'avoir exercée (voir la liste « non vérifié » de `open-questions.md`).

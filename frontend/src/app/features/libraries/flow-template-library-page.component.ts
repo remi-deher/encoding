@@ -23,11 +23,12 @@ import { ManagementCatalogTemplateComponent } from '../../shared/templates/manag
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { FlowTemplates } from '../../shared/services/flow-templates';
 import { FlowTemplateSummary } from '../../shared/models/flow-templates';
-import { MEDIA_TYPE_OPTIONS } from '../../shared/models/media-type';
+import { MEDIA_TYPE_ICONS, MEDIA_TYPE_OPTIONS } from '../../shared/models/media-type';
 import { AuthService } from '../../core/auth/auth.service';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ComponentConfigurationFormComponent } from '../../shared/ui/component-configuration-form.component';
+import { FlowPreviewComponent } from '../../shared/ui/flow-preview/flow-preview';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { NotificationService } from '../../shared/services/notification.service';
 import {
@@ -44,6 +45,7 @@ interface FlowTemplateRow extends DataTableRow {
   readonly id: string;
   readonly name: string;
   readonly mediaType: string;
+  readonly mediaTypeValue: FlowTemplateSummary['mediaType'];
   readonly source: string;
   readonly sourceVersion: string;
   readonly components: string;
@@ -63,6 +65,7 @@ interface FlowTemplateRow extends DataTableRow {
     MatButtonModule,
     MatCheckboxModule,
     ComponentConfigurationFormComponent,
+    FlowPreviewComponent,
   ],
   template: `
     <app-management-catalog-template
@@ -191,6 +194,19 @@ interface FlowTemplateRow extends DataTableRow {
               uniquement ceux qu’il expose. Les chemins et fichiers locaux seront à renseigner dans
               l’éditeur du flow.
             </p>
+            <section class="template-setup-block" aria-label="Flow qui sera créé">
+              <h3>Flow qui sera créé</h3>
+              <p>
+                « {{ setupName() }} » partira du modèle « {{ details.template.name }} »
+                (révision {{ details.template.revision }}). Vérifiez son contenu avant de créer
+                le brouillon.
+              </p>
+              <app-flow-preview
+                [flow]="details.definition"
+                [components]="setupComponents()"
+                mode="flow"
+              />
+            </section>
             @for (block of setupBlocks(); track block.nodeId) {
               <section class="template-setup-block">
                 <h3>{{ block.name }}</h3>
@@ -377,6 +393,7 @@ export class FlowTemplateLibraryPageComponent {
       mediaType:
         MEDIA_TYPE_OPTIONS.find((media) => media.value === template.mediaType)?.label ??
         template.mediaType,
+      mediaTypeValue: template.mediaType,
       source: template.sourceFlowName,
       sourceVersion: `v${template.sourceVersion}`,
       components: String(template.nodeCount),
@@ -398,6 +415,7 @@ export class FlowTemplateLibraryPageComponent {
     this.filteredRows().map((row) => ({
       id: row.id,
       name: row.name,
+      icon: MEDIA_TYPE_ICONS[row.mediaTypeValue],
       subtitle: row.description || undefined,
       tags: [
         { label: row.mediaType },

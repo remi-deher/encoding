@@ -17,25 +17,15 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          if { [ "$BASE_REF" = "dev" ] && [ "$HEAD_REF" != "dev" ] && [ "$HEAD_REF" != "main" ]; } \
-            || { [ "$BASE_REF" = "main" ] && [ "$HEAD_REF" = "dev" ]; }; then
+          if [ "$BASE_REF" = "main" ] && [ "$HEAD_REF" = "dev" ]; then
             echo "Pull request autorisée : $HEAD_REF vers $BASE_REF."
             exit 0
           fi
 
-          echo "Seules les PR vers dev et les PR dev vers main sont autorisées."
+          echo "Seules les PR de dev vers main sont autorisées."
           gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --comment "PR fermée automatiquement : seules les PR vers dev et les PR de dev vers main sont autorisées."
+            --comment "PR fermée automatiquement : seules les PR de dev vers main sont autorisées."
           exit 1
-
-      - name: Enable auto-merge for pull requests targeting dev
-        if: github.event.pull_request.base.ref == 'dev' && github.event.pull_request.draft == false
-        env:
-          # Squash : un seul commit par PR de fonctionnalité dans dev.
-          # Configure PAT_TOKEN in repository Actions secrets when github.token cannot enable auto-merge.
-          GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash
 
       - name: Enable auto-merge for a dev-to-main promotion
         if: >-

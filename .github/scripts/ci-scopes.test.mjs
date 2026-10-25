@@ -26,15 +26,20 @@ test('code, image and monitoring each trigger the relevant workflows', () => {
   assert.deepEqual(affected('backend/src/Encoding.Api/Program.cs'), ['backend', 'image']);
   assert.deepEqual(affected('.dockerignore'), ['image']);
 });
-test('push and PR filters match release lookup scopes', () => {
+test('validation CI runs on promotion PRs only and filters match release lookup scopes', () => {
   for (const scope of scopes) {
     const yaml = readFileSync(new URL(`../workflows/${scope.workflow}.yml`, import.meta.url), 'utf8');
-    const filters = [...yaml.matchAll(/    paths:([^]*?)(?=\n\S|\n  \w)/g)];
-    assert.equal(filters.length, 2, scope.workflow);
-    for (const [, text] of filters) {
-      const paths = [...text.matchAll(/['"]([^'"\n]+)['"]/g)].map(match => match[1]);
-      assert.deepEqual(paths, scope.paths, scope.workflow);
-    }
+    assert.doesNotMatch(yaml, /^  push:/m, scope.workflow);
+    const pullRequest = yaml.split(/^  pull_request:\s*$/m)[1]?.split(/^  [a-z][\w-]*:\s*$/m)[0];
+    assert.ok(pullRequest, scope.workflow);
+    assert.match(pullRequest, /^    branches: \[main\]$/m, scope.workflow);
+    const lines = pullRequest.split('\n');
+    const pathIndex = lines.findIndex(line => line.startsWith('    paths:'));
+    assert.notEqual(pathIndex, -1, scope.workflow);
+    const inlinePaths = lines[pathIndex].slice('    paths:'.length).trim();
+    const filters = inlinePaths || lines.slice(pathIndex + 1).filter(line => line.startsWith('      - ')).join('\n');
+    const paths = [...filters.matchAll(/['"]([^'"\n]+)['"]/g)].map(match => match[1]);
+    assert.deepEqual(paths, scope.paths, scope.workflow);
   }
 });
 test('release resolves checks independently and rejects missing history', () => {
