@@ -182,6 +182,7 @@ export class FlowCanvasComponent {
     height: Math.max(this.bounds().bottom + 64, this.extent().height),
   }));
   protected readonly scale = signal(1);
+  protected readonly fitActive = signal(false);
   protected readonly liveDrag = signal<{ id: string; x: number; y: number } | null>(null);
   private wirePosition(node: FlowGraphNode): FlowGraphPosition {
     const p = this.position(node),
@@ -422,7 +423,24 @@ export class FlowCanvasComponent {
     );
   }
   protected zoom(delta: number): void {
+    this.fitActive.set(false);
     this.scale.update((s) => Math.max(0.2, Math.min(1.75, s + delta)));
+  }
+  protected resetOrFit(): void {
+    if (this.fitActive()) {
+      this.fitActive.set(false);
+      this.scale.set(1);
+      this.viewport()?.nativeElement.scrollTo(0, 0);
+      requestAnimationFrame(() => this.updateOverview());
+      return;
+    }
+    if (this.scale() === 1) {
+      this.fit();
+      return;
+    }
+    this.scale.set(1);
+    this.viewport()?.nativeElement.scrollTo(0, 0);
+    requestAnimationFrame(() => this.updateOverview());
   }
   protected fit(): void {
     const view = this.viewport()?.nativeElement;
@@ -438,6 +456,7 @@ export class FlowCanvasComponent {
         ),
       ),
     );
+    this.fitActive.set(true);
     view.scrollTo(0, 0);
     requestAnimationFrame(() => this.updateOverview());
   }
