@@ -400,7 +400,11 @@ public sealed class RuntimeFlowRunner(NodeAgentOptions options,MediaScanner scan
                         if(!playbackWait.Allowed) throw new InPlaceEditException(playbackWait.Detail??"Lecture en cours ; la source n'a pas été modifiée.");
                         var result=await new InPlaceMkvEditor(tools).ApplyAsync(lease.SourceRoot,Path.Combine(options.DataDirectory,"media-locks"),lease.ExecutionId,lease.MediaPath,sourceSha,
                             edit.Arguments,edit.AlreadyApplied,edit.Verify,directory,MediaActions.Flag(c,"keepBackup"),()=>!job.IsCancellationRequested,job.Token,
-                            async token=>(await guards.CheckForStepAsync(lease.ExecutionId,lease.Epoch,lease.MediaPath,lease.LibraryId,lease.Guards,false,token)) is { Allowed:false } last?last.Detail??"Lecture en cours.":null);
+                            async token=>
+                            {
+                                if(lease.SourceWriteGuardsSupported) await client.PostAsync<object>($"executions/{lease.ExecutionId:D}/source-write/authorize",new SourceWriteAuthorization(lease.Epoch,lease.SourceRoot),token);
+                                return (await guards.CheckForStepAsync(lease.ExecutionId,lease.Epoch,lease.MediaPath,lease.LibraryId,lease.Guards,false,token)) is { Allowed:false } last?last.Detail??"Lecture en cours.":null;
+                            });
                         logger.LogInformation("Modification sur place {Node} : {Detail}",node.Id,result.Detail);
                         if(result.Status=="unchanged") output="unchanged";
                         else variables["runtime.inPlaceEdited"]=JsonSerializer.SerializeToElement(result.NewSha256);

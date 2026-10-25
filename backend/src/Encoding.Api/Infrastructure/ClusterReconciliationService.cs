@@ -16,7 +16,7 @@ public sealed class ClusterReconciliationService(
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory,
     ILogger<ClusterReconciliationService> logger,
-    TimeProvider? timeProvider = null) : BackgroundService
+    TimeProvider? timeProvider = null,IClusterTaskPeerClient? taskPeers=null) : BackgroundService
 {
     internal const int MaximumExchangesPerPeer = 8;
     internal const long MaximumBytesPerPeer = 64L * 1024 * 1024;
@@ -156,6 +156,13 @@ public sealed class ClusterReconciliationService(
         }
     }
 
+    internal async Task RefreshForSourceWritesAsync(IReadOnlyList<string> peers,CancellationToken ct)
+    {
+        var current=await identityRepository.GetAsync(ct);
+        await entityReconciliation.CaptureLocalChangesAsync(ct);
+        await ReconcilePeersAsync(current.Id,peers,ct);
+    }
+
     private async Task<IReadOnlyList<string>> GetPeerUrlsAsync(CancellationToken ct)
     {
         var configured = configuration.GetSection("Cluster:Reconciliation:Peers").Get<string[]>() ?? [];
@@ -257,7 +264,11 @@ public sealed class ClusterReconciliationService(
         var receivedVector = await repository.GetVectorAsync(ct);
         // Vectors, not batch length, detect remaining work: the byte limit can shorten
         // a full page. Stop on an unchanging peer to avoid polling it in a tight loop.
-        return new(IsAhead(localVector, exchange.KnownSequences) || IsAhead(exchange.KnownSequences, receivedVector),
+        var hasMore=IsAhead(localVector, exchange.KnownSequences) || IsAhead(exchange.KnownSequences, receivedVector);
+        health.ConfirmCatchUp(peerUrl,responsePeerId,!hasMore);
+        if(!hasMore && taskPeers is not null)
+            health.ConfirmSourceWriteSupport(responsePeerId,await taskPeers.SupportsSourceWritesAsync(currentClusterId,responsePeerId,responsePublicKey,peerUrl,ct));
+        return new(hasMore,
             IsAhead(exchange.KnownSequences, remoteVector) || IsAhead(receivedVector, localVector),
             (long)requestBody.Length + responseBody.Length);
     }

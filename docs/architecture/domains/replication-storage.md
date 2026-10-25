@@ -89,3 +89,6 @@ Le maillage LWW est l'unique modèle de réplication (ADR [0013](../adr/0013-ret
 
 ## Index du runtime
 - `0048_runtime_lookup_indexes.sql` ajoute des index de recherche des baux et checkpoints, sans nouvelle table ni changement de protocole. Les index sont locaux à la base et reconstruits par les migrations sur chaque serveur ; ne pas les répliquer dans le journal métier. Voir les [plans vérifiés](../../testing/sqlite-runtime-query-plans.md).
+
+## Attentes d'écriture sur la source
+Migration 0054 : `runtime_source_write_waits` et `pending_source_writes` sont **locales, jamais réconciliées**, comme `execution_work` et les réservations. Elles conservent le checkpoint à reprendre ou le résultat déjà publié pendant une attente du cluster. Les métadonnées d'historique restent réconciliées par les règles existantes. Voir [runtime](runtime.md) et ADR [0014](../adr/0014-attente-des-ecritures-source.md).

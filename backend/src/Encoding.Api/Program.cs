@@ -140,6 +140,8 @@ builder.Services.AddHttpClient("MetadataSources", client => client.Timeout = Tim
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<AiMetadataEnrichmentService>();
 builder.Services.AddSingleton<RuntimeEligibility>();
+builder.Services.AddSingleton<ClusterSourceWriteBarrier>();
+builder.Services.AddSingleton<PendingSourceWriteRepository>();
 builder.Services.AddSingleton<RuntimeRepository>();
 builder.Services.AddSingleton<DiskLockRepository>();
 builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>();
@@ -165,6 +167,7 @@ builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.Cont
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
 builder.Services.AddHttpClient("ClusterReconciliation", client => client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<IClusterTaskPeerClient,ClusterTaskPeerClient>();
 builder.Services.AddSingleton<ClusterReconciliationService>();
 builder.Services.AddHostedService<ClusterReconciliationService>(services => services.GetRequiredService<ClusterReconciliationService>());
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -212,6 +215,7 @@ app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();
 app.MapClusterEndpoints();
 app.MapClusterReconciliationEndpoints();
+app.MapClusterTaskEndpoints();
 app.MapNodeEndpoints();
 app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();

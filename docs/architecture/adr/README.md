@@ -29,3 +29,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0011](0011-controles-media-selon-effets.md) | Contrôles média selon les effets des opérations | implemented | runtime |
 | [0012](0012-builder-ffmpeg-et-assemblage.md) | Builder FFmpeg explicite et assemblage MKV atomique | implemented | runtime |
 | [0013](0013-retrait-mode-raft.md) | Retrait du mode de consensus SQL | implemented | replication-storage |
+| [0014](0014-attente-des-ecritures-source.md) | Attente durable des écritures sur les sources en cluster | implemented | runtime |
