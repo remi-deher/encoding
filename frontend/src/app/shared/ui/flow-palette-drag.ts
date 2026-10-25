@@ -18,10 +18,12 @@ export interface FlowPaletteDrop {
 export class FlowPaletteDrag {
   private readonly document = inject(DOCUMENT);
   readonly component = signal<FlowComponentDefinition | null>(null);
+  readonly pointer = signal<FlowGraphPosition>({ x: 0, y: 0 });
   readonly target = signal<FlowComponentDrop | null>(null);
   readonly targets = new Set<FlowComponentDrop>();
 
   move(point: FlowGraphPosition): void {
+    this.pointer.set(point);
     const hit = this.document.elementFromPoint(point.x, point.y);
     const targets = [...this.targets].filter((target) => hit && target.element.contains(hit));
     this.target.set(

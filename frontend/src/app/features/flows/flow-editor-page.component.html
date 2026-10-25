@@ -33,6 +33,7 @@
     (togglePalette)="togglePalette()"
     (toggleTray)="trayOpen.set(!trayOpen())"
     (toggleConnections)="toggleFlowConnections()"
+    (autoLayoutRequested)="requestAutoLayout()"
   >
   </app-flow-command-bar>
 
@@ -98,7 +99,9 @@
             [mediaType]="flowMediaType()"
             [connections]="connections()"
             [showConnections]="showFlowConnections()"
+            [autoLayoutRequest]="autoLayoutRequest()"
             (configurationRequested)="onConfigurationRequested($event)"
+            (branchComponentRequested)="onBranchComponentRequested($event)"
             (connectionRequested)="onConnectionRequested($event)"
             (nodeRemoved)="removeNode($event)"
             (connectionRemoved)="removeConnection($event)"

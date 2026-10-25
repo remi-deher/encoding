@@ -115,7 +115,9 @@ test('canvas connections can be removed, dragged and observed', async ({ page })
     clientX: a!.x + 14,
     clientY: a!.y + 14,
   });
-  await expect(page.getByRole('button', { name: 'Naviguer dans la minicarte' })).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Naviguer dans la vue d’ensemble' }),
+  ).toBeDisabled();
   await target.scrollIntoViewIfNeeded();
   const b = await target.boundingBox();
   await page.mouse.move(b!.x + 14, b!.y + 14);
@@ -124,7 +126,7 @@ test('canvas connections can be removed, dragged and observed', async ({ page })
   await expect(
     page.getByRole('button', { name: 'Liaison success vers Fin', exact: true }),
   ).toHaveCount(2);
-  await expect(page.getByRole('button', { name: 'Naviguer dans la minicarte' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Naviguer dans la vue d’ensemble' })).toBeEnabled();
   await expect(page.locator('.canvas-node')).toHaveCount(5);
 });
 test('AI uses the widget and only applies a reviewed proposal', async ({ page }) => {
@@ -325,11 +327,8 @@ test('editor opens canvas navigation and tools on demand', async ({ page }) => {
     header.getByRole('button', { name: "Ouvrir l'assistant IA", exact: true }),
   ).toHaveCount(0);
   await expect(page.locator('.simulation-tray')).toHaveCount(0);
-  await expect(
-    page
-      .getByRole('toolbar', { name: 'Navigation du canvas' })
-      .getByRole('button', { name: 'Tout afficher', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'Navigation du canvas' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Tout afficher', exact: true })).toBeVisible();
   await header.getByRole('button', { name: 'Autres actions du flow', exact: true }).click();
   await page
     .getByRole('menuitem', { name: 'Basculer le volet de simulation', exact: true })
@@ -360,6 +359,7 @@ async function dragPaletteAction(
   await page.mouse.move(rect.x + 48, rect.y + 30, { steps: 4 });
   const point = await target();
   await page.mouse.move(point.x, point.y, { steps: 20 });
+  await expect(page.locator('.palette-drag-preview')).toBeVisible();
   await page.mouse.up();
 }
 
@@ -379,6 +379,46 @@ test('palette drag places canvas blocks and cancels outside the workspace', asyn
   const added = page.locator('.canvas-node[data-node-id^="flow-node-"]');
   await expect(added).toHaveCSS('left', '90px');
   await expect(added).toHaveCSS('top', '280px');
+  const handle = added.getByRole('button', { name: 'Déplacer l’étape' });
+  const handleBounds = (await handle.boundingBox())!;
+  const before = await added.evaluate((element) => ({
+    left: (element as HTMLElement).style.left,
+    top: (element as HTMLElement).style.top,
+  }));
+  await handle.dispatchEvent('pointerdown', {
+    pointerId: 1,
+    pointerType: 'mouse',
+    button: 0,
+    clientX: handleBounds.x + handleBounds.width / 2,
+    clientY: handleBounds.y + handleBounds.height / 2,
+  });
+  await page.evaluate(
+    ({ x, y }) =>
+      document.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerId: 1,
+          pointerType: 'mouse',
+          clientX: x,
+          clientY: y,
+        }),
+      ),
+    {
+      x: handleBounds.x + handleBounds.width / 2 + 70,
+      y: handleBounds.y + handleBounds.height / 2 + 50,
+    },
+  );
+  await expect(added).toHaveClass(/dragging/);
+  await page.evaluate(() =>
+    document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 })),
+  );
+  await expect
+    .poll(() =>
+      added.evaluate((element) => ({
+        left: (element as HTMLElement).style.left,
+        top: (element as HTMLElement).style.top,
+      })),
+    )
+    .not.toEqual(before);
   await dragPaletteAction(page, async () => ({ x: 25, y: 25 }));
   await expect(page.locator('.canvas-node')).toHaveCount(6);
 });
@@ -548,6 +588,10 @@ test('canvas wires follow dragging before release and selection highlights conne
   const wire = page.locator('.wire').first();
   const before = await wire.getAttribute('d');
   const handle = entry.getByRole('button', { name: 'Déplacer l’étape' });
+  const beforePosition = await entry.evaluate((node) => ({
+    left: (node as HTMLElement).style.left,
+    top: (node as HTMLElement).style.top,
+  }));
   const rect = (await handle.boundingBox())!;
   await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
   await page.mouse.down();
@@ -557,6 +601,44 @@ test('canvas wires follow dragging before release and selection highlights conne
   const during = await wire.getAttribute('d');
   await page.mouse.up();
   await expect(wire).toHaveAttribute('d', during!);
+  await expect
+    .poll(() =>
+      entry.evaluate((node) => ({
+        left: (node as HTMLElement).style.left,
+        top: (node as HTMLElement).style.top,
+      })),
+    )
+    .not.toEqual(beforePosition);
+  const movedPosition = await entry.evaluate((node) => ({
+    left: (node as HTMLElement).style.left,
+    top: (node as HTMLElement).style.top,
+  }));
+  await page.reload();
+  await expect(page.locator('.canvas-node')).toHaveCount(5);
+  await expect
+    .poll(() =>
+      page
+        .locator('.canvas-node')
+        .first()
+        .evaluate((node) => ({
+          left: (node as HTMLElement).style.left,
+          top: (node as HTMLElement).style.top,
+        })),
+    )
+    .toEqual(movedPosition);
+});
+
+test('adding a block on an output opens the palette for that branch', async ({ page }) => {
+  await setup(page);
+  const action = page.locator('.canvas-node[data-node-id="Action A"]');
+  await action.locator('[data-port="output:success"]').focus();
+  await action.getByRole('button', { name: 'Ajouter sur la sortie Suite', exact: true }).click();
+  await expect(page.locator('.insertion-banner')).toContainText(
+    'Insertion sur la sortie « Suite » de Action A',
+  );
+  await expect(
+    page.getByRole('complementary', { name: 'Palette des composants du flow' }),
+  ).toBeVisible();
 });
 
 test('canvas workspace fills the available width and separates blocks from its toolbar', async ({
@@ -639,7 +721,8 @@ test('canvas layout is explicit, reversible and zoom stays inside the workspace'
     );
   await expect(page.locator('.wire').first()).toHaveAttribute('d', /^M /);
   const before = await readPositions();
-  await page.getByRole('button', { name: 'Disposition automatique', exact: true }).click();
+  await page.getByRole('button', { name: 'Autres actions du flow', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Disposition automatique', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Annuler la disposition', exact: true }),
   ).toBeVisible();
@@ -680,7 +763,26 @@ test('canvas layout is explicit, reversible and zoom stays inside the workspace'
     clientY: box.y + 100,
   });
   await expect(page.locator('.canvas-surface')).not.toHaveAttribute('style', oldScale!);
-  await expect(page.getByRole('button', { name: 'Naviguer dans la minicarte' })).toBeVisible();
+  const minimap = page.getByRole('button', { name: 'Naviguer dans la vue d’ensemble' });
+  await expect(minimap).toBeVisible();
+  await minimap.click({ position: { x: 150, y: 55 } });
+  await expect
+    .poll(() => canvas.evaluate((element) => element.scrollLeft + element.scrollTop))
+    .toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Zoomer', exact: true }).click();
+  const scaleBeforeZoom = Number(
+    (await page.locator('.canvas-surface').getAttribute('style'))!.match(/scale\(([^)]+)\)/)?.[1],
+  );
+  await page.getByRole('button', { name: 'Zoomer', exact: true }).click();
+  await expect
+    .poll(async () =>
+      Number(
+        (await page.locator('.canvas-surface').getAttribute('style'))!.match(
+          /scale\(([^)]+)\)/,
+        )?.[1],
+      ),
+    )
+    .toBeGreaterThan(scaleBeforeZoom);
   await page.getByRole('button', { name: 'Tout afficher', exact: true }).click();
   await page.screenshot({ path: info.outputPath('compact-canvas.png') });
   const violations = (
@@ -761,7 +863,8 @@ test('multiple exclusive cases, nested decisions and protected ends remain navig
   for (const name of ['Audio conforme ?', 'Sous-titres', 'Sortie valide ?'])
     await expect(page.locator(`.canvas-node[data-node-id="${name}"]`)).toHaveCount(1);
   await page.locator('.canvas-node[data-node-id="Sous-titres"]').scrollIntoViewIfNeeded();
-  await page.getByRole('button', { name: 'Disposition automatique', exact: true }).click();
+  await page.getByRole('button', { name: 'Autres actions du flow', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Disposition automatique', exact: true }).click();
   await expect(page.locator('.canvas-node')).toHaveCount(15);
   await expect(page.locator('.wire')).toHaveCount(19);
   await expect
@@ -902,7 +1005,8 @@ test('compact adaptive cards expose semantic ports and keep measured wires align
     await page.evaluate((mode) => {
       document.documentElement.dataset['theme'] = mode;
     }, theme);
-    await page.getByRole('button', { name: 'Disposition automatique', exact: true }).click();
+    await page.getByRole('button', { name: 'Autres actions du flow', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Disposition automatique', exact: true }).click();
     await expect
       .poll(async () =>
         page.evaluate(() => {

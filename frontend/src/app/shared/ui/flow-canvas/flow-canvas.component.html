@@ -1,31 +1,24 @@
-<div class="canvas-tools" role="toolbar" aria-label="Navigation du canvas">
-  <button mat-button (click)="zoom(-0.1)" aria-label="Dézoomer">−</button
-  ><span>{{ (scale() * 100).toFixed(0) }} %</span
-  ><button mat-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button
-  ><button mat-button (click)="fit()">Tout afficher</button>
-  @if (!readOnly()) {
-    <button mat-button (click)="autoLayout()">
-      <app-icon name="sort" />Disposition automatique
-    </button>
+@if (canUndoLayout() || expandedPacks().length || pending()) {
+  <div class="canvas-tools" role="toolbar" aria-label="Navigation du canvas">
     @if (canUndoLayout()) {
       <button mat-button (click)="undoLayout()">Annuler la disposition</button>
     }
-  }
-  @for (pack of expandedPacks(); track pack.id) {
-    <button
-      mat-button
-      (click)="packToggle.emit(pack.id)"
-      [attr.aria-label]="'Replier le pack ' + pack.label"
-    >
-      Replier « {{ pack.label }} »
-    </button>
-  }
-  @if (pending(); as selection) {
-    <span role="status"
-      >{{ selection.output.label }} <app-icon name="forward" /> choisissez une entrée</span
-    ><button mat-button (click)="pending.set(null)">Annuler la liaison</button>
-  }
-</div>
+    @for (pack of expandedPacks(); track pack.id) {
+      <button
+        mat-button
+        (click)="packToggle.emit(pack.id)"
+        [attr.aria-label]="'Replier le pack ' + pack.label"
+      >
+        Replier « {{ pack.label }} »
+      </button>
+    }
+    @if (pending(); as selection) {
+      <span role="status"
+        >{{ selection.output.label }} <app-icon name="forward" /> choisissez une entrée</span
+      ><button mat-button (click)="pending.set(null)">Annuler la liaison</button>
+    }
+  </div>
+}
 <div
   #viewport
   class="canvas-viewport"
@@ -92,17 +85,14 @@
         <article
           #canvasCard
           class="canvas-node"
+          draggable="false"
           [class.selected]="selectedNodeId() === node.id"
+          [class.dragging]="liveDrag()?.id === node.id"
           [attr.data-node-id]="node.id"
-          [style.left.px]="position(node).x"
-          [style.top.px]="position(node).y"
+          [style.left.px]="dragPosition(node).x"
+          [style.top.px]="dragPosition(node).y"
           [style.--node-color]="colors(node.component).color"
           [style.--output-count]="node.component.outputs.length"
-          cdkDrag
-          [cdkDragDisabled]="readOnly()"
-          [cdkDragScale]="scale()"
-          (cdkDragMoved)="dragging(node, $event)"
-          (cdkDragEnded)="move(node, $event)"
           appContextActions
           (contextActions)="!readOnly() && menu($event, node)"
           tabindex="0"
@@ -127,8 +117,8 @@
             <button
               type="button"
               class="canvas-icon drag"
+              draggable="false"
               [disabled]="readOnly()"
-              cdkDragHandle
               aria-label="Déplacer l’étape"
               [matTooltip]="'Déplacer : ' + (node.name || node.component.name)"
             >
@@ -205,32 +195,40 @@
     </div>
   </div>
 </div>
-<button
-  [disabled]="pending() !== null"
-  class="minimap"
-  aria-label="Naviguer dans la minicarte"
-  (click)="miniNavigate($event)"
->
-  <span>Vue d’ensemble</span>
-  <svg [attr.viewBox]="miniViewBox()" preserveAspectRatio="none" aria-hidden="true">
-    @for (node of nodes(); track node.id) {
+<div class="minimap-panel" aria-label="Vue d’ensemble du flow">
+  <div class="minimap-tools" role="toolbar" aria-label="Zoom et affichage du canvas">
+    <button mat-icon-button (click)="zoom(-0.1)" aria-label="Dézoomer">−</button>
+    <span aria-live="polite">{{ (scale() * 100).toFixed(0) }} %</span>
+    <button mat-icon-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button>
+    <button mat-button (click)="fit()">Tout afficher</button>
+  </div>
+  <button
+    [disabled]="pending() !== null"
+    class="minimap"
+    aria-label="Naviguer dans la vue d’ensemble"
+    (pointerdown)="miniPanStart($event)"
+    (click)="miniNavigate($event)"
+  >
+    <svg [attr.viewBox]="miniViewBox()" preserveAspectRatio="none" aria-hidden="true">
+      @for (node of nodes(); track node.id) {
+        <rect
+          [attr.x]="position(node).x"
+          [attr.y]="position(node).y"
+          [attr.width]="nodeSize(node).width"
+          [attr.height]="nodeSize(node).height"
+          [class.mini-selected]="selectedNodeId() === node.id"
+        />
+      }
       <rect
-        [attr.x]="position(node).x"
-        [attr.y]="position(node).y"
-        [attr.width]="nodeSize(node).width"
-        [attr.height]="nodeSize(node).height"
-        [class.mini-selected]="selectedNodeId() === node.id"
+        class="mini-viewport"
+        [attr.x]="overview().x"
+        [attr.y]="overview().y"
+        [attr.width]="overview().width"
+        [attr.height]="overview().height"
       />
-    }
-    <rect
-      class="mini-viewport"
-      [attr.x]="overview().x"
-      [attr.y]="overview().y"
-      [attr.width]="overview().width"
-      [attr.height]="overview().height"
-    />
-  </svg>
-</button>
+    </svg>
+  </button>
+</div>
 <div class="connection-list" role="group" aria-label="Actions accessibles sur les liaisons">
   @for (edge of connections(); track edge.id) {
     <button

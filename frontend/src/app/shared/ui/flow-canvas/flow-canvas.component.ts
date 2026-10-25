@@ -19,7 +19,6 @@ import {
   afterRenderEffect,
   untracked,
 } from '@angular/core';
-import { CdkDrag, CdkDragHandle, CdkDragEnd, CdkDragMove } from '@angular/cdk/drag-drop';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonModule } from '@angular/material/button';
 import {
@@ -46,14 +45,16 @@ import { NotificationService } from '../../services/notification.service';
 import { routeFlowLink } from '../flow-link-routing';
 @Component({
   selector: 'app-flow-canvas',
-  host: { '[class.read-only]': 'readOnly()' },
+  host: {
+    '[class.read-only]': 'readOnly()',
+    '(pointerdown)': 'beginNodeDrag($event)',
+    '(mousedown)': 'beginNodeDrag($event)',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FlowComponentDrop,
     IconComponent,
     FlowSimulationStatusComponent,
-    CdkDrag,
-    CdkDragHandle,
     MatButtonModule,
     MatTooltipModule,
     ContextActionsDirective,
@@ -96,6 +97,7 @@ export class FlowCanvasComponent {
   readonly nodes = input.required<readonly FlowGraphNode[]>();
   readonly connections = input.required<readonly FlowGraphConnection[]>();
   readonly showConnections = input(true);
+  readonly autoLayoutRequest = input(0);
   readonly selectedNodeId = input<string | null>(null);
   readonly selectNode = output<string>();
   readonly configure = output<string>();
@@ -180,18 +182,14 @@ export class FlowCanvasComponent {
     height: Math.max(this.bounds().bottom + 64, this.extent().height),
   }));
   protected readonly scale = signal(1);
-  private readonly liveDrag = signal<{ id: string; x: number; y: number } | null>(null);
-  protected dragging(node: FlowGraphNode, event: CdkDragMove): void {
-    this.liveDrag.set({
-      id: node.id,
-      x: event.distance.x / this.scale(),
-      y: event.distance.y / this.scale(),
-    });
-  }
+  protected readonly liveDrag = signal<{ id: string; x: number; y: number } | null>(null);
   private wirePosition(node: FlowGraphNode): FlowGraphPosition {
     const p = this.position(node),
       drag = this.liveDrag();
     return drag?.id === node.id ? { x: p.x + drag.x, y: p.y + drag.y } : p;
+  }
+  protected dragPosition(node: FlowGraphNode): FlowGraphPosition {
+    return this.wirePosition(node);
   }
   protected readonly pending = signal<{ node: FlowGraphNode; output: FlowComponentOutput } | null>(
     null,
@@ -200,14 +198,73 @@ export class FlowCanvasComponent {
   protected readonly context = signal<ContextActionMenuData | null>(null);
   private contextTarget: { node?: FlowGraphNode; edge?: FlowGraphConnection } = {};
   private stopDrag?: () => void;
+  private stopNodeDrag?: () => void;
+  protected beginNodeDrag(event: PointerEvent | MouseEvent): void {
+    if (event.type === 'mousedown' && this.stopNodeDrag) return;
+    const target = event.target as Element | null,
+      handle = target?.closest('.canvas-icon.drag'),
+      card = handle?.closest<HTMLElement>('.canvas-node'),
+      nodeId = card?.dataset['nodeId'];
+    if (this.readOnly() || !card || !nodeId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.stopNodeDrag?.();
+    const start = {
+        x: Number.parseFloat(card.style.left) || 24,
+        y: Number.parseFloat(card.style.top) || 24,
+      },
+      startX = event.clientX,
+      startY = event.clientY;
+    this.selectNode.emit(nodeId);
+    this.liveDrag.set({ id: nodeId, x: 0, y: 0 });
+    const mouse = event.type === 'mousedown';
+    const move = (pointer: PointerEvent | MouseEvent) =>
+      this.liveDrag.set({
+        id: nodeId,
+        x: (pointer.clientX - startX) / this.scale(),
+        y: (pointer.clientY - startY) / this.scale(),
+      });
+    const end = () => {
+      const drag = this.liveDrag();
+      if (drag?.id === nodeId)
+        this.positionChanged.emit({
+          nodeId,
+          position: {
+            x: Math.max(24, start.x + drag.x),
+            y: Math.max(24, start.y + drag.y),
+          },
+        });
+      this.liveDrag.set(null);
+      this.stopNodeDrag?.();
+    };
+    const moveEvent = mouse ? 'mousemove' : 'pointermove';
+    const endEvent = mouse ? 'mouseup' : 'pointerup';
+    document.addEventListener(moveEvent, move as EventListener);
+    document.addEventListener(endEvent, end, { once: true });
+    if (!mouse) document.addEventListener('pointercancel', end, { once: true });
+    this.stopNodeDrag = () => {
+      document.removeEventListener(moveEvent, move as EventListener);
+      document.removeEventListener(endEvent, end);
+      document.removeEventListener('pointercancel', end);
+      this.stopNodeDrag = undefined;
+    };
+  }
   protected readonly colors = flowComponentColors;
   protected readonly kindLabels = FLOW_COMPONENT_KIND_LABELS;
   protected nodeSize(node: FlowGraphNode): FlowCanvasNodeSize {
     return this.measurements().get(node.id) ?? estimateFlowCanvasNodeSize(node);
   }
   constructor() {
+    let handledAutoLayoutRequest = 0;
+    afterRenderEffect(() => {
+      const request = this.autoLayoutRequest();
+      if (!request || request === handledAutoLayoutRequest) return;
+      handledAutoLayoutRequest = request;
+      untracked(() => this.autoLayout());
+    });
     inject(DestroyRef).onDestroy(() => {
       this.stopDrag?.();
+      this.stopNodeDrag?.();
       this.observer?.disconnect();
     });
     afterRenderEffect(() => {
@@ -315,14 +372,41 @@ export class FlowCanvasComponent {
       });
   }
   protected miniNavigate(event: MouseEvent): void {
-    const button = event.currentTarget as HTMLElement,
-      rect = button.querySelector('svg')!.getBoundingClientRect();
+    this.navigateMiniTo(
+      event.currentTarget as HTMLButtonElement,
+      event.clientX,
+      event.clientY,
+      event.detail === 0,
+    );
+  }
+  protected miniPanStart(event: PointerEvent): void {
+    if (event.button !== 0 || this.pending()) return;
+    const button = event.currentTarget as HTMLButtonElement;
+    event.preventDefault();
+    button.setPointerCapture(event.pointerId);
+    this.navigateMiniTo(button, event.clientX, event.clientY);
+    const move = (pointer: PointerEvent) =>
+      this.navigateMiniTo(button, pointer.clientX, pointer.clientY);
+    const finish = () => {
+      button.removeEventListener('pointermove', move);
+      button.removeEventListener('pointerup', finish);
+      button.removeEventListener('pointercancel', finish);
+    };
+    button.addEventListener('pointermove', move);
+    button.addEventListener('pointerup', finish, { once: true });
+    button.addEventListener('pointercancel', finish, { once: true });
+  }
+  private navigateMiniTo(
+    button: HTMLButtonElement,
+    clientX: number,
+    clientY: number,
+    center = false,
+  ): void {
+    const rect = button.querySelector('svg')?.getBoundingClientRect();
     const view = this.viewport()?.nativeElement;
-    if (!view) return;
-    const x =
-      event.detail === 0 ? 0.5 : Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-    const y =
-      event.detail === 0 ? 0.5 : Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    if (!rect || !view) return;
+    const x = center ? 0.5 : Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const y = center ? 0.5 : Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
     view.scrollTo(
       x * this.bounds().right * this.scale() - view.clientWidth / 2,
       y * this.bounds().bottom * this.scale() - view.clientHeight / 2,
@@ -336,19 +420,6 @@ export class FlowCanvasComponent {
     return (
       this.positions().get(node.id) ?? this.layout().positions.get(node.id) ?? { x: 80, y: 80 }
     );
-  }
-  protected move(node: FlowGraphNode, event: CdkDragEnd): void {
-    const p = this.position(node),
-      d = event.distance;
-    this.positionChanged.emit({
-      nodeId: node.id,
-      position: {
-        x: Math.max(24, p.x + d.x / this.scale()),
-        y: Math.max(24, p.y + d.y / this.scale()),
-      },
-    });
-    event.source.reset();
-    this.liveDrag.set(null);
   }
   protected zoom(delta: number): void {
     this.scale.update((s) => Math.max(0.2, Math.min(1.75, s + delta)));
