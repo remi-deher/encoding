@@ -436,20 +436,28 @@ public sealed class SystemLogApiFactoryTests
     [Fact(Timeout = 60000)]
     public async Task Api_Host_Starts_With_System_Logging()
     {
-        await Task.Yield();
-        using var factory = new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Encoding.Api.Auth.AuthOptions>().WithWebHostBuilder(builder =>
+        await using var database=await TestDatabase.CreateSqliteAsync("system-log-host");
+        var directory=Path.Combine(Path.GetTempPath(),"system-log-host-"+Guid.NewGuid().ToString("N"));
+        try
         {
-            builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
-            builder.UseSetting("Logging:LogLevel:Default", "Error");
-            builder.UseSetting("Auth:Enabled", "false");
-            builder.ConfigureServices(services =>
+            using var factory = new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Encoding.Api.Auth.AuthOptions>().WithWebHostBuilder(builder =>
             {
-                foreach (var descriptor in services.Where(item => item.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)).ToArray())
-                    services.Remove(descriptor);
+                builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
+                foreach(var setting in database.Settings()) builder.UseSetting(setting.Key,setting.Value);
+                builder.UseSetting("Node:DataDirectory",directory);
+                builder.UseSetting("PluginSettings:KeyDirectory",Path.Combine(directory,"keys"));
+                builder.UseSetting("Logging:LogLevel:Default", "Error");
+                builder.UseSetting("Auth:Enabled", "false");
+                builder.ConfigureServices(services =>
+                {
+                    foreach (var descriptor in services.Where(item => item.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)).ToArray())
+                        services.Remove(descriptor);
+                });
             });
-        });
-        using var client = factory.CreateClient();
-        Assert.NotNull(factory.Services.GetService(typeof(Encoding.Core.Logging.SystemLogRingBuffer)));
+            using var client = factory.CreateClient();
+            Assert.NotNull(factory.Services.GetService(typeof(Encoding.Core.Logging.SystemLogRingBuffer)));
+        }
+        finally {if(Directory.Exists(directory)) Directory.Delete(directory,true);}
     }
 }
 

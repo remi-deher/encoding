@@ -61,6 +61,8 @@ public sealed class ClusterSourceWriteBarrier(DbDataSource db,ClusterReconciliat
     }
     internal async Task<string?> CheckAsync(DbConnection c,DbTransaction? tx,CancellationToken ct)
     {
+        await using(var ownership=Sql.Command("SELECT EXISTS(SELECT 1 FROM task_server_identity WHERE ready=0) OR EXISTS(SELECT 1 FROM task_ownership_inbox)",c,tx))
+            if(await ownership.ScalarBoolAsync(ct)) return "Écriture source différée : propriété des tâches à réconcilier.";
         await using var cmd=Sql.Command("""
           SELECT DISTINCT a.peer_id FROM cluster_peer_admissions a
           JOIN cluster_identity i ON i.id=a.cluster_id

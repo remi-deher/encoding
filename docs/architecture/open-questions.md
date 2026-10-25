@@ -53,3 +53,9 @@ Livrée : reprise au dernier checkpoint, bornée à 2, blocs rejouables. Reste �
 - Proposition D1–D6 et audit : [revue](../design/cluster-without-quorum-review.md). Le retrait est implémenté par l’ADR 0013 ; la reprise inter-serveurs reste non livrée.
 - Décision de Rémi : à deux nœuds, reprendre la file d'un serveur exige sa **neutralisation explicite**, y compris son autorité de publication ; sinon il conserve sa file. Une expiration estimée côté pair et une époque inconnue du serveur isolé ne constituent pas un fencing. L'extension de reprise inter-serveurs reste non livrée.
 - Priorité D6 : la [sonde de coordination](../testing/coordination-measurements.md) couvre aussi 7 000 tâches et deux workers sur un serveur. La charge représentative sur **deux serveurs**, les latences HTTP état/historique et l'activité disque restent non vérifiées ; ne pas présenter cette sonde locale comme leur validation.
+
+### Suivi de la proposition « cluster sans quorum » (2026-10-25)
+- Livré : retrait du mode de consensus, maillage inchangé ; mesures initiales à 7 000 travaux et jitter ; protection des sources et attentes durables en partition (ADR 0014).
+- Fondation D3 : attribution initiale signée atomique et rattrapage initial avant claims (ADR 0015). Ni transfert de propriété ni reprise distante ne sont exposés.
+- Restent : attribution distante ; source gelée / cible reçue inactive / activation signée ; acheminement vérifié des checkpoints et artefacts ; chaînes inter-serveurs ; gossip avec provenance/TTL ; déduplication déterministe du même média et quarantaine ; indicateurs UI ; reprise manuelle après neutralisation explicite et grâce.
+- Toujours non vérifié : charge à 7 000 travaux sur deux serveurs réels, partition entre hôtes et exclusion au chemin d'un média sur NAS. Les mesures initiales précèdent le coût des nouveaux plans signés ; elles ne valident pas ce coût.

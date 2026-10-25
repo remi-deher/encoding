@@ -4,7 +4,7 @@ using Encoding.Contracts.Executions;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionStreamBroadcaster? broadcaster=null,ClusterSourceWriteBarrier? sourceWrites=null)
+public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionStreamBroadcaster? broadcaster=null,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null)
 {
     public async Task<IReadOnlyList<RuntimeTransfer>> ListAsync(Guid node,CancellationToken ct)
     {
@@ -171,6 +171,7 @@ public sealed class RuntimeTransferRepository(DbDataSource dataSource,ExecutionS
                   """,c,tx);
                 schedule.Parameters.AddWithValue("id",id); schedule.Parameters.AddWithValue("next",next); schedule.Parameters.AddWithValue("event",Guid.NewGuid());
                 schedule.Parameters.AddWithValue("delay",TimeSpan.FromMinutes(request.DeferMinutes!.Value)); await schedule.ExecuteNonQueryAsync(ct);
+                if(ownership is not null) await ownership.CreateAsync([next],c,tx,ct);
             }
         }
         await tx.CommitAsync(ct); return true;

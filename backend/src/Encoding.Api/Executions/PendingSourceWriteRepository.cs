@@ -9,7 +9,7 @@ public sealed class PendingSourceWriteRepository(DbDataSource db,ClusterSourceWr
 {
     internal static async Task EnqueueAsync(Guid id,Guid source,Guid library,string original,string published,string sourceSha,string resultSha,string extension,int hours,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var cmd=Sql.Command("""
+        await using var cmd=Sql.Command($"""
           INSERT INTO pending_source_writes(execution_id,source_node_id,library_id,original_path,published_path,source_sha,result_sha,result_extension,grace_hours,detail)
           VALUES(@id,@source,@library,@original,@published,@before,@after,@extension,@hours,'Remplacement en attente de la connectivité et du rattrapage du cluster.')
           ON CONFLICT(execution_id) DO NOTHING
@@ -23,10 +23,10 @@ public sealed class PendingSourceWriteRepository(DbDataSource db,ClusterSourceWr
     {
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
         if(await barrier.CheckAsync(c,tx,ct) is not null || !await barrier.SupportsGuardAsync(node,c,tx,ct)) return null;
-        await using var read=Sql.Command("""
+        await using var read=Sql.Command($"""
           SELECT p.execution_id,a.local_path,p.original_path,p.published_path,p.source_sha,p.result_sha,p.result_extension,p.grace_hours,p.library_id
           FROM pending_source_writes p JOIN library_node_accesses a ON a.library_id=p.library_id AND a.node_id=p.source_node_id
-          WHERE p.source_node_id=@node AND EXISTS(SELECT 1 FROM cluster_nodes n WHERE n.id=@node AND n.deleted_at IS NULL AND n.accepts_work) AND EXISTS(SELECT 1 FROM executions e WHERE e.id=p.execution_id AND e.state IN ('running','succeeded')) AND (p.state='waiting' OR p.state='claimed' AND p.claim_until<=clock_timestamp())
+          WHERE {TaskOwnershipRepository.ActiveSql("p.execution_id")} AND p.source_node_id=@node AND EXISTS(SELECT 1 FROM cluster_nodes n WHERE n.id=@node AND n.deleted_at IS NULL AND n.accepts_work) AND EXISTS(SELECT 1 FROM executions e WHERE e.id=p.execution_id AND e.state IN ('running','succeeded')) AND (p.state='waiting' OR p.state='claimed' AND p.claim_until<=clock_timestamp())
             AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.can_write AND a.local_path IS NOT NULL
             AND EXISTS(SELECT 1 FROM library_replacement_policies policy WHERE policy.library_id=p.library_id AND policy.enabled)
           ORDER BY p.created_at,p.execution_id LIMIT 1
@@ -51,9 +51,9 @@ public sealed class PendingSourceWriteRepository(DbDataSource db,ClusterSourceWr
         if(!await barrier.VerifyAsync(ct)) return false;
         await using var c=await db.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
         if(await barrier.CheckAsync(c,tx,ct) is not null || !await barrier.SupportsGuardAsync(node,c,tx,ct)) return false;
-        await using var update=Sql.Command("""
+        await using var update=Sql.Command($"""
           UPDATE pending_source_writes SET claim_until=clock_timestamp()+interval '5 minutes'
-          WHERE execution_id=@id AND source_node_id=@node AND state='claimed' AND claim_id=@claim AND claim_until>clock_timestamp()
+          WHERE {TaskOwnershipRepository.ActiveSql("pending_source_writes.execution_id")} AND execution_id=@id AND source_node_id=@node AND state='claimed' AND claim_id=@claim AND claim_until>clock_timestamp()
             AND EXISTS(SELECT 1 FROM media_reservations m WHERE m.execution_id=@id AND m.lease_until>clock_timestamp())
             AND EXISTS(SELECT 1 FROM executions e WHERE e.id=@id AND e.state IN ('running','succeeded'))
             AND EXISTS(SELECT 1 FROM library_replacement_policies policy WHERE policy.library_id=pending_source_writes.library_id AND policy.enabled)

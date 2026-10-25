@@ -30,3 +30,4 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0012](0012-builder-ffmpeg-et-assemblage.md) | Builder FFmpeg explicite et assemblage MKV atomique | implemented | runtime |
 | [0013](0013-retrait-mode-raft.md) | Retrait du mode de consensus SQL | implemented | replication-storage |
 | [0014](0014-attente-des-ecritures-source.md) | Attente durable des écritures sur les sources en cluster | implemented | runtime |
+| [0015](0015-attribution-journalisee-des-taches.md) | Attribution initiale journalisée des tâches | implemented | runtime |

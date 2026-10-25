@@ -16,7 +16,7 @@ public sealed class ClusterReconciliationService(
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory,
     ILogger<ClusterReconciliationService> logger,
-    TimeProvider? timeProvider = null,IClusterTaskPeerClient? taskPeers=null) : BackgroundService
+    TimeProvider? timeProvider = null,IClusterTaskPeerClient? taskPeers=null,Encoding.Api.Executions.TaskOwnershipRepository? taskOwnership=null) : BackgroundService
 {
     internal const int MaximumExchangesPerPeer = 8;
     internal const long MaximumBytesPerPeer = 64L * 1024 * 1024;
@@ -103,6 +103,7 @@ public sealed class ClusterReconciliationService(
                 {
                     logger.LogWarning(exception, "La capture ou la projection des données du cluster sera retentée.");
                 }
+                if(taskOwnership is not null) await taskOwnership.ProjectAsync(stoppingToken);
                 var peerUrls = await GetPeerUrlsAsync(stoppingToken);
                 var configuredUrls = (configuration.GetSection("Cluster:Reconciliation:Peers").Get<string[]>() ?? [])
                     .Select(Normalize).Where(url => url is not null).Cast<string>();

@@ -9,7 +9,7 @@ using Encoding.Contracts.Nodes;
 namespace Encoding.Api.Executions;
 
 public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<RuntimeRecoveryService> logger,
-    NodeGroupRepository? nodeGroups = null, RuntimeEligibility? eligibility = null, NodePresenceOptions? presence = null) : BackgroundService
+    NodeGroupRepository? nodeGroups = null, RuntimeEligibility? eligibility = null, NodePresenceOptions? presence = null,TaskOwnershipRepository? ownership=null) : BackgroundService
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private readonly TimeSpan offlineAfter=presence?.OfflineAfter??TimeSpan.FromSeconds(30);
@@ -32,9 +32,10 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
     public const int MaximumResumes=2;
     private static readonly TimeSpan ResumeGrace=TimeSpan.FromMinutes(2);
 
-    private const string ExpiredWorkPredicate = """
-        (e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()))
-        OR (e.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until IS NOT NULL AND w.lease_until<=clock_timestamp())
+    private static readonly string ExpiredWorkPredicate = $"""
+        ((e.state='cancelling' AND (w.lease_until IS NULL OR w.lease_until<=clock_timestamp()))
+        OR (e.state='running' AND w.worker_node_id IS NOT NULL AND w.lease_until IS NOT NULL AND w.lease_until<=clock_timestamp()))
+        AND {TaskOwnershipRepository.ActiveSql("e.id")}
         """;
 
     private async Task<bool> HasExpiredWorkAsync(CancellationToken ct)
@@ -51,6 +52,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
     /// </summary>
     public async Task<int> ProcessOnceAsync(CancellationToken ct)
     {
+        if(ownership is not null && !await ownership.PrepareClaimsAsync(ct)) return 0;
         // This is only an admission hint: all predicates are rechecked inside the writer transaction.
         if (!await HasExpiredWorkAsync(ct) && !await RuntimeRepository.HasUnavailableSourcesAsync(dataSource, offlineAfter, ct))
             return await FailUnavailableTargetsAsync(ct);
@@ -91,7 +93,7 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
                         if(policy is not null && item.Attempt<=policy.MaximumRetries)
                         {
                             var child=await ExecutionRepository.RetryInTransactionAsync(item.Id,policy.Selector,previous,
-                                $"Nouvelle tentative {item.Attempt+1} créée par la règle du flow après perte du worker.",c,tx,ct);
+                                $"Nouvelle tentative {item.Attempt+1} créée par la règle du flow après perte du worker.",c,tx,ct,ownership);
                             if(child is not null) logger.LogInformation("L’exécution {ExecutionId} crée la tentative bornée {RetryId} après perte du worker {WorkerId}.",item.Id,child,previous);
                         }
                     }
@@ -150,12 +152,12 @@ public sealed class RuntimeRecoveryService(DbDataSource dataSource,ILogger<Runti
         var targets=new List<(Guid Id,Guid? Actor,int Revision,string State,string Flow,string Selector,Guid? Previous,
             Guid Library,Guid? Source,string? Checkpoint,DateTimeOffset Updated)>();
         await using(var c=await dataSource.OpenConnectionAsync(ct))
-        await using(var cmd=Sql.Command("""
+        await using(var cmd=Sql.Command($"""
           SELECT e.id,e.node_id,e.revision,e.state,e.flow_definition::text,w.handoff_selector::text,
             w.previous_worker_node_id,w.library_id,w.source_node_id,
             (SELECT checkpoint::text FROM execution_steps s WHERE s.execution_id=e.id AND s.completed_at IS NOT NULL ORDER BY s.completed_revision DESC LIMIT 1),e.updated_at
           FROM executions e JOIN execution_work w ON w.execution_id=e.id
-          WHERE w.worker_node_id IS NULL AND w.handoff_selector IS NOT NULL AND w.available_at<=clock_timestamp()
+          WHERE {TaskOwnershipRepository.ActiveSql("e.id")} AND w.worker_node_id IS NULL AND w.handoff_selector IS NOT NULL AND w.available_at<=clock_timestamp()
             AND ((e.state='running' AND w.handoff_pending) OR (e.state='queued' AND e.retry_of IS NOT NULL))
           ORDER BY e.updated_at LIMIT 100
           """,c))

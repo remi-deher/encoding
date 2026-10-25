@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace Encoding.Api.Executions;
 
 /// <summary>Persistent lifecycle journal. Does not assign work or publish media.</summary>
-public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRegistry? components = null, ExecutionStreamBroadcaster? broadcaster = null)
+public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRegistry? components = null, ExecutionStreamBroadcaster? broadcaster = null,TaskOwnershipRepository? ownership=null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     private const string Columns = """
@@ -190,7 +190,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
     public async Task<Guid?> RetryAsync(Guid id, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct); await using var tx = await c.BeginTransactionAsync(ct);
-        var created=await RetryInTransactionAsync(id,null,null,"Nouvelle tentative demandée.",c,tx,ct);
+        var created=await RetryInTransactionAsync(id,null,null,"Nouvelle tentative demandée.",c,tx,ct,ownership);
         if(created is null) return null;
         await tx.CommitAsync(ct);
         broadcaster?.Publish(created);
@@ -229,13 +229,14 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
             if (await work.ExecuteNonQueryAsync(ct) != 1)
                 throw new InvalidOperationException("L’exécution d’origine ne possède plus de source à reprendre.");
         }
+        if(ownership is not null) await ownership.CreateAsync([next],c,tx,ct);
         await tx.CommitAsync(ct);
         broadcaster?.Publish(next);
         return next;
     }
 
     internal static async Task<Guid?> RetryInTransactionAsync(Guid id,RuntimeHandoffSelector? selector,Guid? previousWorker,string detail,
-        DbConnection c,DbTransaction tx,CancellationToken ct)
+        DbConnection c,DbTransaction tx,CancellationToken ct,TaskOwnershipRepository? ownership=null)
     {
         var next=Guid.NewGuid();
         await using(var cmd=Sql.Command("""
@@ -259,6 +260,7 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
             work.Parameters.AddWithValue("previous",SqlKind.Uuid,(object?)previousWorker??DBNull.Value);
             if(await work.ExecuteNonQueryAsync(ct)==0) throw new InvalidOperationException("L’exécution d’origine ne possède pas de contexte de média à relancer.");
         }
+        if(ownership is not null) await ownership.CreateAsync([next],c,tx,ct);
         return next;
     }
     // Called by the future orchestrator after its lease and output validation checks.
@@ -276,12 +278,13 @@ public sealed class ExecutionRepository(DbDataSource dataSource, FlowComponentRe
         { rowLock.Parameters.AddWithValue("id", id); if (await rowLock.ExecuteScalarAsync(ct) is null) return false; }
         await using (var duplicate = Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_events WHERE id=@event AND execution_id=@id)", c, tx))
         { duplicate.Parameters.AddWithValue("event", update.EventId); duplicate.Parameters.AddWithValue("id", id); if ((await duplicate.ScalarBoolAsync(ct))) return true; }
-        await using var cmd = Sql.Command("""
+        await using var cmd = Sql.Command($"""
    UPDATE executions SET state=@state,node_id=COALESCE(node_id,@node),progress=@progress,detail=@detail,
    revision=revision+1,updated_at=clock_timestamp(),
    started_at=CASE WHEN @state='running' THEN COALESCE(started_at,clock_timestamp()) ELSE started_at END,
    finished_at=CASE WHEN @state IN ('succeeded','failed','cancelled','deferred') THEN clock_timestamp() ELSE finished_at END
    WHERE id=@id AND revision=@revision AND (node_id IS NULL OR node_id=@node)
+   AND (NOT EXISTS(SELECT 1 FROM execution_work w WHERE w.execution_id=@id) OR {TaskOwnershipRepository.ActiveSql("@id")})
    AND ((state='queued' AND @state IN ('running','failed','cancelled'))
     OR (state='running' AND @state IN ('running','succeeded','failed','cancelled','deferred'))
     OR (state='cancelling' AND @state IN ('cancelled','failed')))
