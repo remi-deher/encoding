@@ -335,8 +335,10 @@ path {
   padding-inline: 6px;
   color: var(--text-primary);
 }
-.minimap-tools span {
-  min-width: 42px;
+.minimap-tools .minimap-zoom-reset {
+  min-width: 56px;
+  flex: 1;
+  padding-inline: 0;
   text-align: center;
 }
 // A pending connection must reach ports beneath this navigation overlay.
