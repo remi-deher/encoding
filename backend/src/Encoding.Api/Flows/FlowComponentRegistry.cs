@@ -281,6 +281,7 @@ public sealed class FlowComponentRegistry
             else if (fields.Any(field => field.RequiresPluginVersion is not null && !Version.TryParse(field.RequiresPluginVersion, out _))) reason = "requiresPluginVersion illisible";
             else if (component.TimeoutSeconds is < 1 or > 21600) reason = "timeoutSeconds hors de 1 à 21600";
             else if (!MediaEffects.IsValid(component.MediaEffect)) reason = "mediaEffect inconnu (readOnly, producesOutput, modifiesCurrent attendus)";
+            else if (component.Category is not null && !FlowComponentCategories.Ids.Contains(component.Category)) reason = $"catégorie « {component.Category} » inconnue";
             else if (component.ConfigurationSchema.Version != 1) reason = $"version de schéma {component.ConfigurationSchema.Version} (1 attendu)";
             else if (component.Outputs.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != component.Outputs.Count) reason = "identifiant de sortie dupliqué";
             else if (fields.Select(f => f.Id).Distinct(StringComparer.Ordinal).Count() != fields.Count) reason = "identifiant de champ dupliqué";

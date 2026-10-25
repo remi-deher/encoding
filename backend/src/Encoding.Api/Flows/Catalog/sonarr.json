@@ -68,7 +68,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "arr"
     },
     {
       "id": "sonarr-check-episode-indexed",
@@ -115,7 +116,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "arr"
     },
     {
       "id": "sonarr-search-missing-episodes",
@@ -157,7 +159,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "arr"
     }
   ]
 }

@@ -126,7 +126,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "category": "media-servers"
     },
     {
       "id": "plex-wait-library-scan",
@@ -171,7 +172,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "category": "media-servers"
     },
     {
       "id": "plex-check-media-indexed",
@@ -220,7 +222,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "category": "media-servers"
     },
     {
       "id": "plex-check-playback",
@@ -297,7 +300,8 @@
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [
         "1.0.0"
-      ]
+      ],
+      "category": "media-servers"
     },
     {
       "id": "plex-analyze-media",
@@ -344,7 +348,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "media-servers"
     }
   ]
 }

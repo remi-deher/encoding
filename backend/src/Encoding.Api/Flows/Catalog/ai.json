@@ -122,7 +122,8 @@
       ],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "category": "text"
     },
     {
       "id": "ai-metadata-enricher",
@@ -225,7 +226,8 @@
       "requiredTools": [],
       "requiresMedia": true,
       "requiresWriteAccess": true,
-      "compatiblePluginVersions": []
+      "compatiblePluginVersions": [],
+      "category": "metadata"
     }
   ],
   "configurationSchema": {

@@ -14,6 +14,8 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
+  FLOW_COMPONENT_CATEGORIES,
+  FlowComponentCategory,
   FlowComponentDefinition,
   isFlowComponentCompatible,
 } from '../../../shared/models/flow-component';
@@ -99,175 +101,102 @@ import { MediaType } from '../../../shared/models/media-type';
             }
           </div>
 
-          <div class="category-chips" role="tablist" aria-label="Catégories de composants">
-            <button
-              type="button"
-              class="chip-btn"
-              [class.chip-btn_active]="activeCategory() === 'all'"
-              (click)="activeCategory.set('all')"
-              role="tab"
-              [attr.aria-selected]="activeCategory() === 'all'"
-            >
-              Tous ({{ components().length }})
-            </button>
-            <button
-              type="button"
-              class="chip-btn"
-              [class.chip-btn_active]="activeCategory() === 'video'"
-              (click)="activeCategory.set('video')"
-              role="tab"
-              [attr.aria-selected]="activeCategory() === 'video'"
-            >
-              Vidéo
-            </button>
-            <button
-              type="button"
-              class="chip-btn"
-              [class.chip-btn_active]="activeCategory() === 'audio'"
-              (click)="activeCategory.set('audio')"
-              role="tab"
-              [attr.aria-selected]="activeCategory() === 'audio'"
-            >
-              Audio
-            </button>
-            <button
-              type="button"
-              class="chip-btn"
-              [class.chip-btn_active]="activeCategory() === 'subtitles'"
-              (click)="activeCategory.set('subtitles')"
-              role="tab"
-              [attr.aria-selected]="activeCategory() === 'subtitles'"
-            >
-              Sous-titres
-            </button>
-            <button
-              type="button"
-              class="chip-btn"
-              [class.chip-btn_active]="activeCategory() === 'general'"
-              (click)="activeCategory.set('general')"
-              role="tab"
-              [attr.aria-selected]="activeCategory() === 'general'"
-            >
-              Logique
-            </button>
-            @if (otherMediaComponents().length) {
-              <button
-                type="button"
-                class="chip-btn chip-btn_other"
-                [class.chip-btn_active]="activeCategory() === 'others'"
-                (click)="activeCategory.set('others')"
-                role="tab"
-                [attr.aria-selected]="activeCategory() === 'others'"
-              >
-                Autres médias ({{ otherMediaComponents().length }})
-              </button>
-            }
-            <button
-              type="button"
-              class="chip-btn chip-btn_packs"
-              [class.chip-btn_active]="activeCategory() === 'packs'"
-              (click)="activeCategory.set('packs')"
-              role="tab"
-              [attr.aria-selected]="activeCategory() === 'packs'"
-            >
-              Packs ({{ packCatalog().length }})
-            </button>
-          </div>
-
-          <div class="plugin-filter">
-            <label for="flow-palette-plugin">Filtrer par plugin</label>
+          <details class="plugin-filter">
+            <summary>
+              <span>Affiner</span>
+              @if (activePlugin() !== 'all') {
+                <span class="active-filter">{{ activePluginName() }}</span>
+              } @else {
+                <span class="catalog-summary">{{ pluginOptions().length }} plugins</span>
+              }
+            </summary>
+            <label for="flow-palette-plugin">Plugin</label>
             <select
               id="flow-palette-plugin"
               class="plugin-select"
               [value]="activePlugin()"
               (change)="onPluginChange($event)"
             >
-              <option value="all">
-                Tous les plugins ({{ components().length + otherMediaComponents().length }} blocs)
-              </option>
+              <option value="all">Tous les plugins</option>
               @for (plugin of pluginOptions(); track plugin.id) {
                 <option [value]="plugin.id">
                   {{ plugin.name }} ({{ plugin.available + plugin.other }})
                 </option>
               }
             </select>
-            <p class="catalog-summary">
-              {{ components().length }} compatibles · {{ otherMediaComponents().length }} autres
-              médias · {{ pluginOptions().length }} plugins
-            </p>
-          </div>
+            @if (activePlugin() !== 'all') {
+              <button type="button" class="clear-filter" (click)="activePlugin.set('all')">
+                Effacer le filtre
+              </button>
+            }
+          </details>
         </div>
 
         <div class="dock-body">
-          @if (activeCategory() === 'packs') {
-            <div class="catalog-list">
-              @for (pack of filteredPacks(); track pack.id) {
-                <div
-                  class="pack-card"
-                  tabindex="0"
-                  role="button"
-                  (click)="packSelected.emit(pack)"
-                  (keydown.enter)="packSelected.emit(pack)"
-                  matTooltip="Cliquer pour insérer ce pack dans le flow"
-                >
-                  <div class="pack-card-header">
-                    <span class="pack-name">{{ pack.name }}</span>
-                    <span class="pack-badge">{{ pack.componentCount }} blocs</span>
-                  </div>
-                  <div class="pack-card-meta">
-                    <span class="meta-tag">Média : {{ pack.mediaType }}</span>
-                  </div>
-                  <button type="button" class="insert-pack-btn">Insérer le pack</button>
+          @for (group of categoryGroups(); track group.id) {
+            @if (group.components.length) {
+              <details class="category-group" [open]="isExpanded(group.id)">
+                <summary (click)="toggleCategory($event, group.id)">
+                  <span>{{ group.label }}</span>
+                  <span class="category-count">{{ group.components.length }}</span>
+                </summary>
+                <div class="catalog-list">
+                  @for (component of group.components; track component.id) {
+                    <div
+                      class="component-card"
+                      cdkDrag
+                      [cdkDragDisabled]="isUnavailable(component) || component.kind === 'input'"
+                      [cdkDragStartDelay]="{ mouse: 0, touch: 200 }"
+                      (cdkDragStarted)="paletteDrag.component.set(component)"
+                      (cdkDragMoved)="paletteDrag.move($event.pointerPosition)"
+                      (cdkDragEnded)="paletteDrag.finish($event.dropPoint); $event.source.reset()"
+                      tabindex="0"
+                      role="button"
+                      [style.--component-accent]="colors(component).color"
+                      [class.component-card_unavailable]="isUnavailable(component)"
+                      [attr.aria-disabled]="isUnavailable(component)"
+                      (click)="selectComponent(component)"
+                      (keydown.enter)="selectComponent(component)"
+                      [matTooltip]="componentTooltip(component)"
+                    >
+                      <span class="component-kind">{{ kindLabel(component.kind) }}</span>
+                      <span class="component-title">{{ component.name }}</span>
+                      <span class="component-plugin">{{ component.pluginName }}</span>
+                      <span class="add-hint" aria-hidden="true">+</span>
+                    </div>
+                  }
                 </div>
-              } @empty {
-                <p class="empty-state">
-                  Aucun pack disponible. Créez-en depuis un flow publié ou dans les Librairies.
-                </p>
-              }
-            </div>
-          } @else {
-            <div class="catalog-list">
-              @for (component of filteredComponents(); track component.id) {
-                <div
-                  class="component-card"
-                  cdkDrag
-                  [cdkDragDisabled]="isUnavailable(component) || component.kind === 'input'"
-                  [cdkDragStartDelay]="{ mouse: 0, touch: 200 }"
-                  (cdkDragStarted)="paletteDrag.component.set(component)"
-                  (cdkDragMoved)="paletteDrag.move($event.pointerPosition)"
-                  (cdkDragEnded)="paletteDrag.finish($event.dropPoint); $event.source.reset()"
-                  tabindex="0"
-                  role="button"
-                  [style.--component-accent]="colors(component).color"
-                  [class.component-card_unavailable]="isUnavailable(component)"
-                  [attr.aria-disabled]="isUnavailable(component)"
-                  (click)="selectComponent(component)"
-                  (keydown.enter)="selectComponent(component)"
-                  [matTooltip]="componentTooltip(component)"
-                >
-                  <div class="component-card-top">
-                    <span class="component-kind">{{ kindLabel(component.kind) }}</span>
-                    <span class="component-plugin">{{ component.pluginName }}</span>
-                  </div>
-                  <span class="component-title">{{ component.name }}</span>
-                  <p class="component-desc">{{ component.description }}</p>
-                  <div class="component-card-footer">
-                    <span class="outputs-tag">
-                      {{ component.outputs.length }}
-                      {{ component.outputs.length > 1 ? 'sorties' : 'sortie' }}
-                    </span>
-                    @if (isUnavailable(component)) {
-                      <span class="unavailable-tag">Autre type de flow</span>
-                    } @else {
-                      <span class="add-hint">+ Ajouter</span>
-                    }
-                  </div>
-                </div>
-              } @empty {
-                <p class="empty-state">Aucun composant ne correspond à cette recherche.</p>
-              }
-            </div>
+              </details>
+            }
           }
+          @if (filteredComponents().length === 0) {
+            <p class="empty-state">Aucun composant ne correspond à cette recherche.</p>
+          }
+          <details class="category-group pack-group" [open]="isExpanded('packs')">
+            <summary (click)="toggleCategory($event, 'packs')">
+              <span>Packs</span>
+              <span class="category-count">{{ filteredPacks().length }}</span>
+            </summary>
+            @if (filteredPacks().length) {
+              <div class="catalog-list">
+                @for (pack of filteredPacks(); track pack.id) {
+                  <button
+                    type="button"
+                    class="pack-card"
+                    (click)="packSelected.emit(pack)"
+                    matTooltip="Insérer ce pack dans le flow"
+                  >
+                    <span class="pack-name">{{ pack.name }}</span>
+                    <span class="pack-badge"
+                      >{{ pack.componentCount }} blocs · {{ pack.mediaType }}</span
+                    >
+                  </button>
+                }
+              </div>
+            } @else {
+              <p class="empty-state">Aucun pack disponible.</p>
+            }
+          </details>
         </div>
       }
     </aside>
@@ -415,18 +344,62 @@ import { MediaType } from '../../../shared/models/media-type';
       cursor: pointer;
       font-size: 12px;
     }
-    .category-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
     .plugin-filter {
       display: grid;
-      gap: 4px;
+      gap: 8px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .plugin-filter summary,
+    .category-group summary {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      cursor: pointer;
+      list-style: none;
+    }
+    .plugin-filter summary::-webkit-details-marker,
+    .category-group summary::-webkit-details-marker {
+      display: none;
+    }
+    .plugin-filter summary::before,
+    .category-group summary::before {
+      content: '›';
+      font-size: 18px;
+      color: var(--text-muted);
+      transform: rotate(0deg);
+      transition: transform 0.15s ease;
+    }
+    .plugin-filter[open] summary::before,
+    .category-group[open] summary::before {
+      transform: rotate(90deg);
+    }
+    .plugin-filter summary > span:first-of-type,
+    .category-group summary > span:first-of-type {
+      flex: 1;
+    }
+    .active-filter,
+    .category-count {
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-container-highest);
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+    .clear-filter {
+      justify-self: start;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--accent);
+      font: inherit;
+      cursor: pointer;
     }
     .plugin-filter label {
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 700;
       letter-spacing: 0.03em;
       text-transform: uppercase;
@@ -450,31 +423,7 @@ import { MediaType } from '../../../shared/models/media-type';
     .catalog-summary {
       margin: 0;
       color: var(--text-muted);
-      font-size: 10px;
-    }
-    .chip-btn {
-      padding: 2px 7px;
-      border-radius: var(--radius-pill);
-      border: 1px solid var(--border-subtle);
-      background: var(--surface);
-      color: var(--text-secondary);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      &:hover {
-        background: var(--surface-container-high);
-      }
-      &_active {
-        background: var(--accent);
-        color: var(--on-accent);
-        border-color: var(--accent);
-      }
-      &_packs {
-        border-style: dashed;
-      }
-      &_other {
-        border-style: dashed;
-      }
+      font-size: 12px;
     }
     .dock-body {
       flex: 1;
@@ -484,34 +433,42 @@ import { MediaType } from '../../../shared/models/media-type';
     .catalog-list {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 2px;
+      padding-bottom: 4px;
     }
-    .component-card,
-    .pack-card {
-      padding: 10px 12px;
-      background: var(--surface);
-      border-radius: var(--radius-md);
+    .category-group {
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 4px;
+    }
+    .category-group summary {
+      min-height: 40px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .pack-group {
+      margin-top: 8px;
+    }
+    .component-card {
+      min-height: 38px;
+      padding: 5px 8px;
+      background: transparent;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      transition:
-        transform 0.15s ease,
-        box-shadow 0.15s ease;
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto 18px;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease;
       &:hover {
-        transform: translateY(-1px);
-        box-shadow: var(--elevation-1);
+        background: var(--surface-container-high);
       }
       &:focus-visible {
         outline: 2px solid var(--accent);
       }
     }
     .component-card {
-      border: 1px solid var(--border-subtle);
-      border-left: 4px solid var(--component-accent, var(--accent));
-      &:hover {
-        border-color: var(--border-strong);
-      }
+      border-left: 2px solid var(--component-accent, var(--accent));
     }
     .component-card.cdk-drag:not(.cdk-drag-disabled) {
       cursor: grab;
@@ -529,84 +486,62 @@ import { MediaType } from '../../../shared/models/media-type';
         box-shadow: none;
       }
     }
-    .component-card-top,
-    .pack-card-header,
-    .component-card-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-    }
-    .component-card-top {
-      font-size: 10px;
-    }
     .component-kind {
-      font-weight: 700;
+      font-size: 12px;
+      font-weight: 600;
       color: var(--component-accent, var(--accent));
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .component-plugin,
-    .outputs-tag,
-    .pack-card-meta {
-      color: var(--text-muted);
-      font-size: 10px;
     }
     .component-plugin {
-      padding: 2px 6px;
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-pill);
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .component-plugin {
       white-space: nowrap;
     }
-    .component-title,
-    .pack-name {
-      font-size: 14px;
-      font-weight: 700;
+    .component-title {
+      font-size: 12px;
+      font-weight: 500;
       color: var(--text-primary);
-    }
-    .component-desc {
-      margin: 0;
-      font-size: 11px;
-      color: var(--text-secondary);
-      line-height: 1.35;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
       overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .component-card-footer {
-      margin-top: 4px;
-      padding-top: 4px;
-      border-top: 1px dashed var(--border-subtle);
-      font-size: 10px;
-    }
-    .add-hint,
-    .insert-pack-btn {
+    .add-hint {
       color: var(--accent);
       font-weight: 600;
+      text-align: center;
     }
     .unavailable-tag {
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
     }
     .pack-card {
+      width: 100%;
+      min-height: 38px;
+      padding: 6px 8px;
       border: 1px dashed var(--accent);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .pack-name {
+      font-size: 12px;
+      font-weight: 600;
     }
     .pack-badge {
-      font-size: 10px;
+      font-size: 12px;
       padding: 2px 6px;
       border-radius: var(--radius-pill);
       background: var(--accent-soft);
       color: var(--accent);
       font-weight: 600;
-    }
-    .insert-pack-btn {
-      align-self: flex-end;
-      border: none;
-      background: transparent;
-      font-size: 11px;
-      cursor: pointer;
     }
     .empty-state {
       padding: 24px 12px;
@@ -634,9 +569,7 @@ export class FlowPaletteDockComponent {
   readonly cancelInsertion = output<void>();
 
   protected readonly searchQuery = signal('');
-  protected readonly activeCategory = signal<
-    'all' | 'video' | 'audio' | 'subtitles' | 'general' | 'others' | 'packs'
-  >('all');
+  protected readonly expandedCategories = signal<ReadonlySet<string>>(new Set(['video']));
   protected readonly activePlugin = signal('all');
   protected readonly pluginOptions = computed(() => {
     const counts = new Map<string, { name: string; available: number; other: number }>();
@@ -669,14 +602,14 @@ export class FlowPaletteDockComponent {
       .sort((left, right) => left.name.localeCompare(right.name, 'fr'));
   });
 
+  protected readonly activePluginName = computed(
+    () => this.pluginOptions().find((plugin) => plugin.id === this.activePlugin())?.name ?? '',
+  );
+
   protected readonly filteredComponents = computed(() => {
     const query = this.searchQuery().trim().toLowerCase();
-    const category = this.activeCategory();
     const plugin = this.activePlugin();
-    const source = category === 'others' ? this.otherMediaComponents() : this.components();
-    return source.filter((comp) => {
-      const matchCat = category === 'all' || category === 'others' || comp.mediaType === category;
-      if (!matchCat) return false;
+    return [...this.components(), ...this.otherMediaComponents()].filter((comp) => {
       if (plugin !== 'all' && comp.pluginId !== plugin) return false;
       if (!query) return true;
       return (
@@ -688,6 +621,31 @@ export class FlowPaletteDockComponent {
       );
     });
   });
+
+  protected readonly categoryGroups = computed(() => {
+    const components = this.filteredComponents();
+    return (Object.entries(FLOW_COMPONENT_CATEGORIES) as [FlowComponentCategory, string][])
+      .map(([id, label]) => ({
+        id,
+        label,
+        components: components.filter((component) => (component.category ?? 'utilities') === id),
+      }))
+      .filter((group) => group.components.length > 0);
+  });
+
+  protected isExpanded(id: string): boolean {
+    return this.searchQuery().trim().length > 0 || this.expandedCategories().has(id);
+  }
+
+  protected toggleCategory(event: MouseEvent, id: string): void {
+    event.preventDefault();
+    this.expandedCategories.update((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   protected onPluginChange(event: Event): void {
     this.activePlugin.set((event.target as HTMLSelectElement).value);

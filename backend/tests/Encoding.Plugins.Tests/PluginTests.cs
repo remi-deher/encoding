@@ -82,6 +82,9 @@ internal static class PluginTests
             File.Copy(Path.Combine(plugins, "example", "manifest.json"), Path.Combine(directory, "example.json"));
             var registry = new FlowComponentRegistry(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["FlowPlugins:ManifestDirectory"] = directory }).Build());
             Check(registry.Plugins.Single(plugin => plugin.Id == "example").Components.Count == 2, "The server catalog accepts the third-party manifest.");
+            Check(registry.Plugins.Where(plugin => plugin.Id != "example").SelectMany(plugin => plugin.Components)
+                .All(component => component.Category is not null && FlowComponentCategories.Ids.Contains(component.Category)),
+                "Every built-in flow component declares a recognized functional category.");
             foreach (var id in new[] { "sonarr", "radarr" })
             {
                 var plugin = registry.Plugins.Single(item => item.Id == id);
@@ -111,6 +114,8 @@ internal static class PluginTests
         badVersion["version"]="latest";
         var badSchema=root.DeepClone().AsObject();
         badSchema["components"]![0]!["configurationSchema"]!["fields"]![0]!["type"]="telepathy";
+        var badCategory=root.DeepClone().AsObject();
+        badCategory["components"]![0]!["category"]="miscellaneous";
         var cases=new Dictionary<string,string>
         {
             ["unsupported host contract"]=unsupported.ToJsonString(),
@@ -119,6 +124,7 @@ internal static class PluginTests
             ["id of a built-in plugin"]=shadowsBuiltIn.ToJsonString(),
             ["non semantic version"]=badVersion.ToJsonString(),
             ["unknown field type"]=badSchema.ToJsonString(),
+            ["unknown component category"]=badCategory.ToJsonString(),
             ["unreadable JSON"]="{ not json"
         };
 
@@ -200,7 +206,7 @@ internal static class PluginTests
         var registry = new FlowComponentRegistry(new ConfigurationBuilder().Build());
         var plex = registry.Plugins.Single(plugin => plugin.Id == "plex");
         var fingerprint = PluginManifestFingerprint.Compute(plex);
-        var relabelled = plex with { Name = "Autre libellé", Components = plex.Components.Select(c => c with { Name = c.Name + " (v2)", Description = "x" }).ToArray() };
+        var relabelled = plex with { Name = "Autre libellé", Components = plex.Components.Select(c => c with { Name = c.Name + " (v2)", Description = "x", Category = "utilities" }).ToArray() };
         Check(PluginManifestFingerprint.Compute(relabelled) == fingerprint, "Cosmetic changes do not alter the contract fingerprint.");
         var firstOutput = plex.Components.First(c => c.Outputs.Count > 0);
         var drifted = plex with
