@@ -67,3 +67,8 @@ L'exécution d'un flow (baux, workers, publication) est dans [runtime.md](runtim
 - L'accueil et le catalogue proposent un assistant vidéo, en complément du flow vierge et des modèles. `POST /api/v1/flows/guided` génère et valide une définition ordinaire à références installées, sans écriture ni publication. L'UI l'enregistre en brouillon puis ouvre l'éditeur.
 - MKV, HEVC/H.264/AV1, profil Équilibré embarqué, qualité adaptative, encodeur automatique ou CPU, conservation ou adaptation audio intégrée. Sous-titres conservés, HDR préservé ; secours CPU facultatif et désactivé par défaut. La politique de bibliothèque reste seule autorité de remplacement.
 - Le graphe explicite préparation → réglages en plan → exécution groupée → publication. Revue complète, frontières et pistes différées : [revue du 24 octobre](../flow-review-2026-10-24.md).
+
+## Builder FFmpeg explicite
+L'assistant vidéo génère désormais **Début FFmpeg → réglages → Exécuter FFmpeg → publication** (base 1.9.0). Les anciens flows ne sont pas réécrits. La validation de publication vérifie chaque chemin : début obligatoire avant Executor, pas de portée imbriquée ou laissée ouverte, pas de script ni d'opération autonome dans la portée. Conditions, variables, lectures natives de métadonnées et blocs de nœud peuvent la traverser. Les brouillons restent enregistrables pendant la construction.
+
+La simulation demande les métadonnées de sortie d'un Executor supposé réussi avant d'évaluer les conditions suivantes ; elle ne propage pas les métadonnées supposées en cas d'échec. **Assembler le résultat MKV** regroupe sous-titres/polices/noms après l'Executor. Sémantique média, secours et compatibilité : [runtime](runtime.md), ADR [0012](../adr/0012-builder-ffmpeg-et-assemblage.md).

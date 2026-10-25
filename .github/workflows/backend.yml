@@ -4,7 +4,6 @@ on:
     branches: [dev, main]
     paths:
       - "backend/**"
-      - "!backend/tests/monitoring/**"
       - ".github/workflows/backend.yml"
       - ".github/actions/apt-install/**"
       - ".github/scripts/apt-install.sh"
@@ -12,7 +11,6 @@ on:
     branches: [dev, main]
     paths:
       - "backend/**"
-      - "!backend/tests/monitoring/**"
       - ".github/workflows/backend.yml"
       - ".github/actions/apt-install/**"
       - ".github/scripts/apt-install.sh"
@@ -184,7 +182,6 @@ jobs:
       - run: dotnet restore backend/Encoding.sln
       - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror
       - run: dotnet run --project backend/tools/ClusterMeshPrototype --configuration Release -- test
-      - run: dotnet run --project backend/tools/ClusterConsensusPrototype --configuration Release -- test
   ai-cli-native:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -209,3 +206,31 @@ jobs:
         env:
           ENCODING_TEST_AI_CLI_NATIVE: '1'
           ENCODING_TEST_AI_CLI_RUNTIME: ${{ runner.temp }}/encoding-ai-cli/node_modules
+
+  cluster-two-server-measurements:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore backend/Encoding.sln
+      - run: dotnet build backend/Encoding.sln --configuration Release --no-restore -warnaserror -m:1
+      - name: Measure two SQLite owners with 7,000 queued tasks
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p cluster-measurements
+          dotnet test backend/tests/Encoding.Runtime.Tests --configuration Release --no-build \
+            --filter "FullyQualifiedName~MeasuresTwoServerOwnershipLoad" \
+            --logger "console;verbosity=detailed" \
+            --logger "trx;LogFileName=two-server.trx" --results-directory cluster-measurements \
+            | tee cluster-measurements/two-server.log
+        env:
+          ENCODING_TEST_LARGE_COORDINATION_MEASUREMENTS: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cluster-two-server-measurements
+          path: cluster-measurements

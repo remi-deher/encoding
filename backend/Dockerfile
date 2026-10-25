@@ -116,9 +116,9 @@ ENV Node__Roles=server,worker \
     Logging__Console__FormatterName=json \
     Logging__Console__FormatterOptions__UseUtcTimestamp=true \
     Logging__Console__FormatterOptions__IncludeScopes=true
-# 8080 : API et interface web ; 8443 : transport TLS mutuel entre serveurs quand PeerCluster est activé.
+# 8080 : API, interface et échanges signés du maillage.
 # L'agent (8081) et le lanceur (8082) restent locaux au conteneur.
-EXPOSE 8080 8443
+EXPOSE 8080
 # Exécution sans root ($APP_UID, 1654 dans l'image de base). GPU : ajouter le GID du groupe de renderD128 au conteneur
 # (group_add, voir docker-compose.gpu.yml). Les volumes déjà créés par une ancienne image (root) doivent être rendus
 # à cet utilisateur : voir docs/operations/reverse-proxy.md.

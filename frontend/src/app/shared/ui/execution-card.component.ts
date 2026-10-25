@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { ExecutionResponse, EXECUTION_STATE_LABELS } from '../models/execution';
+import { ExecutionResponse, executionStateLabel } from '../models/execution';
 import { StatusBadgeComponent, StatusTone } from './status-badge.component';
 
 @Component({
@@ -17,8 +17,12 @@ import { StatusBadgeComponent, StatusTone } from './status-badge.component';
           <p>{{ execution().library }} · {{ execution().flow }} · v{{ execution().flowVersion }}</p>
         </div>
         <app-status-badge
-          [label]="stateLabels[execution().state]"
-          [tone]="stateTone(execution().state)"
+          [label]="stateLabel(execution())"
+          [tone]="
+            execution().ownership?.state === 'quarantined'
+              ? 'warning'
+              : stateTone(execution().state)
+          "
         />
       </header>
 
@@ -166,7 +170,7 @@ export class ExecutionCardComponent {
   readonly execution = input.required<ExecutionResponse>();
   readonly showPipelineAction = input(false);
   readonly pipelineRequested = output<void>();
-  protected readonly stateLabels = EXECUTION_STATE_LABELS;
+  protected readonly stateLabel = executionStateLabel;
 
   protected stateTone(state: ExecutionResponse['state']): StatusTone {
     switch (state) {

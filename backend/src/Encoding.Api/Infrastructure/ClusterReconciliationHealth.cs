@@ -16,8 +16,9 @@ public sealed record ClusterReconciliationHealthStatus(
     IReadOnlyList<ClusterReconciliationPeerHealth> Peers);
 
 /// <summary>Publie l'état opérationnel du maillage sans exposer les clés privées du cluster.</summary>
-public sealed class ClusterReconciliationHealth
+public sealed class ClusterReconciliationHealth(TimeProvider? timeProvider=null)
 {
+    private readonly TimeProvider clock=timeProvider??TimeProvider.System;
     private readonly object gate = new();
     private readonly Dictionary<string, MutablePeerHealth> peers = new(StringComparer.OrdinalIgnoreCase);
     private bool enabled;
@@ -25,11 +26,48 @@ public sealed class ClusterReconciliationHealth
     private bool discoveryAvailable;
     private string? discoveryError;
 
+    private readonly Dictionary<Guid,(string Url,long At)> caughtUp = new();
+    private readonly Dictionary<Guid,(string Url,long At)> authenticated=new();
+    private readonly Dictionary<Guid,long> sourceWriteSupport=new();
+    internal void ConfirmSourceWriteSupport(Guid peer,bool supported)
+    {
+        lock(gate) {if(supported) sourceWriteSupport[peer]=clock.GetTimestamp();else sourceWriteSupport.Remove(peer);}
+    }
+    internal bool HasFreshSourceWriteSupport(Guid peer,TimeSpan maximumAge)
+    {
+        lock(gate) return enabled && sourceWriteSupport.TryGetValue(peer,out var at) && clock.GetElapsedTime(at)<=maximumAge;
+    }
+    internal void ConfirmCatchUp(string url,Guid peer,bool complete)
+    {
+        lock(gate)
+        {
+            foreach(var other in authenticated.Where(item=>item.Key!=peer && string.Equals(item.Value.Url,url,StringComparison.OrdinalIgnoreCase)).Select(item=>item.Key).ToArray())
+            {caughtUp.Remove(other);authenticated.Remove(other);sourceWriteSupport.Remove(other);}
+            authenticated[peer]=(url,clock.GetTimestamp());
+            if(complete) caughtUp[peer]=(url,clock.GetTimestamp());
+            else caughtUp.Remove(peer);
+        }
+    }
+    internal string? AuthenticatedEndpoint(Guid peer)
+    {
+        lock(gate) return authenticated.TryGetValue(peer,out var state)?state.Url:null;
+    }
+    internal bool HasFreshAuthenticated(Guid peer,TimeSpan maximumAge)
+    {lock(gate) return enabled && authenticated.TryGetValue(peer,out var state) && clock.GetElapsedTime(state.At)<=maximumAge;}
+    internal bool HasFreshCatchUp(Guid peer,TimeSpan maximumAge)
+    {
+        lock(gate) return enabled && caughtUp.TryGetValue(peer,out var state)
+            && clock.GetElapsedTime(state.At)<=maximumAge;
+    }
+
     public void Disable(string reason)
     {
         lock (gate)
         {
             enabled = false;
+            caughtUp.Clear();
+            authenticated.Clear();
+            sourceWriteSupport.Clear();
             disabledReason = reason;
         }
     }
@@ -96,6 +134,7 @@ public sealed class ClusterReconciliationHealth
             var peer = GetOrAdd(url);
             peer.LastAttemptAt = DateTimeOffset.UtcNow;
             peer.LastError = error;
+            foreach(var id in authenticated.Where(item=>string.Equals(item.Value.Url,url,StringComparison.OrdinalIgnoreCase)).Select(item=>item.Key).ToArray()) {caughtUp.Remove(id);authenticated.Remove(id);sourceWriteSupport.Remove(id);}
         }
     }
 

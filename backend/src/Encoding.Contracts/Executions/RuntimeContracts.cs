@@ -7,7 +7,7 @@ public sealed record EnqueueMediaRequest(Guid Id, Guid LibraryId, string MediaPa
 public sealed record RuntimeLease(Guid ExecutionId, int Attempt, int Revision, long Epoch, DateTimeOffset ExpiresAt,
     Guid SourceNodeId, string? SourceRoot, string MediaPath, string? SourceSha256, FlowDefinition Flow, RuntimeCheckpoint? Checkpoint, string EntryNodeId,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, JsonElement>>? PluginConfigurations = null, Guid? LibraryId = null,
-    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false);
+    RuntimeWaitProbe? Probe = null, IReadOnlyList<RuntimePublicationGuard>? Guards = null, bool DirectRead = false,bool SourceWriteGuardsSupported=false);
 public sealed record RuntimeFence(long Epoch);
 public sealed record RuntimeAiSubtitleItem(string Id, string Text);
 public sealed record RuntimeAiSubtitleTranslationRequest(long Epoch, Guid InvocationId, string FlowNodeId,

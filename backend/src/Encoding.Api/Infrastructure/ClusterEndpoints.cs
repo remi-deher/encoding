@@ -3,7 +3,6 @@ using Encoding.Core.Nodes;
 
 namespace Encoding.Api.Infrastructure;
 
-using Encoding.Api.Infrastructure.PeerCluster;
 using System.Text.Json;
 using Encoding.Contracts.Cluster;
 
@@ -26,29 +25,8 @@ public static class ClusterEndpoints
         // Un nœud autonome devient un cluster en le nommant ; ensuite seul le nom change (architecture 0045).
         app.MapPost(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions, IServiceProvider services, CancellationToken cancellationToken) =>
         {
-            var peerOptions = services.GetRequiredService<PeerClusterOptions>();
-            var peerConsensus = peerOptions.Enabled ? services.GetRequiredService<PeerConsensusService>() : null;
             if (!ClusterIdentityRepository.IsValidName(request.Name))
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = [$"Le nom du cluster est obligatoire ({ClusterIdentityRepository.MaximumNameLength} caractères au plus)."] });
-            if (peerOptions.Enabled)
-            {
-                if (!peerOptions.Bootstrap && peerConsensus!.GetStatus().Members.Count < 2)
-                    return Results.Conflict(new { title = "Ce pair doit rejoindre une membership existante avant de créer l’identité du cluster." });
-                if (peerConsensus?.Get("cluster/name") is not null)
-                    return Results.Conflict(new { title = "Ce cluster possède déjà un nom." });
-                try
-                {
-                    await peerConsensus!.ReplicateAsync(new PeerReplicatedStateCommand(Guid.NewGuid(), "cluster/name", JsonSerializer.SerializeToElement(request.Name.Trim())), cancellationToken);
-                    var tokens = services.GetRequiredService<ApiTokenRepository>();
-                    var clusterToken = await tokens.EnsureClusterTokenAsync(cancellationToken);
-                    var created = await repository.GetAsync(cancellationToken);
-                    return Results.Ok(new { created.Id, created.Name, created.Standalone, clusterToken });
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Le quorum Raft n’a pas confirmé le nom du cluster.");
-                }
-            }
             var current = await repository.GetAsync(cancellationToken);
             await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);
             if (!await repository.CreateAsync(request.Name, cancellationToken))
@@ -62,24 +40,8 @@ public static class ClusterEndpoints
 
         app.MapPut(route, async (ClusterNameRequest request, ClusterIdentityRepository repository, ClusterPeerAdmissionRepository admissions, ClusterDataKeyStore dataKeyStore, IServiceProvider services, CancellationToken cancellationToken) =>
         {
-            var peerOptions = services.GetRequiredService<PeerClusterOptions>();
-            var peerConsensus = peerOptions.Enabled ? services.GetRequiredService<PeerConsensusService>() : null;
             if (!ClusterIdentityRepository.IsValidName(request.Name))
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = [$"Le nom du cluster est obligatoire ({ClusterIdentityRepository.MaximumNameLength} caractères au plus)."] });
-            if (peerOptions.Enabled)
-            {
-                if (peerConsensus?.Get("cluster/name") is null)
-                    return Results.Conflict(new { title = "Ce cluster n’a pas encore de nom." });
-                try
-                {
-                    await peerConsensus!.ReplicateAsync(new PeerReplicatedStateCommand(Guid.NewGuid(), "cluster/name", JsonSerializer.SerializeToElement(request.Name.Trim())), cancellationToken);
-                    return Results.Ok(await repository.GetAsync(cancellationToken));
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Le quorum Raft n’a pas confirmé le nouveau nom du cluster.");
-                }
-            }
             var current = await repository.GetAsync(cancellationToken);
             if (!dataKeyStore.HasKey(current.Id))
                 await admissions.EnsureRootAdmissionAsync(current.Id, cancellationToken);

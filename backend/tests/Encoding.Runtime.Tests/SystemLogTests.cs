@@ -135,9 +135,9 @@ public sealed class SystemLogFilterPolicyTests
     }
 
     [Fact]
-    public void Drops_Raft_Consensus_Trace_And_Debug_Logs()
+    public void Drops_Mesh_Trace_And_Debug_Logs()
     {
-        var category = "DotNext.Net.Cluster.Consensus.Raft.RaftCluster";
+        var category = "Encoding.ClusterMesh.Transport";
         var message = "Heartbeat packet exchanged with peer";
 
         Assert.False(SystemLogFilterPolicy.ShouldCapture(category, LogLevel.Debug, message));
@@ -150,11 +150,11 @@ public sealed class SystemLogFilterPolicyTests
     {
         var kestrelCategory = "Microsoft.AspNetCore.Hosting.Diagnostics";
         var healthCategory = "Microsoft.AspNetCore.Diagnostics.HealthChecks";
-        var raftCategory = "DotNext.Net.Cluster.Consensus.Raft";
+        var meshCategory = "Encoding.ClusterMesh";
 
         Assert.True(SystemLogFilterPolicy.ShouldCapture(kestrelCategory, LogLevel.Warning, "Connection reset"));
         Assert.True(SystemLogFilterPolicy.ShouldCapture(healthCategory, LogLevel.Error, "Health check failed: Disk full"));
-        Assert.True(SystemLogFilterPolicy.ShouldCapture(raftCategory, LogLevel.Critical, "Consensus partition split"));
+        Assert.True(SystemLogFilterPolicy.ShouldCapture(meshCategory, LogLevel.Critical, "Mesh exchange failed"));
     }
 }
 
@@ -365,6 +365,7 @@ public sealed class SystemLogMcpTests
         services.AddSingleton(ringBuffer);
         services.AddSingleton(repo);
         services.AddLogging();
+        services.AddSingleton<Encoding.Api.Updates.ReleaseService>();
         services.AddSingleton<McpService>();
 
         var sp = services.BuildServiceProvider();
@@ -379,6 +380,18 @@ public sealed class SystemLogMcpTests
         Assert.NotNull(listResult);
         var listJson = JsonSerializer.Serialize(listResult);
         Assert.Contains("get_system_logs", listJson);
+        Assert.Contains("get_version", listJson);
+        Assert.Contains("get_updates", listJson);
+        foreach (var tool in new[] { "get_version", "get_updates" })
+        {
+            var versionResult = await mcp.HandleMessageAsync(
+                new McpJsonRpcRequest("2.0", "tools/call", JsonSerializer.SerializeToElement(10),
+                    JsonSerializer.SerializeToElement(new { name = tool, arguments = new { } })),
+                new System.Security.Claims.ClaimsPrincipal(), CancellationToken.None);
+            var result = Assert.IsType<McpCallToolResult>(versionResult?.Result);
+            Assert.False(result.IsError);
+            Assert.Contains("0.0.0-dev", result.Content[0].Text);
+        }
 
         // 2. tools/call get_system_logs returns the log
         var callRequest = new McpJsonRpcRequest(
@@ -423,20 +436,28 @@ public sealed class SystemLogApiFactoryTests
     [Fact(Timeout = 60000)]
     public async Task Api_Host_Starts_With_System_Logging()
     {
-        await Task.Yield();
-        using var factory = new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Encoding.Api.Auth.AuthOptions>().WithWebHostBuilder(builder =>
+        await using var database=await TestDatabase.CreateSqliteAsync("system-log-host");
+        var directory=Path.Combine(Path.GetTempPath(),"system-log-host-"+Guid.NewGuid().ToString("N"));
+        try
         {
-            builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
-            builder.UseSetting("Logging:LogLevel:Default", "Error");
-            builder.UseSetting("Auth:Enabled", "false");
-            builder.ConfigureServices(services =>
+            using var factory = new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Encoding.Api.Auth.AuthOptions>().WithWebHostBuilder(builder =>
             {
-                foreach (var descriptor in services.Where(item => item.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)).ToArray())
-                    services.Remove(descriptor);
+                builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.ContentRootKey, AppContext.BaseDirectory);
+                foreach(var setting in database.Settings()) builder.UseSetting(setting.Key,setting.Value);
+                builder.UseSetting("Node:DataDirectory",directory);
+                builder.UseSetting("PluginSettings:KeyDirectory",Path.Combine(directory,"keys"));
+                builder.UseSetting("Logging:LogLevel:Default", "Error");
+                builder.UseSetting("Auth:Enabled", "false");
+                builder.ConfigureServices(services =>
+                {
+                    foreach (var descriptor in services.Where(item => item.ServiceType == typeof(Microsoft.Extensions.Hosting.IHostedService)).ToArray())
+                        services.Remove(descriptor);
+                });
             });
-        });
-        using var client = factory.CreateClient();
-        Assert.NotNull(factory.Services.GetService(typeof(Encoding.Core.Logging.SystemLogRingBuffer)));
+            using var client = factory.CreateClient();
+            Assert.NotNull(factory.Services.GetService(typeof(Encoding.Core.Logging.SystemLogRingBuffer)));
+        }
+        finally {if(Directory.Exists(directory)) Directory.Delete(directory,true);}
     }
 }
 

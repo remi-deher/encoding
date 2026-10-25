@@ -8,7 +8,6 @@ using Encoding.Api.Libraries;
 using Encoding.Api.Nodes;
 using Encoding.Contracts.Libraries;
 using Encoding.Contracts.Executions;
-using Encoding.Api.Infrastructure.PeerCluster;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using System.Reflection;
@@ -122,33 +121,6 @@ public static class RuntimeEndpoints
             if (block is null) return Results.Conflict(new { message = "Le bail ou l’étape IA a expiré; la requête est refusée." });
             return Results.Ok(await enricher.EnrichAsync(request, block, ct));
         }).RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy);
-        group.AddEndpointFilter(async (context, next) =>
-        {
-            var request = context.HttpContext.Request;
-            if (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method) || HttpMethods.IsOptions(request.Method))
-                return await next(context);
-            var services = context.HttpContext.RequestServices;
-            if (services.GetService<PeerClusterOptions>() is not { Enabled: true }) return await next(context);
-            if (!services.GetRequiredService<PeerConsensusService>().TryGetLeaderLease(out var leaderLease))
-                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
-                    title: "Le pair n’a pas de bail Raft valide; l’opération worker est suspendue.");
-            var assignmentGate = services.GetRequiredService<IPeerAssignmentGate>();
-            if (ReadLeaseEpochs(context.Arguments).Any(epoch => !assignmentGate.IsCurrentFencingEpoch(epoch)))
-                return Results.Conflict(new { title = "Le bail worker appartient à un ancien terme Raft et ne peut plus modifier cette exécution." });
-
-            var originalToken = context.HttpContext.RequestAborted;
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(originalToken, leaderLease);
-            context.HttpContext.RequestAborted = linked.Token;
-            for (var index = 0; index < context.Arguments.Count; index++)
-                if (context.Arguments[index] is CancellationToken) context.Arguments[index] = linked.Token;
-            try { return await next(context); }
-            catch (OperationCanceledException) when (!originalToken.IsCancellationRequested && leaderLease.IsCancellationRequested)
-            {
-                return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
-                    title: "Le bail Raft a expiré pendant l’opération worker.");
-            }
-            finally { context.HttpContext.RequestAborted = originalToken; }
-        });
         group.MapPost("/execution-states",async(RuntimeExecutionStatesRequest request,RuntimeRepository runtime,CancellationToken ct)=>
             request.Ids is null || request.Ids.Count>500?(IResult)Results.BadRequest():Results.Ok(await runtime.StatesAsync(request.Ids.Distinct().ToArray(),ct)));
         group.MapGet("/capacity",async(Guid nodeId,LibraryProcessingRepository repository,CancellationToken ct)=>
@@ -181,6 +153,16 @@ public static class RuntimeEndpoints
             try {return await locks.ReleaseAsync(id,nodeId,request,ct) is not null?(IResult)Results.NoContent():Results.Conflict();}
             catch(ArgumentException) {return Results.BadRequest();}
         });
+        group.MapPost("/executions/{id:guid}/source-write/authorize",async(Guid nodeId,Guid id,SourceWriteAuthorization request,RuntimeRepository runtime,CancellationToken ct)=>
+            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await runtime.AuthorizeSourceWriteAsync(id,nodeId,request.Epoch,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
+        group.MapPost("/replacements/{id:guid}/authorize",async(Guid nodeId,Guid id,SourceWriteLocation request,SourceReplacementRepository replacements,CancellationToken ct)=>
+            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await replacements.AuthorizeAsync(id,nodeId,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
+        group.MapPost("/source-writes/claim",async(Guid nodeId,PendingSourceWriteRepository writes,Encoding.Api.Plugins.PublicationGuardProvider guards,CancellationToken ct)=>
+            await writes.ClaimAsync(nodeId,ct) is {} task?(IResult)Results.Ok(task with { Guards=await guards.ListAsync(ct) }):Results.NoContent());
+        group.MapPost("/source-writes/{id:guid}/authorize",async(Guid nodeId,Guid id,PendingSourceWriteFence request,PendingSourceWriteRepository writes,CancellationToken ct)=>
+            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await writes.AuthorizeAsync(id,nodeId,request.ClaimId,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
+        group.MapPost("/source-writes/{id:guid}/complete",async(Guid nodeId,Guid id,PendingSourceWriteCompletion request,PendingSourceWriteRepository writes,CancellationToken ct)=>
+            await writes.CompleteAsync(id,nodeId,request,ct)?(IResult)Results.NoContent():Results.Conflict());
         group.MapPost("/executions/{id:guid}/steps/start",async(Guid nodeId,Guid id,StartRuntimeStep request,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.StartStepAsync(id,nodeId,request,ct) is { } step ? (IResult)Results.Ok(step) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/steps/complete",async(Guid nodeId,Guid id,CompleteRuntimeStep request,
@@ -262,21 +244,7 @@ public static class RuntimeEndpoints
         });
     }
 
-    private static IEnumerable<long> ReadLeaseEpochs(IEnumerable<object?> arguments)
-    {
-        foreach (var argument in arguments)
-        {
-            if (argument is long value)
-            {
-                yield return value;
-                continue;
-            }
 
-            if (argument is null) continue;
-            var property = argument.GetType().GetProperty("Epoch", BindingFlags.Instance | BindingFlags.Public);
-            if (property?.PropertyType == typeof(long) && property.GetValue(argument) is long epoch) yield return epoch;
-        }
-    }
 
     private static Guid DeriveBatchRequestId(Guid executionId, Guid invocationId, string nodeId, int batchIndex)
     {

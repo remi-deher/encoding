@@ -30,7 +30,7 @@ public static class GuidedFlowBuilder
         }
         void Link(string from, string output, string to) => connections.Add(new($"link-{connections.Count + 1}", from, output, to));
         Add("input", "base", "base-input-video", new { });
-        Add("prepare", "base", "base-prepare-processing", new { tool = "ffmpeg", preserveUnchangedTracks = true });
+        Add("prepare", "base", FfmpegBuilderPolicy.Start, new { preserveUnchangedTracks = true });
         Add("video", "video", "video-transcode", new {
             processingMode = "plan", videoCodec = request.Codec,
             encodingProfile = BuiltInEncodingProfiles.Balanced,
@@ -51,7 +51,7 @@ public static class GuidedFlowBuilder
         Add("container", "video", "video-remux-media", new { processingMode = "plan", container = "mkv" });
         Link(previous, "success", "container");
         if (request.Audio == "adapt") Link("audio", "unchanged", "container");
-        Add("execute", "base", "base-execute-processing", new { forceProcessing = false });
+        Add("execute", "base", FfmpegBuilderPolicy.Execute, new { });
         Add("publish", "base", "base-publish-result", new { });
         Link("container", "success", "execute");
         Link("execute", "success", "publish");

@@ -71,3 +71,19 @@ describe('activity items', () => {
     );
   });
 });
+
+describe('cluster ownership presentation', () => {
+  it('distinguishes quarantined work from an ordinary queued execution', () => {
+    const item = executionItem({
+      ...execution('queued'),
+      ownership: {
+        executionId: 'e1',
+        ownerPeerId: 'server-a',
+        epoch: 1,
+        state: 'quarantined',
+      },
+    });
+    expect(item.stateLabel).toBe('En quarantaine');
+    expect(item.tone).toBe('warning');
+  });
+});

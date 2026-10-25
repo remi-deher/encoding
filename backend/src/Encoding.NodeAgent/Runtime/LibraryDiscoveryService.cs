@@ -7,6 +7,7 @@ public sealed class LibraryDiscoveryService(WorkerIdentityStore identities,ILogg
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        try { await WorkerPolling.DelayAsync(0,ct); } catch(OperationCanceledException) when(ct.IsCancellationRequested) { return; }
         while(!ct.IsCancellationRequested)
         {
             try
@@ -22,7 +23,7 @@ public sealed class LibraryDiscoveryService(WorkerIdentityStore identities,ILogg
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested) {break;}
             catch(Exception e) {logger.LogWarning("Découverte momentanément indisponible : {Type}.",e.GetType().Name);}
-            try {await Task.Delay(TimeSpan.FromSeconds(3),ct);} catch(OperationCanceledException) when(ct.IsCancellationRequested){break;}
+            try {await WorkerPolling.DelayAsync(3000,ct);} catch(OperationCanceledException) when(ct.IsCancellationRequested){break;}
         }
     }
     private static async Task ScanAsync(LibraryScanLease lease,RuntimeClient client,CancellationToken ct)

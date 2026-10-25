@@ -1,4 +1,5 @@
 using Encoding.Api.Flows;
+using Encoding.Contracts.Flows;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
@@ -19,7 +20,7 @@ public sealed class GuidedFlowTests
         var validation = new FlowDefinitionValidator(registry).Validate(flow);
         Assert.True(validation.IsValid, string.Join("\n", validation.Issues.Select(i => $"{i.Path}: {i.Message}")));
         Assert.Equal("Test", flow.Name);
-        Assert.Single(flow.Nodes, n => n.Component.ComponentId == "base-execute-processing");
+        Assert.Single(flow.Nodes, n => n.Component.ComponentId == FfmpegBuilderPolicy.Execute);
         Assert.Single(flow.Nodes, n => n.Component.ComponentId == "base-publish-result");
         Assert.All(flow.Nodes, n => Assert.Equal(registry.Plugins.Single(p => p.Id == n.Component.PluginId).Version, n.Component.PluginVersion));
         Assert.DoesNotContain(flow.Connections, c => c.SourceOutputId == "error");

@@ -199,8 +199,7 @@ public sealed class ExecutionWaitRepository(DbDataSource dataSource,NodePresence
 }
 
 /// <summary>Évalue périodiquement les attentes dues sur chaque serveur ; sans état local, donc sans point de défaillance unique.</summary>
-public sealed class ExecutionWaitService(ExecutionWaitRepository waits,ILogger<ExecutionWaitService> logger,
-    Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null) : BackgroundService
+public sealed class ExecutionWaitService(ExecutionWaitRepository waits,ILogger<ExecutionWaitService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -208,8 +207,8 @@ public sealed class ExecutionWaitService(ExecutionWaitRepository waits,ILogger<E
         {
             try
             {
-                using var lease = assignment?.AcquireLease(ct);
-                if (assignment is null || lease is not null) await waits.ProcessDueAsync(lease?.Token ?? ct);
+
+                await waits.ProcessDueAsync(ct);
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested) { break; }
             catch(Exception exception) { logger.LogWarning("Évaluation des attentes momentanément indisponible : {Type}.",exception.GetType().Name); }

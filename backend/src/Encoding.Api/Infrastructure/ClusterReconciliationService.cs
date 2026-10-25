@@ -16,7 +16,7 @@ public sealed class ClusterReconciliationService(
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory,
     ILogger<ClusterReconciliationService> logger,
-    TimeProvider? timeProvider = null) : BackgroundService
+    TimeProvider? timeProvider = null,IClusterTaskPeerClient? taskPeers=null,Encoding.Api.Executions.TaskOwnershipRepository? taskOwnership=null) : BackgroundService
 {
     internal const int MaximumExchangesPerPeer = 8;
     internal const long MaximumBytesPerPeer = 64L * 1024 * 1024;
@@ -25,6 +25,8 @@ public sealed class ClusterReconciliationService(
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly ConcurrentDictionary<string, Guid> discoveredPeers = new(StringComparer.OrdinalIgnoreCase);
     private MdnsBrowser? browser;
+    private volatile bool backlog;
+    internal TimeSpan NextCycleDelay=>backlog?TimeSpan.FromMilliseconds(300+Random.Shared.Next(200)):TimeSpan.FromSeconds(15);
     private Guid clusterId;
     private string? advertisedApiBaseUrl;
     private string? ownInstanceName;
@@ -103,6 +105,7 @@ public sealed class ClusterReconciliationService(
                 {
                     logger.LogWarning(exception, "La capture ou la projection des données du cluster sera retentée.");
                 }
+                if(taskOwnership is not null) await taskOwnership.ProjectAsync(stoppingToken);
                 var peerUrls = await GetPeerUrlsAsync(stoppingToken);
                 var configuredUrls = (configuration.GetSection("Cluster:Reconciliation:Peers").Get<string[]>() ?? [])
                     .Select(Normalize).Where(url => url is not null).Cast<string>();
@@ -110,8 +113,9 @@ public sealed class ClusterReconciliationService(
                 var discoveredUrls = discoveredPeers.Where(peer => peer.Value == clusterId).Select(peer => peer.Key)
                     .Concat(dynamicPeers.Select(Normalize).Where(url => url is not null).Cast<string>());
                 health.SetPeers(configuredUrls, discoveredUrls);
+                backlog=false;
                 await ReconcilePeersAsync(clusterId, peerUrls, stoppingToken);
-                await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+                await Task.Delay(NextCycleDelay, stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
@@ -137,6 +141,7 @@ public sealed class ClusterReconciliationService(
                     stoppingToken.ThrowIfCancellationRequested();
                     var progress = await ReconcilePeerAsync(currentClusterId, peerUrl, stoppingToken);
                     transferred += progress.Bytes;
+                    if(progress.HasMore && progress.MadeProgress) backlog=true;
                     if (!progress.HasMore || !progress.MadeProgress
                         || clock.GetElapsedTime(started) >= CatchUpBudget
                         || transferred + 2L * ClusterReconciliationSignature.MaximumBodyBytes > MaximumBytesPerPeer) break;
@@ -154,6 +159,13 @@ public sealed class ClusterReconciliationService(
                 logger.LogDebug(exception, "Réconciliation différée avec le pair {PeerUrl}.", peerUrl);
             }
         }
+    }
+
+    internal async Task RefreshForSourceWritesAsync(IReadOnlyList<string> peers,CancellationToken ct)
+    {
+        var current=await identityRepository.GetAsync(ct);
+        await entityReconciliation.CaptureLocalChangesAsync(ct);
+        await ReconcilePeersAsync(current.Id,peers,ct);
     }
 
     private async Task<IReadOnlyList<string>> GetPeerUrlsAsync(CancellationToken ct)
@@ -257,7 +269,11 @@ public sealed class ClusterReconciliationService(
         var receivedVector = await repository.GetVectorAsync(ct);
         // Vectors, not batch length, detect remaining work: the byte limit can shorten
         // a full page. Stop on an unchanging peer to avoid polling it in a tight loop.
-        return new(IsAhead(localVector, exchange.KnownSequences) || IsAhead(exchange.KnownSequences, receivedVector),
+        var hasMore=IsAhead(localVector, exchange.KnownSequences) || IsAhead(exchange.KnownSequences, receivedVector);
+        health.ConfirmCatchUp(peerUrl,responsePeerId,!hasMore);
+        if(!hasMore && taskPeers is not null)
+            health.ConfirmSourceWriteSupport(responsePeerId,await taskPeers.SupportsSourceWritesAsync(currentClusterId,responsePeerId,responsePublicKey,peerUrl,ct));
+        return new(hasMore,
             IsAhead(exchange.KnownSequences, remoteVector) || IsAhead(receivedVector, localVector),
             (long)requestBody.Length + responseBody.Length);
     }

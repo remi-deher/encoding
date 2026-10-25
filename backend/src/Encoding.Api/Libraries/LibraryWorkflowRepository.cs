@@ -7,14 +7,13 @@ using System.Text;
 using Encoding.Api.Executions;
 using Encoding.Api.Flows;
 using Encoding.Api.Nodes;
-using Encoding.Api.Infrastructure.PeerCluster;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Libraries;
 
 namespace Encoding.Api.Libraries;
 
 public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefinitionValidator validator,NodePresenceOptions presence,
-    IPeerAssignmentGate? peerAssignmentGate = null,PeerConsensusService? peerConsensus = null,ExecutionStreamBroadcaster? broadcaster = null)
+    ExecutionStreamBroadcaster? broadcaster = null,TaskOwnershipRepository? ownership=null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     public Task<LibraryWorkflowResponse> GetAsync(Guid library,CancellationToken ct)=>GetAsync(library,null,null,null,ct);
@@ -57,19 +56,6 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
     public async Task<bool> AssignAsync(Guid library,AssignLibraryFlowRequest request,CancellationToken ct)
     {
         if(request.ExpectedRevision<0 || request.ExpectedRevision==int.MaxValue || (request.FlowId is null)!=(request.Version is null)) return false;
-        if(peerConsensus is { DatabaseTransactionsEnabled: false })
-        {
-            var currentWorkflow=peerConsensus.GetLibraryWorkflow(library);
-            var currentRevision=currentWorkflow?.Revision??0;
-            if(currentRevision!=request.ExpectedRevision) return false;
-            if(request.FlowId is {} flowId)
-            {
-                if(peerConsensus.GetFlowVersion(flowId,request.Version!.Value) is not {} version
-                    || !validator.Validate(version.Definition).IsValid) return false;
-            }
-            var next=new PeerLibraryWorkflowState(library,request.FlowId,request.Version,request.ExpectedRevision+1);
-            return await peerConsensus.ReplicateLibraryWorkflowAsync(next,request.ExpectedRevision,ct);
-        }
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await LockLibraryAsync(library,c,tx,ct)) return false;
         await using var current=Sql.Command("SELECT flow_assignment_revision FROM libraries WHERE id=@id",c,tx);
@@ -125,7 +111,7 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
           """,c,tx);
         cmd.Parameters.AddWithValue("node",node); cmd.Parameters.AddWithValue("offline",presence.OfflineAfter);
         await using var r=await cmd.ExecuteReaderAsync(ct); if(!await r.ReadAsync(ct)) return null;
-        var lease=new LibraryScanLease(r.GetGuid(0),r.GetGuid(1),peerAssignmentGate?.NextFencingEpoch(r.GetInt64(2)) ?? r.GetInt64(2)+1,r.GetString(3),r.GetString(4)); await r.DisposeAsync();
+        var lease=new LibraryScanLease(r.GetGuid(0),r.GetGuid(1),checked(r.GetInt64(2)+1),r.GetString(3),r.GetString(4)); await r.DisposeAsync();
         await using var update=Sql.Command("UPDATE library_scans SET node_id=@node,source_root=@root,epoch=@epoch,state='running',lease_until=clock_timestamp()+interval '60 seconds',detail='Découverte des fichiers en cours.' WHERE id=@id",c,tx);
         update.Parameters.AddWithValue("root",lease.Root); update.Parameters.AddWithValue("id",lease.Id); update.Parameters.AddWithValue("node",node); update.Parameters.AddWithValue("epoch",lease.Epoch);
         await update.ExecuteNonQueryAsync(ct); await tx.CommitAsync(ct); return lease;
@@ -224,16 +210,17 @@ public sealed class LibraryWorkflowRepository(DbDataSource dataSource,FlowDefini
             await using var r=await select.ExecuteReaderAsync(ct); while(await r.ReadAsync(ct)) files.Add((r.GetGuid(0),r.GetString(1),r.GetInt64(2),r.GetFieldValue<DateTimeOffset>(3)));
         }
         if(!automatic && files.Count!=ids.Count || files.Any(file=>!LibraryMediaTypes.Matches(file.Path,flow.MediaType))) return null;
-        int queued=0;
+        int queued=0;var assignments=new List<Guid>();
         foreach(var file in files)
         {
             var execution=actionId is { } confirmedAction ? ConfirmedExecutionId(confirmedAction,file.Id) : Guid.NewGuid();
             if(!await RuntimeRepository.EnqueueInTransactionAsync(new(execution,library,file.Path,flow.Id,flow.Version),flow,c,tx,ct))continue;
-            queued++;
+            queued++;assignments.Add(execution);
             await using var receipt=Sql.Command("INSERT INTO library_processing_receipts(library_id,file_id,flow_id,flow_version,byte_length,modified_at,execution_id) VALUES(@library,@file,@flow,@version,@bytes,@modified,@execution) ON CONFLICT DO NOTHING",c,tx);
             receipt.Parameters.AddWithValue("library",library);receipt.Parameters.AddWithValue("file",file.Id);receipt.Parameters.AddWithValue("flow",flow.Id);receipt.Parameters.AddWithValue("version",flow.Version);
             receipt.Parameters.AddWithValue("bytes",file.Bytes);receipt.Parameters.AddWithValue("modified",file.Modified.ToUniversalTime());receipt.Parameters.AddWithValue("execution",execution);await receipt.ExecuteNonQueryAsync(ct);
         }
+        if(ownership is not null) await ownership.CreateAsync(assignments,c,tx,ct);
         await tx.CommitAsync(ct);
         if(queued>0) broadcaster?.Publish();
         return(queued,files.Count-queued);

@@ -9,7 +9,6 @@
     <InternalsVisibleTo Include="Encoding.Runtime.Tests" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DotNext.AspNetCore.Cluster" Version="6.10.0" />
     <PackageReference Include="Haukcode.Mdns" Version="1.0.21" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
@@ -19,6 +18,7 @@
     <ProjectReference Include="..\Encoding.Core\Encoding.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Content Update="release-manifest.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="Flows\Catalog\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="Flows\Legacy\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\migrations\sqlite\*.sql" Link="migrations\sqlite\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

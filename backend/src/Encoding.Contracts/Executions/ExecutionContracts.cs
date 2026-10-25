@@ -6,7 +6,7 @@ public sealed record ExecutionResponse(
  string State, Guid? NodeId, string? Node, decimal? Progress, string Detail,
  int Attempt, int Revision, DateTimeOffset QueuedAt, DateTimeOffset? StartedAt,
  DateTimeOffset? FinishedAt, DateTimeOffset UpdatedAt, JsonElement? BeforeMetadata = null, JsonElement? AfterMetadata = null, string? PublishedPath = null,
- IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings = null, Guid? LibraryId = null);
+ IReadOnlyList<ResolvedVideoEncoding>? VideoEncodings = null, Guid? LibraryId = null, TaskOwnershipStatus? Ownership = null);
 public sealed record ExecutionEventResponse(Guid Id, int Revision, string State, string Detail, DateTimeOffset CreatedAt);
 public sealed record CreateExecutionRequest(Guid Id, string Media, string Library, string Flow, int FlowVersion, JsonElement FlowDefinition);
 public sealed record ExecutionOverviewResponse(

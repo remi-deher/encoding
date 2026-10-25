@@ -27,3 +27,8 @@ Une décision structurante : nouveau principe, changement d'un invariant des fic
 | [0009](0009-ecrivain-sqlite-unique-par-noeud.md) | Écrivain SQLite unique par nœud | implemented | replication-storage |
 | [0010](0010-capture-incrementale-locale.md) | Capture incrémentale locale par clés modifiées | implemented | replication-storage |
 | [0011](0011-controles-media-selon-effets.md) | Contrôles média selon les effets des opérations | implemented | runtime |
+| [0012](0012-builder-ffmpeg-et-assemblage.md) | Builder FFmpeg explicite et assemblage MKV atomique | implemented | runtime |
+| [0013](0013-retrait-mode-raft.md) | Retrait du mode de consensus SQL | implemented | replication-storage |
+| [0014](0014-attente-des-ecritures-source.md) | Attente durable des écritures sur les sources en cluster | implemented | runtime |
+| [0015](0015-attribution-journalisee-des-taches.md) | Attribution initiale journalisée des tâches | implemented | runtime |
+| [0016](0016-transferts-et-reprise-manuelle.md) | Transferts inter-serveurs et reprise manuelle sans quorum | implemented | runtime |

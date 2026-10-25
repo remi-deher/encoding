@@ -8,11 +8,10 @@ using Encoding.Api.Plugins;
 using Encoding.Contracts.Executions;
 using Encoding.Contracts.Flows;
 using Encoding.Contracts.Nodes;
-using Encoding.Api.Infrastructure.PeerCluster;
 
 namespace Encoding.Api.Executions;
 
-public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,IPeerAssignmentGate? peerAssignmentGate = null)
+public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility eligibility,FlowComponentRegistry components,NodePresenceOptions presence,PluginConfigurationRepository pluginConfigurations,NodeGroupRepository nodeGroups,ClusterSourceWriteBarrier? sourceWrites=null,TaskOwnershipRepository? ownership=null)
 {
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     /// <summary>États des exécutions demandées ; les identifiants inconnus de ce serveur sont absents du résultat.</summary>
@@ -91,6 +90,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
         if(!await EnqueueInTransactionAsync(request,flow,c,tx,ct)) return false;
+        if(ownership is not null) await ownership.CreateAsync([request.Id],c,tx,ct);
         await tx.CommitAsync(ct); return true;
     }
 
@@ -119,9 +119,9 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     /// </summary>
     internal static readonly TimeSpan SourceOfflineGrace = TimeSpan.FromMinutes(5);
 
-    private const string UnavailableSourcesSql = """
+    private static readonly string UnavailableSourcesSql = $"""
         SELECT e.id,e.node_id,e.revision FROM executions e JOIN execution_work w ON w.execution_id=e.id
-        WHERE e.state IN ('queued','running') AND NOT EXISTS(
+        WHERE e.state IN ('queued','running') AND {TaskOwnershipRepository.ActiveSql("e.id")} AND NOT EXISTS(
           SELECT 1 FROM library_node_accesses a JOIN cluster_nodes n ON n.id=a.node_id
           WHERE a.library_id=w.library_id AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.local_path IS NOT NULL
             AND n.deleted_at IS NULL AND n.last_seen_at>clock_timestamp()-@offline
@@ -160,9 +160,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
 
     public async Task<RuntimeLease?> ClaimAsync(Guid worker,CancellationToken ct)
     {
-        using var assignmentLease = peerAssignmentGate?.AcquireLease(ct);
-        if (peerAssignmentGate is not null && assignmentLease is null) return null;
-        if (assignmentLease is not null) ct = assignmentLease.Token;
+        if(ownership is not null && !await ownership.PrepareClaimsAsync(ct)) return null;
         // Persist failures independently, so an inaccessible task cannot delay another eligible task.
         if (await HasUnavailableSourcesAsync(dataSource, presence.OfflineAfter, ct))
         {
@@ -213,6 +211,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             CASE WHEN w.wait_probe_due THEN (SELECT x.spec::text FROM execution_waits x WHERE x.execution_id=e.id AND x.state='waiting') END,e.queued_at
           FROM execution_work w JOIN executions e ON e.id=w.execution_id JOIN libraries l ON l.id=w.library_id
           WHERE (e.state='queued' OR e.state='running' AND w.worker_node_id IS NULL)
+          AND {TaskOwnershipRepository.ActiveSql("e.id")}
+          AND COALESCE(w.handoff_selector->>'mode','')<>'server'
           AND l.is_active AND w.available_at<=clock_timestamp()
           AND w.lease_until IS NULL
           {cursorPredicate}
@@ -246,6 +246,15 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             }
             else if(item.Selector is {} selector && (!item.PreviousWorker.HasValue || !selector.Accepts(worker,item.PreviousWorker.Value,nodeIdentity))) continue;
             if(item.Probe is null && !eligibility.CanRun(item.Flow,capabilities,worker,item.Checkpoint?.NextNodeId,item.Checkpoint is not null,item.Checkpoint?.Context,nodeIdentity,inventory)) continue;
+            var sourceEditResume=false;
+            await using(var waiting=Sql.Command("SELECT EXISTS(SELECT 1 FROM runtime_source_write_waits WHERE execution_id=@id)",c,tx))
+            {
+                waiting.Parameters.AddWithValue("id",item.Id);
+                sourceEditResume=await waiting.ScalarBoolAsync(ct);
+                if(sourceEditResume && sourceWrites is not null && await sourceWrites.CheckAsync(c,tx,ct) is not null) continue;
+            }
+            if(sourceWrites is not null && item.Flow.Nodes.Any(n=>n.Component.ComponentId=="mkv-edit-in-place")
+                && !capabilities.Any(cap=>cap.ToolId==SourceWriteProtocol.Capability) && await sourceWrites.IsClusteredAsync(c,tx,ct)) continue;
             // Library row serializes claims from all workers before counting active leases.
             await using(var limits=Sql.Command("""
               SELECT p.max_concurrent_tasks,(SELECT max_concurrent_tasks FROM library_node_processing_limits WHERE library_id=l.id AND node_id=@worker)
@@ -267,7 +276,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             }
             Guid source=item.Source??worker; string? root=null;
             var needsWrite=item.Flow.Nodes.Any(n=>components.Resolve(n.Component)!.RequiresWriteAccess);
-            var needsDirect=eligibility.RequiresDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
+            var needsDirect=sourceEditResume || eligibility.RequiresDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
             var prefersDirect=eligibility.PrefersDirectAccess(item.Flow,item.Checkpoint?.NextNodeId,item.Checkpoint is not null);
             if(item.Probe is null)
             {
@@ -331,10 +340,11 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                         await ReleaseAsync(item.Id,c,tx,ct); await tx.CommitAsync(ct); return new(null);
                     }
                     if(destination.Mode=="node" && destination.TargetNodeId==worker) returnsToSelf=true;
+                    if(destination.Mode=="server" && !capabilities.Any(c=>c.ToolId=="plugin/nodes" && Version.TryParse(c.Version,out var v) && v>=new Version(1,8,0))) returnsToSelf=true;
                 }
                 if(returnsToSelf) continue;
             }
-            var epoch=peerAssignmentGate?.NextFencingEpoch(item.Epoch) ?? item.Epoch+1;
+            var epoch=checked(item.Epoch+1);
             await using(var reserve=Sql.Command("""
               INSERT INTO media_reservations(library_id,media_key,execution_id,lease_epoch,lease_until)
               VALUES(@library,@key,@id,@epoch,clock_timestamp()+interval '60 seconds')
@@ -345,6 +355,11 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 reserve.Parameters.AddWithValue("library",item.Library); reserve.Parameters.AddWithValue("key",item.Key);
                 reserve.Parameters.AddWithValue("id",item.Id); reserve.Parameters.AddWithValue("epoch",epoch);
                 if(await reserve.ExecuteScalarAsync(ct) is null) continue;
+            }
+            if(sourceEditResume)
+            {
+                await using var clear=Sql.Command("DELETE FROM runtime_source_write_waits WHERE execution_id=@id",c,tx);
+                clear.Parameters.AddWithValue("id",item.Id);await clear.ExecuteNonQueryAsync(ct);
             }
             await using(var set=Sql.Command("""
               UPDATE execution_work SET worker_node_id=@worker,source_node_id=@source,lease_epoch=@epoch,handoff_pending=false,
@@ -379,7 +394,8 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
                 prepare.Parameters.AddWithValue("id",item.Id); prepare.Parameters.AddWithValue("requested",!directRead);
                 await prepare.ExecuteNonQueryAsync(ct);
             }
-            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead));
+            if(ownership is not null) await ownership.SaveCheckpointAsync(item.Id,c,tx,ct);
+            await tx.CommitAsync(ct); return new(new(item.Id,item.Attempt,item.Revision+1,epoch,expires,source,root,item.Path,sourceSha,item.Flow,checkpoint,item.Flow.Nodes.Single(node=>components.Resolve(node.Component)?.Kind=="input").Id,pluginSettings,item.Library,item.Probe,DirectRead:directRead,SourceWriteGuardsSupported:sourceWrites is not null));
         }
         return new(null, candidates.Count == CandidatePageSize
             ? new(candidates[^1].QueuedAt, candidates[^1].Id) : null);
@@ -396,10 +412,11 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
 
     internal static async Task<bool> FenceAsync(Guid id,Guid actor,long epoch,DbConnection c,DbTransaction tx,CancellationToken ct,bool source=false)
     {
-        await using var command=Sql.Command("""
+        await using var command=Sql.Command($"""
           SELECT w.execution_id FROM execution_work w JOIN executions e ON e.id=w.execution_id
           JOIN media_reservations m ON m.execution_id=w.execution_id AND m.lease_epoch=w.lease_epoch
           WHERE w.execution_id=@id AND w.lease_epoch=@epoch AND w.lease_until>clock_timestamp() AND m.lease_until>clock_timestamp()
+          AND {TaskOwnershipRepository.ActiveSql("e.id")}
           AND (CASE WHEN @source THEN w.source_node_id ELSE w.worker_node_id END)=@actor AND e.state IN ('running','cancelling')
           FOR UPDATE OF e,w,m
           """,c,tx);
@@ -408,7 +425,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
     }
     internal static async Task ReleaseAsync(Guid id,DbConnection c,DbTransaction tx,CancellationToken ct)
     {
-        await using var cmd=Sql.Command("DELETE FROM media_reservations WHERE execution_id=@id; DELETE FROM disk_locks WHERE execution_id=@id; UPDATE execution_work SET lease_until=NULL,handoff_pending=false WHERE execution_id=@id",c,tx);
+        await using var cmd=Sql.Command("UPDATE pending_source_writes SET state='failed',detail='Écriture annulée avec son exécution.',claim_id=NULL,claim_until=NULL,finished_at=clock_timestamp() WHERE execution_id=@id AND state IN ('waiting','claimed') AND EXISTS(SELECT 1 FROM executions e WHERE e.id=@id AND e.state IN ('cancelling','cancelled','failed')); DELETE FROM media_reservations WHERE execution_id=@id AND NOT EXISTS(SELECT 1 FROM pending_source_writes p WHERE p.execution_id=@id AND p.state IN ('waiting','claimed')); DELETE FROM runtime_source_write_waits WHERE execution_id=@id; DELETE FROM disk_locks WHERE execution_id=@id; UPDATE execution_work SET lease_until=NULL,handoff_pending=false WHERE execution_id=@id",c,tx);
         cmd.Parameters.AddWithValue("id",id); await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -427,6 +444,46 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         var result=new RuntimeLeaseStatus(r.GetBoolean(0),r.GetInt32(1),r.GetFieldValue<DateTimeOffset>(2)); await r.DisposeAsync(); await tx.CommitAsync(ct); return result;
     }
 
+    private static async Task SuspendSourceWriteAsync(Guid id,Guid worker,string node,long epoch,string reason,DbConnection c,DbTransaction tx,CancellationToken ct)
+    {
+        await using var pause=Sql.Command("""
+          INSERT INTO runtime_source_write_waits(execution_id,flow_node_id,reason) VALUES(@id,@node,@reason)
+          ON CONFLICT(execution_id) DO UPDATE SET reason=@reason;
+          DELETE FROM execution_steps WHERE execution_id=@id AND node_id=@node AND completed_at IS NULL;
+          UPDATE execution_work SET worker_node_id=NULL,lease_until=NULL,lease_epoch=lease_epoch+1,available_at=clock_timestamp()+interval '15 seconds' WHERE execution_id=@id;
+          UPDATE media_reservations SET lease_epoch=@epoch+1,lease_until='infinity'::timestamptz WHERE execution_id=@id;
+          DELETE FROM disk_locks WHERE execution_id=@id;
+          """,c,tx);
+        pause.Parameters.AddWithValue("id",id);pause.Parameters.AddWithValue("node",node);pause.Parameters.AddWithValue("reason",reason);pause.Parameters.AddWithValue("epoch",epoch);
+        await pause.ExecuteNonQueryAsync(ct);
+        await using var revision=Sql.Command("SELECT revision FROM executions WHERE id=@id",c,tx);revision.Parameters.AddWithValue("id",id);
+        await ExecutionRepository.RecordInTransactionAsync(id,new(Guid.NewGuid(),(await revision.ScalarInt32Async(ct))!.Value,"running",worker,null,reason),c,tx,ct);
+    }
+
+    public async Task<bool> AuthorizeSourceWriteAsync(Guid id,Guid worker,long epoch,string root,CancellationToken ct)
+    {
+        await using(var check=dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM execution_work w JOIN executions e ON e.id=w.execution_id WHERE w.execution_id=@id AND w.worker_node_id=@worker AND w.source_node_id=@worker AND w.lease_epoch=@epoch AND w.lease_until>clock_timestamp() AND e.state='running' AND EXISTS(SELECT 1 FROM library_node_accesses a WHERE a.library_id=w.library_id AND a.node_id=@worker AND a.is_enabled AND a.can_write AND a.mode='direct' AND a.local_path=@root))"))
+        {
+            check.Parameters.AddWithValue("id",id);check.Parameters.AddWithValue("worker",worker);check.Parameters.AddWithValue("epoch",epoch);check.Parameters.AddWithValue("root",root);
+            if(!await check.ScalarBoolAsync(ct)) return false;
+        }
+        var verified=sourceWrites is null || await sourceWrites.VerifyAsync(ct);
+        await using var c=await dataSource.OpenConnectionAsync(ct);await using var tx=await c.BeginTransactionAsync(ct);
+        if(!await FenceAsync(id,worker,epoch,c,tx,ct)) return false;
+        if(sourceWrites is not null && !await sourceWrites.SupportsGuardAsync(worker,c,tx,ct)) return false;
+        await using var step=Sql.Command("SELECT s.node_id FROM execution_steps s JOIN executions e ON e.id=s.execution_id JOIN execution_work w ON w.execution_id=e.id WHERE s.execution_id=@id AND s.completed_at IS NULL AND w.source_node_id=@worker AND EXISTS(SELECT 1 FROM library_node_accesses a WHERE a.library_id=w.library_id AND a.node_id=@worker AND a.is_enabled AND a.can_write AND a.mode='direct' AND a.local_path=@root) AND EXISTS(SELECT 1 FROM json_each(e.flow_definition,'$.nodes') n WHERE json_extract(n.value,'$.id')=s.node_id AND json_extract(n.value,'$.component.componentId')='mkv-edit-in-place')",c,tx);
+        step.Parameters.AddWithValue("id",id);step.Parameters.AddWithValue("worker",worker);step.Parameters.AddWithValue("root",root);var node=await step.ExecuteScalarAsync(ct) as string;
+        if(node is null) return false;
+        var refusal=!verified?"Écriture source différée : la synchronisation préalable du cluster est indisponible.":sourceWrites is null?null:await sourceWrites.CheckAsync(c,tx,ct);
+        if(refusal is not null)
+        {
+            // Called only by the native editor immediately before its first source mutation.
+            await SuspendSourceWriteAsync(id,worker,node,epoch,refusal,c,tx,ct);
+            await tx.CommitAsync(ct);return false;
+        }
+        await tx.CommitAsync(ct);return true;
+    }
+
     public async Task<StartedRuntimeStep?> StartStepAsync(Guid id,Guid worker,StartRuntimeStep request,CancellationToken ct)
     {
         await using var c=await dataSource.OpenConnectionAsync(ct); await using var tx=await c.BeginTransactionAsync(ct);
@@ -440,6 +497,11 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             prior.Parameters.AddWithValue("id",id); var json=await prior.ExecuteScalarAsync(ct) as string;
             var expected=json is null ? flow.Nodes.Single(n=>components.Resolve(n.Component)!.Kind=="input").Id : JsonSerializer.Deserialize<RuntimeCheckpoint>(json,Json)!.NextNodeId;
             if(expected!=node.Id) return null;
+        }
+        if(node.Component.ComponentId=="mkv-edit-in-place" && sourceWrites is not null && await sourceWrites.CheckAsync(c,tx,ct) is {} reason)
+        {
+            await SuspendSourceWriteAsync(id,worker,node.Id,request.Epoch,reason,c,tx,ct);
+            await tx.CommitAsync(ct);return null;
         }
         await using var start=Sql.Command("""
           INSERT INTO execution_steps(execution_id,node_id,invocation_id,idempotent) VALUES(@id,@node,@invocation,@idempotent) ON CONFLICT DO NOTHING;
@@ -492,7 +554,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         {
             var inspected=flow.Nodes.SingleOrDefault(node=>node.Id==cp.NodeId);
             if(cp.Context.CurrentSha256!="" || cp.Handoff is not null || cp.Wait is not null || cp.Context.Plan.Count>0
-                || inspected is null || !(DirectMediaInspection.Allows(inspected.Component.PluginId,inspected.Component.ComponentId,FlowOperationConfiguration.Resolve(inspected.Component.ComponentId,inspected.Configuration),cp.Context.Plan.Count)
+                || inspected is null || !(DirectMediaInspection.Allows(inspected.Component.PluginId,inspected.Component.ComponentId,FlowOperationConfiguration.Resolve(inspected.Component.ComponentId,inspected.Configuration),cp.Context.Plan.Count,FfmpegBuilderPolicy.Active(cp.Context.Variables))
                     || DirectMediaInspection.AllowsMetadataOnly(components.Resolve(inspected.Component)))) return false;
             await using var direct=Sql.Command("SELECT EXISTS(SELECT 1 FROM execution_work WHERE execution_id=@id AND worker_node_id=@worker AND source_node_id=@worker AND NOT source_preparation_requested AND source_sha IS NULL)",c,tx);
             direct.Parameters.AddWithValue("id",id); direct.Parameters.AddWithValue("worker",worker);
@@ -524,6 +586,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             var snapshot=await settings.ExecuteScalarAsync(ct) as byte[];
             try { handoff=RuntimeHandoffPolicy.Resolve(node,snapshot is null?null:pluginConfigurations.ReadSnapshot(snapshot).GetValueOrDefault("nodes")); }
             catch(ArgumentException) { return false; }
+            if(handoff.Mode=="server" && (ownership is null || ownership.IsLocalPeer(handoff.TargetNodeId!.Value))) return false;
             if(cp.Handoff!=handoff || cp.NextNodeId is null || handoff.Mode=="node" && handoff.TargetNodeId==worker) return false;
         }
         else if(cp.Handoff is not null) return false;
@@ -580,6 +643,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
             await yield.ExecuteNonQueryAsync(ct);
         }
         if(wait is not null) await ExecutionWaitRepository.BeginAsync(id,node.Id,wait,request.Epoch,c,tx,ct);
+        if(ownership is not null) await ownership.SaveCheckpointAsync(id,c,tx,ct);
         await tx.CommitAsync(ct); return true;
     }
 
@@ -605,7 +669,7 @@ public sealed class RuntimeRepository(DbDataSource dataSource,RuntimeEligibility
         {
             Guid? executionWorker;
             var currentNode=flow.Nodes.SingleOrDefault(item=>item.Id==currentNodeId);
-            if(resolution.FlowNodeId==currentNodeId || currentNode?.Component.PluginId=="base" && currentNode.Component.ComponentId=="base-execute-processing") executionWorker=worker;
+            if(resolution.FlowNodeId==currentNodeId || currentNode?.Component.PluginId=="base" && currentNode.Component.ComponentId is "base-execute-processing" or FfmpegBuilderPolicy.Execute) executionWorker=worker;
             else
             {
                 await using var owner=Sql.Command("SELECT completed_worker_node_id FROM execution_steps WHERE execution_id=@id AND node_id=@node AND completed_at IS NOT NULL",c,tx);

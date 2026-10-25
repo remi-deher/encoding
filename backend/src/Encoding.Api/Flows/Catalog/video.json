@@ -37,7 +37,7 @@
             "label": "Mode de traitement",
             "type": "select",
             "defaultValue": "plan",
-            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "options": [
               {
                 "value": "plan",
@@ -341,7 +341,7 @@
             "label": "Mode de traitement",
             "type": "select",
             "defaultValue": "plan",
-            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "options": [
               {
                 "value": "plan",
@@ -454,7 +454,7 @@
                 "label": "Exécuter immédiatement"
               }
             ],
-            "description": "Le mode plan combine le filtre de rognage à base-transcode-video sans réécriture intermédiaire.",
+            "description": "Le mode plan combine le filtre de rognage à base-transcode-video sans réécriture intermédiaire. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "required": true,
             "importance": "advanced",
             "section": "Exécution"
@@ -561,7 +561,7 @@
                 "label": "Exécuter immédiatement"
               }
             ],
-            "description": "Le mode plan applique le désentrelacement pendant l'encodage sans passe séparée.",
+            "description": "Le mode plan applique le désentrelacement pendant l'encodage sans passe séparée. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "required": true,
             "importance": "advanced",
             "section": "Exécution"
@@ -903,7 +903,7 @@
             "label": "Mode de traitement",
             "type": "select",
             "defaultValue": "plan",
-            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome.",
+            "description": "Ajouter les réglages au plan, puis utiliser Exécuter le traitement ; ou réaliser une opération autonome. Dans une préparation Début FFmpeg / Exécuter FFmpeg, ce bloc ajoute toujours ses réglages au plan, sans produire de fichier intermédiaire.",
             "options": [
               {
                 "value": "plan",

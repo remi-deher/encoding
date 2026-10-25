@@ -21,10 +21,6 @@ public sealed class SessionAuthenticationHandler(
 {
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (Context.Items.TryGetValue(Encoding.Api.Infrastructure.PeerCluster.PeerRequestRouting.PrincipalItem, out var forwarded)
-            && forwarded is ClaimsPrincipal principal)
-            return AuthenticateResult.Success(new AuthenticationTicket(principal, SessionAuthentication.Scheme));
-
         if (Request.Headers.Authorization.ToString() is { Length: > 0 } authHeader
             && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {

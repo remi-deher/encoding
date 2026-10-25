@@ -29,7 +29,7 @@ import {
 } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
-import { EXECUTION_STATE_LABELS } from '../../shared/models/execution';
+import { executionStateLabel } from '../../shared/models/execution';
 import { AiAssistantActivity } from '../../shared/models/ai-tools';
 import { formatFullDateTime } from '../../shared/models/date-format';
 import { joinBadges, mediaBadges } from '../../shared/models/media-badges';
@@ -395,7 +395,18 @@ export class ActivityPageComponent {
       : '—';
     return [
       { section: 'Exécution', label: 'Identifiant', value: e.id, copiable: true },
-      { section: 'Exécution', label: 'État', value: EXECUTION_STATE_LABELS[e.state] },
+      { section: 'Exécution', label: 'État', value: executionStateLabel(e) },
+      {
+        section: 'Attribution',
+        label: 'Serveur propriétaire',
+        value: e.ownership?.ownerPeerId ?? '—',
+        copiable: true,
+      },
+      {
+        section: 'Attribution',
+        label: 'Époque',
+        value: e.ownership ? String(e.ownership.epoch) : '—',
+      },
       {
         section: 'Exécution',
         label: 'Progression',

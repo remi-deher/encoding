@@ -11,8 +11,7 @@ public sealed record RetentionResult(int Candidates, int Purged, long BytesFreed
 /// Les lignes d’historique et empreintes restent dans la base locale ; seule la marque <c>artifacts_purged_at</c> est ajoutée.
 /// Les fichiers publiés dans les bibliothèques ne sont jamais concernés.
 /// </summary>
-public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactStore store, OperationsOptions options, ILogger<ArtifactRetention> logger,
-    Encoding.Api.Infrastructure.PeerCluster.IPeerAssignmentGate? assignment = null)
+public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactStore store, OperationsOptions options, ILogger<ArtifactRetention> logger)
 {
     private const string CandidateSql = """
         SELECT e.id
@@ -20,6 +19,9 @@ public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactSt
         JOIN execution_work w ON w.execution_id = e.id
         WHERE w.artifacts_purged_at IS NULL
           AND e.finished_at IS NOT NULL
+          AND NOT EXISTS(SELECT 1 FROM task_quarantines q WHERE q.execution_id=e.id)
+          AND NOT EXISTS(SELECT 1 FROM task_transfers t WHERE t.execution_id=e.id AND t.state IN ('proposed','received'))
+          AND NOT EXISTS(SELECT 1 FROM pending_source_writes p WHERE p.execution_id=e.id AND p.state IN ('waiting','claimed'))
           AND ((e.state IN ('succeeded','cancelled') AND e.finished_at < clock_timestamp() - make_interval(days => @days))
             OR (e.state = 'failed' AND @failedDays > 0 AND e.finished_at < clock_timestamp() - make_interval(days => @failedDays)))
           AND NOT (e.state = 'succeeded' AND w.publication_requested AND w.published_path IS NULL)
@@ -31,9 +33,7 @@ public sealed class ArtifactRetention(DbDataSource dataSource, RuntimeArtifactSt
 
     public async Task<RetentionResult> RunOnceAsync(CancellationToken cancellationToken)
     {
-        using var lease = assignment?.AcquireLease(cancellationToken);
-        if (assignment is not null && lease is null) return new(0, 0, 0, 0, options.ArtifactRetention.DryRun);
-        cancellationToken = lease?.Token ?? cancellationToken;
+
         var settings = options.ArtifactRetention;
         var ids = new List<Guid>();
         int purged = 0; long freed = 0;

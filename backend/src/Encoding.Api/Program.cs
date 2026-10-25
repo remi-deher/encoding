@@ -15,10 +15,6 @@ using Encoding.Core.Nodes;
 using Encoding.Contracts.Libraries;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
-using Encoding.Api.Infrastructure.PeerCluster;
-using DotNext.Net.Cluster.Consensus.Raft.Http;
-using DotNext.Net.Cluster.Consensus.Raft;
-using DotNext.Net.Cluster.Consensus.Raft.StateMachine;
 using Encoding.Api.Logging;
 using Encoding.Api.Mcp;
 using Encoding.Api.Tools;
@@ -26,10 +22,6 @@ using Encoding.Core.Logging;
 
 if (args.FirstOrDefault() is McpCommand.Name or "--" + McpCommand.Name)
     Environment.Exit(await McpCommand.RunAsync(args[1..], Console.In, Console.Out, CancellationToken.None));
-if (args.FirstOrDefault() == PeerAuthorityDatabaseCommand.Name)
-    Environment.Exit(await PeerAuthorityDatabaseCommand.RunAsync(args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
-if (args.FirstOrDefault() is { } peerCommand && PeerOperationsCommand.Names.Contains(peerCommand))
-    Environment.Exit(await PeerOperationsCommand.RunAsync(peerCommand, args[1..], AppContext.BaseDirectory, Console.Out, CancellationToken.None));
 if (args.FirstOrDefault() == "--isolated-process")
 {
     Environment.Exit(Encoding.Core.Runtime.ProcessSandbox.Run(args));
@@ -38,7 +30,6 @@ if (args.FirstOrDefault() == "--isolated-process")
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddOperations();
-var peerClusterOptions = builder.AddPeerCluster();
 var pluginKeyDirectory = ClusterPeerIdentityStore.ResolveKeyDirectory(builder.Configuration, builder.Environment.ContentRootPath);
 Directory.CreateDirectory(pluginKeyDirectory);
 builder.Services.AddDataProtection()
@@ -50,18 +41,17 @@ if (offlineAfterSeconds <= 0)
     throw new InvalidOperationException("NodePresence:OfflineAfterSeconds doit être supérieur à zéro.");
 }
 var localDatabase = DatabaseProvider.CreateRuntime(builder.Configuration);
-builder.Services.AddSingleton(new PeerLocalDatabase(localDatabase));
-builder.Services.AddSingleton<System.Data.Common.DbDataSource>(services => peerClusterOptions.Enabled
-    ? new PeerDataSource(services.GetRequiredService<PeerDatabaseCoordinator>()) : localDatabase);
+builder.Services.AddSingleton<System.Data.Common.DbDataSource>(localDatabase);
 builder.Services.AddSingleton(new NodePresenceOptions(TimeSpan.FromSeconds(offlineAfterSeconds)));
 builder.Services.AddSingleton<NodeRepository>();
+builder.Services.AddSingleton<INodeModeTransitionGuard,ClusterNodeModeGuard>();
 builder.Services.AddSingleton<NodeDirectoryBrowserRepository>();
 builder.Services.AddSingleton<NodeGroupRepository>();
 builder.Services.AddSingleton<EnrollmentWindowRepository>();
 builder.Services.AddSingleton<FirstLinkRepository>();
 builder.Services.AddSingleton<LocalNodeRegistry>();
 // Instances créées hors conteneur : le fournisseur de logs est résolu pendant l'initialisation de ILoggerFactory.
-var systemLogRepository = new SystemLogRepository(new PeerLocalDatabase(localDatabase));
+var systemLogRepository = new SystemLogRepository(localDatabase);
 var systemLogSink = new SystemLogDbSink(systemLogRepository);
 builder.Services.AddSingleton(systemLogRepository);
 builder.Services.AddSingleton(systemLogSink);
@@ -76,6 +66,13 @@ builder.Services.AddClusterAuthentication(builder.Configuration);
 builder.Services.AddSingleton<NetworkSettingsService>();
 builder.Services.AddSingleton<ApiTokenRepository>();
 builder.Services.AddSingleton<McpSessionManager>();
+builder.Services.AddSingleton<Encoding.Api.Updates.ReleaseService>();
+builder.Services.AddHttpClient("release-updates", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Encoding-UpdateChecker/1.0");
+});
 builder.Services.AddSingleton<ExecutionStreamBroadcaster>();
 builder.Services.AddSingleton<ExecutionRepository>();
 builder.Services.AddSingleton<FlowComponentRegistry>();
@@ -144,6 +141,17 @@ builder.Services.AddHttpClient("MetadataSources", client => client.Timeout = Tim
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<AiMetadataEnrichmentService>();
 builder.Services.AddSingleton<RuntimeEligibility>();
+builder.Services.AddSingleton<ClusterSourceWriteBarrier>();
+builder.Services.AddSingleton<TaskOwnershipRepository>();
+builder.Services.AddSingleton<TaskCheckpointRepository>();
+builder.Services.AddSingleton<TaskCoordinationProjection>();
+builder.Services.AddSingleton<ClusterTaskTransport>();
+builder.Services.AddSingleton<ClusterTaskCoordinator>();
+builder.Services.AddSingleton<ClusterTaskMaintenance>();
+builder.Services.AddHostedService(services=>services.GetRequiredService<ClusterTaskMaintenance>());
+builder.Services.AddHttpClient("ClusterTaskTransfer",client=>client.Timeout=TimeSpan.FromMinutes(30)).ConfigurePrimaryHttpMessageHandler(()=>new HttpClientHandler{AllowAutoRedirect=false});
+builder.Services.AddHostedService<TaskOwnershipService>();
+builder.Services.AddSingleton<PendingSourceWriteRepository>();
 builder.Services.AddSingleton<RuntimeRepository>();
 builder.Services.AddSingleton<DiskLockRepository>();
 builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>();
@@ -169,6 +177,7 @@ builder.Services.AddNodeModeControl(builder.Configuration[NodeModeEndpoints.Cont
 builder.Services.AddHostedService<ClusterDiscoveryPublisher>();
 builder.Services.AddHttpClient("ClusterReconciliation", client => client.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<IClusterTaskPeerClient,ClusterTaskPeerClient>();
 builder.Services.AddSingleton<ClusterReconciliationService>();
 builder.Services.AddHostedService<ClusterReconciliationService>(services => services.GetRequiredService<ClusterReconciliationService>());
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -181,66 +190,7 @@ var app = builder.Build();
 // Fail startup if the bundled installed catalog is invalid or missing.
 app.Services.GetRequiredService<FlowComponentRegistry>();
 await DatabaseMigrator.ApplyAsync(localDatabase, app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
-if (peerClusterOptions.Enabled)
-{
-    await app.Services.GetRequiredService<PeerDatabaseCoordinator>().InitializeAsync(app.Lifetime.ApplicationStopping);
-    await app.RestoreStateAsync<PeerStateMachine>();
-    app.Services.GetRequiredService<PeerTrustStore>().AttachStateMachine(app.Services.GetRequiredService<PeerStateMachine>());
-}
-
-if (peerClusterOptions.Enabled)
-{
-    var peerTrustStore = app.Services.GetRequiredService<PeerTrustStore>();
-    app.UseWhen(context => context.Request.Path == "/api/v1/peer-cluster/presence"
-        && context.Connection.LocalPort != peerClusterOptions.ListenPort, branch =>
-        branch.Run(context =>
-        {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return Task.CompletedTask;
-        }));
-    app.UseWhen(context => context.Connection.LocalPort == peerClusterOptions.ListenPort, branch =>
-    {
-        branch.Use(async (context, next) =>
-        {
-            var path = context.Request.Path;
-            if (path != "/cluster-consensus/raft" && path != "/api/v1/peer-cluster/presence"
-                && path != PeerRequestRouting.StatusPath && !PeerRequestRouting.IsClusterRoute(path))
-            {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-            if (path == "/api/v1/peer-cluster/presence"
-                && context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodySize)
-                bodySize.MaxRequestBodySize = 4 * 1024 * 1024;
-            var certificate = await context.Connection.GetClientCertificateAsync(context.RequestAborted);
-            if (!peerTrustStore.IsTrustedClientCertificate(certificate))
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return;
-            }
-            var database = app.Services.GetRequiredService<PeerDatabaseCoordinator>();
-            if (!PeerRequestRouting.Compatible(context, database))
-            {
-                context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
-                return;
-            }
-            if (path == PeerRequestRouting.StatusPath)
-            {
-                await context.Response.WriteAsJsonAsync(PeerRequestRouting.Status(database, app.Services.GetRequiredService<PeerIdentityStore>(),
-                    app.Services.GetRequiredService<PeerConsensusService>()));
-                return;
-            }
-            if (PeerRequestRouting.IsClusterRoute(path) && !PeerRequestRouting.ReadPrincipal(context))
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return;
-            }
-            await next(context);
-        });
-        branch.UseConsensusProtocolHandler();
-    });
-}
-
+await app.Services.GetRequiredService<TaskOwnershipRepository>().InitializeAsync(app.Lifetime.ApplicationStopping);
 app.UseRequestObservability();
 app.UseTrustedProxies();
 app.UseSecurityHeaders();
@@ -250,7 +200,6 @@ app.UseStaticFiles();
 if (!app.Services.GetRequiredService<Encoding.Api.Auth.AuthOptions>().Enabled)
     app.Logger.LogWarning("Auth:Enabled=false : toute requête est traitée comme administrateur, MCP et API de gestion compris. À réserver au développement.");
 app.UseClusterAuthentication();
-app.UsePeerRequestRouting();
 app.MapAuthEndpoints();
 app.MapApiTokenEndpoints();
 app.MapNetworkSettingsEndpoints();
@@ -276,13 +225,19 @@ app.MapSystemLogEndpoints();
 app.MapLibraryWorkflowEndpoints();
 app.MapLibraryEndpoints();
 app.MapClusterEndpoints();
-app.MapPeerClusterEndpoints();
 app.MapClusterReconciliationEndpoints();
+app.MapClusterTaskEndpoints();
 app.MapNodeEndpoints();
 app.MapNodeGroupEndpoints();
 app.MapLocalNodeEndpoints();
 app.MapNodeMode("/api/v1/node/mode");
 app.MapExecutionEndpoints();
+app.MapTaskOwnershipEndpoints();
+app.MapClusterTaskCoordinationEndpoints();
+app.MapGet("/api/v1/system/version", (Encoding.Api.Updates.ReleaseService releases) =>
+    Results.Ok(new { version = releases.Installed.Version, commit = releases.Installed.Commit }));
+app.MapGet("/api/v1/system/updates", (Encoding.Api.Updates.ReleaseService releases, CancellationToken ct) =>
+    releases.GetUpdatesAsync(ct));
 app.MapMcpEndpoints();
 app.MapBusinessOperationEndpoints();
 app.MapAiToolEndpoints();

@@ -24,8 +24,6 @@ test('documentation and release automation do not run application suites', () =>
 test('code, image and monitoring each trigger the relevant workflows', () => {
   assert.deepEqual(affected('frontend/src/app/example.ts'), ['frontend', 'image']);
   assert.deepEqual(affected('backend/src/Encoding.Api/Program.cs'), ['backend', 'image']);
-  assert.deepEqual(affected('docs/operations/peer-cluster-alerts.yml'), ['monitoring']);
-  assert.deepEqual(affected('backend/tests/monitoring/peer-cluster-alerts.test.yml'), ['monitoring']);
   assert.deepEqual(affected('.dockerignore'), ['image']);
 });
 test('push and PR filters match release lookup scopes', () => {

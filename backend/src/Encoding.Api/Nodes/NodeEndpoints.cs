@@ -1,5 +1,4 @@
 using Encoding.Api.Auth;
-using Encoding.Api.Infrastructure.PeerCluster;
 using Encoding.Api.Libraries;
 using Encoding.Contracts.Nodes;
 using Encoding.Api.Infrastructure;
@@ -185,13 +184,14 @@ public static class NodeEndpoints
             return await repository.LeaveAsync(nodeId, token, ct) switch
             {
                 "deleted" => Results.NoContent(),
+                "coordination" => Results.Conflict(new {title="Départ du serveur différé : réconcilier les pairs et déplacer ou terminer ses tâches."}),
                 "busy" => Results.Conflict(new { title = "Ce nœud participe à un traitement ou une découverte. Attendez sa fin avant de quitter le cluster." }),
                 _ => Results.Unauthorized()
             };
         }).AllowAnonymous().RequireRateLimiting(AuthExtensions.AnonymousPolicy).WithName("LeaveCluster");
 
-        nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, PeerPresenceRegistry peerPresence, CancellationToken cancellationToken) =>
-            Results.Ok(peerPresence.MergeNodes(await repository.ListAsync(options.OfflineAfter, cancellationToken), options.OfflineAfter, replicatedCatalog: true)))
+        nodes.MapGet("", async (NodeRepository repository, NodePresenceOptions options, CancellationToken cancellationToken) =>
+            Results.Ok(await repository.ListAsync(options.OfflineAfter, cancellationToken)))
             .WithName("ListNodes");
 
         nodes.MapPut("/{nodeId:guid}/mode", async (Guid nodeId, ChangeNodeModeRequest request, NodeRepository repository, NodePresenceOptions options, CancellationToken ct) =>
@@ -201,6 +201,7 @@ public static class NodeEndpoints
             return await repository.RequestModeAsync(nodeId, request.Server, request.Worker, options.OfflineAfter, ct) switch
             {
                 NodeRepository.ModeRequestResult.NotFound => Results.NotFound(),
+                NodeRepository.ModeRequestResult.CoordinationUnavailable => Results.Conflict(new {title="Modification de topologie différée : réconcilier les serveurs et vider les files possédées."}),
                 NodeRepository.ModeRequestResult.LastServer => Results.Conflict(new { title = "Ce nœud est le dernier serveur en ligne : sa fonction serveur ne peut pas être retirée." }),
                 _ => Results.Accepted()
             };
@@ -226,6 +227,7 @@ public static class NodeEndpoints
         {
             return await repository.DeleteAsync(nodeId,ct) switch {
                 "deleted"=>(IResult)Results.NoContent(),
+                "coordination"=>Results.Conflict(new{title="Retrait différé : réconcilier les serveurs du cluster."}),
                 "busy"=>Results.Conflict(new{title="Ce nœud participe à un traitement ou une découverte. Attendez sa fin ou annulez les tâches avant de le supprimer."}),
                 _=>Results.NotFound()
             };

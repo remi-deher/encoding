@@ -23,6 +23,25 @@ public static class SafeMediaPaths
     {
         await using var file=File.OpenRead(path); return Convert.ToHexStringLower(await SHA256.HashDataAsync(file,ct));
     }
+    public static async Task CopyVerifiedAsync(string source,string target,string sha,CancellationToken ct)
+    {
+        var partial=target+".copy.partial";
+        try
+        {
+            using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            await using(var input=File.OpenRead(source))
+            await using(var output=new FileStream(partial,FileMode.Create,FileAccess.Write,FileShare.None,81920,FileOptions.Asynchronous))
+            {
+                var buffer=new byte[81920]; int count;
+                while((count=await input.ReadAsync(buffer,ct))>0)
+                { hash.AppendData(buffer,0,count); await output.WriteAsync(buffer.AsMemory(0,count),ct); }
+                await output.FlushAsync(ct); output.Flush(true);
+            }
+            if(Convert.ToHexStringLower(hash.GetHashAndReset())!=sha) throw new IOException("La copie locale ne correspond pas à la source validée.");
+            File.Move(partial,target,true);
+        }
+        finally { if(File.Exists(partial)) File.Delete(partial); }
+    }
     public sealed class MediaLockBusyException() : IOException("Ce média est déjà utilisé par un autre traitement.");
     private sealed class MediaLock(string path,FileStream stream) : IDisposable
     {

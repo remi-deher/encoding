@@ -1,6 +1,5 @@
 using Encoding.Api.Auth;
 using Encoding.Api.Infrastructure;
-using Encoding.Api.Infrastructure.PeerCluster;
 using System.Text.Json;
 using Encoding.Contracts.Flows;
 
@@ -112,7 +111,7 @@ public static class FlowEndpoints
             catch (InvalidDataException e) { return ApiProblem.BadRequest(e.Message); }
         }).AllowViewer().RequireRateLimiting(AuthExtensions.HeavyOperationsPolicy).WithName("ExportFlowsArchive");
 
-        flows.MapPost("/import", async (HttpRequest request, FlowArchiveService archives, PeerClusterOptions peerOptions, CancellationToken ct) =>
+        flows.MapPost("/import", async (HttpRequest request, FlowArchiveService archives, CancellationToken ct) =>
         {
             try
             {

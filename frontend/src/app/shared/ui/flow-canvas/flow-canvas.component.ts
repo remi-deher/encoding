@@ -20,6 +20,7 @@ import {
   untracked,
 } from '@angular/core';
 import { CdkDrag, CdkDragHandle, CdkDragEnd, CdkDragMove } from '@angular/cdk/drag-drop';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatButtonModule } from '@angular/material/button';
 import {
   FlowGraphNode,
@@ -29,9 +30,13 @@ import {
   FlowComponentOutput,
   FLOW_COMPONENT_KIND_LABELS,
 } from '../../models/flow-component';
-import { layoutFlowCanvas, FlowCanvasNodeSize } from '../../models/flow-canvas';
+import {
+  layoutFlowCanvas,
+  FlowCanvasNodeSize,
+  estimateFlowCanvasNodeSize,
+} from '../../models/flow-canvas';
 import { canConnectFlowGraph } from '../../models/flow-graph';
-import { flowComponentColors } from '../../models/flow-presentation';
+import { flowComponentColors, flowOutputPresentation } from '../../models/flow-presentation';
 import { ContextActionsDirective, ContextActionPosition } from '../context-actions.directive';
 import {
   ContextActionMenuComponent,
@@ -50,6 +55,7 @@ import { routeFlowLink } from '../flow-link-routing';
     CdkDrag,
     CdkDragHandle,
     MatButtonModule,
+    MatTooltipModule,
     ContextActionsDirective,
     ContextActionMenuComponent,
   ],
@@ -61,9 +67,17 @@ export class FlowCanvasComponent {
   readonly mediaType = input<MediaType>('video');
   readonly simulationResult = input<SimulationResult | null>(null);
   readonly simulationDetailsRequested = output<void>();
-  protected summary(node: FlowGraphNode): string {
-    return flowBlockSummary(node, this.mediaType());
+  protected nodeTooltip(node: FlowGraphNode): string {
+    return [node.name || node.component.name, flowBlockSummary(node, this.mediaType())]
+      .filter(Boolean)
+      .join(' · ');
   }
+  protected configureWithKeyboard(event: Event, node: FlowGraphNode): void {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    this.edit(node);
+  }
+  protected readonly outputPresentation = flowOutputPresentation;
   readonly componentDropped = output<FlowPaletteDrop>();
   protected dropComponent(event: FlowPaletteDrop): void {
     if (this.readOnly()) return;
@@ -116,15 +130,11 @@ export class FlowCanvasComponent {
       top: Math.min(0, ...nodes.map((node) => this.position(node).y - 24)),
       right: Math.max(
         340,
-        ...nodes.map(
-          (node) => this.position(node).x + (this.measurements().get(node.id)?.width ?? 340) + 24,
-        ),
+        ...nodes.map((node) => this.position(node).x + this.nodeSize(node).width + 24),
       ),
       bottom: Math.max(
         200,
-        ...nodes.map(
-          (node) => this.position(node).y + (this.measurements().get(node.id)?.height ?? 200) + 24,
-        ),
+        ...nodes.map((node) => this.position(node).y + this.nodeSize(node).height + 24),
       ),
     };
   });
@@ -135,12 +145,12 @@ export class FlowCanvasComponent {
   private readonly obstacles = computed(() =>
     this.nodes().map((node) => {
       const p = this.wirePosition(node),
-        size = this.measurements().get(node.id);
+        size = this.nodeSize(node);
       return {
         left: p.x,
-        right: p.x + (size?.width ?? 340),
+        right: p.x + size.width,
         top: p.y,
-        bottom: p.y + (size?.height ?? 200),
+        bottom: p.y + size.height,
       };
     }),
   );
@@ -193,7 +203,7 @@ export class FlowCanvasComponent {
   protected readonly colors = flowComponentColors;
   protected readonly kindLabels = FLOW_COMPONENT_KIND_LABELS;
   protected nodeSize(node: FlowGraphNode): FlowCanvasNodeSize {
-    return this.measurements().get(node.id) ?? { width: 340, height: 200 };
+    return this.measurements().get(node.id) ?? estimateFlowCanvasNodeSize(node);
   }
   constructor() {
     inject(DestroyRef).onDestroy(() => {
@@ -222,13 +232,19 @@ export class FlowCanvasComponent {
           top = p.y * this.scale();
         if (
           left < view.scrollLeft ||
-          left + 300 * this.scale() > view.scrollLeft + view.clientWidth ||
+          left + this.nodeSize(node).width * this.scale() > view.scrollLeft + view.clientWidth ||
           top < view.scrollTop ||
-          top + 180 * this.scale() > view.scrollTop + view.clientHeight
+          top + this.nodeSize(node).height * this.scale() > view.scrollTop + view.clientHeight
         )
           view.scrollTo({
-            left: Math.max(0, left - view.clientWidth / 2 + 150 * this.scale()),
-            top: Math.max(0, top - view.clientHeight / 2 + 90 * this.scale()),
+            left: Math.max(
+              0,
+              left - view.clientWidth / 2 + (this.nodeSize(node).width / 2) * this.scale(),
+            ),
+            top: Math.max(
+              0,
+              top - view.clientHeight / 2 + (this.nodeSize(node).height / 2) * this.scale(),
+            ),
           });
       });
     });
@@ -402,7 +418,13 @@ export class FlowCanvasComponent {
   private anchor(node: FlowGraphNode, port: string | null): FlowGraphPosition {
     const p = this.wirePosition(node),
       offset = this.anchors().get(node.id + ':' + (port === null ? 'input' : 'output:' + port));
-    return { x: p.x + (offset?.x ?? 170), y: p.y + (offset?.y ?? (port === null ? 0 : 160)) };
+    const size = this.nodeSize(node);
+    const index = node.component.outputs.findIndex((output) => output.id === port);
+    const x =
+      port === null
+        ? size.width / 2
+        : 8 + ((size.width - 16) * (index + 0.5)) / Math.max(1, node.component.outputs.length);
+    return { x: p.x + (offset?.x ?? x), y: p.y + (offset?.y ?? (port === null ? 0 : size.height)) };
   }
   protected ghost(): string {
     const pending = this.pending(),

@@ -26,6 +26,15 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         await EnsureIdentityAsync(ct);
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
+        await SetRegisterInTransactionAsync(key,jsonValue,connection,transaction,ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    internal static async Task SetRegisterInTransactionAsync(string key,string jsonValue,DbConnection connection,DbTransaction transaction,CancellationToken ct)
+    {
+        if(string.IsNullOrWhiteSpace(key) || key.Length>256) throw new ArgumentException("Registre invalide.");
+        await using(var identity=Sql.Command("INSERT INTO cluster_sync_identity(singleton,origin_id,next_sequence) VALUES(true,@origin,0) ON CONFLICT(singleton) DO NOTHING",connection,transaction))
+        {identity.Parameters.AddWithValue("origin",Guid.NewGuid());await identity.ExecuteNonQueryAsync(ct);}
         Guid clusterId;
         Guid originId;
         long sequence;
@@ -59,7 +68,6 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
             await updateName.ExecuteNonQueryAsync(ct);
         }
 
-        await transaction.CommitAsync(ct);
     }
 
     /// <summary>Ajoute les événements distants une seule fois et applique les registres connus selon l'ordre LWW.</summary>
@@ -313,7 +321,7 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    private async Task<bool> InsertEventAsync(DbConnection connection, DbTransaction transaction, ClusterChangeEvent change, CancellationToken ct)
+    private static async Task<bool> InsertEventAsync(DbConnection connection, DbTransaction transaction, ClusterChangeEvent change, CancellationToken ct)
     {
         await using var command = Sql.Command("""
             INSERT INTO cluster_change_log(event_id, cluster_id, origin_id, sequence, event_type, payload, occurred_at)
@@ -338,7 +346,7 @@ public sealed class ClusterReconciliationRepository(DbDataSource dataSource)
         return await reader.ReadAsync(ct) ? (ReadDateTimeOffset(reader.GetValue(0)), ReadGuid(reader, 1), Convert.ToInt64(reader.GetValue(2), CultureInfo.InvariantCulture)) : null;
     }
 
-    private async Task UpsertRegisterAsync(DbConnection connection, DbTransaction transaction, string key, string jsonValue, DateTimeOffset occurredAt, Guid originId, long sequence, CancellationToken ct)
+    private static async Task UpsertRegisterAsync(DbConnection connection, DbTransaction transaction, string key, string jsonValue, DateTimeOffset occurredAt, Guid originId, long sequence, CancellationToken ct)
     {
         await using var command = Sql.Command("""
             INSERT INTO cluster_sync_registers(register_key, value, occurred_at, origin_id, sequence)

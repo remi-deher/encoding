@@ -6,7 +6,7 @@ using Encoding.Contracts.Libraries;
 namespace Encoding.Api.Executions;
 
 /// <summary>Politique de remplacement des sources et registre durable des remplacements (voir l'architecture 0029).</summary>
-public sealed class SourceReplacementRepository(DbDataSource dataSource)
+public sealed class SourceReplacementRepository(DbDataSource dataSource,ClusterSourceWriteBarrier? sourceWrites=null)
 {
     public static readonly TimeSpan RollbackReservation=TimeSpan.FromMinutes(15);
     public async Task<LibraryReplacementPolicy?> GetPolicyAsync(Guid library,CancellationToken ct)
@@ -74,7 +74,7 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource)
 
     public async Task<SourceReplacementResponse?> GetAsync(Guid execution,CancellationToken ct)
     {
-        await using var cmd=dataSource.CreateCommand("SELECT execution_id,state,original_path,final_path,backup_path,source_sha,result_sha,replaced_at,grace_until,finished_at,detail FROM source_replacements WHERE execution_id=@id");
+        await using var cmd=dataSource.CreateCommand("SELECT execution_id,state,original_path,final_path,backup_path,source_sha,result_sha,replaced_at,grace_until,finished_at,detail FROM source_replacements WHERE execution_id=@id UNION ALL SELECT execution_id,CASE WHEN state='claimed' AND claim_until>clock_timestamp() THEN 'replacing' ELSE 'waiting' END,original_path,NULL,NULL,source_sha,result_sha,created_at,NULL,finished_at,detail FROM pending_source_writes p WHERE execution_id=@id AND NOT EXISTS(SELECT 1 FROM source_replacements r WHERE r.execution_id=p.execution_id)");
         cmd.Parameters.AddWithValue("id",execution); await using var r=await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct)?new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.IsDBNull(3)?null:r.GetString(3),r.IsDBNull(4)?null:r.GetString(4),r.GetString(5),r.GetString(6),
             r.GetFieldValue<DateTimeOffset>(7),r.IsDBNull(8)?null:r.GetFieldValue<DateTimeOffset>(8),r.IsDBNull(9)?null:r.GetFieldValue<DateTimeOffset>(9),r.IsDBNull(10)?null:r.GetString(10)):null;
@@ -110,19 +110,39 @@ public sealed class SourceReplacementRepository(DbDataSource dataSource)
 
     public async Task<IReadOnlyList<RuntimeReplacementTask>> TasksAsync(Guid node,CancellationToken ct)
     {
-        await using var cmd=dataSource.CreateCommand("""
+        if(sourceWrites is not null)
+        {
+            await using var connection=await dataSource.OpenConnectionAsync(ct);
+            if(await sourceWrites.CheckAsync(connection,null,ct) is not null || !await sourceWrites.SupportsGuardAsync(node,connection,null,ct)) return [];
+        }
+
+        await using var cmd=dataSource.CreateCommand($"""
           SELECT r.execution_id,CASE WHEN r.state='rollback_requested' THEN 'rollback' ELSE 'finalize' END,a.local_path,r.original_path,r.final_path,r.backup_path,r.source_sha,r.result_sha
           FROM source_replacements r JOIN library_node_accesses a ON a.library_id=r.library_id AND a.node_id=r.source_node_id
-          WHERE r.source_node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.can_write AND a.local_path IS NOT NULL
+          JOIN cluster_nodes n ON n.id=r.source_node_id AND n.accepts_work AND n.deleted_at IS NULL
+          WHERE {TaskOwnershipRepository.ActiveSql("r.execution_id")} AND r.source_node_id=@node AND a.mode='direct' AND a.is_enabled AND a.can_read AND a.can_write AND a.local_path IS NOT NULL
           AND (r.state='rollback_requested' OR (r.state='replaced' AND r.grace_until<=clock_timestamp()))
           ORDER BY r.replaced_at LIMIT 20
           """);
         cmd.Parameters.AddWithValue("node",node); await using var r=await cmd.ExecuteReaderAsync(ct); var tasks=new List<RuntimeReplacementTask>();
-        while(await r.ReadAsync(ct)) tasks.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetString(6),r.GetString(7)));
+        while(await r.ReadAsync(ct)) tasks.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetString(6),r.GetString(7),SourceWriteGuardsSupported:sourceWrites is not null));
         return tasks;
     }
 
     /// <summary>Enregistre le résultat d'une restauration ou d'une purge ; seul le nœud d'accès à l'origine du remplacement peut le faire.</summary>
+    public async Task<bool> AuthorizeAsync(Guid execution,Guid node,string root,CancellationToken ct)
+    {
+        await using var cmd=dataSource.CreateCommand($"SELECT EXISTS(SELECT 1 FROM source_replacements r JOIN library_node_accesses a ON a.library_id=r.library_id AND a.node_id=r.source_node_id WHERE {TaskOwnershipRepository.ActiveSql("r.execution_id")} AND r.execution_id=@id AND r.source_node_id=@node AND a.is_enabled AND a.can_write AND a.mode='direct' AND a.local_path=@root AND (r.state='rollback_requested' OR r.state='replaced' AND r.grace_until<=clock_timestamp()))");
+        cmd.Parameters.AddWithValue("id",execution);cmd.Parameters.AddWithValue("node",node);cmd.Parameters.AddWithValue("root",root);if(!await cmd.ScalarBoolAsync(ct)) return false;
+        if(sourceWrites is not null)
+        {
+            if(!await sourceWrites.VerifyAsync(ct)) return false;
+            await using var connection=await dataSource.OpenConnectionAsync(ct);
+            if(await sourceWrites.CheckAsync(connection,null,ct) is not null || !await sourceWrites.SupportsGuardAsync(node,connection,null,ct)) return false;
+        }
+        return await cmd.ScalarBoolAsync(ct);
+    }
+
     public async Task<bool> ReportAsync(Guid execution,Guid node,ReportReplacementTask request,CancellationToken ct)
     {
         if(request.Outcome is not("rolled_back" or "finalized" or "failed") || request.Detail?.Length>2000) return false;

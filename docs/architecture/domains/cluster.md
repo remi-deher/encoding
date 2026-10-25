@@ -75,3 +75,16 @@ Deux onglets : **Ce nœud** (fonctions, identité, capacités, fiche `app-resour
 ## Présence et métadonnées
 - Un heartbeat dont nom, rôles, capacité, outils et inventaire sont identiques ne modifie que `last_seen_at`. Toute modification ou confirmation des rôles demandés emprunte la mise à jour complète, toujours authentifiée par le hash du jeton et refusée après suppression du nœud. Aucun cache de métadonnées ne remplace la base.
 - Le protocole et le nonce de session ne sont réécrits que s’ils changent ; la détection des identités concurrentes, la quarantaine et les raisons d’incompatibilité sont conservées. Le contrat de heartbeat et le protocole réseau ne changent pas.
+
+## Modèle unique sans quorum (2026-10-25)
+Le mode optionnel de consensus et son transport dédié sont retirés : chaque serveur utilise sa base locale et le maillage signé. Le travail local ne dépend d'aucun quorum. Voir ADR [0013](../adr/0013-retrait-mode-raft.md). Cette première étape est complétée par les transferts et la reprise manuelle de l'ADR 0016, sans quorum sur les données.
+
+### Attribution initiale et redémarrage (ADR 0015)
+Chaque nouveau travail local possède désormais un plan signé, créé dans la même transaction que la mise en file. Le serveur initiateur est propriétaire initial ; les workers sont choisis selon les règles existantes. Après redémarrage, les claims attendent le rattrapage authentifié et la projection du journal. Une file déjà ouverte continue son travail possédé pendant une partition. L'époque initiale vaut 1 ; un transfert ou une reprise journalisée l'augmente. Les étapes suivantes sont livrées par ADR 0016.
+
+### Partition, relais et reprise
+La page Nœuds montre isolement, réceptions inactives, préparation/cache des checkpoints et neutralisation locale. `GET /api/v1/cluster/tasks/status` expose aussi l'identité de maillage du serveur, les observations avec provenance et leurs expirations. Ces observations ne sont pas une autorisation de reprise.
+
+Les changements de fonctions et retraits de serveurs sont refusés pendant une partition ; les chemins local et distant utilisent la même garde. Les files actives doivent être vidées ou cédées avant retrait de serveur. Un simple worker sans bail peut quitter selon la fusion LWW/tombstone existante, sans transférer la propriété d'une tâche.
+
+À deux serveurs, un admin peut reprendre un checkpoint répliqué après avoir attesté l'arrêt réel du propriétaire et de ses workers, attendu 135 s, et vérifié l'accès et tous les fichiers. Le retour du propriétaire reste suspendu jusqu'au rattrapage et à une réadmission explicite. Aucune reprise automatique basée sur l'injoignabilité. À trois serveurs ou plus, la reprise attend le futur témoin/mini-consensus dédié ; calculs et transferts coopératifs n'en dépendent pas.
