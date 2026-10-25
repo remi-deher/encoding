@@ -38,7 +38,7 @@ import {
   ManagementCatalogTemplateComponent,
 } from '../../shared/templates/management-catalog-template.component';
 import { MEDIA_TYPE_ICONS, MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
-import { FLOW_CREATION_FORM } from '../../shared/models/flow-creation';
+import { createFlowCreationForm, FLOW_CREATION_FORM } from '../../shared/models/flow-creation';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
 import { FlowTemplates } from '../../shared/services/flow-templates';
@@ -95,7 +95,7 @@ export class FlowCatalogPageComponent {
   });
 
   protected readonly actionDefinition = signal<RecordFormData | null>(null);
-  protected readonly actionForm = computed(() => this.actionDefinition() ?? this.flowCreationForm);
+  protected readonly actionForm = computed(() => this.actionDefinition() ?? this.flowCreationForm());
   private readonly templateSource = signal<{
     readonly id: string;
     readonly version: number;
@@ -523,7 +523,7 @@ export class FlowCatalogPageComponent {
     this.refreshCatalog.next();
   }
   protected readonly actionOpen = signal(false);
-  protected readonly flowCreationForm = FLOW_CREATION_FORM;
+  protected readonly flowCreationForm = signal(FLOW_CREATION_FORM);
   protected readonly creationRecordForm = viewChild(RecordFormComponent);
   protected readonly selectedFlow = signal<FlowRecord | null>(null);
   protected readonly detailTitle = computed(
@@ -607,11 +607,18 @@ export class FlowCatalogPageComponent {
     this.selectedFlow.set(null);
   }
 
-  protected openFlowCreation(): void {
+  protected async openFlowCreation(): Promise<void> {
     this.clearSourcePreview();
     this.actionDefinition.set(null);
     this.templateSource.set(null);
     this.packSource.set(null);
+    try {
+      this.flowCreationForm.set(
+        createFlowCreationForm(await firstValueFrom(this.templates.list())),
+      );
+    } catch {
+      this.flowCreationForm.set(createFlowCreationForm());
+    }
     this.actionOpen.set(true);
   }
 
@@ -623,11 +630,14 @@ export class FlowCatalogPageComponent {
   }
 
   protected startFlow(values: Record<string, string>): void {
-    void this.router.navigate([values['starter'] === 'guided' ? '/flows/guided' : '/flows/new'], {
+    const starter = values['starter'] ?? 'blank';
+    const templateId = starter.startsWith('template:') ? starter.slice('template:'.length) : null;
+    void this.router.navigate([starter === 'guided' ? '/flows/guided' : '/flows/new'], {
       queryParams: {
         name: values['name'],
         mediaType: values['mediaType'],
-        starter: values['starter'],
+        starter: templateId ? 'template' : starter,
+        ...(templateId ? { templateId } : {}),
       },
       info: { flowEditorDirection: 'forward' },
     });

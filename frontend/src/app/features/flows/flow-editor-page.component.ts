@@ -27,14 +27,12 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { FlowEditorAssistant } from '../../shared/services/flow-editor-assistant.service';
 import {
-  GENERIC_FILE_INPUT,
   MEDIA_INPUT_COMPONENTS,
   createFlowInputConfigurationSchema,
   getFlowInputComponents,
 } from '../../shared/models/flow-control-components';
 import { canConnectFlowGraph } from '../../shared/models/flow-graph';
 import { NotificationService } from '../../shared/services/notification.service';
-import { FLOW_COMPONENT_CATALOG } from '../../shared/models/flow-component-catalog';
 import { MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import {
@@ -72,66 +70,6 @@ const TYPE_OPTIONS = [
   { value: 'subtitles', label: 'Sous-titres' },
   { value: 'general', label: 'Logique' },
 ] as const;
-
-interface FlowNodeSeed {
-  readonly id: string;
-  readonly componentId: string;
-}
-
-interface FlowConnectionSeed {
-  readonly sourceNodeId: string;
-  readonly sourceOutputId: string;
-  readonly targetNodeId: string;
-}
-
-interface FlowDemo {
-  readonly name: string;
-  readonly nodes: readonly FlowNodeSeed[];
-  readonly connections?: readonly FlowConnectionSeed[];
-}
-
-const FLOW_EDITOR_DEMOS: Readonly<Record<string, FlowDemo>> = {
-  'flow-video-library': {
-    name: 'Films — H.265',
-    nodes: [
-      { id: 'probe', componentId: 'base-probe-media' },
-      { id: 'transcode', componentId: 'base-transcode-video' },
-      { id: 'plex', componentId: 'plex-refresh-library' },
-    ],
-    connections: [
-      { sourceNodeId: 'probe', sourceOutputId: 'success', targetNodeId: 'transcode' },
-      { sourceNodeId: 'transcode', sourceOutputId: 'success', targetNodeId: 'plex' },
-    ],
-  },
-  'flow-video-series': {
-    name: 'Séries — H.265',
-    nodes: [
-      { id: 'probe', componentId: 'base-probe-media' },
-      { id: 'transcode', componentId: 'base-transcode-video' },
-      { id: 'sonarr', componentId: 'sonarr-refresh-series' },
-    ],
-    connections: [
-      { sourceNodeId: 'probe', sourceOutputId: 'success', targetNodeId: 'transcode' },
-      { sourceNodeId: 'transcode', sourceOutputId: 'success', targetNodeId: 'sonarr' },
-    ],
-  },
-  'flow-video-source-check': {
-    name: 'Films — Vérification de la source',
-    nodes: [{ id: 'probe', componentId: 'base-probe-media' }],
-  },
-  'flow-image-webp': {
-    name: 'Images — Conversion WebP',
-    nodes: [{ id: 'convert', componentId: 'base-convert-image' }],
-  },
-  'flow-music-flac': {
-    name: 'Musique — Vérification FLAC',
-    nodes: [{ id: 'normalize', componentId: 'base-normalize-audio' }],
-  },
-  'flow-subtitles-cleanup': {
-    name: 'Sous-titres — Nettoyage',
-    nodes: [{ id: 'prepare', componentId: 'base-script' }],
-  },
-};
 
 type ComponentDestination =
   | { readonly kind: 'continuation'; readonly sources: readonly FlowContinuationSource[] }
@@ -276,16 +214,13 @@ export class FlowEditorPageComponent {
   });
 
   private readonly flowId = this.route.snapshot.paramMap.get('flowId');
-  private readonly starterId = this.flowId ?? this.route.snapshot.queryParamMap.get('starter');
-  private readonly demoFlow =
-    this.starterId && this.starterId !== 'blank' ? FLOW_EDITOR_DEMOS[this.starterId] : undefined;
   private readonly savedName = signal<string | null>(null);
 
   protected readonly flowTitle = computed(() => {
     if (this.savedName()) return this.savedName()!;
     const name = this.route.snapshot.queryParamMap.get('name');
     if (name) return name;
-    return this.demoFlow?.name ?? (this.flowId ? 'Modifier un flow' : 'Nouveau flow');
+    return this.flowId ? 'Modifier un flow' : 'Nouveau flow';
   });
 
   protected readonly componentDestination = signal<ComponentDestination | null>(null);
@@ -401,59 +336,19 @@ export class FlowEditorPageComponent {
       error: () => this.packCatalog.set([]),
     });
 
-    const componentsById = new Map(
-      FLOW_COMPONENT_CATALOG.map((component) => [component.id, component]),
-    );
     const requestedMediaType = this.route.snapshot.queryParamMap.get('mediaType');
     const templateId = this.route.snapshot.queryParamMap.get('templateId');
     if (templateId) this.loadState.set('loading');
-    const inferredMediaType = this.starterId?.startsWith('flow-image')
-      ? 'image'
-      : this.starterId?.startsWith('flow-music')
-        ? 'music'
-        : this.starterId?.startsWith('flow-subtitles')
-          ? 'subtitles'
-          : 'video';
     const mediaType =
-      MEDIA_TYPE_OPTIONS.find((option) => option.value === requestedMediaType)?.value ??
-      inferredMediaType;
+      MEDIA_TYPE_OPTIONS.find((option) => option.value === requestedMediaType)?.value ?? 'video';
     this.flowMediaType.set(mediaType);
-    const inputComponent = this.demoFlow ? MEDIA_INPUT_COMPONENTS[mediaType] : GENERIC_FILE_INPUT;
     const entry: FlowGraphNode = {
       id: 'flow-input',
-      component: inputComponent,
+      component: MEDIA_INPUT_COMPONENTS[mediaType],
       position: { x: 64, y: 48 },
       configuration: {},
     };
-    const initialNodes: FlowGraphNode[] = (this.demoFlow?.nodes ?? []).flatMap((seed) => {
-      const component = componentsById.get(seed.componentId);
-      return component && isFlowComponentCompatible(component, mediaType)
-        ? [
-            {
-              id: seed.id,
-              component,
-              position: { x: 0, y: 0 },
-              configuration: createDefaultFlowComponentConfiguration(
-                getFlowConfigurationSchema(component.configurationSchema, mediaType),
-              ),
-            },
-          ]
-        : [];
-    });
-    this.nextNodeId = initialNodes.length + 1;
-    const initialConnections = (this.demoFlow?.connections ?? [])
-      .filter(
-        (seed) =>
-          initialNodes.some((node) => node.id === seed.sourceNodeId) &&
-          initialNodes.some((node) => node.id === seed.targetNodeId),
-      )
-      .map((seed) => ({
-        id: `connection-${this.nextConnectionId++}`,
-        ...seed,
-      }));
-    if (initialNodes.length)
-      initialConnections.unshift(this.createConnection(entry.id, 'success', initialNodes[0].id));
-    this.setGraph([entry, ...initialNodes], initialConnections);
+    this.setGraph([entry], []);
     void this.serverValidation
       .catalog()
       .then(async (plugins) => {
@@ -468,38 +363,6 @@ export class FlowEditorPageComponent {
         if (templateId && !this.flowId) {
           await this.loadTemplate(templateId, plugins);
           return;
-        }
-        if (this.demoFlow && !this.flowId) {
-          const available = new Map(
-            [...FLOW_COMPONENT_CATALOG, ...installed].map((component) => [component.id, component]),
-          );
-          const nodes = this.demoFlow.nodes.flatMap((seed) => {
-            const component = available.get(seed.componentId);
-            return component && isFlowComponentCompatible(component, mediaType)
-              ? [
-                  {
-                    id: seed.id,
-                    component,
-                    position: { x: 0, y: 0 },
-                    configuration: createDefaultFlowComponentConfiguration(
-                      getFlowConfigurationSchema(component.configurationSchema, mediaType),
-                    ),
-                  },
-                ]
-              : [];
-          });
-          const connections =
-            this.demoFlow.connections
-              ?.filter(
-                (seed) =>
-                  nodes.some((node) => node.id === seed.sourceNodeId) &&
-                  nodes.some((node) => node.id === seed.targetNodeId),
-              )
-              .map((seed) => ({ id: `connection-${this.nextConnectionId++}`, ...seed })) ?? [];
-          if (nodes.length)
-            connections.unshift(this.createConnection(entry.id, 'success', nodes[0].id));
-          this.nextNodeId = Math.max(this.nextNodeId, nodes.length + 1);
-          this.setGraph([entry, ...nodes], connections);
         }
       })
       .catch(() =>
@@ -1069,6 +932,7 @@ export class FlowEditorPageComponent {
         name,
       };
       this.flowMediaType.set(definition.mediaType);
+      this.savedName.set(name);
       const nodes = this.mapDefinitionNodes(definition, plugins);
       this.updateGraphCounters(definition, nodes);
       this.setGraph(nodes, definition.connections);

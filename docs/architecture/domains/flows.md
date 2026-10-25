@@ -1,6 +1,6 @@
 ---
 domain: flows
-updated: 2026-10-24
+updated: 2026-10-25
 legacy_adr: [0003, 0004, 0006, 0007, 0011, 0012, 0013, 0014, 0015, 0022, 0023, 0024, 0025, 0026, 0027, 0060-api, 0079, 0080, 0081]
 code:
   - backend/src/Encoding.Contracts/Flows/
@@ -64,7 +64,8 @@ L'exécution d'un flow (baux, workers, publication) est dans [runtime.md](runtim
 - Le preflight de la fiche n'atteste pas l'accès à une bibliothèque cible.
 
 ## Création guidée vidéo
-- L'accueil et le catalogue proposent un assistant vidéo, en complément du flow vierge et des modèles. `POST /api/v1/flows/guided` génère et valide une définition ordinaire à références installées, sans écriture ni publication. L'UI l'enregistre en brouillon puis ouvre l'éditeur.
+- L'accueil et le catalogue proposent un assistant vidéo, en complément du flow vierge et des modèles réels, classés par type de média. Le catalogue standard fournit des modèles génériques vidéo, musique, image et sous-titres ainsi que des modèles d'actualisation Plex, Jellyfin, Radarr et Sonarr. Ils sont construits à partir des composants installés, validés au démarrage et enregistrés comme copies en lecture seule de versions publiées; les flows source sont masqués du catalogue normal. Un nouveau flow depuis un modèle reçoit son propre identifiant et s'ouvre comme brouillon.
+- `POST /api/v1/flows/guided` génère et valide une définition vidéo ordinaire à références installées, sans écriture ni publication. L'UI l'enregistre en brouillon puis ouvre l'éditeur. Le flow vierge commence avec l'entrée spécialisée du type média choisi.
 - MKV, HEVC/H.264/AV1, profil Équilibré embarqué, qualité adaptative, encodeur automatique ou CPU, conservation ou adaptation audio intégrée. Sous-titres conservés, HDR préservé ; secours CPU facultatif et désactivé par défaut. La politique de bibliothèque reste seule autorité de remplacement.
 - Le graphe explicite préparation → réglages en plan → exécution groupée → publication. Revue complète, frontières et pistes différées : [revue du 24 octobre](../flow-review-2026-10-24.md).
 

@@ -222,7 +222,7 @@
     } @else {
       <app-record-form
         [embedded]="true"
-        [data]="flowCreationForm"
+        [data]="flowCreationForm()"
         (submitted)="startFlow($event)"
         (cancelled)="closeFlowCreation()"
       />
