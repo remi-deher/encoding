@@ -246,3 +246,30 @@
     grid-column: 2;
   }
 }
+.template-setup-fields {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-top: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-low);
+}
+
+.template-setup-fields h3,
+.template-setup-fields p {
+  margin: 0;
+}
+
+.template-setup-fields fieldset {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.template-setup-fields legend {
+  padding-inline: var(--space-1);
+  font-weight: 600;
+}

@@ -172,10 +172,28 @@ public static class FlowEndpoints
                 : ApiProblem.NotFound("Le flow source est introuvable."))
             .WithName("CloneFlow");
 
-        flows.MapPost("/from-template/{templateId:guid}", async (Guid templateId, CreateFlowFromTemplateRequest? request, FlowRepository repository, FlowTemplateRepository templates, CancellationToken ct) =>
-            await repository.CreateFromTemplateAsync(templateId, request?.Name, templates, ct) is { } created
-                ? Results.Created($"/api/v1/flows/{created.Definition.Id}", created)
-                : ApiProblem.NotFound("Le modèle est introuvable."))
+        flows.MapPost("/from-template/{templateId:guid}", async (Guid templateId, CreateFlowFromTemplateRequest? request, FlowRepository repository, FlowTemplateRepository templates, FlowDefinitionValidator validator, CancellationToken ct) =>
+        {
+            try
+            {
+                var created = await repository.CreateFromTemplateAsync(templateId, request ?? new(), templates, validator, ct);
+                return created is not null
+                    ? Results.Created($"/api/v1/flows/{created.Definition.Id}", created)
+                    : ApiProblem.NotFound("Le modèle est introuvable.");
+            }
+            catch (FlowTemplateRevisionConflictException)
+            {
+                return Results.Conflict(new { title = "Ce modèle a changé. Rechargez-le avant de créer le flow." });
+            }
+            catch (FlowTemplateSetupConfigurationException exception)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["configuration"] = [exception.Message] });
+            }
+            catch (FlowTemplateSetupValidationException exception)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["configuration"] = exception.Issues.Select(issue => issue.Message).ToArray() });
+            }
+        })
             .WithName("CreateFlowFromTemplate");
 
         flows.MapGet("/components", (FlowComponentRegistry registry) => Results.Ok(registry.Plugins))

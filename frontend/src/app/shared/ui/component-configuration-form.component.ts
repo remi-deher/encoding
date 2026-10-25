@@ -18,7 +18,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -348,27 +348,29 @@ type ConfigurationFormGroup = FormGroup<
           </ul>
         </section>
       }
-      <div class="form-actions">
-        <ng-content select="[form-secondary-actions]" />
-        <button matButton="text" type="button" (click)="cancelled.emit()">Annuler</button>
-        @if (showConnectionTest()) {
+      @if (showActions()) {
+        <div class="form-actions">
+          <ng-content select="[form-secondary-actions]" />
+          <button matButton="text" type="button" (click)="cancelled.emit()">Annuler</button>
+          @if (showConnectionTest()) {
+            <button
+              matButton="outlined"
+              type="button"
+              [disabled]="busy() || form.invalid || connectionTestBusy()"
+              (click)="testConnection()"
+            >
+              {{ connectionTestBusy() ? 'Test en cours…' : 'Tester la connexion' }}
+            </button>
+          }
           <button
-            matButton="outlined"
-            type="button"
-            [disabled]="busy() || form.invalid || connectionTestBusy()"
-            (click)="testConnection()"
+            matButton="filled"
+            type="submit"
+            [disabled]="busy() || scriptSelectionBusy() || form.invalid || nameControl.invalid"
           >
-            {{ connectionTestBusy() ? 'Test en cours…' : 'Tester la connexion' }}
+            {{ submitLabel() }}
           </button>
-        }
-        <button
-          matButton="filled"
-          type="submit"
-          [disabled]="busy() || scriptSelectionBusy() || form.invalid || nameControl.invalid"
-        >
-          {{ submitLabel() }}
-        </button>
-      </div>
+        </div>
+      }
       @if (connectionTestMessage()) {
         <p
           class="connection-test-result"
@@ -492,6 +494,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   readonly instanceName = input<string | undefined>();
   readonly instanceNameChange = output<string>();
   readonly submitLabel = input('Enregistrer');
+  readonly showActions = input(true);
   readonly busy = input(false);
   readonly showConnectionTest = input(false);
   readonly connectionTestBusy = input(false);
@@ -537,6 +540,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
     );
   }
   readonly saved = output<FlowComponentConfiguration>();
+  readonly configurationChange = output<FlowComponentConfiguration>();
   readonly cancelled = output<void>();
   readonly savedWithSecrets = output<{
     readonly values: FlowComponentConfiguration;
@@ -554,6 +558,7 @@ export class ComponentConfigurationFormComponent implements OnChanges {
   protected readonly encodingProfileBusy = signal(false);
   protected secretsToClear = new Set<string>();
   protected form: ConfigurationFormGroup = new FormGroup({});
+  private formChanges?: Subscription;
   protected nameControl = new FormControl('', {
     nonNullable: true,
     validators: [Validators.maxLength(128)],
@@ -579,6 +584,10 @@ export class ComponentConfigurationFormComponent implements OnChanges {
         });
       }
       this.form = new FormGroup(controls);
+      this.formChanges?.unsubscribe();
+      this.formChanges = this.form.valueChanges.subscribe(() =>
+        this.configurationChange.emit({ ...this.values(), ...this.form.getRawValue() }),
+      );
       if (this.fields.some((field) => field.type === 'script-reference')) this.loadScripts();
       if (this.fields.some((field) => field.type === 'encoding-profile'))
         this.loadEncodingProfiles();

@@ -17,10 +17,16 @@ public static class FlowTemplateEndpoints
         templates.MapPost("/from-flow", async (
             CreateFlowTemplateFromFlowRequest request,
             FlowTemplateRepository repository,
+            FlowRepository flows,
             CancellationToken ct) =>
         {
             var errors = Validate(request);
             if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            var source = await flows.GetAsync(request.SourceFlowId, request.SourceVersion, ct);
+            if (source is null) return Results.NotFound(new { title = "Cette version publiée du flow est introuvable." });
+            var configurationError = repository.ValidateConfiguration(source.Definition, request.Configuration);
+            if (configurationError is not null)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["configuration"] = [configurationError] });
             try
             {
                 var id = Guid.NewGuid();
@@ -34,6 +40,45 @@ public static class FlowTemplateEndpoints
                 return Results.Conflict(new { title = "Un modèle porte déjà ce nom." });
             }
         }).WithName("CreateFlowTemplateFromFlow");
+
+        templates.MapPut("/{id:guid}", async (
+            Guid id,
+            UpdateFlowTemplateRequest request,
+            FlowTemplateRepository repository,
+            FlowDefinitionValidator validator,
+            CancellationToken ct) =>
+        {
+            var errors = Validate(request);
+            if (errors.Count > 0) return (IResult)Results.ValidationProblem(errors);
+            var currentTemplate = await repository.GetAsync(id, ct);
+            if (currentTemplate is null) return Results.NotFound();
+            if (request.Definition.Id != currentTemplate.Definition.Id
+                || request.Definition.MediaType != currentTemplate.Definition.MediaType)
+                return Results.ValidationProblem(new Dictionary<string, string[]> {
+                    ["definition"] = ["La modification d’un modèle conserve son identité et son type de média."]
+                });
+            var definitionValidation = validator.Validate(request.Definition);
+            if (!definitionValidation.IsValid)
+                return Results.ValidationProblem(new Dictionary<string, string[]> {
+                    ["definition"] = definitionValidation.Issues.Select(issue => issue.Message).ToArray()
+                });
+            var configurationError = repository.ValidateConfiguration(request.Definition, request.Configuration);
+            if (configurationError is not null)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["configuration"] = [configurationError] });
+            try
+            {
+                var updated = await repository.UpdateAsync(id, request, ct);
+                if (updated is not null) return Results.Ok(updated);
+                var current = await repository.GetAsync(id, ct);
+                return current is null
+                    ? Results.NotFound()
+                    : Results.Conflict(new { title = "Le modèle a été modifié depuis son ouverture. Rechargez-le puis réessayez." });
+            }
+            catch (DbException exception) when (Sql.IsUniqueViolation(exception))
+            {
+                return Results.Conflict(new { title = "Un modèle porte déjà ce nom." });
+            }
+        }).WithName("UpdateFlowTemplate");
     }
 
     private static Dictionary<string, string[]> Validate(CreateFlowTemplateFromFlowRequest? request)
@@ -49,6 +94,20 @@ public static class FlowTemplateEndpoints
             errors["name"] = ["Le nom du modèle est obligatoire et limité à 128 caractères."];
         if (request.Description is null || request.Description.Length > 1000)
             errors["description"] = ["La description est limitée à 1 000 caractères."];
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> Validate(UpdateFlowTemplateRequest? request)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (request is null) return new() { ["request"] = ["La demande est obligatoire."] };
+        if (request.ExpectedRevision < 1) errors["expectedRevision"] = ["La révision attendue doit être positive."];
+        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 128)
+            errors["name"] = ["Le nom du modèle est obligatoire et limité à 128 caractères."];
+        if (request.Description is null || request.Description.Length > 1000)
+            errors["description"] = ["La description est limitée à 1 000 caractères."];
+        if (request.Configuration is null) errors["configuration"] = ["La configuration est obligatoire."];
+        if (request.Definition is null) errors["definition"] = ["La définition du modèle est obligatoire."];
         return errors;
     }
 }

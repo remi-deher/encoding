@@ -219,6 +219,35 @@
         (submitted)="submitAction($event)"
         (cancelled)="closeFlowCreation()"
       />
+      @if (templateSource()) {
+        <section
+          class="template-setup-fields"
+          aria-label="Paramètres modifiables par les utilisateurs du modèle"
+        >
+          <h3>Paramètres configurables depuis le modèle</h3>
+          <p>
+            Les valeurs de cette version resteront les valeurs par défaut. Seuls les paramètres
+            cochés pourront être ajustés lors de la création d’un flow.
+          </p>
+          @if (sourcePreviewStatus() === 'ready') {
+            @for (block of templateConfigurableFields(); track block.node.id) {
+              <fieldset>
+                <legend>{{ block.node.name || block.component.name }}</legend>
+                @for (field of block.fields; track field.id) {
+                  <mat-checkbox
+                    [checked]="templateFieldSelected(block.node.id, field.id)"
+                    (change)="toggleTemplateField(block.node.id, field.id, $event.checked)"
+                  >
+                    {{ field.label }}
+                  </mat-checkbox>
+                }
+              </fieldset>
+            } @empty {
+              <p>Ce flow ne contient aucun paramètre configurable compatible avec un modèle.</p>
+            }
+          }
+        </section>
+      }
     } @else {
       <app-record-form
         [embedded]="true"

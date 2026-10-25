@@ -273,7 +273,7 @@ internal static partial class Harness
             builder.Services.AddSingleton(eligibility); builder.Services.AddSingleton(new NodeRepository(db));
             builder.Services.AddSingleton(new NodeDirectoryBrowserRepository(db));
             builder.Services.AddSingleton(registry); builder.Services.AddSingleton(flowRepo); builder.Services.AddSingleton(new FlowArchiveService(flowRepo, validator));
-            builder.Services.AddSingleton(new FlowTemplateRepository(db));
+            builder.Services.AddSingleton(new FlowTemplateRepository(db, registry));
             // Les routes des ressources du runtime ont besoin de ces services déclarés ; ces scénarios ne les appellent pas.
             builder.Services.AddSingleton(_ => new Encoding.Api.Resources.ResourceBlobStore(config));
             builder.Services.AddSingleton(provider => new Encoding.Api.Resources.ResourceRepository(db, provider.GetRequiredService<Encoding.Api.Resources.ResourceBlobStore>()));
