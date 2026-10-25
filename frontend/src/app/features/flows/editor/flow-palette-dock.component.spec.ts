@@ -8,6 +8,7 @@ const MOCK_COMPONENTS: FlowComponentDefinition[] = [
     name: 'Transcoder la vidéo',
     description: 'Convertit le flux vidéo principal vers un codec cible.',
     kind: 'action',
+    category: 'video',
     mediaType: 'video',
     pluginId: 'base',
     pluginName: 'Base',
@@ -21,6 +22,7 @@ const MOCK_COMPONENTS: FlowComponentDefinition[] = [
     name: 'Normaliser le son',
     description: 'Applique un profil audio.',
     kind: 'action',
+    category: 'audio',
     mediaType: 'audio',
     pluginId: 'base',
     pluginName: 'Base',
@@ -91,5 +93,13 @@ describe('FlowPaletteDockComponent', () => {
     firstCard.click();
 
     expect(emitSpy).toHaveBeenCalledWith(MOCK_COMPONENTS[0]);
+  });
+
+  it('groups components by their manifest category', () => {
+    const fixture = createComponent();
+    const summaries = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.category-group summary')];
+
+    expect(summaries.some((summary) => summary.textContent?.includes('Vidéo et image animée'))).toBe(true);
+    expect(summaries.some((summary) => summary.textContent?.includes('Audio et musique'))).toBe(true);
   });
 });

@@ -58,7 +58,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": true
+      "producesFiles": true,
+      "category": "text"
     },
     {
       "id": "subtitles-manage",
@@ -236,7 +237,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-add-fonts",
@@ -314,7 +316,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-add-track",
@@ -413,7 +416,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-track-names",
@@ -515,7 +519,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-convert-ass",
@@ -639,7 +644,8 @@
         "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-style-ass",
@@ -763,7 +769,8 @@
         "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-remove-duplicates",
@@ -815,7 +822,8 @@
         "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-detect-forced",
@@ -867,7 +875,8 @@
         "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-name-tracks",
@@ -933,7 +942,8 @@
         "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     },
     {
       "id": "subtitles-default-audio",
@@ -990,7 +1000,8 @@
         "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "media-rules"
     },
     {
       "id": "subtitles-snapshot-track-titles",
@@ -1037,7 +1048,8 @@
         "1.2.0"
       ],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "text"
     }
   ]
 }

@@ -48,7 +48,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "variables"
     },
     {
       "id": "examplejs-name-matches",
@@ -89,7 +90,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "conditions"
     }
   ]
 }

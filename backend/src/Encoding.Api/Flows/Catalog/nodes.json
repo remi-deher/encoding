@@ -74,7 +74,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0"
-      ]
+      ],
+      "category": "cluster"
     },
     {
       "id": "nodes-require-capability",
@@ -179,7 +180,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0"
-      ]
+      ],
+      "category": "cluster"
     },
     {
       "id": "nodes-handoff",
@@ -288,7 +290,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0"
-      ]
+      ],
+      "category": "cluster"
     },
     {
       "id": "nodes-retry-on-worker-loss",
@@ -363,7 +366,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0"
-      ]
+      ],
+      "category": "cluster"
     },
     {
       "id": "nodes-require-direct-access",
@@ -419,7 +423,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0"
-      ]
+      ],
+      "category": "cluster"
     },
     {
       "id": "nodes-library-access",
@@ -469,7 +474,8 @@
         "1.5.0",
         "1.6.0",
         "1.7.0"
-      ]
+      ],
+      "category": "cluster"
     }
   ],
   "configurationSchema": {

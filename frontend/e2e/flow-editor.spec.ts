@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 const output = (id: string) => ({
   id,
@@ -352,6 +352,7 @@ async function dragPaletteAction(
   const card = page.locator('.component-card').filter({
     has: page.locator('.component-title').filter({ hasText: new RegExp('^' + name + '$') }),
   });
+  await openPaletteCategoryFor(page, card);
   await card.scrollIntoViewIfNeeded();
   const rect = (await card.boundingBox())!;
   await page.mouse.move(rect.x + 40, rect.y + 30);
@@ -360,6 +361,13 @@ async function dragPaletteAction(
   const point = await target();
   await page.mouse.move(point.x, point.y, { steps: 20 });
   await page.mouse.up();
+}
+
+async function openPaletteCategoryFor(page: Page, card: Locator) {
+  const category = page.locator('.category-group').first();
+  const isOpen = await category.evaluate((element) => (element as HTMLDetailsElement).open);
+  if (!isOpen) await category.locator('summary').click();
+  await expect(card).toBeVisible();
 }
 test('palette drag places canvas blocks and cancels outside the workspace', async ({ page }) => {
   await setup(page);
@@ -402,20 +410,22 @@ test('palette closes after a click insertion and can be pinned for successive ad
   await setup(page);
   const add = page.getByRole('button', { name: 'Basculer la palette de blocs', exact: true });
   await add.click();
-  await page
+  const action = page
     .locator('.component-card')
-    .filter({ has: page.locator('.component-title').filter({ hasText: /^action$/ }) })
-    .click();
+    .filter({ has: page.locator('.component-title').filter({ hasText: /^action$/ }) });
+  await openPaletteCategoryFor(page, action);
+  await action.click();
   await expect(page.locator('.canvas-node')).toHaveCount(6);
   await expect(page.locator('.palette-dock_collapsed')).toHaveCount(1);
   await add.click();
   await page
     .getByRole('button', { name: 'Garder la palette ouverte après un ajout', exact: true })
     .click();
-  await page
+  const pinnedAction = page
     .locator('.component-card')
-    .filter({ has: page.locator('.component-title').filter({ hasText: /^action$/ }) })
-    .click();
+    .filter({ has: page.locator('.component-title').filter({ hasText: /^action$/ }) });
+  await openPaletteCategoryFor(page, pinnedAction);
+  await pinnedAction.click();
   await expect(page.locator('.canvas-node')).toHaveCount(7);
   await expect(page.locator('.palette-dock_collapsed')).toHaveCount(0);
 });
@@ -511,7 +521,9 @@ test('inspector preserves optional advanced settings while editing a common sett
   const card = page.locator('.canvas-node[data-node-id="Action A"]');
   await card.locator('.drag').focus();
   await page.keyboard.press('Tab');
-  await expect(page.locator('.mat-mdc-tooltip-surface')).toContainText('Qualité : 20');
+  await expect(
+    page.locator('.mat-mdc-tooltip-surface').filter({ hasText: 'Action A · Qualité : 20' }),
+  ).toBeVisible();
   await card.locator('.canvas-title').click();
   const inspector = page.getByRole('complementary', { name: 'Action A', exact: true });
   await inspector.getByLabel('Qualité', { exact: true }).fill('22');
@@ -521,7 +533,9 @@ test('inspector preserves optional advanced settings while editing a common sett
   await inspector.getByRole('button', { name: 'Appliquer les réglages', exact: true }).click();
   await card.locator('.drag').focus();
   await page.keyboard.press('Tab');
-  await expect(page.locator('.mat-mdc-tooltip-surface')).toContainText('Qualité : 22');
+  await expect(
+    page.locator('.mat-mdc-tooltip-surface').filter({ hasText: 'Action A · Qualité : 22' }),
+  ).toBeVisible();
 });
 
 test('canvas wires follow dragging before release and selection highlights connections', async ({

@@ -273,7 +273,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "encoding"
     },
     {
       "id": "video-resize",
@@ -407,7 +408,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "video"
     },
     {
       "id": "video-auto-crop",
@@ -514,7 +516,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "video"
     },
     {
       "id": "video-deinterlace",
@@ -628,7 +631,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "video"
     },
     {
       "id": "video-thumbnail",
@@ -704,7 +708,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": true
+      "producesFiles": true,
+      "category": "video"
     },
     {
       "id": "video-verify-decoding",
@@ -794,7 +799,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "validation"
     },
     {
       "id": "video-file-size-guard",
@@ -871,7 +877,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "validation"
     },
     {
       "id": "video-remux-media",
@@ -951,7 +958,8 @@
         "1.1.0",
         "1.2.0"
       ],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     }
   ]
 }

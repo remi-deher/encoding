@@ -365,6 +365,11 @@ _COMPONENT_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 _PLUGIN_FIELD_TYPES = ("text", "secret", "number", "boolean", "select")
 _COMPONENT_FIELD_TYPES = ("text", "number", "boolean", "select", "condition-tree", "script-reference", "encoding-profile", "video-encoder", "record-list")
+_FLOW_COMPONENT_CATEGORIES = {
+    "inputs", "files", "discovery", "metadata", "encoding", "video", "audio", "images", "text",
+    "containers", "media-rules", "validation", "conditions", "variables", "scripts", "arr",
+    "media-servers", "communications", "cluster", "orchestration", "reporting", "utilities",
+}
 
 
 def validate_manifest(manifest):
@@ -428,6 +433,10 @@ def validate_manifest(manifest):
             problems.append("Composant « %s » : kind « action » ou « condition »." % cid)
         if not str(component.get("description", "")).strip():
             problems.append("Composant « %s » : description vide (l'éditeur et les assistants IA s'y fient)." % cid)
+        if component.get("category") is not None and (
+            not isinstance(component["category"], str) or component["category"] not in _FLOW_COMPONENT_CATEGORIES
+        ):
+            problems.append("Composant « %s » : catégorie fonctionnelle inconnue." % cid)
         outputs = component.get("outputs") or []
         if not outputs:
             problems.append("Composant « %s » : aucune sortie déclarée." % cid)

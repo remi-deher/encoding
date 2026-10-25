@@ -68,7 +68,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "arr"
     },
     {
       "id": "radarr-check-movie-indexed",
@@ -115,7 +116,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "arr"
     },
     {
       "id": "radarr-search-movie",
@@ -157,7 +159,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "arr"
     }
   ]
 }

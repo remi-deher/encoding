@@ -18,6 +18,8 @@ export interface FlowComponentDefinition {
   readonly description: string;
   readonly kind: FlowComponentKind;
   readonly mediaType: 'video' | 'image' | 'audio' | 'subtitles' | 'general';
+  /** Stable functional catalog group supplied by the plugin manifest. */
+  readonly category?: FlowComponentCategory;
   readonly supportedFlowMediaTypes?: readonly MediaType[];
   readonly pluginId: string;
   readonly pluginName: string;
@@ -26,6 +28,32 @@ export interface FlowComponentDefinition {
   readonly outputs: readonly FlowComponentOutput[];
   readonly configurationSchema?: FlowComponentConfigurationSchema;
 }
+
+export const FLOW_COMPONENT_CATEGORIES = {
+  inputs: 'Entrées et déclencheurs',
+  files: 'Fichiers et dossiers',
+  discovery: 'Découverte et sélection',
+  metadata: 'Analyse et métadonnées',
+  encoding: 'Encodage et transcodage',
+  video: 'Vidéo et image animée',
+  audio: 'Audio et musique',
+  images: 'Images',
+  text: 'Sous-titres et texte',
+  containers: 'Conteneurs et multiplexage',
+  'media-rules': 'Filtres et règles média',
+  validation: 'Contrôle qualité et validation',
+  conditions: 'Conditions et aiguillage',
+  variables: 'Variables et données',
+  scripts: 'Scripts et automatisation',
+  arr: 'Intégrations *ARR',
+  'media-servers': 'Serveurs et bibliothèques média',
+  communications: 'API, réseau et communication',
+  cluster: 'Nœuds et cluster',
+  orchestration: 'Exécution et orchestration',
+  reporting: 'Journaux, rapports et notifications',
+  utilities: 'Utilitaires',
+} as const;
+export type FlowComponentCategory = keyof typeof FLOW_COMPONENT_CATEGORIES;
 
 /** La compatibilité concerne le média du flow, y compris ses pistes intégrées. */
 export function isFlowComponentCompatible(

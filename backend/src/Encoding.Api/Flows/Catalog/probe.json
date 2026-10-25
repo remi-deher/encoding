@@ -66,7 +66,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "metadata"
     },
     {
       "id": "probe-tracks",
@@ -127,7 +128,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "metadata"
     },
     {
       "id": "probe-video",
@@ -196,7 +198,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "metadata"
     },
     {
       "id": "probe-audio",
@@ -266,7 +269,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "metadata"
     },
     {
       "id": "probe-inspect-media",
@@ -326,7 +330,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "metadata"
     },
     {
       "id": "probe-inspect-hdr",
@@ -395,7 +400,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "metadata"
     },
     {
       "id": "probe-inspect-track",
@@ -465,7 +471,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "metadata"
     },
     {
       "id": "probe-export-report",
@@ -505,7 +512,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": true
+      "producesFiles": true,
+      "category": "reporting"
     },
     {
       "id": "probe-validate-output",
@@ -731,7 +739,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": false,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "validation"
     }
   ]
 }

@@ -607,8 +607,9 @@ class AuthoringToolsTests(unittest.TestCase):
         manifest["components"][0]["configurationSchema"]["fields"][0]["type"] = "telepathy"
         manifest["components"][1]["timeoutSeconds"] = 0
         manifest["components"][1]["mediaEffect"] = "disableIntegrity"
+        manifest["components"][1]["category"] = "miscellaneous"
         problems = " | ".join(sdk.validate_manifest(manifest))
-        for expected in ("id :", "version :", "dupliqué", "n'a pas de description", "telepathy", "timeoutSeconds", "mediaEffect"):
+        for expected in ("id :", "version :", "dupliqué", "n'a pas de description", "telepathy", "timeoutSeconds", "mediaEffect", "catégorie fonctionnelle"):
             self.assertIn(expected, problems)
         self.assertEqual(["Le manifeste doit être un objet JSON."], sdk.validate_manifest([]))
 
@@ -642,6 +643,7 @@ for (const component of manifest.components) plugin.component(component.id, () =
 const result = await plugin.simulate(manifest.components[0].id);
 const context = new Context({ context: { currentMetadata: { streams: [] } } });
 manifest.components[0].mediaEffect = 'disableIntegrity';
+manifest.components[0].category = 'miscellaneous';
 console.log(JSON.stringify({ candidate: result.candidateArtifactId, metadata: context.currentMetadata,
   current: context.currentFile, problems: validateManifest(manifest) }));
 """
@@ -654,6 +656,7 @@ console.log(JSON.stringify({ candidate: result.candidateArtifactId, metadata: co
         self.assertEqual({"streams": []}, result["metadata"])
         self.assertIsNone(result["current"])
         self.assertIn("mediaEffect", " | ".join(result["problems"]))
+        self.assertIn("catégorie fonctionnelle", " | ".join(result["problems"]))
 
     @unittest.skipUnless(shutil.which("node"), "Node.js absent")
     def test_javascript_sdk_speaks_the_same_protocol(self):

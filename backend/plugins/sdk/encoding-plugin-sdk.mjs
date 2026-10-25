@@ -175,6 +175,11 @@ const COMPONENT_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const SEMVER = /^\d+\.\d+\.\d+$/;
 const PLUGIN_FIELD_TYPES = ["text", "secret", "number", "boolean", "select"];
 const COMPONENT_FIELD_TYPES = ["text", "number", "boolean", "select", "condition-tree", "script-reference", "encoding-profile", "video-encoder", "record-list"];
+const FLOW_COMPONENT_CATEGORIES = new Set([
+  "inputs", "files", "discovery", "metadata", "encoding", "video", "audio", "images", "text",
+  "containers", "media-rules", "validation", "conditions", "variables", "scripts", "arr",
+  "media-servers", "communications", "cluster", "orchestration", "reporting", "utilities",
+]);
 
 export function validateManifest(manifest) {
   const problems = [];
@@ -209,6 +214,7 @@ export function validateManifest(manifest) {
     if (!SEMVER.test(String(component.version ?? ""))) problems.push(`Composant « ${id} » : version X.Y.Z attendue.`);
     if (!["action", "condition"].includes(component.kind)) problems.push(`Composant « ${id} » : kind « action » ou « condition ».`);
     if (!String(component.description ?? "").trim()) problems.push(`Composant « ${id} » : description vide (l'éditeur et les assistants IA s'y fient).`);
+    if (component.category != null && !FLOW_COMPONENT_CATEGORIES.has(component.category)) problems.push(`Composant « ${id} » : catégorie fonctionnelle inconnue.`);
     const outputs = component.outputs ?? [];
     if (!outputs.length) problems.push(`Composant « ${id} » : aucune sortie déclarée.`);
     if (new Set(outputs.map((o) => o.id)).size !== outputs.length) problems.push(`Composant « ${id} » : identifiant de sortie dupliqué.`);

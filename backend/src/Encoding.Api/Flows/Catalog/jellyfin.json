@@ -71,7 +71,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "media-servers"
     },
     {
       "id": "jellyfin-refresh-library",
@@ -101,7 +102,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "media-servers"
     },
     {
       "id": "jellyfin-check-item-indexed",
@@ -146,7 +148,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "media-servers"
     },
     {
       "id": "jellyfin-check-playback",
@@ -200,7 +203,8 @@
       },
       "requiredTools": [],
       "requiresMedia": false,
-      "requiresWriteAccess": false
+      "requiresWriteAccess": false,
+      "category": "media-servers"
     }
   ]
 }

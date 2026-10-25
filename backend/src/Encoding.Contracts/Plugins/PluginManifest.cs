@@ -47,7 +47,19 @@ public sealed record FlowComponentDescriptor(
     bool ProducesFiles = false,
     int? TimeoutSeconds = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    string? MediaEffect = null);
+    string? MediaEffect = null,
+    string? Category = null);
+
+/// <summary>Stable functional identifiers used to organize flow components in the editor.</summary>
+public static class FlowComponentCategories
+{
+    public static readonly IReadOnlySet<string> Ids = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "inputs", "files", "discovery", "metadata", "encoding", "video", "audio", "images", "text",
+        "containers", "media-rules", "validation", "conditions", "variables", "scripts", "arr",
+        "media-servers", "communications", "cluster", "orchestration", "reporting", "utilities",
+    };
+}
 
 public sealed record FlowOutputDescriptor(string Id, string Label, string Description);
 

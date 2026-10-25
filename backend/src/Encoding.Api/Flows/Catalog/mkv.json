@@ -127,7 +127,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     },
     {
       "id": "mkv-remove-tracks",
@@ -232,7 +233,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     },
     {
       "id": "mkv-extract-track",
@@ -282,7 +284,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": true
+      "producesFiles": true,
+      "category": "containers"
     },
     {
       "id": "mkv-reorder-tracks",
@@ -349,7 +352,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     },
     {
       "id": "mkv-edit-track-properties",
@@ -454,7 +458,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     },
     {
       "id": "mkv-edit-matroska-metadata",
@@ -520,7 +525,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     },
     {
       "id": "mkv-extract-attachments",
@@ -569,7 +575,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": true
+      "producesFiles": true,
+      "category": "containers"
     },
     {
       "id": "mkv-remove-attachments",
@@ -637,7 +644,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     },
     {
       "id": "mkv-extract-chapters",
@@ -695,7 +703,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": true
+      "producesFiles": true,
+      "category": "containers"
     },
     {
       "id": "mkv-replace-chapters",
@@ -763,7 +772,8 @@
       "requiresMedia": true,
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     },
     {
       "id": "mkv-edit-in-place",
@@ -873,7 +883,8 @@
       "requiresWriteAccess": true,
       "compatiblePluginVersions": [],
       "minimumRuntimePluginVersion": "1.1.0",
-      "producesFiles": false
+      "producesFiles": false,
+      "category": "containers"
     }
   ]
 }
