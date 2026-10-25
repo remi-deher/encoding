@@ -1,12 +1,5 @@
 name: Image
 on:
-  push:
-    branches: [dev, main]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - '.dockerignore'
-      - '.github/workflows/image.yml'
   pull_request:
     branches: [main]
     paths:

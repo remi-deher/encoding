@@ -1,12 +1,5 @@
 name: Backend
 on:
-  push:
-    branches: [dev, main]
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend.yml"
-      - ".github/actions/apt-install/**"
-      - ".github/scripts/apt-install.sh"
   pull_request:
     branches: [main]
     paths:
