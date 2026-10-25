@@ -8,15 +8,14 @@ Dressé le 2026-10-21 en relisant les anciens ADR contre le code de `dev`. Chaqu
 - Décision de Rémi : le setup d'un admin est imposé. `Auth:Enabled` vaut désormais `true` par défaut ; les écritures MCP exigent un jeton à portée explicite. Voir [auth-ops](domains/auth-ops.md). Reste à faire : vérifier sur les deux hôtes TrueNAS (comptes existants ? sinon l'assistant d'admin apparaîtra à la mise à jour) et ajouter un jeton MCP scopé pour les clients existants.
 
 ### 2. Deux mécanismes de réplication : retrait décidé et implémenté (2026-10-25)
-Rémi retient le maillage LWW comme modèle unique. Le mode de consensus, sa dépendance, son coordinateur SQL, ses routes, tests et outils dédiés sont retirés (ADR [0013](adr/0013-retrait-mode-raft.md)). Le protocole du maillage ne change pas. La sortie d'une ancienne installation utilisant ce mode nécessite une sauvegarde et une transition explicite ; aucune conversion automatique n'est livrée. La reprise inter-serveurs reste une étape distincte.
+Rémi retient le maillage LWW comme modèle unique. Le mode de consensus, sa dépendance, son coordinateur SQL, ses routes, tests et outils dédiés sont retirés (ADR [0013](adr/0013-retrait-mode-raft.md)). Le protocole du maillage ne change pas. La sortie d'une ancienne installation utilisant ce mode nécessite une sauvegarde et une transition explicite ; aucune conversion automatique n'est livrée. La reprise inter-serveurs est livrée séparément par l’ADR [0016](adr/0016-transferts-et-reprise-manuelle.md).
 
 ### 3. Sécurité du bac à sable : `/proc` et `/sys` lisibles
 - Constaté : Landlock autorise la lecture de `/proc` et `/sys` (ajouté pour les CLI IA). `/proc/<pid>/environ` et `mem` de l'agent restent lisibles par un plugin du même utilisateur, limités seulement par les contrôles ptrace. Mesure déjà prise : environnement minimal de l'enfant. Un plugin .NET n'a jamais été essayé sous Landlock réel.
 - Proposition : espace de noms PID ou utilisateur dédié aux plugins ; tester Landlock réel (aucun scénario Landlock n'a été exécuté en conteneur de développement).
 
-### 4. Pas de reprise après perte d'un serveur
-- Constaté : par conception, une exécution reste sur le serveur qui l'a créée ; la perte de ce serveur n'est reprise par personne tant qu'il ne revient pas. Les baux ne sont pas répliqués ; seule la perte d'un **worker** est couverte (tentative échouée, relance explicite ou bornée).
-- Impact direct sur l'objectif « reprise après perte d'un serveur ou d'un worker ». À valider avec Rémi : acceptable, ou besoin d'une reprise inter-serveurs (donc d'une forme d'exclusion plus forte, voir point 2).
+### 4. Reprise après perte d’un serveur : décidée et implémentée (2026-10-25)
+La reprise manuelle à deux serveurs est livrée par l’ADR [0016](adr/0016-transferts-et-reprise-manuelle.md) : neutralisation explicite de l’installation source et de ses workers, grâce de 135 s, checkpoint signé et fichiers vérifiés, époque supérieure, puis réconciliation avant réadmission. Un serveur injoignable n’est jamais considéré arrêté automatiquement. Les baux restent locaux. Témoin/majorité de reprise à trois serveurs et automatisation restent des extensions futures ; les validations multi-hôtes/NAS restent à réaliser.
 
 ## À décider (périmètre produit)
 
@@ -50,9 +49,9 @@ Livrée : reprise au dernier checkpoint, bornée à 2, blocs rejouables. Reste �
 
 
 ## Cluster sans quorum : cadrage du 2026-10-25
-- Proposition D1–D6 et audit : [revue](../design/cluster-without-quorum-review.md). Le retrait est implémenté par l’ADR 0013 ; la reprise inter-serveurs reste non livrée.
-- Décision de Rémi : à deux nœuds, reprendre la file d'un serveur exige sa **neutralisation explicite**, y compris son autorité de publication ; sinon il conserve sa file. Une expiration estimée côté pair et une époque inconnue du serveur isolé ne constituent pas un fencing. L'extension de reprise inter-serveurs reste non livrée.
-- Priorité D6 : la [sonde de coordination](../testing/coordination-measurements.md) couvre aussi 7 000 tâches et deux workers sur un serveur. La charge représentative sur **deux serveurs**, les latences HTTP état/historique et l'activité disque restent non vérifiées ; ne pas présenter cette sonde locale comme leur validation.
+- Proposition D1–D6 et audit : [revue](../design/cluster-without-quorum-review.md). Le retrait est implémenté par l’ADR 0013 ; l’attribution, les transferts et la reprise manuelle sont livrés par les ADR 0015 et 0016.
+- Décision de Rémi : à deux nœuds, reprendre la file d'un serveur exige sa **neutralisation explicite**, y compris son autorité de publication ; sinon il conserve sa file. Une expiration estimée côté pair et une époque inconnue du serveur isolé ne constituent pas un fencing. La reprise manuelle livrée respecte cette précondition ; elle n’apporte pas de neutralisation technique à distance.
+- Priorité D6 : la [sonde de coordination](../testing/coordination-measurements.md) couvre aussi 7 000 tâches et deux workers sur un serveur. La mesure complémentaire à [deux serveurs logiques](../testing/cluster-two-server-measurements.md) couvre capture concurrente et latences HTTP état/historique. Deux hôtes physiques, NAS et activité disque restent non vérifiés ; ne pas présenter ces sondes locales comme leur validation.
 
 ### Suivi de la proposition « cluster sans quorum » (2026-10-25)
 - Livré : retrait du mode de consensus, maillage inchangé ; mesures initiales à 7 000 travaux et jitter ; protection des sources et attentes durables en partition (ADR 0014).
