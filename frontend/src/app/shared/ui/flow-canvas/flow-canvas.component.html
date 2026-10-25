@@ -198,9 +198,17 @@
 <div class="minimap-panel" aria-label="Vue d’ensemble du flow">
   <div class="minimap-tools" role="toolbar" aria-label="Zoom et affichage du canvas">
     <button mat-icon-button (click)="zoom(-0.1)" aria-label="Dézoomer">−</button>
-    <span aria-live="polite">{{ (scale() * 100).toFixed(0) }} %</span>
+    <button
+      mat-button
+      class="minimap-zoom-reset"
+      (click)="resetOrFit()"
+      [attr.aria-label]="fitActive() ? 'Revenir à 100 %' : 'Tout afficher'"
+      aria-live="polite"
+      matTooltip="Cliquer pour revenir à 100 %, puis cliquer de nouveau pour tout afficher"
+    >
+      {{ (scale() * 100).toFixed(0) }} %
+    </button>
     <button mat-icon-button (click)="zoom(0.1)" aria-label="Zoomer">＋</button>
-    <button mat-button (click)="fit()">Tout afficher</button>
   </div>
   <button
     [disabled]="pending() !== null"

@@ -783,7 +783,20 @@ test('canvas layout is explicit, reversible and zoom stays inside the workspace'
       ),
     )
     .toBeGreaterThan(scaleBeforeZoom);
-  await page.getByRole('button', { name: 'Tout afficher', exact: true }).click();
+  const resetOrFit = page.locator('.minimap-zoom-reset');
+  await resetOrFit.click();
+  await expect(resetOrFit).toHaveAttribute('aria-label', 'Tout afficher');
+  await expect
+    .poll(async () =>
+      Number(
+        (await page.locator('.canvas-surface').getAttribute('style'))!.match(
+          /scale\(([^)]+)\)/,
+        )?.[1],
+      ),
+    )
+    .toBe(1);
+  await resetOrFit.click();
+  await expect(resetOrFit).toHaveAttribute('aria-label', 'Revenir à 100 %');
   await page.screenshot({ path: info.outputPath('compact-canvas.png') });
   const violations = (
     await new AxeBuilder({ page })

@@ -40,6 +40,7 @@ import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { RecordFormActionsComponent } from '../../shared/ui/record-form-actions.component';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
+import { FlowTemplates } from '../../shared/services/flow-templates';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { OverviewExecutionComponent } from './components/overview-execution.component';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
@@ -48,7 +49,7 @@ import {
   AiAssistantConversation,
   AiAssistantOptions,
 } from '../../shared/models/ai-tools';
-import { catchError, forkJoin, of } from 'rxjs';
+import { catchError, firstValueFrom, forkJoin, of } from 'rxjs';
 
 type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
 
@@ -78,6 +79,7 @@ type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
 })
 export class HomePageComponent {
   private readonly router = inject(Router);
+  private readonly flowTemplates = inject(FlowTemplates);
   protected readonly flowActionOpen = signal(false);
   private readonly overviewParams = toSignal(inject(ActivatedRoute).queryParamMap);
   protected readonly overviewTabs: readonly CategoryTabOption[] = [
@@ -111,9 +113,15 @@ export class HomePageComponent {
   protected readonly homeContentTemplate = viewChild<TemplateRef<unknown>>('homeContent');
 
   protected async openFlowCreation(): Promise<void> {
+    const { createFlowCreationForm } = await import('../../shared/models/flow-creation');
+    try {
+      this.flowCreationForm.set(
+        createFlowCreationForm(await firstValueFrom(this.flowTemplates.list())),
+      );
+    } catch {
+      this.flowCreationForm.set(createFlowCreationForm());
+    }
     this.flowActionOpen.set(true);
-    const { FLOW_CREATION_FORM } = await import('../../shared/models/flow-creation');
-    this.flowCreationForm.set(FLOW_CREATION_FORM);
   }
 
   protected closeFlowCreation(): void {
@@ -121,11 +129,14 @@ export class HomePageComponent {
   }
 
   protected startFlow(values: Record<string, string>): void {
-    void this.router.navigate([values['starter'] === 'guided' ? '/flows/guided' : '/flows/new'], {
+    const starter = values['starter'] ?? 'blank';
+    const templateId = starter.startsWith('template:') ? starter.slice('template:'.length) : null;
+    void this.router.navigate([starter === 'guided' ? '/flows/guided' : '/flows/new'], {
       queryParams: {
         name: values['name'],
         mediaType: values['mediaType'],
-        starter: values['starter'],
+        starter: templateId ? 'template' : starter,
+        ...(templateId ? { templateId } : {}),
       },
       info: { flowEditorDirection: 'forward' },
     });

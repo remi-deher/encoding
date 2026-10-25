@@ -188,8 +188,13 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 // Fail startup if the bundled installed catalog is invalid or missing.
-app.Services.GetRequiredService<FlowComponentRegistry>();
+var flowRegistry = app.Services.GetRequiredService<FlowComponentRegistry>();
 await DatabaseMigrator.ApplyAsync(localDatabase, app.Environment.ContentRootPath, app.Lifetime.ApplicationStopping, app.Logger);
+await StandardFlowTemplateSeeder.EnsureAsync(
+    localDatabase,
+    flowRegistry,
+    app.Services.GetRequiredService<FlowDefinitionValidator>(),
+    app.Lifetime.ApplicationStopping);
 await app.Services.GetRequiredService<TaskOwnershipRepository>().InitializeAsync(app.Lifetime.ApplicationStopping);
 app.UseRequestObservability();
 app.UseTrustedProxies();
