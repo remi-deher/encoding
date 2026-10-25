@@ -99,6 +99,7 @@
             [connections]="connections()"
             [showConnections]="showFlowConnections()"
             (configurationRequested)="onConfigurationRequested($event)"
+            (branchComponentRequested)="onBranchComponentRequested($event)"
             (connectionRequested)="onConnectionRequested($event)"
             (nodeRemoved)="removeNode($event)"
             (connectionRemoved)="removeConnection($event)"
