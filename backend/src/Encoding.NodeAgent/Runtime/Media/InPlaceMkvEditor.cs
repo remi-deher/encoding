@@ -74,6 +74,10 @@ public sealed class InPlaceMkvEditor(ProcessToolRunner tools)
         catch(SafeMediaPaths.MediaLockBusyException) { throw new InPlaceEditException("Le média est utilisé par un autre traitement ; la source n'a pas été modifiée."); }
         using(mediaLock)
         {
+            IDisposable sourceLock;
+            try {sourceLock=SharedSourceWriteLock.Acquire(original);}
+            catch(SafeMediaPaths.MediaLockBusyException) {throw new InPlaceEditException("Une écriture utilise déjà ce média ; la source n’a pas été modifiée.");}
+            using var shared=sourceLock;
             if(await SafeMediaPaths.DigestAsync(original,ct)!=expectedSha) throw new InPlaceEditException("La source a changé depuis le scan ; elle n'a pas été modifiée.");
             var (beforeDocument,before)=await IdentifyAsync(original,workDirectory,ct);
             IReadOnlyList<string> arguments;

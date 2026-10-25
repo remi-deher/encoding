@@ -142,6 +142,7 @@ internal static partial class Harness
 
     private static IReadOnlyList<NodeToolCapability> Capabilities(bool encode) => [
         new("plugin/base", "1.9.0", ["general"], []),
+        new("runtime/source-write-guard-v1", "1.0.0", ["general"], []),
         new("plugin/probe", "1.0.0", ["general"], []),
         new("mkvtoolnix", "92.0", ["video"], []),
         new("plugin/video", "1.1.0", ["general"], []),
@@ -215,16 +216,20 @@ internal static partial class Harness
         private RuntimeArtifactStore artifacts = null!;
         private PluginConfigurationRepository configurations = null!;
         private ExecutionRepository executions = null!;
+        private readonly bool sourceWriteGuards;
+        private ClusterPeerIdentityStore? sourceWriteIdentity;
+        private ClusterReconciliationHealth? sourceWriteHealth;
+        private ClusterSourceWriteBarrier? sourceWriteBarrier;
         private int rejectNextCheckpoint;
         private int rejectNextFinish;
         private readonly Guid a = Guid.NewGuid(), b = Guid.NewGuid(), c = Guid.NewGuid();
         private const string Token = "fixture-node-token-is-long-enough-for-authentication";
-        private Fixture(string connection, FlowComponentRegistry registry, FlowDefinitionValidator validator, RuntimeEligibility eligibility)
-        { this.connection=connection; this.registry=registry; this.validator=validator; this.eligibility=eligibility; }
+        private Fixture(string connection, FlowComponentRegistry registry, FlowDefinitionValidator validator, RuntimeEligibility eligibility,bool sourceWriteGuards=false)
+        { this.connection=connection; this.registry=registry; this.validator=validator; this.eligibility=eligibility;this.sourceWriteGuards=sourceWriteGuards; }
 
-        public static async Task<Fixture> CreateAsync(string connection, FlowComponentRegistry registry, FlowDefinitionValidator validator, RuntimeEligibility eligibility)
+        public static async Task<Fixture> CreateAsync(string connection, FlowComponentRegistry registry, FlowDefinitionValidator validator, RuntimeEligibility eligibility,bool sourceWriteGuards=false)
         {
-            var fixture=new Fixture(connection,registry,validator,eligibility);
+            var fixture=new Fixture(connection,registry,validator,eligibility,sourceWriteGuards);
             try { await fixture.InitializeAsync(); return fixture; }
             catch { await fixture.DisposeAsync(); throw; }
         }
@@ -235,7 +240,12 @@ internal static partial class Harness
             await DatabaseMigrator.ApplyAsync(db,RepositoryRoot(),CancellationToken.None);
             var config=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> { ["Runtime:ArtifactDirectory"]=Path.Combine(directory,"durable") }).Build();
             configurations=new(db,DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory,"keys"))));
-            runtime=new(db,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),configurations,new NodeGroupRepository(db));
+            if(sourceWriteGuards)
+            {
+                var keyConfig=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{["PluginSettings:KeyDirectory"]=Path.Combine(directory,"source-write-keys")}).Build();
+                sourceWriteIdentity=new(keyConfig,new EphemeralDataProtectionProvider());sourceWriteHealth=new();sourceWriteHealth.Enable();sourceWriteBarrier=new(db,sourceWriteHealth,sourceWriteIdentity);
+            }
+            runtime=new(db,eligibility,registry,new NodePresenceOptions(TimeSpan.FromHours(1)),configurations,new NodeGroupRepository(db),sourceWriteBarrier);
             artifacts=new(db,config); executions=new(db);
             foreach(var id in new[]{a,b,c})
             {
@@ -254,7 +264,8 @@ internal static partial class Harness
             builder.Services.AddApiProblemDetails();
             builder.Services.ConfigureHttpJsonOptions(options => { options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase; });
             builder.Services.AddSingleton<System.Data.Common.DbDataSource>(db); builder.Services.AddSingleton(runtime); builder.Services.AddSingleton(artifacts);
-            builder.Services.AddSingleton(new ExecutionWaitRepository(db, presenceOptions)); builder.Services.AddSingleton(new RuntimeTransferRepository(db)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db)); builder.Services.AddSingleton(config);
+            builder.Services.AddSingleton<PendingSourceWriteRepository>(_=>sourceWriteBarrier is {} barrier?new(db,barrier):throw new NotSupportedException("Pas de remplacement différé dans ce scénario."));
+            builder.Services.AddSingleton(new ExecutionWaitRepository(db, presenceOptions)); builder.Services.AddSingleton(new RuntimeTransferRepository(db,sourceWrites:sourceWriteBarrier)); builder.Services.AddSingleton(new DiskLockRepository(db)); builder.Services.AddSingleton(configurations); builder.Services.AddSingleton<Encoding.Api.Plugins.PublicationGuardProvider>(); builder.Services.AddSingleton(new SourceReplacementRepository(db,sourceWriteBarrier)); builder.Services.AddSingleton(config);
             builder.Services.AddSingleton(new LibraryProcessingRepository(db)); builder.Services.AddSingleton(workflowRepo);
             builder.Services.AddSingleton(validator); builder.Services.AddSingleton(presenceOptions);
             builder.Services.AddSingleton(eligibility); builder.Services.AddSingleton(new NodeRepository(db));
@@ -794,6 +805,7 @@ internal static partial class Harness
         public async ValueTask DisposeAsync()
         {
             if(app is not null) await app.DisposeAsync();
+            sourceWriteIdentity?.Dispose();
             if(testDb is not null) await testDb.DisposeAsync();
             if(Directory.Exists(directory)) Directory.Delete(directory,true);
         }

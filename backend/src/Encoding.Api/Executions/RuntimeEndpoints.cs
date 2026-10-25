@@ -153,6 +153,16 @@ public static class RuntimeEndpoints
             try {return await locks.ReleaseAsync(id,nodeId,request,ct) is not null?(IResult)Results.NoContent():Results.Conflict();}
             catch(ArgumentException) {return Results.BadRequest();}
         });
+        group.MapPost("/executions/{id:guid}/source-write/authorize",async(Guid nodeId,Guid id,SourceWriteAuthorization request,RuntimeRepository runtime,CancellationToken ct)=>
+            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await runtime.AuthorizeSourceWriteAsync(id,nodeId,request.Epoch,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
+        group.MapPost("/replacements/{id:guid}/authorize",async(Guid nodeId,Guid id,SourceWriteLocation request,SourceReplacementRepository replacements,CancellationToken ct)=>
+            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await replacements.AuthorizeAsync(id,nodeId,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
+        group.MapPost("/source-writes/claim",async(Guid nodeId,PendingSourceWriteRepository writes,Encoding.Api.Plugins.PublicationGuardProvider guards,CancellationToken ct)=>
+            await writes.ClaimAsync(nodeId,ct) is {} task?(IResult)Results.Ok(task with { Guards=await guards.ListAsync(ct) }):Results.NoContent());
+        group.MapPost("/source-writes/{id:guid}/authorize",async(Guid nodeId,Guid id,PendingSourceWriteFence request,PendingSourceWriteRepository writes,CancellationToken ct)=>
+            !string.IsNullOrWhiteSpace(request.Root) && request.Root.Length<=4096 && await writes.AuthorizeAsync(id,nodeId,request.ClaimId,request.Root,ct)?(IResult)Results.NoContent():Results.Conflict());
+        group.MapPost("/source-writes/{id:guid}/complete",async(Guid nodeId,Guid id,PendingSourceWriteCompletion request,PendingSourceWriteRepository writes,CancellationToken ct)=>
+            await writes.CompleteAsync(id,nodeId,request,ct)?(IResult)Results.NoContent():Results.Conflict());
         group.MapPost("/executions/{id:guid}/steps/start",async(Guid nodeId,Guid id,StartRuntimeStep request,RuntimeRepository runtime,CancellationToken ct)=>
             await runtime.StartStepAsync(id,nodeId,request,ct) is { } step ? (IResult)Results.Ok(step) : Results.Conflict());
         group.MapPost("/executions/{id:guid}/steps/complete",async(Guid nodeId,Guid id,CompleteRuntimeStep request,

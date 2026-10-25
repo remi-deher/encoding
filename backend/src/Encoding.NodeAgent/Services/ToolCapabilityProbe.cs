@@ -34,6 +34,7 @@ public sealed class ToolCapabilityProbe(
             var list = new List<NodeToolCapability>
             {
                 new("plugin/base", "1.9.0", ["general"], ["cpu"]),
+                new(Encoding.Contracts.Executions.SourceWriteProtocol.Capability, "1.0.0", ["general"], []),
                 new(FlowArtifactReference.Capability, "1.0.0", ["general"], []),
                 new(Encoding.Contracts.Executions.RuntimeSourceObservation.Capability, "1.0.0", ["general"], []),
                 new("plugin/video", "1.2.0", ["general"], []),
