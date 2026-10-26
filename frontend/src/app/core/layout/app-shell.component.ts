@@ -255,9 +255,8 @@ export class AppShellComponent {
     const button = this.assistantLauncher()?.nativeElement;
     const margin = 16;
     const maxLeft = Math.max(margin, window.innerWidth - (button?.offsetWidth ?? 56) - margin);
-    const bottomClearance = this.isCompactNavigation() && !this.authMode() && !this.workspaceMode()
-      ? 84
-      : margin;
+    const bottomClearance =
+      this.isCompactNavigation() && !this.authMode() && !this.workspaceMode() ? 84 : margin;
     const maxTop = Math.max(
       margin,
       window.innerHeight - (button?.offsetHeight ?? 56) - bottomClearance,

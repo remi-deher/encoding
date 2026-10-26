@@ -4,9 +4,7 @@
   class="application-shell"
   [class.workspace-shell]="workspaceMode()"
   [class.auth-shell]="authMode()"
-  [class.compact-navigation-shell]="
-    !authMode() && !workspaceMode() && isCompactNavigation()
-  "
+  [class.compact-navigation-shell]="!authMode() && !workspaceMode() && isCompactNavigation()"
 >
   @if (authMode()) {
     <header class="auth-header">
@@ -25,61 +23,61 @@
   >
     @if (!authMode() && !workspaceMode() && !isCompactNavigation()) {
       <mat-sidenav
-          class="application-sidebar"
-          [class.is-collapsed]="navigationCollapsed()"
-          [mode]="navigationMode()"
-          [opened]="navigationOpened()"
-          (openedChange)="navigationOpened.set($event)"
-          aria-label="Navigation principale"
-        >
-          <div class="sidebar-content">
-            <div class="sidebar-header" [class.is-collapsed]="navigationCollapsed()">
-              <a
-                class="brand sidebar-brand"
-                routerLink="/"
-                aria-label="Encoding, accueil"
-                (click)="onNavigationClick()"
-              >
-                <span class="brand-mark" aria-hidden="true">E</span>
-                @if (!navigationCollapsed()) {
-                  <span class="brand-name">Encoding</span>
-                }
-              </a>
-            </div>
-
-            <app-primary-navigation
-              class="sidebar-navigation"
-              [collapsed]="navigationCollapsed()"
-              [activeExecutionCount]="activeExecutionCount()"
+        class="application-sidebar"
+        [class.is-collapsed]="navigationCollapsed()"
+        [mode]="navigationMode()"
+        [opened]="navigationOpened()"
+        (openedChange)="navigationOpened.set($event)"
+        aria-label="Navigation principale"
+      >
+        <div class="sidebar-content">
+          <div class="sidebar-header" [class.is-collapsed]="navigationCollapsed()">
+            <a
+              class="brand sidebar-brand"
+              routerLink="/"
+              aria-label="Encoding, accueil"
               (click)="onNavigationClick()"
-            />
-
-            <div class="sidebar-footer" [class.is-collapsed]="navigationCollapsed()">
-              <button
-                type="button"
-                class="sidebar-collapse-btn"
-                [attr.aria-label]="
-                  navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
-                "
-                [matTooltip]="
-                  navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
-                "
-                matTooltipPosition="right"
-                (click)="toggleNavigationCollapsed()"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  @if (navigationCollapsed()) {
-                    <path d="M9 5l7 7-7 7" />
-                  } @else {
-                    <path d="M15 19l-7-7 7-7" />
-                  }
-                </svg>
-                @if (!navigationCollapsed()) {
-                  <span class="collapse-btn-label">Replier</span>
-                }
-              </button>
-            </div>
+            >
+              <span class="brand-mark" aria-hidden="true">E</span>
+              @if (!navigationCollapsed()) {
+                <span class="brand-name">Encoding</span>
+              }
+            </a>
           </div>
+
+          <app-primary-navigation
+            class="sidebar-navigation"
+            [collapsed]="navigationCollapsed()"
+            [activeExecutionCount]="activeExecutionCount()"
+            (click)="onNavigationClick()"
+          />
+
+          <div class="sidebar-footer" [class.is-collapsed]="navigationCollapsed()">
+            <button
+              type="button"
+              class="sidebar-collapse-btn"
+              [attr.aria-label]="
+                navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
+              "
+              [matTooltip]="
+                navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
+              "
+              matTooltipPosition="right"
+              (click)="toggleNavigationCollapsed()"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                @if (navigationCollapsed()) {
+                  <path d="M9 5l7 7-7 7" />
+                } @else {
+                  <path d="M15 19l-7-7 7-7" />
+                }
+              </svg>
+              @if (!navigationCollapsed()) {
+                <span class="collapse-btn-label">Replier</span>
+              }
+            </button>
+          </div>
+        </div>
       </mat-sidenav>
     }
 
