@@ -63,7 +63,7 @@ export class CategoryTabsComponent {
       const activeTab = this.tabButtons()[index]?.nativeElement;
       if (activeTab && typeof window !== 'undefined') {
         requestAnimationFrame(() =>
-          activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' }),
+          activeTab.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'auto' }),
         );
       }
     });

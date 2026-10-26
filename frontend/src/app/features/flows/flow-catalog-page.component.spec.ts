@@ -40,7 +40,7 @@ describe('Flow catalog recovery', () => {
       },
     ]);
     expect(fixture.componentInstance['catalogState']()).toBe('ready');
-    expect(fixture.componentInstance['rows']()[0]['name']).toBe('Films');
+    expect(fixture.componentInstance['catalogueItems']()[0]['name']).toBe('Films');
     fixture.destroy();
   });
 });

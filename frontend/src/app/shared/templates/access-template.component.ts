@@ -9,45 +9,32 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
   imports: [MatProgressBarModule, NgTemplateOutlet],
   template: `
     <main class="access-stage" [class.access-stage_setup]="view() === 'setup'">
-      @if (view() === 'login') {
-        <section class="access-card" aria-labelledby="access-title">
-          @if (busy()) {
-            <mat-progress-bar
-              class="access-progress"
-              mode="indeterminate"
-              [attr.aria-label]="progressLabel()"
-            />
-          }
+      <section
+        class="access-frame"
+        [class.access-frame_setup]="view() === 'setup'"
+        [attr.aria-label]="view() === 'setup' ? 'Assistant de premier démarrage' : null"
+        aria-labelledby="access-title"
+      >
+        @if (busy()) {
+          <mat-progress-bar
+            class="access-progress"
+            mode="indeterminate"
+            [attr.aria-label]="progressLabel()"
+          />
+        }
+        <div class="access-alert-slot"><ng-content select="[access-alert]" /></div>
+        <header class="access-heading">
           <ng-container [ngTemplateOutlet]="brand" />
           <h1 id="access-title">{{ title() }}</h1>
           <p class="access-description">{{ description() }}</p>
+        </header>
+        <div class="access-context-column">
+          <ng-content select="[access-context]" />
+        </div>
+        <section class="access-workbench" aria-label="Configuration de cette installation">
           <ng-content select="[access-content]" />
         </section>
-      } @else {
-        <section class="access-setup-frame" aria-label="Assistant de premier démarrage">
-          @if (busy()) {
-            <mat-progress-bar
-              class="access-progress"
-              mode="indeterminate"
-              [attr.aria-label]="progressLabel()"
-            />
-          }
-          <ng-content select="[access-alert]" />
-          <div class="access-setup-grid">
-            <div class="access-context-column">
-              <header class="access-heading">
-                <ng-container [ngTemplateOutlet]="brand" />
-                <h1 id="access-title">{{ title() }}</h1>
-                <p class="access-description">{{ description() }}</p>
-              </header>
-              <ng-content select="[access-context]" />
-            </div>
-            <section class="access-workbench" aria-label="Configuration de cette installation">
-              <ng-content select="[access-content]" />
-            </section>
-          </div>
-        </section>
-      }
+      </section>
     </main>
 
     <ng-template #brand>
@@ -87,12 +74,9 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
     .access-stage_setup {
       background: var(--page-background);
     }
-    .access-card,
-    .access-setup-frame {
+    .access-frame {
       position: relative;
       width: min(100%, 400px);
-    }
-    .access-card {
       box-sizing: border-box;
       overflow: hidden;
       display: grid;
@@ -102,16 +86,30 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
       background: var(--surface-container);
       box-shadow: var(--elevation-2);
     }
-    .access-setup-frame {
+    .access-frame_setup {
+      overflow: visible;
       width: min(100%, 1060px);
       display: grid;
-      gap: var(--space-4);
-    }
-    .access-setup-grid {
-      display: grid;
       grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
-      gap: var(--space-5);
+      grid-template-rows: auto auto auto;
+      column-gap: var(--space-5);
+      row-gap: var(--space-4);
       align-items: start;
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .access-frame_setup .access-alert-slot {
+      grid-column: 1 / -1;
+    }
+    .access-frame_setup .access-heading,
+    .access-frame_setup .access-context-column {
+      grid-column: 1;
+    }
+    .access-frame_setup .access-workbench {
+      grid-column: 2;
+      grid-row: 2 / span 2;
     }
     .access-context-column {
       display: grid;
@@ -125,6 +123,13 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
     .access-workbench {
       min-width: 0;
     }
+    .access-frame:not(.access-frame_setup) .access-alert-slot,
+    .access-frame:not(.access-frame_setup) .access-context-column {
+      display: none;
+    }
+    .access-frame:not(.access-frame_setup) .access-workbench {
+      display: contents;
+    }
     .access-progress {
       position: absolute;
       z-index: 1;
@@ -132,7 +137,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
       overflow: hidden;
       border-radius: var(--radius-pill);
     }
-    .access-card > .access-progress {
+    .access-frame:not(.access-frame_setup) > .access-progress {
       border-radius: 0;
     }
     .access-brand {
@@ -172,7 +177,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
       font-weight: 800;
       letter-spacing: -0.02em;
     }
-    .access-heading h1 {
+    .access-frame_setup .access-heading h1 {
       font-size: var(--font-title-lg);
     }
     .access-description {
@@ -182,12 +187,19 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
       line-height: 1.6;
     }
     @media (max-width: 900px) {
-      .access-setup-grid {
+      .access-frame_setup {
         grid-template-columns: minmax(0, 1fr);
+      }
+      .access-frame_setup .access-alert-slot,
+      .access-frame_setup .access-heading,
+      .access-frame_setup .access-context-column,
+      .access-frame_setup .access-workbench {
+        grid-column: 1;
+        grid-row: auto;
       }
     }
     @media (max-width: 480px) {
-      .access-card {
+      .access-frame:not(.access-frame_setup) {
         padding-inline: var(--space-4);
       }
     }

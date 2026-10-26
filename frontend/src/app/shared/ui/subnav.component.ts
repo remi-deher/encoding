@@ -88,7 +88,9 @@ export class SubnavComponent {
       const index = this.options().findIndex((option) => option.value === this.selected());
       const active = this.items()[index]?.nativeElement;
       if (active && typeof window !== 'undefined') {
-        requestAnimationFrame(() => active.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+        requestAnimationFrame(() =>
+          active.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }),
+        );
       }
     });
   }
