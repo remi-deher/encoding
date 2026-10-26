@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  TemplateRef,
+  contentChild,
+  input,
+  output,
+  viewChild,
+} from '@angular/core';
 import { CategoryTabOption } from '../ui/category-tabs.component';
 import { SubnavComponent } from '../ui/subnav.component';
 import {
@@ -35,6 +43,17 @@ import {
       [drawerSize]="drawerSize()"
       [drawerHeaderDensity]="drawerHeaderDensity()"
       [drawerModal]="drawerModal()"
+      [pageActionsInput]="pageActionsContent()"
+      [toolbarActionsInput]="toolbarActionsContent()"
+      [detailContentInput]="detailContentContent()"
+      [detailFooterActionsInput]="detailFooterActionsContent()"
+      [detailHeaderActionsInput]="detailHeaderActionsContent()"
+      [actionFooterActionsInput]="actionFooterActionsContent()"
+      [actionContentInput]="actionContentContent()"
+      [catalogueSummaryInput]="catalogueSummaryProjection()"
+      [catalogueFiltersInput]="catalogueFiltersProjection()"
+      [catalogueActiveFiltersInput]="catalogueActiveFiltersProjection()"
+      [catalogueTableInput]="catalogueTableProjection()"
       (searchQueryChange)="searchQueryChange.emit($event)"
       (emptyStateAction)="emptyStateAction.emit()"
       (detailClosed)="detailClosed.emit()"
@@ -47,15 +66,51 @@ import {
         [selected]="navigationSelected()"
         (selectedChange)="navigationSelectedChange.emit($event)"
       />
-      <ng-content select="[catalogue-summary]" />
-      <ng-content select="[catalogue-filters]" />
-      <ng-content select="[catalogue-active-filters]" />
-      <ng-content select="[catalogue-table]" />
-      <ng-content select="ng-template" />
+      <ng-template #catalogueSummarySlot>
+        <ng-content select="[catalogue-summary]" />
+      </ng-template>
+      <ng-template #catalogueFiltersSlot>
+        <ng-content select="[catalogue-filters]" />
+      </ng-template>
+      <ng-template #catalogueActiveFiltersSlot>
+        <ng-content select="[catalogue-active-filters]" />
+      </ng-template>
+      <ng-template #catalogueTableSlot>
+        <ng-content select="[catalogue-table]" />
+      </ng-template>
     </app-management-catalog-template>
   `,
 })
 export class ClusterMaintenanceTemplateComponent {
+  /** Capture et transmet les fragments métier au gabarit catalogue comme templates explicites. */
+  private readonly pageActionsContent = contentChild('pageActions', { read: TemplateRef });
+  private readonly toolbarActionsContent = contentChild('catalogueToolbarActions', {
+    read: TemplateRef,
+  });
+  private readonly detailContentContent = contentChild('detailContent', { read: TemplateRef });
+  private readonly detailFooterActionsContent = contentChild('detailFooterActions', {
+    read: TemplateRef,
+  });
+  private readonly detailHeaderActionsContent = contentChild('detailHeaderActions', {
+    read: TemplateRef,
+  });
+  private readonly actionFooterActionsContent = contentChild('actionFooterActions', {
+    read: TemplateRef,
+  });
+  private readonly actionContentContent = contentChild('actionContent', { read: TemplateRef });
+  protected readonly catalogueSummaryProjection = viewChild('catalogueSummarySlot', {
+    read: TemplateRef,
+  });
+  protected readonly catalogueFiltersProjection = viewChild('catalogueFiltersSlot', {
+    read: TemplateRef,
+  });
+  protected readonly catalogueActiveFiltersProjection = viewChild('catalogueActiveFiltersSlot', {
+    read: TemplateRef,
+  });
+  protected readonly catalogueTableProjection = viewChild('catalogueTableSlot', {
+    read: TemplateRef,
+  });
+
   readonly title = input.required<string>();
   readonly navigationLabel = input.required<string>();
   readonly navigationOptions = input.required<readonly CategoryTabOption[]>();

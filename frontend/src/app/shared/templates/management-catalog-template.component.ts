@@ -81,7 +81,13 @@ export interface CatalogEmptyState {
 
           <section class="catalog-panel" [attr.aria-label]="title()">
             @if (showToolbar()) {
-              <ng-template #filtersContent><ng-content select="[catalogue-filters]" /></ng-template>
+              <ng-template #filtersContent>
+                @if (catalogueFiltersTemplate(); as filters) {
+                  <ng-container [ngTemplateOutlet]="filters" />
+                } @else {
+                  <ng-content select="[catalogue-filters]" />
+                }
+              </ng-template>
               <div class="catalog-toolbar">
                 <div class="catalog-filters">
                   @if (filterLabel() && searchLayout() === 'end') {
@@ -115,7 +121,11 @@ export interface CatalogEmptyState {
                       <ng-container [ngTemplateOutlet]="filtersContent" />
                     }
                     @if (searchLayout() === 'centered-sheet') {
-                      <ng-content select="[catalogue-active-filters]" />
+                      @if (catalogueActiveFiltersTemplate(); as activeFilters) {
+                        <ng-container [ngTemplateOutlet]="activeFilters" />
+                      } @else {
+                        <ng-content select="[catalogue-active-filters]" />
+                      }
                     }
                     @if (toolbarActionsTemplate(); as actions) {
                       <div class="catalog-toolbar-actions">
@@ -157,7 +167,11 @@ export interface CatalogEmptyState {
                 </div>
               </section>
             } @else {
-              <ng-content select="[catalogue-table]" />
+              @if (catalogueTableTemplate(); as table) {
+                <ng-container [ngTemplateOutlet]="table" />
+              } @else {
+                <ng-content select="[catalogue-table]" />
+              }
             }
           </section>
 
@@ -221,6 +235,9 @@ export class ManagementCatalogTemplateComponent {
   readonly actionContentInput = input<TemplateRef<unknown> | undefined>();
   readonly catalogueNavigationInput = input<TemplateRef<unknown> | undefined>();
   readonly catalogueSummaryInput = input<TemplateRef<unknown> | undefined>();
+  readonly catalogueFiltersInput = input<TemplateRef<unknown> | undefined>();
+  readonly catalogueActiveFiltersInput = input<TemplateRef<unknown> | undefined>();
+  readonly catalogueTableInput = input<TemplateRef<unknown> | undefined>();
   readonly detailClosed = output<void>();
   readonly actionClosed = output<void>();
   private readonly pageActionsContent = contentChild('pageActions', { read: TemplateRef });
@@ -242,6 +259,15 @@ export class ManagementCatalogTemplateComponent {
     read: TemplateRef,
   });
   private readonly catalogueSummaryContent = contentChild('catalogueSummary', {
+    read: TemplateRef,
+  });
+  private readonly catalogueFiltersContent = contentChild('catalogueFilters', {
+    read: TemplateRef,
+  });
+  private readonly catalogueActiveFiltersContent = contentChild('catalogueActiveFilters', {
+    read: TemplateRef,
+  });
+  private readonly catalogueTableContent = contentChild('catalogueTable', {
     read: TemplateRef,
   });
 
@@ -271,6 +297,15 @@ export class ManagementCatalogTemplateComponent {
   );
   protected readonly catalogueSummaryTemplate = computed(
     () => this.catalogueSummaryInput() ?? this.catalogueSummaryContent(),
+  );
+  protected readonly catalogueFiltersTemplate = computed(
+    () => this.catalogueFiltersInput() ?? this.catalogueFiltersContent(),
+  );
+  protected readonly catalogueActiveFiltersTemplate = computed(
+    () => this.catalogueActiveFiltersInput() ?? this.catalogueActiveFiltersContent(),
+  );
+  protected readonly catalogueTableTemplate = computed(
+    () => this.catalogueTableInput() ?? this.catalogueTableContent(),
   );
 
   protected onDrawerClosed(): void {
