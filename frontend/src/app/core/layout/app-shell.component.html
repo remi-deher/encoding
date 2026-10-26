@@ -93,6 +93,12 @@
         />
       }
 
+      @if (!authMode() && !workspaceMode()) {
+        <header class="application-header" aria-label="État et préférences du système">
+          <app-page-system-actions />
+        </header>
+      }
+
       <main
         id="main-content"
         class="main-content"
@@ -108,7 +114,7 @@
       class="assistant-launcher"
       mat-fab
       type="button"
-      [hidden]="navigationSheetOpen() || isCompactNavigation()"
+      [hidden]="navigationSheetOpen() || (isCompactNavigation() && !workspaceMode())"
       [class.is-panel-open]="assistantPanelOpen()"
       [attr.aria-hidden]="assistantPanelOpen() ? 'true' : null"
       [attr.tabindex]="assistantPanelOpen() ? -1 : null"

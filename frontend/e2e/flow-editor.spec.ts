@@ -263,18 +263,27 @@ test('right-click and stationary touch hold expose the same step actions', async
 
 test('the general assistant retains its draft when the shared widget is closed and reopened', async ({
   page,
-}) => {
+}, testInfo) => {
   await setup(page);
   await page.goto('/');
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
+  const mobile = testInfo.project.name === 'mobile';
+  const openAssistant = async () => {
+    if (mobile) {
+      await page.getByRole('button', { name: 'Plus', exact: true }).click();
+      await page.getByRole('button', { name: /Assistant rapide/ }).click();
+    } else {
+      await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
+    }
+  };
+  await openAssistant();
   const panel = page.getByLabel('Panneau de l’assistant IA', { exact: true });
   await expect(panel.locator('app-ai-assistant-page')).toBeVisible();
   const composer = panel.locator('textarea').first();
   await composer.fill('Mon brouillon conservé');
   await page.getByRole('button', { name: 'Fermer le panneau de l’assistant', exact: true }).click();
-  await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
+  await openAssistant();
   await expect(composer).toHaveValue('Mon brouillon conservé');
   expect(errors).toEqual([]);
 });
@@ -646,7 +655,7 @@ test('canvas workspace fills the available width and separates blocks from its t
 }) => {
   await setup(page);
   const toolbar = (await page.locator('.command-bar').boundingBox())!;
-  const workspace = (await page.locator('.flow-workbench').boundingBox())!;
+  const workspace = (await page.locator('.flow-workspace-main').boundingBox())!;
   expect(Math.abs(toolbar.width - workspace.width)).toBeLessThan(2);
   const firstBlock = (await page.locator('.canvas-node').first().boundingBox())!;
   expect(firstBlock.y - toolbar.y - toolbar.height).toBeGreaterThanOrEqual(16);

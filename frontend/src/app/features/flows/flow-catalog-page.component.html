@@ -46,24 +46,26 @@
     <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
   </ng-template>
 
-  <div catalogue-summary class="flow-types" role="group" aria-label="Filtrer par type de média">
-    @if (totalCount() > 0) {
-      @for (type of typeTiles(); track type.value) {
-        <button
-          type="button"
-          class="flow-type"
-          [attr.data-media]="type.value"
-          [attr.aria-pressed]="typeFilter() === type.value"
-          [disabled]="type.count === 0"
-          (click)="toggleType(type.value)"
-        >
-          <span class="flow-type-icon"><app-icon [name]="type.icon" /></span>
-          <span class="flow-type-label">{{ type.label }}</span>
-          <span class="flow-type-count">{{ type.count }}</span>
-        </button>
+  <ng-template #catalogueSummary>
+    <div class="flow-types" role="group" aria-label="Filtrer par type de média">
+      @if (totalCount() > 0) {
+        @for (type of typeTiles(); track type.value) {
+          <button
+            type="button"
+            class="flow-type"
+            [attr.data-media]="type.value"
+            [attr.aria-pressed]="typeFilter() === type.value"
+            [disabled]="type.count === 0"
+            (click)="toggleType(type.value)"
+          >
+            <span class="flow-type-icon"><app-icon [name]="type.icon" /></span>
+            <span class="flow-type-label">{{ type.label }}</span>
+            <span class="flow-type-count">{{ type.count }}</span>
+          </button>
+        }
       }
-    }
-  </div>
+    </div>
+  </ng-template>
 
   <ng-template #detailContent catalogue-detail>
     @if (selectedFlow(); as flow) {

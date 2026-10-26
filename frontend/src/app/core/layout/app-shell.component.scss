@@ -363,6 +363,18 @@ button.assistant-launcher {
   z-index: auto !important;
 }
 
+.application-header {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1680px;
+  min-height: 58px;
+  margin-inline: auto;
+  padding: 10px clamp(16px, 2.5vw, 40px) 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .main-content {
   box-sizing: border-box;
   width: 100%;
@@ -418,6 +430,11 @@ button.assistant-launcher {
 
 /* Responsive Rules */
 @media (max-width: 760px) {
+  .application-header {
+    min-height: 54px;
+    padding-inline: 16px;
+  }
+
   .main-content {
     padding-inline: 16px;
     padding-block: 10px 28px;
@@ -429,6 +446,10 @@ button.assistant-launcher {
 }
 
 @media (max-width: 480px) {
+  .application-header {
+    padding-inline: 12px;
+  }
+
   .main-content {
     padding-inline: 12px;
     padding-block: 8px 24px;

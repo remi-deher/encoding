@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, input, model, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  TemplateRef,
+  contentChild,
+  input,
+  model,
+  output,
+} from '@angular/core';
 import {
   DataTableActionEvent,
   DataTableRowAction,
@@ -45,13 +53,20 @@ import {
       [drawerSize]="drawerSize()"
       [drawerHeaderDensity]="drawerHeaderDensity()"
       [drawerModal]="drawerModal()"
+      [pageActionsInput]="pageActions()"
+      [toolbarActionsInput]="toolbarActions()"
+      [detailContentInput]="detailContent()"
+      [detailFooterActionsInput]="detailFooterActions()"
+      [detailHeaderActionsInput]="detailHeaderActions()"
+      [actionFooterActionsInput]="actionFooterActions()"
+      [actionContentInput]="actionContent()"
+      [catalogueNavigationInput]="catalogueNavigation()"
+      [catalogueSummaryInput]="catalogueSummary()"
       (searchQueryChange)="searchQueryChange.emit($event)"
       (emptyStateAction)="emptyStateAction.emit()"
       (detailClosed)="detailClosed.emit()"
       (actionClosed)="actionClosed.emit()"
     >
-      <ng-content select="[catalogue-navigation]" />
-      <ng-content select="[catalogue-summary]" />
       <div catalogue-table>
         <app-resource-list
           [items]="items()"
@@ -71,11 +86,38 @@ import {
           (selectionAction)="selectionAction.emit($event)"
         />
       </div>
-      <ng-content select="ng-template" />
     </app-management-catalog-template>
   `,
 })
 export class ResourceCatalogTemplateComponent {
+  protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
+  protected readonly toolbarActions = contentChild('catalogueToolbarActions', {
+    read: TemplateRef,
+  });
+  protected readonly detailContent = contentChild('detailContent', { read: TemplateRef });
+  protected readonly detailFooterActions = contentChild('detailFooterActions', {
+    read: TemplateRef,
+  });
+  protected readonly detailHeaderActions = contentChild('detailHeaderActions', {
+    read: TemplateRef,
+  });
+  protected readonly actionFooterActions = contentChild('actionFooterActions', {
+    read: TemplateRef,
+  });
+  protected readonly actionContent = contentChild('actionContent', { read: TemplateRef });
+  protected readonly catalogueNavigationContent = contentChild('catalogueNavigation', {
+    read: TemplateRef,
+  });
+  protected readonly catalogueSummaryContent = contentChild('catalogueSummary', {
+    read: TemplateRef,
+  });
+  readonly catalogueNavigationTemplate = input<TemplateRef<unknown> | undefined>();
+  readonly catalogueSummaryTemplate = input<TemplateRef<unknown> | undefined>();
+  protected readonly catalogueNavigation = () =>
+    this.catalogueNavigationTemplate() ?? this.catalogueNavigationContent();
+  protected readonly catalogueSummary = () =>
+    this.catalogueSummaryTemplate() ?? this.catalogueSummaryContent();
+
   readonly title = input.required<string>();
   readonly items = input.required<readonly ResourceListItem[]>();
   readonly rowActions = input<readonly DataTableRowAction[]>([]);

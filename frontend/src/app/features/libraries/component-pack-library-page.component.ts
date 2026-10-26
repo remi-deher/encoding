@@ -58,7 +58,9 @@ interface PackRow extends DataTableRow {
       detailLayout="page"
       searchLayout="centered"
     >
-      <app-library-section-tabs catalogue-navigation selected="packs" />
+      <ng-template #catalogueNavigation>
+        <app-library-section-tabs catalogue-navigation selected="packs" />
+      </ng-template>
       <ng-template #detailContent catalogue-detail>
         @if (selectedPack(); as pack) {
           <app-resource-sheet

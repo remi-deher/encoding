@@ -61,6 +61,7 @@ import { ResourceCatalogTemplateComponent } from './resource-catalog-template.co
       [drawerSize]="drawerSize()"
       [drawerHeaderDensity]="drawerHeaderDensity()"
       [drawerModal]="drawerModal()"
+      [catalogueNavigationTemplate]="catalogueNavigation()"
       (searchQueryChange)="searchQueryChange.emit($event)"
       (emptyStateAction)="emptyStateAction.emit()"
       (detailClosed)="detailClosed.emit()"
@@ -144,6 +145,9 @@ export class LibraryPreparationTemplateComponent {
   readonly selectionAction = output<DataTableSelectionActionEvent>();
 
   protected readonly summaryContent = contentChild('librarySummary', { read: TemplateRef });
+  protected readonly catalogueNavigation = contentChild('catalogueNavigation', {
+    read: TemplateRef,
+  });
   protected readonly mediaContent = contentChild('libraryMedia', { read: TemplateRef });
   protected readonly accessContent = contentChild('libraryAccess', { read: TemplateRef });
   protected readonly historyContent = contentChild('libraryHistory', { read: TemplateRef });

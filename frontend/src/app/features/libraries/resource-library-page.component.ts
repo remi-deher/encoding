@@ -79,7 +79,9 @@ type EditorMode = 'create' | 'version';
         <button matButton="filled" type="button" (click)="openCreate()">Ajouter des polices</button>
       </ng-template>
 
-      <app-library-section-tabs catalogue-navigation selected="resources" />
+      <ng-template #catalogueNavigation>
+        <app-library-section-tabs catalogue-navigation selected="resources" />
+      </ng-template>
 
       <ng-template #detailContent catalogue-detail>
         @if (selected(); as details) {

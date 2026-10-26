@@ -92,7 +92,9 @@ interface FlowTemplateRow extends DataTableRow {
       searchLayout="centered"
       (actionClosed)="closeCreateFlow()"
     >
-      <app-library-section-tabs catalogue-navigation selected="templates" />
+      <ng-template #catalogueNavigation>
+        <app-library-section-tabs catalogue-navigation selected="templates" />
+      </ng-template>
 
       <ng-template #detailContent catalogue-detail>
         @if (selectedTemplate(); as template) {
@@ -186,9 +188,8 @@ interface FlowTemplateRow extends DataTableRow {
             <section class="template-setup-block" aria-label="Flow qui sera créé">
               <h3>Flow qui sera créé</h3>
               <p>
-                « {{ setupName() }} » partira du modèle « {{ details.template.name }} »
-                (révision {{ details.template.revision }}). Vérifiez son contenu avant de créer
-                le brouillon.
+                « {{ setupName() }} » partira du modèle « {{ details.template.name }} » (révision
+                {{ details.template.revision }}). Vérifiez son contenu avant de créer le brouillon.
               </p>
               <app-flow-preview
                 [flow]="details.definition"

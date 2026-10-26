@@ -37,7 +37,9 @@
     </button>
   </ng-template>
 
-  <app-library-section-tabs catalogue-navigation selected="media" />
+  <ng-template #catalogueNavigation>
+    <app-library-section-tabs catalogue-navigation selected="media" />
+  </ng-template>
 
   <ng-template #librarySummary>
     @if (librarySheet(); as sheet) {

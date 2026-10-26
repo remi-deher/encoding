@@ -28,6 +28,7 @@ import { AuthService } from '../auth/auth.service';
 import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 import { SearchPaletteDialogComponent } from './search-palette-dialog.component';
 import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.component';
+import { PageSystemActionsComponent } from '../../shared/ui/page-system-actions.component';
 
 @Component({
   selector: 'app-shell',
@@ -43,6 +44,7 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
     ThemeToggleComponent,
     AiAssistantPageComponent,
     FlowAiAssistantPanelComponent,
+    PageSystemActionsComponent,
   ],
   templateUrl: './app-shell.component.html',
   host: {

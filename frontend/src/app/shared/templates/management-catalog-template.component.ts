@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   TemplateRef,
+  computed,
   contentChild,
   input,
   output,
@@ -40,11 +41,11 @@ export interface CatalogEmptyState {
       [modal]="drawerModal()"
       [title]="actionOpen() ? actionTitle() : detailTitle()"
       [description]="actionOpen() ? actionDescription() : detailDescription()"
-      [content]="actionOpen() ? actionContent() : detailContent()"
+      [content]="actionOpen() ? actionContentTemplate() : detailContentTemplate()"
       [headerActions]="
-        actionOpen() || detailLayout() === 'page' ? undefined : detailHeaderActions()
+        actionOpen() || detailLayout() === 'page' ? undefined : detailHeaderActionsTemplate()
       "
-      [footerActions]="actionOpen() ? actionFooterActions() : detailFooterActions()"
+      [footerActions]="actionOpen() ? actionFooterActionsTemplate() : detailFooterActionsTemplate()"
       [step]="actionOpen() ? actionStep() : null"
       (closed)="onDrawerClosed()"
     >
@@ -53,20 +54,30 @@ export interface CatalogEmptyState {
           <app-page-header
             [title]="detailTitle()"
             [description]="detailDescription()"
-            [actions]="detailHeaderActions()"
+            [actions]="detailHeaderActionsTemplate()"
           />
-          <ng-container [ngTemplateOutlet]="detailContent()" />
+          <ng-container [ngTemplateOutlet]="detailContentTemplate()" />
         } @else {
           <h1 class="visually-hidden">{{ title() }}</h1>
           <div class="catalog-navigation-wrapper">
-            <ng-content select="[catalogue-navigation]" />
-            @if (pageActions(); as actions) {
+            @if (catalogueNavigationTemplate(); as navigation) {
+              <ng-container [ngTemplateOutlet]="navigation" />
+            } @else {
+              <ng-content select="[catalogue-navigation]" />
+            }
+            @if (pageActionsTemplate(); as actions) {
               <div class="catalog-navigation-actions">
                 <ng-container [ngTemplateOutlet]="actions" />
               </div>
             }
           </div>
-          <div class="catalog-summary"><ng-content select="[catalogue-summary]" /></div>
+          <div class="catalog-summary">
+            @if (catalogueSummaryTemplate(); as summary) {
+              <ng-container [ngTemplateOutlet]="summary" />
+            } @else {
+              <ng-content select="[catalogue-summary]" />
+            }
+          </div>
 
           <section class="catalog-panel" [attr.aria-label]="title()">
             @if (showToolbar()) {
@@ -79,7 +90,7 @@ export interface CatalogEmptyState {
                   <div
                     class="catalog-toolbar-row"
                     [class.is-centered]="searchLayout() !== 'end'"
-                    [class.has-actions]="toolbarActions() !== undefined"
+                    [class.has-actions]="toolbarActionsTemplate() !== undefined"
                   >
                     @if (searchLayout() === 'end') {
                       <ng-container [ngTemplateOutlet]="filtersContent" />
@@ -106,7 +117,7 @@ export interface CatalogEmptyState {
                     @if (searchLayout() === 'centered-sheet') {
                       <ng-content select="[catalogue-active-filters]" />
                     }
-                    @if (toolbarActions(); as actions) {
+                    @if (toolbarActionsTemplate(); as actions) {
                       <div class="catalog-toolbar-actions">
                         <ng-container [ngTemplateOutlet]="actions" />
                       </div>
@@ -201,23 +212,66 @@ export class ManagementCatalogTemplateComponent {
   readonly drawerHeaderDensity = input<'standard' | 'compact'>('standard');
   /** Voile derrière le tiroir ; un clic dessus le ferme. */
   readonly drawerModal = input(true);
+  readonly pageActionsInput = input<TemplateRef<unknown> | undefined>();
+  readonly toolbarActionsInput = input<TemplateRef<unknown> | undefined>();
+  readonly detailContentInput = input<TemplateRef<unknown> | undefined>();
+  readonly detailFooterActionsInput = input<TemplateRef<unknown> | undefined>();
+  readonly detailHeaderActionsInput = input<TemplateRef<unknown> | undefined>();
+  readonly actionFooterActionsInput = input<TemplateRef<unknown> | undefined>();
+  readonly actionContentInput = input<TemplateRef<unknown> | undefined>();
+  readonly catalogueNavigationInput = input<TemplateRef<unknown> | undefined>();
+  readonly catalogueSummaryInput = input<TemplateRef<unknown> | undefined>();
   readonly detailClosed = output<void>();
   readonly actionClosed = output<void>();
-  protected readonly pageActions = contentChild('pageActions', { read: TemplateRef });
-  protected readonly toolbarActions = contentChild('catalogueToolbarActions', {
+  private readonly pageActionsContent = contentChild('pageActions', { read: TemplateRef });
+  private readonly toolbarActionsContent = contentChild('catalogueToolbarActions', {
     read: TemplateRef,
   });
-  protected readonly detailContent = contentChild('detailContent', { read: TemplateRef });
-  protected readonly detailFooterActions = contentChild('detailFooterActions', {
+  private readonly detailContentContent = contentChild('detailContent', { read: TemplateRef });
+  private readonly detailFooterActionsContent = contentChild('detailFooterActions', {
     read: TemplateRef,
   });
-  protected readonly detailHeaderActions = contentChild('detailHeaderActions', {
+  private readonly detailHeaderActionsContent = contentChild('detailHeaderActions', {
     read: TemplateRef,
   });
-  protected readonly actionFooterActions = contentChild('actionFooterActions', {
+  private readonly actionFooterActionsContent = contentChild('actionFooterActions', {
     read: TemplateRef,
   });
-  protected readonly actionContent = contentChild('actionContent', { read: TemplateRef });
+  private readonly actionContentContent = contentChild('actionContent', { read: TemplateRef });
+  private readonly catalogueNavigationContent = contentChild('catalogueNavigation', {
+    read: TemplateRef,
+  });
+  private readonly catalogueSummaryContent = contentChild('catalogueSummary', {
+    read: TemplateRef,
+  });
+
+  protected readonly pageActionsTemplate = computed(
+    () => this.pageActionsInput() ?? this.pageActionsContent(),
+  );
+  protected readonly toolbarActionsTemplate = computed(
+    () => this.toolbarActionsInput() ?? this.toolbarActionsContent(),
+  );
+  protected readonly detailContentTemplate = computed(
+    () => this.detailContentInput() ?? this.detailContentContent(),
+  );
+  protected readonly detailFooterActionsTemplate = computed(
+    () => this.detailFooterActionsInput() ?? this.detailFooterActionsContent(),
+  );
+  protected readonly detailHeaderActionsTemplate = computed(
+    () => this.detailHeaderActionsInput() ?? this.detailHeaderActionsContent(),
+  );
+  protected readonly actionFooterActionsTemplate = computed(
+    () => this.actionFooterActionsInput() ?? this.actionFooterActionsContent(),
+  );
+  protected readonly actionContentTemplate = computed(
+    () => this.actionContentInput() ?? this.actionContentContent(),
+  );
+  protected readonly catalogueNavigationTemplate = computed(
+    () => this.catalogueNavigationInput() ?? this.catalogueNavigationContent(),
+  );
+  protected readonly catalogueSummaryTemplate = computed(
+    () => this.catalogueSummaryInput() ?? this.catalogueSummaryContent(),
+  );
 
   protected onDrawerClosed(): void {
     if (this.actionOpen()) this.actionClosed.emit();

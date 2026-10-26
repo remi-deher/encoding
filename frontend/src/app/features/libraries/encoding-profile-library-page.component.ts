@@ -79,7 +79,9 @@ interface EncoderGroup {
       <ng-template #pageActions>
         <button matButton="filled" type="button" (click)="newProfile()">Nouveau profil</button>
       </ng-template>
-      <app-library-section-tabs catalogue-navigation selected="encoding" />
+      <ng-template #catalogueNavigation>
+        <app-library-section-tabs catalogue-navigation selected="encoding" />
+      </ng-template>
       <ng-template #actionContent>
         <form [formGroup]="metadataForm" (ngSubmit)="saveDraft()">
           @if (readOnly()) {

@@ -93,7 +93,9 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
         }
       </ng-template>
 
-      <app-library-section-tabs catalogue-navigation selected="scripts" />
+      <ng-template #catalogueNavigation>
+        <app-library-section-tabs catalogue-navigation selected="scripts" />
+      </ng-template>
 
       <ng-template #actionContent>
         <form class="script-form" [formGroup]="form" (ngSubmit)="saveDraft()">

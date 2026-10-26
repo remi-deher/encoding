@@ -88,7 +88,7 @@ test('completed jobs stay visible behind a large queue and history is paginated'
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/activity');
+  await page.goto('/activity?view=history');
   const activity = page.locator('app-activity-page');
   await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   await activity.getByRole('option', { name: /Terminés/ }).click();
@@ -138,7 +138,7 @@ test('viewers do not request administrator-only AI history', async ({ page }) =>
     aiRequests++;
     return route.fulfill({ status: 403, json: {} });
   });
-  await page.goto('/activity');
+  await page.goto('/activity?view=history');
   await expect(page.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   expect(aiRequests).toBe(0);
   await expect(
