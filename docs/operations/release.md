@@ -7,6 +7,8 @@
 
 Pour un domaine inchangé, `wait-ci.mjs` recherche les contrôles sur les ancêtres compris entre sa dernière modification et le commit cible. Chaque candidat doit avoir exactement les mêmes fichiers dans les chemins de ce domaine (`git diff` vide, suppressions comprises). Cela permet de retrouver une validation exécutée sur la tête d’une PR après le dernier commit ayant modifié le domaine. Un contrôle présent sur le commit cible garde toujours la priorité, même en attente ou en échec ; seuls les succès autorisent la promotion. Les échecs et nouvelles tentatives restent distingués par contrôle et par commit.
 
+La policy sérialise les événements d’une même PR et annule les exécutions remplacées. Si le commit attendu est déjà fusionné et que son contrôle `promotion-ci` a réussi, le contrôle est un succès idempotent : il ne tente pas une seconde fusion et ne signale pas une autorisation périmée. Un autre commit, une fermeture sans fusion ou un gate non réussi reste bloquant.
+
 Le workflow `.github/workflows/release.yml` s'exécute à chaque push sur `main`. Il confirme qu'une PR `dev` vers `main` a été fusionnée et revérifie que les contrôles CI du commit (Backend, Frontend, Image et Release scripts) sont terminés et verts, puis publie sur Docker Hub. Ce workflow est la publication déclenchée par le merge, pas un lancement de la CI de validation :
 
 - `<utilisateur>/encoding` (`backend/Dockerfile`, contexte racine) : image unique contenant le serveur, l'interface web, le worker et le lanceur qui les démarre selon le mode du nœud (voir [cluster](../architecture/domains/cluster.md)).
