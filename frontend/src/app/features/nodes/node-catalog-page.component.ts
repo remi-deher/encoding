@@ -1,5 +1,5 @@
 import { IconComponent } from '../../shared/ui/icon.component';
-import { SummaryTilesComponent, SummaryTile } from '../../shared/ui/summary-tiles.component';
+import type { SummaryTile } from '../../shared/ui/summary-tiles.component';
 import { ContextBannerComponent } from '../../shared/ui/context-banner.component';
 import {
   formatMemory,
@@ -211,7 +211,6 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     DrawerActionButtonComponent,
     GuidedSetupComponent,
     MatMenuModule,
-    SummaryTilesComponent,
     ContextBannerComponent,
     DatePipe,
     WeeklyScheduleFormComponent,
@@ -358,6 +357,14 @@ export class NodeCatalogPageComponent {
     this.actionOpen.set(false);
     this.closeGroupForm();
     this.onDetailClosed();
+  }
+  protected focusEnrollmentRequests(): void {
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'auto'
+      : 'smooth';
+    document
+      .getElementById('node-enrollment-requests')
+      ?.scrollIntoView({ behavior, block: 'start' });
   }
   protected onSetupAction(id: string): void {
     if (id === 'back') this.local.back();
