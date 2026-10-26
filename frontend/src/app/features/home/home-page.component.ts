@@ -46,6 +46,7 @@ import { FlowTemplates } from '../../shared/services/flow-templates';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { OverviewExecutionComponent } from './components/overview-execution.component';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
+import { PageShellContextService } from '../../core/layout/page-shell-context';
 import {
   AiAssistantActivity,
   AiAssistantConversation,
@@ -113,7 +114,6 @@ export class HomePageComponent {
   protected readonly flowCreationForm = signal<
     import('../../shared/ui/record-form.component').RecordFormData | null
   >(null);
-  protected readonly pageActionsTemplate = viewChild<TemplateRef<unknown>>('pageActions');
   protected readonly flowFormTemplate = viewChild<TemplateRef<unknown>>('flowForm');
   protected readonly flowFooterTemplate = viewChild<TemplateRef<unknown>>('flowFooter');
   protected readonly flowRecordForm = viewChild(RecordFormComponent);
@@ -163,6 +163,7 @@ export class HomePageComponent {
 
   private readonly executionTracking = inject(ExecutionTracking);
   private readonly aiTools = inject(AiToolsService);
+  private readonly pageShellContext = inject(PageShellContextService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly aiOptions = signal<AiAssistantOptions | null>(null);
   protected readonly aiActivity = signal<readonly AiAssistantActivity[]>([]);
@@ -250,6 +251,19 @@ export class HomePageComponent {
   });
 
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans Vue d’ensemble…',
+        actions: [
+          {
+            id: 'create-flow',
+            label: 'Créer un flow',
+            icon: 'add',
+            run: () => void this.openFlowCreation(),
+          },
+        ],
+      }),
+    );
     this.refreshAiOverview();
     interval(30_000)
       .pipe(takeUntilDestroyed(this.destroyRef))

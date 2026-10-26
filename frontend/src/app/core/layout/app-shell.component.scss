@@ -362,6 +362,11 @@ button.assistant-launcher {
   background: var(--page-background);
 }
 
+.application-header > app-page-system-actions {
+  margin-left: auto;
+  z-index: 2;
+}
+
 .main-content {
   box-sizing: border-box;
   width: 100%;
@@ -412,6 +417,7 @@ button.assistant-launcher {
 /* Responsive Rules */
 @media (max-width: 760px) {
   .application-header {
+    display: flex;
     min-height: 116px;
     padding: 62px 16px 8px;
     align-items: flex-end;

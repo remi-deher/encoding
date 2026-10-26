@@ -121,7 +121,7 @@ test('adaptive shell keeps all destinations reachable at tablet width and suppor
   await page.goto('/');
   await expect(page.locator('.application-sidebar')).toHaveClass(/is-collapsed/);
   await expect(page.getByRole('link', { name: 'Paramètres', exact: true })).toBeVisible();
-  const search = page.getByRole('combobox', { name: /Rechercher dans Encoding/ });
+  const search = page.getByRole('combobox', { name: /Rechercher dans/ });
   await search.fill('Profils');
   await search.press('Enter');
   await expect(page).toHaveURL(/libraries\/encoding-profiles/);

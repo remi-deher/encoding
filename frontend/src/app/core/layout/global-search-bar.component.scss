@@ -220,7 +220,7 @@
 
 @media (max-width: 1100px) and (min-width: 761px) {
   :host {
-    width: min(880px, calc(100% - 220px));
+    width: min(880px, calc(100% - 300px));
   }
   .search-action-button {
     padding-inline: var(--space-2);
@@ -228,10 +228,19 @@
   }
 }
 
+@media (min-width: 1101px) and (max-width: 1600px) {
+  :host {
+    width: min(880px, calc(100% - 640px));
+  }
+}
+
 @media (max-width: 760px) {
   :host {
+    position: absolute;
     top: var(--space-2);
+    left: 50%;
     width: calc(100% - 24px);
+    transform: translateX(-50%);
   }
   .global-search-capsule app-search-field {
     flex: 1 1 100%;

@@ -43,7 +43,7 @@ test('the search command palette opens with Ctrl+K and navigates to encoding pro
   await expect(page.getByRole('heading').first()).toBeVisible();
   await page.keyboard.press('Control+k');
 
-  const combobox = page.getByRole('combobox', { name: /Rechercher dans Encoding/ });
+  const combobox = page.getByRole('combobox', { name: /Rechercher dans/ });
   await expect(combobox).toBeVisible();
   await combobox.fill('Profils');
   await combobox.press('Enter');
@@ -54,6 +54,42 @@ test('the search command palette opens with Ctrl+K and navigates to encoding pro
     'aria-current',
     'page',
   );
+});
+
+test('the overview action is in the centered search bar and system status stays to its right', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  const search = page.locator('.global-search-capsule');
+  const createFlow = search.getByRole('button', { name: 'Créer un flow' });
+  await expect(createFlow).toBeVisible();
+
+  if ((page.viewportSize()?.width ?? 0) < 761) return;
+  const header = page.locator('.application-header');
+  const systemActions = page.locator('app-page-system-actions');
+  await expect(
+    page.locator('app-page-header .page-header-end').getByRole('button', { name: 'Créer un flow' }),
+  ).toHaveCount(0);
+
+  for (const width of [1920, 1536, 1280, 1100]) {
+    await page.setViewportSize({ width, height: 1080 });
+    const [headerBox, searchBox, actionsBox] = await Promise.all([
+      header.boundingBox(),
+      search.boundingBox(),
+      systemActions.boundingBox(),
+    ]);
+    expect(headerBox).not.toBeNull();
+    expect(searchBox).not.toBeNull();
+    expect(actionsBox).not.toBeNull();
+    expect(
+      Math.abs(searchBox!.x + searchBox!.width / 2 - (headerBox!.x + headerBox!.width / 2)),
+    ).toBeLessThanOrEqual(8);
+    expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(actionsBox!.x);
+  }
+
+  await createFlow.click();
+  await expect(page.getByRole('dialog', { name: 'Créer un flow' })).toBeVisible();
 });
 
 test('the first-run setup studio completes standalone onboarding and passes WCAG AA audit', async ({
