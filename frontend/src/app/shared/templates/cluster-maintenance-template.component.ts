@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   TemplateRef,
-  contentChild,
   input,
   output,
   viewChild,
@@ -43,13 +42,6 @@ import {
       [drawerSize]="drawerSize()"
       [drawerHeaderDensity]="drawerHeaderDensity()"
       [drawerModal]="drawerModal()"
-      [pageActionsInput]="pageActionsContent()"
-      [toolbarActionsInput]="toolbarActionsContent()"
-      [detailContentInput]="detailContentContent()"
-      [detailFooterActionsInput]="detailFooterActionsContent()"
-      [detailHeaderActionsInput]="detailHeaderActionsContent()"
-      [actionFooterActionsInput]="actionFooterActionsContent()"
-      [actionContentInput]="actionContentContent()"
       [catalogueSummaryInput]="catalogueSummaryProjection()"
       [catalogueFiltersInput]="catalogueFiltersProjection()"
       [catalogueActiveFiltersInput]="catalogueActiveFiltersProjection()"
@@ -78,26 +70,12 @@ import {
       <ng-template #catalogueTableSlot>
         <ng-content select="[catalogue-table]" />
       </ng-template>
+      <ng-content select="ng-template" />
     </app-management-catalog-template>
   `,
 })
 export class ClusterMaintenanceTemplateComponent {
-  /** Capture et transmet les fragments métier au gabarit catalogue comme templates explicites. */
-  private readonly pageActionsContent = contentChild('pageActions', { read: TemplateRef });
-  private readonly toolbarActionsContent = contentChild('catalogueToolbarActions', {
-    read: TemplateRef,
-  });
-  private readonly detailContentContent = contentChild('detailContent', { read: TemplateRef });
-  private readonly detailFooterActionsContent = contentChild('detailFooterActions', {
-    read: TemplateRef,
-  });
-  private readonly detailHeaderActionsContent = contentChild('detailHeaderActions', {
-    read: TemplateRef,
-  });
-  private readonly actionFooterActionsContent = contentChild('actionFooterActions', {
-    read: TemplateRef,
-  });
-  private readonly actionContentContent = contentChild('actionContent', { read: TemplateRef });
+  /** Les emplacements catalogue passent au gabarit comme templates explicites. */
   protected readonly catalogueSummaryProjection = viewChild('catalogueSummarySlot', {
     read: TemplateRef,
   });
