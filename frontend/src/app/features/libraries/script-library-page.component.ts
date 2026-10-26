@@ -1,8 +1,8 @@
-import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
+import { ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatExpansionModule } from '@angular/material/expansion';
@@ -11,14 +11,12 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { CodeEditorComponent } from '../../shared/ui/code-editor.component';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { DataTableRow } from '../../shared/ui/data-table.component';
-import {
-  CatalogEmptyState,
-  ManagementCatalogTemplateComponent,
-} from '../../shared/templates/management-catalog-template.component';
+import { CatalogEmptyState } from '../../shared/templates/management-catalog-template.component';
+import { ResourceCatalogTemplateComponent } from '../../shared/templates/resource-catalog-template.component';
+import { LibrarySectionTabsComponent } from './library-section-tabs.component';
 import { FileDownload } from '../../shared/services/file-download';
 import { NotificationService } from '../../shared/services/notification.service';
 import { FlowScripts } from '../../shared/services/flow-scripts';
@@ -39,10 +37,9 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-script-library-page',
   imports: [
-    ResourceListComponent,
-    CategoryTabsComponent,
+    ResourceCatalogTemplateComponent,
+    LibrarySectionTabsComponent,
     CodeEditorComponent,
-    ManagementCatalogTemplateComponent,
     MatButtonModule,
     MatExpansionModule,
     MatFormFieldModule,
@@ -51,11 +48,16 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
     ReactiveFormsModule,
   ],
   template: `
-    <app-management-catalog-template
+    <app-resource-catalog-template
       [title]="title()"
+      [items]="items()"
       filterLabel="Scripts"
       searchLabel="Rechercher un script"
       searchLayout="centered"
+      resourceIcon="terminal"
+      openLabel="Modifier"
+      listEmptyMessage="Aucun script ne correspond à la recherche."
+      (open)="selectScript($event)"
       [showToolbar]="summaries().length > 0"
       [emptyState]="summaries().length === 0 && !formOpen() ? emptyState : null"
       (emptyStateAction)="newScript()"
@@ -91,22 +93,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
         }
       </ng-template>
 
-      <app-category-tabs
-        catalogue-navigation
-        label="Ressources"
-        [options]="librarySections"
-        selected="scripts"
-        (selectedChange)="onSectionChanged($event)"
-      />
-
-      <app-resource-list
-        catalogue-table
-        icon="terminal"
-        [items]="items()"
-        openLabel="Modifier"
-        emptyMessage="Aucun script ne correspond à la recherche."
-        (open)="selectScript($event)"
-      />
+      <app-library-section-tabs catalogue-navigation selected="scripts" />
 
       <ng-template #actionContent>
         <form class="script-form" [formGroup]="form" (ngSubmit)="saveDraft()">
@@ -212,7 +199,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
           </footer>
         </form>
       </ng-template>
-    </app-management-catalog-template>
+    </app-resource-catalog-template>
   `,
   styles: `
     .script-form {
@@ -263,7 +250,6 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
 })
 export class ScriptLibraryPageComponent {
   private readonly api = inject(FlowScripts);
-  private readonly router = inject(Router);
   private readonly download = inject(FileDownload);
   private readonly notifications = inject(NotificationService);
   private readonly route = inject(ActivatedRoute);
@@ -271,14 +257,6 @@ export class ScriptLibraryPageComponent {
     initialValue: this.route.snapshot.data,
   });
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Scripts');
-  protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Bibliothèques' },
-    { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles de flow' },
-    { value: 'packs', label: 'Packs de composants' },
-    { value: 'encoding', label: 'Profils d’encodage' },
-    { value: 'resources', label: 'Ressources' },
-  ];
   protected readonly emptyState: CatalogEmptyState = {
     icon: '</>',
     eyebrow: 'BIBLIOTHÈQUE DE SCRIPTS',
@@ -385,14 +363,6 @@ export class ScriptLibraryPageComponent {
 
   constructor() {
     void this.loadList(true);
-  }
-
-  protected onSectionChanged(section: string): void {
-    if (section === 'media') void this.router.navigateByUrl('/libraries');
-    if (section === 'templates') void this.router.navigateByUrl('/libraries/templates');
-    if (section === 'packs') void this.router.navigateByUrl('/libraries/packs');
-    if (section === 'encoding') void this.router.navigateByUrl('/libraries/encoding-profiles');
-    if (section === 'resources') void this.router.navigateByUrl('/libraries/resources');
   }
 
   protected formatDate(value: string): string {

@@ -2,7 +2,6 @@ import { IconComponent } from '../../shared/ui/icon.component';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { map, Observable } from 'rxjs';
-import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatMenuModule } from '@angular/material/menu';
 import {
@@ -60,6 +59,7 @@ import { ExecutionTracking } from '../../shared/services/execution-tracking';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { AuthService } from '../../core/auth/auth.service';
 import { createUuid } from '../../shared/utils/uuid';
+import { AssistantWorkspaceTemplateComponent } from '../../shared/templates/assistant-workspace-template.component';
 
 type AssistantResourceType = 'flow' | 'execution' | 'node' | 'library';
 interface AssistantResourceOption {
@@ -81,7 +81,7 @@ interface AssistantResourceOption {
     MatProgressSpinnerModule,
     MatSelectModule,
     AiConversationComposerComponent,
-    MatSidenavModule,
+    AssistantWorkspaceTemplateComponent,
     MatChipsModule,
     MatMenuModule,
     RouterLink,

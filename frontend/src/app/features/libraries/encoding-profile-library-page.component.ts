@@ -1,4 +1,4 @@
-import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
+import { ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
@@ -8,7 +8,7 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,7 +17,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { DataTableRow } from '../../shared/ui/data-table.component';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { ResourceCatalogTemplateComponent } from '../../shared/templates/resource-catalog-template.component';
+import { LibrarySectionTabsComponent } from './library-section-tabs.component';
 import { NotificationService } from '../../shared/services/notification.service';
 import { EncodingProfiles } from '../../shared/services/encoding-profiles';
 import {
@@ -46,9 +47,9 @@ interface EncoderGroup {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-encoding-profile-library-page',
   imports: [
-    ResourceListComponent,
+    ResourceCatalogTemplateComponent,
+    LibrarySectionTabsComponent,
     CategoryTabsComponent,
-    ManagementCatalogTemplateComponent,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
@@ -56,11 +57,16 @@ interface EncoderGroup {
     ReactiveFormsModule,
   ],
   template: `
-    <app-management-catalog-template
+    <app-resource-catalog-template
       [title]="title()"
+      [items]="items()"
       filterLabel="Profils d’encodage"
       searchLabel="Rechercher un profil"
       searchLayout="centered"
+      resourceIcon="video"
+      openLabel="Configurer"
+      listEmptyMessage="Aucun profil ne correspond à la recherche."
+      (open)="selectProfile($event)"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
       [catalogState]="catalogState()"
@@ -73,21 +79,7 @@ interface EncoderGroup {
       <ng-template #pageActions>
         <button matButton="filled" type="button" (click)="newProfile()">Nouveau profil</button>
       </ng-template>
-      <app-category-tabs
-        catalogue-navigation
-        label="Ressources"
-        [options]="librarySections"
-        selected="encoding"
-        (selectedChange)="onSectionChanged($event)"
-      />
-      <app-resource-list
-        catalogue-table
-        icon="video"
-        [items]="items()"
-        openLabel="Configurer"
-        emptyMessage="Aucun profil ne correspond à la recherche."
-        (open)="selectProfile($event)"
-      />
+      <app-library-section-tabs catalogue-navigation selected="encoding" />
       <ng-template #actionContent>
         <form [formGroup]="metadataForm" (ngSubmit)="saveDraft()">
           @if (readOnly()) {
@@ -213,7 +205,7 @@ interface EncoderGroup {
           </footer>
         </form>
       </ng-template>
-    </app-management-catalog-template>
+    </app-resource-catalog-template>
   `,
   styles: `
     form {
@@ -311,7 +303,6 @@ interface EncoderGroup {
 })
 export class EncodingProfileLibraryPageComponent {
   private readonly api = inject(EncodingProfiles);
-  private readonly router = inject(Router);
   private readonly notifications = inject(NotificationService);
   private readonly route = inject(ActivatedRoute);
   private readonly routeData = toSignal(this.route.data, {
@@ -320,14 +311,6 @@ export class EncodingProfileLibraryPageComponent {
   protected readonly title = computed(
     () => (this.routeData()['title'] as string) ?? 'Profils d’encodage',
   );
-  protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Bibliothèques' },
-    { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles de flow' },
-    { value: 'packs', label: 'Packs de composants' },
-    { value: 'encoding', label: 'Profils d’encodage' },
-    { value: 'resources', label: 'Ressources' },
-  ];
   protected readonly catalogState = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly catalogMessage = signal('Chargement des profils…');
   protected readonly profiles = signal<readonly EncodingProfileSummary[]>([]);
@@ -426,14 +409,6 @@ export class EncodingProfileLibraryPageComponent {
 
   constructor() {
     void this.load();
-  }
-
-  protected onSectionChanged(section: string): void {
-    if (section === 'media') void this.router.navigateByUrl('/libraries');
-    if (section === 'scripts') void this.router.navigateByUrl('/libraries/scripts');
-    if (section === 'templates') void this.router.navigateByUrl('/libraries/templates');
-    if (section === 'packs') void this.router.navigateByUrl('/libraries/packs');
-    if (section === 'resources') void this.router.navigateByUrl('/libraries/resources');
   }
 
   protected targetControl(

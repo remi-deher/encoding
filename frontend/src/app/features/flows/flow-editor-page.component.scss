@@ -4,16 +4,6 @@
   overflow: hidden;
 }
 
-.flow-workbench {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100%;
-  background: var(--surface-container-lowest);
-  color: var(--text-primary);
-  overflow: hidden;
-}
-
 .workbench-body {
   flex: 1;
   display: flex;

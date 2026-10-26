@@ -1,4 +1,4 @@
-import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
+import { ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -12,13 +12,13 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom, map } from 'rxjs';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { DataTableRow } from '../../shared/ui/data-table.component';
 import {
   ResourceSheetComponent,
   ResourceSheetSection,
 } from '../../shared/ui/resource-sheet.component';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { ResourceCatalogTemplateComponent } from '../../shared/templates/resource-catalog-template.component';
+import { LibrarySectionTabsComponent } from './library-section-tabs.component';
 import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import { FlowComponentPackSummary } from '../../shared/models/flow-component-packs';
 import { FlowComponentPackDetails } from '../../shared/models/flow-component-packs';
@@ -37,19 +37,19 @@ interface PackRow extends DataTableRow {
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-component-pack-library-page',
-  imports: [
-    ResourceListComponent,
-    CategoryTabsComponent,
-    ManagementCatalogTemplateComponent,
-    ResourceSheetComponent,
-  ],
+  imports: [ResourceCatalogTemplateComponent, LibrarySectionTabsComponent, ResourceSheetComponent],
   template: `
-    <app-management-catalog-template
+    <app-resource-catalog-template
       [title]="title()"
+      [items]="items()"
       filterLabel="Packs de composants"
       searchLabel="Rechercher un pack"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
+      resourceIcon="pack"
+      listEmptyMessage="Aucun pack. Créez-en un depuis une version publiée dans Flows."
+      openLabel="Ouvrir"
+      (open)="openPack({ id: $event })"
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
       [detailOpen]="selectedPack() !== null"
@@ -58,21 +58,7 @@ interface PackRow extends DataTableRow {
       detailLayout="page"
       searchLayout="centered"
     >
-      <app-category-tabs
-        catalogue-navigation
-        label="Ressources"
-        [options]="librarySections"
-        selected="packs"
-        (selectedChange)="onSectionChanged($event)"
-      />
-      <app-resource-list
-        catalogue-table
-        icon="pack"
-        [items]="items()"
-        openLabel="Ouvrir"
-        emptyMessage="Aucun pack. Créez-en un depuis une version publiée dans Flows."
-        (open)="openPack({ id: $event })"
-      />
+      <app-library-section-tabs catalogue-navigation selected="packs" />
       <ng-template #detailContent catalogue-detail>
         @if (selectedPack(); as pack) {
           <app-resource-sheet
@@ -83,7 +69,7 @@ interface PackRow extends DataTableRow {
           />
         }
       </ng-template>
-    </app-management-catalog-template>
+    </app-resource-catalog-template>
   `,
 })
 export class ComponentPackLibraryPageComponent {
@@ -96,14 +82,6 @@ export class ComponentPackLibraryPageComponent {
   protected readonly title = computed(
     () => (this.routeData()['title'] as string) ?? 'Packs de composants',
   );
-  protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Bibliothèques' },
-    { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles de flow' },
-    { value: 'packs', label: 'Packs de composants' },
-    { value: 'encoding', label: 'Profils d’encodage' },
-    { value: 'resources', label: 'Ressources' },
-  ];
   protected readonly catalogState = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly catalogMessage = signal('Chargement des packs…');
   protected readonly packs = signal<readonly FlowComponentPackSummary[]>([]);
@@ -254,14 +232,6 @@ export class ComponentPackLibraryPageComponent {
         if (item) void this.showPack(item);
       });
     });
-  }
-
-  protected onSectionChanged(section: string): void {
-    if (section === 'media') void this.router.navigateByUrl('/libraries');
-    if (section === 'scripts') void this.router.navigateByUrl('/libraries/scripts');
-    if (section === 'templates') void this.router.navigateByUrl('/libraries/templates');
-    if (section === 'encoding') void this.router.navigateByUrl('/libraries/encoding-profiles');
-    if (section === 'resources') void this.router.navigateByUrl('/libraries/resources');
   }
 
   protected openPack(row: DataTableRow): void {

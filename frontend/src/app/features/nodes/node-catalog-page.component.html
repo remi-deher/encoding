@@ -1,5 +1,9 @@
-<app-management-catalog-template
+<app-cluster-maintenance-template
   [title]="title()"
+  navigationLabel="Gestion des nœuds"
+  [navigationOptions]="managementTabs"
+  [navigationSelected]="pageTab()"
+  (navigationSelectedChange)="onManagementTabChange($event)"
   [actionStep]="actionStep()"
   [detailOpen]="
     pageTab() === 'groups' ? selectedGroupForDetail() !== null : selectedNode() !== null
@@ -75,13 +79,6 @@
       }
     }
   </ng-template>
-  <app-category-tabs
-    catalogue-navigation
-    label="Gestion des nœuds"
-    [options]="managementTabs"
-    [selected]="pageTab()"
-    (selectedChange)="onManagementTabChange($event)"
-  />
   <ng-container catalogue-summary>
     @if (
       pageTab() === 'cluster' &&
@@ -699,4 +696,4 @@
       />
     }
   </ng-template>
-</app-management-catalog-template>
+</app-cluster-maintenance-template>
