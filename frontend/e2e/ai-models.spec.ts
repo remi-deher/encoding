@@ -418,7 +418,7 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
     await expect(launcher).toBeVisible();
     const before = (await launcher.boundingBox())!;
     expect(before.width).toBeLessThanOrEqual(60);
-    const scroller = page.locator('mat-sidenav-content.page-transition-region');
+    const scroller = page.locator('.page-transition-region');
     await scroller.evaluate((element) => {
       const spacer = document.createElement('div');
       spacer.dataset.testid = 'assistant-scroll-spacer';
@@ -510,4 +510,48 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   await expect
     .poll(async () => Math.abs((await launcher.boundingBox())!.y - moved.y))
     .toBeLessThan(1);
+});
+
+test('compact resource selector keeps its empty label clear of the pointer target at 320px', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.route('**/api/v1/nodes', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: nodeId,
+          name: 'Salon',
+          roles: ['worker'],
+          maxConcurrentTasks: 1,
+          capabilities: [],
+          status: 'online',
+          lastSeenAt: '2030-01-01T00:00:00Z',
+        },
+      ],
+    }),
+  );
+  await page.goto('/activity?type=ai');
+  await page.getByRole('button', { name: 'Plus', exact: true }).click();
+  await page.getByRole('button', { name: /Assistant rapide/ }).click();
+  const widget = page.locator('#assistant-widget-panel');
+  await widget.getByRole('button', { name: 'Joindre un fichier ou une ressource' }).click();
+  await page.getByRole('menuitem', { name: 'Un nœud' }).click();
+  const selector = widget.getByRole('combobox', { name: 'Ressource', exact: true });
+  await expect
+    .poll(() =>
+      selector.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const target = document.elementFromPoint(
+          bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2,
+        );
+        return target !== null && element.contains(target);
+      }),
+    )
+    .toBe(true);
+  await selector.click();
+  await page.getByRole('option', { name: 'Salon', exact: true }).click();
+  await widget.getByRole('button', { name: 'Joindre', exact: true }).click();
+  await expect(widget.locator('.selected-resource')).toContainText('Salon');
 });

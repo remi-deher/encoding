@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { A11yModule } from '@angular/cdk/a11y';
 import { OverlayModule, ConnectedPosition } from '@angular/cdk/overlay';
 import { MatButtonModule } from '@angular/material/button';
@@ -22,6 +29,7 @@ const PALETTE_OPTIONS: readonly { value: ThemePalette; label: string }[] = [
       mat-icon-button
       type="button"
       class="appearance-trigger"
+      #appearanceTrigger
       cdkOverlayOrigin
       #appearanceOrigin="cdkOverlayOrigin"
       aria-label="Apparence : thème et palette de couleurs"
@@ -45,10 +53,16 @@ const PALETTE_OPTIONS: readonly { value: ThemePalette; label: string }[] = [
       cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
       [cdkConnectedOverlayPositions]="positions"
       [cdkConnectedOverlayViewportMargin]="12"
-      (backdropClick)="opened.set(false)"
+      (backdropClick)="close()"
       (overlayKeydown)="closeOnEscape($event)"
     >
-      <section class="appearance-popover" role="dialog" aria-label="Apparence">
+      <section
+        class="appearance-popover"
+        role="dialog"
+        aria-label="Apparence"
+        cdkTrapFocus
+        [cdkTrapFocusAutoCapture]="true"
+      >
         <h2>Apparence</h2>
         <mat-button-toggle-group
           class="appearance-mode"
@@ -200,20 +214,28 @@ const PALETTE_OPTIONS: readonly { value: ThemePalette; label: string }[] = [
       --appearance-swatch: var(--palette-swatch-rose);
     }
   `,
+  host: { '(document:keydown)': 'closeOnEscape($event)' },
 })
 export class AppearancePaletteComponent {
   protected readonly theme = inject(ThemeService);
   protected readonly opened = signal(false);
   protected readonly paletteOptions = PALETTE_OPTIONS;
   protected readonly toggle = (value: boolean) => !value;
+  private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('appearanceTrigger');
   protected readonly positions: ConnectedPosition[] = [
     { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -8 },
     { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 8 },
   ];
 
   protected closeOnEscape(event: KeyboardEvent): void {
-    if (event.key !== 'Escape') return;
+    if (event.key !== 'Escape' || !this.opened()) return;
     event.preventDefault();
+    event.stopPropagation();
+    this.close();
+  }
+
+  protected close(): void {
     this.opened.set(false);
+    this.trigger()?.nativeElement.focus();
   }
 }

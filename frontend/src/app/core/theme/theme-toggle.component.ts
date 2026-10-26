@@ -1,12 +1,31 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatMenuModule } from '@angular/material/menu';
 import { ThemeService } from './theme.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-theme-toggle',
-  imports: [MatButtonModule, MatTooltipModule],
+  imports: [MatButtonModule, MatTooltipModule, MatMenuModule],
+  styles: `
+    :host {
+      display: inline-flex;
+      align-items: center;
+    }
+    .palette-indicator {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border-radius: var(--radius-pill);
+      background: var(--accent);
+      box-shadow: inset 0 0 0 2px var(--accent-soft);
+    }
+    .palette-check {
+      margin-inline-start: auto;
+      color: var(--accent);
+    }
+  `,
   template: `
     <button
       mat-icon-button
@@ -26,6 +45,30 @@ import { ThemeService } from './theme.service';
         }
       </svg>
     </button>
+    <button
+      mat-icon-button
+      type="button"
+      aria-label="Choisir la palette de couleurs"
+      matTooltip="Palette de couleurs"
+      [matMenuTriggerFor]="paletteMenu"
+    >
+      <span class="palette-indicator" aria-hidden="true"></span>
+    </button>
+    <mat-menu #paletteMenu="matMenu" aria-label="Palette de couleurs">
+      @for (option of theme.palettes; track option.value) {
+        <button
+          mat-menu-item
+          role="menuitemradio"
+          [attr.aria-checked]="theme.palette() === option.value"
+          (click)="theme.setPalette(option.value)"
+        >
+          {{ option.label }}
+          @if (theme.palette() === option.value) {
+            <span class="palette-check" aria-hidden="true">✓</span>
+          }
+        </button>
+      }
+    </mat-menu>
   `,
 })
 export class ThemeToggleComponent {

@@ -1,3 +1,4 @@
+import { selectionNavigationIndex } from './selection-navigation';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -23,17 +24,15 @@ export interface CategoryTabOption {
       class="category-tabs"
       [class.is-underline]="variant() === 'underline'"
       [attr.aria-label]="label()"
-      role="tablist"
+      role="group"
     >
       @for (option of options(); track option.value; let index = $index) {
         <button
           #tabButton
           type="button"
           class="category-tab-pill"
-          role="tab"
           [class.is-active]="option.value === selected()"
-          [attr.aria-selected]="option.value === selected()"
-          [attr.tabindex]="option.value === selected() ? 0 : -1"
+          [attr.aria-pressed]="option.value === selected()"
           (click)="selectedChange.emit(option.value)"
           (keydown)="onKeydown($event, index)"
         >
@@ -73,16 +72,7 @@ export class CategoryTabsComponent {
     const list = this.options();
     if (!list.length) return;
 
-    let nextIndex = -1;
-    if (event.key === 'ArrowRight') {
-      nextIndex = (index + 1) % list.length;
-    } else if (event.key === 'ArrowLeft') {
-      nextIndex = (index - 1 + list.length) % list.length;
-    } else if (event.key === 'Home') {
-      nextIndex = 0;
-    } else if (event.key === 'End') {
-      nextIndex = list.length - 1;
-    }
+    const nextIndex = selectionNavigationIndex(event.key, index, list.length);
 
     if (nextIndex >= 0) {
       event.preventDefault();

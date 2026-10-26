@@ -1,3 +1,4 @@
+import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -111,6 +112,7 @@ const AI_REFRESH_MS = 15000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-activity-page',
   imports: [
+    PageHeaderComponent,
     DataTableComponent,
     DetailDrawerComponent,
     DetailFieldListComponent,

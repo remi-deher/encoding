@@ -1,6 +1,13 @@
 import { ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -67,6 +74,8 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
       [actionOpen]="formOpen()"
+      [actionCloseGuarded]="true"
+      (actionCloseRequested)="requestClose()"
       [actionTitle]="workspaceTitle()"
       [actionDescription]="workspaceStatus()"
       (actionClosed)="requestClose()"
@@ -102,14 +111,14 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
           <div class="script-fields">
             <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>Nom du script</mat-label>
-              <input matInput formControlName="name" maxlength="128" [disabled]="busy()" />
+              <input matInput formControlName="name" maxlength="128" />
               @if (form.controls.name.invalid && form.controls.name.touched) {
                 <mat-error>Le nom est obligatoire (128 caractères maximum).</mat-error>
               }
             </mat-form-field>
             <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>Langage</mat-label>
-              <mat-select formControlName="language" [disabled]="busy()">
+              <mat-select formControlName="language">
                 <mat-option value="javascript">JavaScript</mat-option>
                 <mat-option value="python">Python</mat-option>
               </mat-select>
@@ -117,7 +126,7 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
           </div>
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Description</mat-label>
-            <input matInput formControlName="description" maxlength="1000" [disabled]="busy()" />
+            <input matInput formControlName="description" maxlength="1000" />
           </mat-form-field>
 
           <app-code-editor
@@ -185,21 +194,26 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
           @if (message()) {
             <p class="save-message" role="status">{{ message() }}</p>
           }
-          <footer class="script-actions">
-            <button matButton="text" type="button" (click)="requestClose()">Fermer</button>
-            <button matButton="outlined" type="submit" [disabled]="busy() || form.invalid">
-              {{ busy() ? 'Enregistrement…' : 'Enregistrer le brouillon' }}
-            </button>
-            <button
-              matButton="filled"
-              type="button"
-              [disabled]="busy() || form.invalid || !form.controls.code.value.trim()"
-              (click)="publish()"
-            >
-              {{ busy() ? 'Publication…' : 'Publier une version' }}
-            </button>
-          </footer>
         </form>
+      </ng-template>
+      <ng-template #actionFooterActions>
+        <button matButton="text" type="button" (click)="requestClose()">Fermer</button>
+        <button
+          matButton="outlined"
+          type="button"
+          (click)="saveDraft()"
+          [disabled]="busy() || form.invalid"
+        >
+          {{ busy() ? 'Enregistrement…' : 'Enregistrer le brouillon' }}
+        </button>
+        <button
+          matButton="filled"
+          type="button"
+          [disabled]="busy() || form.invalid || !form.controls.code.value.trim()"
+          (click)="publish()"
+        >
+          {{ busy() ? 'Publication…' : 'Publier une version' }}
+        </button>
       </ng-template>
     </app-resource-catalog-template>
   `,
@@ -229,23 +243,9 @@ const LANGUAGE_LABELS: Readonly<Record<FlowScriptLanguage, string>> = {
       margin: 0;
       color: var(--success);
     }
-    .script-actions {
-      position: sticky;
-      bottom: 0;
-      padding: var(--space-3) 0;
-      display: flex;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-      gap: var(--space-2);
-      border-top: 1px solid var(--border-subtle);
-      background: var(--surface);
-    }
     @media (max-width: 600px) {
       .script-fields {
         grid-template-columns: 1fr;
-      }
-      .script-actions button {
-        flex: 1 1 auto;
       }
     }
   `,
@@ -364,6 +364,10 @@ export class ScriptLibraryPageComponent {
   });
 
   constructor() {
+    effect(() => {
+      if (this.busy()) this.form.disable({ emitEvent: false });
+      else this.form.enable({ emitEvent: false });
+    });
     void this.loadList(true);
   }
 
@@ -446,6 +450,10 @@ export class ScriptLibraryPageComponent {
   }
 
   /** Ferme l'éditeur ; demande confirmation si des modifications ne sont pas enregistrées. */
+  hasUnsavedChanges(): boolean {
+    return this.formOpen() && (this.form.dirty || this.busy());
+  }
+
   protected requestClose(): void {
     if (this.busy()) return;
     if (!this.form.dirty) {

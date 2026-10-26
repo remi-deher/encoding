@@ -1,3 +1,4 @@
+import { selectionNavigationIndex } from './selection-navigation';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -56,6 +57,8 @@ export interface SubnavOption {
               type="button"
               class="subnav-item"
               role="tab"
+              [id]="panelId() ? tabId(option.value) : null"
+              [attr.aria-controls]="panelId() || null"
               [class.is-active]="option.value === selected()"
               [attr.aria-selected]="option.value === selected()"
               [attr.tabindex]="option.value === selected() ? 0 : -1"
@@ -76,6 +79,10 @@ export interface SubnavOption {
 })
 export class SubnavComponent {
   readonly label = input.required<string>();
+  readonly panelId = input('');
+  tabId(value: string): string {
+    return this.panelId() + '-tab-' + value;
+  }
   readonly options = input.required<readonly SubnavOption[]>();
   readonly selected = input.required<string>();
   readonly variant = input<'links' | 'tabs'>('tabs');
@@ -103,11 +110,7 @@ export class SubnavComponent {
     const options = this.options();
     if (index < 0 || !options.length) return;
 
-    let nextIndex = -1;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % options.length;
-    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + options.length) % options.length;
-    else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = options.length - 1;
+    const nextIndex = selectionNavigationIndex(event.key, index, options.length);
 
     if (nextIndex >= 0) {
       event.preventDefault();

@@ -1,16 +1,18 @@
-import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, TemplateRef, input, output } from '@angular/core';
 import { CategoryTabOption } from '../ui/category-tabs.component';
+import { PageHeaderComponent } from '../ui/page-header.component';
 import { SubnavComponent } from '../ui/subnav.component';
 
 /** Cadre commun de synthèse et d’orientation pour le rôle métier Piloter. */
 @Component({
   selector: 'app-monitor-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, SubnavComponent],
+  imports: [SubnavComponent, PageHeaderComponent],
   template: `
-    <h1 class="visually-hidden">{{ title() }}</h1>
+    <app-page-header [title]="title()" [actions]="actions()" />
     <app-subnav
+      #viewNavigation
+      panelId="monitor-panel"
       [label]="viewsLabel()"
       [options]="views()"
       [selected]="selectedView()"
@@ -19,41 +21,44 @@ import { SubnavComponent } from '../ui/subnav.component';
       @if (metadata()) {
         <span subnav-actions class="cluster-name">{{ metadata() }}</span>
       }
-      @if (actions(); as pageActions) {
-        <ng-container subnav-actions [ngTemplateOutlet]="pageActions" />
-      }
     </app-subnav>
 
-    @if (state() === 'loading') {
-      <p class="monitor-feedback" role="status">{{ loadingMessage() }}</p>
-    } @else if (state() === 'error') {
-      <p class="monitor-feedback" role="alert">
-        {{ errorMessage() }}
-        @if (hasKnownData()) {
-          {{ staleMessage() }}
-        }
-      </p>
-    }
+    <section
+      id="monitor-panel"
+      role="tabpanel"
+      [attr.aria-labelledby]="viewNavigation.tabId(selectedView())"
+    >
+      @if (state() === 'loading') {
+        <p class="monitor-feedback" role="status">{{ loadingMessage() }}</p>
+      } @else if (state() === 'error') {
+        <p class="monitor-feedback" role="alert">
+          {{ errorMessage() }}
+          @if (hasKnownData()) {
+            {{ staleMessage() }}
+          }
+        </p>
+      }
 
-    @if (layout() === 'special') {
-      <div class="monitor-special"><ng-content select="[monitor-special]" /></div>
-    } @else {
-      <div class="monitor-summary"><ng-content select="[monitor-summary]" /></div>
-      <div
-        class="monitor-grid monitor-grid_primary"
-        [class.monitor-grid_single]="layout() === 'single'"
-      >
-        <div class="monitor-slot"><ng-content select="[monitor-primary]" /></div>
-        <div class="monitor-slot"><ng-content select="[monitor-context]" /></div>
-      </div>
-      <div
-        class="monitor-grid monitor-grid_supporting"
-        [class.monitor-grid_single]="layout() === 'single'"
-      >
-        <div class="monitor-slot"><ng-content select="[monitor-activity]" /></div>
-        <div class="monitor-slot"><ng-content select="[monitor-supporting]" /></div>
-      </div>
-    }
+      @if (layout() === 'special') {
+        <div class="monitor-special"><ng-content select="[monitor-special]" /></div>
+      } @else {
+        <div class="monitor-summary"><ng-content select="[monitor-summary]" /></div>
+        <div
+          class="monitor-grid monitor-grid_primary"
+          [class.monitor-grid_single]="layout() === 'single'"
+        >
+          <div class="monitor-slot"><ng-content select="[monitor-primary]" /></div>
+          <div class="monitor-slot"><ng-content select="[monitor-context]" /></div>
+        </div>
+        <div
+          class="monitor-grid monitor-grid_supporting"
+          [class.monitor-grid_single]="layout() === 'single'"
+        >
+          <div class="monitor-slot"><ng-content select="[monitor-activity]" /></div>
+          <div class="monitor-slot"><ng-content select="[monitor-supporting]" /></div>
+        </div>
+      }
+    </section>
   `,
   styles: `
     :host {

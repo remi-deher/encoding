@@ -3,22 +3,31 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 export type ThemeMode = 'light' | 'dark';
 export type ThemePalette = 'forest' | 'ocean' | 'iris' | 'rose';
-
-const THEME_STORAGE_KEY = 'encoding.theme';
+export const THEME_PALETTES: readonly { value: ThemePalette; label: string }[] = [
+  { value: 'forest', label: 'Forêt' },
+  { value: 'ocean', label: 'Océan' },
+  { value: 'iris', label: 'Iris' },
+  { value: 'rose', label: 'Rose' },
+];
 const PALETTE_STORAGE_KEY = 'encoding.palette';
+
+const STORAGE_KEY = 'encoding.theme';
 
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
   private readonly document = inject(DOCUMENT);
   private readonly mode = signal<ThemeMode>(this.initialMode());
-  private readonly selectedPalette = signal<ThemePalette>(this.initialPalette());
+
+  private readonly paletteMode = signal<ThemePalette>(this.initialPalette());
+  readonly palettes = THEME_PALETTES;
+  readonly palette = this.paletteMode.asReadonly();
 
   readonly current = this.mode.asReadonly();
   readonly isDark = computed(() => this.mode() === 'dark');
-  readonly palette = this.selectedPalette.asReadonly();
 
   constructor() {
-    this.apply(this.mode(), this.palette());
+    this.apply(this.mode());
+    this.document.documentElement.dataset['palette'] = this.palette();
   }
 
   toggle(): void {
@@ -27,27 +36,37 @@ export class ThemeService {
 
   set(mode: ThemeMode): void {
     this.mode.set(mode);
-    this.apply(mode, this.palette());
+    this.apply(mode);
     try {
-      localStorage.setItem(THEME_STORAGE_KEY, mode);
+      localStorage.setItem(STORAGE_KEY, mode);
     } catch {
       // Stockage indisponible : le choix reste valable pour la session.
     }
   }
 
   setPalette(palette: ThemePalette): void {
-    this.selectedPalette.set(palette);
-    this.apply(this.mode(), palette);
+    if (!THEME_PALETTES.some((option) => option.value === palette)) return;
+    this.paletteMode.set(palette);
+    this.document.documentElement.dataset['palette'] = palette;
     try {
       localStorage.setItem(PALETTE_STORAGE_KEY, palette);
     } catch {
-      // Stockage indisponible : le choix reste valable pour la session.
+      // La préférence reste active si le stockage est indisponible.
+    }
+  }
+
+  private initialPalette(): ThemePalette {
+    try {
+      const stored = localStorage.getItem(PALETTE_STORAGE_KEY);
+      return THEME_PALETTES.find((option) => option.value === stored)?.value ?? 'forest';
+    } catch {
+      return 'forest';
     }
   }
 
   private initialMode(): ThemeMode {
     try {
-      const stored = localStorage.getItem(THEME_STORAGE_KEY);
+      const stored = localStorage.getItem(STORAGE_KEY);
       if (stored === 'light' || stored === 'dark') return stored;
     } catch {
       // Stockage indisponible : repli sur la préférence système.
@@ -57,20 +76,7 @@ export class ThemeService {
       : 'light';
   }
 
-  private initialPalette(): ThemePalette {
-    try {
-      const stored = localStorage.getItem(PALETTE_STORAGE_KEY);
-      if (stored === 'forest' || stored === 'ocean' || stored === 'iris' || stored === 'rose') {
-        return stored;
-      }
-    } catch {
-      // Repli sur la palette Forêt quand le stockage est indisponible.
-    }
-    return 'forest';
-  }
-
-  private apply(mode: ThemeMode, palette: ThemePalette): void {
+  private apply(mode: ThemeMode): void {
     this.document.documentElement.dataset['theme'] = mode;
-    this.document.documentElement.dataset['palette'] = palette;
   }
 }

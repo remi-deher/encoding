@@ -87,7 +87,7 @@
                   tool.provider === 'stock' ? 'Outil livré avec l’image' : 'Personnalisé'
                 }}</span>
               </div>
-              <span class="badge">{{ tool.clusterReadiness }}</span>
+              <app-status-badge [label]="tool.clusterReadiness" />
             </div>
 
             <p class="tool-description">{{ tool.role }}</p>
@@ -124,12 +124,13 @@
               </div>
               <div class="repo-badges">
                 @if (repo.isLocked) {
-                  <span class="badge accent">Officiel</span>
+                  <app-status-badge label="Officiel" tone="accent" />
                 }
-                <span class="badge" [class.success]="repo.enabled">{{
-                  repo.enabled ? 'Actif' : 'Désactivé'
-                }}</span>
-                <span class="badge">{{ repo.packagesCount }} paquets</span>
+                <app-status-badge
+                  [label]="repo.enabled ? 'Actif' : 'Désactivé'"
+                  [tone]="repo.enabled ? 'success' : 'neutral'"
+                />
+                <app-status-badge [label]="repo.packagesCount + ' paquets'" />
                 <button
                   matButton="outlined"
                   type="button"
@@ -183,16 +184,22 @@
           >
             Ajouter le dépôt
           </button>
-          <label class="store-upload">
-            <input
-              type="file"
-              accept=".zip,application/zip"
-              hidden
-              [disabled]="storeBusy()"
-              (change)="onArchiveSelected($event)"
-            />
-            <span matButton="outlined">Importer une archive (.zip)</span>
-          </label>
+          <input
+            #archiveFile
+            type="file"
+            accept=".zip,application/zip"
+            hidden
+            [disabled]="storeBusy()"
+            (change)="onArchiveSelected($event)"
+          />
+          <button
+            matButton="outlined"
+            type="button"
+            [disabled]="storeBusy()"
+            (click)="archiveFile.click()"
+          >
+            Importer une archive (.zip)
+          </button>
         </div>
         <p class="store-note">
           Les paquets s’installent sur ce serveur ; les workers les téléchargent et vérifient leur
@@ -214,13 +221,10 @@
                 <h3>{{ pkg.name }}</h3>
                 <span class="store-author">Par {{ pkg.author }} • v{{ pkg.version }}</span>
               </div>
-              <span
-                class="badge"
-                [class.accent]="pkg.kind === 'plugin'"
-                [class.warning]="pkg.kind === 'tool'"
-              >
-                {{ pkg.categoryLabel }}
-              </span>
+              <app-status-badge
+                [label]="pkg.categoryLabel"
+                [tone]="pkg.kind === 'plugin' ? 'accent' : 'warning'"
+              />
             </div>
 
             <p class="store-description">{{ pkg.description }}</p>
@@ -245,7 +249,10 @@
                     Mettre à jour (v{{ pkg.version }})
                   </button>
                 } @else {
-                  <span class="badge success">Installé (v{{ pkg.installedVersion }})</span>
+                  <app-status-badge
+                    [label]="'Installé (v' + pkg.installedVersion + ')'"
+                    tone="success"
+                  />
                 }
                 <button
                   matButton="outlined"

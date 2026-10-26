@@ -1,4 +1,4 @@
-:host {
+app-shell {
   display: block;
   height: 100dvh;
   min-height: 0;
@@ -160,7 +160,7 @@ button.assistant-launcher {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 11px;
+  gap: var(--space-3);
   color: var(--text-primary);
   text-decoration: none;
   border-radius: var(--radius-md);
@@ -183,7 +183,7 @@ button.assistant-launcher {
   font-size: var(--font-title);
   font-weight: 800;
   letter-spacing: -0.05em;
-  box-shadow: 0 2px 8px rgb(20 86 68 / 22%);
+  box-shadow: var(--elevation-1);
 }
 
 .brand-name {
@@ -196,79 +196,34 @@ button.assistant-launcher {
   white-space: nowrap;
 }
 
-/* Navigation Layout (M3 Adaptive Scaffold) */
+/* Navigation persistante : scaffold CSS sans modification des internes Material. */
 .application-navigation-layout {
   position: relative;
+  display: flex;
   width: 100%;
   height: 100%;
   min-height: 0;
   flex: 1 1 auto;
-  background: var(--page-background);
   overflow: hidden;
 }
-
-@media (min-width: 761px) {
-  .application-navigation-layout {
-    display: flex !important;
-    flex-direction: row !important;
-    height: 100% !important;
-    min-height: 0;
-
-    > .mat-drawer-backdrop {
-      display: none !important;
-    }
-
-    > .application-sidebar.mat-drawer {
-      position: relative !important;
-      transform: none !important;
-      visibility: visible !important;
-      display: flex !important;
-      flex-direction: column;
-      flex: 0 0 auto;
-      z-index: 2;
-      width: auto;
-      border: none !important;
-      background: transparent !important;
-      overflow: visible;
-    }
-
-    > .page-transition-region.mat-drawer-content {
-      margin-left: 0 !important;
-      margin-right: 0 !important;
-      flex: 1 1 0%;
-      min-width: 0;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      z-index: auto !important;
-    }
-  }
-}
-
 .application-sidebar {
-  box-sizing: border-box;
-  width: auto;
-  border: none !important;
-  background: transparent !important;
-  overflow: visible;
-
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  background: var(--sidebar-background);
+  transition:
+    width 220ms var(--motion-emphasized),
+    flex-basis 220ms var(--motion-emphasized);
   &.is-collapsed {
-    .sidebar-content {
-      width: 64px;
-      min-width: 64px;
-      padding: 12px 6px;
-    }
+    width: var(--rail-width);
+    flex-basis: var(--rail-width);
   }
 }
 
 .sidebar-content {
   box-sizing: border-box;
-  margin: 12px 0 12px 12px;
-  height: calc(100% - 24px);
-  min-height: 0;
-  width: 202px;
-  max-width: 202px;
-  padding: 12px 8px;
+  height: 100%;
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -285,7 +240,7 @@ button.assistant-launcher {
   overflow-x: hidden;
 }
 
-/* Contrôles persistants du pied de navigation */
+/* Contrôles du pied de navigation */
 .sidebar-footer {
   margin-top: auto;
   padding-top: var(--space-2);
@@ -329,8 +284,8 @@ button.assistant-launcher {
 
 .sidebar-collapse-btn {
   width: 100%;
-  min-height: 40px;
-  padding: 0 12px;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -377,14 +332,16 @@ button.assistant-launcher {
 
 /* Main Content Area */
 .page-transition-region {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  z-index: auto;
+  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior-y: contain;
-  z-index: auto !important;
 }
 
 .application-header {
@@ -393,13 +350,14 @@ button.assistant-launcher {
   z-index: 5;
   box-sizing: border-box;
   width: 100%;
-  max-width: 1680px;
+  max-width: var(--content-wide-width);
   min-height: 84px;
   margin-inline: auto;
-  padding: 10px clamp(16px, 2.5vw, 40px) 0;
+  padding: var(--space-3) clamp(16px, 3vw, 40px);
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
   flex: 0 0 auto;
   background: var(--page-background);
 }
@@ -407,10 +365,10 @@ button.assistant-launcher {
 .main-content {
   box-sizing: border-box;
   width: 100%;
-  max-width: 1680px;
+  max-width: var(--content-max-width);
   margin-inline: auto;
-  padding-inline: clamp(16px, 2.5vw, 40px);
-  padding-block: 12px 40px;
+  padding-inline: clamp(16px, 3vw, 40px);
+  padding-block: var(--space-5) var(--space-6);
   flex: 1;
   outline: none;
 }
@@ -498,4 +456,11 @@ button.assistant-launcher {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.application-sidebar.is-collapsed .sidebar-content {
+  padding-inline: var(--space-3);
+}
+.sidebar-collapse-btn[hidden] {
+  display: none;
 }

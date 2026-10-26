@@ -312,7 +312,7 @@ let nextPanelId = 0;
       min-height: 50px;
       margin: 0;
       padding: 0 var(--space-3);
-      border-left: 1px solid var(--border-subtle);
+      border-left: 0;
       border-radius: 0;
       background: transparent;
       color: var(--text-secondary);
@@ -322,6 +322,9 @@ let nextPanelId = 0;
     .search-field_global .search-field-filters:hover {
       background: color-mix(in srgb, var(--accent) 10%, transparent);
       color: var(--accent-strong);
+    }
+    .search-field_global .search-field-filters.has-previous-segment {
+      border-left: 1px solid var(--border-subtle);
     }
     .search-field_global .search-field-filters:focus-visible {
       outline: 2px solid var(--accent-strong);

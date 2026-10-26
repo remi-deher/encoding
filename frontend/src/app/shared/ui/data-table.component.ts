@@ -160,7 +160,12 @@ export interface DataTableListActionEvent {
                 [accept]="action.fileAccept"
                 (change)="pickFile(action.id, $event)"
               />
-              <button class="selection-action" type="button" (click)="filePicker.click()">
+              <button
+                matButton="tonal"
+                class="selection-action"
+                type="button"
+                (click)="filePicker.click()"
+              >
                 {{ action.label }}
               </button>
             } @else {
@@ -198,13 +203,19 @@ export interface DataTableListActionEvent {
           </span>
           <div class="selection-actions">
             @if (rowOpenable() && selectedRows().length === 1) {
-              <button class="selection-action" type="button" (click)="openSelectedRow()">
+              <button
+                matButton="tonal"
+                class="selection-action"
+                type="button"
+                (click)="openSelectedRow()"
+              >
                 {{ rowOpenLabel() }}
               </button>
             }
             @for (action of selectionActions(); track action.id) {
               @if (!action.visibleWhen || action.visibleWhen(selectedRows())) {
                 <button
+                  matButton="tonal"
                   class="selection-action"
                   type="button"
                   (click)="requestSelectionAction(action)"
@@ -213,7 +224,12 @@ export interface DataTableListActionEvent {
                 </button>
               }
             }
-            <button class="selection-clear" type="button" (click)="clearSelection()">
+            <button
+              matButton="text"
+              class="selection-clear"
+              type="button"
+              (click)="clearSelection()"
+            >
               Tout désélectionner
             </button>
           </div>
@@ -597,6 +613,7 @@ export interface DataTableListActionEvent {
                 >
                   @if (!action.visibleWhen || action.visibleWhen(row)) {
                     <button
+                      matButton="outlined"
                       class="row-action"
                       [class.row-action_danger]="action.tone === 'danger'"
                       type="button"
@@ -620,6 +637,7 @@ export interface DataTableListActionEvent {
                 @for (action of rowActions(); track action.id) {
                   @if (!action.visibleWhen || action.visibleWhen(row)) {
                     <button
+                      matButton="outlined"
                       class="row-action"
                       [class.row-action_danger]="action.tone === 'danger'"
                       type="button"
