@@ -35,6 +35,12 @@
     [layout]="monitorLayout()"
     (selectedViewChange)="onOverviewViewChanged($event)"
   >
+    @if (overviewView() === 'ai') {
+      <a monitor-subnav-actions class="ai-primary-link" routerLink="/ai/assistant">
+        Ouvrir l’assistant <span aria-hidden="true"><app-icon name="outward" /></span>
+      </a>
+    }
+
     <app-summary-tiles
       monitor-summary
       [hidden]="overviewView() !== 'general'"
@@ -261,23 +267,10 @@
     <section
       monitor-special
       class="ai-overview"
-      aria-labelledby="ai-overview-heading"
+      aria-label="Vue d’ensemble de l’intelligence artificielle"
       [hidden]="overviewView() !== 'ai'"
     >
       @if (overviewView() === 'ai') {
-        <header class="ai-overview-heading">
-          <div>
-            <p class="eyebrow">Vue d’ensemble</p>
-            <h2 id="ai-overview-heading">Intelligence artificielle</h2>
-            <p>État des fournisseurs, demandes récentes et conversations de l’assistant.</p>
-          </div>
-          <div class="ai-overview-actions">
-            <a class="ai-primary-link" routerLink="/ai/assistant"
-              >Ouvrir l’assistant <span aria-hidden="true"><app-icon name="outward" /></span
-            ></a>
-          </div>
-        </header>
-
         @if (aiOverviewLoading()) {
           <p class="ai-feedback" role="status">Chargement des données IA…</p>
         } @else if (aiOverviewPartial()) {

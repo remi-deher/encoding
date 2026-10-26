@@ -1,14 +1,16 @@
 <app-page-header title="Activité" [visuallyHidden]="true" />
-<app-subnav
-  #roleNavigation
-  panelId="activity-role-panel"
-  label="Rôle de l’activité"
-  [options]="roleTabs"
-  [selected]="roleFilter()"
-  (selectedChange)="setRole($event)"
->
-  <span subnav-actions class="activity-count-pill">{{ countText() }}</span>
-</app-subnav>
+<app-subnav-template>
+  <span subnav-info class="activity-count-pill">{{ countText() }}</span>
+  <app-subnav
+    #roleNavigation
+    presentation="capsule"
+    panelId="activity-role-panel"
+    label="Rôle de l’activité"
+    [options]="roleTabs"
+    [selected]="roleFilter()"
+    (selectedChange)="setRole($event)"
+  />
+</app-subnav-template>
 
 <div
   id="activity-role-panel"

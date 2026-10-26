@@ -3,12 +3,13 @@ import { CategoryTabOption } from '../ui/category-tabs.component';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
 import { PageHeaderComponent } from '../ui/page-header.component';
 import { SubnavComponent } from '../ui/subnav.component';
+import { SubnavTemplateComponent } from './subnav-template.component';
 
 /** Cadre commun des domaines d’administration et de leur édition protégée. */
 @Component({
   selector: 'app-platform-admin-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DetailDrawerComponent, SubnavComponent, PageHeaderComponent],
+  imports: [DetailDrawerComponent, SubnavComponent, SubnavTemplateComponent, PageHeaderComponent],
   template: `
     <app-detail-drawer
       [opened]="editorOpen()"
@@ -23,14 +24,17 @@ import { SubnavComponent } from '../ui/subnav.component';
     >
       <div drawer-main>
         <app-page-header [title]="title()" [visuallyHidden]="true" />
-        <app-subnav
-          #domainNavigation
-          panelId="platform-admin-panel"
-          label="Domaines des paramètres"
-          [options]="tabs()"
-          [selected]="activeTab()"
-          (selectedChange)="tabChange.emit($event)"
-        />
+        <app-subnav-template>
+          <app-subnav
+            #domainNavigation
+            presentation="capsule"
+            panelId="platform-admin-panel"
+            label="Domaines des paramètres"
+            [options]="tabs()"
+            [selected]="activeTab()"
+            (selectedChange)="tabChange.emit($event)"
+          />
+        </app-subnav-template>
         <div
           id="platform-admin-panel"
           class="platform-admin-content"
