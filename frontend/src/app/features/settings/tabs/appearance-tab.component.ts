@@ -7,11 +7,7 @@ import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-
 @Component({
   selector: 'app-appearance-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    ConfigurationSectionComponent,
-    SettingRowComponent,
-    SettingGroupComponent,
-  ],
+  imports: [ConfigurationSectionComponent, SettingRowComponent, SettingGroupComponent],
   template: `
     <app-configuration-section
       title="Apparence"
