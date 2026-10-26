@@ -47,6 +47,8 @@ export interface CatalogEmptyState {
       "
       [footerActions]="actionOpen() ? actionFooterActionsTemplate() : detailFooterActionsTemplate()"
       [step]="actionOpen() ? actionStep() : null"
+      [closeGuarded]="actionOpen() && actionCloseGuarded()"
+      (closeRequested)="actionCloseRequested.emit()"
       (closed)="onDrawerClosed()"
     >
       <div drawer-main>
@@ -58,17 +60,12 @@ export interface CatalogEmptyState {
           />
           <ng-container [ngTemplateOutlet]="detailContentTemplate()" />
         } @else {
-          <h1 class="visually-hidden">{{ title() }}</h1>
+          <app-page-header [title]="title()" [actions]="pageActionsTemplate()" />
           <div class="catalog-navigation-wrapper">
             @if (catalogueNavigationTemplate(); as navigation) {
               <ng-container [ngTemplateOutlet]="navigation" />
             } @else {
               <ng-content select="[catalogue-navigation]" />
-            }
-            @if (pageActionsTemplate(); as actions) {
-              <div class="catalog-navigation-actions">
-                <ng-container [ngTemplateOutlet]="actions" />
-              </div>
             }
           </div>
           <div class="catalog-summary">
@@ -216,6 +213,8 @@ export class ManagementCatalogTemplateComponent {
   readonly detailTitle = input('Détails');
   readonly detailDescription = input('');
   readonly actionOpen = input(false);
+  readonly actionCloseGuarded = input(false);
+  readonly actionCloseRequested = output<void>();
   readonly actionTitle = input('Ajouter');
   readonly actionDescription = input('');
   /** Avancement d'un formulaire en plusieurs étapes dans le tiroir d'action. */

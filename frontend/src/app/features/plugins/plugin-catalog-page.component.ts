@@ -1,3 +1,4 @@
+import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -262,6 +263,7 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-plugin-catalog-page',
   imports: [
+    StatusBadgeComponent,
     DataTableComponent,
     ResourceSheetComponent,
     ClusterMaintenanceTemplateComponent,

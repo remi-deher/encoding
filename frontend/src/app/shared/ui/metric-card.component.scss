@@ -7,19 +7,17 @@
 
 .metric-card {
   height: 100%;
-  border: 1px solid var(--border-subtle);
+  border: 0;
   border-radius: var(--radius-xl);
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
+  background: var(--surface-container-lowest);
+  box-shadow: none;
   transition:
     background-color 220ms var(--motion-spring-fast),
-    border-color 220ms var(--motion-spring-fast),
     border-radius 240ms var(--motion-spring-fast),
     transform 220ms var(--motion-spring-fast);
 }
 
 .metric-card:hover {
-  border-color: var(--border-strong);
   background: var(--surface-container-low);
 }
 
@@ -83,7 +81,6 @@
 }
 
 .metric-card_attention {
-  border-color: var(--warning);
   background: var(--warning-soft);
 }
 

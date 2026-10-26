@@ -56,15 +56,15 @@
   }
 
   &[data-os='linux'] {
-    color: #f59e0b;
-    background: color-mix(in srgb, #f59e0b 12%, var(--surface-container-low));
-    border-color: color-mix(in srgb, #f59e0b 24%, transparent);
+    color: var(--tone-os-linux);
+    background: color-mix(in srgb, var(--tone-os-linux) 12%, var(--surface-container-low));
+    border-color: color-mix(in srgb, var(--tone-os-linux) 24%, transparent);
   }
 
   &[data-os='windows'] {
-    color: #0284c7;
-    background: color-mix(in srgb, #0284c7 12%, var(--surface-container-low));
-    border-color: color-mix(in srgb, #0284c7 24%, transparent);
+    color: var(--tone-os-windows);
+    background: color-mix(in srgb, var(--tone-os-windows) 12%, var(--surface-container-low));
+    border-color: color-mix(in srgb, var(--tone-os-windows) 24%, transparent);
   }
 
   &[data-os='macos'] {

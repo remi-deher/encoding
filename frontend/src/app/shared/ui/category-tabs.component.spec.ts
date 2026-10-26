@@ -8,7 +8,7 @@ describe('CategoryTabsComponent', () => {
     { value: 'encoding', label: 'Profils d’encodage' },
   ] as const;
 
-  it('renders a WAI-ARIA tablist with roving tabindex on the selected tab', () => {
+  it('renders a labelled group of filter buttons with the selected state', () => {
     const fixture = TestBed.createComponent(CategoryTabsComponent);
     fixture.componentRef.setInput('label', 'Type de librairie');
     fixture.componentRef.setInput('options', options);
@@ -16,18 +16,15 @@ describe('CategoryTabsComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    const tablist = host.querySelector('[role="tablist"]');
+    const tablist = host.querySelector('[role="group"]');
     expect(tablist).toBeTruthy();
     expect(tablist?.getAttribute('aria-label')).toBe('Type de librairie');
 
-    const tabs = Array.from(host.querySelectorAll('[role="tab"]')) as HTMLButtonElement[];
+    const tabs = Array.from(host.querySelectorAll('button')) as HTMLButtonElement[];
     expect(tabs.length).toBe(3);
-    expect(tabs[0].getAttribute('aria-selected')).toBe('false');
-    expect(tabs[0].getAttribute('tabindex')).toBe('-1');
-    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
-    expect(tabs[1].getAttribute('tabindex')).toBe('0');
-    expect(tabs[2].getAttribute('aria-selected')).toBe('false');
-    expect(tabs[2].getAttribute('tabindex')).toBe('-1');
+    expect(tabs[0].getAttribute('aria-pressed')).toBe('false');
+    expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
+    expect(tabs[2].getAttribute('aria-pressed')).toBe('false');
   });
 
   it('supports ArrowRight, ArrowLeft, Home and End keyboard navigation', () => {
@@ -41,7 +38,7 @@ describe('CategoryTabsComponent', () => {
     fixture.componentInstance.selectedChange.subscribe((val) => emitted.push(val));
 
     const tabs = Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll('[role="tab"]'),
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
     ) as HTMLButtonElement[];
 
     tabs[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));

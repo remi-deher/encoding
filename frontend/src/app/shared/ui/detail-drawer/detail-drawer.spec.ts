@@ -89,3 +89,37 @@ describe('DetailDrawerComponent header template', () => {
     expect(bar?.getAttribute('aria-valuenow')).toBe('1');
   });
 });
+
+describe('DetailDrawerComponent modal ownership and protected dismissal', () => {
+  it('keeps the document locked until the last modal closes, including destruction of a closed drawer', () => {
+    const first = TestBed.createComponent(DetailDrawerComponent);
+    const second = TestBed.createComponent(DetailDrawerComponent);
+    for (const fixture of [first, second]) {
+      fixture.componentRef.setInput('modal', true);
+      fixture.componentRef.setInput('opened', true);
+      fixture.detectChanges();
+    }
+    first.componentRef.setInput('opened', false);
+    first.detectChanges();
+    first.destroy();
+    expect(document.body.classList.contains('detail-drawer-open')).toBe(true);
+    second.destroy();
+    expect(document.body.classList.contains('detail-drawer-open')).toBe(false);
+  });
+
+  it('requests confirmation without closing a guarded drawer from the close button', () => {
+    const fixture = TestBed.createComponent(DetailDrawerComponent);
+    fixture.componentRef.setInput('opened', true);
+    fixture.componentRef.setInput('closeGuarded', true);
+    fixture.detectChanges();
+    let requested = 0;
+    fixture.componentInstance.closeRequested.subscribe(() => requested++);
+    const drawer = fixture.nativeElement.querySelector('mat-drawer');
+    fixture.nativeElement.querySelector('.drawer-close').click();
+    fixture.detectChanges();
+    expect(requested).toBe(1);
+    expect(drawer.classList.contains('mat-drawer-opened')).toBe(true);
+    drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(requested).toBe(2);
+  });
+});

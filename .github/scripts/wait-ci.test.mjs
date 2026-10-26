@@ -22,3 +22,13 @@ test('cancelled, skipped, neutral, timed out and missing checks do not authorize
   }
   assert.equal(evaluate([]), 'missing');
 });
+
+test('an explicitly equivalent ancestor can carry CI beyond the last file-changing commit', () => {
+  const sources = { 'frontend-e2e': 'last-change' };
+  const equivalents = { 'frontend-e2e': ['current', 'validated', 'last-change'] };
+  assert.equal(evaluateChecks(sources, 'current', [run(2, 'validated', 'success')], equivalents)[0].state, 'success');
+  assert.equal(evaluateChecks(sources, 'current', [run(2, 'unrelated', 'success')], equivalents)[0].state, 'missing');
+  assert.equal(evaluateChecks(sources, 'current', [run(2, 'validated', 'success'), run(3, 'current', null, 'in_progress')], equivalents)[0].state, 'pending');
+  assert.equal(evaluateChecks(sources, 'current', [run(2, 'validated', 'success'), run(3, 'current', 'failure')], equivalents)[0].state, 'failed');
+  assert.equal(evaluateChecks(sources, 'current', [run(1, 'last-change', 'success'), run(2, 'validated', 'failure')], equivalents)[0].state, 'failed');
+});

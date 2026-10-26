@@ -1,15 +1,13 @@
 import {
-  ChangeDetectionStrategy,
   AfterViewInit,
+  ChangeDetectionStrategy,
   Component,
   ElementRef,
-  EventEmitter,
-  Input,
-  OnChanges,
   OnDestroy,
-  Output,
-  SimpleChanges,
-  ViewChild,
+  effect,
+  input,
+  output,
+  viewChild,
 } from '@angular/core';
 import { basicSetup } from 'codemirror';
 import { Compartment, EditorState } from '@codemirror/state';
@@ -20,84 +18,105 @@ import { python } from '@codemirror/lang-python';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-code-editor',
-  template:
-    '<div #host class="code-editor" [class.code-editor_roomy]="roomy" [attr.aria-label]="label"></div>',
-  styles: [
-    `
-      :host {
-        display: block;
-        min-width: 0;
-      }
+  template: '<div #host class="code-editor" [class.code-editor_roomy]="roomy()"></div>',
+  styles: `
+    :host {
+      display: block;
+      min-width: 0;
+    }
+    .code-editor {
+      --editor-min-height: 260px;
+      --editor-max-height: 560px;
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    .code-editor_roomy {
+      --editor-min-height: 420px;
+      --editor-max-height: none;
+    }
+    .code-editor:focus-within {
+      outline: 2px solid var(--accent-strong);
+      outline-offset: 2px;
+    }
+    @media (max-width: 600px) {
       .code-editor {
-        overflow: hidden;
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-md);
+        --editor-min-height: 220px;
       }
-      .code-editor:focus-within {
-        outline: 2px solid var(--focus-ring, var(--primary));
-        outline-offset: 1px;
-      }
-      :host ::ng-deep .cm-editor {
-        min-height: 260px;
-        max-height: 560px;
-        color: var(--text-primary);
-        background: var(--surface);
-        font-size: var(--font-body);
-      }
-      .code-editor_roomy ::ng-deep .cm-editor {
-        min-height: 420px;
-        max-height: none;
-      }
-      :host ::ng-deep .cm-scroller {
-        overflow: auto;
-        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-      }
-      :host ::ng-deep .cm-gutters {
-        color: var(--text-muted);
-        background: var(--surface-muted);
-        border-right: 1px solid var(--border-subtle);
-      }
-      :host ::ng-deep .cm-activeLineGutter {
-        color: var(--text-primary);
-      }
-      @media (max-width: 600px) {
-        :host ::ng-deep .cm-editor {
-          min-height: 220px;
-          font-size: var(--font-body);
-        }
-      }
-    `,
-  ],
+    }
+  `,
 })
-export class CodeEditorComponent implements AfterViewInit, OnChanges, OnDestroy {
-  @Input() value = '';
-  @Input() language: 'javascript' | 'python' = 'javascript';
-  @Input() disabled = false;
-  @Input() roomy = false;
-  @Input() label = 'Code du script';
-  @Output() readonly valueChange = new EventEmitter<string>();
-  @ViewChild('host', { static: true }) private readonly host!: ElementRef<HTMLDivElement>;
-
-  private view?: EditorView;
+export class CodeEditorComponent implements AfterViewInit, OnDestroy {
+  readonly value = input('');
+  readonly language = input<'javascript' | 'python'>('javascript');
+  readonly disabled = input(false);
+  readonly roomy = input(false);
+  readonly label = input('Code du script');
+  readonly valueChange = output<string>();
+  private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
   private readonly languageSlot = new Compartment();
   private readonly editableSlot = new Compartment();
+  private readonly labelSlot = new Compartment();
+  private view?: EditorView;
   private syncing = false;
+
+  constructor() {
+    effect(() => {
+      const value = this.value();
+      const language = this.language();
+      const disabled = this.disabled();
+      const label = this.label();
+      if (!this.view) return;
+      this.syncing = true;
+      try {
+        this.view.dispatch({
+          ...(this.view.state.doc.toString() !== value
+            ? { changes: { from: 0, to: this.view.state.doc.length, insert: value } }
+            : {}),
+          effects: [
+            this.languageSlot.reconfigure(this.languageExtension(language)),
+            this.editableSlot.reconfigure(this.editableExtension(disabled)),
+            this.labelSlot.reconfigure(EditorView.contentAttributes.of({ 'aria-label': label })),
+          ],
+        });
+      } finally {
+        this.syncing = false;
+      }
+    });
+  }
 
   ngAfterViewInit(): void {
     this.view = new EditorView({
-      parent: this.host.nativeElement,
+      parent: this.host().nativeElement,
       state: EditorState.create({
-        doc: this.value,
+        doc: this.value(),
         extensions: [
           basicSetup,
-          this.languageSlot.of(this.languageExtension()),
-          this.editableSlot.of(EditorView.editable.of(!this.disabled)),
+          this.languageSlot.of(this.languageExtension(this.language())),
+          this.editableSlot.of(this.editableExtension(this.disabled())),
+          this.labelSlot.of(EditorView.contentAttributes.of({ 'aria-label': this.label() })),
           EditorView.theme({
-            '&': { backgroundColor: 'var(--surface)', color: 'var(--text-primary)' },
+            '&': {
+              minHeight: 'var(--editor-min-height)',
+              maxHeight: 'var(--editor-max-height)',
+              backgroundColor: 'var(--surface)',
+              color: 'var(--text-primary)',
+              fontSize: 'var(--font-body)',
+            },
+            '.cm-scroller': {
+              overflow: 'auto',
+              fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+            },
             '.cm-content': { caretColor: 'var(--text-primary)' },
+            '.cm-gutters': {
+              color: 'var(--text-muted)',
+              backgroundColor: 'var(--surface-muted)',
+              borderRight: '1px solid var(--border-subtle)',
+            },
+            '.cm-activeLineGutter': { color: 'var(--text-primary)' },
             '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text-primary)' },
             '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-              backgroundColor: 'var(--selection-subtle, #dce6ff)',
+              backgroundColor: 'var(--accent-soft)',
             },
           }),
           EditorView.updateListener.of((update) => {
@@ -109,28 +128,13 @@ export class CodeEditorComponent implements AfterViewInit, OnChanges, OnDestroy 
     });
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (!this.view) return;
-    if (changes['value'] && this.view.state.doc.toString() !== this.value) {
-      this.syncing = true;
-      this.view.dispatch({
-        changes: { from: 0, to: this.view.state.doc.length, insert: this.value ?? '' },
-      });
-      this.syncing = false;
-    }
-    if (changes['language'])
-      this.view.dispatch({ effects: this.languageSlot.reconfigure(this.languageExtension()) });
-    if (changes['disabled'])
-      this.view.dispatch({
-        effects: this.editableSlot.reconfigure(EditorView.editable.of(!this.disabled)),
-      });
-  }
-
   ngOnDestroy(): void {
     this.view?.destroy();
   }
-
-  private languageExtension() {
-    return this.language === 'python' ? python() : javascript();
+  private languageExtension(language: 'javascript' | 'python') {
+    return language === 'python' ? python() : javascript();
+  }
+  private editableExtension(disabled: boolean) {
+    return [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)];
   }
 }
