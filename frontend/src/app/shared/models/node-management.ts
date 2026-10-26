@@ -358,16 +358,7 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
             {
               label: 'Processeur',
               value: inventory.processorModel?.trim() || `${inventory.processorCount} cœurs`,
-              detail: `${inventory.processorCount} cœurs logiques`,
-            },
-            { label: 'Mémoire', value: formatMemory(inventory.memoryMb) },
-            {
-              label: 'Système',
-              value: `${inventory.operatingSystem} · ${inventory.architecture}`,
-            },
-            {
-              label: 'Environnement',
-              value: runtimeEnvironmentLabel(inventory.runtimeEnvironment),
+              detail: `${inventory.processorCount} cœurs logiques · ${formatMemory(inventory.memoryMb)} de mémoire installée · ${inventory.operatingSystem} · ${inventory.architecture}`,
             },
             gpus.length
               ? {
@@ -389,6 +380,15 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
                   unavailable: true,
                   detail: inventory.gpus ? undefined : 'Cet agent ne remonte pas encore ses GPU.',
                 },
+            { label: 'Mémoire', value: formatMemory(inventory.memoryMb) },
+            {
+              label: 'Système',
+              value: `${inventory.operatingSystem} · ${inventory.architecture}`,
+            },
+            {
+              label: 'Environnement',
+              value: runtimeEnvironmentLabel(inventory.runtimeEnvironment),
+            },
           ]
         : [
             {
