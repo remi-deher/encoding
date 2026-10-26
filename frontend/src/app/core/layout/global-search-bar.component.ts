@@ -5,6 +5,7 @@ import {
   ElementRef,
   afterNextRender,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -209,7 +210,12 @@ export class GlobalSearchBarComponent {
     { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top' },
   ];
 
-  protected readonly visibleActions = computed(() => this.context()?.actions?.slice(0, 2) ?? []);
+  protected readonly visibleActions = computed(
+    () =>
+      this.context()
+        ?.actions?.filter((action) => !action.visibleWhen || action.visibleWhen())
+        .slice(0, 2) ?? [],
+  );
   protected readonly filterButtonCount = computed(() =>
     this.context()?.filter ? (this.context()?.filter?.activeCount?.() ?? 0) : null,
   );
@@ -242,6 +248,11 @@ export class GlobalSearchBarComponent {
   private readonly allResults = computed(() => [...this.pageResults(), ...this.globalResults()]);
 
   constructor() {
+    effect(() => {
+      const context = this.context();
+      this.query.set('');
+      context?.onSearchQueryChange?.('');
+    });
     afterNextRender(() => {
       this.measureCapsule();
       const element = this.capsule()?.nativeElement;
@@ -272,6 +283,7 @@ export class GlobalSearchBarComponent {
 
   protected updateQuery(value: string): void {
     this.query.set(value);
+    this.context()?.onSearchQueryChange?.(value);
     this.activeIndex.set(0);
     this.openPanel();
   }

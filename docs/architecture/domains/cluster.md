@@ -55,7 +55,7 @@ Un cluster est un ensemble de nœuds sans coordinateur permanent. Une installati
 - Encodage matériel : pilotes VA-API Intel/AMD dans l'image, NVIDIA via NVIDIA Container Toolkit (`docker-compose.gpu.yml`, optionnel). Un encodeur n'est « utilisable » que si une mire synthétique 64×64 réussit (`ToolCapabilityProbe`). `GpuDeviceSelector` : `ENCODING_GPU_DEVICE`, sinon premier `renderD*`. Un seul périphérique de rendu par nœud.
 
 ### Interface (page Nœuds)
-Deux onglets : **Ce nœud** (fonctions, identité, capacités, fiche `app-resource-sheet`) et **Cluster** (membres en cartes `ResourceCardComponent`, demandes de rattachement en tableau, actions groupées Vidanger/Reprendre/Supprimer appelant l'API unitaire). Assistant de rattachement `GuidedSetup` (stepper CDK). Détails visuels dans [ui.md](ui.md).
+Deux onglets : **Ce nœud** (fonctions, activité, matériel et capacités dans la présentation aperçu d’`app-resource-sheet`) et **Cluster** (identité et synthèse compacte, membres affichés uniquement en cartes `ResourceCardComponent`, demandes de rattachement en tableau, actions groupées Vidanger/Reprendre/Supprimer appelant l'API unitaire). Assistant de rattachement `GuidedSetup` (stepper CDK). Détails visuels dans [ui.md](ui.md).
 
 ## Invariants
 1. Aucun serveur permanent ; chaque serveur actif sert la gestion depuis sa copie locale, la convergence est éventuelle.

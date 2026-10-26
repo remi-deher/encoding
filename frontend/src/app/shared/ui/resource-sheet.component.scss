@@ -25,6 +25,54 @@
   flex: 1 0 auto;
 }
 
+.sheet-stack_overview .sheet {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    'head head'
+    'state hardware'
+    'capabilities identity';
+  gap: var(--space-3);
+  padding: 0;
+  background: transparent;
+}
+
+.sheet-stack_overview .sheet-head {
+  grid-area: head;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-container);
+}
+
+.sheet-stack_overview .sheet-section {
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-container);
+}
+
+.sheet-stack_overview .sheet-section-state {
+  grid-area: state;
+}
+
+.sheet-stack_overview .sheet-section-hardware {
+  grid-area: hardware;
+}
+
+.sheet-stack_overview .sheet-section-capabilities {
+  grid-area: capabilities;
+}
+
+.sheet-stack_overview .sheet-section-identity {
+  grid-area: identity;
+}
+
+.sheet-stack_overview .sheet-section:last-child {
+  border-radius: var(--radius-xl);
+}
+
 .sheet-notice {
   display: grid;
   gap: var(--space-1);
@@ -300,6 +348,16 @@
 }
 
 @media (max-width: 560px) {
+  .sheet-stack_overview .sheet {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'head'
+      'state'
+      'hardware'
+      'capabilities'
+      'identity';
+  }
+
   .sheet-head,
   .sheet-section {
     padding: var(--space-3);

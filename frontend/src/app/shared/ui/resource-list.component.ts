@@ -122,6 +122,7 @@ export interface ResourceListToggleEvent {
                   class="resource-item"
                   [class.has-selection]="selectable()"
                   [class.has-icon]="showIcon()"
+                  [class.has-top-right-menu]="menuPlacement() === 'top-right'"
                 >
                   @if (selectable()) {
                     <mat-checkbox
@@ -135,7 +136,20 @@ export interface ResourceListToggleEvent {
                     <span class="resource-icon"><app-icon [name]="icon()" /></span>
                   }
                   <div class="resource-title">
-                    <h3>{{ item.name }}</h3>
+                    <h3>
+                      @if (openMode() === 'title') {
+                        <button
+                          class="resource-title-open"
+                          type="button"
+                          [attr.aria-label]="'Ouvrir ' + item.name"
+                          (click)="open.emit(item.id)"
+                        >
+                          {{ item.name }}
+                        </button>
+                      } @else {
+                        {{ item.name }}
+                      }
+                    </h3>
                     @if (item.subtitle) {
                       <p>{{ item.subtitle }}</p>
                     }
@@ -162,15 +176,20 @@ export interface ResourceListToggleEvent {
                       (change)="requestToggle(item, $event)"
                     />
                   }
-                  <div class="resource-actions">
-                    <button
-                      matButton="outlined"
-                      type="button"
-                      [disabled]="disabled()"
-                      (click)="open.emit(item.id)"
-                    >
-                      {{ openLabel() }}
-                    </button>
+                  <div
+                    class="resource-actions"
+                    [class.resource-actions_top-right]="menuPlacement() === 'top-right'"
+                  >
+                    @if (openMode() === 'button') {
+                      <button
+                        matButton="outlined"
+                        type="button"
+                        [disabled]="disabled()"
+                        (click)="open.emit(item.id)"
+                      >
+                        {{ openLabel() }}
+                      </button>
+                    }
                     @if (visibleActions(item).length) {
                       <button
                         matIconButton
@@ -215,8 +234,11 @@ export class ResourceListComponent {
   readonly icon = input<IconName>('pack');
   readonly showIcon = input(true);
   readonly openLabel = input('Ouvrir');
+  readonly openMode = input<'button' | 'title' | 'none'>('button');
+  readonly menuPlacement = input<'inline' | 'top-right'>('inline');
   readonly selectionUnit = input('élément(s)');
   readonly emptyMessage = input('Aucun résultat.');
+  readonly groupDefinitions = input<readonly ResourceListGroup[]>([]);
   readonly selectable = input(false);
   readonly disabled = input(false);
   readonly selectionActions = input<readonly ResourceListSelectionAction[]>([]);
@@ -239,6 +261,9 @@ export class ResourceListComponent {
         items: ResourceListItem[];
       }
     >();
+    for (const definition of this.groupDefinitions()) {
+      groups.set(definition.id, { ...definition, items: [] });
+    }
     for (const item of this.items()) {
       const key = item.group?.id ?? '';
       let group = groups.get(key);

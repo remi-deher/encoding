@@ -54,6 +54,7 @@ import {
       (actionClosed)="actionClosed.emit()"
     >
       <app-subnav-template catalogue-navigation>
+        <ng-content select="[subnav-info]" />
         <app-subnav
           #sectionNavigation
           presentation="capsule"
@@ -63,6 +64,7 @@ import {
           [selected]="navigationSelected()"
           (selectedChange)="navigationSelectedChange.emit($event)"
         />
+        <ng-content select="[subnav-actions]" />
       </app-subnav-template>
       <ng-template #catalogueSummarySlot>
         <ng-content select="[catalogue-summary]" />

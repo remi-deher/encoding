@@ -30,6 +30,41 @@ const counts = {
   activity: [],
   observedAt: now,
 };
+const activityCounts = { untreated: 6000, active: 2, done: 60, failed: 1, disabled: 0 };
+
+function activityResponse(status: string, offset: number, limit: number) {
+  const totalCount = activityCounts[status as keyof typeof activityCounts] ?? 0;
+  const files =
+    status === 'done'
+      ? Array.from({ length: Math.min(limit, Math.max(0, totalCount - offset)) }, (_, index) => ({
+          id: `file-${offset + index}`,
+          libraryId: 'library-1',
+          library: 'Films',
+          relativePath: `Film terminé ${offset + index}.mkv`,
+          bytes: 1024,
+          modifiedAt: now,
+          libraryActive: true,
+          flow: 'HEVC',
+          flowVersion: 3,
+          status: 'done',
+          executionId: `done-${offset + index}`,
+          executionState: 'succeeded',
+          detail: 'Traitement terminé',
+          nodeId: 'node-1',
+          node: 'Studio',
+          progress: 100,
+          updatedAt: now,
+        }))
+      : [];
+  return {
+    files,
+    counts: activityCounts,
+    totalCount,
+    limit,
+    offset,
+    observedAt: now,
+  };
+}
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
@@ -41,6 +76,16 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/cluster', (route) =>
     route.fulfill({ json: { id: 'cluster', name: 'Maison', standalone: true } }),
   );
+  await page.route('**/api/v1/activity/files**', (route) => {
+    const url = new URL(route.request().url());
+    return route.fulfill({
+      json: activityResponse(
+        url.searchParams.get('status') ?? 'untreated',
+        Number(url.searchParams.get('offset') ?? 0),
+        Number(url.searchParams.get('limit') ?? 50),
+      ),
+    });
+  });
   await page.route('**/api/v1/tools/ai/assistant/activity', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/v1/executions*', (route) => {
     const url = new URL(route.request().url());
@@ -91,11 +136,13 @@ test('completed jobs stay visible behind a large queue and history is paginated'
   await page.goto('/activity?view=history');
   const activity = page.locator('app-activity-page');
   await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
-  await activity.getByRole('option', { name: /Terminés/ }).click();
-  await activity.getByRole('button', { name: 'Voir la suite : terminés' }).click();
-  await expect(activity.getByText('Film terminé 25.mkv', { exact: true })).toBeVisible();
-  await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toHaveCount(0);
-  await activity.getByRole('button', { name: 'Page précédente' }).click();
+  await expect(activity.getByRole('tab', { name: /Déjà traité/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(activity).toContainText('6063 fichiers suivis');
+  await activity.getByRole('button', { name: 'Afficher plus de fichiers' }).click();
+  await expect(activity.getByText('Film terminé 50.mkv', { exact: true })).toBeVisible();
   await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -146,40 +193,25 @@ test('viewers do not request administrator-only AI history', async ({ page }) =>
   ).toHaveCount(0);
 });
 
-test('AI history preserves cached data through an outage and recovers automatically', async ({
+test('activity keeps the last results visible through a refresh outage and recovers automatically', async ({
   page,
 }) => {
   let unavailable = false;
   await page.clock.install();
-  await page.route('**/api/v1/tools/ai/assistant/activity', (route) =>
-    unavailable
-      ? route.fulfill({ status: 503, json: {} })
-      : route.fulfill({
-          json: [
-            {
-              requestId: 'ai-1',
-              conversationTitle: 'Analyse du flow',
-              status: 'succeeded',
-              provider: 'ollama',
-              startedAt: now,
-              updatedAt: now,
-              durationMilliseconds: 500,
-              errorCategory: null,
-            },
-          ],
-        }),
+  await page.route('**/api/v1/activity/files**', (route) =>
+    unavailable ? route.fulfill({ status: 503, json: {} }) : route.fallback(),
   );
-  await page.goto('/activity?type=ai');
+  await page.goto('/activity?view=history');
   const activity = page.locator('app-activity-page');
-  await expect(activity.getByText('Analyse du flow', { exact: true })).toBeVisible();
+  await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   unavailable = true;
-  await page.clock.fastForward(15_000);
-  await expect(activity.getByRole('status')).toContainText('Les demandes de l’assistant');
-  await expect(activity.getByText('Analyse du flow', { exact: true })).toBeVisible();
+  await page.clock.fastForward(10_000);
+  await expect(activity.getByRole('status')).toContainText('L’activité n’a pas pu être actualisée');
+  await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   unavailable = false;
-  await page.clock.fastForward(15_000);
+  await page.clock.fastForward(10_000);
   await expect(
-    activity.getByText('Les demandes de l’assistant sont momentanément indisponibles.'),
+    activity.getByText('L’activité n’a pas pu être actualisée.', { exact: false }),
   ).toHaveCount(0);
 });
 
@@ -187,7 +219,7 @@ test('background failures preserve history and recover automatically, with respo
   page,
 }, info) => {
   let unavailable = false;
-  await page.route('**/api/v1/executions?state=succeeded*', (route) =>
+  await page.route('**/api/v1/activity/files**', (route) =>
     unavailable ? route.fulfill({ status: 503, json: {} }) : route.fallback(),
   );
   await page.clock.install();
@@ -196,11 +228,13 @@ test('background failures preserve history and recover automatically, with respo
   await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   unavailable = true;
   await page.clock.fastForward(10_000);
-  await expect(activity.getByRole('status')).toContainText('Actualisation impossible');
+  await expect(activity.getByRole('status')).toContainText('L’activité n’a pas pu être actualisée');
   await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   unavailable = false;
   await page.clock.fastForward(10_000);
-  await expect(activity.getByText('Actualisation impossible', { exact: false })).toHaveCount(0);
+  await expect(
+    activity.getByText('L’activité n’a pas pu être actualisée.', { exact: false }),
+  ).toHaveCount(0);
   for (const theme of ['light', 'dark']) {
     await page.evaluate((value) => (document.documentElement.dataset['theme'] = value), theme);
     await page.evaluate(async () => {

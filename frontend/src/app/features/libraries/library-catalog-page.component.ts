@@ -10,12 +10,15 @@ import { HttpClient } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
+  ElementRef,
   computed,
   effect,
   inject,
   untracked,
   signal,
   viewChildren,
+  viewChild,
 } from '@angular/core';
 
 import { MatButtonModule } from '@angular/material/button';
@@ -51,6 +54,7 @@ import {
 } from '../../shared/ui/data-table.component';
 
 import {
+  ResourceListGroup,
   ResourceListItem,
   ResourceListTag,
   ResourceListToggleEvent,
@@ -92,6 +96,16 @@ import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeli
 import { ExecutionCardComponent } from '../../shared/ui/execution-card.component';
 import { ExecutionResponse } from '../../shared/models/execution';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
+import { FileDownload } from '../../shared/services/file-download';
+import {
+  PageShellContextService,
+  PageShellSearchResult,
+} from '../../core/layout/page-shell-context';
+
+interface LibraryExportFile {
+  readonly format: number;
+  readonly libraries: readonly Pick<LibraryResponse, 'name' | 'isActive'>[];
+}
 
 interface LibraryRecord extends DataTableRow {
   readonly id: string;
@@ -199,9 +213,15 @@ export class LibraryCatalogPageComponent {
 
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
+  private readonly downloads = inject(FileDownload);
+  private readonly libraryImportInput =
+    viewChild<ElementRef<HTMLInputElement>>('libraryImportFile');
 
   private readonly libraries = signal<readonly LibraryRecord[]>([]);
   protected readonly searchQuery = signal('');
+  protected readonly selectedLibraryIds = signal<ReadonlySet<string>>(new Set());
   private readonly libraryParam = toSignal(
     this.route.queryParamMap.pipe(map((params) => params.get('library'))),
     { initialValue: this.route.snapshot.queryParamMap.get('library') },
@@ -1053,7 +1073,9 @@ export class LibraryCatalogPageComponent {
           (library) =>
             library.id === selectedId ||
             library.name.toLocaleLowerCase('fr').includes(query) ||
-            library.nodePaths.toLocaleLowerCase('fr').includes(query),
+            library.nodePaths.toLocaleLowerCase('fr').includes(query) ||
+            library.assignedFlow.toLocaleLowerCase('fr').includes(query) ||
+            library.state.toLocaleLowerCase('fr').includes(query),
         )
       : this.libraries();
     return visible.map((library) => {
@@ -1084,7 +1106,42 @@ export class LibraryCatalogPageComponent {
     this.filteredLibraries().map((library) => this.toListItem(library)),
   );
 
+  protected readonly libraryGroups: readonly ResourceListGroup[] = [
+    { id: 'configuration', label: 'À configurer', tone: 'warning' },
+    { id: 'ready', label: 'Prêtes', tone: 'default' },
+    { id: 'disabled', label: 'Désactivées', tone: 'blue' },
+  ];
+
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans Bibliothèques…',
+        onSearchQueryChange: (query) => this.searchQuery.set(query),
+        searchResults: (query) => this.librarySearchResults(query),
+        actions: [
+          {
+            id: 'create-library',
+            label: 'Ajouter une bibliothèque',
+            icon: 'add',
+            run: () => this.addLibrary(),
+          },
+          {
+            id: 'import-libraries',
+            label: 'Importer',
+            icon: 'upload',
+            visibleWhen: () => !this.hasSelectedLibraries(),
+            run: () => this.libraryImportInput()?.nativeElement.click(),
+          },
+          {
+            id: 'export-libraries',
+            label: 'Exporter',
+            icon: 'outward',
+            visibleWhen: () => this.hasSelectedLibraries(),
+            run: () => void this.exportSelectedLibraries(),
+          },
+        ],
+      }),
+    );
     this.refresh();
     // La fiche est portée par l'URL (?library=<id>) : le menu latéral et le bouton précédent
     // du navigateur ramènent à la liste sans bouton retour dédié.
@@ -1101,6 +1158,164 @@ export class LibraryCatalogPageComponent {
         if (library) this.openLibrary(library);
       });
     });
+  }
+
+  private librarySearchResults(query: string): readonly PageShellSearchResult[] {
+    const normalized = query.trim().toLocaleLowerCase('fr-FR');
+    return this.libraries()
+      .filter(
+        (library) =>
+          !normalized ||
+          [
+            library.name,
+            library.state,
+            library.assignedFlow,
+            library.configuredNodes,
+            library.accessModes,
+            library.nodePaths,
+          ]
+            .join(' ')
+            .toLocaleLowerCase('fr-FR')
+            .includes(normalized),
+      )
+      .slice(0, 8)
+      .map((library) => ({
+        id: `library:${library.id}`,
+        label: library.name,
+        description: `${library.state} · ${library.assignedFlow}`,
+        group: 'Bibliothèques',
+        glyph: '▱',
+        run: () => this.onLibraryOpen({ id: library.id }),
+      }));
+  }
+
+  private hasSelectedLibraries(): boolean {
+    const selected = this.selectedLibraryIds();
+    return this.libraries().some((library) => selected.has(library.id));
+  }
+
+  private async exportSelectedLibraries(): Promise<void> {
+    const selectedIds = new Set(
+      [...this.selectedLibraryIds()].filter((id) =>
+        this.libraries().some((library) => library.id === id),
+      ),
+    );
+    if (!selectedIds.size) return;
+    try {
+      const exportFile = await firstValueFrom(
+        this.http.get<{
+          format: number;
+          exportedAt: string;
+          clusterName: string;
+          libraries: readonly LibraryResponse[];
+        }>('/api/v1/libraries/export'),
+      );
+      const selected = exportFile.libraries.filter((library) => selectedIds.has(library.id));
+      if (!selected.length) {
+        this.notifications.show('Aucune bibliothèque sélectionnée à exporter.');
+        return;
+      }
+      this.downloads.save(
+        new Blob([JSON.stringify({ ...exportFile, libraries: selected }, null, 2)], {
+          type: 'application/json',
+        }),
+        'bibliotheques-selection.json',
+      );
+    } catch {
+      this.notifications.show('Les bibliothèques sélectionnées n’ont pas pu être exportées.');
+    }
+  }
+
+  protected onLibraryImportSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void this.importLibraries(file);
+  }
+
+  private async importLibraries(file: File): Promise<void> {
+    let entries: readonly Pick<LibraryResponse, 'name' | 'isActive'>[];
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        !('format' in parsed) ||
+        parsed.format !== 1 ||
+        !('libraries' in parsed) ||
+        !Array.isArray(parsed.libraries)
+      ) {
+        throw new Error('invalid-file');
+      }
+      const payload = parsed as LibraryExportFile;
+      entries = payload.libraries.filter(
+        (library): library is Pick<LibraryResponse, 'name' | 'isActive'> =>
+          !!library &&
+          typeof library === 'object' &&
+          'name' in library &&
+          typeof library.name === 'string' &&
+          !!library.name.trim(),
+      );
+      if (!entries.length) throw new Error('empty-file');
+    } catch {
+      this.notifications.show(
+        'Import impossible. Sélectionnez un export de bibliothèques au format JSON pris en charge.',
+      );
+      return;
+    }
+
+    let existing: readonly LibraryResponse[];
+    try {
+      existing = await firstValueFrom(this.clusterApi.listLibraries());
+    } catch {
+      this.notifications.show('Impossible de charger les bibliothèques avant l’import.');
+      return;
+    }
+    this.libraries.set(existing.map((library) => this.toRecord(library)));
+
+    const knownNames = new Set(existing.map((library) => library.name.toLocaleLowerCase('fr-FR')));
+    let imported = 0;
+    let skipped = 0;
+    let failed = 0;
+    let activationFailed = 0;
+    for (const entry of entries) {
+      const name = entry.name.trim();
+      const key = name.toLocaleLowerCase('fr-FR');
+      if (knownNames.has(key)) {
+        skipped++;
+        continue;
+      }
+      try {
+        const created = await firstValueFrom(
+          this.http.post<LibraryResponse>('/api/v1/libraries', { name }),
+        );
+        knownNames.add(key);
+        imported++;
+        if (entry.isActive === false) {
+          try {
+            await firstValueFrom(
+              this.http.put<LibraryResponse>(`/api/v1/libraries/${created.id}/activation`, {
+                isActive: false,
+              }),
+            );
+          } catch {
+            activationFailed++;
+          }
+        }
+      } catch (error) {
+        if ((error as { status?: number }).status === 409) skipped++;
+        else failed++;
+      }
+    }
+    this.refresh();
+    const details = [
+      `${imported} bibliothèque(s) importée(s)`,
+      skipped ? `${skipped} déjà présente(s)` : '',
+      failed ? `${failed} en échec` : '',
+      activationFailed ? `${activationFailed} état(s) à vérifier` : '',
+      imported ? 'flows et accès des nœuds à reconfigurer' : '',
+    ].filter(Boolean);
+    this.notifications.show(details.join(' · '));
   }
 
   protected onLibraryOpen(row: DataTableRow): void {
@@ -1125,6 +1340,12 @@ export class LibraryCatalogPageComponent {
       id: library.id,
       name: library.name,
       subtitle: `Créée le ${library.modifiedAt}`,
+      group: !library.isActive
+        ? this.libraryGroups[2]
+        : hasFlow && library.configuredNodeCount > 0
+          ? this.libraryGroups[1]
+          : this.libraryGroups[0],
+      rowData: library,
       tags,
       toggle: {
         checked: library.isActive,

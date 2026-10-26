@@ -2,187 +2,175 @@
 <app-subnav-template>
   <span subnav-info class="activity-count-pill">{{ countText() }}</span>
   <app-subnav
-    #roleNavigation
+    #activityNavigation
     presentation="capsule"
-    panelId="activity-role-panel"
-    label="Rôle de l’activité"
-    [options]="roleTabs"
-    [selected]="roleFilter()"
-    (selectedChange)="setRole($event)"
+    panelId="activity-status-panel"
+    label="État des fichiers"
+    [options]="statusOptions()"
+    [selected]="status()"
+    (selectedChange)="setStatus($event)"
   />
 </app-subnav-template>
 
 <div
-  id="activity-role-panel"
+  id="activity-status-panel"
   role="tabpanel"
-  [attr.aria-labelledby]="roleNavigation.tabId(roleFilter())"
+  [attr.aria-labelledby]="activityNavigation.tabId(status())"
 >
-  @if (kindFilter() !== 'ai') {
-    <app-summary-tiles
-      class="activity-summary"
-      density="compact"
-      label="Traitements du cluster"
-      [tiles]="summary()"
-    />
-  }
-
-  <section class="activity-panel" [attr.aria-label]="activityHeading()">
-    <div class="activity-toolbar">
-      <div class="activity-heading">
-        <div>
-          <h2>{{ activityHeading() }}</h2>
-          <p>{{ activitySubheading() }}</p>
-        </div>
-        <app-search-field
-          class="activity-search"
-          variant="bar"
-          label="Rechercher dans les activités chargées"
-          [value]="search()"
-          (valueChange)="search.set($event)"
-        />
-      </div>
-      @if (roleFilter() === 'diagnose') {
-        <mat-chip-listbox
-          aria-label="Origine des éléments à diagnostiquer"
-          [value]="kindFilter()"
-          (change)="setKind($event.value ?? 'all')"
-        >
-          <mat-chip-option value="all">Tout</mat-chip-option>
-          <mat-chip-option value="execution">Traitements</mat-chip-option>
-          @if (auth.isAdmin()) {
-            <mat-chip-option value="ai">Assistant IA</mat-chip-option>
-          }
-        </mat-chip-listbox>
-      }
-      <mat-chip-listbox
-        [attr.aria-label]="
-          roleFilter() === 'operate' ? 'État des opérations' : 'Résultat à examiner'
-        "
-        [value]="groupFilter()"
-        (change)="setGroup($event.value ?? 'all')"
-      >
-        <mat-chip-option value="all">
-          {{ roleFilter() === 'operate' ? 'Toutes les opérations' : 'Tous les résultats' }}
-        </mat-chip-option>
-        @for (group of visibleGroups(); track group.id) {
-          <mat-chip-option [value]="group.id"
-            >{{ group.label }} ·
-            {{
-              (kindFilter() === 'ai' ? aiState().loaded : trackingState().data !== null)
-                ? counts()[group.id]
-                : '—'
-            }}</mat-chip-option
-          >
+  <section class="activity-panel" [attr.aria-label]="currentStatusLabel()">
+    @if (filtersOpen()) {
+      <div class="activity-filter-panel">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Bibliothèque</mat-label>
+          <mat-select [value]="libraryFilter() ?? ''" (selectionChange)="setLibrary($event.value)">
+            <mat-option value="">Toutes les bibliothèques</mat-option>
+            @for (library of libraries(); track library.id) {
+              <mat-option [value]="library.id">{{ library.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Flow</mat-label>
+          <mat-select [value]="flowFilter() ?? ''" (selectionChange)="setFlow($event.value)">
+            <mat-option value="">Tous les flows</mat-option>
+            @for (flow of flowOptions(); track flow) {
+              <mat-option [value]="flow">{{ flow }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Nœud</mat-label>
+          <mat-select [value]="nodeFilter() ?? ''" (selectionChange)="setNode($event.value)">
+            <mat-option value="">Tous les nœuds</mat-option>
+            @for (node of nodes(); track node.id) {
+              <mat-option [value]="node.id">{{ node.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        @if (libraryFilter() || flowFilter() || nodeFilter()) {
+          <button matButton="text" type="button" (click)="clearFilters()">
+            Effacer les filtres
+          </button>
         }
-      </mat-chip-listbox>
-      @if (pageOffset() > 0) {
-        <div class="activity-pagination" aria-label="Pagination des activités">
-          <button matButton="text" type="button" (click)="previousPage()">Page précédente</button>
-          <span>Page {{ pageNumber() }}</span>
-        </div>
-      }
-    </div>
+      </div>
+    }
 
     @if (feedback()) {
       <p class="activity-feedback" role="status">{{ feedback() }}</p>
     }
-    @if (roleFilter() === 'operate' && selectedActionItems().length) {
+    @if (pageState().status === 'error') {
+      <p class="activity-feedback" role="status">
+        L’activité n’a pas pu être actualisée. Les données affichées peuvent être anciennes.
+      </p>
+    }
+
+    @if (selectedCancelableFiles().length) {
       <div
         class="activity-selection"
         role="toolbar"
-        aria-label="Actions sur les exécutions sélectionnées"
+        aria-label="Actions sur les traitements actifs"
       >
-        <span aria-live="polite">{{ selectedActionItems().length }} sélectionnée(s)</span>
-        @if (selectedCancelableItems().length) {
-          <button matButton="outlined" type="button" [disabled]="busy()" (click)="runBulkCancel()">
-            Annuler {{ selectedCancelableItems().length }}
-          </button>
-        }
+        <span aria-live="polite">{{ selectedCancelableFiles().length }} sélectionnée(s)</span>
+        <button
+          matButton="outlined"
+          type="button"
+          [disabled]="actionBusy()"
+          (click)="runBulkCancel()"
+        >
+          Annuler la sélection
+        </button>
         <button matButton="text" type="button" (click)="clearActionSelection()">
           Tout désélectionner
         </button>
       </div>
     }
 
-    @for (section of sections(); track section.id) {
-      <h3 class="section-title">
-        {{ section.section }} <span>{{ section.total }}</span>
-      </h3>
+    @if (pageState().status === 'loading' && !pageState().data) {
+      <div class="empty-state" role="status"><p>Chargement des fichiers…</p></div>
+    } @else if (!files().length) {
+      <div class="empty-state">
+        <h2>{{ pageState().status === 'error' ? 'Données indisponibles' : 'Aucun fichier' }}</h2>
+        <p>
+          @if (pageState().status === 'error') {
+            La liste sera actualisée dès que le serveur répond.
+          } @else {
+            Aucun fichier ne correspond à cet état et à ces filtres.
+          }
+        </p>
+      </div>
+    } @else {
       <ul class="item-stack">
-        @for (item of section.items; track item.key) {
-          <li class="item-row" [class.is-selected]="selected()?.key === item.key">
-            @if (roleFilter() === 'operate' && item.execution && canCancelItem(item)) {
+        @for (file of files(); track file.id) {
+          <li class="item-row" [class.is-selected]="selectedFile()?.id === file.id">
+            @if (status() === 'active' && file.executionId && file.executionState === 'running') {
               <mat-checkbox
                 class="item-select"
-                [checked]="selectedActionIds().has(item.execution.id)"
-                [disabled]="!canCancelItem(item)"
-                [aria-label]="'Sélectionner ' + item.title"
-                (change)="toggleActionSelection(item, $event.checked)"
+                [checked]="selectedActionIds().has(file.executionId)"
+                [aria-label]="'Sélectionner ' + fileName(file.relativePath)"
+                (click)="$event.stopPropagation()"
+                (change)="toggleActionSelection(file, $event.checked)"
               />
             }
-            <button type="button" class="item-main" (click)="open(item)">
-              <span class="item-icon" [class.is-ai]="item.kind === 'ai'" aria-hidden="true">
-                @if (item.kind === 'ai') {
-                  ✦
-                } @else {
-                  <app-icon name="play" />
-                }
+            <button type="button" class="item-main" (click)="open(file)">
+              <span
+                class="item-icon"
+                [class.is-disabled]="file.status === 'disabled'"
+                aria-hidden="true"
+              >
+                <app-icon name="play" />
               </span>
               <span class="item-text">
-                <span class="item-title">{{ item.title }}</span>
-                <span class="item-subtitle">{{ item.subtitle || '—' }}</span>
-                @if (item.progress !== null) {
+                <span class="item-title">{{ fileName(file.relativePath) }}</span>
+                <span class="item-subtitle">
+                  {{ file.library }} ·
+                  {{ file.flow ? file.flow + ' · v' + file.flowVersion : 'Aucun flow attribué' }}
+                  @if (file.node) {
+                    · {{ file.node }}
+                  }
+                  @if (file.detail && status() !== 'untreated') {
+                    · {{ file.detail }}
+                  }
+                </span>
+                @if (file.status === 'active' && file.progress !== null) {
                   <mat-progress-bar
                     mode="determinate"
-                    [value]="item.progress"
-                    [attr.aria-label]="'Progression de ' + item.title"
+                    [value]="file.progress"
+                    [attr.aria-label]="'Progression de ' + fileName(file.relativePath)"
                   />
                 }
               </span>
               <span class="item-meta">
-                <app-status-badge [label]="item.stateLabel" [tone]="item.tone" />
-                <span class="item-time"
-                  >{{ item.progress !== null ? item.progress + ' % · ' : '' }}{{ item.time }}</span
-                >
+                <app-status-badge
+                  [label]="statusLabel(file.status)"
+                  [tone]="statusTone(file.status)"
+                />
+                <span class="item-time">
+                  @if (file.status === 'active' && file.progress !== null) {
+                    {{ file.progress }} % ·
+                  }
+                  {{ rowTime(file) }}
+                </span>
               </span>
             </button>
           </li>
         }
       </ul>
-      @if (section.more && !search().trim()) {
-        <button matButton="text" type="button" class="more-button" (click)="nextPage(section.id)">
-          Voir la suite : {{ section.label.toLocaleLowerCase('fr') }}
+      @if (hasMore()) {
+        <button
+          matButton="text"
+          type="button"
+          class="more-button"
+          [disabled]="loadingMore()"
+          (click)="loadMore()"
+        >
+          {{ loadingMore() ? 'Chargement…' : 'Afficher plus de fichiers' }}
         </button>
       }
-    } @empty {
-      <div class="empty-state">
-        @if (emptyStateReady()) {
-          <h3>{{ emptyStateTitle() }}</h3>
-          <p>{{ emptyStateDescription() }}</p>
-        } @else {
-          <h3>
-            {{
-              trackingState().status === 'loading' ||
-              (roleFilter() === 'diagnose' &&
-                kindFilter() !== 'execution' &&
-                auth.isAdmin() &&
-                !aiState().loaded &&
-                !aiState().error)
-                ? 'Chargement du journal'
-                : 'Données indisponibles'
-            }}
-          </h3>
-          <p>
-            Les dernières données sont conservées. La mise à jour automatique reprendra dès que le
-            serveur répond.
-          </p>
-        }
-      </div>
     }
   </section>
 
   <app-detail-drawer
-    [opened]="selected() !== null"
+    [opened]="selectedFile() !== null"
     [modal]="true"
     [title]="drawerTitle()"
     [description]="drawerDescription()"
@@ -193,125 +181,105 @@
 </div>
 
 <ng-template #detailContent>
-  @if (selectedExecution(); as exec) {
-    <div class="detail-comparison" aria-label="Comparaison média et worker">
-      <div class="comparison-card">
-        <span class="comparison-label">Taille source</span>
-        <strong>{{ beforeSize() }}</strong>
-      </div>
-      <div class="comparison-arrow" aria-hidden="true"><app-icon name="forward" /></div>
-      <div class="comparison-card">
-        <span class="comparison-label">Taille finale</span>
-        <strong>{{ afterSize() }}</strong>
-      </div>
-      <div class="comparison-card">
-        <span class="comparison-label">Worker et progression</span>
-        <strong
-          >{{ exec.node ?? '—' }} ·
-          {{ exec.progress === null ? '—' : exec.progress + ' %' }}</strong
-        >
-      </div>
-    </div>
-    <mat-tab-group
-      class="detail-tabs"
-      aria-label="Informations de l’exécution"
-      [selectedIndex]="selectedDetailTab()"
-      (selectedIndexChange)="selectedDetailTab.set($event)"
-    >
-      <mat-tab label="Synthèse">
-        <div class="detail-tab"><app-detail-field-list [fields]="executionFields()" /></div>
-      </mat-tab>
-      <mat-tab label="Pipeline">
-        <div class="detail-tab">
-          <app-execution-pipeline-logs
-            [executionId]="exec.id"
-            [steps]="pipelineState().steps"
-            [feedback]="pipelineState().message"
-          />
+  @if (selectedFile()) {
+    <app-detail-field-list [fields]="fileFields()" />
+    @if (executionLoading()) {
+      <p class="detail-empty" role="status">Chargement des options avancées…</p>
+    } @else if (selectedExecution(); as execution) {
+      <div class="detail-comparison" aria-label="Comparaison média et worker">
+        <div class="comparison-card">
+          <span class="comparison-label">Taille source</span>
+          <strong>{{ metadataSize(execution.beforeMetadata) }}</strong>
         </div>
-      </mat-tab>
-      <mat-tab label="Événements">
-        <div class="detail-tab">
-          <h3>Historique de l’exécution</h3>
-          @if (eventState().message) {
-            <p role="status">{{ eventState().message }}</p>
-          }
-          <app-data-table
-            [columns]="eventColumns"
-            [rows]="eventState().rows"
-            emptyMessage="Aucun événement enregistré."
-          />
+        <div class="comparison-arrow" aria-hidden="true"><app-icon name="forward" /></div>
+        <div class="comparison-card">
+          <span class="comparison-label">Taille finale</span>
+          <strong>{{ metadataSize(execution.afterMetadata) }}</strong>
         </div>
-      </mat-tab>
-      <mat-tab label="Résultats">
-        <div class="detail-tab">
-          @if (artifactsState().message) {
-            <p role="status">{{ artifactsState().message }}</p>
-          }
-          @if (artifactsState().rows.length) {
-            <h3>Fichiers produits</h3>
-            <app-data-table
-              [columns]="artifactColumns"
-              [rows]="artifactsState().rows"
-              [rowActions]="artifactActions"
-              (rowAction)="downloadArtifact($event.row)"
-              emptyMessage="Aucun fichier produit."
+        <div class="comparison-card">
+          <span class="comparison-label">Worker et progression</span>
+          <strong
+            >{{ execution.node ?? '—' }} ·
+            {{ execution.progress === null ? '—' : execution.progress + ' %' }}</strong
+          >
+        </div>
+      </div>
+      <mat-tab-group
+        class="detail-tabs"
+        aria-label="Options avancées du fichier"
+        [selectedIndex]="selectedDetailTab()"
+        (selectedIndexChange)="selectedDetailTab.set($event)"
+      >
+        <mat-tab label="Détails">
+          <div class="detail-tab"><app-detail-field-list [fields]="executionFields()" /></div>
+        </mat-tab>
+        <mat-tab label="Pipeline">
+          <div class="detail-tab">
+            <app-execution-pipeline-logs
+              [executionId]="execution.id"
+              [steps]="pipelineState().steps"
+              [feedback]="pipelineState().message"
             />
-          }
-          @if (videoEncodingRows().length) {
-            <h3>Configuration vidéo retenue</h3>
+          </div>
+        </mat-tab>
+        <mat-tab label="Événements">
+          <div class="detail-tab">
+            <h3>Historique de l’exécution</h3>
+            @if (eventState().message) {
+              <p role="status">{{ eventState().message }}</p>
+            }
             <app-data-table
-              [columns]="videoEncodingColumns"
-              [rows]="videoEncodingRows()"
-              emptyMessage="Aucun encodeur vidéo résolu pour cette exécution."
+              [columns]="eventColumns"
+              [rows]="eventState().rows"
+              emptyMessage="Aucun événement enregistré."
             />
-          }
-          @if (
-            !artifactsState().rows.length &&
-            !artifactsState().message &&
-            !videoEncodingRows().length
-          ) {
-            <p class="detail-empty">Aucun fichier ou réglage vidéo enregistré.</p>
-          }
-        </div>
-      </mat-tab>
-    </mat-tab-group>
-  } @else if (selectedAi(); as ai) {
-    <div class="detail-tab">
-      <app-detail-field-list [fields]="aiFields()" />
-      @if (ai.progress) {
-        <p class="detail-empty">
-          {{ ai.progress }}{{ ai.progressDetail ? ' · ' + ai.progressDetail : '' }}
-        </p>
-      }
-    </div>
+          </div>
+        </mat-tab>
+        <mat-tab label="Résultats">
+          <div class="detail-tab">
+            @if (artifactsState().message) {
+              <p role="status">{{ artifactsState().message }}</p>
+            }
+            @if (artifactsState().rows.length) {
+              <h3>Fichiers produits</h3>
+              <app-data-table
+                [columns]="artifactColumns"
+                [rows]="artifactsState().rows"
+                [rowActions]="artifactActions"
+                (rowAction)="downloadArtifact($event.row)"
+                emptyMessage="Aucun fichier produit."
+              />
+            }
+            @if (videoEncodingRows().length) {
+              <h3>Configuration vidéo retenue</h3>
+              <app-data-table
+                [columns]="videoEncodingColumns"
+                [rows]="videoEncodingRows()"
+                emptyMessage="Aucun encodeur vidéo résolu pour cette exécution."
+              />
+            }
+            @if (
+              !artifactsState().rows.length &&
+              !artifactsState().message &&
+              !videoEncodingRows().length
+            ) {
+              <p class="detail-empty">Aucun fichier ou réglage vidéo enregistré.</p>
+            }
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    }
   }
 </ng-template>
 
 <ng-template #detailFooter>
-  @if (selectedAi(); as ai) {
-    @if (ai.conversationId) {
-      <a
-        matButton="tonal"
-        routerLink="/ai/assistant"
-        [queryParams]="{ conversation: ai.conversationId }"
-      >
-        Ouvrir la conversation
-      </a>
-    }
-  }
   @if (canRetry()) {
-    <button
-      matButton="filled"
-      type="button"
-      [disabled]="busy()"
-      (click)="retry(selectedExecution()!.id, selectedExecution()!.media)"
-    >
+    <button matButton="filled" type="button" [disabled]="actionBusy()" (click)="retrySelected()">
       Créer une nouvelle tentative
     </button>
   }
   @if (canCancel()) {
-    <button matButton="outlined" type="button" [disabled]="busy()" (click)="cancelSelected()">
+    <button matButton="outlined" type="button" [disabled]="actionBusy()" (click)="cancelSelected()">
       Annuler l’exécution
     </button>
   }

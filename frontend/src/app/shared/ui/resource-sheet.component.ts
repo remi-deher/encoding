@@ -80,7 +80,11 @@ export interface ResourceSheetNotice {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, StatusBadgeComponent],
   template: `
-    <div class="sheet-stack" [class.sheet-stack_fill]="fill()">
+    <div
+      class="sheet-stack"
+      [class.sheet-stack_fill]="fill()"
+      [class.sheet-stack_overview]="presentation() === 'overview'"
+    >
       @for (notice of notices(); track notice.title) {
         <div class="sheet-notice" [class]="'sheet-notice tone-' + notice.tone" role="status">
           <strong>{{ notice.title }}</strong>
@@ -118,7 +122,10 @@ export interface ResourceSheetNotice {
           </div>
         </header>
         @for (section of sections(); track section.id) {
-          <section class="sheet-section" [attr.aria-labelledby]="'sheet-' + section.id">
+          <section
+            [class]="'sheet-section sheet-section-' + section.id"
+            [attr.aria-labelledby]="'sheet-' + section.id"
+          >
             <h3 [id]="'sheet-' + section.id">
               <span>{{ section.title }}</span>
               @if (section.caption) {
@@ -141,7 +148,10 @@ export interface ResourceSheetNotice {
                       <div class="sheet-item-main">
                         <strong>{{ item.label }}</strong>
                         @for (badge of item.badges ?? []; track badge.label) {
-                          <app-status-badge [label]="badge.label" [tone]="badge.tone ?? 'neutral'" />
+                          <app-status-badge
+                            [label]="badge.label"
+                            [tone]="badge.tone ?? 'neutral'"
+                          />
                         }
                       </div>
                       @if (item.action; as action) {
@@ -216,6 +226,8 @@ export interface ResourceSheetNotice {
 export class ResourceSheetComponent {
   /** Étire la pile dans un panneau dont la zone disponible est déjà définie. */
   readonly fill = input(false);
+  /** Présentation en cartes d’aperçu, réservée aux fiches qui résument une ressource sur la page. */
+  readonly presentation = input<'standard' | 'overview'>('standard');
   readonly ariaLabel = input.required<string>();
   readonly title = input.required<string>();
   readonly subtitle = input<string>('');

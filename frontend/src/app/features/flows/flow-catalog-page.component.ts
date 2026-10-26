@@ -14,6 +14,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   inject,
   signal,
@@ -48,6 +49,10 @@ import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
 import { FlowPreviewComponent } from '../../shared/ui/flow-preview/flow-preview';
 import { firstValueFrom } from 'rxjs';
 import { FileImportComponent } from '../../shared/ui/file-import.component';
+import {
+  PageShellContextService,
+  PageShellSearchResult,
+} from '../../core/layout/page-shell-context';
 
 interface FlowRecord extends DataTableRow {
   readonly id: string;
@@ -93,6 +98,8 @@ const MEDIA_TYPE_TONES = {
   styleUrl: './flow-catalog-page.component.scss',
 })
 export class FlowCatalogPageComponent {
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   protected readonly auth = inject(AuthService);
   protected readonly deletingFlow = signal<string | null>(null);
   private readonly refreshCatalog = new Subject<void>();
@@ -678,6 +685,47 @@ export class FlowCatalogPageComponent {
       rowData: flow,
     })),
   );
+
+  constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans les flows…',
+        onSearchQueryChange: (query) => this.searchQuery.set(query),
+        searchResults: (query) => this.flowSearchResults(query),
+        actions: [
+          {
+            id: 'create-flow',
+            label: 'Créer un flow',
+            icon: 'add',
+            run: () => void this.openFlowCreation(),
+          },
+        ],
+      }),
+    );
+  }
+
+  private flowSearchResults(query: string): readonly PageShellSearchResult[] {
+    const normalized = query.trim().toLocaleLowerCase('fr-FR');
+    return this.records()
+      .filter(
+        (flow) =>
+          (!this.typeFilter() || flow.category === this.typeFilter()) &&
+          (!normalized ||
+            [flow.name, flow.mediaType, flow.summary, flow.status, flow.state]
+              .join(' ')
+              .toLocaleLowerCase('fr-FR')
+              .includes(normalized)),
+      )
+      .slice(0, 8)
+      .map((flow) => ({
+        id: `flow:${flow.id}`,
+        label: flow.name,
+        description: `${flow.mediaType} · ${flow.status}`,
+        group: 'Flows',
+        glyph: '▶',
+        run: () => this.onFlowOpen(flow.id),
+      }));
+  }
 
   protected onFlowOpen(row: DataTableRow | string): void {
     this.detailTab.set(0);
