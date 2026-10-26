@@ -1,3 +1,10 @@
+.metric-card-link {
+  display: block;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
 .metric-card {
   height: 100%;
   border: 1px solid var(--border-subtle);
@@ -14,6 +21,28 @@
 .metric-card:hover {
   border-color: var(--border-strong);
   background: var(--surface-container-low);
+}
+
+.metric-card_actionable {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.metric-card-link:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 3px;
+}
+
+.metric-card_stale {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 8px,
+      var(--surface-container-high) 8px,
+      var(--surface-container-high) 10px
+    ),
+    var(--surface);
 }
 
 .metric-card mat-card-content {
@@ -42,6 +71,7 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
   line-height: 1.08;
+  overflow-wrap: anywhere;
 }
 
 .metric-detail {

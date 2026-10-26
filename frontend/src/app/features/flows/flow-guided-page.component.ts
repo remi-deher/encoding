@@ -2,16 +2,15 @@ import { ChangeDetectionStrategy, Component, inject, signal, viewChild } from '@
 import { ActivatedRoute, Router } from '@angular/router';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { MatButtonModule } from '@angular/material/button';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { FlowValidation } from '../../shared/services/flow-validation';
 import { NotificationService } from '../../shared/services/notification.service';
 
 @Component({
   selector: 'app-flow-guided-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RecordFormComponent, PageHeaderComponent, MatButtonModule],
+  imports: [RecordFormComponent, MatButtonModule],
   template: `
-    <app-page-header [title]="definition.title" [description]="definition.description" />
+    <h1 class="visually-hidden">{{ definition.title }}</h1>
     @if (form(); as form) {
       <app-record-form
         [data]="form"

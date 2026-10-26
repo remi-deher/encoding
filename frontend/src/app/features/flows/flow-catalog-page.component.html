@@ -1,5 +1,16 @@
-<app-management-catalog-template
+<app-resource-catalog-template
   [title]="title()"
+  [items]="catalogueItems()"
+  [rowActions]="rowActions"
+  [selectionActions]="selectionActions"
+  [selectable]="auth.isAdmin()"
+  [disabled]="selectingFlows()"
+  [(selectedIds)]="selectedFlowIds"
+  openLabel="Consulter"
+  selectionUnit="flow(s)"
+  listEmptyMessage="Aucun flow ne correspond à votre recherche ou au type sélectionné."
+  [showResourceIcon]="false"
+  resourceIcon="flow"
   [detailOpen]="selectedFlow() !== null"
   [actionOpen]="actionOpen()"
   [actionTitle]="actionForm().title"
@@ -21,6 +32,9 @@
   [catalogMessage]="
     catalogState() === 'loading' ? 'Chargement des flows…' : 'Impossible de charger les flows.'
   "
+  (open)="onFlowOpen($event)"
+  (action)="onRowAction($event)"
+  (selectionAction)="onSelectionAction($event)"
 >
   <ng-template #catalogueToolbarActions>
     <app-file-import
@@ -32,129 +46,26 @@
     <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
   </ng-template>
 
-  <div catalogue-summary class="flow-types" role="group" aria-label="Filtrer par type de média">
-    @if (totalCount() > 0) {
-      @for (type of typeTiles(); track type.value) {
-        <button
-          type="button"
-          class="flow-type"
-          [attr.data-media]="type.value"
-          [attr.aria-pressed]="typeFilter() === type.value"
-          [disabled]="type.count === 0"
-          (click)="toggleType(type.value)"
-        >
-          <span class="flow-type-icon"><app-icon [name]="type.icon" /></span>
-          <span class="flow-type-label">{{ type.label }}</span>
-          <span class="flow-type-count">{{ type.count }}</span>
-        </button>
-      }
-    }
-  </div>
-
-  <div catalogue-table class="flow-groups">
-    @if (selectedFlowRows().length) {
-      <div class="flow-selection" role="toolbar" aria-label="Actions sur les flows sélectionnés">
-        <span aria-live="polite">{{ selectedFlowRows().length }} flow(s) sélectionné(s)</span>
-        @if (auth.isAdmin() && selectedDraftCount()) {
+  <ng-template #catalogueSummary>
+    <div class="flow-types" role="group" aria-label="Filtrer par type de média">
+      @if (totalCount() > 0) {
+        @for (type of typeTiles(); track type.value) {
           <button
-            matButton="outlined"
             type="button"
-            [disabled]="selectingFlows()"
-            (click)="publishSelected()"
+            class="flow-type"
+            [attr.data-media]="type.value"
+            [attr.aria-pressed]="typeFilter() === type.value"
+            [disabled]="type.count === 0"
+            (click)="toggleType(type.value)"
           >
-            Publier {{ selectedDraftCount() }} brouillon(s)
-          </button>
-        }
-        @if (auth.isAdmin()) {
-          <button
-            matButton="outlined"
-            type="button"
-            [disabled]="selectingFlows()"
-            (click)="deleteSelected()"
-          >
-            Supprimer la sélection
-          </button>
-        }
-        <button matButton="text" type="button" (click)="clearFlowSelection()">
-          Tout désélectionner
-        </button>
-      </div>
-    }
-    @for (group of groups(); track group.value) {
-      <section class="flow-group" [attr.aria-label]="group.label">
-        <header class="flow-group-head">
-          <span class="flow-group-icon" [attr.data-media]="group.value">
-            <app-icon [name]="group.icon" />
-          </span>
-          <h2>{{ group.label }}</h2>
-          <span class="flow-group-count"
-            >{{ group.rows.length }} {{ group.rows.length === 1 ? 'flow' : 'flows' }}</span
-          >
-        </header>
-        <ul class="flow-list">
-          @for (row of group.rows; track row.id) {
-            <li class="flow-row">
-              @if (auth.isAdmin()) {
-                <mat-checkbox
-                  [checked]="selectedFlowIds().has(row.id)"
-                  [aria-label]="'Sélectionner le flow ' + row.name"
-                  (change)="toggleFlowSelection(row.id, $event.checked)"
-                />
-              }
-              <button type="button" class="flow-main" (click)="onFlowOpen(row)">
-                <span class="flow-name">{{ row.name }}</span>
-                <span class="flow-meta">{{ row.steps }}</span>
-              </button>
-              <div class="flow-badges">
-                <app-status-badge
-                  [label]="row.state === 'Brouillon' ? 'Brouillon' : 'Publié · ' + row.version"
-                  [tone]="row.state === 'Brouillon' ? 'warning' : 'success'"
-                />
-                <app-status-badge
-                  [label]="'JSON : ' + row.backup.toLowerCase()"
-                  [tone]="row.backup === 'En échec' ? 'danger' : 'neutral'"
-                />
-              </div>
-              <time class="flow-date">{{ row.modifiedAt }}</time>
-              <div class="flow-actions">
-                <button matButton="text" type="button" (click)="onFlowOpen(row)">Consulter</button>
-                <button
-                  matIconButton
-                  type="button"
-                  [matMenuTriggerFor]="rowMenu"
-                  [matMenuTriggerData]="{ row: row }"
-                  [attr.aria-label]="'Autres actions pour ' + row.name"
-                >
-                  <span aria-hidden="true">⋮</span>
-                </button>
-              </div>
-            </li>
-          }
-        </ul>
-      </section>
-    } @empty {
-      <p class="catalog-state">
-        Aucun flow ne correspond à votre recherche ou au type sélectionné.
-      </p>
-    }
-  </div>
-
-  <mat-menu #rowMenu="matMenu">
-    <ng-template matMenuContent let-row="row">
-      @for (action of rowActions; track action.id) {
-        @if (!action.visibleWhen || action.visibleWhen(row)) {
-          <button
-            mat-menu-item
-            type="button"
-            [class.flow-menu-danger]="action.tone === 'danger'"
-            (click)="onRowAction({ actionId: action.id, row: row })"
-          >
-            {{ action.label }}
+            <span class="flow-type-icon"><app-icon [name]="type.icon" /></span>
+            <span class="flow-type-label">{{ type.label }}</span>
+            <span class="flow-type-count">{{ type.count }}</span>
           </button>
         }
       }
-    </ng-template>
-  </mat-menu>
+    </div>
+  </ng-template>
 
   <ng-template #detailContent catalogue-detail>
     @if (selectedFlow(); as flow) {
@@ -276,4 +187,4 @@
       <app-flow-preview [flow]="flow" [components]="sourcePreviewComponents()" mode="flow" />
     }
   </ng-template>
-</app-management-catalog-template>
+</app-resource-catalog-template>

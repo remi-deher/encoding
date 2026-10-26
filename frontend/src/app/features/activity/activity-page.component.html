@@ -1,11 +1,13 @@
-<app-page-header
-  title="Activité"
-  description="Suivez les traitements en cours et retrouvez leur historique."
-  [showSystemActions]="true"
+<h1 class="visually-hidden">Activité</h1>
+<app-subnav
+  label="Rôle de l’activité"
+  [options]="roleTabs"
+  [selected]="roleFilter()"
+  (selectedChange)="setRole($event)"
 >
-  <span page-metadata class="activity-count-pill">{{ countText() }}</span>
-  <button page-actions matButton="outlined" type="button" (click)="refresh()">Actualiser</button>
-</app-page-header>
+  <span subnav-actions class="activity-count-pill">{{ countText() }}</span>
+  <button subnav-actions matButton="outlined" type="button" (click)="refresh()">Actualiser</button>
+</app-subnav>
 
 @if (kindFilter() !== 'ai') {
   <app-summary-tiles
@@ -16,12 +18,12 @@
   />
 }
 
-<section class="activity-panel" aria-label="Activité">
+<section class="activity-panel" [attr.aria-label]="activityHeading()">
   <div class="activity-toolbar">
     <div class="activity-heading">
       <div>
-        <h2>Journal des activités</h2>
-        <p>Traitements, résultats et demandes de l’assistant.</p>
+        <h2>{{ activityHeading() }}</h2>
+        <p>{{ activitySubheading() }}</p>
       </div>
       <app-search-field
         class="activity-search"
@@ -31,24 +33,28 @@
         (valueChange)="search.set($event)"
       />
     </div>
+    @if (roleFilter() === 'diagnose') {
+      <mat-chip-listbox
+        aria-label="Origine des éléments à diagnostiquer"
+        [value]="kindFilter()"
+        (change)="setKind($event.value ?? 'all')"
+      >
+        <mat-chip-option value="all">Tout</mat-chip-option>
+        <mat-chip-option value="execution">Traitements</mat-chip-option>
+        @if (auth.isAdmin()) {
+          <mat-chip-option value="ai">Assistant IA</mat-chip-option>
+        }
+      </mat-chip-listbox>
+    }
     <mat-chip-listbox
-      aria-label="Type d’activité"
-      [value]="kindFilter()"
-      (change)="setKind($event.value ?? 'all')"
-    >
-      <mat-chip-option value="all">Tout</mat-chip-option>
-      <mat-chip-option value="execution">Traitements</mat-chip-option>
-      @if (auth.isAdmin()) {
-        <mat-chip-option value="ai">Assistant IA</mat-chip-option>
-      }
-    </mat-chip-listbox>
-    <mat-chip-listbox
-      aria-label="État des activités"
+      [attr.aria-label]="roleFilter() === 'operate' ? 'État des opérations' : 'Résultat à examiner'"
       [value]="groupFilter()"
       (change)="setGroup($event.value ?? 'all')"
     >
-      <mat-chip-option value="all">Tous les états</mat-chip-option>
-      @for (group of groups; track group.id) {
+      <mat-chip-option value="all">
+        {{ roleFilter() === 'operate' ? 'Toutes les opérations' : 'Tous les résultats' }}
+      </mat-chip-option>
+      @for (group of visibleGroups(); track group.id) {
         <mat-chip-option [value]="group.id"
           >{{ group.label }} ·
           {{
@@ -70,7 +76,7 @@
   @if (feedback()) {
     <p class="activity-feedback" role="status">{{ feedback() }}</p>
   }
-  @if (selectedActionItems().length) {
+  @if (roleFilter() === 'operate' && selectedActionItems().length) {
     <div
       class="activity-selection"
       role="toolbar"
@@ -78,13 +84,8 @@
     >
       <span aria-live="polite">{{ selectedActionItems().length }} sélectionnée(s)</span>
       @if (selectedCancelableItems().length) {
-        <button matButton="outlined" type="button" [disabled]="busy()" (click)="runBulk('cancel')">
+        <button matButton="outlined" type="button" [disabled]="busy()" (click)="runBulkCancel()">
           Annuler {{ selectedCancelableItems().length }}
-        </button>
-      }
-      @if (selectedRetryItems().length) {
-        <button matButton="outlined" type="button" [disabled]="busy()" (click)="runBulk('retry')">
-          Relancer {{ selectedRetryItems().length }}
         </button>
       }
       <button matButton="text" type="button" (click)="clearActionSelection()">
@@ -100,11 +101,11 @@
     <ul class="item-stack">
       @for (item of section.items; track item.key) {
         <li class="item-row" [class.is-selected]="selected()?.key === item.key">
-          @if (item.execution && (canRetryItem(item) || canCancelItem(item))) {
+          @if (roleFilter() === 'operate' && item.execution && canCancelItem(item)) {
             <mat-checkbox
               class="item-select"
               [checked]="selectedActionIds().has(item.execution.id)"
-              [disabled]="!canRetryItem(item) && !canCancelItem(item)"
+              [disabled]="!canCancelItem(item)"
               [aria-label]="'Sélectionner ' + item.title"
               (change)="toggleActionSelection(item, $event.checked)"
             />
@@ -135,17 +136,6 @@
               >
             </span>
           </button>
-          @if (canRetryItem(item)) {
-            <button
-              matButton="tonal"
-              type="button"
-              class="item-action"
-              [disabled]="busy()"
-              (click)="retry(item.execution!.id, item.execution!.media)"
-            >
-              Relancer
-            </button>
-          }
         </li>
       }
     </ul>
@@ -156,17 +146,15 @@
     }
   } @empty {
     <div class="empty-state">
-      @if (
-        (kindFilter() === 'ai' || trackingState().status === 'ready') &&
-        (kindFilter() === 'execution' || (aiState().loaded && !aiState().error))
-      ) {
-        <h3>Aucune activité</h3>
-        <p>Aucun élément ne correspond à ces filtres.</p>
+      @if (emptyStateReady()) {
+        <h3>{{ emptyStateTitle() }}</h3>
+        <p>{{ emptyStateDescription() }}</p>
       } @else {
         <h3>
           {{
             trackingState().status === 'loading' ||
-            (kindFilter() !== 'execution' &&
+            (roleFilter() === 'diagnose' &&
+              kindFilter() !== 'execution' &&
               auth.isAdmin() &&
               !aiState().loaded &&
               !aiState().error)
@@ -174,7 +162,10 @@
               : 'Données indisponibles'
           }}
         </h3>
-        <p>Le journal sera actualisé automatiquement. Vous pouvez aussi réessayer.</p>
+        <p>
+          Les dernières données sont conservées. L’actualisation automatique ou manuelle peut
+          rétablir le chargement.
+        </p>
       }
     </div>
   }
@@ -305,7 +296,7 @@
       [disabled]="busy()"
       (click)="retry(selectedExecution()!.id, selectedExecution()!.media)"
     >
-      Relancer
+      Créer une nouvelle tentative
     </button>
   }
   @if (canCancel()) {

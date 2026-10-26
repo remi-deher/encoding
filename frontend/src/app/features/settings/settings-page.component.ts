@@ -8,9 +8,8 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
-import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
+import { CategoryTabOption } from '../../shared/ui/category-tabs.component';
+import { PlatformAdminTemplateComponent } from '../../shared/templates/platform-admin-template.component';
 import { ConfigurationSectionComponent } from '../../shared/ui/configuration-section.component';
 import { SystemLogViewerComponent } from '../../shared/ui/system-log-viewer/system-log-viewer.component';
 import { UserAccount } from '../../shared/models/auth';
@@ -44,9 +43,7 @@ export function settingsDomain(value: string | null): SettingsMainTab {
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [SettingsEditor],
   imports: [
-    PageHeaderComponent,
-    CategoryTabsComponent,
-    DetailDrawerComponent,
+    PlatformAdminTemplateComponent,
     ConfigurationSectionComponent,
     AccessSummaryComponent,
     ApiTokenTabComponent,
@@ -61,76 +58,50 @@ export function settingsDomain(value: string | null): SettingsMainTab {
     SystemLogViewerComponent,
   ],
   template: `
-    <app-detail-drawer
-      [opened]="!!editor.state()"
-      [title]="editor.state()?.title ?? ''"
-      [content]="editor.state()?.content"
-      size="standard"
-      [modal]="true"
-      mainScroll="parent"
-      [dismissible]="!editor.isBusy() && !editor.hasUnsavedChanges()"
-      (closed)="editor.drawerClosed()"
+    <app-platform-admin-template
+      [description]="descriptions[activeMainTab()]"
+      [tabs]="mainTabs"
+      [activeTab]="activeMainTab()"
+      [editorOpen]="!!editor.state()"
+      [editorTitle]="editor.state()?.title ?? ''"
+      [editorContent]="editor.state()?.content"
+      [editorDismissible]="!editor.isBusy() && !editor.hasUnsavedChanges()"
+      (tabChange)="onMainTabChange($event)"
+      (editorClosed)="editor.drawerClosed()"
     >
-      <div drawer-main>
-        <app-page-header
-          title="Paramètres"
-          [description]="descriptions[activeMainTab()]"
-          [showSystemActions]="true"
-        />
-        <app-category-tabs
-          label="Domaines des paramètres"
-          [options]="mainTabs"
-          [selected]="activeMainTab()"
-          variant="underline"
-          (selectedChange)="onMainTabChange($event)"
-        />
-        <div
-          class="settings-content"
-          role="tabpanel"
-          [attr.aria-label]="descriptions[activeMainTab()]"
-        >
-          @switch (activeMainTab()) {
-            @case ('interface') {
-              <app-appearance-tab />
-            }
-            @case ('access') {
-              <app-access-summary [users]="users()" [tokens]="tokens()" />
-              <app-user-management-tab (usersUpdated)="users.set($event)" />
-              <app-api-token-tab
-                (tokensUpdated)="tokens.set($event)"
-                (tokenCreated)="createdToken.set($event)"
-              />
-            }
-            @case ('ai') {
-              <app-ai-tools-tab /><app-mcp-server-tab [createdToken]="createdToken()" />
-            }
-            @case ('connections') {
-              <app-webhooks-tab /><app-metrics-tab />
-            }
-            @case ('network') {
-              <app-network-tab />
-            }
-            @case ('operations') {
-              <app-system-tab />
-              <app-configuration-section
-                title="Journaux système"
-                description="Événements des services sur le nœud consulté."
-                ><app-system-log-viewer
-              /></app-configuration-section>
-            }
+      <ng-container platform-admin-content>
+        @switch (activeMainTab()) {
+          @case ('interface') {
+            <app-appearance-tab />
           }
-        </div>
-      </div>
-    </app-detail-drawer>
-  `,
-  styles: `
-    .settings-content {
-      display: grid;
-      gap: var(--space-4);
-      margin-top: var(--space-4);
-      max-width: 1440px;
-      min-width: 0;
-    }
+          @case ('access') {
+            <app-access-summary [users]="users()" [tokens]="tokens()" />
+            <app-user-management-tab (usersUpdated)="users.set($event)" />
+            <app-api-token-tab
+              (tokensUpdated)="tokens.set($event)"
+              (tokenCreated)="createdToken.set($event)"
+            />
+          }
+          @case ('ai') {
+            <app-ai-tools-tab /><app-mcp-server-tab [createdToken]="createdToken()" />
+          }
+          @case ('connections') {
+            <app-webhooks-tab /><app-metrics-tab />
+          }
+          @case ('network') {
+            <app-network-tab />
+          }
+          @case ('operations') {
+            <app-system-tab />
+            <app-configuration-section
+              title="Journaux système"
+              description="Événements des services sur le nœud consulté."
+              ><app-system-log-viewer
+            /></app-configuration-section>
+          }
+        }
+      </ng-container>
+    </app-platform-admin-template>
   `,
 })
 export class SettingsPageComponent {

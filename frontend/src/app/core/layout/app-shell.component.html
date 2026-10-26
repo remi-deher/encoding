@@ -4,6 +4,7 @@
   class="application-shell"
   [class.workspace-shell]="workspaceMode()"
   [class.auth-shell]="authMode()"
+  [class.compact-navigation-shell]="!authMode() && !workspaceMode() && isCompactNavigation()"
 >
   @if (authMode()) {
     <header class="auth-header">
@@ -20,28 +21,25 @@
     [class.workspace-navigation-layout]="workspaceMode()"
     [class.auth-navigation-layout]="authMode()"
   >
-    @if (!authMode() && !workspaceMode()) {
+    @if (!authMode() && !workspaceMode() && !isCompactNavigation()) {
       <mat-sidenav
         class="application-sidebar"
-        [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
+        [class.is-collapsed]="navigationCollapsed()"
         [mode]="navigationMode()"
         [opened]="navigationOpened()"
         (openedChange)="navigationOpened.set($event)"
         aria-label="Navigation principale"
       >
         <div class="sidebar-content">
-          <div
-            class="sidebar-header"
-            [class.is-collapsed]="!isCompactNavigation() && navigationCollapsed()"
-          >
+          <div class="sidebar-header" [class.is-collapsed]="navigationCollapsed()">
             <a
               class="brand sidebar-brand"
               routerLink="/"
-              [attr.aria-label]="'Encoding, accueil'"
+              aria-label="Encoding, accueil"
               (click)="onNavigationClick()"
             >
               <span class="brand-mark" aria-hidden="true">E</span>
-              @if (isCompactNavigation() || !navigationCollapsed()) {
+              @if (!navigationCollapsed()) {
                 <span class="brand-name">Encoding</span>
               }
             </a>
@@ -49,65 +47,64 @@
 
           <app-primary-navigation
             class="sidebar-navigation"
-            [collapsed]="!isCompactNavigation() && navigationCollapsed()"
+            [collapsed]="navigationCollapsed()"
             [activeExecutionCount]="activeExecutionCount()"
             (click)="onNavigationClick()"
           />
 
-          @if (!isCompactNavigation()) {
-            <div class="sidebar-footer" [class.is-collapsed]="navigationCollapsed()">
-              <button
-                type="button"
-                class="sidebar-collapse-btn"
-                [attr.aria-label]="
-                  navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
-                "
-                [matTooltip]="
-                  navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
-                "
-                matTooltipPosition="right"
-                (click)="toggleNavigationCollapsed()"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  @if (navigationCollapsed()) {
-                    <path d="M9 5l7 7-7 7" />
-                  } @else {
-                    <path d="M15 19l-7-7 7-7" />
-                  }
-                </svg>
-                @if (!navigationCollapsed()) {
-                  <span class="collapse-btn-label">Replier</span>
+          <div class="sidebar-footer" [class.is-collapsed]="navigationCollapsed()">
+            <button
+              type="button"
+              class="sidebar-collapse-btn"
+              [attr.aria-label]="
+                navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
+              "
+              [matTooltip]="
+                navigationCollapsed() ? 'Déplier la navigation' : 'Replier la navigation'
+              "
+              matTooltipPosition="right"
+              (click)="toggleNavigationCollapsed()"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                @if (navigationCollapsed()) {
+                  <path d="M9 5l7 7-7 7" />
+                } @else {
+                  <path d="M15 19l-7-7 7-7" />
                 }
-              </button>
-            </div>
-          }
+              </svg>
+              @if (!navigationCollapsed()) {
+                <span class="collapse-btn-label">Replier</span>
+              }
+            </button>
+          </div>
         </div>
       </mat-sidenav>
     }
 
     <mat-sidenav-content class="page-transition-region">
       @if (!authMode() && !workspaceMode() && isCompactNavigation()) {
-        <header class="shell-topbar" aria-label="Navigation de la page">
-          <div class="topbar-start">
-            <button
-              matButton="text"
-              class="navigation-menu-toggle"
-              type="button"
-              [attr.aria-label]="
-                navigationOpened() ? 'Fermer la navigation' : 'Ouvrir la navigation'
-              "
-              [attr.aria-expanded]="navigationOpened()"
-              (click)="toggleNavigationCollapsed()"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            </button>
-          </div>
+        <app-primary-navigation
+          #mobileNavigation
+          class="mobile-navigation-host"
+          [mobileDock]="true"
+          [activeExecutionCount]="activeExecutionCount()"
+          (mobileMenuOpenChange)="navigationSheetOpen.set($event)"
+          (openAssistant)="toggleAssistantPanel()"
+        />
+      }
+
+      @if (!authMode() && !workspaceMode()) {
+        <header class="application-header" aria-label="État et préférences du système">
+          <app-page-system-actions />
         </header>
       }
 
-      <main id="main-content" class="main-content" tabindex="-1">
+      <main
+        id="main-content"
+        class="main-content"
+        tabindex="-1"
+        [attr.inert]="navigationSheetOpen() ? '' : null"
+      >
         <router-outlet />
       </main>
     </mat-sidenav-content>
@@ -117,6 +114,7 @@
       class="assistant-launcher"
       mat-fab
       type="button"
+      [hidden]="navigationSheetOpen() || (isCompactNavigation() && !workspaceMode())"
       [class.is-panel-open]="assistantPanelOpen()"
       [attr.aria-hidden]="assistantPanelOpen() ? 'true' : null"
       [attr.tabindex]="assistantPanelOpen() ? -1 : null"

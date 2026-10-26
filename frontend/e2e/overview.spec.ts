@@ -92,10 +92,11 @@ test('overview uses backend counts and filtered records with accessible responsi
 }, info) => {
   await page.goto('/');
   const home = page.locator('app-home-page');
-  await expect(home.locator('.metric').nth(0)).toContainText('4');
-  await expect(home.locator('.metric').nth(1)).toContainText('18');
-  await expect(home.locator('.metric').nth(2)).toContainText('126');
-  await expect(home.locator('.metric').nth(3)).toContainText('0 / 0');
+  const metrics = home.locator('app-summary-tiles app-metric-card');
+  await expect(metrics.nth(0)).toContainText('4');
+  await expect(metrics.nth(1)).toContainText('18');
+  await expect(metrics.nth(2)).toContainText('126');
+  await expect(metrics.nth(3)).toContainText('0 / 0');
   await expect(home.locator('app-overview-execution')).toHaveCount(1);
   await expect(home.locator('app-overview-execution')).toContainText('En cours');
   await expect(home.locator('app-overview-execution')).toContainText('100 %');
@@ -136,8 +137,9 @@ test('failed refresh preserves known records and reports stale values', async ({
   await home.getByRole('button', { name: 'Actualiser', exact: true }).click();
   await expect(home.getByRole('alert').first()).toContainText('obsolètes');
   await expect(home.locator('app-overview-execution')).toContainText('Dune');
-  await expect(home.locator('.metric').first()).toHaveClass(/is-stale/);
-  await expect(home.locator('.metric').first()).toContainText('4');
+  const firstMetric = home.locator('app-summary-tiles app-metric-card').first();
+  await expect(firstMetric.locator('.metric-card')).toHaveClass(/metric-card_stale/);
+  await expect(firstMetric).toContainText('4');
 });
 
 test('initial outage displays unavailable metrics without claiming an empty history', async ({
@@ -147,7 +149,9 @@ test('initial outage displays unavailable metrics without claiming an empty hist
   await page.goto('/');
   const home = page.locator('app-home-page');
   await expect(home.getByRole('alert').first()).toBeVisible();
-  await expect(home.locator('.metric').first().locator('strong')).toHaveText('—');
+  await expect(
+    home.locator('app-summary-tiles app-metric-card').first().locator('.metric-value'),
+  ).toHaveText('—');
   await expect(home).not.toContainText('Aucune exécution en cours.');
   await expect(home).not.toContainText('Aucun traitement terminé.');
 });

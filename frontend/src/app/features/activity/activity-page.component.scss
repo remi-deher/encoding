@@ -33,7 +33,6 @@
 .activity-count-pill {
   display: inline-flex;
   align-items: center;
-  margin-top: var(--space-2);
   padding: 4px 12px;
   border-radius: var(--radius-pill);
   background: var(--surface-container);
@@ -287,9 +286,6 @@
   .item-row {
     flex-wrap: wrap;
     padding-bottom: var(--space-2);
-  }
-  .item-action {
-    margin-left: 56px;
   }
   .comparison-arrow {
     display: none;

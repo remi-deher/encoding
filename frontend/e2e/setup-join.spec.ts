@@ -146,9 +146,7 @@ test('first-run cluster join authenticates before protected calls and recovers f
   pending = false;
   approved = true;
   await expect(
-    page
-      .getByRole('region', { name: 'Assistant de premier démarrage' })
-      .getByText('Ce nœud a rejoint Cluster Salon.', { exact: true }),
+    page.getByRole('status').filter({ hasText: 'Ce nœud a rejoint Cluster Salon.' }),
   ).toBeVisible({
     timeout: 12_000,
   });

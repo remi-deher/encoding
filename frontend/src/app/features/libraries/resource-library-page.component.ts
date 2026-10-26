@@ -19,11 +19,11 @@ import { map } from 'rxjs';
 import { FlowResourceDetails, FlowResourceSummary } from '../../shared/models/flow-resources';
 import { FlowResources } from '../../shared/services/flow-resources';
 import { NotificationService } from '../../shared/services/notification.service';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { ResourceCatalogTemplateComponent } from '../../shared/templates/resource-catalog-template.component';
 import { ConfirmationDialogComponent } from '../../shared/ui/confirmation-dialog.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
-import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
+import { ResourceListItem } from '../../shared/ui/resource-list.component';
+import { LibrarySectionTabsComponent } from './library-section-tabs.component';
 import {
   ResourceSheetComponent,
   ResourceSheetSection,
@@ -42,10 +42,9 @@ type EditorMode = 'create' | 'version';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-resource-library-page',
   imports: [
-    ResourceListComponent,
-    CategoryTabsComponent,
+    ResourceCatalogTemplateComponent,
+    LibrarySectionTabsComponent,
     DrawerActionButtonComponent,
-    ManagementCatalogTemplateComponent,
     ResourceSheetComponent,
     ReactiveFormsModule,
     MatButtonModule,
@@ -53,13 +52,18 @@ type EditorMode = 'create' | 'version';
     MatInputModule,
   ],
   template: `
-    <app-management-catalog-template
+    <app-resource-catalog-template
       [title]="title()"
+      [items]="items()"
       filterLabel="Ressources"
       searchLabel="Rechercher une ressource"
       searchLayout="centered"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
+      resourceIcon="copy"
+      listEmptyMessage="Aucune ressource. Ajoutez des polices pour les partager avec tous les nœuds."
+      openLabel="Ouvrir"
+      (open)="openResource($event)"
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
       [actionOpen]="editorMode() !== null"
@@ -75,22 +79,9 @@ type EditorMode = 'create' | 'version';
         <button matButton="filled" type="button" (click)="openCreate()">Ajouter des polices</button>
       </ng-template>
 
-      <app-category-tabs
-        catalogue-navigation
-        label="Ressources"
-        [options]="librarySections"
-        selected="resources"
-        (selectedChange)="onSectionChanged($event)"
-      />
-
-      <app-resource-list
-        catalogue-table
-        icon="copy"
-        [items]="items()"
-        openLabel="Ouvrir"
-        emptyMessage="Aucune ressource. Ajoutez des polices pour les partager avec tous les nœuds."
-        (open)="openResource($event)"
-      />
+      <ng-template #catalogueNavigation>
+        <app-library-section-tabs catalogue-navigation selected="resources" />
+      </ng-template>
 
       <ng-template #detailContent catalogue-detail>
         @if (selected(); as details) {
@@ -184,7 +175,7 @@ type EditorMode = 'create' | 'version';
           </div>
         </form>
       </ng-template>
-    </app-management-catalog-template>
+    </app-resource-catalog-template>
   `,
   styles: `
     .resource-form {
@@ -229,14 +220,6 @@ export class ResourceLibraryPageComponent {
     initialValue: this.route.snapshot.data,
   });
   protected readonly title = computed(() => (this.routeData()['title'] as string) ?? 'Ressources');
-  protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Bibliothèques' },
-    { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles de flow' },
-    { value: 'packs', label: 'Packs de composants' },
-    { value: 'encoding', label: 'Profils d’encodage' },
-    { value: 'resources', label: 'Ressources' },
-  ];
   protected readonly catalogState = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly catalogMessage = signal('Chargement des ressources…');
   protected readonly resources = signal<readonly FlowResourceSummary[]>([]);
@@ -338,17 +321,6 @@ export class ResourceLibraryPageComponent {
 
   protected size(bytes: number): string {
     return formatResourceSize(bytes);
-  }
-
-  protected onSectionChanged(section: string): void {
-    const targets: Record<string, string> = {
-      media: '/libraries',
-      scripts: '/libraries/scripts',
-      templates: '/libraries/templates',
-      packs: '/libraries/packs',
-      encoding: '/libraries/encoding-profiles',
-    };
-    if (targets[section]) void this.router.navigateByUrl(targets[section]);
   }
 
   protected openResource(id: string): void {

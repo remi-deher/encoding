@@ -1,19 +1,15 @@
-<app-management-catalog-template
+<app-cluster-maintenance-template
   [title]="title()"
+  navigationLabel="Sections"
+  [navigationOptions]="extensionTabs()"
+  [navigationSelected]="activeTab()"
+  (navigationSelectedChange)="onExtensionTabChange($event)"
   [detailOpen]="selectedPlugin() !== null"
   [detailTitle]="detailTitle()"
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
   filterLabel="Filtrer"
 >
-  <app-category-tabs
-    catalogue-navigation
-    label="Sections"
-    [options]="extensionTabs()"
-    [selected]="activeTab()"
-    (selectedChange)="onExtensionTabChange($event)"
-  />
-
   <div catalogue-filters>
     @if (activeTab() === 'plugins') {
       <app-category-tabs
@@ -321,4 +317,4 @@
       }
     </mat-tab-group>
   </ng-template>
-</app-management-catalog-template>
+</app-cluster-maintenance-template>

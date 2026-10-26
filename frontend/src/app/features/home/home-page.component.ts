@@ -15,6 +15,7 @@ import {
   nodeLifecycle,
 } from '../../shared/models/cluster-health';
 import { HealthBannerComponent } from '../../shared/ui/health-banner.component';
+import { SummaryTilesComponent } from '../../shared/ui/summary-tiles.component';
 import { MatrixCell, MatrixTableComponent } from '../../shared/ui/matrix-table.component';
 import {
   formatNodeLabel,
@@ -36,8 +37,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-drawer';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { CategoryTabOption } from '../../shared/ui/category-tabs.component';
+import { MonitorTemplateComponent } from '../../shared/templates/monitor-template.component';
 import { RecordFormActionsComponent } from '../../shared/ui/record-form-actions.component';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
 import { FlowTemplates } from '../../shared/services/flow-templates';
@@ -65,10 +66,10 @@ type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
     DetailDrawerComponent,
     OverviewExecutionComponent,
     HealthBannerComponent,
+    SummaryTilesComponent,
     MatrixTableComponent,
     NgTemplateOutlet,
-    PageHeaderComponent,
-    CategoryTabsComponent,
+    MonitorTemplateComponent,
     RecordFormComponent,
     RecordFormActionsComponent,
     RouterLink,
@@ -94,6 +95,13 @@ export class HomePageComponent {
       ? (value as OverviewView)
       : 'general';
   });
+  protected readonly monitorLayout = computed(() =>
+    this.overviewView() === 'ai'
+      ? 'special'
+      : this.overviewView() === 'general'
+        ? 'overview'
+        : 'single',
+  );
   protected onOverviewViewChanged(value: string): void {
     if (this.overviewTabs.some((tab) => tab.value === value)) {
       this.overviewView.set(value as OverviewView);
@@ -180,6 +188,29 @@ export class HomePageComponent {
   protected readonly aiFailedCount = computed(
     () => this.aiActivity().filter((activity) => activity.status === 'failed').length,
   );
+  protected readonly aiMetrics = computed(() => [
+    {
+      label: 'Fournisseurs disponibles',
+      value: this.count(this.aiProviderCount()),
+      detail: `${this.aiOptions()?.models?.length ?? 0} modèles · ${this.aiProviderNames() || 'Aucun disponible'}`,
+    },
+    {
+      label: 'Modèle par défaut',
+      value: this.aiDefaultModel(),
+      detail: this.aiDefaultProvider(),
+    },
+    {
+      label: 'Demandes en cours',
+      value: this.count(this.aiRunningCount()),
+      detail: 'Demandes encore actives',
+    },
+    {
+      label: 'Demandes en échec',
+      value: this.count(this.aiFailedCount()),
+      detail: 'Dans l’activité conservée',
+      tone: this.aiFailedCount() > 0 ? ('attention' as const) : ('default' as const),
+    },
+  ]);
   protected readonly recentAiActivity = computed(() =>
     [...this.aiActivity()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5),
   );
@@ -264,24 +295,32 @@ export class HomePageComponent {
   protected readonly metrics = computed(() => {
     const data = this.executionState().data;
     const snapshot = this.state().snapshot;
+    const executionIsStale = this.executionState().status === 'error';
+    const clusterIsStale = this.state().status === 'error';
     return [
       {
         label: 'En cours',
         value: this.count(data?.activeCount),
         detail: 'Traitements en cours d’exécution',
-        view: 'active',
+        link: '/activity',
+        queryParams: { view: 'active' },
+        stale: executionIsStale,
       },
       {
         label: 'En attente',
         value: this.count(data?.queuedCount),
         detail: 'Dans la file de traitement',
-        view: 'queue',
+        link: '/activity',
+        queryParams: { view: 'queue' },
+        stale: executionIsStale,
       },
       {
         label: 'Terminés',
         value: this.count(data?.succeededCount),
         detail: 'Total des exécutions réussies',
-        view: 'history',
+        link: '/activity',
+        queryParams: { view: 'history' },
+        stale: executionIsStale,
       },
       {
         label: 'Bibliothèques actives',
@@ -289,7 +328,8 @@ export class HomePageComponent {
           ? snapshot.libraries.filter((l) => l.isActive).length + ' / ' + snapshot.libraries.length
           : '—',
         detail: 'Bibliothèques configurées',
-        view: null,
+        link: '/libraries',
+        stale: clusterIsStale,
       },
     ];
   });

@@ -6,9 +6,12 @@ export interface SummaryTile {
   readonly value: string;
   readonly detail: string;
   readonly tone?: 'default' | 'attention';
+  readonly link?: string;
+  readonly queryParams?: Readonly<Record<string, string | number | boolean>>;
+  readonly stale?: boolean;
 }
 
-/** Rangée de tuiles de synthèse d'une page de gestion : valeur et légende, jamais d'action. */
+/** Rangée de tuiles récapitulatives, avec orientation facultative vers la prise en charge. */
 @Component({
   selector: 'app-summary-tiles',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,6 +28,9 @@ export interface SummaryTile {
           [value]="tile.value"
           [detail]="tile.detail"
           [tone]="tile.tone ?? 'default'"
+          [link]="tile.link"
+          [queryParams]="tile.queryParams ?? {}"
+          [stale]="tile.stale ?? false"
         />
       }
     </section>

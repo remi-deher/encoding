@@ -28,6 +28,7 @@ import { AuthService } from '../auth/auth.service';
 import { ThemeToggleComponent } from '../theme/theme-toggle.component';
 import { SearchPaletteDialogComponent } from './search-palette-dialog.component';
 import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.component';
+import { PageSystemActionsComponent } from '../../shared/ui/page-system-actions.component';
 
 @Component({
   selector: 'app-shell',
@@ -43,6 +44,7 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
     ThemeToggleComponent,
     AiAssistantPageComponent,
     FlowAiAssistantPanelComponent,
+    PageSystemActionsComponent,
   ],
   templateUrl: './app-shell.component.html',
   host: {
@@ -53,6 +55,7 @@ import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.co
 export class AppShellComponent {
   protected readonly flowAssistant = inject(FlowEditorAssistant);
   protected readonly generalAssistant = viewChild(AiAssistantPageComponent);
+  private readonly mobileNavigation = viewChild<PrimaryNavigationComponent>('mobileNavigation');
   protected readonly flowWidget = viewChild<FlowAiAssistantPanelComponent>('flowWidget');
   protected async applyFlowProposal(
     flow: import('../../shared/models/flow-validation').FlowDocument,
@@ -89,6 +92,7 @@ export class AppShellComponent {
     this.isCompactNavigation() ? 'over' : 'side',
   );
   protected readonly navigationOpened = signal(true);
+  protected readonly navigationSheetOpen = signal(false);
   protected readonly navigationCollapsed = signal(
     typeof localStorage !== 'undefined' ? localStorage.getItem('nav_collapsed') === 'true' : false,
   );
@@ -122,6 +126,9 @@ export class AppShellComponent {
       const compact = this.isCompactNavigation();
       const context = this.navigationEnd();
       this.navigationOpened.set(!compact && !context.authMode && !context.workspaceMode);
+    });
+    effect(() => {
+      if (!this.isCompactNavigation()) this.navigationSheetOpen.set(false);
     });
     effect(() => {
       if (this.assistantRouteActive()) this.assistantPanelOpen.set(false);
@@ -250,7 +257,12 @@ export class AppShellComponent {
     const button = this.assistantLauncher()?.nativeElement;
     const margin = 16;
     const maxLeft = Math.max(margin, window.innerWidth - (button?.offsetWidth ?? 56) - margin);
-    const maxTop = Math.max(margin, window.innerHeight - (button?.offsetHeight ?? 56) - margin);
+    const bottomClearance =
+      this.isCompactNavigation() && !this.authMode() && !this.workspaceMode() ? 84 : margin;
+    const maxTop = Math.max(
+      margin,
+      window.innerHeight - (button?.offsetHeight ?? 56) - bottomClearance,
+    );
     const grid = AppShellComponent.assistantLauncherGrid;
     const snap = (value: number, max: number) =>
       Math.min(max, Math.max(margin, Math.round((value - margin) / grid) * grid + margin));
@@ -323,7 +335,6 @@ export class AppShellComponent {
     const button = this.assistantLauncher()?.nativeElement;
     if (!button) return;
 
-    const launcher = button.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const panelWidth = Math.min(
@@ -335,6 +346,23 @@ export class AppShellComponent {
       Math.max(1, viewportHeight - 112),
     );
     const margin = 16;
+    if (this.isCompactNavigation()) {
+      const dockClearance = 84;
+      const left = Math.max(margin, viewportWidth - panelWidth - margin);
+      const top = Math.max(margin, viewportHeight - panelHeight - dockClearance);
+      const anchorSize = 48;
+      this.assistantPanelGeometry.set({
+        left,
+        top,
+        originX: Math.max(0, panelWidth - anchorSize),
+        originY: Math.max(0, panelHeight - anchorSize),
+        scaleX: Math.min(1, anchorSize / panelWidth),
+        scaleY: Math.min(1, anchorSize / panelHeight),
+      });
+      return;
+    }
+
+    const launcher = button.getBoundingClientRect();
     const gap = 16;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
@@ -361,10 +389,13 @@ export class AppShellComponent {
   protected closeAssistantPanel(): void {
     this.assistantPanelOpen.set(false);
     setTimeout(() => {
-      const target = this.focusReturnElement?.isConnected
-        ? this.focusReturnElement
-        : this.assistantLauncher()?.nativeElement;
-      target?.focus();
+      if (this.focusReturnElement?.isConnected) {
+        this.focusReturnElement.focus();
+      } else if (this.isCompactNavigation()) {
+        this.mobileNavigation()?.focusMoreButton();
+      } else {
+        this.assistantLauncher()?.nativeElement.focus();
+      }
       this.focusReturnElement = null;
     });
   }

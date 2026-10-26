@@ -407,25 +407,32 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
       },
     });
   });
-  await page.goto('/ai/activity');
+  await page.goto('/activity?type=ai');
   const launcher = page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true });
-  await expect(launcher).toBeVisible();
-  const before = (await launcher.boundingBox())!;
-  expect(before.width).toBeLessThanOrEqual(60);
-  const scroller = page.locator('mat-sidenav-content.page-transition-region');
-  await scroller.evaluate((element) => {
-    const spacer = document.createElement('div');
-    spacer.dataset.testid = 'assistant-scroll-spacer';
-    spacer.style.height = '1600px';
-    spacer.style.pointerEvents = 'none';
-    element.append(spacer);
-    element.scrollTop = element.scrollHeight;
-  });
-  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(600);
-  const after = (await launcher.boundingBox())!;
-  expect(Math.abs(before.y - after.y)).toBeLessThan(1);
-  expect(after.y + after.height).toBeLessThanOrEqual(page.viewportSize()!.height);
-  await launcher.click();
+  const mobile = testInfo.project.name === 'mobile';
+  let after: { x: number; y: number; width: number; height: number } | null = null;
+  if (mobile) {
+    await page.getByRole('button', { name: 'Plus', exact: true }).click();
+    await page.getByRole('button', { name: /Assistant rapide/ }).click();
+  } else {
+    await expect(launcher).toBeVisible();
+    const before = (await launcher.boundingBox())!;
+    expect(before.width).toBeLessThanOrEqual(60);
+    const scroller = page.locator('mat-sidenav-content.page-transition-region');
+    await scroller.evaluate((element) => {
+      const spacer = document.createElement('div');
+      spacer.dataset.testid = 'assistant-scroll-spacer';
+      spacer.style.flex = '0 0 1600px';
+      spacer.style.pointerEvents = 'none';
+      element.append(spacer);
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(600);
+    after = (await launcher.boundingBox())!;
+    expect(Math.abs(before.y - after.y)).toBeLessThan(1);
+    expect(after.y + after.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    await launcher.click();
+  }
   const widget = page.locator('#assistant-widget-panel');
   await expect(widget).toBeVisible();
   await expect
@@ -442,8 +449,10 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
     .toBe(true);
   const panelBounds = (await widget.boundingBox())!;
   expect(panelBounds.height).toBeLessThanOrEqual(520);
-  expect(Math.abs(panelBounds.x + panelBounds.width - (after.x + after.width))).toBeLessThan(1);
-  expect(Math.abs(panelBounds.y + panelBounds.height + 16 - after.y)).toBeLessThan(1);
+  if (after) {
+    expect(Math.abs(panelBounds.x + panelBounds.width - (after.x + after.width))).toBeLessThan(1);
+    expect(Math.abs(panelBounds.y + panelBounds.height + 16 - after.y)).toBeLessThan(1);
+  }
   await openModelSettings(widget);
   await widget.getByRole('combobox', { name: 'Fournisseur IA', exact: true }).click();
   await page.getByRole('option', { name: 'Claude', exact: true }).click();
@@ -456,11 +465,16 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
   await widget.getByRole('textbox', { name: 'Votre question' }).fill('Analyser ce nœud');
   await widget.getByRole('textbox', { name: 'Votre question' }).press('Enter');
   await expect(widget.getByText('Réponse du widget', { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/activity$/);
+  await expect(page).toHaveURL(/\/activity\?type=ai$/);
   await widget.getByRole('textbox', { name: 'Votre question' }).fill('Brouillon conservé');
   await page.getByRole('button', { name: 'Fermer le panneau de l’assistant' }).click();
-  await expect(launcher).toBeFocused();
-  await launcher.click();
+  if (mobile) {
+    await page.getByRole('button', { name: 'Plus', exact: true }).click();
+    await page.getByRole('button', { name: /Assistant rapide/ }).click();
+  } else {
+    await expect(launcher).toBeFocused();
+    await launcher.click();
+  }
   await expect(widget.getByRole('textbox', { name: 'Votre question' })).toHaveValue(
     'Brouillon conservé',
   );
@@ -486,22 +500,14 @@ test('floating launcher follows scrolling and compact chat preserves conversatio
     ).toEqual([]);
   }
   await page.getByRole('button', { name: 'Fermer le panneau de l’assistant' }).click();
+  if (mobile) return;
   await launcher.focus();
   await page.keyboard.press('Alt+ArrowUp');
-  expect((await launcher.boundingBox())!.y).toBeLessThan(after.y);
+  expect((await launcher.boundingBox())!.y).toBeLessThan(after!.y);
   const moved = (await launcher.boundingBox())!;
   await page.reload();
   await expect(launcher).toBeVisible();
   await expect
     .poll(async () => Math.abs((await launcher.boundingBox())!.y - moved.y))
     .toBeLessThan(1);
-  await page.setViewportSize({ width: 360, height: 640 });
-  await expect
-    .poll(async () => {
-      const rect = (await launcher.boundingBox())!;
-      return (
-        rect.x >= 0 && rect.x + rect.width <= 360 && rect.y >= 0 && rect.y + rect.height <= 640
-      );
-    })
-    .toBeTruthy();
 });

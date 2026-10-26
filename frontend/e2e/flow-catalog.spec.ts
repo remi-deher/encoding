@@ -95,7 +95,7 @@ async function setup(
   );
   await page.goto('/flows');
   await expect(
-    page.getByRole('button', { name: 'Autres actions pour Encodage cinéma' }),
+    page.getByRole('button', { name: 'Plus d’actions pour Encodage cinéma' }),
   ).toBeVisible();
   return { requests: () => requests, lastUrl: () => lastUrl };
 }
@@ -108,7 +108,7 @@ async function confirmDeletion(dialog: Locator) {
 }
 
 async function requestDeletion(page: Page) {
-  await page.getByRole('button', { name: 'Autres actions pour Encodage cinéma' }).click();
+  await page.getByRole('button', { name: 'Plus d’actions pour Encodage cinéma' }).click();
   await page.getByRole('menuitem', { name: 'Supprimer', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Supprimer le flow « Encodage cinéma » ?');
@@ -122,7 +122,7 @@ test('canceling flow deletion sends no request and keeps the flow', async ({ pag
   await expect(dialog).toBeHidden();
   expect(state.requests()).toBe(0);
   await expect(
-    page.getByRole('button', { name: 'Autres actions pour Encodage cinéma' }),
+    page.getByRole('button', { name: 'Plus d’actions pour Encodage cinéma' }),
   ).toBeVisible();
 });
 
@@ -134,7 +134,7 @@ for (const draft of [false, true]) {
     const dialog = await requestDeletion(page);
     await confirmDeletion(dialog);
     await expect(
-      page.getByRole('button', { name: 'Autres actions pour Encodage cinéma' }),
+      page.getByRole('button', { name: 'Plus d’actions pour Encodage cinéma' }),
     ).toHaveCount(0);
     await expect(
       page.getByText('Le flow « Encodage cinéma » a été supprimé.', { exact: true }),
@@ -152,7 +152,7 @@ for (const failure of ['Des exécutions sont actuellement en cours pour ce flow.
     await confirmDeletion(dialog);
     await expect(page.getByText(failure, { exact: true })).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Autres actions pour Encodage cinéma' }),
+      page.getByRole('button', { name: 'Plus d’actions pour Encodage cinéma' }),
     ).toBeVisible();
     expect(state.requests()).toBe(1);
   });
@@ -184,14 +184,14 @@ test('deleting from the detail header closes the obsolete detail', async ({ page
   ).toBeVisible();
   await expect(detail).toBeHidden();
   await expect(
-    page.getByRole('button', { name: 'Autres actions pour Encodage cinéma' }),
+    page.getByRole('button', { name: 'Plus d’actions pour Encodage cinéma' }),
   ).toHaveCount(0);
   expect(state.requests()).toBe(1);
 });
 
 test('viewers can inspect flows but have no deletion action', async ({ page }) => {
   const state = await setup(page, { role: 'viewer' });
-  await page.getByRole('button', { name: 'Autres actions pour Encodage cinéma' }).click();
+  await page.getByRole('button', { name: 'Plus d’actions pour Encodage cinéma' }).click();
   await expect(page.getByRole('menuitem', { name: 'Supprimer', exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Consulter', exact: true }).click();

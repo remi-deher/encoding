@@ -50,9 +50,9 @@ test('the search command palette opens with Ctrl+K and navigates to encoding pro
 
   await expect(page).toHaveURL(/\/libraries\/encoding-profiles$/);
   await expect(page.getByRole('heading', { name: /Profils d’encodage/ }).first()).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Profils d’encodage/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  await expect(page.getByRole('link', { name: /Profils d’encodage/ })).toHaveAttribute(
+    'aria-current',
+    'page',
   );
 });
 
@@ -259,8 +259,7 @@ test('setup lists all interfaces and keeps browser access with a published port 
     await expect(page.getByText(new URL(page.url()).origin, { exact: true })).toBeVisible();
     await expect(page.getByText('Adresse utilisée par ce navigateur')).toBeVisible();
     const setup = page.locator('app-setup-wizard-page');
-    if (theme === 'light') await expect(setup).toHaveCSS('background-image', 'none');
-    else await expect(setup).not.toHaveCSS('background-image', 'none');
+    await expect(setup).toHaveCSS('background-image', 'none');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

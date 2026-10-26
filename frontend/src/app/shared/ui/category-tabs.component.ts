@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  effect,
   input,
   output,
   viewChildren,
@@ -54,6 +55,19 @@ export class CategoryTabsComponent {
   readonly selectedChange = output<string>();
 
   private readonly tabButtons = viewChildren<ElementRef<HTMLButtonElement>>('tabButton');
+
+  constructor() {
+    effect(() => {
+      const selected = this.selected();
+      const index = this.options().findIndex((option) => option.value === selected);
+      const activeTab = this.tabButtons()[index]?.nativeElement;
+      if (activeTab && typeof window !== 'undefined') {
+        requestAnimationFrame(() =>
+          activeTab.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'auto' }),
+        );
+      }
+    });
+  }
 
   protected onKeydown(event: KeyboardEvent, index: number): void {
     const list = this.options();
