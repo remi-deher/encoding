@@ -60,6 +60,7 @@ import { ResourceCatalogTemplateComponent } from './resource-catalog-template.co
       [actionStep]="actionStep()"
       [drawerSize]="drawerSize()"
       [drawerHeaderDensity]="drawerHeaderDensity()"
+      [detailBodyLayout]="detailBodyLayout()"
       [drawerModal]="drawerModal()"
       [catalogueNavigationTemplate]="catalogueNavigation()"
       (searchQueryChange)="searchQueryChange.emit($event)"
@@ -75,6 +76,7 @@ import { ResourceCatalogTemplateComponent } from './resource-catalog-template.co
       <ng-content select="[catalogue-summary]" />
       <ng-template #detailContent catalogue-detail>
         <mat-tab-group
+          class="library-detail-tabs"
           aria-label="Sections de la bibliothèque"
           [selectedIndex]="detailTabIndex()"
           (selectedIndexChange)="detailTabIndex.set($event)"
@@ -95,6 +97,32 @@ import { ResourceCatalogTemplateComponent } from './resource-catalog-template.co
       </ng-template>
       <ng-content select="ng-template" />
     </app-resource-catalog-template>
+  `,
+  styles: `
+    .library-detail-tabs {
+      box-sizing: border-box;
+      display: flex;
+      flex: 1 1 0;
+      height: 100%;
+      min-height: 0;
+      padding: var(--space-4) var(--space-5);
+    }
+
+    :host ::ng-deep .library-detail-tabs > .mat-mdc-tab-body-wrapper {
+      flex: 1 1 0;
+      min-height: 0;
+    }
+
+    :host ::ng-deep .library-detail-tabs .mat-mdc-tab-body-content {
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+
+    @media (max-width: 700px) {
+      .library-detail-tabs {
+        padding: var(--space-3) var(--space-4);
+      }
+    }
   `,
 })
 export class LibraryPreparationTemplateComponent {
@@ -133,6 +161,7 @@ export class LibraryPreparationTemplateComponent {
   readonly actionStep = input<{ readonly current: number; readonly total: number } | null>(null);
   readonly drawerSize = input<'standard' | 'wide'>('wide');
   readonly drawerHeaderDensity = input<'standard' | 'compact'>('standard');
+  readonly detailBodyLayout = input<'scroll' | 'fill'>('fill');
   readonly drawerModal = input(true);
 
   readonly searchQueryChange = output<string>();

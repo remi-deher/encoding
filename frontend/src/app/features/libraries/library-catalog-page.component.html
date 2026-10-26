@@ -44,6 +44,7 @@
   <ng-template #librarySummary>
     @if (librarySheet(); as sheet) {
       <app-resource-sheet
+        [fill]="true"
         ariaLabel="Accès, traitement et activité de la bibliothèque"
         [title]="sheet.title"
         [subtitle]="sheet.subtitle"

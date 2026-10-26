@@ -38,6 +38,7 @@ export interface CatalogEmptyState {
       [opened]="actionOpen() || (detailOpen() && detailLayout() === 'drawer')"
       [size]="drawerSize()"
       [headerDensity]="drawerHeaderDensity()"
+      [bodyLayout]="actionOpen() ? 'scroll' : detailBodyLayout()"
       [modal]="drawerModal()"
       [title]="actionOpen() ? actionTitle() : detailTitle()"
       [description]="actionOpen() ? actionDescription() : detailDescription()"
@@ -223,6 +224,8 @@ export class ManagementCatalogTemplateComponent {
   readonly drawerSize = input<'standard' | 'wide'>('wide');
   /** Densité de l'en-tête des fiches ; reste normale pour les formulaires d'action. */
   readonly drawerHeaderDensity = input<'standard' | 'compact'>('standard');
+  /** Le mode `fill` réserve le défilement aux vues imbriquées, comme une fiche à onglets. */
+  readonly detailBodyLayout = input<'scroll' | 'fill'>('scroll');
   /** Voile derrière le tiroir ; un clic dessus le ferme. */
   readonly drawerModal = input(true);
   readonly pageActionsInput = input<TemplateRef<unknown> | undefined>();

@@ -74,10 +74,13 @@ export interface ResourceSheetNotice {
  */
 @Component({
   selector: 'app-resource-sheet',
+  host: {
+    '[class.resource-sheet-fill]': 'fill()',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, StatusBadgeComponent],
   template: `
-    <div class="sheet-stack">
+    <div class="sheet-stack" [class.sheet-stack_fill]="fill()">
       @for (notice of notices(); track notice.title) {
         <div class="sheet-notice" [class]="'sheet-notice tone-' + notice.tone" role="status">
           <strong>{{ notice.title }}</strong>
@@ -211,6 +214,8 @@ export interface ResourceSheetNotice {
   styleUrl: './resource-sheet.component.scss',
 })
 export class ResourceSheetComponent {
+  /** Étire la pile dans un panneau dont la zone disponible est déjà définie. */
+  readonly fill = input(false);
   readonly ariaLabel = input.required<string>();
   readonly title = input.required<string>();
   readonly subtitle = input<string>('');
