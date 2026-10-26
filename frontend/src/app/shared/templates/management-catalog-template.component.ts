@@ -61,7 +61,11 @@ export interface CatalogEmptyState {
           />
           <ng-container [ngTemplateOutlet]="detailContentTemplate()" />
         } @else {
-          <app-page-header [title]="title()" [actions]="pageActionsTemplate()" />
+          <app-page-header
+            [title]="title()"
+            [actions]="pageActionsTemplate()"
+            [visuallyHidden]="titleVisuallyHidden()"
+          />
           <div class="catalog-navigation-wrapper">
             @if (catalogueNavigationTemplate(); as navigation) {
               <ng-container [ngTemplateOutlet]="navigation" />
@@ -188,6 +192,7 @@ export interface CatalogEmptyState {
 })
 export class ManagementCatalogTemplateComponent {
   readonly title = input.required<string>();
+  readonly titleVisuallyHidden = input(false);
   readonly filterLabel = input('Filtres');
   readonly searchLabel = input('');
   readonly searchQuery = input('');

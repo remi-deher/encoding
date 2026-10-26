@@ -32,6 +32,7 @@ import {
   template: `
     <app-management-catalog-template
       [title]="title()"
+      [titleVisuallyHidden]="true"
       [filterLabel]="filterLabel()"
       [searchLabel]="searchLabel()"
       [searchQuery]="searchQuery()"
