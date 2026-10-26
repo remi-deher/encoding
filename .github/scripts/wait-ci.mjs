@@ -1,12 +1,28 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { checkCommits } from './ci-scopes.mjs';
+import { checkCommits, scopes } from './ci-scopes.mjs';
 
-export function evaluateChecks(sources, target, runs) {
+// Only ancestors after the domain's last change are considered, and each candidate
+// must still have exactly the same scoped files as the target (including deletions).
+export function equivalentCheckCommits(target, sources, git) {
+  return Object.fromEntries(scopes.flatMap(scope => {
+    const source = sources[scope.checks[0]];
+    const paths = scope.paths.map(path => path.startsWith('!') ? `:(exclude)${path.slice(1)}` : path);
+    const descendants = source === target ? [] : git([
+      'rev-list', '--topo-order', '--ancestry-path', `${source}..${target}`,
+    ]).split('\n').filter(Boolean);
+    const candidates = [...new Set([target, ...descendants, source])].filter(commit =>
+      !git(['diff', '--name-only', target, commit, '--', ...paths]));
+    return scope.checks.map(name => [name, candidates]);
+  }));
+}
+
+export function evaluateChecks(sources, target, runs, equivalents = {}) {
   return Object.entries(sources).map(([name, source]) => {
-    const own = runs.filter(run => run.name === name && run.sha === target);
-    const matching = own.length ? own : runs.filter(run => run.name === name && run.sha === source);
+    const candidates = [...new Set([target, ...(equivalents[name] ?? [source])])];
+    const checked = candidates.find(commit => runs.some(run => run.name === name && run.sha === commit));
+    const matching = runs.filter(run => run.name === name && run.sha === checked);
     // Retries supersede previous attempts of the same check on the same commit.
     const latest = matching.sort((a, b) => b.id - a.id)[0];
     const state = !latest ? 'missing' : latest.status !== 'completed' ? 'pending'
@@ -21,17 +37,28 @@ export async function main() {
   if (!repo || !/^[a-f0-9]{40}$/.test(sha ?? '')) throw new Error('Repository and target SHA required');
   const git = args => execFileSync('git', args, { encoding: 'utf8' }).trim();
   const sources = checkCommits(sha, (target, paths) => git(['log', '-1', '--format=%H', target, '--', ...paths]));
-  const commits = [...new Set([sha, ...Object.values(sources)])];
+  const equivalents = equivalentCheckCommits(sha, sources, git);
   const deadline = Date.now() + 40 * 60 * 1000;
   let results;
   while (Date.now() < deadline) {
-    const runs = commits.flatMap(commit => {
-      const pages = JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp',
-        `repos/${repo}/commits/${commit}/check-runs?per_page=100`], { encoding: 'utf8' }));
-      return pages.flatMap(page => page.check_runs)
-        .filter(run => run.app?.slug === 'github-actions').map(run => ({ ...run, sha: commit }));
-    });
-    results = evaluateChecks(sources, sha, runs);
+    const fetched = new Map();
+    const readChecks = commit => {
+      if (!fetched.has(commit)) {
+        const pages = JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp',
+          `repos/${repo}/commits/${commit}/check-runs?per_page=100`], { encoding: 'utf8' }));
+        fetched.set(commit, pages.flatMap(page => page.check_runs)
+          .filter(run => run.app?.slug === 'github-actions').map(run => ({ ...run, sha: commit })));
+      }
+      return fetched.get(commit);
+    };
+    // Prefer a current check even when pending/failed. For unchanged domains, stop
+    // at the nearest verified ancestor that actually carries the required check.
+    for (const [name, candidates] of Object.entries(equivalents)) {
+      for (const commit of candidates) {
+        if (readChecks(commit).some(run => run.name === name)) break;
+      }
+    }
+    results = evaluateChecks(sources, sha, [...fetched.values()].flat(), equivalents);
     for (const result of results.filter(result => result.state !== 'success')) {
       console.log(`${result.name}: ${result.state} (${result.conclusion ?? ''}, ${result.sha}) ${result.url ?? ''}`);
     }
