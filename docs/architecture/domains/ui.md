@@ -23,6 +23,8 @@ legacy_adr:
   ]
 code:
   - frontend/src/styles.scss
+  - frontend/src/app/core/layout/
+  - frontend/src/app/core/theme/
   - frontend/src/app/shared/ui/
   - frontend/src/app/shared/models/
   - frontend/src/app/features/
@@ -39,6 +41,8 @@ tags:
     éditeur de flow,
     canvas,
     page nœuds,
+    shell,
+    recherche contextuelle,
   ]
 ---
 
@@ -50,6 +54,12 @@ Règles obligatoires : [UI_RULES.md](../../../UI_RULES.md). Ce fichier consigne 
 
 - Angular + Angular Material/CDK uniquement. `frontend/src/styles.scss` : jetons `--space-1..6`, `--radius-*`, `--font-*`, `--elevation-*`, couleurs sémantiques ; thème clair/sombre (`ThemeService`, `data-theme`, suit `prefers-color-scheme`) ; **jamais de couleur ni de valeur hors échelle en dur**. Boutons Material en pilule ; un seul bouton rempli par vue, tonal pour l'alternative, contour pour le reste, destruction en rouge avec confirmation commune. Contrastes ≥ 4,5:1, focus visible, `prefers-reduced-motion`.
 - Composants communs (toute évolution examine ses usages) : `DataTable` (`layout="table|cards"`, tri, sélection, actions de ligne/liste, confirmations), `RecordForm`/formulaire de schéma, `detail-drawer` (`size standard|wide`, `modal`, pied d'actions collant), `app-resource-card`, `app-resource-sheet`, `app-summary-tiles`/`app-metric-card`, `app-context-banner`, `PageHeader`, `GuidedSetup` (stepper), `MonitorTemplateComponent`, `ResourceCatalogTemplateComponent`, `LibrarySectionTabsComponent`, `FlowWorkspaceTemplateComponent`, `AssistantWorkspaceTemplateComponent` et `PlatformAdminTemplateComponent`. `MonitorTemplateComponent` cadre le pilotage et ses zones responsives ; `SummaryTiles` et `MetricCard` restent informatifs par défaut et acceptent une destination lorsque la mesure oriente vers une prise en charge. Les catalogues Construire partagent le gabarit et les lignes `ResourceList` ; l’espace de conception partage son cadre entre création et modification tout en gardant le graphe et ses outils spécialisés. L’assistant partage son shell d’historique, de conversation et de contexte avec son panneau compact ; les sources, citations et actions restent fournies par la feature IA. Paramètres partage son en-tête, sa navigation par domaine et son tiroir protégé, tandis que les pages de domaine gardent la portée, les formulaires et les règles d’enregistrement. Les tableaux imbriqués et le suivi d'exécutions restent en table.
+- Le shell global (`AppShellComponent`) garde la navigation et la barre supérieure constantes entre les pages. Le corps du document est fixe ; la région principale est l’unique zone de défilement vertical du shell. Le pied de navigation réunit le repli, le compte et le contrôle d’apparence. Les modes d’authentification et d’éditeur plein écran conservent leurs cadres dédiés.
+- `GlobalSearchBarComponent` réutilise `SearchFieldComponent` et affiche d’abord les résultats fournis par la page, puis les destinations globales. `PageShellContextService` permet à chaque page de fournir sa recherche, jusqu’à deux actions et un filtre ; les données, l’état des filtres et les règles métier restent dans leur feature. Les contrôles sans contexte ne sont pas rendus. La feuille est ancrée au champ, garde sa largeur et son alignement, et son voile commence sous le séparateur inférieur.
+- `AppearancePaletteComponent` réunit les modes Clair/Sombre et les palettes Forêt, Océan, Iris et Rose. `ThemeService` persiste ces choix dans le navigateur. Le choix de palette colore aussi les jetons Angular Material exposés par le shell.
+
+La décision de shell est enregistrée dans [ADR 0018](../adr/0018-shell-commun-et-recherche-contextuelle.md). Les pages seront raccordées au contrat de recherche et d’actions au fil des travaux métier ; le shell ne fournit actuellement que les destinations globales aux pages sans contexte enregistré.
+
 - Les modèles et niveaux de raisonnement IA, les presets d'encodeurs et les catalogues métier **viennent du backend**, pas du frontend. Distinguer composants de flow, composants UI et nœuds de cluster dans le code.
 
 ## Éditeur de flow

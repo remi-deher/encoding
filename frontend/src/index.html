@@ -13,6 +13,9 @@
           t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
         document.documentElement.dataset.theme = t;
+        var p = localStorage.getItem('encoding.palette');
+        if (p !== 'forest' && p !== 'ocean' && p !== 'iris' && p !== 'rose') p = 'forest';
+        document.documentElement.dataset.palette = p;
       } catch (e) {}
     </script>
   </head>

@@ -19,29 +19,31 @@ import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter, map, of, switchMap } from 'rxjs';
 import { PrimaryNavigationComponent } from '../navigation/primary-navigation.component';
 import { AuthService } from '../auth/auth.service';
-import { ThemeToggleComponent } from '../theme/theme-toggle.component';
-import { SearchPaletteDialogComponent } from './search-palette-dialog.component';
+import { AppearancePaletteComponent } from '../theme/appearance-palette.component';
 import { AiAssistantPageComponent } from '../../features/ai/ai-assistant-page.component';
 import { PageSystemActionsComponent } from '../../shared/ui/page-system-actions.component';
+import { GlobalSearchBarComponent } from './global-search-bar.component';
+import { UserMenuComponent } from '../auth/user-menu.component';
+import { PageShellContextService } from './page-shell-context';
 
 @Component({
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatButtonModule,
-    MatDialogModule,
     MatSidenavModule,
     MatTooltipModule,
     PrimaryNavigationComponent,
     RouterLink,
     RouterOutlet,
-    ThemeToggleComponent,
+    AppearancePaletteComponent,
+    UserMenuComponent,
+    GlobalSearchBarComponent,
     AiAssistantPageComponent,
     FlowAiAssistantPanelComponent,
     PageSystemActionsComponent,
@@ -70,8 +72,12 @@ export class AppShellComponent {
   private static readonly assistantLauncherStorageKey = 'encoding.assistant-launcher.position';
   private static readonly assistantLauncherGrid = 24;
   private readonly router = inject(Router);
-  private readonly dialog = inject(MatDialog);
-  private paletteDialogRef: MatDialogRef<SearchPaletteDialogComponent> | null = null;
+  private readonly pageShellContext = inject(PageShellContextService);
+  protected readonly globalSearch = viewChild(GlobalSearchBarComponent);
+  protected readonly hasSearchControls = computed(() => {
+    const context = this.pageShellContext.current();
+    return (context?.actions?.length ?? 0) > 0 || context?.filter !== undefined;
+  });
 
   private readonly navigationEnd = toSignal(
     this.router.events.pipe(
@@ -415,31 +421,27 @@ export class AppShellComponent {
     () => this.executionState().data?.activeCount ?? 0,
   );
 
-  protected openSearchPalette(): void {
-    if (this.paletteDialogRef) {
-      this.paletteDialogRef.close();
-      return;
-    }
-    this.paletteDialogRef = this.dialog.open(SearchPaletteDialogComponent, {
-      width: 'min(560px, 94vw)',
-      maxWidth: '560px',
-      position: { top: '10vh' },
-      panelClass: 'search-palette-dialog-panel',
-      autoFocus: 'first-tabbable',
-      restoreFocus: true,
-    });
-    this.paletteDialogRef.afterClosed().subscribe(() => {
-      this.paletteDialogRef = null;
-    });
-  }
   protected onNavigationClick(): void {
     if (this.isCompactNavigation()) {
       this.navigationOpened.set(false);
     }
   }
 
+  protected onMobileNavigationOpenChange(open: boolean): void {
+    this.navigationSheetOpen.set(open);
+    if (!open) return;
+    this.assistantPanelOpen.set(false);
+    this.assistantPanelOpening.set(false);
+    this.focusReturnElement = null;
+  }
+
   protected onGlobalSearchShortcut(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
+    if (event.key === 'Escape' && this.globalSearch()?.hasOpenPanel()) {
+      event.preventDefault();
+      this.globalSearch()?.closePanel();
+      return;
+    }
     if (event.key === 'Escape' && this.assistantPanelOpen()) {
       event.preventDefault();
       this.closeAssistantPanel();
@@ -448,10 +450,11 @@ export class AppShellComponent {
     if (
       event.key.toLocaleLowerCase() === 'k' &&
       (event.metaKey || event.ctrlKey) &&
-      !this.authMode()
+      !this.authMode() &&
+      !this.workspaceMode()
     ) {
       event.preventDefault();
-      this.openSearchPalette();
+      this.globalSearch()?.focusSearch();
     }
   }
 

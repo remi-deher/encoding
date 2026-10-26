@@ -9,12 +9,12 @@ import {
   output,
 } from '@angular/core';
 
-export type SearchFieldVariant = 'bar' | 'filled' | 'compact';
+export type SearchFieldVariant = 'bar' | 'filled' | 'compact' | 'global';
 
 let nextPanelId = 0;
 
 /**
- * Champ de recherche Material 3 : barre (pages catalogues), rempli (panneaux), compact (barres d'outils).
+ * Champ de recherche Material 3 : barre (catalogues), rempli (panneaux), compact (barres d'outils), global (shell).
  * Avec `filterCount`, un bouton « Filtres » ouvre un panneau soudé à la barre (contenu projeté
  * via `[search-filters]`).
  */
@@ -27,48 +27,63 @@ let nextPanelId = 0;
     '(keydown.escape)': 'closeFilters()',
   },
   template: `
-    <label class="search-field" [class]="'search-field search-field_' + variant()">
-      <svg class="search-field-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="10.8" cy="10.8" r="6.3" />
-        <path d="m15.5 15.5 5 5" />
-      </svg>
-      <input
-        #field
-        type="search"
-        autocomplete="off"
-        [attr.name]="name() || null"
-        [attr.aria-label]="label()"
-        [attr.placeholder]="placeholder() || label()"
-        [value]="value()"
-        (input)="valueChange.emit(field.value)"
-        (keydown.escape)="onEscape($event, field)"
-      />
-      @if (hasValue()) {
-        <button
-          type="button"
-          class="search-field-clear"
-          aria-label="Effacer la recherche"
-          (click)="clear(field)"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-        </button>
-      }
+    <div [class]="'search-field search-field_' + variant()">
+      <div class="search-field-control">
+        <svg class="search-field-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="10.8" cy="10.8" r="6.3" />
+          <path d="m15.5 15.5 5 5" />
+        </svg>
+        <input
+          #field
+          type="search"
+          [attr.role]="inputRole()"
+          [attr.aria-autocomplete]="ariaAutocomplete()"
+          [attr.aria-controls]="ariaControls()"
+          [attr.aria-expanded]="ariaExpanded()"
+          [attr.aria-activedescendant]="activeDescendant()"
+          autocomplete="off"
+          [attr.name]="name() || null"
+          [attr.aria-label]="label()"
+          [attr.placeholder]="placeholder() || label()"
+          [value]="value()"
+          (focus)="focused.emit()"
+          (input)="valueChange.emit(field.value)"
+          (keydown.escape)="onEscape($event, field)"
+        />
+        @if (hasValue()) {
+          <button
+            type="button"
+            class="search-field-clear"
+            aria-label="Effacer la recherche"
+            (click)="clear(field)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        }
+      </div>
+      <ng-content select="[search-actions]" />
       @if (filterCount() !== null) {
         <button
           type="button"
           class="search-field-filters"
-          [attr.aria-controls]="panelId"
-          [attr.aria-expanded]="filtersOpen()"
-          (click)="filtersOpen.set(!filtersOpen())"
+          [class.has-previous-segment]="filterHasPreviousSegment()"
+          [attr.aria-controls]="filterExternallyManaged() ? null : panelId"
+          [attr.aria-expanded]="filterExternallyManaged() ? null : filtersOpen()"
+          (click)="onFilterButtonClick()"
         >
-          Filtres
+          @if (variant() === 'global') {
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16M7 12h10m-7 6h4" />
+            </svg>
+          }
+          <span>{{ filterLabel() }}</span>
           @if (filterCount()) {
             <b>{{ filterCount() }}</b>
           }
         </button>
       }
-    </label>
-    @if (filterCount() !== null) {
+    </div>
+    @if (filterCount() !== null && !filterExternallyManaged()) {
       <div
         [id]="panelId"
         class="search-field-panel"
@@ -99,6 +114,13 @@ let nextPanelId = 0;
         background-color 0.15s ease,
         box-shadow 0.15s ease,
         color 0.15s ease;
+    }
+    .search-field-control {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
     }
     .search-field svg {
       flex: none;
@@ -267,6 +289,89 @@ let nextPanelId = 0;
       background: var(--accent-soft);
       color: var(--accent);
     }
+
+    .search-field_global {
+      min-height: 50px;
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+      font-size: var(--font-body);
+    }
+    .search-field_global:hover,
+    .search-field_global:focus-within {
+      background: transparent;
+      box-shadow: none;
+    }
+    .search-field_global .search-field-icon {
+      width: 20px;
+      height: 20px;
+      margin-left: var(--space-4);
+      color: var(--accent-strong);
+    }
+    .search-field_global .search-field-filters {
+      min-height: 50px;
+      margin: 0;
+      padding: 0 var(--space-3);
+      border-left: 1px solid var(--border-subtle);
+      border-radius: 0;
+      background: transparent;
+      color: var(--text-secondary);
+      font: inherit;
+      font-weight: 650;
+    }
+    .search-field_global .search-field-filters:hover {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--accent-strong);
+    }
+    .search-field_global .search-field-filters:focus-visible {
+      outline: 2px solid var(--accent-strong);
+      outline-offset: -3px;
+    }
+    .search-field_global .search-field-filters svg {
+      width: 19px;
+      height: 19px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .search-field_global .search-field-filters b {
+      min-width: 20px;
+      height: 20px;
+      padding-inline: 5px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: var(--radius-pill);
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-size: var(--font-label);
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 760px) {
+      .search-field_global {
+        flex-wrap: wrap;
+        gap: 0;
+      }
+      .search-field_global .search-field-control {
+        min-height: 46px;
+        flex: 1 0 100%;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .search-field_global .search-action-button,
+      .search-field_global .search-field-filters {
+        min-height: 44px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .search-field_global .search-field-filters {
+        border-left: 0;
+      }
+      .search-field_global .search-action-button.has-divider + .search-action-button.has-divider,
+      .search-field_global .search-field-filters.has-previous-segment {
+        border-left: 1px solid var(--border-subtle);
+      }
+    }
   `,
 })
 export class SearchFieldComponent {
@@ -277,7 +382,17 @@ export class SearchFieldComponent {
   readonly variant = input<SearchFieldVariant>('filled');
   /** `null` : pas de bouton Filtres. Un nombre (0 compris) l'affiche, avec un badge au-dessus de 0. */
   readonly filterCount = input<number | null>(null);
+  readonly filterLabel = input('Filtres');
+  readonly inputRole = input<string | null>(null);
+  readonly ariaAutocomplete = input<string | null>(null);
+  readonly ariaControls = input<string | null>(null);
+  readonly ariaExpanded = input<boolean | null>(null);
+  readonly activeDescendant = input<string | null>(null);
+  readonly filterExternallyManaged = input(false);
+  readonly filterHasPreviousSegment = input(false);
   readonly filtersOpen = model(false);
+  readonly focused = output<void>();
+  readonly filterAction = output<void>();
   readonly valueChange = output<string>();
 
   protected readonly panelId = `search-field-panel-${nextPanelId++}`;
@@ -289,6 +404,18 @@ export class SearchFieldComponent {
     field.value = '';
     this.valueChange.emit('');
     field.focus();
+  }
+
+  focusSearch(): void {
+    this.host.nativeElement.querySelector<HTMLInputElement>('input')?.focus();
+  }
+
+  protected onFilterButtonClick(): void {
+    if (this.filterExternallyManaged()) {
+      this.filterAction.emit();
+      return;
+    }
+    this.filtersOpen.update((open) => !open);
   }
 
   protected onEscape(event: Event, field: HTMLInputElement): void {

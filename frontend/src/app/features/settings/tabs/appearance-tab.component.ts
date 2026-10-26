@@ -1,6 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { ThemeService } from '../../../core/theme/theme.service';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import {
   SettingRowComponent,
   SettingGroupComponent,
@@ -9,35 +7,24 @@ import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-
 @Component({
   selector: 'app-appearance-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    ConfigurationSectionComponent,
-    SettingRowComponent,
-    SettingGroupComponent,
-    MatButtonToggleModule,
-  ],
+  imports: [ConfigurationSectionComponent, SettingRowComponent, SettingGroupComponent],
   template: `
     <app-configuration-section
       title="Apparence"
-      description="Choisissez le thème qui vous convient."
+      description="Les préférences visuelles sont regroupées dans la navigation principale."
       icon="settings"
     >
       <app-setting-group>
         <app-setting-row
-          label="Thème de l’interface"
-          hint="S’applique immédiatement, dans ce navigateur uniquement."
+          label="Thème et couleur"
+          hint="Ce choix s’applique dans ce navigateur uniquement."
         >
-          <mat-button-toggle-group
-            aria-label="Thème de l’interface"
-            [value]="theme.current()"
-            (change)="theme.set($event.value)"
-            ><mat-button-toggle value="light">Clair</mat-button-toggle
-            ><mat-button-toggle value="dark">Sombre</mat-button-toggle></mat-button-toggle-group
-          >
+          <p>
+            Ouvrez le bouton Apparence au pied de la navigation pour choisir le mode et la palette.
+          </p>
         </app-setting-row>
       </app-setting-group>
     </app-configuration-section>
   `,
 })
-export class AppearanceTabComponent {
-  protected readonly theme = inject(ThemeService);
-}
+export class AppearanceTabComponent {}
