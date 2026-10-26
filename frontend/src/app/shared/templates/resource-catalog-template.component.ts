@@ -32,6 +32,7 @@ import {
   template: `
     <app-management-catalog-template
       [title]="title()"
+      [titleVisuallyHidden]="true"
       [filterLabel]="filterLabel()"
       [searchLabel]="searchLabel()"
       [searchQuery]="searchQuery()"
@@ -54,6 +55,7 @@ import {
       [actionStep]="actionStep()"
       [drawerSize]="drawerSize()"
       [drawerHeaderDensity]="drawerHeaderDensity()"
+      [detailBodyLayout]="detailBodyLayout()"
       [drawerModal]="drawerModal()"
       [pageActionsInput]="pageActions()"
       [toolbarActionsInput]="toolbarActions()"
@@ -155,6 +157,7 @@ export class ResourceCatalogTemplateComponent {
   readonly actionStep = input<{ readonly current: number; readonly total: number } | null>(null);
   readonly drawerSize = input<'standard' | 'wide'>('wide');
   readonly drawerHeaderDensity = input<'standard' | 'compact'>('standard');
+  readonly detailBodyLayout = input<'scroll' | 'fill'>('scroll');
   readonly drawerModal = input(true);
 
   readonly searchQueryChange = output<string>();

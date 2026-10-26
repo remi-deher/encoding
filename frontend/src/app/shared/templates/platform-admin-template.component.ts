@@ -22,7 +22,7 @@ import { SubnavComponent } from '../ui/subnav.component';
       (closed)="editorClosed.emit()"
     >
       <div drawer-main>
-        <app-page-header [title]="title()" />
+        <app-page-header [title]="title()" [visuallyHidden]="true" />
         <app-subnav
           #domainNavigation
           panelId="platform-admin-panel"

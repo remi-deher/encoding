@@ -28,6 +28,7 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
   selector: 'app-detail-drawer',
   host: {
     '[class.drawer-fill]': 'fill()',
+    '[class.drawer-body-fill]': "bodyLayout() === 'fill'",
     '(document:keydown.escape)': 'onEscape($event)',
   },
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -295,9 +296,16 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
     .drawer-body {
       min-height: 0;
       padding: var(--space-5);
-      flex: 1 1 auto;
+      flex: 1 1 0;
       overscroll-behavior: contain;
       overflow: auto;
+    }
+
+    :host(.drawer-body-fill) .drawer-body {
+      display: flex;
+      min-height: 0;
+      padding: 0;
+      overflow: hidden;
     }
 
     .drawer-footer:empty {
@@ -306,8 +314,7 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
 
     .drawer-footer {
       flex: 0 0 auto;
-      position: sticky;
-      bottom: 0;
+      z-index: 1;
       padding: var(--space-3) var(--space-5);
       display: flex;
       align-items: center;
@@ -390,6 +397,8 @@ export class DetailDrawerComponent {
 
   /** `standard` : tiroir de 560 px pour une fiche ; `wide` : jusqu'à 1 000 px pour un éditeur. */
   readonly fill = input(false);
+  /** `fill` laisse la vue imbriquée remplir le corps et gérer son propre défilement. */
+  readonly bodyLayout = input<'scroll' | 'fill'>('scroll');
   readonly mode = input<'side' | 'over'>('over');
   readonly size = input<'standard' | 'wide'>('wide');
   readonly headerDensity = input<'standard' | 'compact'>('standard');

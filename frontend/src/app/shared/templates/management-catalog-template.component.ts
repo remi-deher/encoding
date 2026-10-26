@@ -38,6 +38,7 @@ export interface CatalogEmptyState {
       [opened]="actionOpen() || (detailOpen() && detailLayout() === 'drawer')"
       [size]="drawerSize()"
       [headerDensity]="drawerHeaderDensity()"
+      [bodyLayout]="actionOpen() ? 'scroll' : detailBodyLayout()"
       [modal]="drawerModal()"
       [title]="actionOpen() ? actionTitle() : detailTitle()"
       [description]="actionOpen() ? actionDescription() : detailDescription()"
@@ -60,7 +61,11 @@ export interface CatalogEmptyState {
           />
           <ng-container [ngTemplateOutlet]="detailContentTemplate()" />
         } @else {
-          <app-page-header [title]="title()" [actions]="pageActionsTemplate()" />
+          <app-page-header
+            [title]="title()"
+            [actions]="pageActionsTemplate()"
+            [visuallyHidden]="titleVisuallyHidden()"
+          />
           <div class="catalog-navigation-wrapper">
             @if (catalogueNavigationTemplate(); as navigation) {
               <ng-container [ngTemplateOutlet]="navigation" />
@@ -187,6 +192,7 @@ export interface CatalogEmptyState {
 })
 export class ManagementCatalogTemplateComponent {
   readonly title = input.required<string>();
+  readonly titleVisuallyHidden = input(false);
   readonly filterLabel = input('Filtres');
   readonly searchLabel = input('');
   readonly searchQuery = input('');
@@ -223,6 +229,8 @@ export class ManagementCatalogTemplateComponent {
   readonly drawerSize = input<'standard' | 'wide'>('wide');
   /** Densité de l'en-tête des fiches ; reste normale pour les formulaires d'action. */
   readonly drawerHeaderDensity = input<'standard' | 'compact'>('standard');
+  /** Le mode `fill` réserve le défilement aux vues imbriquées, comme une fiche à onglets. */
+  readonly detailBodyLayout = input<'scroll' | 'fill'>('scroll');
   /** Voile derrière le tiroir ; un clic dessus le ferme. */
   readonly drawerModal = input(true);
   readonly pageActionsInput = input<TemplateRef<unknown> | undefined>();

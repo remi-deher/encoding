@@ -10,7 +10,7 @@ import { PageSystemActionsComponent } from './page-system-actions.component';
     <div class="page-header" [class.page-header_workspace]="layout() === 'workspace'">
       <div class="page-heading" [class.page-heading_empty]="!showHeading()">
         @if (showHeading()) {
-          <h1>{{ title() }}</h1>
+          <h1 [class.visually-hidden]="visuallyHidden()">{{ title() }}</h1>
           @if (description()) {
             <p class="page-description">{{ description() }}</p>
           }
@@ -34,6 +34,7 @@ import { PageSystemActionsComponent } from './page-system-actions.component';
 export class PageHeaderComponent {
   readonly title = input.required<string>();
   readonly showHeading = input(true);
+  readonly visuallyHidden = input(false);
   readonly layout = input<'default' | 'workspace'>('default');
   readonly description = input('');
   readonly actions = input<TemplateRef<unknown> | undefined>();

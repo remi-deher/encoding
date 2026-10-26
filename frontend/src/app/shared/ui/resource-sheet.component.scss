@@ -3,9 +3,26 @@
   min-width: 0;
 }
 
+:host(.resource-sheet-fill) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 .sheet-stack {
   display: grid;
   gap: var(--space-4);
+}
+
+.sheet-stack_fill {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.sheet-stack_fill .sheet {
+  flex: 1 0 auto;
 }
 
 .sheet-notice {

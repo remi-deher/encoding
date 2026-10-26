@@ -1,27 +1,42 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  effect,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CategoryTabOption } from '../ui/category-tabs.component';
-import { PageHeaderComponent } from '../ui/page-header.component';
 import { SubnavComponent } from '../ui/subnav.component';
 
 /** Cadre commun de synthèse et d’orientation pour le rôle métier Piloter. */
 @Component({
   selector: 'app-monitor-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SubnavComponent, PageHeaderComponent],
+  imports: [SubnavComponent],
   template: `
-    <app-page-header [title]="title()" [actions]="actions()" />
-    <app-subnav
-      #viewNavigation
-      panelId="monitor-panel"
-      [label]="viewsLabel()"
-      [options]="views()"
-      [selected]="selectedView()"
-      (selectedChange)="selectedViewChange.emit($event)"
+    <h1 class="visually-hidden">{{ title() }}</h1>
+    <div
+      #navigationRow
+      class="monitor-navigation"
+      [class.is-stuck]="navigationStuck()"
     >
+      <app-subnav
+        #viewNavigation
+        class="monitor-subnav"
+        presentation="capsule"
+        panelId="monitor-panel"
+        [label]="viewsLabel()"
+        [options]="views()"
+        [selected]="selectedView()"
+        (selectedChange)="selectedViewChange.emit($event)"
+      />
       @if (metadata()) {
-        <span subnav-actions class="cluster-name">{{ metadata() }}</span>
+        <span class="cluster-name">{{ metadata() }}</span>
       }
-    </app-subnav>
+    </div>
 
     <section
       id="monitor-panel"
@@ -68,6 +83,34 @@ import { SubnavComponent } from '../ui/subnav.component';
       margin: 0;
       color: var(--text-muted);
       font-size: var(--font-body);
+      grid-column: 3;
+      grid-row: 1;
+      justify-self: end;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      text-align: end;
+    }
+    .monitor-navigation {
+      position: sticky;
+      top: calc(var(--shell-header-sticky-offset, 84px) + var(--space-2));
+      z-index: 4;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      min-width: 0;
+      margin-bottom: var(--space-4);
+      padding-block: var(--space-1);
+      background: transparent;
+      pointer-events: none;
+    }
+    .monitor-navigation > app-subnav {
+      grid-column: 2;
+      grid-row: 1;
+      pointer-events: auto;
+    }
+    .monitor-navigation.is-stuck > app-subnav {
+      box-shadow: var(--elevation-2);
     }
     .monitor-feedback {
       margin: 0 0 var(--space-4);
@@ -103,12 +146,56 @@ import { SubnavComponent } from '../ui/subnav.component';
         grid-template-columns: minmax(0, 1fr);
       }
     }
+    @media (max-width: 760px) {
+      .monitor-navigation {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        gap: var(--space-1);
+      }
+      .monitor-navigation > app-subnav,
+      .cluster-name {
+        grid-column: 1;
+      }
+      .monitor-navigation > app-subnav {
+        grid-row: 1;
+      }
+      .cluster-name {
+        grid-row: 2;
+        justify-self: center;
+        font-size: var(--font-label);
+      }
+    }
   `,
 })
 export class MonitorTemplateComponent {
+  private readonly navigationRow = viewChild<ElementRef<HTMLElement>>('navigationRow');
+  protected readonly navigationStuck = signal(false);
+
+  constructor() {
+    effect((onCleanup) => {
+      const row = this.navigationRow()?.nativeElement;
+      if (!row || typeof window === 'undefined') return;
+
+      const scrollRegion = row.closest<HTMLElement>('.page-transition-region') ?? window;
+      const updateStuckState = () => {
+        const stickyTop = Number.parseFloat(window.getComputedStyle(row).top);
+        const stuck = row.getBoundingClientRect().top <= stickyTop + 1;
+        if (stuck !== this.navigationStuck()) this.navigationStuck.set(stuck);
+      };
+
+      scrollRegion.addEventListener('scroll', updateStuckState, { passive: true });
+      window.addEventListener('resize', updateStuckState, { passive: true });
+      updateStuckState();
+
+      onCleanup(() => {
+        scrollRegion.removeEventListener('scroll', updateStuckState);
+        window.removeEventListener('resize', updateStuckState);
+      });
+    });
+  }
+
   readonly title = input.required<string>();
   readonly metadata = input('');
-  readonly actions = input<TemplateRef<unknown> | undefined>();
   readonly viewsLabel = input('Vues d’ensemble');
   readonly views = input.required<readonly CategoryTabOption[]>();
   readonly selectedView = input.required<string>();

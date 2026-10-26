@@ -18,7 +18,7 @@ Le shell adaptatif et les palettes Material partagées sont définis par l’ADR
 
 ## Décision
 
-Le shell global fournit une barre de recherche composite, centrée et stable dans la zone de contenu, avec une feuille de résultats directement accolée. Elle réutilise `SearchFieldComponent`. Une page peut enregistrer ses résultats, jusqu’à deux actions et un filtre via `PageShellContextService`. Le shell place les résultats de la page avant les destinations globales et n’implémente pas les règles métier de recherche ou de filtrage. Les actions et le filtre apparaissent dans le même composant que la recherche, sans séparateurs ni espace vide lorsque ces commandes ne sont pas présentes.
+Le shell global fournit une barre de recherche composite, centrée et stable dans la zone de contenu, avec une feuille de résultats directement accolée. À viewport et état de navigation identiques, sa largeur est stable entre les routes ; elle s’adapte au viewport et aux largeurs de sidebar définies par le shell. Elle réutilise `SearchFieldComponent`. Une page peut enregistrer ses résultats, jusqu’à deux actions et un filtre via `PageShellContextService`. Le shell place les résultats de la page avant les destinations globales et n’implémente pas les règles métier de recherche ou de filtrage. Les actions et le filtre apparaissent dans le même composant que la recherche, sans séparateurs ni espace vide lorsque ces commandes ne sont pas présentes.
 
 ## Alternatives écartées
 

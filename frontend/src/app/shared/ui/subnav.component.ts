@@ -21,6 +21,9 @@ export interface SubnavOption {
 /** Navigation de second niveau commune : liens entre routes ou vues locales. */
 @Component({
   selector: 'app-subnav',
+  host: {
+    '[class.subnav-capsule]': "presentation() === 'capsule'",
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
   template: `
@@ -86,6 +89,8 @@ export class SubnavComponent {
   readonly options = input.required<readonly SubnavOption[]>();
   readonly selected = input.required<string>();
   readonly variant = input<'links' | 'tabs'>('tabs');
+  /** Présentation capsule centrée, utile pour les vues locales intégrées à une page. */
+  readonly presentation = input<'default' | 'capsule'>('default');
   readonly selectedChange = output<string>();
 
   private readonly items = viewChildren<ElementRef<HTMLElement>>('subnavItem');
