@@ -65,7 +65,8 @@ export function settingsDomain(value: string | null): SettingsMainTab {
       [editorOpen]="!!editor.state()"
       [editorTitle]="editor.state()?.title ?? ''"
       [editorContent]="editor.state()?.content"
-      [editorDismissible]="!editor.isBusy() && !editor.hasUnsavedChanges()"
+      [editorDismissible]="!editor.isBusy()"
+      [editorCloseGuard]="editorCloseGuard"
       (tabChange)="onMainTabChange($event)"
       (editorClosed)="editor.drawerClosed()"
     >
@@ -108,6 +109,7 @@ export class SettingsPageComponent {
   private navigationApproved = false;
   private readonly aiTab = viewChild(AiToolsTabComponent);
   protected readonly editor = inject(SettingsEditor);
+  protected readonly editorCloseGuard = () => this.editor.close();
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);

@@ -1,8 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
-import { catchError, forkJoin, of } from 'rxjs';
+import { catchError, forkJoin, interval, of } from 'rxjs';
 import { AiClusterView, AiSettings, AiToolInfo } from '../../shared/models/ai-tools';
 import { AiToolsService } from '../../shared/services/ai-tools.service';
 
@@ -42,7 +50,7 @@ const PROVIDERS = [
                 Une ou plusieurs sources n’ont pas répondu. Les données absentes restent inconnues.
               </p>
             </div>
-            <button matButton="text" type="button" (click)="refresh()">Réessayer</button>
+            <p>Une nouvelle vérification sera effectuée automatiquement.</p>
           </section>
         }
 
@@ -308,6 +316,9 @@ const PROVIDERS = [
 })
 export class AiProviderOverviewComponent {
   private readonly aiTools = inject(AiToolsService);
+  private readonly destroyRef = inject(DestroyRef);
+  private inFlight = false;
+  private hasLoaded = false;
   protected readonly loading = signal(true);
   protected readonly loadFailed = signal(false);
   protected readonly tools = signal<readonly AiToolInfo[] | null>(null);
@@ -394,21 +405,27 @@ export class AiProviderOverviewComponent {
 
   constructor() {
     this.refresh();
+    interval(30_000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.refresh());
   }
 
-  refresh(): void {
-    this.loading.set(true);
-    this.loadFailed.set(false);
+  private refresh(): void {
+    if (this.inFlight) return;
+    this.inFlight = true;
+    if (!this.hasLoaded) this.loading.set(true);
     forkJoin({
       tools: this.aiTools.listTools().pipe(catchError(() => of(null))),
       cluster: this.aiTools.getCluster().pipe(catchError(() => of(null))),
       settings: this.aiTools.getSettings().pipe(catchError(() => of(null))),
     }).subscribe(({ tools, cluster, settings }) => {
-      this.tools.set(tools);
-      this.cluster.set(cluster);
-      this.settings.set(settings);
+      if (tools) this.tools.set(tools);
+      if (cluster) this.cluster.set(cluster);
+      if (settings) this.settings.set(settings);
       this.loadFailed.set(tools === null || cluster === null || settings === null);
       this.loading.set(false);
+      this.hasLoaded = true;
+      this.inFlight = false;
     });
   }
 

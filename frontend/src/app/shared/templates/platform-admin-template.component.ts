@@ -17,6 +17,7 @@ import { SubnavComponent } from '../ui/subnav.component';
       [modal]="true"
       mainScroll="parent"
       [dismissible]="editorDismissible()"
+      [closeGuard]="editorCloseGuard()"
       (closed)="editorClosed.emit()"
     >
       <div drawer-main>
@@ -53,6 +54,7 @@ export class PlatformAdminTemplateComponent {
   readonly editorTitle = input('');
   readonly editorContent = input<TemplateRef<unknown> | undefined>(undefined);
   readonly editorDismissible = input(true);
+  readonly editorCloseGuard = input<(() => boolean | Promise<boolean>) | undefined>();
 
   readonly tabChange = output<string>();
   readonly editorClosed = output<void>();

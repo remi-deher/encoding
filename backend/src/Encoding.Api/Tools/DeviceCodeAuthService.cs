@@ -58,6 +58,10 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             else
             {
                 var account = await ReadCachedCliStatusAsync(id, ct);
+                // The CLI can persist credentials before its interactive login process exits.
+                // Treat the independently verified account state as success immediately so the
+                // UI does not keep reporting a pending attempt or cancel a completed login.
+                MarkAuthorizedSession(id, session, account);
                 return account with { AttemptState = session.State, AttemptErrorMessage = session.Error };
             }
         }
@@ -77,7 +81,10 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             else if (session.State == "authorized")
                 return Task.FromResult(new DeviceAuthStatus(id, "authorized", AttemptState: "authorized"));
             else
+            {
+                if (session.State == "pending") QueuePendingStatusCheck(id, session);
                 return Task.FromResult(new DeviceAuthStatus(id, session.State, ErrorMessage: session.Error));
+            }
         }
         if (runtime.Find(id) is null) return Task.FromResult(new DeviceAuthStatus(id, "unconfigured", ErrorMessage: "Outil non installé."));
         var entry = statusCache.GetOrAdd(id, _ => new());
@@ -142,6 +149,32 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         try { await ReadCachedCliStatusAsync(id, CancellationToken.None); }
         catch (Exception) { }
         finally { lock (entry.Sync) entry.RefreshQueued = false; }
+    }
+
+    private void QueuePendingStatusCheck(string id, Session session)
+    {
+        if (Interlocked.Exchange(ref session.StatusCheckQueued, 1) != 0) return;
+        _ = VerifyPendingStatusInBackground(id, session);
+    }
+
+    private async Task VerifyPendingStatusInBackground(string id, Session session)
+    {
+        try
+        {
+            var account = await ReadCachedCliStatusAsync(id, CancellationToken.None);
+            MarkAuthorizedSession(id, session, account);
+        }
+        catch (Exception) { }
+        finally { Interlocked.Exchange(ref session.StatusCheckQueued, 0); }
+    }
+
+    private void MarkAuthorizedSession(string id, Session session, DeviceAuthStatus account)
+    {
+        if (session.State != "pending" || account.State != "authorized") return;
+        session.State = "authorized";
+        session.Error = null;
+        session.FinishedAt ??= clock.GetUtcNow();
+        ConnectionChanged(id);
     }
 
     private async Task<DeviceAuthStatus> CheckCliStatusAsync(string id, CancellationToken ct)
@@ -282,7 +315,9 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
             var verified = result.ExitCode == 0 && promptRecognized
                 ? await CheckCliStatusAsync(session.ToolId, session.Cancellation.Token)
                 : null;
-            session.State = verified?.State == "authorized" ? "authorized" : "failed";
+            session.State = session.State == "authorized" || verified?.State == "authorized"
+                ? "authorized"
+                : "failed";
             if (session.State == "failed") session.Error = result.ExitCode != 0
                 ? $"La CLI a terminé avec le code {result.ExitCode}. Consultez les journaux système de ce nœud."
                 : promptRecognized
@@ -504,6 +539,7 @@ public sealed partial class DeviceCodeAuthService(AiCliRuntime runtime, ILogger<
         public readonly SemaphoreSlim InputGate = new(1);
         public volatile string State = "pending";
         public volatile bool InputSubmitted;
+        public int StatusCheckQueued;
         public AiCliProcess? Process;
         public string? Error;
         public Task? Run;

@@ -21,8 +21,8 @@
         <app-settings-notice>Chargement des modèles annoncés par les nœuds…</app-settings-notice>
       } @else if (!modelCatalog()) {
         <app-settings-notice tone="warning"
-          >Impossible de charger les modèles annoncés. Actualisez les
-          connexions.</app-settings-notice
+          >Impossible de charger les modèles annoncés. Une nouvelle vérification sera effectuée en
+          arrière-plan.</app-settings-notice
         >
       } @else if (!providerChoices().length) {
         <app-settings-notice
@@ -241,15 +241,6 @@
       description="Les connexions Codex, Claude Code et les clés OpenAI et Anthropic sont copiées chiffrées sur tous les nœuds : si le serveur tombe, les flows IA continuent."
       icon="api"
     >
-      <button
-        section-actions
-        matButton="tonal"
-        type="button"
-        [disabled]="loadingTools()"
-        (click)="refreshTools()"
-      >
-        <app-icon name="refresh" />Actualiser les connexions
-      </button>
       <app-setting-group>
         @for (provider of providers; track provider.id) {
           <app-setting-row [label]="provider.name" [hint]="clusterLabel(provider.id)">

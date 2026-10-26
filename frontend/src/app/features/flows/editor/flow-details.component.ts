@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
   inject,
   input,
@@ -15,7 +16,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, interval } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FlowValidation } from '../../../shared/services/flow-validation';
 import {
   FlowDocument,
@@ -53,6 +55,7 @@ type Selection =
   styleUrl: './flow-details.component.scss',
 })
 export class FlowDetailsComponent implements OnChanges, OnDestroy {
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly formatDate = formatFullDateTime;
   readonly flowId = input.required<string>();
   readonly initialTab = input(0);
@@ -169,6 +172,11 @@ export class FlowDetailsComponent implements OnChanges, OnDestroy {
   });
   private generation = 0;
   private previewGeneration = 0;
+  constructor() {
+    interval(60_000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => void this.refreshInBackground());
+  }
   ngOnChanges(): void {
     void this.load();
   }
@@ -230,6 +238,44 @@ export class FlowDetailsComponent implements OnChanges, OnDestroy {
       if (generation === this.generation) this.previewState.set('error');
     }
     await extras;
+  }
+  private async refreshInBackground(): Promise<void> {
+    if (!this.current() || this.busy()) return;
+    const generation = this.generation;
+    const id = this.flowId();
+    const results = await Promise.allSettled([
+      this.api.get(id),
+      this.api.catalog(),
+      this.api.versions(id),
+      this.api.draftBackups(id),
+      this.api.usage(id),
+      this.api.preflight(id),
+    ]);
+    if (generation !== this.generation) return;
+
+    const [current, catalog, versions, backups, usage, preflight] = results;
+    const errors = new Set<string>();
+    if (current.status === 'fulfilled') {
+      this.current.set(current.value);
+      if (this.selection().kind === 'current') {
+        this.document.set(current.value.definition);
+        this.selectedDate.set(current.value.createdAt);
+        this.selectedBackup.set(current.value.backupStatus);
+      }
+    } else errors.add('current');
+    if (catalog.status === 'fulfilled') this.catalog.set(catalog.value);
+    else errors.add('catalog');
+    if (versions.status === 'fulfilled')
+      this.versions.set([...versions.value].sort((a, b) => b.version - a.version));
+    else errors.add('versions');
+    if (backups.status === 'fulfilled') this.backups.set(backups.value);
+    else errors.add('backups');
+    if (usage.status === 'fulfilled') this.usage.set(usage.value);
+    else errors.add('usage');
+    if (preflight.status === 'fulfilled') this.preflight.set(preflight.value);
+    else errors.add('validation');
+    this.errors.set(errors);
+    this.extrasLoaded.set(true);
   }
   private fail(key: string): void {
     this.errors.update((values) => new Set([...values, key]));

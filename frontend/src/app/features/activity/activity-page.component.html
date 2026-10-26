@@ -6,7 +6,6 @@
   (selectedChange)="setRole($event)"
 >
   <span subnav-actions class="activity-count-pill">{{ countText() }}</span>
-  <button subnav-actions matButton="outlined" type="button" (click)="refresh()">Actualiser</button>
 </app-subnav>
 
 @if (kindFilter() !== 'ai') {
@@ -163,8 +162,8 @@
           }}
         </h3>
         <p>
-          Les dernières données sont conservées. L’actualisation automatique ou manuelle peut
-          rétablir le chargement.
+          Les dernières données sont conservées. La mise à jour automatique reprendra dès que le
+          serveur répond.
         </p>
       }
     </div>

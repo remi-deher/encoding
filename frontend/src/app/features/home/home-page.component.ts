@@ -6,7 +6,7 @@ import {
 } from '../../shared/services/execution-tracking';
 import { HomeExecutions, INITIAL_HOME_EXECUTIONS } from './home-executions';
 import { DatePipe } from '@angular/common';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../../shared/services/cluster-overview';
 import {
   assessClusterHealth,
@@ -26,6 +26,7 @@ import {
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   TemplateRef,
   computed,
   inject,
@@ -51,6 +52,7 @@ import {
   AiAssistantOptions,
 } from '../../shared/models/ai-tools';
 import { catchError, firstValueFrom, forkJoin, of } from 'rxjs';
+import { interval } from 'rxjs';
 
 type OverviewView = 'general' | 'ai' | 'activity' | 'infrastructure';
 
@@ -105,6 +107,7 @@ export class HomePageComponent {
   protected onOverviewViewChanged(value: string): void {
     if (this.overviewTabs.some((tab) => tab.value === value)) {
       this.overviewView.set(value as OverviewView);
+      if (value === 'ai') this.refreshAiOverview();
     }
   }
   protected readonly flowCreationForm = signal<
@@ -160,7 +163,7 @@ export class HomePageComponent {
 
   private readonly executionTracking = inject(ExecutionTracking);
   private readonly aiTools = inject(AiToolsService);
-  private readonly providerOverview = viewChild(AiProviderOverviewComponent);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly aiOptions = signal<AiAssistantOptions | null>(null);
   protected readonly aiActivity = signal<readonly AiAssistantActivity[]>([]);
   protected readonly aiConversations = signal<readonly AiAssistantConversation[]>([]);
@@ -240,16 +243,25 @@ export class HomePageComponent {
     () => this.state().snapshot?.identity.name ?? 'Installation',
   );
   private readonly overview = inject(ClusterOverview);
+  private aiOverviewInFlight = false;
+  private aiOverviewLoaded = false;
   protected readonly state = toSignal(this.overview.state$, {
     initialValue: INITIAL_CLUSTER_OVERVIEW,
   });
 
   constructor() {
     this.refreshAiOverview();
+    interval(30_000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.overviewView() === 'ai') this.refreshAiOverview();
+      });
   }
 
   protected refreshAiOverview(): void {
-    this.aiOverviewLoading.set(true);
+    if (this.aiOverviewInFlight) return;
+    this.aiOverviewInFlight = true;
+    if (!this.aiOverviewLoaded) this.aiOverviewLoading.set(true);
     forkJoin({
       options: this.aiTools.getAssistantOptions().pipe(catchError(() => of(null))),
       activity: this.aiTools.listAssistantActivity().pipe(catchError(() => of(null))),
@@ -260,6 +272,8 @@ export class HomePageComponent {
       if (conversations) this.aiConversations.set(conversations);
       this.aiOverviewPartial.set(!options || !activity || !conversations);
       this.aiOverviewLoading.set(false);
+      this.aiOverviewLoaded = true;
+      this.aiOverviewInFlight = false;
     });
   }
 
@@ -378,12 +392,5 @@ export class HomePageComponent {
   }
   protected roleLabel(roles: readonly NodeRole[]): string {
     return roles.map((r) => NODE_ROLE_LABELS[r]).join(' · ');
-  }
-  protected refresh(): void {
-    this.overview.refresh();
-    this.executionTracking.refresh();
-    this.homeExecutions.refresh();
-    this.refreshAiOverview();
-    this.providerOverview()?.refresh();
   }
 }
