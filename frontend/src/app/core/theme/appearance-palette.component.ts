@@ -52,6 +52,7 @@ const PALETTE_OPTIONS: readonly { value: ThemePalette; label: string }[] = [
       [cdkConnectedOverlayHasBackdrop]="true"
       cdkConnectedOverlayBackdropClass="cdk-overlay-transparent-backdrop"
       [cdkConnectedOverlayPositions]="positions"
+      [cdkConnectedOverlayPush]="true"
       [cdkConnectedOverlayViewportMargin]="12"
       (backdropClick)="close()"
       (overlayKeydown)="closeOnEscape($event)"

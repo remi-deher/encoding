@@ -362,6 +362,27 @@ button.assistant-launcher {
   background: var(--page-background);
 }
 
+.application-header > app-page-system-actions {
+  margin-left: auto;
+  z-index: 2;
+}
+
+@media (min-width: 1101px) and (max-width: 1600px) {
+  .application-header {
+    padding-inline: clamp(12px, 1.25vw, 20px);
+  }
+}
+
+.application-shell.rail-navigation-shell .application-header {
+  max-width: calc(var(--content-wide-width) + var(--sidebar-width) - var(--rail-width));
+}
+
+@media (min-width: 1101px) {
+  .application-shell.rail-navigation-shell app-global-search-bar {
+    width: min(980px, 50%, calc(100% - 740px));
+  }
+}
+
 .main-content {
   box-sizing: border-box;
   width: 100%;
@@ -412,6 +433,7 @@ button.assistant-launcher {
 /* Responsive Rules */
 @media (max-width: 760px) {
   .application-header {
+    display: flex;
     min-height: 116px;
     padding: 62px 16px 8px;
     align-items: flex-end;

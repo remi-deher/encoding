@@ -28,7 +28,6 @@
   <app-monitor-template
     title="Vue d’ensemble"
     [metadata]="clusterName()"
-    [actions]="pageActionsTemplate()"
     [views]="overviewTabs"
     [selectedView]="overviewView()"
     [state]="state().status"
@@ -361,10 +360,6 @@
       }
     </section>
   </app-monitor-template>
-</ng-template>
-
-<ng-template #pageActions>
-  <button matButton="filled" type="button" (click)="openFlowCreation()">Créer un flow</button>
 </ng-template>
 
 <ng-template #flowForm>

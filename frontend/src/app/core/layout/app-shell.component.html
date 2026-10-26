@@ -4,6 +4,7 @@
   class="application-shell"
   [class.workspace-shell]="workspaceMode()"
   [class.auth-shell]="authMode()"
+  [class.rail-navigation-shell]="!authMode() && !workspaceMode() && railNavigation()"
   [class.compact-navigation-shell]="!authMode() && !workspaceMode() && isCompactNavigation()"
 >
   @if (authMode()) {
