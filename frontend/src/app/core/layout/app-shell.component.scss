@@ -367,6 +367,12 @@ button.assistant-launcher {
   z-index: 2;
 }
 
+@media (min-width: 1101px) and (max-width: 1600px) {
+  .application-header {
+    padding-inline: clamp(12px, 1.25vw, 20px);
+  }
+}
+
 .application-shell.rail-navigation-shell .application-header {
   max-width: calc(var(--content-wide-width) + var(--sidebar-width) - var(--rail-width));
 }
