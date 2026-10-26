@@ -1,6 +1,15 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
+async function openAppearancePalette(page: import('@playwright/test').Page) {
+  const appearance = page.getByRole('button', { name: 'Apparence : thème et palette de couleurs' });
+  if (!(await appearance.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: 'Plus', exact: true }).click();
+  }
+  await appearance.click();
+  return appearance;
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/v1/auth/status', (route) =>
@@ -36,18 +45,14 @@ test('palette menu changes Material and application colours, preserves mode and 
   page,
 }) => {
   await page.goto('/');
-  const appearance = page.getByRole('button', { name: 'Apparence : thème et palette de couleurs' });
-  await appearance.click();
+  const appearance = await openAppearancePalette(page);
   await page.getByRole('button', { name: 'Iris', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'iris');
   await page.getByRole('radio', { name: 'Sombre' }).click();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'iris');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  const reloadedAppearance = page.getByRole('button', {
-    name: 'Apparence : thème et palette de couleurs',
-  });
-  await reloadedAppearance.click();
+  const reloadedAppearance = await openAppearancePalette(page);
   await expect(page.getByRole('button', { name: 'Iris', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -65,9 +70,7 @@ test('populated tools stay readable in four palettes and both modes without mobi
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const colours: string[] = [];
   for (const palette of ['forest', 'ocean', 'iris', 'rose']) {
-    await page
-      .getByRole('button', { name: 'Apparence : thème et palette de couleurs' })
-      .click();
+    await openAppearancePalette(page);
     await page
       .getByRole('button', {
         name: { forest: 'Forêt', ocean: 'Océan', iris: 'Iris', rose: 'Rose' }[palette],

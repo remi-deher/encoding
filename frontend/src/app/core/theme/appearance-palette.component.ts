@@ -236,6 +236,6 @@ export class AppearancePaletteComponent {
 
   protected close(): void {
     this.opened.set(false);
-    this.trigger()?.nativeElement.focus();
+    this.trigger()?.nativeElement?.focus();
   }
 }

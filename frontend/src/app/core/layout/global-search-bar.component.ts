@@ -53,7 +53,7 @@ interface SearchEntry {
           [value]="query()"
           [inputRole]="'combobox'"
           [ariaAutocomplete]="'list'"
-          [ariaControls]="'global-search-results'"
+          [ariaControls]="panelOpen() ? 'global-search-results' : null"
           [ariaExpanded]="panelOpen()"
           [activeDescendant]="activeItemId()"
           [filterCount]="filterButtonCount()"
@@ -287,7 +287,8 @@ export class GlobalSearchBarComponent {
   }
 
   protected activeItemId(): string | null {
-    return this.allResults().length &&
+    return this.panelOpen() &&
+      this.allResults().length &&
       this.activeIndex() >= 0 &&
       this.activeIndex() < this.allResults().length
       ? `global-search-option-${this.activeIndex()}`

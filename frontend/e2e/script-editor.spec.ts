@@ -62,7 +62,7 @@ test('script code remains in the accessible editor after cancelled close, Escape
 test('browser back asks before losing a script draft', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('Control+k');
-  const search = page.getByRole('combobox', { name: /Rechercher une destination/ });
+  const search = page.getByRole('combobox', { name: /Rechercher dans Encoding/ });
   await search.fill('Scripts');
   await search.press('Enter');
   await page.getByRole('button', { name: 'Créer le premier script' }).click();
