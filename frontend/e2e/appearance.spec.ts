@@ -179,9 +179,13 @@ test('store cards and repository actions stay accessible with populated content 
   await page.goto('/plugins');
   await page.getByRole('tab', { name: /Store & Dépôts/ }).click();
   await expect(page.getByRole('heading', { name: 'Outil de test' })).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: 'Importer une archive (.zip)', exact: true }),
-  ).toBeVisible();
+  const importAction = page.getByRole('button', { name: 'Importer une archive', exact: true });
+  await expect(importAction).toBeVisible();
+  const [archiveChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    importAction.click(),
+  ]);
+  expect(archiveChooser.isMultiple()).toBe(false);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const mode of ['light', 'dark']) {
     await page.evaluate((value) => (document.documentElement.dataset['theme'] = value), mode);

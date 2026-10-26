@@ -27,6 +27,7 @@ import {
   of,
   startWith,
   switchMap,
+  tap,
   timeout,
   timer,
 } from 'rxjs';
@@ -180,6 +181,10 @@ export class ActivityPageComponent {
   protected readonly selectedExecution = signal<ExecutionResponse | null>(null);
   protected readonly executionLoading = signal(false);
   protected readonly selectedDetailTab = signal(0);
+  private readonly lastSuccessfulPage = signal<{
+    readonly key: string;
+    readonly data: LibraryActivityResponse;
+  } | null>(null);
 
   protected readonly libraries = toSignal(
     this.clusterApi.listLibraries().pipe(catchError(() => of([]))),
@@ -223,18 +228,27 @@ export class ActivityPageComponent {
       computed(() => ({ query: this.request(), revision: this.refreshRevision() })),
     ).pipe(
       debounceTime(180),
-      switchMap(({ query, revision }) =>
-        timer(0, PAGE_REFRESH_MS).pipe(
+      switchMap(({ query, revision }) => {
+        const key = this.requestKey();
+        return timer(0, PAGE_REFRESH_MS).pipe(
           exhaustMap(() =>
             this.activityApi.list(query).pipe(
               timeout(20000),
+              tap((data) => this.lastSuccessfulPage.set({ key, data })),
               map((data): ActivityPageState => ({ status: 'ready', data, revision })),
-              catchError(() => of({ status: 'error', data: null, revision })),
+              catchError(() => {
+                const cached = this.lastSuccessfulPage();
+                return of({
+                  status: 'error',
+                  data: cached?.key === key ? cached.data : null,
+                  revision,
+                });
+              }),
             ),
           ),
           startWith({ status: 'loading', data: null, revision } as ActivityPageState),
-        ),
-      ),
+        );
+      }),
     ),
     { initialValue: { status: 'loading', data: null, revision: 0 } as ActivityPageState },
   );
