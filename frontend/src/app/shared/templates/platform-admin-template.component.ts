@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, TemplateRef, input, output } from '@angular/core';
-import { CategoryTabsComponent, CategoryTabOption } from '../ui/category-tabs.component';
+import { CategoryTabOption } from '../ui/category-tabs.component';
 import { DetailDrawerComponent } from '../ui/detail-drawer/detail-drawer';
-import { PageHeaderComponent } from '../ui/page-header.component';
+import { SubnavComponent } from '../ui/subnav.component';
 
 /** Cadre commun des domaines d’administration et de leur édition protégée. */
 @Component({
   selector: 'app-platform-admin-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CategoryTabsComponent, DetailDrawerComponent, PageHeaderComponent],
+  imports: [DetailDrawerComponent, SubnavComponent],
   template: `
     <app-detail-drawer
       [opened]="editorOpen()"
@@ -20,16 +20,11 @@ import { PageHeaderComponent } from '../ui/page-header.component';
       (closed)="editorClosed.emit()"
     >
       <div drawer-main>
-        <app-page-header
-          [title]="title()"
-          [description]="description()"
-          [showSystemActions]="true"
-        />
-        <app-category-tabs
+        <h1 class="visually-hidden">{{ title() }}</h1>
+        <app-subnav
           label="Domaines des paramètres"
           [options]="tabs()"
           [selected]="activeTab()"
-          variant="underline"
           (selectedChange)="tabChange.emit($event)"
         />
         <div class="platform-admin-content" role="tabpanel" [attr.aria-label]="description()">

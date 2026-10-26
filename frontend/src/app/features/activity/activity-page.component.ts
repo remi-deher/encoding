@@ -54,9 +54,9 @@ import { DetailDrawerComponent } from '../../shared/ui/detail-drawer/detail-draw
 import { DetailField, DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeline-logs.component';
 import { IconComponent } from '../../shared/ui/icon.component';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { CategoryTabOption } from '../../shared/ui/category-tabs.component';
+import { SubnavComponent } from '../../shared/ui/subnav.component';
 import {
   ACTIVITY_GROUPS,
   ACTIVITY_STATES,
@@ -123,8 +123,7 @@ const AI_REFRESH_MS = 15000;
     SummaryTilesComponent,
     SearchFieldComponent,
     MatTabsModule,
-    CategoryTabsComponent,
-    PageHeaderComponent,
+    SubnavComponent,
     RouterLink,
     StatusBadgeComponent,
   ],
@@ -163,11 +162,6 @@ export class ActivityPageComponent {
           this.auth.isAdmin() &&
           group.id === 'active'),
     ),
-  );
-  protected readonly pageDescription = computed(() =>
-    this.roleFilter() === 'operate'
-      ? 'Prenez en charge la file et suivez les traitements en cours.'
-      : 'Examinez les résultats, les échecs et les demandes de l’assistant.',
   );
   protected readonly activityHeading = computed(() =>
     this.roleFilter() === 'operate'

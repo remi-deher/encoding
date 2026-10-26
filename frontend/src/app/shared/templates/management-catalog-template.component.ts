@@ -54,19 +54,17 @@ export interface CatalogEmptyState {
             [title]="detailTitle()"
             [description]="detailDescription()"
             [actions]="detailHeaderActions()"
-            [showSystemActions]="true"
           />
           <ng-container [ngTemplateOutlet]="detailContent()" />
         } @else {
-          @if (showPageHeader()) {
-            <app-page-header
-              [title]="title()"
-              [actions]="pageActions()"
-              [showSystemActions]="true"
-            />
-          }
+          <h1 class="visually-hidden">{{ title() }}</h1>
           <div class="catalog-navigation-wrapper">
             <ng-content select="[catalogue-navigation]" />
+            @if (pageActions(); as actions) {
+              <div class="catalog-navigation-actions">
+                <ng-container [ngTemplateOutlet]="actions" />
+              </div>
+            }
           </div>
           <div class="catalog-summary"><ng-content select="[catalogue-summary]" /></div>
 
@@ -167,7 +165,6 @@ export interface CatalogEmptyState {
 })
 export class ManagementCatalogTemplateComponent {
   readonly title = input.required<string>();
-  readonly showPageHeader = input(true);
   readonly filterLabel = input('Filtres');
   readonly searchLabel = input('');
   readonly searchQuery = input('');

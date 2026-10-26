@@ -24,7 +24,6 @@ import {
   template: `
     <app-management-catalog-template
       [title]="title()"
-      [showPageHeader]="showPageHeader()"
       [filterLabel]="filterLabel()"
       [searchLabel]="searchLabel()"
       [searchQuery]="searchQuery()"
@@ -90,7 +89,6 @@ export class ResourceCatalogTemplateComponent {
   readonly disabled = input(false);
   readonly selectedIds = model<ReadonlySet<string>>(new Set());
 
-  readonly showPageHeader = input(true);
   readonly filterLabel = input('Filtres');
   readonly searchLabel = input('');
   readonly searchQuery = input('');

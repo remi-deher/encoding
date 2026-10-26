@@ -51,7 +51,6 @@
   [searchQuery]="nodeSearchQuery()"
   (searchQueryChange)="nodeSearchQuery.set($event)"
   [filterCount]="activeFilters().length"
-  [showPageHeader]="pageTab() !== 'node'"
 >
   <ng-template #pageActions>
     @if (pageTab() === 'groups') {

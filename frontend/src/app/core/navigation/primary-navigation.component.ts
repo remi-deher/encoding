@@ -1,6 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
-import { Route, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
+import { NgTemplateOutlet } from '@angular/common';
+import { NavigationEnd, Route, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { filter, map } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 
 export interface NavigationItem {
@@ -38,6 +52,8 @@ const NAVIGATION_GROUP_ORDER = [
   'Infrastructure',
   'Administration',
 ];
+
+const MOBILE_DOCK_PATHS = ['/', '/flows', '/activity', '/libraries'];
 
 export function getPrimaryNavigationGroups(routes: Route[]): readonly NavigationGroup[] {
   const grouped = new Map<string, { item: NavigationItem; order: number }[]>();
@@ -110,20 +126,99 @@ export function getSearchableNavigationItems(routes: Route[]): readonly Navigati
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-primary-navigation',
-  imports: [RouterLink, RouterLinkActive, MatTooltipModule],
+  imports: [
+    CdkTrapFocus,
+    MatTooltipModule,
+    NgTemplateOutlet,
+    RouterLink,
+    RouterLinkActive,
+  ],
   templateUrl: './primary-navigation.component.html',
   styleUrl: './primary-navigation.component.scss',
+  host: {
+    '(document:keydown)': 'onDocumentKeydown($event)',
+  },
 })
 export class PrimaryNavigationComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly currentUrl = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map((event) => event.urlAfterRedirects),
+    ),
+    { initialValue: this.router.url },
+  );
+  private readonly moreButton = viewChild<ElementRef<HTMLButtonElement>>('moreButton');
+  private readonly closeMenuButton = viewChild<ElementRef<HTMLButtonElement>>('closeMenuButton');
 
   readonly collapsed = input(false);
+  readonly mobileDock = input(false);
   readonly activeExecutionCount = input(0);
+  readonly mobileMenuOpenChange = output<boolean>();
+  readonly openAssistant = output<void>();
+  protected readonly mobileMenuOpen = signal(false);
 
-  protected readonly items = computed(() =>
+  protected readonly groups = computed(() =>
     getPrimaryNavigationGroups(this.router.config)
-      .flatMap((group) => group.items)
-      .filter((item) => item.visible !== false && (!item.adminOnly || this.auth.isAdmin())),
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) => item.visible !== false && (!item.adminOnly || this.auth.isAdmin()),
+        ),
+      }))
+      .filter((group) => group.items.length > 0),
   );
+
+  protected readonly dockItems = computed(() => {
+    const items = this.groups().flatMap((group) => group.items);
+    return MOBILE_DOCK_PATHS.map((path) => items.find((item) => item.path === path)).filter(
+      (item): item is NavigationItem => item !== undefined,
+    );
+  });
+
+  protected readonly activeOutsideDock = computed(() => {
+    const path = this.currentUrl().split(/[?#]/, 1)[0] || '/';
+    return !MOBILE_DOCK_PATHS.some((dockPath) =>
+      dockPath === '/' ? path === '/' : path === dockPath || path.startsWith(`${dockPath}/`),
+    );
+  });
+
+  protected dockLabel(item: NavigationItem): string {
+    if (item.path === '/') return 'Accueil';
+    if (item.path === '/libraries') return 'Biblios';
+    return item.label;
+  }
+
+  protected toggleMobileMenu(): void {
+    if (this.mobileMenuOpen()) {
+      this.closeMobileMenu();
+      return;
+    }
+    this.mobileMenuOpen.set(true);
+    this.mobileMenuOpenChange.emit(true);
+    setTimeout(() => this.closeMenuButton()?.nativeElement.focus(), 0);
+  }
+
+  protected closeMobileMenu(): void {
+    if (!this.mobileMenuOpen()) return;
+    this.mobileMenuOpen.set(false);
+    this.mobileMenuOpenChange.emit(false);
+    setTimeout(() => this.moreButton()?.nativeElement.focus(), 0);
+  }
+
+  protected openQuickAssistant(): void {
+    this.closeMobileMenu();
+    this.openAssistant.emit();
+  }
+
+  protected onDocumentKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape' || !this.mobileMenuOpen()) return;
+    event.preventDefault();
+    this.closeMobileMenu();
+  }
+
+  focusMoreButton(): void {
+    this.moreButton()?.nativeElement.focus();
+  }
 }

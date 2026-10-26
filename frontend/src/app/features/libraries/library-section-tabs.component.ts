@@ -1,47 +1,30 @@
-import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
-import { Router } from '@angular/router';
-import { CategoryTabsComponent, CategoryTabOption } from '../../shared/ui/category-tabs.component';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { SubnavComponent, SubnavOption } from '../../shared/ui/subnav.component';
 
-const SECTIONS: readonly CategoryTabOption[] = [
-  { value: 'media', label: 'Bibliothèques' },
-  { value: 'scripts', label: 'Scripts' },
-  { value: 'templates', label: 'Modèles de flow' },
-  { value: 'packs', label: 'Packs de composants' },
-  { value: 'encoding', label: 'Profils d’encodage' },
-  { value: 'resources', label: 'Ressources' },
+const SECTIONS: readonly SubnavOption[] = [
+  { value: 'media', label: 'Bibliothèques', route: '/libraries' },
+  { value: 'scripts', label: 'Scripts', route: '/libraries/scripts' },
+  { value: 'templates', label: 'Modèles de flow', route: '/libraries/templates' },
+  { value: 'packs', label: 'Packs de composants', route: '/libraries/packs' },
+  { value: 'encoding', label: 'Profils d’encodage', route: '/libraries/encoding-profiles' },
+  { value: 'resources', label: 'Ressources', route: '/libraries/resources' },
 ];
-
-const SECTION_ROUTES: Readonly<Record<string, string>> = {
-  media: '/libraries',
-  scripts: '/libraries/scripts',
-  templates: '/libraries/templates',
-  packs: '/libraries/packs',
-  encoding: '/libraries/encoding-profiles',
-  resources: '/libraries/resources',
-};
 
 /** Navigation commune entre les catalogues de ressources réutilisables. */
 @Component({
   selector: 'app-library-section-tabs',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CategoryTabsComponent],
+  imports: [SubnavComponent],
   template: `
-    <app-category-tabs
+    <app-subnav
       label="Ressources"
       [options]="sections"
       [selected]="selected()"
-      (selectedChange)="navigateTo($event)"
+      variant="links"
     />
   `,
 })
 export class LibrarySectionTabsComponent {
-  private readonly router = inject(Router);
   readonly selected = input.required<string>();
   protected readonly sections = SECTIONS;
-
-  protected navigateTo(section: string): void {
-    if (section === this.selected()) return;
-    const route = SECTION_ROUTES[section];
-    if (route) void this.router.navigateByUrl(route);
-  }
 }

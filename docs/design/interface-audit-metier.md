@@ -1,6 +1,6 @@
 # Revue de l’interface par parcours métier
 
-Date : 2026-10-26  
+Date : 2026-10-26
 Périmètre : routes et composants Angular du frontend, comparés à `UI_RULES.md`, à la fiche UI et aux documents de conception. Cette revue porte sur le sens des vues et des interactions, pas sur une validation visuelle en navigateur ni sur des essais avec un cluster réel.
 
 Note : le brief des Paramètres est reconnu comme obsolète ; sa différence avec les six onglets actuels n’est pas retenue comme divergence d’interface dans cette revue.

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { CategoryTabOption, CategoryTabsComponent } from '../ui/category-tabs.component';
+import { CategoryTabOption } from '../ui/category-tabs.component';
+import { SubnavComponent } from '../ui/subnav.component';
 import {
   CatalogEmptyState,
   ManagementCatalogTemplateComponent,
@@ -9,11 +10,10 @@ import {
 @Component({
   selector: 'app-cluster-maintenance-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CategoryTabsComponent, ManagementCatalogTemplateComponent],
+  imports: [ManagementCatalogTemplateComponent, SubnavComponent],
   template: `
     <app-management-catalog-template
       [title]="title()"
-      [showPageHeader]="showPageHeader()"
       [filterLabel]="filterLabel()"
       [searchLabel]="searchLabel()"
       [searchQuery]="searchQuery()"
@@ -40,7 +40,7 @@ import {
       (detailClosed)="detailClosed.emit()"
       (actionClosed)="actionClosed.emit()"
     >
-      <app-category-tabs
+      <app-subnav
         catalogue-navigation
         [label]="navigationLabel()"
         [options]="navigationOptions()"
@@ -62,7 +62,6 @@ export class ClusterMaintenanceTemplateComponent {
   readonly navigationSelected = input.required<string>();
   readonly navigationSelectedChange = output<string>();
 
-  readonly showPageHeader = input(true);
   readonly filterLabel = input('Filtres');
   readonly searchLabel = input('');
   readonly searchQuery = input('');

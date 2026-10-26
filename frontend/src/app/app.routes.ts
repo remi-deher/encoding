@@ -266,7 +266,7 @@ const applicationRoutes: Routes = [
     data: {
       title: 'Plugins & Outils',
       navigation: {
-        group: 'Ressources',
+        group: 'Infrastructure',
         label: 'Plugins & Outils',
         glyph: '✣',
         order: 2,

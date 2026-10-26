@@ -1,29 +1,28 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, TemplateRef, input, output } from '@angular/core';
-import { CategoryTabOption, CategoryTabsComponent } from '../ui/category-tabs.component';
-import { PageHeaderComponent } from '../ui/page-header.component';
+import { CategoryTabOption } from '../ui/category-tabs.component';
+import { SubnavComponent } from '../ui/subnav.component';
 
 /** Cadre commun de synthèse et d’orientation pour le rôle métier Piloter. */
 @Component({
   selector: 'app-monitor-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CategoryTabsComponent, PageHeaderComponent],
+  imports: [NgTemplateOutlet, SubnavComponent],
   template: `
-    <app-page-header
-      [title]="title()"
-      [actions]="actions()"
-      [showSystemActions]="showSystemActions()"
+    <h1 class="visually-hidden">{{ title() }}</h1>
+    <app-subnav
+      [label]="viewsLabel()"
+      [options]="views()"
+      [selected]="selectedView()"
+      (selectedChange)="selectedViewChange.emit($event)"
     >
-      <span page-metadata class="cluster-name" [hidden]="!metadata()">{{ metadata() }}</span>
-    </app-page-header>
-
-    <div class="overview-tabs-wrapper">
-      <app-category-tabs
-        [label]="viewsLabel()"
-        [options]="views()"
-        [selected]="selectedView()"
-        (selectedChange)="selectedViewChange.emit($event)"
-      />
-    </div>
+      @if (metadata()) {
+        <span subnav-actions class="cluster-name">{{ metadata() }}</span>
+      }
+      @if (actions(); as pageActions) {
+        <ng-container subnav-actions [ngTemplateOutlet]="pageActions" />
+      }
+    </app-subnav>
 
     @if (state() === 'loading') {
       <p class="monitor-feedback" role="status">{{ loadingMessage() }}</p>
@@ -59,13 +58,6 @@ import { PageHeaderComponent } from '../ui/page-header.component';
   styles: `
     :host {
       display: block;
-    }
-    .overview-tabs-wrapper {
-      display: flex;
-      align-items: center;
-      padding-bottom: var(--space-4);
-      margin-bottom: var(--space-5);
-      border-bottom: 1px solid var(--border-subtle);
     }
     .cluster-name {
       margin: 0;
@@ -112,7 +104,6 @@ export class MonitorTemplateComponent {
   readonly title = input.required<string>();
   readonly metadata = input('');
   readonly actions = input<TemplateRef<unknown> | undefined>();
-  readonly showSystemActions = input(false);
   readonly viewsLabel = input('Vues d’ensemble');
   readonly views = input.required<readonly CategoryTabOption[]>();
   readonly selectedView = input.required<string>();

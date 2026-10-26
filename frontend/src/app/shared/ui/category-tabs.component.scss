@@ -53,6 +53,30 @@
   background: var(--surface-container-low);
 }
 
+@media (max-width: 760px) {
+  .category-tabs:not(.is-underline) {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    scroll-padding-inline: 4px;
+    overscroll-behavior-inline: contain;
+  }
+
+  .category-tabs:not(.is-underline)::-webkit-scrollbar {
+    display: none;
+  }
+
+  .category-tabs:not(.is-underline) .category-tab-pill {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+}
+
 .category-tab-pill {
   display: inline-flex;
   align-items: center;

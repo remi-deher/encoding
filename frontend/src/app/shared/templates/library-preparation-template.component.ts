@@ -40,7 +40,6 @@ import { ResourceCatalogTemplateComponent } from './resource-catalog-template.co
       [selectionUnit]="selectionUnit()"
       [listEmptyMessage]="listEmptyMessage()"
       [showResourceIcon]="showResourceIcon()"
-      [showPageHeader]="showPageHeader()"
       [filterLabel]="filterLabel()"
       [searchLabel]="searchLabel()"
       [searchQuery]="searchQuery()"
@@ -110,7 +109,6 @@ export class LibraryPreparationTemplateComponent {
   readonly listEmptyMessage = input('Aucune bibliothèque.');
   readonly showResourceIcon = input(true);
 
-  readonly showPageHeader = input(true);
   readonly filterLabel = input('Filtres');
   readonly searchLabel = input('Rechercher');
   readonly searchQuery = input('');

@@ -4,15 +4,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, exhaustMap, of, startWith } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { ConfigurationSectionComponent } from '../../shared/ui/configuration-section.component';
-import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { UpdatesService, UpdateStatus } from '../../shared/services/updates.service';
 
 @Component({
   selector: 'app-updates-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, MatButtonModule, ConfigurationSectionComponent, PageHeaderComponent],
+  imports: [DatePipe, MatButtonModule, ConfigurationSectionComponent],
   template: `
-    <app-page-header title="Mise à jour" description="Version de ce nœud et notes de version." />
+    <h1 class="visually-hidden">Mise à jour</h1>
     <app-configuration-section title="Version installée" [badge]="data()?.installedVersion ?? ''">
       <button section-actions mat-stroked-button [disabled]="loading()" (click)="refresh.next()">
         Vérifier les mises à jour

@@ -1,14 +1,13 @@
-<app-page-header title="Activité" [description]="pageDescription()" [showSystemActions]="true">
-  <span page-metadata class="activity-count-pill">{{ countText() }}</span>
-  <button page-actions matButton="outlined" type="button" (click)="refresh()">Actualiser</button>
-</app-page-header>
-
-<app-category-tabs
+<h1 class="visually-hidden">Activité</h1>
+<app-subnav
   label="Rôle de l’activité"
   [options]="roleTabs"
   [selected]="roleFilter()"
   (selectedChange)="setRole($event)"
-/>
+>
+  <span subnav-actions class="activity-count-pill">{{ countText() }}</span>
+  <button subnav-actions matButton="outlined" type="button" (click)="refresh()">Actualiser</button>
+</app-subnav>
 
 @if (kindFilter() !== 'ai') {
   <app-summary-tiles
