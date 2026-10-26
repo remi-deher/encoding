@@ -42,6 +42,7 @@
 }
 .workspace-resource mat-form-field {
   width: 100%;
+  min-width: 0;
 }
 .workspace-resource h4 {
   margin: var(--space-2) 0 0;
