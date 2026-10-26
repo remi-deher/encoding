@@ -43,7 +43,7 @@ test('the search command palette opens with Ctrl+K and navigates to encoding pro
   await expect(page.getByRole('heading').first()).toBeVisible();
   await page.keyboard.press('Control+k');
 
-  const combobox = page.getByRole('combobox', { name: /Rechercher une destination/ });
+  const combobox = page.getByRole('combobox', { name: /Rechercher dans Encoding/ });
   await expect(combobox).toBeVisible();
   await combobox.fill('Profils');
   await combobox.press('Enter');

@@ -14,7 +14,11 @@ test.beforeEach(async ({ page }) => {
 
 async function openDialog(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: /Compte de admin/ }).click();
+  const account = page.getByRole('button', { name: /Compte de admin/ });
+  if (!(await account.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: 'Plus', exact: true }).click();
+  }
+  await account.click();
   await page.getByRole('menuitem', { name: 'Changer le mot de passe' }).click();
   const dialog = page.getByRole('dialog', { name: 'Changer le mot de passe' });
   await expect(dialog).toBeVisible();

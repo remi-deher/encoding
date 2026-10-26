@@ -1,6 +1,7 @@
 app-shell {
   display: block;
-  min-height: 100dvh;
+  height: 100dvh;
+  min-height: 0;
 }
 
 /* Lien d'évitement W3C WCAG 2.4.1 */
@@ -29,9 +30,11 @@ app-shell {
 }
 
 .application-shell {
-  min-height: 100dvh;
+  height: 100dvh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--page-background);
 }
 
@@ -46,7 +49,7 @@ button.assistant-launcher {
   min-width: 56px;
   padding: 0;
   border-radius: var(--radius-pill);
-  z-index: 40;
+  z-index: 80;
   touch-action: none;
   cursor: grab;
   box-shadow: var(--elevation-2);
@@ -79,7 +82,7 @@ button.assistant-launcher {
   bottom: max(88px, calc(env(safe-area-inset-bottom) + 72px));
   width: min(380px, calc(100vw - 32px));
   height: min(520px, calc(100dvh - 112px));
-  z-index: 40;
+  z-index: 80;
   overflow: hidden;
   border-radius: var(--radius-xl);
   background: var(--surface-container-lowest);
@@ -195,10 +198,12 @@ button.assistant-launcher {
 
 /* Navigation persistante : scaffold CSS sans modification des internes Material. */
 .application-navigation-layout {
+  position: relative;
   display: flex;
   width: 100%;
-  height: 100dvh;
+  height: 100%;
   min-height: 0;
+  flex: 1 1 auto;
   overflow: hidden;
 }
 .application-sidebar {
@@ -218,7 +223,7 @@ button.assistant-launcher {
   box-sizing: border-box;
   height: 100%;
   width: 100%;
-  padding: var(--space-5) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -227,41 +232,54 @@ button.assistant-launcher {
     padding 220ms var(--motion-emphasized);
 }
 
-/* Sidebar Brand Header */
-.sidebar-header {
-  padding: 2px 6px 8px;
-  display: flex;
-  align-items: center;
-
-  &.is-collapsed {
-    justify-content: center;
-    padding: 2px 0 8px;
-  }
-}
-
 /* Sidebar Navigation */
 .sidebar-navigation {
   min-height: 0;
   flex: 1;
-  overflow-y: auto;
+  overflow-y: hidden;
   overflow-x: hidden;
-  scrollbar-width: none;
 }
 
-.sidebar-navigation::-webkit-scrollbar {
-  display: none;
-}
-
-/* Sidebar Footer (Uniquement le bouton de repli M3 accessible >= 40px) */
+/* Contrôles du pied de navigation */
 .sidebar-footer {
   margin-top: auto;
-  padding-top: 8px;
-  border-top: 0;
-  display: flex;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--sidebar-border);
+}
 
-  &.is-collapsed {
-    justify-content: center;
-  }
+.sidebar-footer-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.sidebar-footer-controls .sidebar-collapse-btn {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sidebar-footer-controls app-user-menu,
+.sidebar-footer-controls app-appearance-palette {
+  width: 38px;
+  height: 40px;
+  flex: 0 0 38px;
+}
+
+.sidebar-footer.is-collapsed .sidebar-footer-controls {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-footer.is-collapsed .sidebar-footer-controls .sidebar-collapse-btn {
+  width: 40px;
+  min-height: 40px;
+  flex: 0 0 40px;
+  justify-content: center;
+}
+
+.sidebar-footer.is-collapsed .sidebar-footer-controls .collapse-btn-label {
+  display: none;
 }
 
 .sidebar-collapse-btn {
@@ -314,6 +332,7 @@ button.assistant-launcher {
 
 /* Main Content Area */
 .page-transition-region {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -321,19 +340,26 @@ button.assistant-launcher {
   z-index: auto;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
 }
 
 .application-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   box-sizing: border-box;
   width: 100%;
   max-width: var(--content-wide-width);
-  min-height: 72px;
+  min-height: 84px;
   margin-inline: auto;
   padding: var(--space-3) clamp(16px, 3vw, 40px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  flex: 0 0 auto;
+  background: var(--page-background);
 }
 
 .main-content {
@@ -347,12 +373,6 @@ button.assistant-launcher {
   outline: none;
 }
 
-/* Dialog Panel Override for Search Palette */
-.search-palette-dialog-panel .mat-mdc-dialog-surface {
-  --mat-dialog-container-shape: var(--radius-2xl);
-  overflow: hidden;
-}
-
 /* Workspace Shell (Flow Editor Fullscreen Atelier) */
 .workspace-shell {
   height: 100dvh;
@@ -360,7 +380,7 @@ button.assistant-launcher {
   overflow: hidden;
 
   .application-navigation-layout {
-    height: 100dvh;
+    height: 100%;
   }
 
   .page-transition-region {
@@ -392,8 +412,14 @@ button.assistant-launcher {
 /* Responsive Rules */
 @media (max-width: 760px) {
   .application-header {
-    min-height: 54px;
-    padding-inline: 16px;
+    min-height: 116px;
+    padding: 62px 16px 8px;
+    align-items: flex-end;
+  }
+
+  .application-header.has-search-controls {
+    min-height: 162px;
+    padding-top: 108px;
   }
 
   .main-content {
@@ -435,30 +461,6 @@ button.assistant-launcher {
 .application-sidebar.is-collapsed .sidebar-content {
   padding-inline: var(--space-3);
 }
-.application-sidebar.is-collapsed .sidebar-header {
-  justify-content: center;
-}
 .sidebar-collapse-btn[hidden] {
   display: none;
-}
-.shell-search {
-  flex: 0 1 auto;
-}
-.shell-search kbd {
-  margin-inline-start: var(--space-3);
-  font-size: var(--font-label);
-  color: var(--text-muted);
-}
-@media (max-width: 760px) {
-  .shell-search {
-    min-width: var(--touch-target);
-    padding-inline: var(--space-2);
-  }
-  .shell-search-label,
-  .shell-search kbd {
-    display: none;
-  }
-  .application-header {
-    min-height: 64px;
-  }
 }

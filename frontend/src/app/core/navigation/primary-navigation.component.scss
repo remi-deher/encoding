@@ -408,10 +408,23 @@
 
 .mobile-navigation-menu {
   min-height: 0;
+  flex: 1 1 auto;
   padding: 4px 0 8px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+}
+
+.mobile-navigation-sheet-footer {
+  padding-top: var(--space-2);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  border-top: 1px solid var(--sidebar-border);
+}
+
+.mobile-navigation-sheet-footer app-user-menu {
+  width: 38px;
 }
 
 .mobile-navigation-group {

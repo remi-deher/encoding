@@ -8,8 +8,6 @@ import { RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { of, switchMap } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
-import { ThemeToggleComponent } from '../../core/theme/theme-toggle.component';
-import { UserMenuComponent } from '../../core/auth/user-menu.component';
 import { ClusterOverview, INITIAL_CLUSTER_OVERVIEW } from '../services/cluster-overview';
 import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../services/execution-tracking';
 
@@ -19,15 +17,13 @@ import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../services/execu
   imports: [
     MatTooltipModule,
     RouterLink,
-    ThemeToggleComponent,
-    UserMenuComponent,
     OverlayModule,
     A11yModule,
     MatButtonModule,
     ActiveJobsPanelComponent,
   ],
   template: `
-    <div class="page-system-actions" aria-label="État et préférences du système">
+    <div class="page-system-actions" role="group" aria-label="État du système">
       <a
         class="system-pill cluster-pill"
         routerLink="/nodes"
@@ -70,8 +66,6 @@ import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../services/execu
           <app-active-jobs-panel [state]="activeJobsState()" (closed)="jobsOpen.set(false)" />
         </div>
       </ng-template>
-      <app-theme-toggle />
-      <app-user-menu class="page-user-menu" [collapsed]="true" />
     </div>
   `,
   styles: `
@@ -145,14 +139,6 @@ import { ExecutionTracking, INITIAL_EXECUTION_TRACKING } from '../services/execu
       .tasks-pill .tasks-label {
         display: none;
       }
-    }
-    app-theme-toggle {
-      display: block;
-      flex: 0 0 auto;
-    }
-    app-user-menu.page-user-menu {
-      width: 38px;
-      flex: 0 0 38px;
     }
     @media (max-width: 760px) {
       .page-system-actions {

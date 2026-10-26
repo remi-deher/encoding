@@ -23,6 +23,8 @@ legacy_adr:
   ]
 code:
   - frontend/src/styles.scss
+  - frontend/src/app/core/layout/
+  - frontend/src/app/core/theme/
   - frontend/src/app/shared/ui/
   - frontend/src/app/shared/models/
   - frontend/src/app/features/
@@ -39,6 +41,8 @@ tags:
     éditeur de flow,
     canvas,
     page nœuds,
+    shell,
+    recherche contextuelle,
   ]
 ---
 
@@ -55,13 +59,16 @@ Règles obligatoires : [UI_RULES.md](../../../UI_RULES.md). Ce fichier consigne 
 ## Shell adaptatif et apparence
 
 - Le shell standard utilise une navigation persistante CSS (248 px), repliable en rail (88 px), automatiquement en rail entre 761 et 1 100 px. Sous 761 px, la navigation basse et son menu « Plus » conservent les destinations et les droits. Le graphe conserve son atelier plein écran et les pages d’accès leur cadre distinct.
-- La barre système centralise recherche, état observé, tâches, apparence et compte. Les catalogues, la supervision, l’activité et les paramètres exposent un titre de page visible. Le contenu standard est centré sur 1 360 px.
-- Quatre palettes (Forêt, Océan, Iris, Rose) partagent les rôles système Material avec les composants maison. Le mode clair/sombre (`encoding.theme`) et la palette (`encoding.palette`) sont indépendants, locaux au navigateur et appliqués avant le démarrage Angular. Choix immédiat depuis la barre supérieure et Paramètres → Interface ; les tons succès/avertissement gardent leur sens.
+- La barre système garde l’état du cluster et des tâches à droite. Le pied de navigation regroupe le repli, le profil et l’unique contrôle d’apparence ; l’icône et le nom de marque ne sont pas répétés dans la barre latérale. Les pages d’accès conservent le contrôle d’apparence dans leur en-tête. Le contenu standard est centré sur 1 360 px.
+- Quatre palettes (Forêt, Océan, Iris, Rose) partagent les rôles système Material avec les composants maison. Le mode clair/sombre (`encoding.theme`) et la palette (`encoding.palette`) sont indépendants, locaux au navigateur et appliqués avant le démarrage Angular. Le contrôle Apparence du pied de navigation réunit ces deux choix ; les tons succès/avertissement gardent leur sens.
+- `GlobalSearchBarComponent` réutilise `SearchFieldComponent`. Elle reste centrée et de largeur constante entre les pages, et intègre la recherche, jusqu’à deux actions de page et le filtre à droite lorsque la page en a besoin. Sans action ou filtre déclaré, ni le bouton ni son séparateur ne sont rendus. La feuille de recherche s’accole à la barre, conserve sa largeur et son alignement ; son voile commence sous le fin séparateur inférieur.
+- `PageShellContextService` permet à une page de fournir ses résultats, ses actions et son filtre. Les résultats de la page précèdent les destinations globales ; données, état des filtres et règles métier restent dans leur feature. Le raccordement des pages se fait au fil des évolutions métier ; celles sans contexte affichent uniquement les destinations globales.
+- Le corps du document est fixe et la région de contenu du shell constitue son unique zone de défilement vertical. La recherche globale reste visible au défilement. Le graphe conserve son atelier plein écran et les pages d’accès leur cadre distinct.
 - Le sélecteur de ressource dans le contexte de l’assistant utilise des libellés Material toujours flottants : le libellé vide ne couvre pas la cible de clic dans le panneau compact, y compris à 320 px.
 - `AssistantHostComponent` porte le panneau et le lanceur IA ; les vues de conversation et de proposition de flow sont différées et conservent leur état après fermeture. Le shell ne porte plus leur orchestration.
 - Les filtres `CategoryTabs` sont des groupes de boutons pressés, distincts des onglets `Subnav` reliés à leur panneau ; ils partagent le calcul de navigation clavier.
 - La géométrie des tiroirs appartient à `DetailDrawer` (feuille basse sous 700 px). Un registre gère les propriétaires du verrou modal. `closeGuarded` / `closeRequested` permet à la feature de confirmer avant fermeture ; les scripts utilisent ce contrat par le catalogue partagé.
-- Décision : [ADR 0018](../adr/0018-shell-adaptatif-et-palettes.md). Analyse et validation : [audit](../../design/audit-ui-2026-10-26/audit.md), [mise en œuvre](../../design/audit-ui-2026-10-26/implementation.md).
+- Décisions : [ADR 0018](../adr/0018-shell-adaptatif-et-palettes.md) et [ADR 0019](../adr/0019-recherche-contextuelle-du-shell.md). Analyse et validation : [audit](../../design/audit-ui-2026-10-26/audit.md), [mise en œuvre](../../design/audit-ui-2026-10-26/implementation.md).
 
 ## Éditeur de flow
 

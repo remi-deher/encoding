@@ -171,6 +171,11 @@
             </section>
           }
         </nav>
+
+        <footer class="mobile-navigation-sheet-footer" aria-label="Compte et apparence">
+          <app-user-menu [collapsed]="true" />
+          <app-appearance-palette />
+        </footer>
       </section>
     </div>
   }
@@ -202,9 +207,7 @@
     }
     @case ('/libraries') {
       <svg viewBox="0 0 24 24" class="navigation-svg">
-        <path
-          d="M4 6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
-        />
+        <path d="M4 6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z" />
       </svg>
     }
     @case ('/nodes') {

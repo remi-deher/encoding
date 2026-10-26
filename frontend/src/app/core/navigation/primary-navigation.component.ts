@@ -16,6 +16,8 @@ import { NavigationEnd, Route, Router, RouterLink, RouterLinkActive } from '@ang
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter, map } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
+import { AppearancePaletteComponent } from '../theme/appearance-palette.component';
+import { UserMenuComponent } from '../auth/user-menu.component';
 
 export interface NavigationItem {
   readonly label: string;
@@ -132,6 +134,8 @@ export function getSearchableNavigationItems(routes: Route[]): readonly Navigati
     NgTemplateOutlet,
     RouterLink,
     RouterLinkActive,
+    AppearancePaletteComponent,
+    UserMenuComponent,
   ],
   templateUrl: './primary-navigation.component.html',
   styleUrl: './primary-navigation.component.scss',

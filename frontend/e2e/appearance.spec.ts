@@ -1,6 +1,15 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
+async function openAppearancePalette(page: import('@playwright/test').Page) {
+  const appearance = page.getByRole('button', { name: 'Apparence : thème et palette de couleurs' });
+  if (!(await appearance.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: 'Plus', exact: true }).click();
+  }
+  await appearance.click();
+  return appearance;
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/**', (route) => route.fulfill({ json: [] }));
   await page.route('**/api/v1/auth/status', (route) =>
@@ -36,20 +45,20 @@ test('palette menu changes Material and application colours, preserves mode and 
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Choisir la palette de couleurs' }).click();
-  await page.getByRole('menuitemradio', { name: 'Iris' }).click();
+  const appearance = await openAppearancePalette(page);
+  await page.getByRole('button', { name: 'Iris', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'iris');
-  await page.getByRole('button', { name: 'Passer au thème sombre' }).click();
+  await page.getByRole('radio', { name: 'Sombre' }).click();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'iris');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.getByRole('button', { name: 'Choisir la palette de couleurs' }).click();
-  await expect(page.getByRole('menuitemradio', { name: 'Iris' })).toHaveAttribute(
-    'aria-checked',
+  const reloadedAppearance = await openAppearancePalette(page);
+  await expect(page.getByRole('button', { name: 'Iris', exact: true })).toHaveAttribute(
+    'aria-pressed',
     'true',
   );
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Choisir la palette de couleurs' })).toBeFocused();
+  await expect(reloadedAppearance).toBeFocused();
 });
 
 test('populated tools stay readable in four palettes and both modes without mobile overflow', async ({
@@ -61,13 +70,14 @@ test('populated tools stay readable in four palettes and both modes without mobi
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const colours: string[] = [];
   for (const palette of ['forest', 'ocean', 'iris', 'rose']) {
-    await page.getByRole('button', { name: 'Choisir la palette de couleurs' }).click();
+    await openAppearancePalette(page);
     await page
-      .getByRole('menuitemradio', {
+      .getByRole('button', {
         name: { forest: 'Forêt', ocean: 'Océan', iris: 'Iris', rose: 'Rose' }[palette],
         exact: true,
       })
       .click();
+    await page.keyboard.press('Escape');
     colours.push(
       await page.evaluate(() =>
         getComputedStyle(document.documentElement).getPropertyValue('--mat-sys-primary'),
@@ -111,8 +121,7 @@ test('adaptive shell keeps all destinations reachable at tablet width and suppor
   await page.goto('/');
   await expect(page.locator('.application-sidebar')).toHaveClass(/is-collapsed/);
   await expect(page.getByRole('link', { name: 'Paramètres', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Rechercher une destination', exact: true }).click();
-  const search = page.getByRole('combobox', { name: /Rechercher une destination/ });
+  const search = page.getByRole('combobox', { name: /Rechercher dans Encoding/ });
   await search.fill('Profils');
   await search.press('Enter');
   await expect(page).toHaveURL(/libraries\/encoding-profiles/);
