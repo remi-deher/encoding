@@ -126,7 +126,9 @@ test('provider settings remain focused, accessible and usable in both themes', a
   expect(errors).toEqual([]);
 });
 
-test('Codex only shows the supplied code and closing cancels the attempt', async ({ page }) => {
+test('Codex only shows the supplied code and closing keeps the attempt active', async ({
+  page,
+}) => {
   let cancelled = false;
   await page.route('**/api/v1/tools/ai/codex-cli/auth/device-code/start', (route) =>
     route.fulfill({
@@ -167,7 +169,8 @@ test('Codex only shows the supplied code and closing cancels the attempt', async
   );
   await expect(dialog.getByText(/Simuler/)).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Fermer', exact: true }).click();
-  await expect.poll(() => cancelled).toBe(true);
+  await expect(dialog).toHaveCount(0);
+  expect(cancelled).toBe(false);
 });
 
 test('settings navigation and system health use shared components in both themes', async ({
@@ -325,8 +328,13 @@ test('Claude browser authentication accepts the return code from the redesigned 
   await expect(dialog.getByText('Code transmis. Claude Code vérifie la connexion…')).toBeVisible();
 });
 
-test('provider changes survive refresh before saving', async ({ page }) => {
+test('provider changes survive a background connection refresh before saving', async ({ page }) => {
   let saved: Record<string, unknown> | undefined;
+  let connectionRefreshes = 0;
+  await page.route('**/api/v1/tools/ai', (route) => {
+    connectionRefreshes++;
+    return route.fulfill({ json: [] });
+  });
   await page.route('**/api/v1/tools/ai/settings', async (route) => {
     if (route.request().method() !== 'GET') {
       saved = route.request().postDataJSON();
@@ -344,12 +352,15 @@ test('provider changes survive refresh before saving', async ({ page }) => {
       },
     });
   });
+  await page.clock.install();
   await page.goto('/settings?tab=ai');
   const tab = page.locator('app-ai-tools-tab');
   await tab.getByRole('button', { name: 'Configurer Ollama', exact: true }).click();
   const editor = page.getByRole('dialog', { name: 'Ollama', exact: true });
   await editor.getByLabel('Modèle', { exact: true }).fill('my-local-model');
-  await tab.getByRole('button', { name: 'Actualiser les connexions' }).click({ force: true });
+  const refreshesBeforeEdit = connectionRefreshes;
+  await page.clock.fastForward(15_000);
+  await expect.poll(() => connectionRefreshes).toBeGreaterThan(refreshesBeforeEdit);
   await expect(editor.getByLabel('Modèle', { exact: true })).toHaveValue('my-local-model');
   await editor.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect.poll(() => saved?.['ollamaModel']).toBe('my-local-model');
@@ -365,8 +376,10 @@ test('application sessions show observed usage and exchanges on desktop and mobi
   page,
 }, testInfo) => {
   const id = 'application-session';
-  await page.route('**/api/v1/tools/ai/sessions?offset=0', (route) =>
-    route.fulfill({
+  let sessionRequests = 0;
+  await page.route('**/api/v1/tools/ai/sessions?offset=0', (route) => {
+    sessionRequests++;
+    return route.fulfill({
       json: {
         items: [
           {
@@ -383,8 +396,8 @@ test('application sessions show observed usage and exchanges on desktop and mobi
         offset: 0,
         hasMore: false,
       },
-    }),
-  );
+    });
+  });
   await page.route(`**/api/v1/tools/ai/sessions/${id}`, (route) =>
     route.fulfill({
       json: {
@@ -400,11 +413,14 @@ test('application sessions show observed usage and exchanges on desktop and mobi
       },
     }),
   );
+  await page.clock.install();
   await page.goto('/settings?tab=ai');
   await page.getByRole('button', { name: /Suivi de l’IA/ }).click();
   const history = page.locator('app-ai-session-history');
-  await history.getByRole('button', { name: 'Actualiser l’historique' }).click();
   await expect(history.getByText('Création de flow', { exact: true })).toBeVisible();
+  const requestsAfterInitialLoad = sessionRequests;
+  await page.clock.fastForward(30_000);
+  await expect.poll(() => sessionRequests).toBeGreaterThan(requestsAfterInitialLoad);
   await expect(history.getByText('Jetons d’entrée : 150', { exact: false })).toBeVisible();
   await expect(history.getByText('Traduction validée')).toHaveCount(0);
   await history.getByRole('button', { name: 'Consulter les échanges' }).click();
@@ -466,6 +482,7 @@ test('subscription quotas show windows and mark failed refreshes as old', async 
           },
         }),
   );
+  await page.clock.install();
   await page.goto('/settings?tab=ai');
   await page.getByRole('button', { name: /Suivi de l’IA/ }).click();
   const quotas = page.locator('app-ai-quota-panel');
@@ -489,7 +506,7 @@ test('subscription quotas show windows and mark failed refreshes as old', async 
     await quotas.screenshot({ path: testInfo.outputPath(`ai-quotas-${theme}.png`) });
   }
   failed = true;
-  await quotas.getByRole('button', { name: 'Actualiser les quotas' }).click();
+  await page.clock.fastForward(60_000);
   await expect(
     quotas.getByText('15 % restant lors de la dernière observation', { exact: true }),
   ).toBeVisible();

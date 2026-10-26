@@ -47,21 +47,25 @@ test('shows versions, safely displays notes and works on desktop and mobile', as
   });
 });
 
-test('distinguishes a failed check from an up-to-date installation and allows retry', async ({
-  page,
-}) => {
-  await page.route('**/api/v1/system/updates', (route) => route.fulfill({ status: 503 }));
+test('distinguishes a failed check and retries automatically', async ({ page }) => {
+  let unavailable = true;
+  await page.route('**/api/v1/system/updates', (route) =>
+    unavailable
+      ? route.fulfill({ status: 503 })
+      : route.fulfill({
+          json: { ...status, status: 'unavailable', latestVersion: null, updateAvailable: null },
+        }),
+  );
+  await page.clock.install();
   await page.goto('/updates');
   await expect(
-    page.getByText('Impossible de charger les informations de version. Réessayez.'),
+    page.getByText(
+      'Impossible de charger les informations de version. Une vérification sera retentée automatiquement.',
+    ),
   ).toBeVisible();
   await expect(page.getByText('Ce nœud est à jour.')).toHaveCount(0);
-  await page.route('**/api/v1/system/updates', (route) =>
-    route.fulfill({
-      json: { ...status, status: 'unavailable', latestVersion: null, updateAvailable: null },
-    }),
-  );
-  await page.getByRole('button', { name: 'Vérifier les mises à jour' }).click();
+  unavailable = false;
+  await page.clock.fastForward(15 * 60_000);
   await expect(page.getByText('Vérification indisponible.', { exact: false })).toBeVisible();
   await expect(page.getByText('Amélioration des flows.')).toBeVisible();
 });
