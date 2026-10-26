@@ -15,6 +15,7 @@ import {
   DataTableSelectionActionEvent,
 } from '../ui/data-table.component';
 import {
+  ResourceListGroup,
   ResourceListItem,
   ResourceListSelectionAction,
   ResourceListToggleEvent,
@@ -37,6 +38,9 @@ import { ResourceCatalogTemplateComponent } from './resource-catalog-template.co
       [disabled]="disabled()"
       [(selectedIds)]="selectedIds"
       [openLabel]="openLabel()"
+      [openMode]="openMode()"
+      [menuPlacement]="menuPlacement()"
+      [groupDefinitions]="groupDefinitions()"
       [selectionUnit]="selectionUnit()"
       [listEmptyMessage]="listEmptyMessage()"
       [showResourceIcon]="showResourceIcon()"
@@ -134,6 +138,9 @@ export class LibraryPreparationTemplateComponent {
   readonly disabled = input(false);
   readonly selectedIds = model<ReadonlySet<string>>(new Set());
   readonly openLabel = input('Ouvrir');
+  readonly openMode = input<'button' | 'title' | 'none'>('button');
+  readonly menuPlacement = input<'inline' | 'top-right'>('inline');
+  readonly groupDefinitions = input<readonly ResourceListGroup[]>([]);
   readonly selectionUnit = input('bibliothèque(s)');
   readonly listEmptyMessage = input('Aucune bibliothèque.');
   readonly showResourceIcon = input(true);

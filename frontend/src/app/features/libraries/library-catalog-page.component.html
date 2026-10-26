@@ -3,18 +3,18 @@
   [items]="libraryItems()"
   [rowActions]="libraryRowActions"
   [selectionActions]="librarySelectionActions"
+  [groupDefinitions]="libraryGroups"
   [selectable]="true"
-  openLabel="Ouvrir"
+  openMode="title"
+  menuPlacement="top-right"
+  [(selectedIds)]="selectedLibraryIds"
   listEmptyMessage="Aucune bibliothèque n’est déclarée."
   [detailOpen]="selectedLibrary() !== null"
   [detailTabIndex]="selectedLibraryTabIndex()"
   (detailTabIndexChange)="selectedLibraryTabIndex.set($event)"
   [mediaCount]="mediaRows().length"
   [accessCount]="selectedAccesses().length"
-  searchLayout="centered"
-  searchLabel="Rechercher une bibliothèque"
-  [searchQuery]="searchQuery()"
-  (searchQueryChange)="searchQuery.set($event)"
+  [showToolbar]="false"
   [actionOpen]="actionOpen()"
   [actionTitle]="actionTitle()"
   [actionDescription]="actionDescription()"
@@ -28,14 +28,14 @@
   (toggleChange)="onLibraryItemToggle($event)"
   (selectionAction)="onLibrarySelection($event)"
 >
-  <ng-template #pageActions>
-    <a matButton="outlined" href="/api/v1/libraries/export" download="bibliotheques.json">
-      Exporter les définitions
-    </a>
-    <button matButton="filled" type="button" (click)="addLibrary()">
-      Ajouter une bibliothèque
-    </button>
-  </ng-template>
+  <input
+    #libraryImportFile
+    type="file"
+    accept="application/json,.json"
+    hidden
+    aria-label="Importer un export de bibliothèques"
+    (change)="onLibraryImportSelected($event)"
+  />
 
   <ng-template #catalogueNavigation>
     <app-library-section-tabs catalogue-navigation selected="media" />

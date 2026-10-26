@@ -210,7 +210,12 @@ export class GlobalSearchBarComponent {
     { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top' },
   ];
 
-  protected readonly visibleActions = computed(() => this.context()?.actions?.slice(0, 2) ?? []);
+  protected readonly visibleActions = computed(
+    () =>
+      this.context()
+        ?.actions?.filter((action) => !action.visibleWhen || action.visibleWhen())
+        .slice(0, 2) ?? [],
+  );
   protected readonly filterButtonCount = computed(() =>
     this.context()?.filter ? (this.context()?.filter?.activeCount?.() ?? 0) : null,
   );

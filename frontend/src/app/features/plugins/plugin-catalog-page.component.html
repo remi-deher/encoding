@@ -9,16 +9,10 @@
   [detailDescription]="detailDescription()"
   (detailClosed)="onDetailClosed()"
   filterLabel="Filtrer"
+  [showToolbar]="activeTab() === 'store'"
 >
   <div catalogue-filters>
-    @if (activeTab() === 'plugins') {
-      <app-category-tabs
-        label="Famille de plugin"
-        [options]="familyOptions()"
-        [selected]="selectedFamily()"
-        (selectedChange)="onFamilyChange($event)"
-      />
-    } @else if (activeTab() === 'store') {
+    @if (activeTab() === 'store') {
       <app-category-tabs
         label="Catégorie du Store"
         [options]="storeCategoryOptions()"
@@ -42,79 +36,141 @@
           </ul>
         </div>
       }
-      <app-data-table
-        layout="resources"
-        [columns]="columns"
-        [rows]="filteredPlugins()"
-        [rowOpenable]="true"
-        rowOpenLabel="Consulter"
-        (rowOpen)="onPluginOpen($event)"
-        emptyMessage="Aucun plugin ne correspond à cette famille."
-      />
-    } @else if (activeTab() === 'tools') {
-      <div class="tools-grid">
-        @for (tool of clusterTools(); track tool.id) {
-          <div class="tool-card">
-            <div class="tool-card-header">
-              <span class="tool-icon" aria-hidden="true">
-                @switch (tool.id) {
-                  @case ('ffmpeg') {
-                    🎞️
-                  }
-                  @case ('mkvtoolnix') {
-                    📦
-                  }
-                  @case ('ffprobe') {
-                    🔍
-                  }
-                  @case ('mediainfo') {
-                    📊
-                  }
-                  @case ('imagemagick') {
-                    🖼️
-                  }
-                  @case ('python') {
-                    🐍
-                  }
-                  @default {
-                    ⚙️
-                  }
-                }
-              </span>
-              <div class="tool-title-group">
-                <h3>{{ tool.name }}</h3>
-                <span class="tool-version">{{
-                  tool.provider === 'stock' ? 'Outil livré avec l’image' : 'Personnalisé'
-                }}</span>
-              </div>
-              <app-status-badge [label]="tool.clusterReadiness" />
-            </div>
-
-            <p class="tool-description">{{ tool.role }}</p>
-
-            <div class="tool-details">
-              <div><strong>Exécutables :</strong> {{ tool.executables.join(', ') }}</div>
-              <div><strong>Médias supportés :</strong> {{ tool.mediaTypes.join(', ') }}</div>
-              @if (tool.id === 'ffmpeg' && tool.encoders.length > 0) {
-                <div>
-                  <strong>Encodeurs vérifiés :</strong> {{ tool.encoders.length }} (CPU, NVENC, QSV,
-                  VAAPI)
-                </div>
-              }
+      <div class="extension-sections">
+        @for (group of pluginGroups(); track group.value) {
+          <section class="plugin-section" [attr.aria-label]="group.label">
+            <header class="plugin-section-heading">
               <div>
-                <strong>Sonde système :</strong>
-                {{ tool.probePreserved ? 'Préservée (/usr/bin)' : 'Personnalisée' }}
+                <h2>{{ group.label }}</h2>
+                <p>{{ group.description }}</p>
               </div>
-            </div>
-          </div>
+            </header>
+            @if (group.plugins.length) {
+              <div class="plugin-grid">
+                @for (plugin of group.plugins; track plugin.id) {
+                  <article class="plugin-card" [id]="'plugin-' + plugin.id">
+                    <button
+                      matIconButton
+                      type="button"
+                      class="plugin-menu"
+                      [matMenuTriggerFor]="pluginMenu"
+                      [attr.aria-label]="'Actions pour ' + plugin.name"
+                    >
+                      <span aria-hidden="true">⋮</span>
+                    </button>
+                    <mat-menu #pluginMenu="matMenu">
+                      <button mat-menu-item type="button" (click)="onPluginOpen(plugin.id)">
+                        Consulter
+                      </button>
+                    </mat-menu>
+                    <div class="plugin-card-header">
+                      <img class="plugin-icon" [src]="plugin.iconUrl" alt="" />
+                      <div>
+                        <h3>
+                          <button
+                            class="plugin-title-button"
+                            type="button"
+                            (click)="onPluginOpen(plugin.id)"
+                          >
+                            {{ plugin.name }}
+                          </button>
+                        </h3>
+                        <span class="plugin-subtitle">{{ plugin.category }}</span>
+                      </div>
+                    </div>
+                    <p>{{ plugin.components }}</p>
+                    <div class="plugin-meta">
+                      <span class="plugin-state">{{ plugin.state }}</span>
+                      <span>Version {{ plugin.version }}</span>
+                    </div>
+                  </article>
+                }
+              </div>
+            } @else {
+              <p class="plugin-empty">
+                Aucun plugin tiers installé pour le moment. Les extensions ajoutées depuis le Store
+                apparaîtront ici.
+              </p>
+            }
+          </section>
+        } @empty {
+          <p class="plugin-empty">Aucun plugin ne correspond à cette recherche.</p>
         }
       </div>
+    } @else if (activeTab() === 'tools') {
+      <section class="plugin-section" aria-label="Outils média déclarés par le cluster">
+        <header class="plugin-section-heading">
+          <div>
+            <h2>Outils déclarés par le cluster</h2>
+            <p>Inventaire, exécutables et capacités remontés par les workers</p>
+          </div>
+        </header>
+        <div class="plugin-grid">
+          @for (tool of filteredTools(); track tool.id) {
+            <article class="plugin-card tool-card" [id]="'cluster-tool-' + tool.id">
+              <div class="tool-card-header">
+                <span class="tool-icon" aria-hidden="true">
+                  @switch (tool.id) {
+                    @case ('ffmpeg') {
+                      🎞️
+                    }
+                    @case ('mkvtoolnix') {
+                      📦
+                    }
+                    @case ('ffprobe') {
+                      🔍
+                    }
+                    @case ('mediainfo') {
+                      📊
+                    }
+                    @case ('imagemagick') {
+                      🖼️
+                    }
+                    @case ('python') {
+                      🐍
+                    }
+                    @default {
+                      ⚙️
+                    }
+                  }
+                </span>
+                <div class="tool-title-group">
+                  <h3 class="tool-name">{{ tool.name }}</h3>
+                  <span class="tool-version">{{
+                    tool.provider === 'stock' ? 'Outil livré avec l’image' : 'Personnalisé'
+                  }}</span>
+                </div>
+                <app-status-badge [label]="tool.clusterReadiness" />
+              </div>
+
+              <p class="tool-description">{{ tool.role }}</p>
+
+              <div class="tool-details">
+                <div><strong>Exécutables :</strong> {{ tool.executables.join(', ') }}</div>
+                <div><strong>Médias supportés :</strong> {{ tool.mediaTypes.join(', ') }}</div>
+                @if (tool.id === 'ffmpeg' && tool.encoders.length > 0) {
+                  <div>
+                    <strong>Encodeurs vérifiés :</strong> {{ tool.encoders.length }} (CPU, NVENC,
+                    QSV, VAAPI)
+                  </div>
+                }
+                <div>
+                  <strong>Sonde système :</strong>
+                  {{ tool.probePreserved ? 'Préservée (/usr/bin)' : 'Personnalisée' }}
+                </div>
+              </div>
+            </article>
+          } @empty {
+            <p class="plugin-empty">Aucun outil ne correspond à cette recherche.</p>
+          }
+        </div>
+      </section>
     } @else if (activeTab() === 'store') {
       <div class="repositories-section">
         <h3>Dépôts configurés pour ce serveur</h3>
         <div class="repos-list">
-          @for (repo of storeRepositories(); track repo.id) {
-            <div class="repo-item">
+          @for (repo of filteredRepositories(); track repo.id) {
+            <div class="repo-item" [id]="'store-repository-' + repo.id">
               <div class="repo-info">
                 <span class="repo-name">{{ repo.name }}</span>
                 <span class="repo-url">{{ repo.url }}</span>
@@ -161,8 +217,12 @@
             </div>
           } @empty {
             <p class="store-empty">
-              Aucun dépôt configuré. Ajoutez l’adresse d’un fichier <code>repository.json</code> ou
-              importez une archive.
+              @if (storeRepositories().length) {
+                Aucun dépôt ne correspond à cette recherche.
+              } @else {
+                Aucun dépôt configuré. Ajoutez l’adresse d’un fichier
+                <code>repository.json</code> ou importez une archive.
+              }
             </p>
           }
         </div>
@@ -176,30 +236,14 @@
             (input)="onRepositoryUrlInput($event)"
             (keydown.enter)="addCustomRepository()"
           />
-          <button
-            matButton="filled"
-            type="button"
-            [disabled]="storeBusy() || !repositoryUrl().trim()"
-            (click)="addCustomRepository()"
-          >
-            Ajouter le dépôt
-          </button>
           <input
-            #archiveFile
+            class="store-archive-file"
             type="file"
             accept=".zip,application/zip"
             hidden
             [disabled]="storeBusy()"
             (change)="onArchiveSelected($event)"
           />
-          <button
-            matButton="outlined"
-            type="button"
-            [disabled]="storeBusy()"
-            (click)="archiveFile.click()"
-          >
-            Importer une archive (.zip)
-          </button>
         </div>
         <p class="store-note">
           Les paquets s’installent sur ce serveur ; les workers les téléchargent et vérifient leur
@@ -211,10 +255,12 @@
         <p class="store-empty">
           Aucun paquet disponible : le Store n’est pas encore alimenté par un dépôt.
         </p>
+      } @else if (filteredStorePackages().length === 0) {
+        <p class="store-empty">Aucun paquet ne correspond à ces critères.</p>
       }
       <div class="store-grid">
         @for (pkg of filteredStorePackages(); track pkg.id) {
-          <div class="store-card">
+          <div class="store-card" [id]="'store-package-' + pkg.id">
             <div class="store-card-header">
               <span class="store-icon" aria-hidden="true">{{ pkg.icon }}</span>
               <div class="store-title-group">

@@ -5,6 +5,8 @@ export interface PageShellAction {
   readonly id: string;
   readonly label: string;
   readonly icon?: IconName;
+  /** Masque l'action selon l'état métier courant de la page. */
+  readonly visibleWhen?: () => boolean;
   readonly run: () => void;
 }
 

@@ -89,7 +89,7 @@ Voir [cluster.md](cluster.md) : onglets **Ce nœud** / **Cluster**, aperçu en c
 
 ## Bibliothèques et page Activité
 
-La liste des bibliothèques suit le catalogue Flows : fiche de détail dans un tiroir, lignes de ressources avec sélection et barre d'actions groupées. Les bibliothèques peuvent être activées, désactivées ou supprimées ; elles ne sont pas publiables.
+La liste des bibliothèques suit le catalogue Flows : fiche de détail dans un tiroir, lignes de ressources avec sélection et barre d'actions groupées. Les lignes sont regroupées en « À configurer », « Prêtes » et « Désactivées » ; le nom ouvre la fiche et les actions de ligne restent dans le menu en haut à droite. La recherche est celle du shell. « Ajouter une bibliothèque » reste toujours dans la barre globale ; « Importer » y est remplacé par « Exporter » dès qu’une sélection existe. Le format d’export/import porte les noms et l’état actif ; les affectations de flow et accès par nœud sont à reconfigurer à l’import. Les bibliothèques peuvent être activées, désactivées ou supprimées ; elles ne sont pas publiables.
 
 Route `/activity` : cinq états centrés sur les fichiers découverts : **Non traité**, **En cours de traitement**, **Déjà traité**, **Échec du traitement** et **Traitement désactivé**. Les éléments actifs peuvent être annulés ; la relance d’un échec est proposée dans le tiroir après confirmation. Le tiroir réutilise `DetailDrawer` et expose les détails du fichier et, lorsqu’une exécution existe, son pipeline, ses événements et ses résultats. La recherche du shell filtre la page et propose ces fichiers avant les résultats globaux ; le filtre du shell propose bibliothèque, flow et nœud. Les anciens paramètres `view=active|errors|history|queue` sont traduits vers les états correspondants.
 
@@ -103,7 +103,7 @@ Initialisation et accès (`/login`, `/setup`) : `AccessTemplateComponent` fourni
 
 Jonction depuis le premier démarrage : bouton explicite « Créer le compte et continuer » avant la recherche ou la vérification d’un cluster. Les informations du compte et le mode sont ensuite confirmés ; la vérification, l’envoi et les nouvelles tentatives restent dans l’assistant avec la même session. Le code se compare sur le cluster d’accueil. L’ouverture de l’application suit l’approbation ; une demande encore en attente propose « Suivre la demande dans Nœuds ».
 
-Console de logs système (filtres de sévérité, recherche, pause, auto-scroll intelligent, export) ; scripts (liste en cartes, éditeur en tiroir, restauration dans le brouillon) ; IA & fournisseurs ; Plugins (configuration globale, Store).
+Console de logs système (filtres de sévérité, recherche, pause, auto-scroll intelligent, export) ; scripts (liste en cartes, éditeur en tiroir, restauration dans le brouillon) ; IA & fournisseurs ; Plugins & Outils (plugins regroupés par famille, inventaire média remonté par le cluster, Store et dépôts). La recherche de cette page filtre la sous-page active ; les actions d’ajout de dépôt et d’import d’archive apparaissent dans la barre globale sur Store & Dépôts.
 
 ## Mise à jour
 

@@ -15,6 +15,7 @@ import {
 import { IconName } from '../ui/icon.component';
 import {
   ResourceListComponent,
+  ResourceListGroup,
   ResourceListItem,
   ResourceListSelectionAction,
   ResourceListToggleEvent,
@@ -78,6 +79,9 @@ import {
           [icon]="resourceIcon()"
           [showIcon]="showResourceIcon()"
           [openLabel]="openLabel()"
+          [openMode]="openMode()"
+          [menuPlacement]="menuPlacement()"
+          [groupDefinitions]="groupDefinitions()"
           [selectionUnit]="selectionUnit()"
           [emptyMessage]="listEmptyMessage()"
           [selectable]="selectable()"
@@ -129,6 +133,9 @@ export class ResourceCatalogTemplateComponent {
   readonly resourceIcon = input<IconName>('flow');
   readonly showResourceIcon = input(true);
   readonly openLabel = input('Ouvrir');
+  readonly openMode = input<'button' | 'title' | 'none'>('button');
+  readonly menuPlacement = input<'inline' | 'top-right'>('inline');
+  readonly groupDefinitions = input<readonly ResourceListGroup[]>([]);
   readonly selectionUnit = input('élément(s)');
   readonly listEmptyMessage = input('Aucun résultat.');
   readonly selectable = input(false);

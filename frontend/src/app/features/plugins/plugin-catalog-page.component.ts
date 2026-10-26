@@ -1,15 +1,18 @@
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { MatTabsModule } from '@angular/material/tabs';
 import { ClusterMaintenanceTemplateComponent } from '../../shared/templates/cluster-maintenance-template.component';
-import {
-  DataTableColumn,
-  DataTableComponent,
-  DataTableRow,
-} from '../../shared/ui/data-table.component';
+import { DataTableRow } from '../../shared/ui/data-table.component';
 import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { ComponentConfigurationFormComponent } from '../../shared/ui/component-configuration-form.component';
 import { FlowValidation } from '../../shared/services/flow-validation';
@@ -32,6 +35,7 @@ import {
 } from '../../shared/ui/resource-sheet.component';
 
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import { ClusterExtensionsService } from '../../shared/services/cluster-extensions.service';
 import {
   ClusterTool,
@@ -40,6 +44,10 @@ import {
   StorePackage,
   StoreRepository,
 } from '../../shared/models/cluster-extensions';
+import {
+  PageShellContextService,
+  PageShellSearchResult,
+} from '../../core/layout/page-shell-context';
 
 type PluginFamily = 'base' | 'cluster' | 'media' | 'automation' | 'custom';
 
@@ -259,12 +267,19 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
   { value: 'custom', label: 'Tiers' },
 ];
 
+const PLUGIN_FAMILY_DESCRIPTIONS: Readonly<Record<PluginFamily, string>> = {
+  base: 'Composants natifs et logique des flows',
+  cluster: 'Répartition et circulation des traitements entre workers',
+  media: 'Traitement, lecture et analyse des médias',
+  automation: 'Intégrations avec les services de médiathèque',
+  custom: 'Extensions installées depuis le Store',
+};
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-plugin-catalog-page',
   imports: [
     StatusBadgeComponent,
-    DataTableComponent,
     ResourceSheetComponent,
     ClusterMaintenanceTemplateComponent,
     CategoryTabsComponent,
@@ -273,11 +288,14 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
     PlexSetupAssistantComponent,
     MatTabsModule,
     MatButtonModule,
+    MatMenuModule,
   ],
   templateUrl: './plugin-catalog-page.component.html',
   styleUrl: './plugin-catalog-page.component.scss',
 })
 export class PluginCatalogPageComponent {
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly pageShellContext = inject(PageShellContextService);
   private readonly flowValidation = inject(FlowValidation);
   private readonly configurationApi = inject(PluginConfigurationApi);
   private readonly extensionsService = inject(ClusterExtensionsService);
@@ -295,6 +313,7 @@ export class PluginCatalogPageComponent {
   protected readonly storeRepositories = signal<readonly StoreRepository[]>([]);
   protected readonly storePackages = signal<readonly StorePackage[]>([]);
   protected readonly selectedStoreCategory = signal('all');
+  protected readonly searchQuery = signal('');
 
   protected readonly extensionTabs = computed<readonly CategoryTabOption[]>(() => [
     { value: 'plugins', label: 'Plugins', count: this.pluginRecords().length },
@@ -323,12 +342,57 @@ export class PluginCatalogPageComponent {
 
   protected readonly filteredStorePackages = computed(() => {
     const cat = this.selectedStoreCategory();
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
     const pkgs = this.storePackages();
-    return cat === 'all' ? pkgs : pkgs.filter((p) => p.category === cat);
+    return pkgs.filter(
+      (pkg) =>
+        (cat === 'all' || pkg.category === cat) &&
+        (!query ||
+          [
+            pkg.name,
+            pkg.id,
+            pkg.author,
+            pkg.description,
+            pkg.categoryLabel,
+            pkg.requiredTools.join(' '),
+          ]
+            .join(' ')
+            .toLocaleLowerCase('fr-FR')
+            .includes(query)),
+    );
+  });
+  protected readonly filteredTools = computed(() => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return this.clusterTools().filter(
+      (tool) =>
+        !query ||
+        [
+          tool.name,
+          tool.id,
+          tool.role,
+          tool.provider,
+          tool.stockVersion,
+          tool.executables.join(' '),
+          tool.mediaTypes.join(' '),
+        ]
+          .join(' ')
+          .toLocaleLowerCase('fr-FR')
+          .includes(query),
+    );
+  });
+  protected readonly filteredRepositories = computed(() => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return this.storeRepositories().filter(
+      (repo) =>
+        !query ||
+        [repo.name, repo.url, repo.description, repo.lastError ?? '']
+          .join(' ')
+          .toLocaleLowerCase('fr-FR')
+          .includes(query),
+    );
   });
 
   protected readonly rejectedPlugins = signal<readonly RejectedPlugin[]>([]);
-  protected readonly selectedFamily = signal('all');
   protected readonly selectedPlugin = signal<PluginRecord | null>(null);
   private readonly pluginCatalog = signal<readonly FlowPluginCatalog[]>([]);
   /** Fiches connues du front, versions réelles du serveur, et plugins tiers déclarés par le catalogue. */
@@ -469,26 +533,43 @@ export class PluginCatalogPageComponent {
     };
   });
 
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Nom', sortable: true },
-    { key: 'familyLabel', label: 'Famille', sortable: true },
-    { key: 'category', label: 'Type', sortable: true },
-    { key: 'version', label: 'Version', sortable: true },
-    { key: 'components', label: 'Composants fournis', sortable: true },
-    { key: 'state', label: 'État', sortable: true },
-  ];
-
-  protected readonly familyOptions = computed<readonly CategoryTabOption[]>(() => [
-    { value: 'all', label: 'Tous', count: this.pluginRecords().length },
-    ...PLUGIN_FAMILY_OPTIONS.map((family) => ({
-      ...family,
-      count: this.pluginRecords().filter((plugin) => plugin.family === family.value).length,
-    })),
-  ]);
-
   protected readonly filteredPlugins = computed(() => {
-    const family = this.selectedFamily();
-    return this.pluginRecords().filter((plugin) => family === 'all' || plugin.family === family);
+    const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
+    return this.pluginRecords().filter(
+      (plugin) =>
+        !query ||
+        [
+          plugin.name,
+          plugin.familyLabel,
+          plugin.category,
+          plugin.components,
+          plugin.runtime,
+          plugin.configuration,
+          plugin.state,
+        ]
+          .join(' ')
+          .toLocaleLowerCase('fr-FR')
+          .includes(query),
+    );
+  });
+
+  protected readonly pluginGroups = computed(() => {
+    const plugins = this.filteredPlugins();
+    const groups = PLUGIN_FAMILY_OPTIONS.map((family) => ({
+      ...family,
+      description: PLUGIN_FAMILY_DESCRIPTIONS[family.value],
+      plugins: plugins.filter((plugin) => plugin.family === family.value),
+    }));
+    const hasQuery = !!this.searchQuery().trim();
+    if (plugins.length) {
+      const visible = groups.filter((group) => group.plugins.length > 0);
+      const customFamily = groups.find((group) => group.value === 'custom');
+      if (!hasQuery && customFamily?.plugins.length === 0) visible.push(customFamily);
+      return visible;
+    }
+    if (hasQuery) return [];
+    const customFamily = groups.find((group) => group.value === 'custom');
+    return customFamily ? [customFamily] : [];
   });
 
   private pluginComponents(pluginId: string) {
@@ -496,6 +577,29 @@ export class PluginCatalogPageComponent {
   }
 
   constructor() {
+    this.destroyRef.onDestroy(
+      this.pageShellContext.register({
+        searchPlaceholder: 'Rechercher dans Plugins & outils…',
+        onSearchQueryChange: (query) => this.searchQuery.set(query),
+        searchResults: (query) => this.extensionSearchResults(query),
+        actions: [
+          {
+            id: 'add-repository',
+            label: 'Ajouter un dépôt',
+            icon: 'add',
+            visibleWhen: () => this.activeTab() === 'store',
+            run: () => this.addRepositoryFromShell(),
+          },
+          {
+            id: 'import-store-archive',
+            label: 'Importer une archive',
+            icon: 'upload',
+            visibleWhen: () => this.activeTab() === 'store',
+            run: () => document.querySelector<HTMLInputElement>('.store-archive-file')?.click(),
+          },
+        ],
+      }),
+    );
     void this.flowValidation
       .catalog()
       .then((plugins) => {
@@ -624,12 +728,8 @@ export class PluginCatalogPageComponent {
     );
   }
 
-  protected onFamilyChange(family: string): void {
-    this.selectedFamily.set(family);
-  }
-
-  protected onPluginOpen(row: DataTableRow): void {
-    const plugin = this.pluginRecords().find((candidate) => candidate.id === row['id']) ?? null;
+  protected onPluginOpen(pluginId: string): void {
+    const plugin = this.pluginRecords().find((candidate) => candidate.id === pluginId) ?? null;
     this.selectedPlugin.set(plugin);
     this.configurationValues.set({});
     this.configuredSecrets.set([]);
@@ -640,6 +740,92 @@ export class PluginCatalogPageComponent {
     if (plugin && this.pluginCatalog().some((candidate) => candidate.id === plugin.id)) {
       void this.loadConfiguration(plugin.id);
     }
+  }
+
+  private extensionSearchResults(query: string): readonly PageShellSearchResult[] {
+    const normalized = query.trim().toLocaleLowerCase('fr-FR');
+    const matches = (values: readonly string[]) =>
+      !normalized || values.join(' ').toLocaleLowerCase('fr-FR').includes(normalized);
+    if (this.activeTab() === 'plugins') {
+      return this.pluginRecords()
+        .filter((plugin) =>
+          matches([
+            plugin.name,
+            plugin.familyLabel,
+            plugin.category,
+            plugin.components,
+            plugin.runtime,
+            plugin.state,
+          ]),
+        )
+        .slice(0, 8)
+        .map((plugin) => ({
+          id: `plugin:${plugin.id}`,
+          label: plugin.name,
+          description: `${plugin.familyLabel} · ${plugin.category}`,
+          group: 'Plugins',
+          glyph: '◇',
+          run: () => this.onPluginOpen(plugin.id),
+        }));
+    }
+    if (this.activeTab() === 'tools') {
+      return this.clusterTools()
+        .filter((tool) =>
+          matches([
+            tool.name,
+            tool.id,
+            tool.role,
+            tool.provider,
+            ...tool.executables,
+            ...tool.mediaTypes,
+          ]),
+        )
+        .slice(0, 8)
+        .map((tool) => ({
+          id: `tool:${tool.id}`,
+          label: tool.name,
+          description: `${tool.clusterReadiness} · ${tool.executables.join(', ')}`,
+          group: 'Outils média',
+          glyph: '⚙',
+          run: () =>
+            document.getElementById(`cluster-tool-${tool.id}`)?.scrollIntoView({ block: 'center' }),
+        }));
+    }
+    const repositories = this.storeRepositories()
+      .filter((repo) => matches([repo.name, repo.url, repo.description, repo.lastError ?? '']))
+      .slice(0, 4)
+      .map<PageShellSearchResult>((repo) => ({
+        id: `repository:${repo.id}`,
+        label: repo.name,
+        description: repo.url,
+        group: 'Dépôts',
+        glyph: '↗',
+        run: () =>
+          document
+            .getElementById(`store-repository-${repo.id}`)
+            ?.scrollIntoView({ block: 'center' }),
+      }));
+    const packages = this.storePackages()
+      .filter((pkg) => matches([pkg.name, pkg.id, pkg.author, pkg.description, pkg.categoryLabel]))
+      .slice(0, 4)
+      .map<PageShellSearchResult>((pkg) => ({
+        id: `package:${pkg.id}`,
+        label: pkg.name,
+        description: `${pkg.categoryLabel} · v${pkg.version}`,
+        group: 'Store',
+        glyph: pkg.icon,
+        run: () =>
+          document.getElementById(`store-package-${pkg.id}`)?.scrollIntoView({ block: 'center' }),
+      }));
+    return [...repositories, ...packages].slice(0, 8);
+  }
+
+  private addRepositoryFromShell(): void {
+    if (this.repositoryUrl().trim()) {
+      this.addCustomRepository();
+      return;
+    }
+    document.querySelector<HTMLInputElement>('.store-url')?.focus();
   }
 
   private async loadConfiguration(pluginId: string): Promise<void> {
