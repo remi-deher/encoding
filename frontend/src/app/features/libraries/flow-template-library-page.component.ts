@@ -1,4 +1,4 @@
-import { ResourceListComponent, ResourceListItem } from '../../shared/ui/resource-list.component';
+import { ResourceListItem } from '../../shared/ui/resource-list.component';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -12,14 +12,14 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom, map } from 'rxjs';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import { DataTableRow } from '../../shared/ui/data-table.component';
 import {
   ResourceSheetComponent,
   ResourceSheetSection,
 } from '../../shared/ui/resource-sheet.component';
 import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-button/drawer-action-button.component';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { ResourceCatalogTemplateComponent } from '../../shared/templates/resource-catalog-template.component';
+import { LibrarySectionTabsComponent } from './library-section-tabs.component';
 import { RecordFormComponent, RecordFormData } from '../../shared/ui/record-form.component';
 import { FlowTemplates } from '../../shared/services/flow-templates';
 import { FlowTemplateSummary } from '../../shared/models/flow-templates';
@@ -54,10 +54,9 @@ interface FlowTemplateRow extends DataTableRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-template-library-page',
   imports: [
-    ResourceListComponent,
-    CategoryTabsComponent,
+    ResourceCatalogTemplateComponent,
+    LibrarySectionTabsComponent,
     DrawerActionButtonComponent,
-    ManagementCatalogTemplateComponent,
     RecordFormComponent,
     ResourceSheetComponent,
     MatButtonModule,
@@ -65,12 +64,19 @@ interface FlowTemplateRow extends DataTableRow {
     ComponentConfigurationFormComponent,
   ],
   template: `
-    <app-management-catalog-template
+    <app-resource-catalog-template
       [title]="title()"
+      [items]="items()"
+      [rowActions]="rowActions"
       filterLabel="Modèles de flow"
       searchLabel="Rechercher un modèle"
       [searchQuery]="query()"
       (searchQueryChange)="query.set($event)"
+      resourceIcon="copy"
+      listEmptyMessage="Aucun modèle. Depuis Flows, ouvrez le menu d’un flow publié puis choisissez Créer un modèle."
+      openLabel="Ouvrir"
+      (open)="openTemplate({ id: $event })"
+      (action)="onRowAction($event)"
       [catalogState]="catalogState()"
       [catalogMessage]="catalogMessage()"
       [actionOpen]="actionOpen()"
@@ -83,24 +89,7 @@ interface FlowTemplateRow extends DataTableRow {
       searchLayout="centered"
       (actionClosed)="closeCreateFlow()"
     >
-      <app-category-tabs
-        catalogue-navigation
-        label="Ressources"
-        [options]="librarySections"
-        selected="templates"
-        (selectedChange)="onSectionChanged($event)"
-      />
-
-      <app-resource-list
-        catalogue-table
-        icon="copy"
-        [items]="items()"
-        [actions]="rowActions"
-        openLabel="Ouvrir"
-        (open)="openTemplate({ id: $event })"
-        (action)="onRowAction($event)"
-        emptyMessage="Aucun modèle. Depuis Flows, ouvrez le menu d’un flow publié puis choisissez Créer un modèle."
-      />
+      <app-library-section-tabs catalogue-navigation selected="templates" />
 
       <ng-template #detailContent catalogue-detail>
         @if (selectedTemplate(); as template) {
@@ -218,7 +207,7 @@ interface FlowTemplateRow extends DataTableRow {
           </section>
         }
       </ng-template>
-    </app-management-catalog-template>
+    </app-resource-catalog-template>
   `,
   styles: [
     `
@@ -261,14 +250,6 @@ export class FlowTemplateLibraryPageComponent {
   protected readonly title = computed(
     () => (this.routeData()['title'] as string) ?? 'Modèles de flow',
   );
-  protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Bibliothèques' },
-    { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles de flow' },
-    { value: 'packs', label: 'Packs de composants' },
-    { value: 'encoding', label: 'Profils d’encodage' },
-    { value: 'resources', label: 'Ressources' },
-  ];
   protected readonly catalogState = signal<'ready' | 'loading' | 'error'>('loading');
   protected readonly catalogMessage = signal('Chargement des modèles…');
   protected readonly templates = signal<readonly FlowTemplateSummary[]>([]);
@@ -496,14 +477,6 @@ export class FlowTemplateLibraryPageComponent {
         }
       });
     });
-  }
-
-  protected onSectionChanged(section: string): void {
-    if (section === 'media') void this.router.navigateByUrl('/libraries');
-    if (section === 'scripts') void this.router.navigateByUrl('/libraries/scripts');
-    if (section === 'packs') void this.router.navigateByUrl('/libraries/packs');
-    if (section === 'encoding') void this.router.navigateByUrl('/libraries/encoding-profiles');
-    if (section === 'resources') void this.router.navigateByUrl('/libraries/resources');
   }
 
   protected openTemplate(row: DataTableRow): void {

@@ -15,11 +15,11 @@ import { CommonModule, DOCUMENT } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { AuthService } from '../../core/auth/auth.service';
 import { LocalNodeController } from '../../shared/services/local-node-controller';
 import { NotificationService } from '../../shared/services/notification.service';
 import { formatMemory } from '../../shared/models/node-hardware';
+import { AccessTemplateComponent } from '../../shared/templates/access-template.component';
 
 const MINIMUM_PASSWORD_LENGTH = 12;
 const MAXIMUM_PASSWORD_LENGTH = 256;
@@ -31,19 +31,17 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-setup-wizard-page',
   providers: [LocalNodeController],
-  imports: [IconComponent, CommonModule, FormsModule, MatButtonModule, MatProgressBarModule],
+  imports: [IconComponent, CommonModule, FormsModule, MatButtonModule, AccessTemplateComponent],
   template: `
-    <section class="setup-studio" aria-label="Assistant de premier démarrage">
-      @if (busy()) {
-        <mat-progress-bar
-          class="setup-progress"
-          mode="indeterminate"
-          aria-label="Action en cours"
-        />
-      }
-
+    <app-access-template
+      view="setup"
+      title="Bienvenue sur Encoding"
+      description="Configurez cette machine en un coup d’œil et vérifiez les ressources matérielles détectées localement."
+      [busy]="busy()"
+      progressLabel="Action en cours"
+    >
       @if (errorMessage() || localController.error()) {
-        <div role="alert" class="setup-error">
+        <div access-alert role="alert" class="setup-error">
           <svg
             viewBox="0 0 24 24"
             width="20"
@@ -60,600 +58,555 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
         </div>
       }
 
-      <div class="setup-grid">
-        <!-- Colonne gauche : Fiche d'identité live & télémétrie matérielle -->
-        <aside class="setup-telemetry" aria-label="Identité et matériel détecté">
-          <header class="setup-brand">
-            <div class="brand-badge">
-              <span class="brand-mark" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  width="18"
-                  height="18"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                >
-                  <polygon points="6 4 20 12 6 20 6 4" />
-                </svg>
-              </span>
-              <span class="brand-name">Encoding</span>
-              <span class="brand-tag">Premier démarrage</span>
-            </div>
-            <h1 class="setup-title">Bienvenue sur Encoding</h1>
-            <p class="setup-subtitle">
-              Configurez cette machine en un coup d’œil et vérifiez les ressources matérielles
-              détectées localement.
-            </p>
-          </header>
-
-          <div class="hardware-bento" role="region" aria-labelledby="hardware-card-title">
-            <div class="hardware-bento-header">
-              <span class="live-dot" aria-hidden="true"></span>
-              <div class="hardware-bento-title-group">
-                <span class="hardware-eyebrow">Nœud local détecté</span>
-                <h2 id="hardware-card-title" class="hardware-node-name">
-                  {{ effectiveNodeName() }}
-                </h2>
-                <span class="hardware-host-meta">{{ hostPlatformLabel() }}</span>
-              </div>
-            </div>
-
-            <div class="hardware-tiles">
-              <div class="hardware-tile hardware-tile--wide">
-                <span class="tile-label">Accès au nœud</span>
-                @for (url of networkAccessUrls(); track url) {
-                  <span class="tile-value tile-value--mono">{{ url }}</span>
-                }
-                <span class="tile-hint">{{ networkAccessSource() }}</span>
-              </div>
-              <div class="hardware-tile hardware-tile--wide">
-                <span class="tile-label">Adresses des interfaces</span>
-                @if (setupSheet()?.addresses?.length) {
-                  <ul class="network-addresses" aria-label="Adresses des interfaces">
-                    @for (
-                      item of setupSheet()!.addresses;
-                      track item.interface + '/' + item.address
-                    ) {
-                      <li class="tile-value tile-value--mono">
-                        {{ item.address }} ({{ item.interface }})
-                      </li>
-                    }
-                  </ul>
-                } @else {
-                  <span class="tile-value">{{
-                    setupSheet() ? 'Aucune adresse détectée' : 'Détection en cours…'
-                  }}</span>
-                }
-              </div>
-              <div class="hardware-tile">
-                <span class="tile-label">Processeur</span>
-                <span class="tile-value">{{ cpuInfo() }}</span>
-              </div>
-              <div class="hardware-tile">
-                <span class="tile-label">Mémoire</span>
-                <span class="tile-value">{{ memoryInfo() }}</span>
-              </div>
-              <div class="hardware-tile hardware-tile--wide">
-                <span class="tile-label">Graphique / GPU</span>
-                <span class="tile-value">{{ gpuInfo() }}</span>
-              </div>
-              <div class="hardware-tile hardware-tile--wide hardware-tile--accent">
-                <span class="tile-label">Accélération GPU</span>
-                <span class="tile-value">{{ gpuAccelerationInfo() }}</span>
-              </div>
+      <!-- Colonne gauche : Fiche d'identité live & télémétrie matérielle -->
+      <aside access-context class="setup-telemetry" aria-label="Identité et matériel détecté">
+        <div class="hardware-bento" role="region" aria-labelledby="hardware-card-title">
+          <div class="hardware-bento-header">
+            <span class="live-dot" aria-hidden="true"></span>
+            <div class="hardware-bento-title-group">
+              <span class="hardware-eyebrow">Nœud local détecté</span>
+              <h2 id="hardware-card-title" class="hardware-node-name">
+                {{ effectiveNodeName() }}
+              </h2>
+              <span class="hardware-host-meta">{{ hostPlatformLabel() }}</span>
             </div>
           </div>
 
-          <p class="telemetry-footnote">
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            <span>
-              Vous pourrez renommer ce nœud ou basculer entre autonome et cluster à chaud depuis la
-              page <strong>Nœuds</strong>.
-            </span>
-          </p>
-        </aside>
-
-        <!-- Colonne droite : Atelier de configuration directe -->
-        <div class="setup-workbench">
-          <!-- Section 1 : Compte administrateur -->
-          <section class="workbench-card" aria-labelledby="step-admin-heading">
-            <div class="section-heading">
-              <span class="step-pill" aria-hidden="true">1</span>
-              <div>
-                <h2 id="step-admin-heading">
-                  {{ accountCreated() ? 'Administrateur créé' : 'Créer l’administrateur' }}
-                </h2>
-                <p>
-                  Ce compte protège l’accès au cluster. Vous pourrez en ajouter d’autres ensuite.
-                </p>
-              </div>
+          <div class="hardware-tiles">
+            <div class="hardware-tile hardware-tile--wide">
+              <span class="tile-label">Accès au nœud</span>
+              @for (url of networkAccessUrls(); track url) {
+                <span class="tile-value tile-value--mono">{{ url }}</span>
+              }
+              <span class="tile-hint">{{ networkAccessSource() }}</span>
             </div>
-
-            @if (accountCreated()) {
-              <p>
-                Connecté avec le compte <strong>{{ adminUsername() }}</strong
-                >.
-              </p>
-            } @else {
-              <div class="form-group">
-                <label for="admin-username-input" class="field-label">Nom d’utilisateur</label>
-                <input
-                  id="admin-username-input"
-                  [disabled]="busy() || accountCreated()"
-                  type="text"
-                  class="text-input"
-                  [class.invalid]="adminErrors().username"
-                  [ngModel]="adminUsername()"
-                  (ngModelChange)="adminUsername.set($event)"
-                  maxlength="64"
-                  autocomplete="username"
-                  [attr.aria-invalid]="adminErrors().username ? 'true' : null"
-                  aria-describedby="admin-username-error"
-                />
-                @if (adminErrors().username) {
-                  <span id="admin-username-error" class="field-error">{{
-                    adminErrors().username
-                  }}</span>
-                }
-              </div>
-
-              <div class="form-group">
-                <label for="admin-password-input" class="field-label">Mot de passe</label>
-                <div class="input-with-button">
-                  <input
-                    id="admin-password-input"
-                    [disabled]="busy() || accountCreated()"
-                    class="text-input"
-                    [class.invalid]="adminErrors().password"
-                    [type]="passwordVisible() ? 'text' : 'password'"
-                    [ngModel]="adminPassword()"
-                    (ngModelChange)="adminPassword.set($event)"
-                    autocomplete="new-password"
-                    [attr.aria-invalid]="adminErrors().password ? 'true' : null"
-                    aria-describedby="admin-password-hint"
-                  />
-                  <button
-                    matButton="outlined"
-                    type="button"
-                    [attr.aria-pressed]="passwordVisible()"
-                    (click)="passwordVisible.set(!passwordVisible())"
-                  >
-                    {{ passwordVisible() ? 'Masquer' : 'Afficher' }}
-                  </button>
-                </div>
-                <span
-                  id="admin-password-hint"
-                  [class]="adminErrors().password ? 'field-error' : 'field-hint'"
-                >
-                  {{ adminErrors().password || minimumPasswordLength + ' caractères minimum.' }}
-                </span>
-              </div>
-
-              <div class="form-group">
-                <label for="admin-confirm-input" class="field-label"
-                  >Confirmer le mot de passe</label
-                >
-                <input
-                  id="admin-confirm-input"
-                  [disabled]="busy() || accountCreated()"
-                  class="text-input"
-                  [class.invalid]="adminErrors().confirm"
-                  [type]="passwordVisible() ? 'text' : 'password'"
-                  [ngModel]="adminConfirm()"
-                  (ngModelChange)="adminConfirm.set($event)"
-                  autocomplete="new-password"
-                  [attr.aria-invalid]="adminErrors().confirm ? 'true' : null"
-                  aria-describedby="admin-confirm-error"
-                />
-                @if (adminErrors().confirm) {
-                  <span id="admin-confirm-error" class="field-error">{{
-                    adminErrors().confirm
-                  }}</span>
-                }
-              </div>
-            }
-          </section>
-
-          <!-- Section 2 : Identité -->
-          <section class="workbench-card" aria-labelledby="step-identity-heading">
-            <div class="section-heading">
-              <span class="step-pill" aria-hidden="true">2</span>
-              <div>
-                <h2 id="step-identity-heading">Identifier cette machine</h2>
-                <p>Donnez un nom convivial pour repérer facilement ce nœud sur votre réseau.</p>
-              </div>
+            <div class="hardware-tile hardware-tile--wide">
+              <span class="tile-label">Adresses des interfaces</span>
+              @if (setupSheet()?.addresses?.length) {
+                <ul class="network-addresses" aria-label="Adresses des interfaces">
+                  @for (
+                    item of setupSheet()!.addresses;
+                    track item.interface + '/' + item.address
+                  ) {
+                    <li class="tile-value tile-value--mono">
+                      {{ item.address }} ({{ item.interface }})
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <span class="tile-value">{{
+                  setupSheet() ? 'Aucune adresse détectée' : 'Détection en cours…'
+                }}</span>
+              }
             </div>
+            <div class="hardware-tile">
+              <span class="tile-label">Processeur</span>
+              <span class="tile-value">{{ cpuInfo() }}</span>
+            </div>
+            <div class="hardware-tile">
+              <span class="tile-label">Mémoire</span>
+              <span class="tile-value">{{ memoryInfo() }}</span>
+            </div>
+            <div class="hardware-tile hardware-tile--wide">
+              <span class="tile-label">Graphique / GPU</span>
+              <span class="tile-value">{{ gpuInfo() }}</span>
+            </div>
+            <div class="hardware-tile hardware-tile--wide hardware-tile--accent">
+              <span class="tile-label">Accélération GPU</span>
+              <span class="tile-value">{{ gpuAccelerationInfo() }}</span>
+            </div>
+          </div>
+        </div>
 
+        <p class="telemetry-footnote">
+          <svg
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+          <span>
+            Vous pourrez renommer ce nœud ou basculer entre autonome et cluster à chaud depuis la
+            page <strong>Nœuds</strong>.
+          </span>
+        </p>
+      </aside>
+
+      <!-- Colonne droite : Atelier de configuration directe -->
+      <div access-content class="setup-workbench">
+        <!-- Section 1 : Compte administrateur -->
+        <section class="workbench-card" aria-labelledby="step-admin-heading">
+          <div class="section-heading">
+            <span class="step-pill" aria-hidden="true">1</span>
+            <div>
+              <h2 id="step-admin-heading">
+                {{ accountCreated() ? 'Administrateur créé' : 'Créer l’administrateur' }}
+              </h2>
+              <p>Ce compte protège l’accès au cluster. Vous pourrez en ajouter d’autres ensuite.</p>
+            </div>
+          </div>
+
+          @if (accountCreated()) {
+            <p>
+              Connecté avec le compte <strong>{{ adminUsername() }}</strong
+              >.
+            </p>
+          } @else {
             <div class="form-group">
-              <label for="node-name-input" class="field-label">Nom de ce nœud</label>
+              <label for="admin-username-input" class="field-label">Nom d’utilisateur</label>
               <input
-                id="node-name-input"
+                id="admin-username-input"
                 [disabled]="busy() || accountCreated()"
                 type="text"
                 class="text-input"
-                [placeholder]="defaultNodeName()"
-                [ngModel]="nodeName()"
-                (ngModelChange)="nodeName.set($event)"
-                maxlength="128"
-                autocomplete="off"
+                [class.invalid]="adminErrors().username"
+                [ngModel]="adminUsername()"
+                (ngModelChange)="adminUsername.set($event)"
+                maxlength="64"
+                autocomplete="username"
+                [attr.aria-invalid]="adminErrors().username ? 'true' : null"
+                aria-describedby="admin-username-error"
               />
-              <div class="Quick-suggestions" aria-label="Suggestions de noms">
-                <span class="suggestions-label">Suggestions :</span>
-                @for (suggestion of nodeNameSuggestions; track suggestion) {
-                  <button
-                    type="button"
-                    class="suggestion-chip"
-                    [disabled]="busy() || accountCreated()"
-                    [class.active]="nodeName() === suggestion"
-                    (click)="nodeName.set(suggestion)"
-                  >
-                    {{ suggestion }}
-                  </button>
-                }
-              </div>
-            </div>
-          </section>
-
-          <!-- Section 3 : Choix de l'architecture -->
-          <section class="workbench-card" aria-labelledby="step-mode-heading">
-            <div class="section-heading">
-              <span class="step-pill" aria-hidden="true">3</span>
-              <div>
-                <h2 id="step-mode-heading">Comment souhaitez-vous utiliser cette machine ?</h2>
-                <p>Sélectionnez l’organisation initiale de votre installation.</p>
-              </div>
+              @if (adminErrors().username) {
+                <span id="admin-username-error" class="field-error">{{
+                  adminErrors().username
+                }}</span>
+              }
             </div>
 
-            <div class="mode-grid" role="radiogroup" aria-labelledby="step-mode-heading">
-              <!-- Mode 1 : Autonome -->
-              <button
-                type="button"
-                class="mode-card"
-                [disabled]="busy() || accountCreated()"
-                [class.selected]="selectedMode() === 'standalone'"
-                (click)="selectMode('standalone')"
-                role="radio"
-                [attr.aria-checked]="selectedMode() === 'standalone'"
-              >
-                <div class="mode-card-top">
-                  <span class="mode-icon" aria-hidden="true">
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="20"
-                      height="20"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                      <line x1="8" y1="21" x2="16" y2="21" />
-                      <line x1="12" y1="17" x2="12" y2="21" />
-                    </svg>
-                  </span>
-                  <span class="mode-badge primary">Recommandé</span>
-                </div>
-                <strong class="mode-title">Machine autonome</strong>
-                <p class="mode-description">
-                  Serveur et worker réunis sur cette machine. Idéal pour démarrer immédiatement sans
-                  cluster.
-                </p>
-              </button>
-
-              <!-- Mode 2 : Créer un cluster -->
-              <button
-                type="button"
-                class="mode-card"
-                [disabled]="busy() || accountCreated()"
-                [class.selected]="selectedMode() === 'createCluster'"
-                (click)="selectMode('createCluster')"
-                role="radio"
-                [attr.aria-checked]="selectedMode() === 'createCluster'"
-              >
-                <div class="mode-card-top">
-                  <span class="mode-icon" aria-hidden="true">
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="20"
-                      height="20"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <circle cx="18" cy="5" r="3" />
-                      <circle cx="6" cy="12" r="3" />
-                      <circle cx="18" cy="19" r="3" />
-                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                    </svg>
-                  </span>
-                  <span class="mode-badge neutral">Multi-machines</span>
-                </div>
-                <strong class="mode-title">Créer un cluster</strong>
-                <p class="mode-description">
-                  Initialise un nouveau maillage prêt à accueillir d’autres serveurs ou workers.
-                </p>
-              </button>
-
-              <!-- Mode 3 : Rejoindre un cluster -->
-              <button
-                type="button"
-                class="mode-card"
-                [disabled]="busy() || accountCreated()"
-                [class.selected]="selectedMode() === 'joinCluster'"
-                (click)="selectMode('joinCluster')"
-                role="radio"
-                [attr.aria-checked]="selectedMode() === 'joinCluster'"
-              >
-                <div class="mode-card-top">
-                  <span class="mode-icon" aria-hidden="true">
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="20"
-                      height="20"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                    </svg>
-                  </span>
-                  <span class="mode-badge accent">Worker / Pair</span>
-                </div>
-                <strong class="mode-title">Rejoindre un cluster</strong>
-                <p class="mode-description">
-                  Rattache cette machine à un cluster Encoding déjà actif sur votre réseau.
-                </p>
-              </button>
-            </div>
-          </section>
-
-          <!-- Section 4 : Finalisation contextuelle selon le mode choisi -->
-          <section class="workbench-card workbench-card--Contextual" aria-live="polite">
-            @if (selectedMode() === 'standalone') {
-              <div class="contextual-summary">
-                <div class="contextual-summary-head">
-                  <span class="status-check" aria-hidden="true">✓</span>
-                  <div>
-                    <h3>Prêt à démarrer en mode autonome</h3>
-                    <p>
-                      <strong>{{ effectiveNodeName() }}</strong> assurera l’interface serveur et
-                      l’encodage local. Vous vous connecterez avec le compte administrateur créé
-                      ci-dessus.
-                    </p>
-                  </div>
-                </div>
-                <div class="workbench-actions">
-                  <button
-                    matButton="filled"
-                    type="button"
-                    [disabled]="busy()"
-                    (click)="submitStandalone()"
-                  >
-                    Accéder au tableau de bord
-                    <app-icon name="forward" matButtonIcon iconPositionEnd />
-                  </button>
-                </div>
-              </div>
-            }
-
-            @if (selectedMode() === 'createCluster') {
-              <div class="section-heading">
-                <span class="step-pill" aria-hidden="true">4</span>
-                <div>
-                  <h3>Nommer votre nouveau cluster</h3>
-                  <p>Ce nom sera affiché lors de l’ajout d’autres serveurs ou workers.</p>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="cluster-name-input" class="field-label">Nom du cluster</label>
+            <div class="form-group">
+              <label for="admin-password-input" class="field-label">Mot de passe</label>
+              <div class="input-with-button">
                 <input
-                  id="cluster-name-input"
-                  type="text"
+                  id="admin-password-input"
+                  [disabled]="busy() || accountCreated()"
                   class="text-input"
-                  [placeholder]="defaultClusterName()"
-                  [ngModel]="clusterName()"
-                  (ngModelChange)="clusterName.set($event)"
-                  maxlength="128"
-                  autocomplete="off"
+                  [class.invalid]="adminErrors().password"
+                  [type]="passwordVisible() ? 'text' : 'password'"
+                  [ngModel]="adminPassword()"
+                  (ngModelChange)="adminPassword.set($event)"
+                  autocomplete="new-password"
+                  [attr.aria-invalid]="adminErrors().password ? 'true' : null"
+                  aria-describedby="admin-password-hint"
                 />
-                <span class="field-hint">
-                  Premier coordinateur et worker : <strong>{{ effectiveNodeName() }}</strong>
-                </span>
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [attr.aria-pressed]="passwordVisible()"
+                  (click)="passwordVisible.set(!passwordVisible())"
+                >
+                  {{ passwordVisible() ? 'Masquer' : 'Afficher' }}
+                </button>
               </div>
+              <span
+                id="admin-password-hint"
+                [class]="adminErrors().password ? 'field-error' : 'field-hint'"
+              >
+                {{ adminErrors().password || minimumPasswordLength + ' caractères minimum.' }}
+              </span>
+            </div>
 
+            <div class="form-group">
+              <label for="admin-confirm-input" class="field-label">Confirmer le mot de passe</label>
+              <input
+                id="admin-confirm-input"
+                [disabled]="busy() || accountCreated()"
+                class="text-input"
+                [class.invalid]="adminErrors().confirm"
+                [type]="passwordVisible() ? 'text' : 'password'"
+                [ngModel]="adminConfirm()"
+                (ngModelChange)="adminConfirm.set($event)"
+                autocomplete="new-password"
+                [attr.aria-invalid]="adminErrors().confirm ? 'true' : null"
+                aria-describedby="admin-confirm-error"
+              />
+              @if (adminErrors().confirm) {
+                <span id="admin-confirm-error" class="field-error">{{
+                  adminErrors().confirm
+                }}</span>
+              }
+            </div>
+          }
+        </section>
+
+        <!-- Section 2 : Identité -->
+        <section class="workbench-card" aria-labelledby="step-identity-heading">
+          <div class="section-heading">
+            <span class="step-pill" aria-hidden="true">2</span>
+            <div>
+              <h2 id="step-identity-heading">Identifier cette machine</h2>
+              <p>Donnez un nom convivial pour repérer facilement ce nœud sur votre réseau.</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="node-name-input" class="field-label">Nom de ce nœud</label>
+            <input
+              id="node-name-input"
+              [disabled]="busy() || accountCreated()"
+              type="text"
+              class="text-input"
+              [placeholder]="defaultNodeName()"
+              [ngModel]="nodeName()"
+              (ngModelChange)="nodeName.set($event)"
+              maxlength="128"
+              autocomplete="off"
+            />
+            <div class="Quick-suggestions" aria-label="Suggestions de noms">
+              <span class="suggestions-label">Suggestions :</span>
+              @for (suggestion of nodeNameSuggestions; track suggestion) {
+                <button
+                  type="button"
+                  class="suggestion-chip"
+                  [disabled]="busy() || accountCreated()"
+                  [class.active]="nodeName() === suggestion"
+                  (click)="nodeName.set(suggestion)"
+                >
+                  {{ suggestion }}
+                </button>
+              }
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 3 : Choix de l'architecture -->
+        <section class="workbench-card" aria-labelledby="step-mode-heading">
+          <div class="section-heading">
+            <span class="step-pill" aria-hidden="true">3</span>
+            <div>
+              <h2 id="step-mode-heading">Comment souhaitez-vous utiliser cette machine ?</h2>
+              <p>Sélectionnez l’organisation initiale de votre installation.</p>
+            </div>
+          </div>
+
+          <div class="mode-grid" role="radiogroup" aria-labelledby="step-mode-heading">
+            <!-- Mode 1 : Autonome -->
+            <button
+              type="button"
+              class="mode-card"
+              [disabled]="busy() || accountCreated()"
+              [class.selected]="selectedMode() === 'standalone'"
+              (click)="selectMode('standalone')"
+              role="radio"
+              [attr.aria-checked]="selectedMode() === 'standalone'"
+            >
+              <div class="mode-card-top">
+                <span class="mode-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                    <line x1="8" y1="21" x2="16" y2="21" />
+                    <line x1="12" y1="17" x2="12" y2="21" />
+                  </svg>
+                </span>
+                <span class="mode-badge primary">Recommandé</span>
+              </div>
+              <strong class="mode-title">Machine autonome</strong>
+              <p class="mode-description">
+                Serveur et worker réunis sur cette machine. Idéal pour démarrer immédiatement sans
+                cluster.
+              </p>
+            </button>
+
+            <!-- Mode 2 : Créer un cluster -->
+            <button
+              type="button"
+              class="mode-card"
+              [disabled]="busy() || accountCreated()"
+              [class.selected]="selectedMode() === 'createCluster'"
+              (click)="selectMode('createCluster')"
+              role="radio"
+              [attr.aria-checked]="selectedMode() === 'createCluster'"
+            >
+              <div class="mode-card-top">
+                <span class="mode-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <circle cx="18" cy="5" r="3" />
+                    <circle cx="6" cy="12" r="3" />
+                    <circle cx="18" cy="19" r="3" />
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                  </svg>
+                </span>
+                <span class="mode-badge neutral">Multi-machines</span>
+              </div>
+              <strong class="mode-title">Créer un cluster</strong>
+              <p class="mode-description">
+                Initialise un nouveau maillage prêt à accueillir d’autres serveurs ou workers.
+              </p>
+            </button>
+
+            <!-- Mode 3 : Rejoindre un cluster -->
+            <button
+              type="button"
+              class="mode-card"
+              [disabled]="busy() || accountCreated()"
+              [class.selected]="selectedMode() === 'joinCluster'"
+              (click)="selectMode('joinCluster')"
+              role="radio"
+              [attr.aria-checked]="selectedMode() === 'joinCluster'"
+            >
+              <div class="mode-card-top">
+                <span class="mode-icon" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                </span>
+                <span class="mode-badge accent">Worker / Pair</span>
+              </div>
+              <strong class="mode-title">Rejoindre un cluster</strong>
+              <p class="mode-description">
+                Rattache cette machine à un cluster Encoding déjà actif sur votre réseau.
+              </p>
+            </button>
+          </div>
+        </section>
+
+        <!-- Section 4 : Finalisation contextuelle selon le mode choisi -->
+        <section class="workbench-card workbench-card--Contextual" aria-live="polite">
+          @if (selectedMode() === 'standalone') {
+            <div class="contextual-summary">
+              <div class="contextual-summary-head">
+                <span class="status-check" aria-hidden="true">✓</span>
+                <div>
+                  <h3>Prêt à démarrer en mode autonome</h3>
+                  <p>
+                    <strong>{{ effectiveNodeName() }}</strong> assurera l’interface serveur et
+                    l’encodage local. Vous vous connecterez avec le compte administrateur créé
+                    ci-dessus.
+                  </p>
+                </div>
+              </div>
               <div class="workbench-actions">
                 <button
                   matButton="filled"
                   type="button"
                   [disabled]="busy()"
-                  (click)="submitCreateCluster()"
+                  (click)="submitStandalone()"
                 >
-                  Créer le cluster et continuer <app-icon name="forward" />
+                  Accéder au tableau de bord
+                  <app-icon name="forward" matButtonIcon iconPositionEnd />
                 </button>
               </div>
-            }
+            </div>
+          }
 
-            @if (selectedMode() === 'joinCluster') {
-              @if (!accountCreated()) {
-                <p>
-                  Créez le compte administrateur de cette machine pour rechercher un cluster et
-                  envoyer une demande. La jonction devra ensuite être approuvée sur le cluster
-                  d’accueil.
-                </p>
-                <div class="workbench-actions">
-                  <button
-                    matButton="filled"
-                    type="button"
-                    [disabled]="busy()"
-                    (click)="prepareClusterJoin()"
-                  >
-                    Créer le compte et continuer
-                  </button>
-                </div>
-              } @else {
-                <p role="status">
-                  Compte administrateur local créé. Vous pouvez rejoindre un cluster.
-                </p>
-              }
-              <div class="section-heading">
-                <span class="step-pill" aria-hidden="true">4</span>
-                <div>
-                  <h3>Connexion au cluster d’accueil</h3>
-                  <p>
-                    Sélectionnez un cluster découvert sur le réseau local ou indiquez son adresse
-                    URL.
-                  </p>
-                </div>
+          @if (selectedMode() === 'createCluster') {
+            <div class="section-heading">
+              <span class="step-pill" aria-hidden="true">4</span>
+              <div>
+                <h3>Nommer votre nouveau cluster</h3>
+                <p>Ce nom sera affiché lors de l’ajout d’autres serveurs ou workers.</p>
               </div>
+            </div>
 
-              @if (availableClusters().length > 0) {
-                <div class="discovered-clusters">
-                  <span class="list-label">Clusters détectés automatiquement (mDNS) :</span>
-                  <div class="cluster-cards-list">
-                    @for (cluster of availableClusters(); track cluster.id) {
-                      <div class="cluster-card">
-                        <div class="cluster-info">
-                          <strong>{{ cluster.name }}</strong>
-                          <span class="cluster-address">{{ cluster.apiBaseUrl }}</span>
-                        </div>
-                        <button
-                          matButton="outlined"
-                          type="button"
-                          [disabled]="
-                            !accountCreated() ||
-                            busy() ||
-                            localController.pending() ||
-                            joinApproved()
-                          "
-                          (click)="selectClusterAddress(cluster.apiBaseUrl)"
-                        >
-                          Sélectionner
-                        </button>
-                      </div>
-                    }
-                  </div>
-                </div>
-              }
+            <div class="form-group">
+              <label for="cluster-name-input" class="field-label">Nom du cluster</label>
+              <input
+                id="cluster-name-input"
+                type="text"
+                class="text-input"
+                [placeholder]="defaultClusterName()"
+                [ngModel]="clusterName()"
+                (ngModelChange)="clusterName.set($event)"
+                maxlength="128"
+                autocomplete="off"
+              />
+              <span class="field-hint">
+                Premier coordinateur et worker : <strong>{{ effectiveNodeName() }}</strong>
+              </span>
+            </div>
 
-              <div class="form-group">
-                <label for="cluster-address-input" class="field-label">
-                  Adresse du cluster d’accueil
-                </label>
-                <div class="input-with-button">
-                  <input
-                    id="cluster-address-input"
-                    [disabled]="
-                      !accountCreated() || busy() || localController.pending() || joinApproved()
-                    "
-                    type="url"
-                    class="text-input"
-                    placeholder="http://192.168.1.50:8090"
-                    [ngModel]="clusterAddress()"
-                    (ngModelChange)="clusterAddress.set($event)"
-                  />
-                  <button
-                    matButton="outlined"
-                    type="button"
-                    [disabled]="
-                      !accountCreated() ||
-                      !clusterAddress() ||
-                      busy() ||
-                      localController.pending() ||
-                      joinApproved()
-                    "
-                    (click)="verifyClusterAddress()"
-                  >
-                    Vérifier
-                  </button>
-                </div>
-                <span class="field-hint">
-                  Adresse complète avec port (ex. http://192.168.1.50:8090).
-                </span>
-              </div>
+            <div class="workbench-actions">
+              <button
+                matButton="filled"
+                type="button"
+                [disabled]="busy()"
+                (click)="submitCreateCluster()"
+              >
+                Créer le cluster et continuer <app-icon name="forward" />
+              </button>
+            </div>
+          }
 
-              @if (localController.target(); as target) {
-                <div class="target-confirmed-box">
-                  <div class="target-badge">Cluster joignable</div>
-                  <h4>{{ target.name }}</h4>
-                  <p class="target-url">{{ target.apiBaseUrl }} ({{ target.id }})</p>
-
-                  @if (joinApproved()) {
-                    <p role="status">Ce nœud a rejoint {{ target.name }}.</p>
-                  } @else if (pairingCode(); as code) {
-                    <div class="hero-code-box">
-                      <span class="code-label">Code de confirmation à comparer</span>
-                      <div class="hero-digits">{{ code }}</div>
-                      <p class="code-helper">
-                        Un administrateur du cluster <strong>{{ target.name }}</strong> doit valider
-                        ce code depuis sa page Nœuds.
-                      </p>
-                    </div>
-                  } @else if (localController.pending()) {
-                    <p role="status">
-                      Demande envoyée. En attente de confirmation du cluster d’accueil.
-                    </p>
-                  } @else {
-                    <button
-                      matButton="outlined"
-                      type="button"
-                      [disabled]="busy() || !localController.canJoin()"
-                      (click)="requestClusterJoin()"
-                    >
-                      Envoyer la demande de rattachement
-                    </button>
-                  }
-                </div>
-              }
-
+          @if (selectedMode() === 'joinCluster') {
+            @if (!accountCreated()) {
+              <p>
+                Créez le compte administrateur de cette machine pour rechercher un cluster et
+                envoyer une demande. La jonction devra ensuite être approuvée sur le cluster
+                d’accueil.
+              </p>
               <div class="workbench-actions">
                 <button
                   matButton="filled"
                   type="button"
-                  [disabled]="
-                    busy() || !accountCreated() || (!localController.pending() && !joinApproved())
-                  "
-                  (click)="submitJoinFinish()"
+                  [disabled]="busy()"
+                  (click)="prepareClusterJoin()"
                 >
-                  {{ joinApproved() ? 'Ouvrir l’application' : 'Suivre la demande dans Nœuds' }}
-                  <app-icon name="forward" matButtonIcon iconPositionEnd />
+                  Créer le compte et continuer
                 </button>
               </div>
+            } @else {
+              <p role="status">
+                Compte administrateur local créé. Vous pouvez rejoindre un cluster.
+              </p>
             }
-          </section>
-        </div>
+            <div class="section-heading">
+              <span class="step-pill" aria-hidden="true">4</span>
+              <div>
+                <h3>Connexion au cluster d’accueil</h3>
+                <p>
+                  Sélectionnez un cluster découvert sur le réseau local ou indiquez son adresse URL.
+                </p>
+              </div>
+            </div>
+
+            @if (availableClusters().length > 0) {
+              <div class="discovered-clusters">
+                <span class="list-label">Clusters détectés automatiquement (mDNS) :</span>
+                <div class="cluster-cards-list">
+                  @for (cluster of availableClusters(); track cluster.id) {
+                    <div class="cluster-card">
+                      <div class="cluster-info">
+                        <strong>{{ cluster.name }}</strong>
+                        <span class="cluster-address">{{ cluster.apiBaseUrl }}</span>
+                      </div>
+                      <button
+                        matButton="outlined"
+                        type="button"
+                        [disabled]="
+                          !accountCreated() || busy() || localController.pending() || joinApproved()
+                        "
+                        (click)="selectClusterAddress(cluster.apiBaseUrl)"
+                      >
+                        Sélectionner
+                      </button>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            <div class="form-group">
+              <label for="cluster-address-input" class="field-label">
+                Adresse du cluster d’accueil
+              </label>
+              <div class="input-with-button">
+                <input
+                  id="cluster-address-input"
+                  [disabled]="
+                    !accountCreated() || busy() || localController.pending() || joinApproved()
+                  "
+                  type="url"
+                  class="text-input"
+                  placeholder="http://192.168.1.50:8090"
+                  [ngModel]="clusterAddress()"
+                  (ngModelChange)="clusterAddress.set($event)"
+                />
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [disabled]="
+                    !accountCreated() ||
+                    !clusterAddress() ||
+                    busy() ||
+                    localController.pending() ||
+                    joinApproved()
+                  "
+                  (click)="verifyClusterAddress()"
+                >
+                  Vérifier
+                </button>
+              </div>
+              <span class="field-hint">
+                Adresse complète avec port (ex. http://192.168.1.50:8090).
+              </span>
+            </div>
+
+            @if (localController.target(); as target) {
+              <div class="target-confirmed-box">
+                <div class="target-badge">Cluster joignable</div>
+                <h4>{{ target.name }}</h4>
+                <p class="target-url">{{ target.apiBaseUrl }} ({{ target.id }})</p>
+
+                @if (joinApproved()) {
+                  <p role="status">Ce nœud a rejoint {{ target.name }}.</p>
+                } @else if (pairingCode(); as code) {
+                  <div class="hero-code-box">
+                    <span class="code-label">Code de confirmation à comparer</span>
+                    <div class="hero-digits">{{ code }}</div>
+                    <p class="code-helper">
+                      Un administrateur du cluster <strong>{{ target.name }}</strong> doit valider
+                      ce code depuis sa page Nœuds.
+                    </p>
+                  </div>
+                } @else if (localController.pending()) {
+                  <p role="status">
+                    Demande envoyée. En attente de confirmation du cluster d’accueil.
+                  </p>
+                } @else {
+                  <button
+                    matButton="outlined"
+                    type="button"
+                    [disabled]="busy() || !localController.canJoin()"
+                    (click)="requestClusterJoin()"
+                  >
+                    Envoyer la demande de rattachement
+                  </button>
+                }
+              </div>
+            }
+
+            <div class="workbench-actions">
+              <button
+                matButton="filled"
+                type="button"
+                [disabled]="
+                  busy() || !accountCreated() || (!localController.pending() && !joinApproved())
+                "
+                (click)="submitJoinFinish()"
+              >
+                {{ joinApproved() ? 'Ouvrir l’application' : 'Suivre la demande dans Nœuds' }}
+                <app-icon name="forward" matButtonIcon iconPositionEnd />
+              </button>
+            </div>
+          }
+        </section>
       </div>
-    </section>
+    </app-access-template>
   `,
   styles: `
-    .setup-studio {
-      width: min(100%, 1060px);
-      margin: 2vh auto 4vh;
-      display: grid;
-      gap: var(--space-4);
-    }
     :host {
       display: block;
       min-height: 100%;
-      padding: var(--space-4);
-      background: var(--page-background);
-    }
-    :host-context([data-theme='dark']) {
-      background: radial-gradient(ellipse at 50% 0, var(--accent-soft), transparent 65%);
     }
     .network-addresses {
       display: grid;
@@ -661,10 +614,6 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       margin: 0;
       padding: 0;
       list-style: none;
-    }
-    .setup-progress {
-      border-radius: var(--radius-pill);
-      overflow: hidden;
     }
     .setup-error {
       display: flex;
@@ -676,52 +625,24 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       color: var(--danger);
       font-size: var(--font-body);
     }
-    .setup-grid {
-      display: grid;
-      grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
-      gap: var(--space-5);
-      align-items: start;
-    }
     .setup-telemetry,
     .workbench-card {
       display: grid;
       gap: var(--space-4);
       padding: var(--space-5);
-      border-radius: 28px;
+      border-radius: var(--radius-2xl);
       background: var(--surface-container);
-      box-shadow:
-        0 1px 2px rgb(0 0 0 / 8%),
-        0 8px 28px rgb(0 0 0 / 10%);
+      box-shadow: var(--elevation-2);
     }
     .setup-telemetry {
       position: sticky;
       top: 76px;
     }
-    .setup-brand,
     .setup-workbench,
     .hardware-bento {
       display: grid;
       gap: var(--space-3);
     }
-    .brand-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .brand-mark {
-      width: 30px;
-      height: 30px;
-      border-radius: 9px;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-      color: var(--on-accent);
-    }
-    .brand-name {
-      font-weight: 800;
-      font-size: var(--font-body);
-    }
-    .brand-tag,
     .mode-badge {
       padding: 2px 8px;
       border-radius: var(--radius-pill);
@@ -730,13 +651,6 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       background: var(--accent-soft);
       color: var(--accent);
     }
-    .setup-title {
-      margin: 0;
-      font-size: var(--font-title-lg);
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-    .setup-subtitle,
     .section-heading p,
     .contextual-summary-head p {
       margin: 0;
@@ -1032,7 +946,6 @@ export type SetupOperationMode = 'standalone' | 'createCluster' | 'joinCluster';
       font-family: ui-monospace, monospace;
     }
     @media (max-width: 900px) {
-      .setup-grid,
       .mode-grid {
         grid-template-columns: 1fr;
       }

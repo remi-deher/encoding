@@ -83,7 +83,7 @@ L’interface adopte les principes de **Material 3 Expressive** pour offrir une 
   - Tous les retours d’action (succès, erreur) passent par `NotificationService`.
 
 ### Gabarit des Paramètres
-Tous les onglets de Paramètres utilisent le même gabarit (`shared/ui/configuration-section.component.ts` et `shared/ui/settings/`) :
+`PlatformAdminTemplateComponent` (`shared/templates/platform-admin-template.component.ts`) fournit l’en-tête, la navigation par domaine, le panneau de contenu et le tiroir modal d’édition protégé. La page feature reste propriétaire de la portée des réglages, des paramètres d’URL, de la confirmation de navigation et des données. Tous les domaines utilisent ensuite les mêmes briques de section (`shared/ui/configuration-section.component.ts` et `shared/ui/settings/`) :
 - `app-configuration-section` : pastille (`icon`), titre h2, description, puce d’état (`badge`) et actions d’en-tête (`section-actions`, boutons tonals).
 - `app-setting-group` + `app-setting-row` : pile de lignes groupées ; libellé et aide à gauche, contrôle à droite ; `stacked` pour un champ large, `dense` pour une liste, `row-lead` pour une pastille.
 - `app-settings-notice` : seul bloc d’aide ou d’avertissement.

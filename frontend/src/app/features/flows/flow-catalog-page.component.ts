@@ -25,18 +25,19 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import {
-  DataTableColumn,
   DataTableListActionEvent,
   DataTableActionEvent,
   DataTableSelectionActionEvent,
   DataTableRow,
 } from '../../shared/ui/data-table.component';
-import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { CatalogEmptyState } from '../../shared/templates/management-catalog-template.component';
+import { ResourceCatalogTemplateComponent } from '../../shared/templates/resource-catalog-template.component';
 import {
-  CatalogEmptyState,
-  ManagementCatalogTemplateComponent,
-} from '../../shared/templates/management-catalog-template.component';
+  ResourceListGroup,
+  ResourceListItem,
+  ResourceListSelectionAction,
+} from '../../shared/ui/resource-list.component';
 import { MEDIA_TYPE_ICONS, MEDIA_TYPE_OPTIONS, MediaType } from '../../shared/models/media-type';
 import { createFlowCreationForm, FLOW_CREATION_FORM } from '../../shared/models/flow-creation';
 import { RecordFormComponent } from '../../shared/ui/record-form.component';
@@ -66,13 +67,19 @@ interface FlowRecord extends DataTableRow {
   readonly modifiedOrder: number;
 }
 
+const MEDIA_TYPE_TONES = {
+  video: 'blue',
+  image: 'purple',
+  music: 'warning',
+  subtitles: 'default',
+} as const satisfies Record<MediaType, NonNullable<ResourceListGroup['tone']>>;
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-flow-catalog-page',
   imports: [
-    StatusBadgeComponent,
     FlowDetailsComponent,
-    ManagementCatalogTemplateComponent,
+    ResourceCatalogTemplateComponent,
     IconComponent,
     MatButtonModule,
     MatCheckboxModule,
@@ -257,14 +264,27 @@ export class FlowCatalogPageComponent {
       visibleWhen: () => this.auth.isAdmin() && this.deletingFlow() === null,
     },
   ];
-  protected readonly selectionActions = [{ id: 'export', label: 'Exporter la sélection (ZIP)' }];
+  protected readonly selectionActions: readonly ResourceListSelectionAction[] = [
+    { id: 'export', label: 'Exporter la sélection (ZIP)' },
+    {
+      id: 'publish',
+      label: 'Publier les brouillons',
+      labelFor: (rows) => {
+        const count = rows.filter((row) => row['state'] === 'Brouillon').length;
+        return `Publier ${count} brouillon(s)`;
+      },
+      visibleWhen: (rows) =>
+        this.auth.isAdmin() &&
+        !this.selectingFlows() &&
+        rows.some((row) => row['state'] === 'Brouillon'),
+    },
+    {
+      id: 'delete',
+      label: 'Supprimer la sélection',
+      visibleWhen: () => this.auth.isAdmin() && !this.selectingFlows(),
+    },
+  ];
   protected readonly selectedFlowIds = signal<ReadonlySet<string>>(new Set());
-  protected readonly selectedFlowRows = computed(() =>
-    this.filteredFlows().filter((flow) => this.selectedFlowIds().has(flow.id)),
-  );
-  protected readonly selectedDraftCount = computed(
-    () => this.selectedFlowRows().filter((flow) => flow.state === 'Brouillon').length,
-  );
   protected readonly selectingFlows = signal(false);
   protected async onListAction(event: DataTableListActionEvent): Promise<void> {
     if (!event.file) return;
@@ -371,6 +391,14 @@ export class FlowCatalogPageComponent {
   }
 
   protected async onSelectionAction(event: DataTableSelectionActionEvent): Promise<void> {
+    if (event.actionId === 'publish') {
+      await this.publishSelected(event.rows);
+      return;
+    }
+    if (event.actionId === 'delete') {
+      await this.deleteSelected(event.rows);
+      return;
+    }
     try {
       this.downloads.save(
         await this.api.exportMany(event.rows.map((row) => String(row['id']))),
@@ -380,20 +408,9 @@ export class FlowCatalogPageComponent {
       this.notifications.show('Export de la sélection impossible.');
     }
   }
-  protected toggleFlowSelection(id: string, checked: boolean): void {
-    this.selectedFlowIds.update((current) => {
-      const next = new Set(current);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }
-  protected clearFlowSelection(): void {
-    this.selectedFlowIds.set(new Set());
-  }
-  protected async publishSelected(): Promise<void> {
+  protected async publishSelected(rows: readonly DataTableRow[]): Promise<void> {
     if (!this.auth.isAdmin() || this.selectingFlows()) return;
-    const drafts = this.selectedFlowRows().filter((flow) => flow.state === 'Brouillon');
+    const drafts = rows.filter((flow) => flow['state'] === 'Brouillon');
     if (!drafts.length) return;
     const accepted = await firstValueFrom(
       this.dialog
@@ -414,14 +431,15 @@ export class FlowCatalogPageComponent {
       failed = 0;
     for (const flow of drafts) {
       try {
-        const draft = await this.api.get(flow.id);
+        const flowId = String(flow['id']);
+        const draft = await this.api.get(flowId);
         if (draft.draftRevision == null) {
           unchanged++;
           continue;
         }
         const currentVersion = draft.publishedVersion ?? 0;
         if (currentVersion > 0) {
-          const current = await firstValueFrom(this.api.versionStatus(flow.id, currentVersion));
+          const current = await firstValueFrom(this.api.versionStatus(flowId, currentVersion));
           if (flowDocumentKey(current.definition) === flowDocumentKey(draft.definition)) {
             unchanged++;
             continue;
@@ -445,15 +463,18 @@ export class FlowCatalogPageComponent {
       `${published} publié(s), ${unchanged} sans changement, ${failed} en échec ou invalide(s).`,
     );
   }
-  protected async deleteSelected(): Promise<void> {
+  protected async deleteSelected(rows: readonly DataTableRow[]): Promise<void> {
     if (!this.auth.isAdmin() || this.selectingFlows()) return;
-    const flows = [...this.selectedFlowRows()];
+    const flows = [...rows];
     if (!flows.length) return;
     const usageById = new Map<string, Awaited<ReturnType<FlowValidation['usage']>>>();
     this.selectingFlows.set(true);
     try {
       await Promise.all(
-        flows.map(async (flow) => usageById.set(flow.id, await this.api.usage(flow.id))),
+        flows.map(async (flow) => {
+          const id = String(flow['id']);
+          usageById.set(id, await this.api.usage(id));
+        }),
       );
     } catch (error) {
       this.selectingFlows.set(false);
@@ -479,7 +500,10 @@ export class FlowCatalogPageComponent {
     if (!accepted) return;
     this.selectingFlows.set(true);
     const results = await Promise.allSettled(
-      flows.map((flow) => this.api.remove(flow.id, (usageById.get(flow.id)?.length ?? 0) > 0)),
+      flows.map((flow) => {
+        const id = String(flow['id']);
+        return this.api.remove(id, (usageById.get(id)?.length ?? 0) > 0);
+      }),
     );
     this.selectingFlows.set(false);
     this.selectedFlowIds.set(new Set());
@@ -592,14 +616,6 @@ export class FlowCatalogPageComponent {
         : flow.state + ' · ' + flow.version)
     );
   });
-  protected readonly columns: readonly DataTableColumn[] = [
-    { key: 'name', label: 'Nom du flow', sortable: true },
-    { key: 'steps', label: 'Étapes', sortable: true, sortValueKey: 'nodeCount' },
-    { key: 'status', label: 'État & version', sortable: true },
-    { key: 'backup', label: 'Sauvegarde JSON', sortable: true },
-    { key: 'modifiedAt', label: 'Modifié le', sortable: true, sortValueKey: 'modifiedOrder' },
-  ];
-
   protected readonly filteredFlows = computed(() => {
     const type = this.typeFilter();
     const query = this.searchQuery().trim().toLocaleLowerCase('fr-FR');
@@ -635,18 +651,38 @@ export class FlowCatalogPageComponent {
     chips: MEDIA_TYPE_OPTIONS.map((type) => type.label),
     actionLabel: 'Créer le premier flow',
   };
-  protected readonly rows = this.filteredFlows;
-  protected readonly groups = computed(() =>
-    MEDIA_TYPE_OPTIONS.map((type) => ({
-      ...type,
-      icon: MEDIA_TYPE_ICONS[type.value],
-      rows: this.filteredFlows().filter((flow) => flow.category === type.value),
-    })).filter((group) => group.rows.length > 0),
+  protected readonly catalogueItems = computed<readonly ResourceListItem[]>(() =>
+    this.filteredFlows().map((flow) => ({
+      id: flow.id,
+      name: flow.name,
+      subtitle: flow.steps,
+      meta: flow.modifiedAt,
+      group: {
+        id: flow.category,
+        label:
+          MEDIA_TYPE_OPTIONS.find((type) => type.value === flow.category)?.label ?? flow.category,
+        icon: MEDIA_TYPE_ICONS[flow.category],
+        tone: MEDIA_TYPE_TONES[flow.category],
+        countUnit: { singular: 'flow', plural: 'flows' },
+      },
+      tags: [
+        {
+          label: flow.state === 'Brouillon' ? 'Brouillon' : 'Publié · ' + flow.version,
+          tone: flow.state === 'Brouillon' ? 'warn' : 'ok',
+        },
+        {
+          label: 'JSON : ' + flow.backup.toLocaleLowerCase('fr-FR'),
+          tone: flow.backup === 'En échec' ? 'danger' : 'neutral',
+        },
+      ],
+      rowData: flow,
+    })),
   );
 
-  protected onFlowOpen(row: DataTableRow): void {
+  protected onFlowOpen(row: DataTableRow | string): void {
     this.detailTab.set(0);
-    this.selectedFlow.set(this.records().find((flow) => flow.id === row['id']) ?? null);
+    const id = typeof row === 'string' ? row : String(row['id']);
+    this.selectedFlow.set(this.records().find((flow) => flow.id === id) ?? null);
   }
 
   protected onDetailClosed(): void {

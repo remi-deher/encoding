@@ -16,7 +16,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { SearchFieldComponent } from '../../shared/ui/search-field.component';
 import { MatTabsModule } from '@angular/material/tabs';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   Observable,
   catchError,
@@ -56,6 +56,7 @@ import { ExecutionPipelineLogsComponent } from '../../shared/ui/execution-pipeli
 import { IconComponent } from '../../shared/ui/icon.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
+import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
 import {
   ACTIVITY_GROUPS,
   ACTIVITY_STATES,
@@ -74,6 +75,7 @@ import {
 
 type KindFilter = 'all' | ActivityKind;
 type GroupFilter = 'all' | ActivityGroup;
+type ActivityRole = 'operate' | 'diagnose';
 
 const VIEW_TO_GROUP: Readonly<Record<string, ActivityGroup>> = {
   queue: 'queue',
@@ -82,6 +84,25 @@ const VIEW_TO_GROUP: Readonly<Record<string, ActivityGroup>> = {
   cancelled: 'cancelled',
   history: 'done',
 };
+const ROLE_GROUPS: Readonly<Record<ActivityRole, readonly ActivityGroup[]>> = {
+  operate: ['queue', 'active'],
+  diagnose: ['errors', 'cancelled', 'done'],
+};
+const GROUP_TO_ROLE: Readonly<Record<ActivityGroup, ActivityRole>> = {
+  queue: 'operate',
+  active: 'operate',
+  errors: 'diagnose',
+  cancelled: 'diagnose',
+  done: 'diagnose',
+};
+
+function roleFromView(view: string | null, kind: string | null): ActivityRole {
+  const group = view ? VIEW_TO_GROUP[view] : undefined;
+  if (view === 'active' && kind === 'ai') return 'diagnose';
+  if (group) return GROUP_TO_ROLE[group];
+  if (view === 'operate' || view === 'diagnose') return view;
+  return kind === 'ai' ? 'diagnose' : 'operate';
+}
 /** Nombre de lignes « Terminés » affichées avant « Afficher plus ». */
 const DONE_PAGE_SIZE = 25;
 const AI_REFRESH_MS = 15000;
@@ -102,6 +123,7 @@ const AI_REFRESH_MS = 15000;
     SummaryTilesComponent,
     SearchFieldComponent,
     MatTabsModule,
+    CategoryTabsComponent,
     PageHeaderComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -112,6 +134,7 @@ const AI_REFRESH_MS = 15000;
 export class ActivityPageComponent {
   protected readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly tracking = inject(ExecutionTracking);
   private readonly detailPolling = inject(ExecutionDetailPolling);
   private readonly aiTools = inject(AiToolsService);
@@ -121,6 +144,41 @@ export class ActivityPageComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly groups = ACTIVITY_GROUPS;
+  protected readonly roleTabs: readonly CategoryTabOption[] = [
+    { value: 'operate', label: 'Exploiter' },
+    { value: 'diagnose', label: 'Diagnostiquer' },
+  ];
+  protected readonly roleFilter = signal<ActivityRole>(
+    roleFromView(
+      this.route.snapshot.queryParamMap.get('view'),
+      this.route.snapshot.queryParamMap.get('type'),
+    ),
+  );
+  protected readonly visibleGroups = computed(() =>
+    this.groups.filter(
+      (group) =>
+        ROLE_GROUPS[this.roleFilter()].includes(group.id) ||
+        (this.roleFilter() === 'diagnose' &&
+          this.kindFilter() !== 'execution' &&
+          this.auth.isAdmin() &&
+          group.id === 'active'),
+    ),
+  );
+  protected readonly pageDescription = computed(() =>
+    this.roleFilter() === 'operate'
+      ? 'Prenez en charge la file et suivez les traitements en cours.'
+      : 'Examinez les résultats, les échecs et les demandes de l’assistant.',
+  );
+  protected readonly activityHeading = computed(() =>
+    this.roleFilter() === 'operate'
+      ? 'Opérations à prendre en charge'
+      : 'Résultats à diagnostiquer',
+  );
+  protected readonly activitySubheading = computed(() =>
+    this.roleFilter() === 'operate'
+      ? 'Annulez une opération autorisée ou ouvrez son suivi détaillé.'
+      : 'Consultez les tentatives, leurs événements, leurs résultats et les demandes IA.',
+  );
   private readonly aiRefresh = signal(0);
   protected readonly aiState = signal<{
     readonly items: readonly AiAssistantActivity[];
@@ -129,7 +187,11 @@ export class ActivityPageComponent {
   }>({ items: [], error: false, loaded: false });
 
   protected readonly kindFilter = signal<KindFilter>(
-    this.route.snapshot.queryParamMap.get('type') === 'ai' ? 'ai' : 'all',
+    this.route.snapshot.queryParamMap.get('type') === 'ai'
+      ? 'ai'
+      : this.route.snapshot.queryParamMap.get('type') === 'execution'
+        ? 'execution'
+        : 'all',
   );
   protected readonly groupFilter = signal<GroupFilter>(
     VIEW_TO_GROUP[this.route.snapshot.queryParamMap.get('view') ?? ''] ?? 'all',
@@ -141,10 +203,11 @@ export class ActivityPageComponent {
     toObservable(
       computed(() => ({
         states:
-          this.kindFilter() === 'ai'
+          this.kindFilter() === 'ai' ||
+          (this.roleFilter() === 'diagnose' && this.groupFilter() === 'active')
             ? []
             : this.groupFilter() === 'all'
-              ? Object.values(ACTIVITY_STATES).flat()
+              ? ROLE_GROUPS[this.roleFilter()].flatMap((group) => ACTIVITY_STATES[group])
               : ACTIVITY_STATES[this.groupFilter() as ActivityGroup],
         offset: this.pageOffset(),
       })),
@@ -160,27 +223,35 @@ export class ActivityPageComponent {
   private readonly openedItem = signal<ActivityItem | null>(null);
   protected readonly summary = computed<readonly SummaryTile[]>(() => {
     const data = this.trackingState().data;
+    if (this.roleFilter() === 'operate')
+      return [
+        {
+          label: 'À traiter',
+          value: data ? String(data.queuedCount) : '—',
+          detail: 'Exécutions en attente dans la file',
+        },
+        {
+          label: 'En cours',
+          value: data ? String(data.activeCount) : '—',
+          detail: 'Traitements actifs sur le cluster',
+        },
+      ];
     return [
       {
-        label: 'En cours',
-        value: data ? String(data.activeCount) : '—',
-        detail: 'Traitements actifs sur le cluster',
-      },
-      {
-        label: 'À traiter',
-        value: data ? String(data.queuedCount) : '—',
-        detail: 'Fichiers dans la file',
-      },
-      {
-        label: 'Réussis',
-        value: data ? String(data.succeededCount) : '—',
-        detail: 'Traitements terminés avec succès',
-      },
-      {
-        label: 'Échecs',
+        label: 'Erreurs',
         value: data ? String(data.failedCount) : '—',
-        detail: 'Traitements à examiner',
+        detail: 'Tentatives à examiner',
         tone: data?.failedCount ? 'attention' : 'default',
+      },
+      {
+        label: 'Annulés',
+        value: data ? String(data.cancelledCount) : '—',
+        detail: 'Traitements annulés',
+      },
+      {
+        label: 'Terminés',
+        value: data ? String(data.succeededCount + (data.deferredCount ?? 0)) : '—',
+        detail: 'Traitements réussis ou différés',
       },
     ];
   });
@@ -197,9 +268,6 @@ export class ActivityPageComponent {
       (item) => item.execution && this.selectedActionIds().has(item.execution.id),
     ),
   );
-  protected readonly selectedRetryItems = computed(() =>
-    this.selectedActionItems().filter((item) => item.execution?.state === 'failed'),
-  );
   protected readonly selectedCancelableItems = computed(() =>
     this.selectedActionItems().filter((item) =>
       ['queued', 'running'].includes(item.execution?.state ?? ''),
@@ -214,8 +282,13 @@ export class ActivityPageComponent {
   private readonly scoped = computed(() => {
     const kind = this.kindFilter();
     const query = this.search().trim().toLocaleLowerCase('fr');
+    const role = this.roleFilter();
     return this.allItems().filter(
       (item) =>
+        (role === 'operate'
+          ? ROLE_GROUPS.operate.includes(item.group) && item.kind === 'execution'
+          : ROLE_GROUPS.diagnose.includes(item.group) ||
+            (item.kind === 'ai' && item.group === 'active')) &&
         (kind === 'all' || item.kind === kind) &&
         (!query ||
           [
@@ -251,18 +324,20 @@ export class ActivityPageComponent {
         cancelled: data.cancelledCount,
         done: data.succeededCount + (data.deferredCount ?? 0),
       };
+      if (this.roleFilter() === 'diagnose') executionCounts.active = 0;
       for (const group of ACTIVITY_GROUPS)
         counts[group.id] =
           executionCounts[group.id] +
           this.scoped().filter((item) => item.kind === 'ai' && item.group === group.id).length;
-      counts.all = ACTIVITY_GROUPS.reduce((total, group) => total + counts[group.id], 0);
+      counts.all = this.visibleGroups().reduce((total, group) => total + counts[group.id], 0);
     }
     return counts;
   });
   protected readonly sections = computed(() => {
     const filter = this.groupFilter();
     const scoped = this.scoped();
-    return ACTIVITY_GROUPS.filter((group) => filter === 'all' || filter === group.id)
+    return this.visibleGroups()
+      .filter((group) => filter === 'all' || filter === group.id)
       .map((group) => {
         const all = scoped
           .filter((item) => item.group === group.id)
@@ -282,22 +357,52 @@ export class ActivityPageComponent {
   protected readonly countText = computed(() => {
     if (this.kindFilter() === 'ai')
       return this.aiState().loaded
-        ? `${this.aiState().items.length} demande(s) chargée(s)`
+        ? `${this.counts().all} demande(s) chargée(s)`
         : 'Chargement de l’assistant…';
     const data = this.trackingState().data;
-    return data
-      ? `${data.queuedCount} à traiter · ${data.activeCount} en cours · ${data.failedCount} ${data.failedCount === 1 ? 'erreur' : 'erreurs'}`
-      : 'Données indisponibles';
+    if (!data) return 'Données indisponibles';
+    if (this.roleFilter() === 'operate')
+      return `${data.queuedCount} à traiter · ${data.activeCount} en cours`;
+    const aiRunningCount =
+      this.kindFilter() === 'execution'
+        ? 0
+        : this.scoped().filter((item) => item.kind === 'ai' && item.group === 'active').length;
+    return `${data.failedCount} ${data.failedCount === 1 ? 'erreur' : 'erreurs'} · ${data.cancelledCount} annulée(s) · ${data.succeededCount + (data.deferredCount ?? 0)} terminée(s)${aiRunningCount ? ` · ${aiRunningCount} demande(s) IA en cours` : ''}`;
   });
+  protected readonly emptyStateReady = computed(() => {
+    if (this.roleFilter() === 'operate' || this.kindFilter() === 'execution')
+      return this.trackingState().status === 'ready';
+    if (this.kindFilter() === 'ai') return this.aiState().loaded && !this.aiState().error;
+    return (
+      this.trackingState().status === 'ready' &&
+      (!this.auth.isAdmin() || this.aiState().loaded || this.aiState().error)
+    );
+  });
+  protected readonly emptyStateTitle = computed(() =>
+    this.roleFilter() === 'operate'
+      ? 'Aucune opération à prendre en charge'
+      : 'Aucun résultat à diagnostiquer',
+  );
+  protected readonly emptyStateDescription = computed(() =>
+    this.roleFilter() === 'operate'
+      ? 'La file et les traitements actifs sont vides.'
+      : 'Aucun élément ne correspond à ces filtres.',
+  );
   protected readonly feedback = computed(() => {
     const state = this.trackingState();
     if (this.kindFilter() !== 'ai' && state.status === 'loading')
-      return 'Chargement de l’activité…';
+      return this.roleFilter() === 'operate'
+        ? 'Chargement des opérations…'
+        : 'Chargement de l’historique…';
     if (this.kindFilter() !== 'ai' && state.status === 'error')
       return 'Actualisation impossible. Les dernières données reçues peuvent être obsolètes.';
-    if (this.aiState().error && this.kindFilter() !== 'execution')
+    if (
+      this.roleFilter() === 'diagnose' &&
+      this.aiState().error &&
+      this.kindFilter() !== 'execution'
+    )
       return 'Les demandes de l’assistant sont momentanément indisponibles.';
-    if (this.kindFilter() === 'ai' && !this.aiState().loaded)
+    if (this.roleFilter() === 'diagnose' && this.kindFilter() === 'ai' && !this.aiState().loaded)
       return 'Chargement des demandes de l’assistant…';
     return '';
   });
@@ -483,7 +588,10 @@ export class ActivityPageComponent {
     toObservable(
       computed(() => ({
         refresh: this.aiRefresh(),
-        enabled: this.auth.isAdmin() && this.kindFilter() !== 'execution',
+        enabled:
+          this.auth.isAdmin() &&
+          this.roleFilter() === 'diagnose' &&
+          this.kindFilter() !== 'execution',
       })),
     )
       .pipe(
@@ -507,26 +615,100 @@ export class ActivityPageComponent {
         ),
       );
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
-      this.setGroup(VIEW_TO_GROUP[params.get('view') ?? ''] ?? 'all');
-      this.setKind(params.get('type') === 'ai' ? 'ai' : 'all');
+      this.applyQueryParams(params.get('view'), params.get('type'));
     });
   }
 
   protected setKind(kind: KindFilter): void {
-    this.kindFilter.set(kind === 'ai' && !this.auth.isAdmin() ? 'execution' : kind);
+    const selectedKind = kind === 'ai' && !this.auth.isAdmin() ? 'all' : kind;
+    if (selectedKind === 'ai' && this.roleFilter() !== 'diagnose') {
+      this.roleFilter.set('diagnose');
+      this.groupFilter.set('all');
+    }
+    this.kindFilter.set(selectedKind);
     this.pageOffset.set(0);
+    this.clearActionSelection();
+    this.close();
+    this.syncViewInUrl();
+  }
+  protected setRole(value: string): void {
+    if (value !== 'operate' && value !== 'diagnose') return;
+    const role = value;
+    if (role === this.roleFilter()) return;
+    this.roleFilter.set(role);
+    this.groupFilter.set('all');
+    if (role === 'operate') this.kindFilter.set('all');
+    this.pageOffset.set(0);
+    this.clearActionSelection();
+    this.close();
+    this.syncViewInUrl();
   }
   protected setGroup(group: GroupFilter): void {
+    if (group !== 'all') {
+      const diagnosticAiActivity =
+        group === 'active' && this.roleFilter() === 'diagnose' && this.auth.isAdmin();
+      if (diagnosticAiActivity) this.kindFilter.set('ai');
+      else {
+        const role = GROUP_TO_ROLE[group];
+        this.roleFilter.set(role);
+        if (role === 'operate' && this.kindFilter() === 'ai') this.kindFilter.set('all');
+      }
+    }
     this.groupFilter.set(group);
     this.pageOffset.set(0);
+    this.clearActionSelection();
+    this.close();
+    this.syncViewInUrl();
   }
   protected nextPage(group: ActivityGroup): void {
     const offset = this.groupFilter() === group ? this.pageOffset() : 0;
+    this.roleFilter.set(GROUP_TO_ROLE[group]);
     this.groupFilter.set(group);
     this.pageOffset.set(offset + DONE_PAGE_SIZE);
+    this.close();
+    this.syncViewInUrl();
   }
   protected previousPage(): void {
     this.pageOffset.update((offset) => Math.max(0, offset - DONE_PAGE_SIZE));
+  }
+  private applyQueryParams(view: string | null, type: string | null): void {
+    const role = roleFromView(view, type);
+    const requestedGroup = view ? VIEW_TO_GROUP[view] : undefined;
+    const group =
+      requestedGroup &&
+      (ROLE_GROUPS[role].includes(requestedGroup) ||
+        (role === 'diagnose' && requestedGroup === 'active' && type === 'ai'))
+        ? requestedGroup
+        : 'all';
+    const kind: KindFilter =
+      type === 'ai' && role === 'diagnose' && this.auth.isAdmin()
+        ? 'ai'
+        : type === 'execution'
+          ? 'execution'
+          : 'all';
+    const changed =
+      role !== this.roleFilter() || group !== this.groupFilter() || kind !== this.kindFilter();
+    this.roleFilter.set(role);
+    this.groupFilter.set(group);
+    this.kindFilter.set(kind);
+    if (changed) {
+      this.pageOffset.set(0);
+      this.clearActionSelection();
+      this.close();
+    }
+  }
+  private syncViewInUrl(): void {
+    const group = this.groupFilter();
+    const view = group === 'all' ? this.roleFilter() : group === 'done' ? 'history' : group;
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        view,
+        type: this.kindFilter() === 'all' ? null : this.kindFilter(),
+        request: null,
+      },
+      queryParamsHandling: 'merge',
+    });
   }
   protected refresh(): void {
     this.tracking.refresh();
@@ -551,9 +733,6 @@ export class ActivityPageComponent {
       );
   }
 
-  protected canRetryItem(item: ActivityItem): boolean {
-    return item.execution?.state === 'failed';
-  }
   protected canCancelItem(item: ActivityItem): boolean {
     return item.execution?.state === 'queued' || item.execution?.state === 'running';
   }
@@ -570,48 +749,32 @@ export class ActivityPageComponent {
   protected clearActionSelection(): void {
     this.selectedActionIds.set(new Set());
   }
-  protected async runBulk(action: 'cancel' | 'retry'): Promise<void> {
+  protected async runBulkCancel(): Promise<void> {
     if (this.busy()) return;
-    const targets =
-      action === 'cancel' ? this.selectedCancelableItems() : this.selectedRetryItems();
+    const targets = this.selectedCancelableItems();
     if (!targets.length) return;
     const accepted = await firstValueFrom(
       this.dialog
         .open(ConfirmationDialogComponent, {
-          data:
-            action === 'cancel'
-              ? {
-                  title: `Annuler ${targets.length} exécution(s) ?`,
-                  message:
-                    'Une demande sera envoyée pour les exécutions encore en attente ou en cours.',
-                  confirmLabel: 'Annuler les exécutions',
-                  variant: 'danger',
-                }
-              : {
-                  title: `Relancer ${targets.length} exécution(s) ?`,
-                  message:
-                    'Une nouvelle tentative sera ajoutée à la file pour chaque exécution sélectionnée en échec.',
-                  confirmLabel: 'Relancer',
-                },
+          data: {
+            title: `Annuler ${targets.length} exécution(s) ?`,
+            message: 'Une demande sera envoyée pour les exécutions encore en attente ou en cours.',
+            confirmLabel: 'Annuler les exécutions',
+            variant: 'danger',
+          },
         })
         .afterClosed(),
     );
     if (!accepted) return;
     this.busy.set(true);
     const results = await Promise.allSettled(
-      targets.map(async (item) => {
-        const id = item.execution!.id;
-        if (action === 'cancel') await firstValueFrom(this.tracking.cancel(id));
-        else await firstValueFrom(this.tracking.retry(id));
-      }),
+      targets.map((item) => firstValueFrom(this.tracking.cancel(item.execution!.id))),
     );
     this.busy.set(false);
     this.selectedActionIds.set(new Set());
     this.tracking.refresh();
     const succeeded = results.filter((result) => result.status === 'fulfilled').length;
-    this.done(
-      `${succeeded}/${targets.length} exécution(s) ${action === 'cancel' ? 'annulée(s)' : 'relancée(s)'}.`,
-    );
+    this.done(`${succeeded}/${targets.length} exécution(s) annulée(s).`);
   }
   protected cancelSelected(): void {
     const e = this.selectedExecution();
@@ -629,9 +792,9 @@ export class ActivityPageComponent {
   protected retry(id: string, media: string): void {
     this.confirm(
       {
-        title: 'Relancer cette exécution ?',
-        message: `Une nouvelle exécution de « ${media} » sera ajoutée à la file.`,
-        confirmLabel: 'Relancer',
+        title: 'Créer une nouvelle tentative ?',
+        message: `Une nouvelle exécution de « ${media} » sera ajoutée à la file. La tentative en échec restera dans l’historique.`,
+        confirmLabel: 'Mettre en file',
       },
       () => this.perform('retry', id),
     );
@@ -653,10 +816,14 @@ export class ActivityPageComponent {
     const request: Observable<unknown> =
       action === 'cancel' ? this.tracking.cancel(id) : this.tracking.retry(id);
     request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () =>
+      next: () => {
         this.done(
-          action === 'cancel' ? 'Demande d’annulation enregistrée.' : 'Relance ajoutée à la file.',
-        ),
+          action === 'cancel'
+            ? 'Demande d’annulation enregistrée.'
+            : 'Nouvelle tentative mise en file.',
+        );
+        if (action === 'retry') this.setGroup('queue');
+      },
       error: () => this.done('La demande a échoué ou l’état de l’exécution a changé.'),
     });
   }

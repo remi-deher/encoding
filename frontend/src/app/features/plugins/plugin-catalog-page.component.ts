@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { MatTabsModule } from '@angular/material/tabs';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { ClusterMaintenanceTemplateComponent } from '../../shared/templates/cluster-maintenance-template.component';
 import {
   DataTableColumn,
   DataTableComponent,
@@ -264,7 +264,7 @@ const PLUGIN_FAMILY_OPTIONS: readonly { readonly value: PluginFamily; readonly l
   imports: [
     DataTableComponent,
     ResourceSheetComponent,
-    ManagementCatalogTemplateComponent,
+    ClusterMaintenanceTemplateComponent,
     CategoryTabsComponent,
     ComponentConfigurationFormComponent,
     FlowComponentListComponent,

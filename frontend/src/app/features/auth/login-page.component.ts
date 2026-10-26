@@ -3,11 +3,11 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { safeReturnUrl } from '../../shared/models/auth';
 import { NotificationService } from '../../shared/services/notification.service';
+import { AccessTemplateComponent } from '../../shared/templates/access-template.component';
 
 /** Connexion à l'application. */
 @Component({
@@ -18,41 +18,23 @@ import { NotificationService } from '../../shared/services/notification.service'
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
-    MatProgressBarModule,
+    AccessTemplateComponent,
   ],
   template: `
-    <main class="auth-stage">
+    <app-access-template
+      view="login"
+      title="Connexion"
+      description="Identifiez-vous pour gérer le cluster."
+      [busy]="busy()"
+      progressLabel="Connexion en cours"
+    >
       <form
-        class="auth-card"
-        aria-labelledby="login-title"
+        access-content
+        class="auth-form"
+        aria-labelledby="access-title"
         [formGroup]="form"
         (ngSubmit)="submit()"
       >
-        @if (busy()) {
-          <mat-progress-bar
-            class="auth-progress"
-            mode="indeterminate"
-            aria-label="Connexion en cours"
-          />
-        }
-        <div class="auth-brand" aria-hidden="true">
-          <span class="auth-brand-mark">
-            <svg
-              viewBox="0 0 24 24"
-              width="20"
-              height="20"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-            >
-              <polygon points="6 4 20 12 6 20 6 4" />
-            </svg>
-          </span>
-          <span class="auth-brand-name">Encoding</span>
-        </div>
-        <h1 id="login-title">Connexion</h1>
-        <p class="auth-lead">Identifiez-vous pour gérer le cluster.</p>
-
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Nom d’utilisateur</mat-label>
           <input
@@ -106,65 +88,13 @@ import { NotificationService } from '../../shared/services/notification.service'
           Se connecter
         </button>
       </form>
-    </main>
+    </app-access-template>
   `,
   styles: `
-    .auth-stage {
-      min-height: 100%;
-      display: grid;
-      place-items: center;
-      padding: var(--space-5) var(--space-4);
-      background: radial-gradient(ellipse at 50% 0, var(--accent-soft), transparent 65%);
-    }
-    .auth-card {
-      position: relative;
-      overflow: hidden;
+    .auth-form {
       display: grid;
       gap: var(--space-4);
-      width: min(100%, 400px);
-      padding: var(--space-6) 28px;
-      border-radius: 28px;
-      background: var(--surface-container);
-      box-shadow:
-        0 1px 2px rgb(0 0 0 / 8%),
-        0 8px 28px rgb(0 0 0 / 10%);
-    }
-    .auth-progress {
-      position: absolute;
-      inset: 0 0 auto;
-    }
-    .auth-brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: var(--space-2);
-    }
-    .auth-brand-mark {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-      color: var(--on-accent);
-    }
-    .auth-brand-name {
-      font-weight: 800;
-      font-size: var(--font-title-md);
-      color: var(--text-primary);
-      letter-spacing: -0.02em;
-    }
-    h1 {
-      margin: 0;
-      color: var(--text-primary);
-      font-size: var(--font-headline);
-      letter-spacing: -0.02em;
-    }
-    .auth-lead {
-      margin: calc(-1 * var(--space-2)) 0 var(--space-2);
-      color: var(--text-secondary);
-      font-size: var(--font-body);
-      line-height: 1.6;
+      min-width: 0;
     }
     mat-form-field {
       width: 100%;

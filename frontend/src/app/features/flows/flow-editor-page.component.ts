@@ -48,6 +48,7 @@ import {
 import { FlowGraphEditorComponent } from '../../shared/ui/flow-graph-editor.component';
 import { ComponentConfigurationFormComponent } from '../../shared/ui/component-configuration-form.component';
 import { FlowSimulation } from '../../shared/services/flow-simulation';
+import { FlowWorkspaceTemplateComponent } from '../../shared/templates/flow-workspace-template.component';
 import { createUuid } from '../../shared/utils/uuid';
 import { FlowTemplates } from '../../shared/services/flow-templates';
 import { FlowComponentPacks } from '../../shared/services/flow-component-packs';
@@ -89,6 +90,7 @@ type ComponentDestination =
   },
   imports: [
     MatButtonModule,
+    FlowWorkspaceTemplateComponent,
     DetailDrawerComponent,
     FlowComponentDrop,
     FlowCommandBarComponent,

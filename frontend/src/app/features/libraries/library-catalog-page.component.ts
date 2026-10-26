@@ -20,7 +20,6 @@ import {
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTabsModule } from '@angular/material/tabs';
 
 import { toSignal, toObservable } from '@angular/core/rxjs-interop';
 
@@ -52,13 +51,12 @@ import {
 } from '../../shared/ui/data-table.component';
 
 import {
-  ResourceListComponent,
   ResourceListItem,
   ResourceListTag,
   ResourceListToggleEvent,
 } from '../../shared/ui/resource-list.component';
 
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { LibraryPreparationTemplateComponent } from '../../shared/templates/library-preparation-template.component';
 
 import {
   ResourceSheetComponent,
@@ -84,7 +82,7 @@ import { DrawerActionButtonComponent } from '../../shared/ui/drawer-action-butto
 
 import { NotificationService } from '../../shared/services/notification.service';
 
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { LibrarySectionTabsComponent } from './library-section-tabs.component';
 import { formatFileSize } from '../../shared/models/file-size';
 import {
   ExecutionTracking,
@@ -149,14 +147,11 @@ interface LibraryAccessRecord extends DataTableRow {
 
   imports: [
     DataTableComponent,
-    ResourceListComponent,
-
     ResourceSheetComponent,
 
-    ManagementCatalogTemplateComponent,
+    LibraryPreparationTemplateComponent,
 
     MatButtonModule,
-    MatTabsModule,
 
     RecordFormComponent,
     RecordFormActionsComponent,
@@ -164,7 +159,7 @@ interface LibraryAccessRecord extends DataTableRow {
     LibraryNodeAccessFormComponent,
 
     DrawerActionButtonComponent,
-    CategoryTabsComponent,
+    LibrarySectionTabsComponent,
     ExecutionPipelineLogsComponent,
     ExecutionCardComponent,
   ],
@@ -375,23 +370,6 @@ export class LibraryCatalogPageComponent {
   protected readonly title = computed(
     () => (this.routeData()['title'] as string) ?? 'Bibliothèques',
   );
-
-  protected readonly librarySections: readonly CategoryTabOption[] = [
-    { value: 'media', label: 'Bibliothèques' },
-    { value: 'scripts', label: 'Scripts' },
-    { value: 'templates', label: 'Modèles de flow' },
-    { value: 'packs', label: 'Packs de composants' },
-    { value: 'encoding', label: 'Profils d’encodage' },
-    { value: 'resources', label: 'Ressources' },
-  ];
-  protected readonly selectedSection = signal('media');
-  protected onSectionChanged(section: string): void {
-    if (section === 'scripts') void this.router.navigateByUrl('/libraries/scripts');
-    if (section === 'templates') void this.router.navigateByUrl('/libraries/templates');
-    if (section === 'packs') void this.router.navigateByUrl('/libraries/packs');
-    if (section === 'encoding') void this.router.navigateByUrl('/libraries/encoding-profiles');
-    if (section === 'resources') void this.router.navigateByUrl('/libraries/resources');
-  }
 
   protected readonly actionOpen = signal(false);
 

@@ -1,6 +1,7 @@
-<div class="flow-workbench">
+<app-flow-workspace-template>
   <!-- Zone 1 : Command Bar -->
   <app-flow-command-bar
+    flow-workspace-toolbar
     [canUndo]="canUndoEdit()"
     [canRedo]="canRedoEdit()"
     (undoRequested)="undoEdit()"
@@ -40,6 +41,7 @@
   <!-- Main Split Body (Zone 2 and Zone 3) -->
   <app-detail-drawer
     class="flow-inspector"
+    flow-workspace-main
     [fill]="true"
     mode="side"
     size="standard"
@@ -112,6 +114,7 @@
   </app-detail-drawer>
   <!-- Zone 5 : Bottom Tray (Simulation & Diagnostics) -->
   <app-flow-simulation-tray
+    flow-workspace-tray
     [opened]="trayOpen()"
     [(activeTab)]="trayTab"
     [nodes]="nodes()"
@@ -159,6 +162,7 @@
   <!-- Modal Dialog : Création de Pack -->
   @if (packCreationOpen()) {
     <div
+      flow-workspace-overlay
       class="modal-backdrop"
       (click)="packCreationOpen.set(false)"
       role="dialog"
@@ -174,4 +178,4 @@
       </div>
     </div>
   }
-</div>
+</app-flow-workspace-template>

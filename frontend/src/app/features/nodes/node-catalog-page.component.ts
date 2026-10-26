@@ -92,7 +92,7 @@ import {
   exhaustMap,
   Observable,
 } from 'rxjs';
-import { ManagementCatalogTemplateComponent } from '../../shared/templates/management-catalog-template.component';
+import { ClusterMaintenanceTemplateComponent } from '../../shared/templates/cluster-maintenance-template.component';
 import {
   DataTableColumn,
   DataTableComponent,
@@ -104,7 +104,7 @@ import {
   DataTableSelectionActionEvent,
   DataTableLayoutOption,
 } from '../../shared/ui/data-table.component';
-import { CategoryTabOption, CategoryTabsComponent } from '../../shared/ui/category-tabs.component';
+import { CategoryTabOption } from '../../shared/ui/category-tabs.component';
 import { DetailFieldListComponent } from '../../shared/ui/detail-field-list.component';
 import { nodeCapabilityCards, nodeCapabilityFields } from '../../shared/models/node-capabilities';
 import { RecordFormActionsComponent } from '../../shared/ui/record-form-actions.component';
@@ -200,8 +200,7 @@ const NODE_ROLE_OPTIONS: readonly { readonly value: NodeRole; readonly label: st
     DetailFieldListComponent,
     DetailCardGridComponent,
     ResourceSheetComponent,
-    ManagementCatalogTemplateComponent,
-    CategoryTabsComponent,
+    ClusterMaintenanceTemplateComponent,
     MatButtonModule,
     MatTabsModule,
     MatFormFieldModule,

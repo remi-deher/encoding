@@ -1,14 +1,13 @@
-<mat-drawer-container
-  class="assistant-layout"
-  [hasBackdrop]="compact() || panelMode()"
-  (backdropClick)="historyOpen.set(false); closePreview()"
+<app-assistant-workspace-template
+  [compact]="compact()"
+  [panelMode]="panelMode()"
+  [historyOpen]="historyOpen()"
+  [previewOpen]="previewOpen()"
+  (backdropClicked)="historyOpen.set(false); closePreview()"
+  (historyClosed)="historyOpen.set(false)"
+  (previewClosed)="closePreview()"
 >
-  <mat-drawer
-    class="conversation-panel"
-    [mode]="compact() ? 'over' : 'side'"
-    [opened]="!panelMode() && (!compact() || historyOpen())"
-    (closedStart)="historyOpen.set(false)"
-  >
+  <section assistant-history class="assistant-history-content">
     <div class="conversation-heading">
       <h2>Conversations</h2>
       <button
@@ -84,15 +83,8 @@
         </div>
       }
     </nav>
-  </mat-drawer>
-  <mat-drawer
-    class="preview-panel"
-    position="end"
-    [mode]="compact() || panelMode() ? 'over' : 'side'"
-    [opened]="previewOpen()"
-    (closedStart)="closePreview()"
-    aria-label="Espace de travail de l’assistant"
-  >
+  </section>
+  <section assistant-context class="assistant-context-content">
     <header class="preview-panel__header">
       <h2>{{ previewFlow() ? previewTitle() : 'Espace de travail' }}</h2>
       <button
@@ -272,8 +264,8 @@
     } @else if (previewFlow(); as flow) {
       <app-flow-preview [flow]="flow" [components]="previewComponents()" mode="flow" />
     }
-  </mat-drawer>
-  <mat-drawer-content class="chat-panel">
+  </section>
+  <section assistant-chat class="assistant-chat-content">
     @if (!panelMode()) {
       <header class="chat-toolbar">
         <button
@@ -580,8 +572,8 @@
         (filesChosen)="selectAttachments($event)"
       />
     </footer>
-  </mat-drawer-content>
-</mat-drawer-container>
+  </section>
+</app-assistant-workspace-template>
 @if (draggingFiles()) {
   <div class="drop-overlay" aria-hidden="true">
     <span>Déposez vos fichiers pour les joindre</span>
