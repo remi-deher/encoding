@@ -2,6 +2,9 @@ name: PR policy
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited, ready_for_review]
+concurrency:
+  group: pr-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions:
   contents: write
   pull-requests: write
@@ -37,21 +40,39 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Revoke any previous authorization before checking this promotion.
-          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --disable-auto
-          for _ in $(seq 1 120); do
+          read_promotion() {
             pr="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid,state,statusCheckRollup)"
-            if [ "$(jq -r '.headRefOid' <<<"$pr")" != "$EXPECTED_SHA" ] || [ "$(jq -r '.state' <<<"$pr")" != OPEN ]; then
+            if [ "$(jq -r '.headRefOid' <<<"$pr")" != "$EXPECTED_SHA" ]; then
               echo "::error::La PR a changé ; cette autorisation est périmée."
               exit 1
             fi
             gate="$(jq '[.statusCheckRollup[] | select(.name == "promotion-ci")] | sort_by(.startedAt) | last' <<<"$pr")"
+            if [ "$(jq -r '.state' <<<"$pr")" = MERGED ] &&
+               [ "$(jq -r '.status' <<<"$gate")" = COMPLETED ] &&
+               [ "$(jq -r '.conclusion' <<<"$gate")" = SUCCESS ]; then
+              echo "Le commit attendu est déjà fusionné après réussite de promotion-ci."
+              exit 0
+            fi
+            if [ "$(jq -r '.state' <<<"$pr")" != OPEN ]; then
+              echo "::error::La PR n’est plus ouverte ; aucune fusion n’est autorisée."
+              exit 1
+            fi
+          }
+          read_promotion
+          # Revoke a previous authorization only while this promotion is open.
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --disable-auto || {
+            code=$?; read_promotion; exit "$code";
+          }
+          for _ in $(seq 1 120); do
+            read_promotion
             if [ "$(jq -r '.status' <<<"$gate")" = COMPLETED ]; then
               if [ "$(jq -r '.conclusion' <<<"$gate")" != SUCCESS ]; then
                 echo "::error::promotion-ci a échoué : auto-merge vers main refusé."
                 exit 1
               fi
-              gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge --match-head-commit "$EXPECTED_SHA"
+              gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge --match-head-commit "$EXPECTED_SHA" || {
+                code=$?; read_promotion; exit "$code";
+              }
               exit 0
             fi
             sleep 20
