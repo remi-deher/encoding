@@ -10,8 +10,10 @@ import {
   computed,
   input,
   output,
+  signal,
+  viewChild,
 } from '@angular/core';
-import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatDrawer, MatSidenavModule } from '@angular/material/sidenav';
 
 export type DrawerVariant = 'neutral' | 'info' | 'danger' | 'success';
 
@@ -24,22 +26,28 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
 
 @Component({
   selector: 'app-detail-drawer',
-  host: { '[class.drawer-fill]': 'fill()' },
+  host: {
+    '[class.drawer-fill]': 'fill()',
+    '(document:keydown.escape)': 'onEscape($event)',
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatButtonModule, MatSidenavModule, NgTemplateOutlet],
   template: `
-    <mat-drawer-container class="detail-drawer-container" [hasBackdrop]="modal()">
+    <mat-drawer-container
+      class="detail-drawer-container"
+      [hasBackdrop]="modal()"
+      (backdropClick)="requestClose()"
+    >
       <mat-drawer-content [style.overflow]="mainScroll() === 'parent' ? 'visible' : null">
         <ng-content select="[drawer-main]" />
       </mat-drawer-content>
       <mat-drawer
-        #drawer
         class="detail-drawer-panel"
         [class.detail-drawer-panel_standard]="size() === 'standard'"
         position="end"
         [mode]="mode()"
         [opened]="opened()"
-        [disableClose]="!dismissible()"
+        [disableClose]="true"
         [attr.role]="modal() ? 'dialog' : 'complementary'"
         [attr.aria-modal]="modal() ? 'true' : null"
         [attr.aria-label]="title()"
@@ -73,8 +81,8 @@ const VARIANT_GLYPHS: Record<DrawerVariant, string | null> = {
                 class="drawer-close"
                 type="button"
                 aria-label="Fermer le panneau"
-                [disabled]="!dismissible()"
-                (click)="drawer.close()"
+                [disabled]="!dismissible() || closePending()"
+                (click)="requestClose()"
               >
                 <span aria-hidden="true">×</span>
               </button>
@@ -381,8 +389,10 @@ export class DetailDrawerComponent {
   readonly headerDensity = input<'standard' | 'compact'>('standard');
   /** Avec un voile, un clic extérieur ferme le tiroir si celui-ci est dismissible. */
   readonly modal = input(false);
-  /** Désactiver Escape et la fermeture par voile pendant une saisie à protéger. */
+  /** Autoriser les demandes de fermeture par croix, Escape et voile. */
   readonly dismissible = input(true);
+  /** Contrôle asynchrone facultatif, par exemple pour confirmer l’abandon d’une saisie. */
+  readonly closeGuard = input<(() => boolean | Promise<boolean>) | undefined>();
   readonly mainScroll = input<'auto' | 'parent'>('auto');
   readonly opened = input(false);
   /** Teinte du bandeau : même vocabulaire que les modales (`DialogFrameComponent`). */
@@ -400,6 +410,8 @@ export class DetailDrawerComponent {
   readonly footerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly headerActions = input<TemplateRef<unknown> | undefined>(undefined);
   readonly closed = output<void>();
+  protected readonly closePending = signal(false);
+  private readonly drawer = viewChild(MatDrawer);
 
   constructor() {
     this.destroyRef.onDestroy(() => {
@@ -418,5 +430,24 @@ export class DetailDrawerComponent {
         sidebar.toggleAttribute('inert', isModalOpen);
       }
     });
+  }
+
+  protected onEscape(event: Event): void {
+    if (!this.opened() || event.defaultPrevented) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void this.requestClose();
+  }
+
+  protected async requestClose(): Promise<void> {
+    if (!this.opened() || !this.dismissible() || this.closePending()) return;
+    this.closePending.set(true);
+    try {
+      const guard = this.closeGuard();
+      if (guard && !(await guard())) return;
+      this.drawer()?.close();
+    } finally {
+      this.closePending.set(false);
+    }
   }
 }

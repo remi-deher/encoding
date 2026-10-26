@@ -146,8 +146,11 @@ test('viewers do not request administrator-only AI history', async ({ page }) =>
   ).toHaveCount(0);
 });
 
-test('AI history survives a temporary outage and recovers on refresh', async ({ page }) => {
+test('AI history preserves cached data through an outage and recovers automatically', async ({
+  page,
+}) => {
   let unavailable = false;
+  await page.clock.install();
   await page.route('**/api/v1/tools/ai/assistant/activity', (route) =>
     unavailable
       ? route.fulfill({ status: 503, json: {} })
@@ -170,31 +173,33 @@ test('AI history survives a temporary outage and recovers on refresh', async ({ 
   const activity = page.locator('app-activity-page');
   await expect(activity.getByText('Analyse du flow', { exact: true })).toBeVisible();
   unavailable = true;
-  await activity.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  await page.clock.fastForward(15_000);
   await expect(activity.getByRole('status')).toContainText('Les demandes de l’assistant');
   await expect(activity.getByText('Analyse du flow', { exact: true })).toBeVisible();
   unavailable = false;
-  await activity.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  await page.clock.fastForward(15_000);
   await expect(
     activity.getByText('Les demandes de l’assistant sont momentanément indisponibles.'),
   ).toHaveCount(0);
 });
 
-test('a failed refresh preserves history and a retry recovers, with responsive light and dark themes', async ({
+test('background failures preserve history and recover automatically, with responsive light and dark themes', async ({
   page,
 }, info) => {
-  await page.goto('/activity?view=history');
-  const activity = page.locator('app-activity-page');
-  await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
-  let unavailable = true;
+  let unavailable = false;
   await page.route('**/api/v1/executions?state=succeeded*', (route) =>
     unavailable ? route.fulfill({ status: 503, json: {} }) : route.fallback(),
   );
-  await activity.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  await page.clock.install();
+  await page.goto('/activity?view=history');
+  const activity = page.locator('app-activity-page');
+  await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
+  unavailable = true;
+  await page.clock.fastForward(10_000);
   await expect(activity.getByRole('status')).toContainText('Actualisation impossible');
   await expect(activity.getByText('Film terminé 0.mkv', { exact: true })).toBeVisible();
   unavailable = false;
-  await activity.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  await page.clock.fastForward(10_000);
   await expect(activity.getByText('Actualisation impossible', { exact: false })).toHaveCount(0);
   for (const theme of ['light', 'dark']) {
     await page.evaluate((value) => (document.documentElement.dataset['theme'] = value), theme);

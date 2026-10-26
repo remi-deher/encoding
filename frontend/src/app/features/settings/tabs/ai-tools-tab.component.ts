@@ -7,6 +7,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   OnDestroy,
   OnInit,
   computed,
@@ -15,6 +16,8 @@ import {
   TemplateRef,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { interval } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -143,6 +146,7 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
   private readonly aiService = inject(AiToolsService);
   private readonly notifications = inject(NotificationService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
   readonly isAdmin = inject(AuthService).isAdmin;
   readonly providers = [
     { id: 'ollama', name: 'Ollama' },
@@ -156,7 +160,6 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
   readonly cluster = signal<AiClusterView | null>(null);
   readonly modelCatalog = signal<AiClusterModelCatalog | null>(null);
   readonly loadingModelCatalog = signal(false);
-  readonly loadingTools = signal(false);
   readonly quotaRevision = signal(0);
   readonly loadingSettings = signal(true);
   readonly savingSettings = signal(false);
@@ -240,6 +243,9 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.refreshTools();
     this.loadSettings();
+    interval(15_000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.loadConnections(true));
   }
   ngOnDestroy(): void {
     if (this.modelCatalogPollTimer !== null) clearTimeout(this.modelCatalogPollTimer);
@@ -260,23 +266,21 @@ export class AiToolsTabComponent implements OnInit, OnDestroy {
   }
   refreshTools(): void {
     this.quotaRevision.update((value) => value + 1);
-    this.loadingTools.set(true);
     this.loadModelCatalog();
+    this.loadConnections();
+  }
+  private loadConnections(silent = false): void {
     this.aiService.listTools().subscribe({
       next: (tools) => {
         this.tools.set(tools);
-        this.loadingTools.set(false);
       },
       error: () => {
-        this.loadingTools.set(false);
-        this.notifications.show('Impossible de charger les connexions locales.');
+        if (!silent) this.notifications.show('Impossible de charger les connexions locales.');
       },
     });
     this.aiService.getCluster().subscribe({
       next: (view) => this.cluster.set(view),
-      error: () => {
-        this.cluster.set(null);
-      },
+      error: () => {},
     });
   }
   private applySettings(settings: AiSettings): void {

@@ -1,6 +1,15 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  OnInit,
+  inject,
+  signal,
+} from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { interval } from 'rxjs';
 import { AiToolsService } from '../../../shared/services/ai-tools.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { AiSessionPage, AiSessionState, AiSessionSummary } from '../../../shared/models/ai-tools';
@@ -16,16 +25,16 @@ import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-
       description="Historique de l’application, indépendant des conversations web des fournisseurs."
       icon="terminal"
     >
-      <div section-actions>
-        <button matButton="tonal" type="button" [disabled]="loading()" (click)="refresh()">
-          {{ loading() ? 'Chargement…' : 'Actualiser l’historique' }}
-        </button>
-      </div>
       @if (page(); as result) {
         <p>
-          État au dernier chargement. Les mises à jour des autres nœuds peuvent apparaître avec un
-          délai.
+          Mise à jour automatique toutes les 30 secondes. Les changements des autres nœuds peuvent
+          apparaître avec un délai.
         </p>
+        @if (error()) {
+          <p role="status">
+            Les données précédentes sont conservées. La vérification sera retentée automatiquement.
+          </p>
+        }
         @for (session of result.items; track session.id) {
           <article>
             <header>
@@ -152,28 +161,35 @@ import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-
   `,
 })
 export class AiSessionHistoryComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly api = inject(AiToolsService);
   private readonly notifications = inject(NotificationService);
   readonly page = signal<AiSessionPage | null>(null);
   readonly selected = signal<AiSessionState | null>(null);
   readonly loading = signal(false);
   readonly loadingDetail = signal(false);
+  readonly error = signal(false);
 
   ngOnInit(): void {
     this.refresh();
+    interval(30_000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.refresh(this.page()?.offset ?? 0, true));
   }
 
-  refresh(offset = this.page()?.offset ?? 0): void {
+  refresh(offset = this.page()?.offset ?? 0, silent = false): void {
     if (this.loading()) return;
     this.loading.set(true);
     this.api.listSessions(offset).subscribe({
       next: (page) => {
         this.page.set(page);
+        this.error.set(false);
         this.loading.set(false);
       },
       error: () => {
+        this.error.set(true);
         this.loading.set(false);
-        this.notifications.show('Impossible de charger l’historique IA.');
+        if (!silent) this.notifications.show('Impossible de charger l’historique IA.');
       },
     });
   }

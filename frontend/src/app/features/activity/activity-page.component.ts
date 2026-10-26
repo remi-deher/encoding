@@ -173,7 +173,6 @@ export class ActivityPageComponent {
       ? 'Annulez une opération autorisée ou ouvrez son suivi détaillé.'
       : 'Consultez les tentatives, leurs événements, leurs résultats et les demandes IA.',
   );
-  private readonly aiRefresh = signal(0);
   protected readonly aiState = signal<{
     readonly items: readonly AiAssistantActivity[];
     readonly error: boolean;
@@ -581,7 +580,6 @@ export class ActivityPageComponent {
   constructor() {
     toObservable(
       computed(() => ({
-        refresh: this.aiRefresh(),
         enabled:
           this.auth.isAdmin() &&
           this.roleFilter() === 'diagnose' &&
@@ -703,10 +701,6 @@ export class ActivityPageComponent {
       },
       queryParamsHandling: 'merge',
     });
-  }
-  protected refresh(): void {
-    this.tracking.refresh();
-    this.aiRefresh.update((value) => value + 1);
   }
   protected open(item: ActivityItem): void {
     this.openedItem.set(item);

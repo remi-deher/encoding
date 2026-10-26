@@ -9,7 +9,6 @@ import {
   untracked,
 } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { interval } from 'rxjs';
@@ -20,24 +19,13 @@ import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-
 @Component({
   selector: 'app-ai-quota-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    ConfigurationSectionComponent,
-    DatePipe,
-    DecimalPipe,
-    MatButtonModule,
-    MatProgressBarModule,
-  ],
+  imports: [ConfigurationSectionComponent, DatePipe, DecimalPipe, MatProgressBarModule],
   template: `
     <app-configuration-section
       title="Quotas des abonnements"
       description="Limites du compte fournisseur, incluant son utilisation en dehors de l’application."
       icon="api"
     >
-      <div section-actions>
-        <button matButton="tonal" type="button" [disabled]="loading()" (click)="refresh()">
-          {{ loading() ? 'Lecture des quotas…' : 'Actualiser les quotas' }}
-        </button>
-      </div>
       <p>
         Actualisation chaque minute. Plusieurs nœuds peuvent utiliser le même compte : leurs quotas
         ne s’additionnent pas.

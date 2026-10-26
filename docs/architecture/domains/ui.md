@@ -87,12 +87,12 @@ Console de logs système (filtres de sévérité, recherche, pause, auto-scroll 
 
 ## Mise à jour
 
-La page `/updates`, présente dans la navigation Administration et accessible aux deux rôles, affiche la version installée, les notes embarquées et celles de la dernière release publique si elle est joignable. Les états « à jour », « nouvelle version disponible », développement et vérification indisponible sont distincts ; le texte des notes est interpolé comme texte, sans interprétation HTML. La vérification peut être relancée et conserve les données affichées en cas d’erreur. Le cache serveur dure 10 minutes. L’installation se fait par mise à jour de l’image Docker.
+La page `/updates`, présente dans la navigation Administration et accessible aux deux rôles, affiche la version installée, les notes embarquées et celles de la dernière release publique si elle est joignable. Les états « à jour », « nouvelle version disponible », développement et vérification indisponible sont distincts ; le texte des notes est interpolé comme texte, sans interprétation HTML. La vérification se relance automatiquement toutes les 15 minutes et conserve les données affichées en cas d’erreur. Le cache serveur dure 10 minutes. L’installation se fait par mise à jour de l’image Docker.
 
 ## Limites connues
 
 - Thème sombre non vérifié visuellement partout (éditeur de flow, blocs de plugins) ; Nodes redesign non vérifié en navigateur réel (mobile, E2E complets).
-- La fermeture d'un tiroir de script par la croix n'est pas interceptée.
+- `DetailDrawer` traite la croix, Escape et le voile comme la même demande de fermeture ; `closeGuard` permet de confirmer l’abandon d’une saisie avant de fermer.
 - Le rôle lecture masque Paramètres et l'enrôlement direct ; les autres boutons d'écriture répondent par un refus.
 
 ## Assistant de création de flow

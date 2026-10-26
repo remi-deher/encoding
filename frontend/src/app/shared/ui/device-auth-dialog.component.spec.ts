@@ -51,14 +51,14 @@ describe('DeviceAuthDialogComponent', () => {
     fixture.detectChanges();
     return fixture;
   }
-  it('ne déclare aucun succès tant que le serveur attend, et annule à la fermeture', async () => {
+  it('ne déclare aucun succès et laisse la tentative continuer à la fermeture', async () => {
     const fixture = await setup('pending');
     expect(fixture.componentInstance.isAuthorized()).toBe(false);
     expect(fixture.nativeElement.textContent).not.toContain('Simuler');
     fixture.componentInstance.close();
     expect(close).toHaveBeenCalledWith({ success: false });
     fixture.destroy();
-    expect(cancel).toHaveBeenCalledWith('codex-cli', 'attempt-123');
+    expect(cancel).not.toHaveBeenCalled();
   });
   it('ne confirme que le statut autorisé renvoyé par le serveur', async () => {
     const fixture = await setup('authorized');

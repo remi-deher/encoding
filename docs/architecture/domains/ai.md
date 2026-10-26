@@ -1,6 +1,6 @@
 ---
 domain: ai
-updated: 2026-10-21
+updated: 2026-10-26
 legacy_adr: [0062, 0065, 0071, 0072, 0074, 0077]
 code:
   - backend/src/Encoding.Api/Tools/
@@ -14,10 +14,12 @@ tags: [ia, codex, claude, ollama, session, checkpoint, assistant, générateur d
 # IA : fournisseurs, sessions, assistant et génération de flows
 
 ## Fournisseurs et connexion
-- CLI officielles lancées par le serveur : **Codex** (`codex exec --json --ephemeral`, connexion `codex login --device-auth`) et **Claude** (`claude -p --output-format stream-json …`, jeton `claude setup-token` protégé par Data Protection et passé par `CLAUDE_CODE_OAUTH_TOKEN`), plus API compatibles OpenAI/Ollama (non configurées sur une nouvelle installation). Le lien/code de connexion émis par la CLI reste en mémoire (15 min max), jamais journalisé ni persisté ; le succès n'est confirmé qu'après `codex login status` / `claude auth status`.
+- CLI officielles lancées par le serveur : **Codex** (`codex exec --json --ephemeral`, connexion `codex login --device-auth`) et **Claude** (`claude -p --output-format stream-json …`, jeton `claude setup-token` protégé par Data Protection et passé par `CLAUDE_CODE_OAUTH_TOKEN`), plus API compatibles OpenAI/Ollama (non configurées sur une nouvelle installation). Le lien/code de connexion émis par la CLI reste en mémoire (15 min max), jamais journalisé ni persisté ; le succès n'est confirmé qu'après `codex login status` / `claude auth status`, même si le processus interactif est encore en attente de fermeture.
 - Profils par fournisseur (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`) sous `AiTools:CredentialsDirectory` (défaut `Node:DataDirectory/credentials/ai-tools`) : copiés localement, mais **répliqués chiffrés entre nœuds** (Codex `auth.json`, jeton Claude, clé OpenAI) par `AiCredentialSyncService` et la table `ai_credentials` ([ADR 0001](../adr/0001-replication-connexions-ia.md)) ; la modification la plus récente l’emporte et une déconnexion se propage. CLI installées sous `AiTools:RuntimeDirectory` (`/opt/encoding/ai-cli`).
 - CLI **confinées par Landlock** (code partagé dans `Encoding.Core.Runtime`) ; sans Landlock elles refusent de démarrer. Claude sans outils/MCP/skills/réglages hérités ; Codex en lecture seule sans approbation interactive. Aucune réponse simulée si la CLI est absente ; plus de flow synthétique en cas d'échec.
 - La page « IA & fournisseurs » distingue moteur par défaut et fiche sélectionnée ; les secrets restent masqués ; `hasOpenAiApiKey` seulement.
+- Les connexions des CLI et leur réplication sont relues en arrière-plan toutes les 15 s ; quotas toutes les 60 s et historique des sessions toutes les 30 s. La fenêtre d’association vérifie son état automatiquement.
+- Fermer ou recharger l’interface n’annule pas le processus d’association, qui continue côté serveur jusqu’à sa confirmation ou son expiration (15 min maximum).
 
 ## Accès depuis tous les nœuds
 - Les autres serveurs routent vers un serveur qui héberge la connexion via `/api/v1/cluster/ai/exchange` (requêtes signées et chiffrées AES-GCM avec les identités admises du maillage ; aucune opération d'ajout/récupération de secrets). Les workers passent par `/api/v1/runtime/nodes/{nodeId}/ai/generate` (jeton de nœud). Héberger une connexion CLI exige la fonction serveur sur ce nœud.

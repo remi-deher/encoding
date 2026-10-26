@@ -69,6 +69,7 @@ export interface DeviceAuthDialogData {
         <p class="instruction">
           Une fois associé, le compte est copié chiffré sur tous les nœuds du cluster.
         </p>
+        <p class="instruction">La tentative continue sur le nœud si vous fermez cette fenêtre.</p>
 
         @if (data.prompt.userCode; as userCode) {
           <div class="code-box">
@@ -129,15 +130,7 @@ export interface DeviceAuthDialogData {
               <app-icon name="check" /> Compte associé avec succès !
             </span>
           } @else {
-            <button
-              matButton="text"
-              type="button"
-              [disabled]="isChecking()"
-              (click)="checkStatus()"
-            >
-              <app-icon name="refresh" />
-              {{ data.prompt.userCode ? "J'ai validé le code" : 'Vérifier la connexion' }}
-            </button>
+            <span>La connexion est vérifiée automatiquement.</span>
           }
         </div>
         @if (statusMessage()) {
@@ -239,13 +232,6 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     clearInterval(this.polling);
     this.subscription?.unsubscribe();
-    if (!this.isAuthorized())
-      this.aiService.cancelAuth(this.data.toolId, this.data.attemptId).subscribe({
-        error: () =>
-          this.notifications.show(
-            'La tentative expirera automatiquement si son annulation n’a pas pu être confirmée.',
-          ),
-      });
   }
   readonly copied = signal(false);
   readonly isChecking = signal(false);
@@ -300,7 +286,7 @@ export class DeviceAuthDialogComponent implements OnInit, OnDestroy {
       next: (status) => {
         this.isChecking.set(false);
         const attemptState = status.attemptState ?? status.state;
-        if (attemptState === 'authorized') {
+        if (status.state === 'authorized' || attemptState === 'authorized') {
           this.isAuthorized.set(true);
           clearInterval(this.polling);
           this.notifications.show('Compte associé.');

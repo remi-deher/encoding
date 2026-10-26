@@ -183,6 +183,7 @@
       <p>
         Ce contrôle concerne le brouillon actuel, ou la dernière version publiée en l’absence de
         brouillon. L’accès et les droits de la bibliothèque cible restent à vérifier au lancement.
+        Les informations sont actualisées en arrière-plan toutes les minutes.
       </p>
       @if (!extrasLoaded()) {
         <p role="status">Vérification en cours…</p>
@@ -215,9 +216,6 @@
           <li>{{ requirement }}</li>
         }
       </ul>
-      <button mat-button type="button" [disabled]="busy()" (click)="load()">
-        Actualiser les informations
-      </button>
     </section>
   </mat-tab>
   <mat-tab label="Sauvegardes et export">

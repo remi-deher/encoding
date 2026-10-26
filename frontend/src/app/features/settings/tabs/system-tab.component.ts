@@ -1,6 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { firstValueFrom, interval } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { ConfigurationSectionComponent } from '../../../shared/ui/configuration-section.component';
 import { StatusBadgeComponent, StatusTone } from '../../../shared/ui/status-badge.component';
@@ -52,9 +60,11 @@ const STATUS_ORDER = { unhealthy: 0, degraded: 1, healthy: 2 } as const;
       description="État des services sur le nœud consulté."
       icon="check"
     >
-      <button section-actions matButton="tonal" [disabled]="refreshing()" (click)="refreshAll()">
-        {{ refreshing() ? 'Actualisation…' : 'Actualiser la santé' }}
-      </button>
+      @if (refreshError()) {
+        <p role="status">
+          Les dernières données sont conservées. Une nouvelle vérification est prévue.
+        </p>
+      }
       @if (health(); as value) {
         <div class="banner" [class]="'banner tone-' + tone(value.status)" role="status">
           <span class="dot" aria-hidden="true"></span>
@@ -164,11 +174,13 @@ const STATUS_ORDER = { unhealthy: 0, degraded: 1, healthy: 2 } as const;
   `,
 })
 export class SystemTabComponent {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly http = inject(HttpClient);
   protected readonly lastChecked = signal('');
   private readonly notifications = inject(NotificationService);
 
   protected readonly refreshing = signal(false);
+  protected readonly refreshError = signal(false);
   protected readonly cluster = signal<ClusterIdentityResponse | null>(null);
   protected readonly health = signal<HealthDetailsResponse | null>(null);
 
@@ -208,22 +220,25 @@ export class SystemTabComponent {
 
   constructor() {
     void this.refreshAll();
+    interval(60_000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => void this.refreshAll());
   }
 
   async refreshAll(): Promise<void> {
+    if (this.refreshing()) return;
     this.refreshing.set(true);
     const outcomes = await Promise.allSettled([
       firstValueFrom(this.http.get<ClusterIdentityResponse>('/api/v1/cluster')),
       firstValueFrom(this.http.get<HealthDetailsResponse>('/health/details')),
     ]);
     const [identity, diagnostics] = outcomes;
-    this.cluster.set(identity.status === 'fulfilled' ? identity.value : null);
-    this.health.set(diagnostics.status === 'fulfilled' ? diagnostics.value : null);
-    this.lastChecked.set(
-      diagnostics.status === 'fulfilled' ? new Date().toLocaleTimeString('fr-FR') : '',
-    );
-    if (outcomes.some((result) => result.status === 'rejected'))
-      this.notifications.show('Impossible d’actualiser certains diagnostics système.');
+    if (identity.status === 'fulfilled') this.cluster.set(identity.value);
+    if (diagnostics.status === 'fulfilled') {
+      this.health.set(diagnostics.value);
+      this.lastChecked.set(new Date().toLocaleTimeString('fr-FR'));
+    }
+    this.refreshError.set(outcomes.some((result) => result.status === 'rejected'));
     this.refreshing.set(false);
   }
 

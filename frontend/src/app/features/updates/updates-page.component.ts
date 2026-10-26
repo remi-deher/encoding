@@ -1,27 +1,26 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject, catchError, exhaustMap, of, startWith } from 'rxjs';
-import { MatButtonModule } from '@angular/material/button';
+import { catchError, exhaustMap, of, timer } from 'rxjs';
 import { ConfigurationSectionComponent } from '../../shared/ui/configuration-section.component';
 import { UpdatesService, UpdateStatus } from '../../shared/services/updates.service';
 
 @Component({
   selector: 'app-updates-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, MatButtonModule, ConfigurationSectionComponent],
+  imports: [DatePipe, ConfigurationSectionComponent],
   template: `
     <h1 class="visually-hidden">Mise à jour</h1>
     <app-configuration-section title="Version installée" [badge]="data()?.installedVersion ?? ''">
-      <button section-actions mat-stroked-button [disabled]="loading()" (click)="refresh.next()">
-        Vérifier les mises à jour
-      </button>
       <div role="status" aria-live="polite">
         @if (loading()) {
           <p>Vérification en cours…</p>
         }
         @if (error()) {
-          <p>Impossible de charger les informations de version. Réessayez.</p>
+          <p>
+            Impossible de charger les informations de version. Une vérification sera retentée
+            automatiquement.
+          </p>
         }
         @if (data(); as status) {
           @switch (status.status) {
@@ -76,16 +75,14 @@ import { UpdatesService, UpdateStatus } from '../../shared/services/updates.serv
   `,
 })
 export class UpdatesPageComponent {
-  protected readonly refresh = new Subject<void>();
   protected readonly data = signal<UpdateStatus | null>(null);
   protected readonly loading = signal(false);
   protected readonly error = signal(false);
   private readonly service = inject(UpdatesService);
 
   constructor() {
-    this.refresh
+    timer(0, 15 * 60_000)
       .pipe(
-        startWith(undefined),
         exhaustMap(() => {
           this.loading.set(true);
           this.error.set(false);

@@ -129,12 +129,18 @@ test('overview uses backend counts and filtered records with accessible responsi
   await expect(page).toHaveURL(/activity\?view=errors/);
 });
 
-test('failed refresh preserves known records and reports stale values', async ({ page }) => {
+test('background refresh preserves known records and reports stale values', async ({ page }) => {
+  let unavailable = false;
+  await page.route('**/api/v1/executions*', (route) => {
+    if (route.request().url().includes('/stream')) return route.fallback();
+    return unavailable ? route.fulfill({ status: 503, json: {} }) : route.fallback();
+  });
+  await page.clock.install();
   await page.goto('/');
   const home = page.locator('app-home-page');
   await expect(home.locator('app-overview-execution')).toContainText('Dune');
-  await page.route('**/api/v1/executions*', (route) => route.fulfill({ status: 503, json: {} }));
-  await home.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  unavailable = true;
+  await page.clock.fastForward(5_000);
   await expect(home.getByRole('alert').first()).toContainText('obsolètes');
   await expect(home.locator('app-overview-execution')).toContainText('Dune');
   const firstMetric = home.locator('app-summary-tiles app-metric-card').first();
@@ -159,20 +165,24 @@ test('initial outage displays unavailable metrics without claiming an empty hist
 test('AI overview is integrated into home and the former route redirects there', async ({
   page,
 }) => {
-  await page.route('**/api/v1/tools/ai/settings', (r) =>
-    r.fulfill({
-      json: {
-        defaultProvider: 'ollama',
-        ollamaBaseUrl: 'http://localhost:11434',
-        ollamaModel: 'local',
-        openAiBaseUrl: '',
-        openAiModel: '',
-      },
-    }),
+  let settingsUnavailable = false;
+  await page.route('**/api/v1/tools/ai/settings', (route) =>
+    settingsUnavailable
+      ? route.abort()
+      : route.fulfill({
+          json: {
+            defaultProvider: 'ollama',
+            ollamaBaseUrl: 'http://localhost:11434',
+            ollamaModel: 'local',
+            openAiBaseUrl: '',
+            openAiModel: '',
+          },
+        }),
   );
   await page.route('**/api/v1/tools/ai/cluster', (r) =>
     r.fulfill({ json: { nodes: [{ nodeId: 'n1', name: 'Studio', providers: ['ollama'] }] } }),
   );
+  await page.clock.install();
   await page.goto('/ai');
   await expect(page).toHaveURL(/\/\?view=ai$/);
   await expect(page.locator('app-home-page')).toBeVisible();
@@ -182,10 +192,8 @@ test('AI overview is integrated into home and the former route redirects there',
   await expect(page.getByRole('heading', { name: 'Fournisseurs', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Nœuds déclarants', exact: true })).toBeVisible();
   await expect(page.locator('app-ai-provider-overview')).toContainText('Studio');
-  await page.getByRole('button', { name: 'Actualiser', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Fournisseurs', exact: true })).toBeVisible();
-  await page.route('**/api/v1/tools/ai/settings', (r) => r.abort());
-  await page.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  settingsUnavailable = true;
+  await page.clock.fastForward(30_000);
   await expect(
     page.getByRole('heading', { name: 'État IA partiellement indisponible' }),
   ).toBeVisible();

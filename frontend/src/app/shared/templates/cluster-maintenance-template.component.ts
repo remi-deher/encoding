@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  TemplateRef,
+  input,
+  output,
+  viewChild,
+} from '@angular/core';
 import { CategoryTabOption } from '../ui/category-tabs.component';
 import { SubnavComponent } from '../ui/subnav.component';
 import {
@@ -35,6 +42,10 @@ import {
       [drawerSize]="drawerSize()"
       [drawerHeaderDensity]="drawerHeaderDensity()"
       [drawerModal]="drawerModal()"
+      [catalogueSummaryInput]="catalogueSummaryProjection()"
+      [catalogueFiltersInput]="catalogueFiltersProjection()"
+      [catalogueActiveFiltersInput]="catalogueActiveFiltersProjection()"
+      [catalogueTableInput]="catalogueTableProjection()"
       (searchQueryChange)="searchQueryChange.emit($event)"
       (emptyStateAction)="emptyStateAction.emit()"
       (detailClosed)="detailClosed.emit()"
@@ -47,15 +58,37 @@ import {
         [selected]="navigationSelected()"
         (selectedChange)="navigationSelectedChange.emit($event)"
       />
-      <ng-content select="[catalogue-summary]" />
-      <ng-content select="[catalogue-filters]" />
-      <ng-content select="[catalogue-active-filters]" />
-      <ng-content select="[catalogue-table]" />
+      <ng-template #catalogueSummarySlot>
+        <ng-content select="[catalogue-summary]" />
+      </ng-template>
+      <ng-template #catalogueFiltersSlot>
+        <ng-content select="[catalogue-filters]" />
+      </ng-template>
+      <ng-template #catalogueActiveFiltersSlot>
+        <ng-content select="[catalogue-active-filters]" />
+      </ng-template>
+      <ng-template #catalogueTableSlot>
+        <ng-content select="[catalogue-table]" />
+      </ng-template>
       <ng-content select="ng-template" />
     </app-management-catalog-template>
   `,
 })
 export class ClusterMaintenanceTemplateComponent {
+  /** Les emplacements catalogue passent au gabarit comme templates explicites. */
+  protected readonly catalogueSummaryProjection = viewChild('catalogueSummarySlot', {
+    read: TemplateRef,
+  });
+  protected readonly catalogueFiltersProjection = viewChild('catalogueFiltersSlot', {
+    read: TemplateRef,
+  });
+  protected readonly catalogueActiveFiltersProjection = viewChild('catalogueActiveFiltersSlot', {
+    read: TemplateRef,
+  });
+  protected readonly catalogueTableProjection = viewChild('catalogueTableSlot', {
+    read: TemplateRef,
+  });
+
   readonly title = input.required<string>();
   readonly navigationLabel = input.required<string>();
   readonly navigationOptions = input.required<readonly CategoryTabOption[]>();
