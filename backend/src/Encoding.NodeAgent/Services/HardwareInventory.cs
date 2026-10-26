@@ -31,7 +31,37 @@ public static class HardwareInventory
         Environment.ProcessorCount,
         ReadMemoryMb(),
         ReadProcessorModel(cpuInfoPath),
-        ReadGpus(drmRoot));
+        ReadGpus(drmRoot),
+        RuntimeEnvironment: DetectRuntimeEnvironment());
+
+    /// <summary>Runtime host/container category advertised in the node inventory.</summary>
+    public static string DetectRuntimeEnvironment() => DetectRuntimeEnvironment(
+        Environment.GetEnvironmentVariable("container"),
+        string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase),
+        File.Exists("/.dockerenv"),
+        File.Exists("/run/.containerenv"),
+        ReadTrimmed("/proc/1/cgroup"));
+
+    public static string DetectRuntimeEnvironment(
+        string? container,
+        bool dotnetRunningInContainer,
+        bool dockerMarker,
+        bool podmanMarker,
+        string? cgroup)
+    {
+        if (dockerMarker || string.Equals(container, "docker", StringComparison.OrdinalIgnoreCase) ||
+            cgroup?.Contains("docker", StringComparison.OrdinalIgnoreCase) == true)
+            return "docker";
+        if (podmanMarker || string.Equals(container, "podman", StringComparison.OrdinalIgnoreCase) ||
+            cgroup?.Contains("libpod", StringComparison.OrdinalIgnoreCase) == true)
+            return "podman";
+        if (dotnetRunningInContainer ||
+            (!string.IsNullOrWhiteSpace(container) && !string.Equals(container, "none", StringComparison.OrdinalIgnoreCase)) ||
+            cgroup?.Contains("kubepods", StringComparison.OrdinalIgnoreCase) == true ||
+            cgroup?.Contains("containerd", StringComparison.OrdinalIgnoreCase) == true)
+            return "container";
+        return "native";
+    }
 
     private static readonly string[] CgroupLimitPaths = ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"];
 

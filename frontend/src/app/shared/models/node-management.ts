@@ -1,8 +1,7 @@
 import { DetailCard } from '../ui/detail-card-grid.component';
-import { formatMemory } from './node-hardware';
+import { formatMemory, nodeAcceleratorBadges } from './node-hardware';
 import {
   ResourceSheetBadge,
-  ResourceSheetHeadAction,
   ResourceSheetItem,
   ResourceSheetMetric,
   ResourceSheetNotice,
@@ -65,6 +64,148 @@ export function formatLastSignal(
   );
 }
 
+export function runtimeEnvironmentLabel(value: string | null | undefined): string {
+  switch (value?.toLowerCase()) {
+    case 'docker':
+      return 'Docker · conteneur';
+    case 'podman':
+      return 'Podman · conteneur';
+    case 'container':
+      return 'Conteneur';
+    case 'native':
+      return 'Natif';
+    default:
+      return 'Non renseigné';
+  }
+}
+
+/** Quatre blocs de synthèse communs aux cartes des membres du cluster. */
+export function memberNodeOverviewSections(
+  node: NodeResponse,
+  activeTasks: number | null,
+  clusterName: string,
+): readonly ResourceSheetSection[] {
+  const online = node.status === 'online';
+  const worker = node.roles.includes('worker');
+  const inventory = node.inventory;
+  const usableEncoders = node.capabilities.flatMap((tool) =>
+    (tool.encoderChecks ?? [])
+      .filter((check) => check.status === 'usable')
+      .map((check) => check.encoderId.toLowerCase()),
+  );
+  const codecPatterns: readonly [string, readonly string[]][] = [
+    ['H.264', ['h264_', 'libx264']],
+    ['HEVC / H.265', ['hevc_', 'libx265']],
+    ['AV1', ['av1_', 'libsvtav1', 'libaom-av1']],
+  ];
+  const codecs = codecPatterns
+    .filter(([, patterns]) =>
+      usableEncoders.some((encoder) => patterns.some((pattern) => encoder.includes(pattern))),
+    )
+    .map(([label]) => ({ label, tone: 'success' as const }));
+  const accelerators = worker
+    ? nodeAcceleratorBadges(node).map((label) => ({
+        label,
+        tone: label === 'CPU' ? ('neutral' as const) : ('success' as const),
+      }))
+    : [{ label: 'Non applicable', tone: 'neutral' as const }];
+  const taskMetric = !worker
+    ? { label: 'Traitements actifs', value: 'Non applicable', unavailable: true }
+    : activeTasks === null || !online
+      ? {
+          label: 'Traitements actifs',
+          value: 'Indisponible',
+          unavailable: true,
+          detail: `${node.maxConcurrentTasks} traitement(s) simultané(s) au maximum`,
+        }
+      : {
+          label: 'Traitements actifs',
+          value: `${activeTasks} / ${node.maxConcurrentTasks}`,
+          detail: `${node.maxConcurrentTasks} place(s) de traitement simultané`,
+        };
+
+  return [
+    {
+      id: 'state',
+      title: 'État et activité',
+      items: node.roles.map((role) => ({
+        label: role === 'server' ? 'Serveur' : 'Worker',
+        badges: [{ label: online ? 'Actif' : 'Injoignable', tone: online ? 'success' : 'warning' }],
+      })),
+      metrics: [
+        taskMetric,
+        {
+          label: 'Dernier signal',
+          value: formatLastSignal(node.lastSeenAt) ?? 'Indisponible',
+          unavailable: !node.lastSeenAt,
+        },
+      ],
+    },
+    {
+      id: 'hardware',
+      title: 'Matériel déclaré',
+      fields: inventory
+        ? [
+            {
+              label: 'Processeur',
+              value: inventory.processorModel?.trim() || `${inventory.processorCount} cœurs`,
+              detail: `${inventory.processorCount} cœurs logiques`,
+            },
+            { label: 'Mémoire', value: formatMemory(inventory.memoryMb) },
+            {
+              label: 'Système',
+              value: `${inventory.operatingSystem} · ${inventory.architecture}`,
+            },
+            {
+              label: 'Environnement',
+              value: runtimeEnvironmentLabel(inventory.runtimeEnvironment),
+            },
+            {
+              label:
+                inventory.gpus?.length === 1 ? 'Processeur graphique' : 'Processeurs graphiques',
+              value: inventory.gpus?.length
+                ? inventory.gpus.map((gpu) => gpu.name).join(' · ')
+                : inventory.gpus
+                  ? 'Aucun détecté'
+                  : 'Non déclaré',
+            },
+          ]
+        : [{ label: 'Matériel', value: 'Non renseigné' }],
+    },
+    {
+      id: 'capabilities',
+      title: 'Capacités de traitement',
+      notice: !worker
+        ? 'La fonction worker est désactivée.'
+        : node.capabilities.length
+          ? undefined
+          : 'Aucune capacité déclarée.',
+      items: [
+        {
+          label: 'Moteur d’accélération',
+          badges: accelerators,
+          detail: accelerators.some((item) => item.label === 'CPU')
+            ? 'Traitements assurés par le processeur principal.'
+            : undefined,
+        },
+        {
+          label: 'Codecs compatibles',
+          badges: codecs.length ? codecs : [{ label: 'Aucun codec validé', tone: 'neutral' }],
+        },
+      ],
+    },
+    {
+      id: 'identity',
+      title: 'Identité et appartenance',
+      fields: [
+        { label: 'Identifiant', value: node.id, mono: true },
+        { label: 'Nom technique', value: node.name },
+        { label: 'Cluster', value: clusterName },
+      ],
+    },
+  ];
+}
+
 export interface LocalNodeSheetInput {
   readonly status: LocalNodeStatus | null;
   readonly node: NodeResponse | null;
@@ -85,7 +226,6 @@ export interface LocalNodeSheetInput {
 export function localNodeSheet(input: LocalNodeSheetInput): {
   readonly title: string;
   readonly subtitle: string;
-  readonly headAction?: ResourceSheetHeadAction | null;
   readonly notices: readonly ResourceSheetNotice[];
   readonly sections: readonly ResourceSheetSection[];
 } {
@@ -218,7 +358,16 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
             {
               label: 'Processeur',
               value: inventory.processorModel?.trim() || `${inventory.processorCount} cœurs`,
-              detail: `${inventory.processorCount} cœurs logiques · ${formatMemory(inventory.memoryMb)} de mémoire installée · ${inventory.operatingSystem} · ${inventory.architecture}`,
+              detail: `${inventory.processorCount} cœurs logiques`,
+            },
+            { label: 'Mémoire', value: formatMemory(inventory.memoryMb) },
+            {
+              label: 'Système',
+              value: `${inventory.operatingSystem} · ${inventory.architecture}`,
+            },
+            {
+              label: 'Environnement',
+              value: runtimeEnvironmentLabel(inventory.runtimeEnvironment),
             },
             gpus.length
               ? {
@@ -323,22 +472,6 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
               });
             }
 
-            // 3. Outils déclarés
-            const toolBadges: ResourceSheetBadge[] = tools.map((t) => ({
-              label:
-                t.toolId.toLowerCase() === 'mkvtoolnix'
-                  ? 'MKVToolNix'
-                  : t.toolId.toLowerCase() === 'ffmpeg'
-                    ? 'FFmpeg'
-                    : t.toolId,
-              tone: 'success' as const,
-            }));
-            items.push({
-              label: 'Outils de traitement',
-              badges: toolBadges,
-              detail: `${tools.length} outil(s) déclaré(s) et opérationnel(s)`,
-            });
-
             return items;
           })(),
       action: workerOff || !node ? undefined : { id: 'capabilities', label: 'Détails techniques' },
@@ -363,7 +496,6 @@ export function localNodeSheet(input: LocalNodeSheetInput): {
     subtitle: standalone
       ? 'Nœud autonome'
       : `Membre de ${input.clusterName ?? status?.clusterName ?? 'son cluster'}`,
-    headAction: node ? { id: 'settings', label: 'Consulter les réglages' } : null,
     notices,
     sections,
   };

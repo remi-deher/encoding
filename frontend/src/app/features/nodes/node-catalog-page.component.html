@@ -63,18 +63,17 @@
       }
     }
   </ng-template>
-  <div subnav-info class="node-subnav-context">
-    @if (pageTab() === 'node') {
-      <span>Nœud local</span>
-      <strong>{{ localName() }}</strong>
-    } @else if (pageTab() === 'cluster') {
-      <span>{{ local.standalone() ? 'État' : 'Cluster actuel' }}</span>
-      <strong>{{ local.standalone() ? 'Autonome' : clusterName() }}</strong>
-    } @else {
-      <span>Organisation</span>
-      <strong>{{ filteredGroups().length }} groupe(s)</strong>
-    }
-  </div>
+  @if (pageTab() !== 'node') {
+    <div subnav-info class="node-subnav-context">
+      @if (pageTab() === 'cluster') {
+        <span>{{ local.standalone() ? 'État' : 'Cluster actuel' }}</span>
+        <strong>{{ local.standalone() ? 'Autonome' : clusterName() }}</strong>
+      } @else {
+        <span>Organisation</span>
+        <strong>{{ filteredGroups().length }} groupe(s)</strong>
+      }
+    </div>
+  }
   @if (pageTab() === 'cluster' && isAdmin() && !local.standalone() && clusterIdentity()) {
     <div subnav-actions class="node-subnav-actions">
       @if (enrollmentRows().length > 0) {
@@ -278,14 +277,19 @@
         }
       </div>
     } @else if (pageTab() === 'node') {
-      <app-resource-sheet
+      <app-node-overview-card
         ariaLabel="Fiche du nœud local"
-        presentation="overview"
         [title]="localSheet().title"
         [subtitle]="localSheet().subtitle"
-        [headAction]="localSheet().headAction ?? null"
+        [statusLabel]="localOverviewStatus().label"
+        [statusTone]="localOverviewStatus().tone"
+        [nodeId]="localNode()?.id ?? 'local-node'"
+        [roles]="localOverviewRoles()"
+        [meta]="localOverviewMeta()"
         [notices]="localSheet().notices"
         [sections]="localSheet().sections"
+        [libraries]="localOverviewLibraries()"
+        [libraryAccessState]="libraryAccessState()"
         (actionSelected)="onLocalSheetAction($event)"
       />
     } @else if (local.standalone()) {
@@ -348,20 +352,23 @@
       @if (memberCards().length) {
         <div class="member-cards">
           @for (card of memberCards(); track card.id) {
-            <app-resource-card
+            <app-node-overview-card
+              [ariaLabel]="'Carte du nœud ' + card.title"
               [title]="card.title"
+              [subtitle]="card.subtitle"
               [statusLabel]="card.statusLabel"
               [statusTone]="card.statusTone"
-              [badges]="card.badges"
-              [acceleratorBadges]="card.acceleratorBadges"
-              [osFamily]="card.osFamily"
-              [osLabel]="card.osLabel"
+              [nodeId]="card.id"
+              [roles]="card.roles"
               [meta]="card.meta"
               [sections]="card.sections"
+              [libraries]="card.libraries"
+              [libraryAccessState]="libraryAccessState()"
               [actions]="memberActions()"
               [selectable]="isAdmin() && !bulkBusy()"
               [selected]="selectedMemberIds().has(card.id)"
               [active]="selectedNode()?.id === card.id"
+              [openable]="true"
               (selectedChange)="toggleMember(card.id, $event)"
               (actionSelected)="onMemberCardAction(card.id, $event)"
               (open)="openNodeCard(card.id)"

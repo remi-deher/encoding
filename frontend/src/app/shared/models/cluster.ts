@@ -38,6 +38,8 @@ export interface NodeInventory {
   readonly processorModel?: string | null;
   readonly gpus?: readonly NodeGpu[] | null;
   readonly fontSets?: readonly string[] | null;
+  /** Environnement d’exécution signalé par l’agent (`docker`, `podman`, `container`, `native`). */
+  readonly runtimeEnvironment?: string | null;
 }
 export interface NodeGpu {
   readonly name: string;
