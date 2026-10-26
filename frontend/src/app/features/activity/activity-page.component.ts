@@ -58,6 +58,7 @@ import { IconComponent } from '../../shared/ui/icon.component';
 import { StatusBadgeComponent } from '../../shared/ui/status-badge.component';
 import { CategoryTabOption } from '../../shared/ui/category-tabs.component';
 import { SubnavComponent } from '../../shared/ui/subnav.component';
+import { SubnavTemplateComponent } from '../../shared/templates/subnav-template.component';
 import {
   ACTIVITY_GROUPS,
   ACTIVITY_STATES,
@@ -126,6 +127,7 @@ const AI_REFRESH_MS = 15000;
     SearchFieldComponent,
     MatTabsModule,
     SubnavComponent,
+    SubnavTemplateComponent,
     RouterLink,
     StatusBadgeComponent,
   ],

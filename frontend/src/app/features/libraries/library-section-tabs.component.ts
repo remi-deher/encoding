@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { SubnavComponent, SubnavOption } from '../../shared/ui/subnav.component';
+import { SubnavTemplateComponent } from '../../shared/templates/subnav-template.component';
 
 const SECTIONS: readonly SubnavOption[] = [
   { value: 'media', label: 'Bibliothèques', route: '/libraries' },
@@ -14,14 +15,17 @@ const SECTIONS: readonly SubnavOption[] = [
 @Component({
   selector: 'app-library-section-tabs',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SubnavComponent],
+  imports: [SubnavComponent, SubnavTemplateComponent],
   template: `
-    <app-subnav
-      label="Ressources"
-      [options]="sections"
-      [selected]="selected()"
-      variant="links"
-    />
+    <app-subnav-template>
+      <app-subnav
+        label="Ressources"
+        [options]="sections"
+        [selected]="selected()"
+        variant="links"
+        presentation="capsule"
+      />
+    </app-subnav-template>
   `,
 })
 export class LibrarySectionTabsComponent {

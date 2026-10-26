@@ -75,7 +75,6 @@ export interface SubnavOption {
           }
         </div>
       }
-      <div class="subnav-actions"><ng-content select="[subnav-actions]" /></div>
     </div>
   `,
   styleUrl: './subnav.component.scss',

@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { CategoryTabOption } from '../ui/category-tabs.component';
 import { SubnavComponent } from '../ui/subnav.component';
+import { SubnavTemplateComponent } from './subnav-template.component';
 import {
   CatalogEmptyState,
   ManagementCatalogTemplateComponent,
@@ -17,7 +18,7 @@ import {
 @Component({
   selector: 'app-cluster-maintenance-template',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ManagementCatalogTemplateComponent, SubnavComponent],
+  imports: [ManagementCatalogTemplateComponent, SubnavComponent, SubnavTemplateComponent],
   template: `
     <app-management-catalog-template
       [title]="title()"
@@ -52,15 +53,17 @@ import {
       (detailClosed)="detailClosed.emit()"
       (actionClosed)="actionClosed.emit()"
     >
-      <app-subnav
-        #sectionNavigation
-        panelId="cluster-maintenance-panel"
-        catalogue-navigation
-        [label]="navigationLabel()"
-        [options]="navigationOptions()"
-        [selected]="navigationSelected()"
-        (selectedChange)="navigationSelectedChange.emit($event)"
-      />
+      <app-subnav-template catalogue-navigation>
+        <app-subnav
+          #sectionNavigation
+          presentation="capsule"
+          panelId="cluster-maintenance-panel"
+          [label]="navigationLabel()"
+          [options]="navigationOptions()"
+          [selected]="navigationSelected()"
+          (selectedChange)="navigationSelectedChange.emit($event)"
+        />
+      </app-subnav-template>
       <ng-template #catalogueSummarySlot>
         <ng-content select="[catalogue-summary]" />
       </ng-template>
