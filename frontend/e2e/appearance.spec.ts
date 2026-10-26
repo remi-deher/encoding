@@ -46,6 +46,15 @@ test('palette menu changes Material and application colours, preserves mode and 
 }) => {
   await page.goto('/');
   const appearance = await openAppearancePalette(page);
+  const panel = page.getByRole('dialog', { name: 'Apparence' });
+  await expect(panel).toBeVisible();
+  const panelBox = await panel.boundingBox();
+  const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  expect(panelBox).not.toBeNull();
+  expect(panelBox!.x).toBeGreaterThanOrEqual(0);
+  expect(panelBox!.y).toBeGreaterThanOrEqual(0);
+  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(viewport.width);
+  expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(viewport.height);
   await page.getByRole('button', { name: 'Iris', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-palette', 'iris');
   await page.getByRole('radio', { name: 'Sombre' }).click();

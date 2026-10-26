@@ -228,9 +228,9 @@
   }
 }
 
-@media (min-width: 1101px) and (max-width: 1600px) {
+@media (min-width: 1101px) {
   :host {
-    width: min(880px, calc(100% - 640px));
+    width: min(880px, 50%, calc(100% - 640px));
   }
 }
 

@@ -88,6 +88,20 @@ test('the overview action is in the centered search bar and system status stays 
     expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(actionsBox!.x);
   }
 
+  await page.setViewportSize({ width: 1536, height: 1080 });
+  const sidebar = page.locator('.application-sidebar');
+  await expect(sidebar).not.toHaveClass(/is-collapsed/);
+  const searchRatio = async () =>
+    page.evaluate(() => {
+      const header = document.querySelector('.application-header')!.getBoundingClientRect();
+      const searchBar = document.querySelector('.global-search-capsule')!.getBoundingClientRect();
+      return searchBar.width / header.width;
+    });
+  const expandedRatio = await searchRatio();
+  await page.getByRole('button', { name: 'Replier la navigation' }).click();
+  await expect(sidebar).toHaveClass(/is-collapsed/);
+  await expect.poll(async () => Math.abs((await searchRatio()) - expandedRatio)).toBeLessThan(0.02);
+
   await createFlow.click();
   await expect(page.getByRole('dialog', { name: 'Créer un flow' })).toBeVisible();
 });
